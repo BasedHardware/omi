@@ -238,3 +238,151 @@ export async function fetchStripeFeeHistory(
   for (const r of rows) fees[r.day] = Number(r.fee_usd);
   return fees;
 }
+
+/** Soniox measured day-rate, derived on the producer from prepaid-balance
+ * snapshots (`vendor_balance_snapshot` → `vendor_balance_spend_daily`): the
+ * organization key has no usage/invoice API, only the balance endpoint, so
+ * consecutive-snapshot deltas ARE the daily spend. A `usd` of null is a
+ * baseline-reset day (unmeasured, flagged); `gap_spread` days carry an
+ * even-spread assumption. Kept out of the plan-cost query so a dark table
+ * (org key unmounted before the first snapshot) can never fail the
+ * plan/STT/SaaS read — it is an unavailable line, like the fee table.
+ */
+export const FINOPS_VENDOR_BALANCE_QUERY = `
+WITH spend AS (
+  SELECT FORMAT_DATE('%F', date) AS day, SUM(usd) AS usd, IFNULL(MAX(flag), '') AS flag
+  FROM \`based-hardware.omi_finops.vendor_balance_spend_daily\`
+  WHERE vendor = 'soniox' AND date >= DATE_SUB(@today, INTERVAL @days DAY) AND date <= @today
+  GROUP BY day
+), snaps AS (
+  SELECT COUNT(1) AS n, MAX(FORMAT_TIMESTAMP('%FT%TZ', ts)) AS latest,
+    FORMAT_DATE('%F', MAX(date)) AS last_day
+  FROM \`based-hardware.omi_finops.vendor_balance_snapshot\`
+  WHERE vendor = 'soniox'
+)
+SELECT TO_JSON_STRING(STRUCT(
+  ARRAY(SELECT AS STRUCT day, usd, flag FROM spend ORDER BY day) AS spend,
+  (SELECT n FROM snaps) AS snapshots,
+  (SELECT latest FROM snaps) AS latest_ts,
+  (SELECT last_day FROM snaps) AS as_of
+)) AS history`;
+
+export interface VendorBalanceHistory {
+  /** Total snapshots stored (the producer writes one per successful day). */
+  snapshots: number;
+  /** Latest snapshot timestamp (producer clock), shown as the as-of date. */
+  latestTs: string | null;
+  /** UTC day of the latest snapshot. */
+  asOf: string | null;
+  /** date → measured daily USD; null = flagged baseline-reset day. */
+  spend: Record<string, number | null>;
+  /** date → producer flag ('' normal, 'gap_spread', 'baseline_reset'). */
+  flags: Record<string, string>;
+}
+
+export async function fetchVendorBalanceHistory(
+  today: string,
+  days = 40
+): Promise<VendorBalanceHistory> {
+  const bq = getGcpBillingClient();
+  if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
+  let rows: { history: string }[];
+  try {
+    [rows] = await bq.query({
+      query: FINOPS_VENDOR_BALANCE_QUERY,
+      params: { today: new BigQueryDate(today), days },
+      maximumBytesBilled: String(10 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+  } catch {
+    throw new WallSourceError(
+      "Soniox measured STT unavailable (balance line dark: org key unmounted or table not created)"
+    );
+  }
+  return parseVendorBalance(rows[0]?.history || "{}");
+}
+
+export function parseVendorBalance(json: string): VendorBalanceHistory {
+  const parsed = JSON.parse(json) as {
+    spend?: { day: string; usd: number | null; flag: string | null }[];
+    snapshots?: number;
+    latest_ts?: string | null;
+    as_of?: string | null;
+  };
+  const history: VendorBalanceHistory = {
+    snapshots: Number(parsed.snapshots ?? 0),
+    latestTs: parsed.latest_ts ?? null,
+    asOf: parsed.as_of ?? null,
+    spend: {},
+    flags: {},
+  };
+  for (const r of parsed.spend || []) {
+    history.spend[r.day] = r.usd == null ? null : Number(r.usd);
+    if (r.flag) history.flags[r.day] = r.flag;
+  }
+  return history;
+}
+
+/** Modelled Modulate STT cost: measured Prometheus audio seconds × the
+ * committed rate-card price (producer table `stt_modulate_modelled_daily`).
+ * Modulate has no usage/balance API, so this line is never measured; the
+ * monthly Mercury cash reconciliation (wall side) shows the variance.
+ */
+export const FINOPS_MODULATE_MODELLED_QUERY = `
+SELECT FORMAT_DATE('%F', date) AS day, audio_seconds, usd, price_usd_per_hour,
+  FORMAT_DATE('%F', price_as_of) AS price_as_of
+FROM \`based-hardware.omi_finops.stt_modulate_modelled_daily\`
+WHERE date >= DATE_SUB(@today, INTERVAL @days DAY) AND date <= @today
+ORDER BY day`;
+
+export interface ModulateModelledDay {
+  usd: number;
+  seconds: number;
+  pricePerHour: number;
+  priceAsOf: string;
+}
+
+export async function fetchModulateModelled(
+  today: string,
+  days = 40
+): Promise<{
+  byDay: Record<string, ModulateModelledDay>;
+  price: number | null;
+  priceAsOf: string | null;
+}> {
+  const bq = getGcpBillingClient();
+  if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
+  let rows: {
+    day: string;
+    audio_seconds: string | number;
+    usd: string | number;
+    price_usd_per_hour: string | number;
+    price_as_of: string;
+  }[];
+  try {
+    [rows] = await bq.query({
+      query: FINOPS_MODULATE_MODELLED_QUERY,
+      params: { today: new BigQueryDate(today), days },
+      maximumBytesBilled: String(10 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+  } catch {
+    throw new WallSourceError(
+      "Modulate modelled STT unavailable (Prometheus series or committed price missing)"
+    );
+  }
+  const byDay: Record<string, ModulateModelledDay> = {};
+  let price: number | null = null;
+  let priceAsOf: string | null = null;
+  for (const r of rows) {
+    byDay[r.day] = {
+      usd: Number(r.usd),
+      seconds: Number(r.audio_seconds),
+      pricePerHour: Number(r.price_usd_per_hour),
+      priceAsOf: r.price_as_of,
+    };
+    price = Number(r.price_usd_per_hour);
+    priceAsOf = r.price_as_of;
+  }
+  return { byDay, price, priceAsOf };
+}

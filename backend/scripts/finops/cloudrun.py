@@ -44,6 +44,9 @@ def secrets_dir() -> pathlib.Path:
 
 
 # Secret file names this job understands. Values are never printed.
+# soniox_org is the ORGANIZATION key (balance endpoint only; the usage-summary
+# API 404s for it). modulate_org is bound for a future vendor API — no code
+# calls a Modulate endpoint with it.
 SECRET_FILES = {
     "prometheus": "OMI_PROMETHEUS_TOKEN",
     "stripe": "STRIPE_API_KEY",
@@ -53,6 +56,8 @@ SECRET_FILES = {
     "soniox": "SONIOX_API_KEY",
     "deepgram": "DEEPGRAM_API_KEY",
     "mercury": "finops-mercury-readonly",
+    "soniox_org": "FINOPS_SONIOX_ORG_KEY",
+    "modulate_org": "FINOPS_MODULATE_ORG_KEY",
 }
 
 

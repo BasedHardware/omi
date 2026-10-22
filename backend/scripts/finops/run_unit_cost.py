@@ -6,8 +6,9 @@
 What it does, in order:
   1. picks a run directory and records a manifest (window, identities, settlement)
   2. pulls the raw inputs for the window (GCP billing export, gateway ledger, users snapshot,
-     hourly_usage transcription seconds, Prometheus VAD hours, OpenAI/Anthropic invoices,
-     Stripe subscription book, PostHog DAU)
+     hourly_usage transcription seconds, Prometheus VAD hours + per-provider speech seconds,
+     OpenAI/Anthropic invoices, Stripe subscription book, PostHog DAU, the Soniox org-balance
+     snapshot and the Modulate modelled volume line)
   3. assembles the allocation (backend/scripts/finops/assemble_unit_cost.py)
   4. validates: every variable pool must reconcile within --recon-tolerance-pct, the window
      must be settled, and no raw uid may appear in any output
@@ -194,7 +195,7 @@ def main() -> None:
     ap.add_argument(
         "--skip",
         default="",
-        help="comma-separated pulls to skip: gcp,ledger,users,stt,prom,providers,mercury,stripe,posthog",
+        help="comma-separated pulls to skip: gcp,ledger,users,stt,prom,modulate,providers,mercury,stripe,balance,posthog",
     )
     ap.add_argument("--recon-tolerance-pct", type=float, default=0.5)
     ap.add_argument("--allow-unsettled", action="store_true")
@@ -232,6 +233,14 @@ def main() -> None:
             sh([str(HERE / "pull_hourly_usage.py"), "--start", start, "--end", end, "--raw", str(raw)], log, "stt")
         if "prom" not in skip:
             sh([str(HERE / "pull_prometheus.py"), "--start", start, "--end", end, "--raw", str(raw)], log, "prom")
+        if "modulate" not in skip and "prom" not in skip:
+            # measured-volume modelled line; derives from the prom artifact above
+            sh(
+                [str(HERE / "pull_modulate_modelled.py"), "--start", start, "--end", end, "--raw", str(raw)],
+                log,
+                "modulate",
+                required=False,
+            )
         if "providers" not in skip:
             sh([str(HERE / "pull_providers.py"), "--start", start, "--end", end, "--raw", str(raw)], log, "providers")
         if "mercury" not in skip:
@@ -241,6 +250,13 @@ def main() -> None:
                 [str(HERE / "pull_stripe.py"), "--raw", str(raw), "--end", end],
                 log,
                 "stripe",
+                required=False,
+            )
+        if "balance" not in skip:
+            sh(
+                [str(HERE / "pull_vendor_balance.py"), "--raw", str(raw)],
+                log,
+                "balance",
                 required=False,
             )
         if "posthog" not in skip:
@@ -273,6 +289,14 @@ def main() -> None:
     stripe_fees = raw / "stripe_fee_daily.json"
     if stripe_fees.exists() and json.loads(stripe_fees.read_text()).get("status") == "skipped":
         sys.stderr.write("WARNING: Stripe fee line unavailable; see pull.log\n")
+
+    vendor_balance = raw / "vendor_balance_snapshot.json"
+    if vendor_balance.exists() and json.loads(vendor_balance.read_text()).get("status") == "skipped":
+        sys.stderr.write("WARNING: Soniox balance snapshot unavailable; see pull.log\n")
+
+    modulate_modelled = raw / "stt_modulate_modelled_daily.json"
+    if modulate_modelled.exists() and json.loads(modulate_modelled.read_text()).get("status") == "skipped":
+        sys.stderr.write("WARNING: Modulate modelled STT line unavailable; see pull.log\n")
 
     cws = a.cohort_window_start
     with open(run / "assembly_output.md", "w") as fh:

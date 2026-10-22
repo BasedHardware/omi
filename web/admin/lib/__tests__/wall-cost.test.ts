@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { FINOPS_PLAN_COST_QUERY, parsePlanCost } from "../wall-finops";
+import {
+  FINOPS_MODULATE_MODELLED_QUERY,
+  FINOPS_PLAN_COST_QUERY,
+  FINOPS_VENDOR_BALANCE_QUERY,
+  parsePlanCost,
+  parseVendorBalance,
+} from "../wall-finops";
 import {
   allInCost,
   estimateStatus,
+  modulateReconciliation,
   oneTimeExcess,
   SAAS_MONTHLY_USD,
+  sttLineFor,
   STT_MONTHLY_USD,
 } from "../wall-cost";
 
@@ -318,5 +326,163 @@ describe("FinOps plan cost reader", () => {
     expect(FINOPS_PLAN_COST_QUERY).toContain("mercury_saas_daily");
     expect(FINOPS_PLAN_COST_QUERY).toContain("variable_total");
     expect(FINOPS_PLAN_COST_QUERY).toContain("mercury_vendor_spend_daily");
+  });
+});
+
+describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => {
+  const bal = (
+    over: Partial<Parameters<typeof sttLineFor>[1]["sonioxBalance"]> = {}
+  ) => ({
+    ready: true,
+    firstDay: "2026-10-11",
+    asOf: "2026-10-13",
+    spend: { "2026-10-12": 175.5, "2026-10-13": 140.25 },
+    flags: {},
+    ...over,
+  });
+
+  it("uses the measured balance-delta day-rate once the series is live", () => {
+    const line = sttLineFor("2026-10-13", {
+      sonioxBalance: bal(),
+      sttCash: { "2026-10-13": { modulate: 20 } },
+    });
+    expect(line.usd).toBeCloseTo(140.25 + 20);
+    expect(line.measured).toBe(true);
+    expect(line.sonioxUsd).toBeCloseTo(140.25);
+    expect(line.modulateUsd).toBeCloseTo(20);
+    expect(line.modulateModelled).toBe(false);
+    expect(line.flag).toBeNull();
+    // a legacy usage-summary row never overrides the live balance series
+    const legacy = sttLineFor("2026-10-13", {
+      sonioxBalance: bal(),
+      sttMeasured: { "2026-10-13": 99 },
+    });
+    expect(legacy.sonioxUsd).toBeCloseTo(140.25);
+  });
+
+  it("marks a gap-spread day as an estimate, not a silent measurement", () => {
+    const line = sttLineFor("2026-10-12", {
+      sonioxBalance: bal({ flags: { "2026-10-12": "gap_spread" } }),
+    });
+    expect(line.measured).toBe(true);
+    expect(line.flag).toBe("gap_spread");
+  });
+
+  it("treats a baseline-reset day as unmeasured and flagged, never the constant", () => {
+    const line = sttLineFor("2026-10-13", {
+      sonioxBalance: bal({
+        spend: { "2026-10-13": null },
+        flags: { "2026-10-13": "baseline_reset" },
+      }),
+    });
+    expect(line.measured).toBe(false);
+    expect(line.sonioxUsd).toBe(0);
+    expect(line.flag).toBe("baseline_reset");
+  });
+
+  it("keeps the labelled dated constant until 2 snapshots exist and before the series starts", () => {
+    const one = sttLineFor("2026-10-13", {
+      sonioxBalance: bal({ ready: false, spend: {} }),
+    });
+    expect(one.measured).toBe(false);
+    expect(one.sonioxUsd).toBeCloseTo(STT_MONTHLY_USD / (365.25 / 12));
+    const before = sttLineFor("2026-10-10", { sonioxBalance: bal() });
+    expect(before.measured).toBe(false);
+    expect(before.sonioxUsd).toBeCloseTo(STT_MONTHLY_USD / (365.25 / 12));
+  });
+
+  it("replaces Modulate Mercury cash with the modelled volume line exactly once", () => {
+    const line = sttLineFor("2026-10-13", {
+      sonioxBalance: bal(),
+      modulateModelled: {
+        byDay: { "2026-10-13": { usd: 20.5, priceAsOf: "2026-10-18" } },
+        price: 0.06,
+        priceAsOf: "2026-10-18",
+      },
+      sttCash: { "2026-10-13": { modulate: 20 } },
+    });
+    expect(line.usd).toBeCloseTo(140.25 + 20.5);
+    expect(line.modulateModelled).toBe(true);
+    expect(line.cash).toBe(0); // Mercury cash never stacks under the modelled line
+  });
+
+  it("keeps Deepgram cash off days with a measured Soniox balance line", () => {
+    const line = sttLineFor("2026-10-13", {
+      sonioxBalance: bal(),
+      sttCash: { "2026-10-13": { deepgram: 7 } },
+    });
+    expect(line.usd).toBeCloseTo(140.25);
+    const none = sttLineFor("2026-10-10", {
+      sonioxBalance: bal(),
+      sttCash: { "2026-10-10": { deepgram: 7 } },
+    });
+    expect(none.usd).toBeCloseTo(STT_MONTHLY_USD / (365.25 / 12) + 7);
+  });
+
+  it("reconciles Modulate modelled spend against Mercury cash over the trailing window", () => {
+    const modelled = {
+      byDay: {
+        "2026-10-10": { usd: 10 },
+        "2026-10-11": { usd: 20 },
+        "2026-09-01": { usd: 999 }, // outside the 30-day window
+      },
+      price: 0.06,
+      priceAsOf: "2026-10-18",
+    };
+    const recon = modulateReconciliation(
+      modelled,
+      { "2026-10-10": { modulate: 12 }, "2026-10-11": { modulate: 24 } },
+      "2026-10-11",
+      30
+    );
+    expect(recon).not.toBeNull();
+    expect(recon!.modelledUsd).toBeCloseTo(30);
+    expect(recon!.cashUsd).toBeCloseTo(36);
+    expect(recon!.variancePct).toBeCloseTo(20);
+    expect(modulateReconciliation(undefined, {}, "2026-10-11")).toBeNull();
+    expect(
+      modulateReconciliation(
+        { byDay: {}, price: null, priceAsOf: null },
+        {},
+        "2026-10-11"
+      )
+    ).toBeNull();
+  });
+});
+
+describe("vendor balance and Modulate modelled readers", () => {
+  it("parses snapshot count, as-of and flagged spend days", () => {
+    const parsed = parseVendorBalance(
+      JSON.stringify({
+        spend: [
+          { day: "2026-10-12", usd: 20.5, flag: "gap_spread" },
+          { day: "2026-10-13", usd: null, flag: "baseline_reset" },
+        ],
+        snapshots: 3,
+        latest_ts: "2026-10-13T14:30:00Z",
+        as_of: "2026-10-13",
+      })
+    );
+    expect(parsed.snapshots).toBe(3);
+    expect(parsed.asOf).toBe("2026-10-13");
+    expect(parsed.spend["2026-10-12"]).toBeCloseTo(20.5);
+    expect(parsed.spend["2026-10-13"]).toBeNull();
+    expect(parsed.flags["2026-10-13"]).toBe("baseline_reset");
+    // empty history parses to zero snapshots: the wall keeps its fallbacks
+    const empty = parseVendorBalance("{}");
+    expect(empty.snapshots).toBe(0);
+    expect(empty.spend).toEqual({});
+  });
+
+  it("queries the vendor tables separately from the plan-cost read", () => {
+    expect(FINOPS_VENDOR_BALANCE_QUERY).toContain("vendor_balance_spend_daily");
+    expect(FINOPS_VENDOR_BALANCE_QUERY).toContain("vendor_balance_snapshot");
+    expect(FINOPS_VENDOR_BALANCE_QUERY).toContain("vendor = 'soniox'");
+    expect(FINOPS_PLAN_COST_QUERY).not.toContain("vendor_balance");
+    expect(FINOPS_MODULATE_MODELLED_QUERY).toContain(
+      "stt_modulate_modelled_daily"
+    );
+    expect(FINOPS_MODULATE_MODELLED_QUERY).toContain("price_as_of");
+    expect(FINOPS_PLAN_COST_QUERY).not.toContain("stt_modulate_modelled_daily");
   });
 });

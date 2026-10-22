@@ -26,19 +26,25 @@ import { WallSourceError, wallFailure } from "./wall-source-error";
 import { fetchShopifyWeek } from "./wall-shopify";
 import {
   fetchFinopsHistory,
+  fetchModulateModelled,
   fetchPlanCostHistory,
   fetchStripeFeeHistory,
+  fetchVendorBalanceHistory,
   FinopsHistory,
+  ModulateModelledDay,
   PlanCostHistory,
+  VendorBalanceHistory,
 } from "./wall-finops";
 import { WallJobCache } from "./wall-job-cache";
 import {
   allInCost,
   estimateStatus,
   FEES_UNAVAILABLE_REASON,
+  MODULATE_UNAVAILABLE_REASON,
+  modulateReconciliation,
   SAAS_AS_OF,
   SAAS_MONTHLY_USD,
-  STT_AS_OF,
+  SONIOX_UNAVAILABLE_REASON,
   STT_MONTHLY_USD,
   STT_SOURCE,
 } from "./wall-cost";
@@ -148,6 +154,14 @@ export interface WallSources {
   finops?: (today: string) => Promise<FinopsHistory>;
   /** Measured Stripe processing fees; throws while the fee table is dark. */
   fees?: (today: string) => Promise<Record<string, number>>;
+  /** Soniox balance-derived day-rate; throws while that table is dark. */
+  vendorBalance?: (today: string) => Promise<VendorBalanceHistory>;
+  /** Modulate modelled volume line; throws while its table is dark. */
+  modulate?: (today: string) => Promise<{
+    byDay: Record<string, ModulateModelledDay>;
+    price: number | null;
+    priceAsOf: string | null;
+  }>;
   stripe: () => Promise<{
     usd: number;
     byPlan?: Record<string, number>;
@@ -179,6 +193,8 @@ export const defaultWallSources: WallSources = {
   planCost: fetchPlanCostHistory,
   finops: fetchFinopsHistory,
   fees: fetchStripeFeeHistory,
+  vendorBalance: fetchVendorBalanceHistory,
+  modulate: fetchModulateModelled,
   stripe: async () => {
     const { getOptionalStripe } = await import("./stripe");
     const { fetchWallSubscriptionBook, wallSubscriptionBook } = await import(
@@ -718,16 +734,29 @@ export async function computeWall(
         async () => {
           const planCostSource = sources.planCost;
           const feesSource = sources.fees;
-          const [billResult, planCostResult, feesResult] =
-            await Promise.allSettled([
-              Promise.resolve().then(() => sources.billing()),
-              planCostSource
-                ? Promise.resolve().then(() => planCostSource(isoDay(now)))
-                : Promise.resolve(null),
-              feesSource
-                ? Promise.resolve().then(() => feesSource(isoDay(now)))
-                : Promise.resolve(null),
-            ]);
+          const vendorBalanceSource = sources.vendorBalance;
+          const modulateSource = sources.modulate;
+          const [
+            billResult,
+            planCostResult,
+            feesResult,
+            vendorBalanceResult,
+            modulateResult,
+          ] = await Promise.allSettled([
+            Promise.resolve().then(() => sources.billing()),
+            planCostSource
+              ? Promise.resolve().then(() => planCostSource(isoDay(now)))
+              : Promise.resolve(null),
+            feesSource
+              ? Promise.resolve().then(() => feesSource(isoDay(now)))
+              : Promise.resolve(null),
+            vendorBalanceSource
+              ? Promise.resolve().then(() => vendorBalanceSource(isoDay(now)))
+              : Promise.resolve(null),
+            modulateSource
+              ? Promise.resolve().then(() => modulateSource(isoDay(now)))
+              : Promise.resolve(null),
+          ]);
           if (billResult.status === "rejected") throw billResult.reason;
           const bill = billResult.value;
           const planCost =
@@ -736,15 +765,48 @@ export async function computeWall(
           // missing line, never a guess and never a failed cost stack.
           const feesUnavailable =
             feesResult.status === "rejected" ? FEES_UNAVAILABLE_REASON : null;
+          // Same contract for the two vendor STT legs: dark tables are labelled
+          // missing lines; the stack keeps its labelled fallbacks.
+          const sonioxUnavailable =
+            vendorBalanceResult.status === "rejected"
+              ? SONIOX_UNAVAILABLE_REASON
+              : null;
+          const modulateUnavailable =
+            modulateResult.status === "rejected"
+              ? MODULATE_UNAVAILABLE_REASON
+              : null;
+          const vendorBalance =
+            vendorBalanceResult.status === "fulfilled"
+              ? vendorBalanceResult.value
+              : null;
+          // ≥2 snapshots = the derived day-rate series is live (David
+          // 2026-10-22); before that the dated console constant stays.
+          const sonioxReady = (vendorBalance?.snapshots ?? 0) >= 2;
+          const modulate =
+            modulateResult.status === "fulfilled" ? modulateResult.value : null;
           // Source failures (not empty data): the cache keeps the last good cost.
           if (!bill || bill.summary.costSource !== "billing")
             throw new WallSourceError("Settled billing aggregate unavailable");
           const cutoff = isoDay(shiftDay(end, -2));
           // All-in: GCP net of CUD minus one-time incidents, plus OpenAI, the
           // Anthropic API leg only when it reports spend, measured STT vendor
-          // lines (+ Modulate cash), Mercury SaaS, and measured Stripe fees.
+          // lines (Soniox balance deltas + Modulate modelled volume), Mercury
+          // SaaS, and measured Stripe fees.
           const vendor = {
             sttMeasured: planCost?.sttMeasured,
+            sonioxBalance: vendorBalance
+              ? {
+                  ready: sonioxReady,
+                  firstDay:
+                    Object.keys(vendorBalance.spend).sort()[0] ??
+                    vendorBalance.asOf ??
+                    cutoff,
+                  asOf: vendorBalance.asOf,
+                  spend: vendorBalance.spend,
+                  flags: vendorBalance.flags,
+                }
+              : undefined,
+            modulateModelled: modulate ?? undefined,
             sttCash: planCost?.sttCash,
             saasMeasured: planCost?.saasMeasured,
             stripeFees:
@@ -769,20 +831,75 @@ export async function computeWall(
           const sttEstimate = estimateStatus(now, {
             STT: last.sttMeasured,
           }).find((e) => e.line === "STT")!;
-          const sttLine = last.sttMeasured
-            ? `measured STT $${last.stt.toFixed(2)}/day${
-                last.sttCash
-                  ? ` (incl. $${last.sttCash.toFixed(2)} Mercury vendor cash)`
+          const missingLines = [...cost.missing];
+          if (sonioxUnavailable) missingLines.push("Soniox measured STT");
+          if (modulateUnavailable) missingLines.push("Modulate modelled STT");
+          // Soniox: the balance-delta day-rate once the snapshot series is live
+          // (≥2 snapshots); before that the labelled dated constant (round 1's
+          // stale rule), with the legacy usage line still winning over neither.
+          const sonioxText =
+            sonioxReady && vendorBalance
+              ? last.sttMeasured
+                ? `Soniox measured $${last.sttSonioxUsd.toFixed(
+                    2
+                  )}/day (prepaid-balance Δ, as-of ${
+                    vendorBalance.asOf ?? "?"
+                  })${
+                    last.sttFlag === "gap_spread"
+                      ? ", gap-spread estimate over a missed run"
+                      : ""
+                  }`
+                : `Soniox balance reset on ${last.date}: day unmeasured, new baseline taken`
+              : !vendorBalance && sonioxUnavailable
+              ? `Soniox measured line UNAVAILABLE (${sonioxUnavailable})`
+              : last.sttMeasured
+              ? `Soniox measured $${last.sttSonioxUsd.toFixed(
+                  2
+                )}/day (usage-summary line; balance series not live yet)`
+              : staleEstimate(
+                  sttEstimate,
+                  `Soniox-console constant $${STT_MONTHLY_USD}/mo (${STT_SOURCE}); ${
+                    vendorBalance
+                      ? `${vendorBalance.snapshots}/2 balance snapshots`
+                      : "no balance series"
+                  }`
+                );
+          // Modulate: modelled volume × committed price when present; Mercury
+          // cash is the labelled fallback and always the monthly cross-check.
+          const recon = modulateReconciliation(
+            modulate ?? undefined,
+            planCost?.sttCash,
+            cutoff
+          );
+          const modulateText = last.sttModulateModelled
+            ? `Modulate modelled $${last.sttModulateUsd.toFixed(
+                2
+              )}/day (measured volume × $${modulate?.price}/h, price as-of ${
+                modulate?.priceAsOf
+              })`
+            : `Modulate Mercury cash${
+                last.sttCash ? ` $${last.sttCash.toFixed(2)}/day` : ""
+              }${
+                modulateUnavailable
+                  ? " (modelled line unavailable)"
+                  : modulate
+                  ? " (modelled line has no row for the day)"
                   : ""
-              }`
-            : staleEstimate(
-                sttEstimate,
-                `STT $${STT_MONTHLY_USD}/mo Soniox-console constant as of ${STT_AS_OF}${
-                  last.sttCash
-                    ? ` + $${last.sttCash.toFixed(2)} Mercury vendor cash`
-                    : ""
-                }`
-              );
+              }`;
+          const reconText = recon
+            ? ` Modulate 30d reconciliation: modelled $${Math.round(
+                recon.modelledUsd
+              ).toLocaleString("en-US")} vs Mercury cash $${Math.round(
+                recon.cashUsd
+              ).toLocaleString("en-US")} (${
+                recon.variancePct == null
+                  ? "modelled $0"
+                  : `${
+                      recon.variancePct >= 0 ? "+" : ""
+                    }${recon.variancePct.toFixed(1)}%`
+              }).`
+            : "";
+          const sttLine = `STT ${sonioxText}; ${modulateText}${reconText}`;
           const saasLine = last.saasMeasured
             ? `measured SaaS (Mercury) $${last.saas.toFixed(2)}/day`
             : `SaaS fixed $${SAAS_MONTHLY_USD}/mo estimate as of ${SAAS_AS_OF} (${
@@ -801,7 +918,7 @@ export async function computeWall(
               ? " + Anthropic $0 API (team seats are SaaS cash)"
               : " + Anthropic API leg not configured (team seats are SaaS cash)";
           const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI${anthropicLine} + ${sttLine} + ${saasLine} + ${feesLine}${
-            cost.missing.length ? `; missing: ${cost.missing.join(", ")}` : ""
+            missingLines.length ? `; missing: ${missingLines.join(", ")}` : ""
           }`;
           const m = metrics["cost.net_day"];
           m.value = last.total;

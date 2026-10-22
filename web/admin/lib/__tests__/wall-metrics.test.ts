@@ -307,7 +307,154 @@ it("adds Modulate Mercury cash to the STT line and keeps Soniox cash out", async
   // Measured Soniox + Modulate cash; the Soniox prepaid recharge and the
   // Deepgram cash (a measured line exists) never stack on top.
   expect(metric.value).toBeCloseTo(100 + 140 + 20 + 0);
-  expect(metric.reason).toContain("incl. $20.00 Mercury vendor cash");
+  expect(metric.reason).toContain(
+    "Soniox measured $140.00/day (usage-summary line; balance series not live yet)"
+  );
+  expect(metric.reason).toContain("Modulate Mercury cash $20.00/day");
+});
+
+it("uses the Soniox balance-delta day-rate once two snapshots exist", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: { "2026-10-13": 0 },
+    sttCash: {},
+  });
+  s.vendorBalance = async () => ({
+    snapshots: 3,
+    latestTs: "2026-10-13T14:30:00Z",
+    asOf: "2026-10-13",
+    spend: { "2026-10-12": 175.5, "2026-10-13": 140.25 },
+    flags: {},
+  });
+  s.modulate = async () => ({
+    byDay: {
+      "2026-10-13": {
+        usd: 20.5,
+        seconds: 1_230_000,
+        pricePerHour: 0.06,
+        priceAsOf: "2026-10-18",
+      },
+    },
+    price: 0.06,
+    priceAsOf: "2026-10-18",
+  });
+  const wall = await computeWall(s, now);
+  const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(metric.value).toBeCloseTo(100 + 140.25 + 20.5);
+  expect(metric.reason).toContain(
+    "Soniox measured $140.25/day (prepaid-balance Δ, as-of 2026-10-13)"
+  );
+  expect(metric.reason).toContain(
+    "Modulate modelled $20.50/day (measured volume × $0.06/h, price as-of 2026-10-18)"
+  );
+  // no Mercury modulate cash in the window: the reconciliation shows -100%
+  expect(metric.reason).toContain("Modulate 30d reconciliation");
+  expect(metric.reason).toContain("-100.0%");
+});
+
+it("flags a baseline-reset day and keeps the constant only below two snapshots", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: { "2026-10-13": 0 },
+    sttCash: {},
+  });
+  s.vendorBalance = async () => ({
+    snapshots: 3,
+    latestTs: "2026-10-13T14:30:00Z",
+    asOf: "2026-10-13",
+    spend: { "2026-10-13": null },
+    flags: { "2026-10-13": "baseline_reset" },
+  });
+  const wall = await computeWall(s, now);
+  const reset = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(reset.value).toBeCloseTo(100);
+  expect(reset.reason).toContain(
+    "Soniox balance reset on 2026-10-13: day unmeasured, new baseline taken"
+  );
+
+  s.vendorBalance = async () => ({
+    snapshots: 1,
+    latestTs: "2026-10-13T14:30:00Z",
+    asOf: "2026-10-13",
+    spend: {},
+    flags: {},
+  });
+  const wall2 = await computeWall(s, now);
+  const constant = wall2.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(constant.value).toBeCloseTo(100 + 5_300 / (365.25 / 12));
+  expect(constant.reason).toContain("1/2 balance snapshots");
+});
+
+it("reports both vendor STT legs unavailable when their tables are dark", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: { "2026-10-13": 0 },
+    sttCash: {},
+  });
+  s.vendorBalance = fail;
+  s.modulate = fail;
+  const wall = await computeWall(s, now);
+  const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(metric.reason).toContain("Soniox measured line UNAVAILABLE");
+  expect(metric.reason).toContain("Modulate Mercury cash");
+  expect(metric.reason).toContain("modelled line unavailable");
+  expect(metric.reason).toContain(
+    "missing: Stripe processing fees, Soniox measured STT, Modulate modelled STT"
+  );
 });
 
 it("shows Stripe fees as unavailable with the missing scope, never a guess", async () => {

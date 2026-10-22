@@ -129,6 +129,9 @@ BigQuery `based-hardware.omi_finops` (location US, same as the billing export, s
 | `unit_cost_user_day` | date × `uid_hash` | hashed uids only (`sha256[:16]`) |
 | `mercury_vendor_spend_daily`, `mercury_saas_daily` | date × vendor / date | Mercury aggregates (`load_mercury`; dark while Mercury is off) |
 | `stripe_fee_daily` | date | measured Stripe processing fees (dark while the fee scope is missing) |
+| `vendor_balance_snapshot` | ts × vendor | Soniox prepaid-balance snapshots (dark while the org key is off) |
+| `vendor_balance_spend_daily` | date × vendor | daily spend derived from consecutive snapshots (gap/reset flagged) |
+| `stt_modulate_modelled_daily` | date | modelled Modulate STT cost: Prometheus seconds × committed rate-card price |
 
 All four are partitioned by `date` and clustered. Loads are **idempotent per date**: the run's
 dates are deleted and re-inserted inside one BigQuery transaction, so re-running a date replaces
@@ -554,3 +557,75 @@ The TV reads it through `wall-finops.ts` (`fetchStripeFeeHistory`), kept
 outside the plan-cost query so a dark fee table can never fail the plan/STT/SaaS
 legs; the wall shows the fee line as unavailable with the missing scope until
 the first successful pull creates the table.
+
+## Vendor balance snapshots: the measured Soniox day-rate (2026-10-22)
+
+The Soniox **organization** key (`FINOPS_SONIOX_ORG_KEY`) has no usage, invoice
+or billing API — every such path returns 404. The one readable endpoint is
+`GET https://api.soniox.com/v1/organization/balance` (`Authorization: Bearer`),
+which returns `used_balance_usd` (cumulative, a string), `available_balance_usd`
+and `invoice_billing_enabled`. `pull_vendor_balance.py` snapshots those parsed
+numbers once per daily run into `raw/vendor_balance_snapshot.json`; the pull
+logs and artifact carry parsed numbers only — never the key and never the raw
+response body.
+
+The loader writes two dark-able tables:
+
+- `omi_finops.vendor_balance_snapshot` — one row per successful pull
+  (`date`, `ts`, `vendor`, `used_usd`, `available_usd`,
+  `invoice_billing_enabled`), idempotent per (date, vendor).
+- `omi_finops.vendor_balance_spend_daily` — the **derived day rate**: each
+  interval between consecutive snapshots belongs to the UTC days strictly
+  after the previous snapshot's day through the current snapshot's day
+  (daily runs ⇒ exactly the snapshot's own day). A run gap spreads the delta
+  evenly over the missed days and flags them `gap_spread` (an assumption, not
+  a measurement). A lower `used` value is a recharge/reset: that day is
+  unmeasured (`usd` NULL, flag `baseline_reset`) and the new value becomes
+  the next interval's baseline. The whole trailing window is recomputed from
+  the snapshot table on every run, so the spread/reset rules can change
+  without backfilling.
+
+Optional by design: a missing key, a 401/403, or a transport/shape failure
+writes `status=skipped` with a reason and never fails the daily job. The TV
+(`fetchVendorBalanceHistory`) shows Soniox as **measured** with its as-of
+date only once **≥2 snapshots** exist; before that the labelled, dated
+console constant (read 2026-10-16, STALE after 14 days) stays as the
+fallback, and a dark table is an explicit unavailable line, never a guess.
+
+Secret wiring: `cloudrun.secret('soniox_org')` resolves the
+`FINOPS_SONIOX_ORG_KEY` file mount (added to the deploy workflow's
+`--set-secrets` on 2026-10-22; the secret is readable by
+`finops-writer@based-hardware.iam.gserviceaccount.com`). Local runs use the
+`FINOPS_SONIOX_ORG_KEY` env var. The separate `SONIOX_API_KEY` mount and its
+usage-summary leg are unchanged; the balance series supersedes that line on
+the wall once live.
+
+## Modelled Modulate STT cost (no vendor API exists)
+
+Modulate exposes no usage or balance API — every GET path probed returns 404 —
+so its line can never be measured. `pull_prometheus.py` additionally pulls
+`sum by (provider) (increase(omi_live_stt_audio_seconds_total[1d]))` (VAD
+speech seconds flushed to backend-provider live sessions; the `modulate`
+series is the measured volume), and `pull_modulate_modelled.py` multiplies it
+by the **committed, dated unit price** from `backend/config/rate_card_v2.json`
+(committed 2026-10-18 @ f6a358902db): **$0.06 per audio hour** — Modulate
+"Multilingual Transcription" streaming WebSocket list price,
+platform.modulate.ai (100 credits = $1, so $0.06/h is 6 credits/h); live SKU
+`velma-2-stt-streaming`, not Velma Triage. Every row is `method=modelled`.
+The rate card is SHA-pinned by backend tests; a price change is a reviewed
+commit that updates the pinned expectations and this line's as-of date.
+
+Coverage caveat, surfaced by the reconciliation rather than hidden: the
+Prometheus series meters backend live/PTT streaming sessions; any Modulate
+batch-REST volume outside that counter appears as reconciliation variance
+against Mercury cash. The wall computes the trailing-30-day variance between
+the modelled line and Mercury `modulate` cash (`stt_vendor` in the vendor
+map) and prints it on the STT line. When the modelled line is unavailable
+(missing series or missing card) the wall falls back to labelled Mercury
+Modulate cash, exactly as before.
+
+The loader writes `omi_finops.stt_modulate_modelled_daily` (date, audio
+seconds, usd, price, price as-of, `method='modelled'`), dark while skipped.
+The Modulate ORG key binding (`FINOPS_MODULATE_ORG_KEY`) is mounted for a
+future vendor API; **no code calls a Modulate endpoint with it**, pinned by
+test.
