@@ -1,6 +1,7 @@
 """One owner session, two independent verifiers, one reversible effect boundary."""
 
 from utils.generated_compute import generated_compute_allowed, generated_compute_configured
+from config.vertex_reservations import PROBE_SECONDS, PROBE_TIMEOUT_SECONDS
 
 import asyncio
 import logging
@@ -831,8 +832,10 @@ async def run_pass(
             await dream_capacity.release(slot)
 
 
-RESERVED_RECHECKS = 4
 RESERVED_RECHECK_SECONDS = 30
+# A previous replica can leave a full discovery lease after an inconclusive
+# probe or shutdown. Wait for its expiry, one bounded probe, and a final read.
+RESERVED_RECHECKS = (PROBE_SECONDS + PROBE_TIMEOUT_SECONDS) // RESERVED_RECHECK_SECONDS + 1
 
 
 async def drain(*, limit=5000):
@@ -847,6 +850,8 @@ async def drain(*, limit=5000):
                 # before giving up the hourly sweep.
                 for _ in range(RESERVED_RECHECKS):
                     await asyncio.sleep(RESERVED_RECHECK_SECONDS)
+                    if not enabled():
+                        return results
                     if await dream_capacity.available_model(mode='reserved') is not None:
                         reserved_open = True
                         break

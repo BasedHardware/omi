@@ -162,6 +162,21 @@ def test_sweep_rechecks_after_stale_evidence_before_giving_up(monkeypatch):
     assert len(pages) == 1
 
 
+def test_sweep_stops_rechecking_when_global_kill_switch_turns_off(monkeypatch):
+    monkeypatch.setattr(dream_agent, 'enabled', lambda: True)
+    monkeypatch.setattr(dream_agent, 'on_demand_enabled', lambda: False)
+    available = AsyncMock(return_value=None)
+    monkeypatch.setattr(dream_capacity, 'available_model', available)
+
+    async def switch_off(seconds):
+        monkeypatch.setattr(dream_agent, 'enabled', lambda: False)
+
+    monkeypatch.setattr(dream_agent.asyncio, 'sleep', switch_off)
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pytest.fail('owner page read'))
+    assert asyncio.run(dream_agent.drain()) == []
+    available.assert_awaited_once()
+
+
 def test_no_model_stops_before_gateway_access(monkeypatch):
     monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=None))
     monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: pytest.fail('gateway accessed'))

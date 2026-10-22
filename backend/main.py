@@ -155,7 +155,7 @@ paths_timeout = {
     "/v2/cap-hold-recovery/sweep": 1710,  # Await bounded redrive under Scheduler's 1740s deadline.
     "/v2/batch-pipeline/recover-quarantine": 1500,  # Await paid STT and durable settlement within the task request.
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
-    "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
+    "/v2/dream-agent/sweep": 150,  # Enabled Dream routes use the 1710s cap in TimeoutMiddleware.
     "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
     "/v2/dream-agent/canary": 90,
     "/v1/dream/runs": 90,
