@@ -425,9 +425,18 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
     return goals[0]
 
 
+# The query has no order_by, so a limit returns the first rows in document-id
+# order. The ended-goal filter and the sort both run in Python, so the limit has
+# to be applied after them: pushing it into the query drops active goals whose
+# document ids sort later, and an ended row inside the first page comes back as
+# a short page. 100 matches the widest caller (chat context, goal advice); the
+# developer-API caller passes its own limit and slices the same way.
+_GET_USER_GOALS_SCAN_CAP = 100
+
+
 def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
-    query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
+    query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(max(limit, _GET_USER_GOALS_SCAN_CAP))
     goals = _normalize_goal_documents(query.stream())
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)
