@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
 export const dynamic = "force-dynamic";
 
@@ -62,7 +62,7 @@ export function summarizeCsatRatings(
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
   const requested = parseInt(
     request.nextUrl.searchParams.get("limit") || "500",
@@ -78,14 +78,14 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .get();
     const rows = snapshot.docs.map((d) => row(d.data()));
-    return NextResponse.json({
+    return authResult.json({
       available: true,
       ...summarizeCsatRatings(rows),
     });
   } catch (error) {
     console.error("CSAT stats error:", error);
     // Never invent zeros while claiming success.
-    return NextResponse.json({
+    return authResult.json({
       available: false,
       total: 0,
       histogram: {},
