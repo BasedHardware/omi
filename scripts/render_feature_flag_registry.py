@@ -8,6 +8,8 @@ header marker, never from wall-clock time, so CI drift checks are stable.
 from __future__ import annotations
 
 import argparse
+
+from feature_flag_parser_defaults import parser_defaults
 import json
 import re
 import sys
@@ -274,6 +276,11 @@ def _preamble() -> list[str]:
         "# Feature-flag authority registry",
         "",
         GENERATED_NOTICE,
+        "",
+        "Boolean `fail` fields for migrated switches are generated from the shared parser's",
+        "missing-value policy. `CAPTURE_COVERAGE_MODE` off/shadow preserves the legacy token",
+        "grammar; serve uses `refactor_modes.default_on/default_off`. Explicit child settings",
+        "override repeat-work inheritance only in serve mode. Check with `--check-parsers`.",
         "",
         "Flipping a row here does not turn a feature on; PostHog / bundle identity /",
         "`runtime_env` remain the live levers. This file is a catalog of *which* lever",
@@ -572,6 +579,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=ROOT)
     parser.add_argument("--as-of", dest="as_of", help="YYYY-MM-DD; required on first render")
+    parser.add_argument(
+        '--check-parsers', action='store_true', help='Check migrated boolean fail fields without writing'
+    )
     args = parser.parse_args()
 
     root = args.root.resolve()
@@ -589,7 +599,30 @@ def main() -> int:
             return 2
         as_of = date.fromisoformat(match[1])
 
-    registry = _parse_yaml_subset(root / REGISTRY_PATH)
+    registry_path = root / REGISTRY_PATH
+    defaults = parser_defaults(root)
+    original = registry_path.read_text(encoding='utf-8')
+    updated = []
+    mismatches = []
+    for line in original.splitlines(keepends=True):
+        match = re.search(r'"key"\s*:\s*"([A-Z0-9_]+)"', line)
+        if match and match[1] in defaults:
+            expected = defaults[match[1]]
+            declared = re.search(r'"fail"\s*:\s*"(open|closed)"', line)
+            if declared is None:
+                raise ValueError(f"{match[1]}: missing or invalid fail field")
+            if declared[1] != expected:
+                mismatches.append(match[1])
+                line = line[: declared.start(1)] + expected + line[declared.end(1) :]
+        updated.append(line)
+    if args.check_parsers:
+        if mismatches:
+            print('parser fail field mismatch: ' + ', '.join(mismatches), file=sys.stderr)
+            return 1
+        print(f'checked {len(defaults)} migrated boolean parser defaults')
+        return 0
+    registry_path.write_text(''.join(updated), encoding='utf-8')
+    registry = _parse_yaml_subset(registry_path)
     rendered = render(root, registry, as_of)
     doc = root / DOC_PATH
     doc.parent.mkdir(parents=True, exist_ok=True)

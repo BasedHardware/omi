@@ -18,8 +18,10 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import math
 import os
 from typing import Literal
+from collections.abc import Mapping
 
 from config.policy.batch import cohort_bucket
 
@@ -32,14 +34,23 @@ _FALSE = frozenset(('0', 'false', 'off', 'no'))
 _warned: set[str] = set()
 
 
+# Typed bindings make the generic cohort reader visible to registry validation.
+CAPTURE_COVERAGE_MODE_ENV = 'CAPTURE_COVERAGE_MODE'
+CAPTURE_COVERAGE_SERVE_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_PERCENT'
+CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S'
+_COHORT_ENVS = {
+    CAPTURE_COVERAGE_MODE_ENV: (CAPTURE_COVERAGE_SERVE_PERCENT_ENV, CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV),
+}
+
+
 def _warn_once(name: str, raw: str) -> None:
     if name not in _warned:
         _warned.add(name)
         logger.warning('event=config_value_unrecognized name=%s', name)
 
 
-def mode(name: str, default: Mode = 'shadow') -> Mode:
-    raw = os.getenv(name, '').strip().lower()
+def mode(name: str, default: Mode = 'shadow', *, environ: Mapping[str, str] | None = None) -> Mode:
+    raw = (os.environ if environ is None else environ).get(name, '').strip().lower()
     if not raw:
         return default
     if raw in _MODES:
@@ -48,9 +59,9 @@ def mode(name: str, default: Mode = 'shadow') -> Mode:
     return default
 
 
-def default_on(name: str) -> bool:
+def default_on(name: str, *, environ: Mapping[str, str] | None = None) -> bool:
     """A kill switch: on unless explicitly set to a false word. Unknown values stay on."""
-    raw = os.getenv(name, '').strip().lower()
+    raw = (os.environ if environ is None else environ).get(name, '').strip().lower()
     if raw in _FALSE:
         return False
     if raw and raw not in _TRUE:
@@ -58,9 +69,9 @@ def default_on(name: str) -> bool:
     return True
 
 
-def default_off(name: str) -> bool:
+def default_off(name: str, *, environ: Mapping[str, str] | None = None) -> bool:
     """An opt-in switch: off unless explicitly set to a true word. Unknown values stay off."""
-    raw = os.getenv(name, '').strip().lower()
+    raw = (os.environ if environ is None else environ).get(name, '').strip().lower()
     if raw in _TRUE:
         return True
     if raw and raw not in _FALSE:
@@ -72,22 +83,29 @@ def uid_digest(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 
 
-def serving_for(name: str, uid: str | None, default: Mode = 'shadow') -> bool:
+def serving_for(
+    name: str, uid: str | None, default: Mode = 'shadow', *, environ: Mapping[str, str] | None = None
+) -> bool:
     """Whether the new path serves this uid. ``off`` and ``shadow`` serve only the cohort."""
-    current = mode(name, default)
+    env = os.environ if environ is None else environ
+    current = mode(name, default, environ=env)
     if current == 'off':
         return False
     if current == 'serve':
         return True
     if not uid:
         return False
-    digests = {d.strip().lower() for d in os.getenv(f'{name}_SERVE_UID_SHA256S', '').split(',') if d.strip()}
+    percent_env, digests_env = _COHORT_ENVS.get(name, (f'{name}_SERVE_PERCENT', f'{name}_SERVE_UID_SHA256S'))
+    digests = {d.strip().lower() for d in env.get(digests_env, '').split(',') if d.strip()}
     if digests and uid_digest(uid) in digests:
         return True
     try:
-        percent = float(os.getenv(f'{name}_SERVE_PERCENT', '0') or 0)
+        percent = float(env.get(percent_env, '0') or 0)
     except ValueError:
-        _warn_once(f'{name}_SERVE_PERCENT', 'invalid')
+        _warn_once(percent_env, 'invalid')
+        percent = 0.0
+    if not math.isfinite(percent) or not 0 <= percent <= 100:
+        _warn_once(percent_env, 'invalid')
         percent = 0.0
     return percent > 0 and cohort_bucket(uid, name.lower()) < percent
 

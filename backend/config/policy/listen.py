@@ -338,7 +338,9 @@ def resolve_listen_policy(
     hintable = _hintable_percent(env)
 
     def enabled(key, default='false'):
-        return env.get(key, default).lower() == 'true'
+        from config.policy.parts import boolean
+
+        return boolean(env, key, default, strip=False, uid=uid)
 
     try:
         shed = min(1000, max(1, int(env.get('STT_SHED_CONNECT_FAILURES', '3'))))
