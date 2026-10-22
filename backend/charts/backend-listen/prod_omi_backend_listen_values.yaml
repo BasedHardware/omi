@@ -765,6 +765,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MCP_OAUTH_CLIENTS_JSON
+  - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
 

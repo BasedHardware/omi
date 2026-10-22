@@ -4133,6 +4133,28 @@
       ]
     },
     {
+      "collectionGroup": "conversations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "has_content",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "finished_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "chat_first_deferrals",
       "queryScope": "COLLECTION",
       "fields": [

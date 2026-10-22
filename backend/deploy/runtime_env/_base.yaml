@@ -355,6 +355,7 @@ environment_shared:
           category: service_discovery
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           category: service_discovery
+        LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
           value: '900'
           category: reliability
@@ -514,6 +515,7 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
         STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
@@ -1147,6 +1149,7 @@ environment_shared:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
+          LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -1491,6 +1494,7 @@ environment_shared:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
+          LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -1845,6 +1849,7 @@ environment_shared:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
+          LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -2171,6 +2176,7 @@ environment_shared:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
+          LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability

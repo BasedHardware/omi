@@ -6225,3 +6225,63 @@ Operator redrive payloads may carry `redrive_mode: 'minimal'` to re-transcribe p
 Runtime STT-cap and ladder execution scope shares the 60-second, environment-fenced
 Firestore token cache; session admission does not wait for it. Existing live sessions
 retain admitted state until reconnect. See [runtime ramp and rollback](stt-cap-dispatch.md#runtime-cohort-no-restart).
+
+## Durable mono pendant/phone quiet checks
+
+`LISTEN_QUIET_FINALIZATION_ENABLED=true` is the default. Mono `omi` and `phone`
+recordings arm one opaque `quiet-*` check in `conversation_finalization_jobs`
+on session setup and every socket exit (including drain/network failure).
+Arming on setup covers process death before teardown, including rows that gain
+content later. Checks leave the conversation `in_progress`; they do not bind
+`finalization_job_id`, increment the processing revision, or emit side effects.
+The first due time is the persisted last-content time plus the configured quiet
+timeout, including the stored calendar continuation window. The ordinary
+120-second gap is the fallback for legacy rows lacking the timeout stamp.
+
+At each wake, the check transaction re-reads the conversation and its recording
+session lease. A continuing owner or later content reserves a new wake at the
+later of the quiet deadline and lease expiry. An expired owner admits content
+through the normal transactional `SERVER_RECOVERY` lifecycle path with
+`require_cloud_tasks=True`. That admission rechecks status, content, protected
+output, locks, discard/deletion, quiet time and the live lease. A reconnect
+between evaluation and admission therefore wins; a reconnect with a new
+conversation identity does not suppress the old row's obligation. Desktop
+clean-close and multichannel processing keep their existing paths. Their
+existing job bindings also fence any quiet check of the same row.
+
+Only opaque job ID and dispatch generation enter Cloud Tasks. Session setup
+stamps only a boolean BYOK requirement; credential-free recovery creates a
+blocked BYOK job, never substitutes platform credentials. Each check
+reserves its next generation before processing admission, so worker death,
+duplicate delivery, task exhaustion and enqueue failure retain indexed replay
+debt. Normal processing jobs retain their existing revision/lease/fanout fences.
+The periodic outbox reconciler uses a 60-second default while this switch is
+on (300 seconds when off). It owns due wakes for GKE listen, which keeps its
+existing inline pusher route and needs no finalization queue binding to persist
+checks; queue-capable producers can additionally schedule opaque Cloud Tasks. The independent fast in-progress sweep is eligible after five minutes
+while this switch is enabled, using a due-content collection-group index (status, has_content, finished_at)
+instead of rotating through historical empty stubs, with its bounded 2,000-row scan and
+ten-admission tick cap; historical backlog drain time remains bounded by those
+caps, not guaranteed for the whole fleet in a single tick. The original two-hour full scan remains always on, with its own cursor and
+five-minute scan cadence, for markerless content and unknown legacy leases.
+New recordings have
+a per-conversation due item and do not depend on that legacy scan or a reconnect.
+
+`omi_conversation_orphaned_unfinalized_total` is an unlabeled counter of observed
+quiet, content-bearing rows without a processing job and without a live lease
+(including legacy-sweep admissions). Alert on a positive increase over a short
+window such as ten minutes; retries can observe the same row more than once.
+This measures missing finalization handoff, not missing capture or STT ingress.
+
+Roll out the producer code on GKE listen and the consumer code on backend
+API/reconciler/worker hosts. Keep the existing Cloud Run durable-finalization
+queue/handler bindings; GKE listen retains inline finalization. Verify check creation, deferral for
+same-conversation continuation, a single processing revision after lease expiry,
+and the alert signal before declaring runtime acceptance. The declared due-content index must be READY before rollout; the existing
+Firestore readiness release gate enforces that prerequisite. Historical redrive
+is not part of this change. Kill switch:
+`LISTEN_QUIET_FINALIZATION_ENABLED=false` on **all** those hosts; this suppresses
+arming, retires queued checks without processing, and restores the prior
+2-hour fallback threshold. Already-admitted processing jobs finish under their
+normal fences. Re-enable with `true`; resumed sockets and the legacy sweep pick
+up remaining debt. This PR does not deploy or change any production row.

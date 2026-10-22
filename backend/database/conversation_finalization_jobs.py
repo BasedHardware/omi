@@ -16,8 +16,10 @@ from typing import Any, Callable, Literal, Mapping, TypedDict
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
+from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database._client import document_id_from_seed, get_firestore_client
 from database.conversation_terminal_title import (
     dead_letter_conversation_updates,
@@ -31,6 +33,7 @@ from database.firestore_index_registry import (
 )
 from database.people_stats_cache import invalidate_people_stats_cache
 from models.client_processing import PROJECTION_FAMILY_FIELDS
+from utils.conversation_continuity import continuation_timeout
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -358,7 +361,7 @@ def recovery_admission_refusal(
     if conversation.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD):
         return 'terminal_no_derived'
     source = getattr(conversation.get('source'), 'value', conversation.get('source'))
-    if source != 'omi':
+    if source != 'omi' and not (source == 'phone' and quiet_finalization_enabled()):
         return 'source'
     if structured_has_protected_content(conversation.get('structured'), conversation.get('user_title')):
         return 'protected_content'
@@ -377,24 +380,24 @@ def recovery_admission_refusal(
     return None
 
 
-def _has_active_recording_session_lease(
+def recording_session_lease_expiry(
     transaction: Any,
     recording_sessions_collection: Any | None,
     uid: str,
     conversation_id: str,
     conversation: Mapping[str, Any],
     now: datetime,
-) -> bool:
+) -> datetime | None:
     """Read the live-session fence in the same transaction as recovery admission."""
     external_data = conversation.get('external_data') or {}
     if not isinstance(external_data, Mapping):
-        return False
+        return None
     recording_session_id = external_data.get('recording_session_id')
     if not isinstance(recording_session_id, str) or not recording_session_id or recording_sessions_collection is None:
-        return False
+        return None
     snapshot = recording_sessions_collection.document(recording_session_id).get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
-        return False
+        return None
     session = snapshot.to_dict() or {}
     if (
         session.get('uid') != uid
@@ -402,13 +405,13 @@ def _has_active_recording_session_lease(
         or session.get('conversation_id') != conversation_id
         or str(session.get('lifecycle_phase') or '') != 'in_progress'
     ):
-        return False
+        return None
     lease_expires_at = session.get('lease_expires_at')
     if not isinstance(lease_expires_at, datetime):
-        return False
+        return None
     if lease_expires_at.tzinfo is None and now.tzinfo is not None:
         lease_expires_at = lease_expires_at.replace(tzinfo=timezone.utc)
-    return lease_expires_at > now
+    return lease_expires_at
 
 
 def _snapshot_bound_projection_updates(
@@ -500,6 +503,8 @@ def _create_or_get_finalization_intent_txn(
     extra_updates: Mapping[str, Any] | None = None,
     recovery_cutoff: datetime | None = None,
     recording_sessions_collection: Any | None = None,
+    account_deletion_ref: Any | None = None,
+    require_expired_recording_lease: bool = False,
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff.
 
@@ -519,18 +524,41 @@ def _create_or_get_finalization_intent_txn(
         loaded: dict[str, Any] = conversation_snapshot.to_dict() or {}
         conversation = loaded
         if trigger is ProcessingTrigger.SERVER_RECOVERY:
+            if account_deletion_ref is not None:
+                marker = account_deletion_ref.get(transaction=transaction)
+                deletion_status = normalize_account_deletion_status(
+                    marker_exists=bool(marker.exists),
+                    raw_status=(marker.to_dict() or {}).get('wipe_status'),
+                )
+                if account_deletion_blocks_access(deletion_status):
+                    intent = _no_finalization_intent('refused_account_deleting')
+                    return intent
             refusal = recovery_admission_refusal(uid, loaded, recovery_cutoff)
             if refusal is not None:
                 intent = _no_finalization_intent(f'refused_{refusal}')
                 return intent
-            if _has_active_recording_session_lease(
+            if quiet_finalization_enabled():
+                timeout = loaded.get('listen_quiet_timeout_seconds', 120)
+                if not isinstance(timeout, (int, float)) or isinstance(timeout, bool) or not math.isfinite(timeout):
+                    timeout = 120
+                timeout = max(1, min(timeout, 14400))
+                finished_at = loaded['finished_at']
+                finished_at = finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)
+                if finished_at + timedelta(seconds=continuation_timeout(loaded, timeout)) > now:
+                    intent = _no_finalization_intent('refused_not_quiet')
+                    return intent
+            lease_expiry = recording_session_lease_expiry(
                 transaction,
                 recording_sessions_collection,
                 uid,
                 conversation_id,
                 loaded,
                 now,
-            ):
+            )
+            if require_expired_recording_lease and lease_expiry is None:
+                intent = _no_finalization_intent('refused_recording_lease_unknown')
+                return intent
+            if lease_expiry is not None and lease_expiry > now:
                 intent = _no_finalization_intent('refused_active_recording_session')
                 return intent
         if loaded.get('deferred'):
@@ -582,6 +610,8 @@ def _create_or_get_finalization_intent_txn(
             intent = _intent_from_job(job_id, job)
             return intent
 
+        if trigger is ProcessingTrigger.SERVER_RECOVERY:
+            requires_byok = bool(requires_byok or loaded.get('listen_finalization_requires_byok'))
         status: FinalizationJobStatus = 'blocked_byok' if requires_byok else 'queued'
         job = {
             'schema_version': 1,
@@ -676,6 +706,7 @@ def create_or_get_finalization_intent(
     trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
     recovery_cutoff: datetime | None = None,
+    require_expired_recording_lease: bool = False,
     firestore_client: Any = None,
 ) -> FinalizationIntent:
     client = _client(firestore_client)
@@ -704,6 +735,12 @@ def create_or_get_finalization_intent(
             extra_updates=extra_updates,
             recovery_cutoff=recovery_cutoff,
             recording_sessions_collection=recording_sessions_collection,
+            account_deletion_ref=(
+                client.collection('account_deletions').document(uid)
+                if trigger is ProcessingTrigger.SERVER_RECOVERY
+                else None
+            ),
+            require_expired_recording_lease=require_expired_recording_lease,
         )
 
     intent = run_with_transaction_contention_retry(
@@ -1752,7 +1789,7 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
     query = collection.where('reconcile_after_at', '<=', _now()).limit(max(1, min(safe_limit, 100)))
     for snapshot in query.stream():
         job = snapshot.to_dict() or {}
-        if job.get('status') in {'queued', 'leased'}:
+        if job.get('status') in {'queued', 'leased', 'waiting_quiet'}:
             result.append(job | {'job_id': snapshot.id})
     return result
 
@@ -1874,6 +1911,7 @@ STALE_PROCESSING_SWEEP_STATE_DOC = 'stale_processing_sweep'
 MEETING_RECEIPT_SWEEP_STATE_DOC = 'meeting_receipt_backfill_sweep'
 BYOK_ABANDONMENT_SWEEP_STATE_DOC = 'byok_abandonment_sweep'
 IN_PROGRESS_CONTENT_SWEEP_STATE_DOC = 'in_progress_content_sweep'
+IN_PROGRESS_QUIET_SWEEP_STATE_DOC = 'in_progress_quiet_sweep'
 SELFHEAL_MAX_PENDING_VERIFICATIONS = 100
 
 
@@ -1883,14 +1921,18 @@ def scan_in_progress_conversations(
     max_scan: int = 2000,
     resume_after_path: str | None = None,
     firestore_client: Any = None,
+    content_due_before: datetime | None = None,
 ) -> dict[str, Any]:
     """Return a bounded window of ``status == 'in_progress'`` conversation rows.
 
-    The query shape is fixed: a single-equality ``collection_group`` on
+    The legacy query shape is fixed: a single-equality ``collection_group`` on
     ``conversations.status == 'in_progress'``, limited per page, optionally
     resuming after the persisted cursor snapshot. Every recovery predicate is
     evaluated Python-side by the caller; no extra Firestore predicate may be
-    added here.
+    added to that legacy shape. The always-on fast recovery caller explicitly
+    selects the content-bearing, due-by-finished_at collection-group index.
+    This avoids rotating through historical empty stubs before finding a
+    recently expired recording. Lease and admission guards remain transactional.
 
     Returns ``{'rows', 'scanned', 'resume_after_path', 'exhausted'}`` where each
     row is ``{'uid', 'conversation_id', 'path', 'data'}``.
@@ -1914,6 +1956,12 @@ def scan_in_progress_conversations(
             .where(filter=firestore.FieldFilter('status', '==', 'in_progress'))
             .limit(page_size)
         )
+        if content_due_before is not None:
+            query = (
+                query.where(filter=firestore.FieldFilter('has_content', '==', True))
+                .where(filter=firestore.FieldFilter('finished_at', '<=', content_due_before))
+                .order_by('finished_at')
+            )
         if cursor_snapshot is not None:
             query = query.start_after(cursor_snapshot)
         page = list(query.stream())
@@ -1951,11 +1999,13 @@ def scan_in_progress_conversations(
     }
 
 
-def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
+def get_in_progress_content_sweep_cursor(*, quiet: bool = False, firestore_client: Any = None) -> dict[str, Any]:
     """Read the CAS cursor and bounded job identities with optional ``admitted_at`` deadlines."""
     client = _client(firestore_client)
     snapshot = (
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC).get()
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION)
+        .document(IN_PROGRESS_QUIET_SWEEP_STATE_DOC if quiet else IN_PROGRESS_CONTENT_SWEEP_STATE_DOC)
+        .get()
     )
     if not getattr(snapshot, 'exists', False):
         return {'resume_after_path': None, 'generation': 0, 'pending_verifications': []}
@@ -1981,6 +2031,7 @@ def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dic
         'resume_after_path': path if isinstance(path, str) else None,
         'generation': int(data.get('generation', 0)),
         'pending_verifications': entries,
+        'updated_at': data.get('updated_at'),
     }
 
 
@@ -2022,6 +2073,7 @@ def advance_in_progress_content_sweep_cursor(
     new_resume_after_path: str | None,
     *,
     pending_verifications: list[dict[str, Any]] | None = None,
+    quiet: bool = False,
     firestore_client: Any = None,
 ) -> bool:
     """Atomically advance the self-heal sweep cursor; ``False`` on a CAS loss."""
@@ -2030,7 +2082,9 @@ def advance_in_progress_content_sweep_cursor(
     transactional = firestore.transactional(_advance_in_progress_content_sweep_cursor_txn)
     return transactional(
         transaction,
-        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC),
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(
+            IN_PROGRESS_QUIET_SWEEP_STATE_DOC if quiet else IN_PROGRESS_CONTENT_SWEEP_STATE_DOC
+        ),
         expected_generation,
         new_resume_after_path,
         pending_verifications or [],

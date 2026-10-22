@@ -34,18 +34,27 @@ def test_api_reconciler_runs_the_fenced_selfheal_primitive_in_heal_mode(monkeypa
         lambda **kwargs: calls.append(kwargs) or {'enqueued': 1, 'verified': 0, 'errors': 0},
     )
 
+    monkeypatch.setattr(
+        finalization_service.jobs_db,
+        'get_in_progress_content_sweep_cursor',
+        lambda **kw: {'updated_at': datetime.now(timezone.utc)},
+    )
     result = finalization_service.reconcile_stale_in_progress_conversations(firestore_client='db')
 
     assert result['enqueued'] == 1
-    assert calls == [
-        {
-            'firestore_client': 'db',
-            'mode': 'heal',
-            'dry_run': False,
-            'use_configured_uid_allowlist': False,
-            'wedge_runner': finalization_service._skip_capture_wedge,
-        }
-    ]
+    assert len(calls) == 1
+    fast_call = calls[0]
+    assert fast_call.pop('cursor_getter').keywords == {'quiet': True}
+    assert fast_call.pop('cursor_advancer').keywords == {'quiet': True}
+    assert fast_call == {
+        'firestore_client': 'db',
+        'mode': 'heal',
+        'dry_run': False,
+        'use_configured_uid_allowlist': False,
+        'wedge_runner': finalization_service._skip_capture_wedge,
+        'stale_after': timedelta(minutes=5),
+        'content_due_scan': True,
+    }
 
 
 def test_api_reconciler_is_inert_without_durable_dispatch(monkeypatch):
@@ -893,3 +902,36 @@ def test_dry_run_pages_verification_refusals_without_mutating_cursor(reason, cap
     assert counters['refused'] == 1 and state['advances'] == []
     criticals = [r.getMessage() for r in caplog.records if r.levelname == 'CRITICAL']
     assert len(criticals) == 1 and f'reason={reason}' in criticals[0]
+
+
+def test_fast_recovery_selects_due_content_within_minutes():
+    rows = [_row('u1', 'c1', _eligible_data(finished_at=NOW - timedelta(minutes=6)))]
+    state, kwargs = _harness(rows, mode='heal')
+    counters = sweep.run_selfheal_tick(**kwargs, stale_after=timedelta(minutes=5), content_due_scan=True)
+    assert counters['enqueued'] == 1
+    assert state['scan_calls'][0]['content_due_before'] == NOW - timedelta(minutes=5)
+    assert state['finalization_calls'][0]['recovery_cutoff'] == NOW - timedelta(minutes=5)
+
+
+def test_kill_switch_restores_legacy_sweep_threshold(monkeypatch):
+    monkeypatch.setenv('LISTEN_QUIET_FINALIZATION_ENABLED', 'false')
+    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    calls = []
+    monkeypatch.setattr(finalization_service, 'run_selfheal_tick', lambda **kw: calls.append(kw) or {'enqueued': 0})
+    finalization_service.reconcile_stale_in_progress_conversations()
+    assert calls[0]['stale_after'] == timedelta(hours=2)
+    assert calls[0]['content_due_scan'] is False
+
+
+def test_fast_recovery_preserves_the_legacy_always_on_fallback(monkeypatch):
+    monkeypatch.setenv('LISTEN_QUIET_FINALIZATION_ENABLED', 'true')
+    monkeypatch.setattr(finalization_service, 'is_listen_finalization_dispatch_enabled', lambda: True)
+    monkeypatch.setattr(finalization_service.jobs_db, 'get_in_progress_content_sweep_cursor', lambda **kw: {})
+    calls = []
+    monkeypatch.setattr(finalization_service, 'run_selfheal_tick', lambda **kw: calls.append(kw) or {'enqueued': 1})
+    result = finalization_service.reconcile_stale_in_progress_conversations()
+    assert len(calls) == 2
+    assert calls[0]['content_due_scan'] is True
+    assert calls[1]['content_due_scan'] is False
+    assert calls[1]['stale_after'] == timedelta(hours=2)
+    assert result['enqueued'] == 2
