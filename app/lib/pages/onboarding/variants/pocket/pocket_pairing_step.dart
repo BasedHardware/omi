@@ -38,6 +38,7 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   String? _attemptedId;
   bool _failed = false;
   bool _completingConnected = false;
+  bool _attemptInFlight = false;
 
   @override
   void initState() {
@@ -65,9 +66,12 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   /// own path. Runs after the frame so the provider is never mutated during build.
   void _maybeConnect(OnboardingProvider provider) {
     if (_done) return;
+    // A connect this step started finishes only through handleTap's own callback, after its
+    // settle and persistence; isConnected flips earlier than that.
+    if (_attemptInFlight) return;
     if (provider.isConnected) {
-      // Already connected (an earlier attempt, or the pendant reconnected on its own): complete
-      // pairing once as connected so the walkthrough check still runs.
+      // Connected on entry, with no attempt from this step (the pendant reconnected on its own):
+      // complete pairing once as connected so the walkthrough check still runs.
       if (_completingConnected) return;
       _completingConnected = true;
       WidgetsBinding.instance.addPostFrameCallback((_) => _finish(true));
@@ -83,10 +87,12 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
     }
     if (candidate == null || candidate.id == _attemptedId) return;
     _attemptedId = candidate.id;
+    _attemptInFlight = true;
     final device = candidate;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _done) return;
       unawaited(provider.handleTap(device: device, isFromOnboarding: true, goNext: () => _finish(true)).then((_) {
+        _attemptInFlight = false;
         if (!mounted || _done || provider.isConnected) return;
         // handleTap swallowed a failure: offer a fresh scan instead of searching forever.
         setState(() {
