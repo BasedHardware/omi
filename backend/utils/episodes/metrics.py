@@ -136,6 +136,10 @@ def _prime() -> None:
             EPISODE_PROVISIONAL_ITEMS_TOTAL.labels(outcome=outcome)
         for outcome in BOUNDARY_OUTCOMES:
             EPISODE_BOUNDARY_TOTAL.labels(outcome=outcome)
+        for outcome in MOMENT_OUTCOMES:
+            EPISODE_MOMENT_LATENCY_SECONDS.labels(outcome=outcome)
+        for reason in CLOSE_REASON_LABELS:
+            EPISODE_WRAPUP_LATENCY_SECONDS.labels(reason=reason)
         for seen in ('true', 'false'):
             EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen=seen)
         for channel in CLIENT_CHANNELS:

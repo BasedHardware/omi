@@ -193,9 +193,11 @@ def test_steady_talk_ends_a_moment_on_the_interval():
 def test_session_end_flushes_the_buffer(monkeypatch):
     tracker = MomentTracker()
     tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
-    moment = tracker.flush('u')
+    # Another session's conversation (a parallel capture on this pod) keeps its buffer.
+    assert tracker.flush('u', 'c-other') is None
+    moment = tracker.flush('u', 'c1')
     assert moment.trigger == 'session_end' and moment.conversation_id == 'c1'
-    assert tracker.flush('u') is None
+    assert tracker.flush('u', 'c1') is None and tracker.flush('u', None) is None
 
     scheduled = []
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
@@ -204,6 +206,12 @@ def test_session_end_flushes_the_buffer(monkeypatch):
         live.executors, 'start_background_task', lambda coro, *, name: scheduled.append(name) or coro.close()
     )
     tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
-    asyncio.run(live.on_session_end('u'))
-    asyncio.run(live.on_session_end('u'))
+    asyncio.run(live.on_session_end('u', 'c1'))
+    asyncio.run(live.on_session_end('u', 'c1'))
     assert scheduled == ['episode_moment']
+
+
+def test_alternating_devices_attach_each_conversation_once():
+    counter = live._SessionCounter()
+    seen = [counter.first_moment('u', cid) for cid in ['phone', 'omi', 'phone', 'omi', 'phone']]
+    assert seen == [True, True, False, False, False]

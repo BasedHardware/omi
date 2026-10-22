@@ -43,6 +43,10 @@ class EpisodeProvider extends ChangeNotifier {
   /// words, and the row should switch to it (and hide its fragments) within seconds, not half a minute.
   static const pendingPollInterval = Duration(seconds: 10);
 
+  /// The quick re-reads stop after this long without an episode (a pendant worn in silence), so
+  /// quiet wear costs the normal cadence; an episode closing re-arms them for the next stretch.
+  static const pendingPollWindow = Duration(minutes: 3);
+
   /// One stable start for every surface's running length (Home row, live page, device page).
   final LiveStartAnchor liveAnchor = LiveStartAnchor();
 
@@ -66,7 +70,7 @@ class EpisodeProvider extends ChangeNotifier {
   Future<void> refreshLive() async {
     final generation = ++_generation;
     final result = await _fetchLive();
-    if (generation != _generation) return;
+    if (generation != _generation || _disposed) return;
     switch (result) {
       case ApiSuccess(:final data):
         _enabled = data.enabled;
@@ -81,11 +85,22 @@ class EpisodeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Duration get _interval => _enabled && _live == null ? pendingPollInterval : pollInterval;
+  DateTime? _pendingSince;
+  bool _disposed = false;
+
+  Duration get _interval {
+    if (!_enabled || _live != null) {
+      _pendingSince = null;
+      return pollInterval;
+    }
+    final since = _pendingSince ??= _clock();
+    return _clock().difference(since) < pendingPollWindow ? pendingPollInterval : pollInterval;
+  }
+
   Duration? _scheduled;
 
   void _reschedule() {
-    if (_watchers == 0 || _scheduled == _interval) return;
+    if (_disposed || _watchers == 0 || _scheduled == _interval) return;
     _poll?.cancel();
     _scheduled = _interval;
     _poll = Timer.periodic(_interval, (_) => unawaited(refreshLive()));
@@ -183,6 +198,7 @@ class EpisodeProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _poll?.cancel();
     super.dispose();
   }

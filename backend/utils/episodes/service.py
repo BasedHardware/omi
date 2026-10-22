@@ -150,7 +150,7 @@ def _new_episode(
         'sources': [],
         'applied': {},
         'calendar_identity': calendar_identity,
-        'pending_boundary': None,
+        'pending_boundary': {},
         'primary_conversation_id': conversation_id,
         'closing_conversation_id': None,
         'wrap_up_requested_at': None,
@@ -190,7 +190,8 @@ def _close(
         if item.get('status') == 'provisional' and item.get('conversation_id') != detach:
             item['status'] = 'dropped'
             dropped += 1
-    extra: dict[str, Any] = {'provisional_items': items, 'pending_boundary': None}
+    # A provisional join still unsettled at close stays with this episode (it joined on the cheap rules).
+    extra: dict[str, Any] = {'provisional_items': items, 'pending_boundary': {}}
     if detach:
         extra['conversation_ids'] = [cid for cid in episode.get('conversation_ids') or [] if cid != detach]
         extra['provisional_items'] = [item for item in items if item.get('conversation_id') != detach]
@@ -205,6 +206,12 @@ def _close(
     if closed is not None:
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
+
+
+def _pending(episode: Optional[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Provisional joins awaiting their first moment, by conversation id."""
+    raw = (episode or {}).get('pending_boundary')
+    return {str(k): dict(v) for k, v in raw.items() if isinstance(v, Mapping)} if isinstance(raw, Mapping) else {}
 
 
 def _idle_closed_at(episode: Mapping[str, Any], now: datetime) -> datetime:
@@ -306,9 +313,8 @@ def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_
         # Join now so the app hides it under the live episode; its first moment asks Jev.
         metrics.record_boundary('pending')
         updates['pending_boundary'] = {
-            'conversation_id': conversation_id,
-            'gap_seconds': decision.gap_seconds or 0.0,
-            'source_changed': decision.source_changed,
+            **_pending(episode),
+            conversation_id: {'gap_seconds': decision.gap_seconds or 0.0, 'source_changed': decision.source_changed},
         }
     elif not decision.parallel:
         metrics.record_boundary('continue')
@@ -370,15 +376,15 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         speakers=policy.speaker_keys(segments),
     )
     decision = policy.boundary(episode, facts)
-    pending = (episode or {}).get('pending_boundary') or {}
-    if episode and pending.get('conversation_id') == moment.conversation_id and decision.action == policy.CONTINUE:
+    pending = _pending(episode).get(moment.conversation_id)
+    if episode and pending is not None and decision.action == policy.CONTINUE:
         # It joined provisionally at its first words; with its text in hand, settle it now.
         decision = policy.Boundary(
             policy.ASK,
             gap_seconds=float(pending.get('gap_seconds') or 0.0),
             source_changed=bool(pending.get('source_changed')),
         )
-    detach = moment.conversation_id if pending.get('conversation_id') == moment.conversation_id else None
+    detach = moment.conversation_id if pending is not None else None
     if decision.action == policy.ASK and episode:
         prior_speakers = frozenset(episode.get('speaker_keys') or [])
         p_same = incremental.ask_same_occasion(
@@ -443,6 +449,17 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         metrics.record_moment_update(
             trigger=moment.trigger, outcome=failure.outcome, latency_seconds=failure.latency_seconds
         )
+        if episode is None:
+            # The notes failed, the occasion did not: open it without notes (a split already closed
+            # the old one), so the live row and its hidden fragments survive until the next moment.
+            episodes_db.commit_moment(
+                uid,
+                expected_episode_id=None,
+                expected_version=None,
+                new_episode={**base, **_with_conversation(base, moment.conversation_id, moment.source)},
+                link_conversation_ids=[moment.conversation_id],
+                firestore_client=c.firestore_client,
+            )
         return failure.outcome
 
     end_offset = max((_segment_end(s) for s in segments), default=0.0)
@@ -489,8 +506,8 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         'last_activity_at': max(moment.ended_at, last_activity) if last_activity else moment.ended_at,
         'calendar_identity': base.get('calendar_identity') or moment.calendar_identity,
     }
-    if pending.get('conversation_id') == moment.conversation_id:
-        updates['pending_boundary'] = None
+    if pending is not None:
+        updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}
     if episode is None:
         episodes_db.commit_moment(
             uid,

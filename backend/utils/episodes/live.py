@@ -11,7 +11,10 @@
   for the first moment of a live stretch, ``FIRST_MOMENT_MIN_SECONDS`` and
   ``FIRST_MOMENT_MIN_WORDS`` (so the episode has a title within a minute);
 - a session end: the pusher session closes (``on_session_end``), so a pod move or
-  a reconnect does not strand what was buffered.
+  a reconnect does not strand what was buffered. Only the ending session's own
+  conversation is flushed: a parallel capture on the same pod keeps its buffer.
+  (The listen fallback, used only when pusher is unavailable, still relies on
+  finalization for what it buffered.)
 
 A moment shorter than ``MOMENT_MIN_WORDS``, or one inside
 ``MOMENT_MIN_INTERVAL_SECONDS`` of the last flush, keeps accumulating instead
@@ -151,12 +154,15 @@ class MomentTracker:
                     self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
         return ended
 
-    def flush(self, uid: str) -> Optional[MomentInput]:
-        """The session ended: hand over whatever is buffered (the service drops it when too short)."""
-        with self._lock:
-            buf = self._buffers.pop(uid, None)
-        if buf is None or not buf.segments:
+    def flush(self, uid: str, conversation_id: Optional[str]) -> Optional[MomentInput]:
+        """The session for ``conversation_id`` ended: hand over its buffer (the service drops it when too short)."""
+        if not conversation_id:
             return None
+        with self._lock:
+            buf = self._buffers.get(uid)
+            if buf is None or buf.conversation_id != conversation_id or not buf.segments:
+                return None
+            del self._buffers[uid]
         return self._moment(buf, 'session_end')
 
     def clear(self) -> None:
@@ -168,19 +174,27 @@ tracker = MomentTracker()
 
 
 class _SessionCounter:
-    """Remembers the last conversation seen per user, so each one is attached and counted once."""
+    """Remembers each user's recent conversations, so each one is attached and counted once.
+
+    A few per user, not just the last: two devices capturing in parallel alternate batches,
+    and remembering only the last id re-attached (and re-counted) on every switch.
+    """
+
+    RECENT_PER_USER = 6
 
     def __init__(self, cap: int = MAX_BUFFERS) -> None:
-        self._last: dict[str, str] = {}
+        self._last: dict[str, list[str]] = {}
         self._cap = cap
         self._lock = threading.Lock()
 
     def first_moment(self, uid: str, conversation_id: str) -> bool:
         with self._lock:
-            if self._last.get(uid) == conversation_id:
+            recent = self._last.pop(uid, [])
+            self._last[uid] = recent
+            if conversation_id in recent:
                 return False
-            self._last.pop(uid, None)
-            self._last[uid] = conversation_id
+            recent.append(conversation_id)
+            del recent[: -self.RECENT_PER_USER]
             while len(self._last) > self._cap:
                 del self._last[next(iter(self._last))]
             return True
@@ -242,12 +256,12 @@ async def on_realtime_segments(
         logger.warning('event=episode_live outcome=error exception_type=%s', type(error).__name__)
 
 
-async def on_session_end(uid: str) -> None:
-    """The pusher session closed: flush the buffered moment instead of stranding it. Never raises."""
+async def on_session_end(uid: str, conversation_id: Optional[str]) -> None:
+    """The pusher session for ``conversation_id`` closed: flush its buffered moment. Never raises."""
     try:
         if not episodes_enabled_for(uid):
             return
-        moment = tracker.flush(uid)
+        moment = tracker.flush(uid, conversation_id)
         if moment is not None:
             executors.start_background_task(_moment_if_client_seen(uid, moment), name='episode_moment')
     except Exception as error:

@@ -12,16 +12,29 @@ class LiveStartAnchor {
     required bool streaming,
     required DateTime now,
   }) {
-    if (episode != null && !episode.startedAt.isAfter(now)) {
-      // The server's start is authoritative: it is when the occasion's first words arrived.
-      _episodeId = episode.id;
-      _start = episode.startedAt;
+    if (episode != null) {
+      if (_episodeId != episode.id) {
+        // Adopted once per episode: the server's start is when the occasion's first words arrived.
+        // A server clock ahead of the phone keeps the capture start instead, so a later read of the
+        // same episode can never move the start forward (and the label back down).
+        _episodeId = episode.id;
+        if (!episode.startedAt.isAfter(now)) {
+          _start = episode.startedAt;
+        } else if (captureStart != null && !captureStart.isAfter(now)) {
+          _start = _start == null || captureStart.isBefore(_start!) ? captureStart : _start;
+        }
+      }
       return _start;
     }
-    if (_episodeId != null && episode == null) {
-      // The episode closed (idle, wrap-up): the next stretch counts from its own start.
+    if (_episodeId != null) {
+      // The episode closed (idle, wrap-up). The next stretch counts from a fresh capture start when
+      // one is known; with the lease lapsed during the quiet that closed it, keep the old start
+      // rather than reading 0s.
       _episodeId = null;
-      _start = null;
+      if (captureStart != null && !captureStart.isAfter(now)) {
+        _start = captureStart;
+        return _start;
+      }
     }
     if (!streaming) {
       _start = null;

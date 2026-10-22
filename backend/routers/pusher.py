@@ -645,6 +645,9 @@ async def _websocket_util_trigger(
                 finally:
                     audio_budget.release(len(item['data']))
 
+    # The conversation this session last streamed, for the episode moment flush at teardown.
+    episode_session: Dict[str, Optional[str]] = {'conversation_id': None}
+
     async def receive_tasks() -> None:
         nonlocal websocket_active
         nonlocal websocket_close_code
@@ -792,6 +795,7 @@ async def _websocket_util_trigger(
                         if private_cloud_sync_enabled and len(record_close_requests) < 128:
                             record_close_requests.add(current_conversation_id)
                     current_conversation_id = new_conversation_id
+                    episode_session['conversation_id'] = new_conversation_id
                     # A conversation boundary ends the current v2 run: the
                     # next audio starts a fresh continuity window.
                     audio_timeline_last_end = None
@@ -1111,7 +1115,7 @@ async def _websocket_util_trigger(
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
         # Live episode moments buffer in this process; a pod move or reconnect must not strand them.
-        await flush_episode_moment(uid)
+        await flush_episode_moment(uid, episode_session['conversation_id'])
 
         journey_attempt.finish(pusher_session_outcome(websocket_close_code, application_failed=application_failed))
 

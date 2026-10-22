@@ -738,9 +738,9 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     final l10n = context.l10n;
     return DeviceRightNowGroup(
       liveTitle: live == null ? null : (live.title.isEmpty ? l10n.episodeListeningNow : live.title),
-      liveLength: live == null || capture == null
+      liveLengthNow: live == null || capture == null
           ? null
-          : EpisodePresentation.runningLength(
+          : (_) => EpisodePresentation.runningLength(
               EpisodePresentation.elapsed(live, capture, episodes!.now(), anchor: episodes.liveAnchor), l10n),
       onOpenLive: capture == null
           ? null

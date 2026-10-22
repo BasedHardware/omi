@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -38,10 +40,20 @@ void main() {
       expect(anchor.resolve(episode: null, captureStart: next, streaming: true, now: next), next);
     });
 
-    test('a server clock ahead of the phone falls back to the capture start', () {
+    test('an idle close during a lapsed lease keeps the old start instead of 0s', () {
+      final anchor = LiveStartAnchor();
+      final now = _t0.add(const Duration(minutes: 40));
+      anchor.resolve(episode: _episode(_t0), captureStart: null, streaming: true, now: now);
+      expect(anchor.resolve(episode: null, captureStart: null, streaming: true, now: now), _t0);
+    });
+
+    test('a server clock ahead of the phone never moves the start forward later', () {
       final anchor = LiveStartAnchor();
       final ahead = _episode(_t0.add(const Duration(seconds: 20)));
       expect(anchor.resolve(episode: ahead, captureStart: _t0, streaming: true, now: _t0), _t0);
+      // Once the phone's clock passes the server's start, the same episode keeps the earlier start.
+      final later = _t0.add(const Duration(seconds: 30));
+      expect(anchor.resolve(episode: ahead, captureStart: _t0, streaming: true, now: later), _t0);
     });
 
     test('nothing streaming means no running start', () {
@@ -75,5 +87,39 @@ void main() {
       provider.unwatch();
       provider.dispose();
     });
+  });
+
+  test('quiet wear relaxes the quick re-reads after the pending window', () {
+    fakeAsync((async) {
+      var reads = 0;
+      final provider = EpisodeProvider(
+        clock: () => _t0.add(async.elapsed),
+        fetchLive: () async {
+          reads++;
+          return const ApiSuccess(EpisodeRead(enabled: true));
+        },
+      );
+      provider.watch();
+      async.elapse(EpisodeProvider.pendingPollWindow + EpisodeProvider.pendingPollInterval);
+      final quick = reads;
+      async.elapse(EpisodeProvider.pollInterval * 2);
+      // Only the normal cadence now: two reads in a minute, not six.
+      expect(reads - quick, inInclusiveRange(1, 3));
+      provider.unwatch();
+      provider.dispose();
+    });
+  });
+
+  test('a read landing after dispose arms nothing', () async {
+    final release = Completer<void>();
+    final provider = EpisodeProvider(fetchLive: () async {
+      await release.future;
+      return const ApiSuccess(EpisodeRead(enabled: true));
+    });
+    provider.watch();
+    provider.dispose();
+    release.complete();
+    await Future<void>.delayed(Duration.zero);
+    expect(provider.live, isNull);
   });
 }
