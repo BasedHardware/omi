@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { createTvLink, listTvLinks } from "@/lib/tv-links";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const auth = await verifyAdmin(request);
+  const auth = await requireScope(request, "analytics:share");
   if (auth instanceof NextResponse) return auth;
 
   try {
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await verifyAdmin(request);
+  const auth = await requireScope(request, "analytics:share");
   if (auth instanceof NextResponse) return auth;
 
   const raw = await request.text();

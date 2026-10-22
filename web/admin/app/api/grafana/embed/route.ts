@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { embedEnabled, mintEmbed } from "@/lib/grafana-embed";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const admin = await verifyAdmin(request);
+  const admin = await requireScope(request, "analytics:read");
   if (admin instanceof NextResponse) return admin;
   const headers = {
     "Cache-Control": "no-store",

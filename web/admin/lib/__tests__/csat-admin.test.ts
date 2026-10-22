@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => ({ uid: "t" })),
 }));
 vi.mock("@/lib/firebase/admin", () => ({ getDb: () => ({}) }));
 

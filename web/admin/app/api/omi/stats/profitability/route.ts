@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { withRowLimit } from "@/lib/posthog";
 import { getOptionalStripe } from "@/lib/stripe";
 import {
@@ -977,7 +977,7 @@ export async function computeProfitability(opts: {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {

@@ -7,7 +7,7 @@ Detail for the two rules in `web/admin/AGENTS.md`.
 All fetches use `hooks/useAuthToken.ts`; never call `getIdToken()`, create auth headers, or read Firestore in the client.
 
 - Reads: `useAuthToken()` + `authenticatedFetcher`; mutations: `useAuthFetch()` → `fetchWithAuth(url, init)`.
-- Server routes call `verifyAdmin(request)` from `lib/auth.ts`.
+- Server routes call `requireScope(request, scope)` from `lib/auth.ts`, with the scope listed in `lib/route-scopes.ts` (see `docs/team-access.md`).
 - Parallel fetches use `Promise.allSettled`, returning `partial: true` on partial failure and 502 on total failure.
 - SWR configuration belongs in `components/swr-provider.tsx`; keys are `token ? [url, token] : null`.
 - Partial data shows an amber warning. On error, clear stale data and show N/A; never show stale data with an error flag.

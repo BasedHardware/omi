@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { fetchPlanEconomics } from "@/lib/services/plan-economics";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const auth = await verifyAdmin(request);
+  const auth = await requireScope(request, "finance:read");
   if (auth instanceof NextResponse) return auth;
   // No request-level platform attribution exists for these cost pools.
   const platform = request.nextUrl.searchParams.get("platform");

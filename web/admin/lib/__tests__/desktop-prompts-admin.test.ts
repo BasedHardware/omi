@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => ({ uid: "t" })),
 }));
 vi.mock("@/lib/firebase/admin", () => ({ getDb: () => ({}) }));
 
@@ -27,17 +27,17 @@ describe("normalizePrompt", () => {
 
   it("rejects unknown types, empty questions, and 1-option choices", () => {
     expect(normalizePrompt({ type: "modal", question: "x" }).error).toContain(
-      "type",
+      "type"
     );
     expect(normalizePrompt({ type: "stars", question: "  " }).error).toContain(
-      "question",
+      "question"
     );
     expect(
       normalizePrompt({
         type: "choice",
         question: "Pick",
         options: ["only one"],
-      }).error,
+      }).error
     ).toContain("options");
   });
 

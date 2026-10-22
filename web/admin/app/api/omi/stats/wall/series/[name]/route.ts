@@ -1,5 +1,5 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { wallPayload, wallSnapshotStore } from "@/lib/wall-cache";
 import { localWallFixture } from "@/lib/wall-local-fixture";
 import { SERIES_NAMES, SeriesName, seriesPayload } from "@/lib/wall-series";
@@ -12,7 +12,7 @@ export async function GET(
   request: NextRequest,
   props: { params: Promise<{ name: string }> }
 ) {
-  const auth = await verifyAdmin(request);
+  const auth = await requireScope(request, "analytics:read");
   if (auth instanceof NextResponse) return auth;
   const { name } = await props.params;
   if (!SERIES_NAMES.includes(name as SeriesName))

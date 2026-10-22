@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
 export const dynamic = "force-dynamic";
 
@@ -62,7 +62,7 @@ export function summarizeCsatRatings(
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
   const requested = parseInt(
     request.nextUrl.searchParams.get("limit") || "500",

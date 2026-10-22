@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { ADMIN_LLM_LANES, invokeAdminLlmGateway } from "@/lib/llm-gateway";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ interface Evaluation {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:write");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -32,7 +32,7 @@ export async function POST(request: NextRequest) {
         {
           error: "current_prompt and non-empty evaluations array are required",
         },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -43,8 +43,12 @@ export async function POST(request: NextRequest) {
 Question: ${e.question}
 Response: ${e.response}
 AI Score: ${e.ai_score}/5
-${e.human_score != null ? `Human Score: ${e.human_score}/5` : "Human Score: not provided"}
-${e.human_comment ? `Human Comment: ${e.human_comment}` : ""}`,
+${
+  e.human_score != null
+    ? `Human Score: ${e.human_score}/5`
+    : "Human Score: not provided"
+}
+${e.human_comment ? `Human Comment: ${e.human_comment}` : ""}`
       )
       .join("\n\n");
 

@@ -1,9 +1,10 @@
 # Web Admin Dashboard
 
-- **Networking:** all fetches use `hooks/useAuthToken.ts`; never call `getIdToken()`, create auth headers, or read Firestore in the client. Server routes call `verifyAdmin(request)` from `lib/auth.ts`.
+- **Networking:** all fetches use `hooks/useAuthToken.ts`; never call `getIdToken()`, create auth headers, or read Firestore in the client. Server routes call `requireScope(request, scope)` from `lib/auth.ts`.
 - **Revenue metrics:** subscription metrics use `lib/stripe-subscriptions.ts`; never list subscriptions by price ID.
 
-- **Admin removal:** `adminData/{uid}.owner === true` marks the workspace owner; only the owner can `DELETE /api/omi/team-members` (any role, never themselves). Set the flag in Firestore, never through the UI.
+- **Permissions:** list every API handler's scope in `lib/route-scopes.ts` (a test fails otherwise); roles live in `lib/admin-access.ts`. `owner: true` is Firestore-only; only the owner appoints deputies.
+- **Team agents:** `GET /api/agent/team`, `…/audit`, `…/proposals` and `POST …/proposals` take a Google ID token (aud `ADMIN_TEAM_AGENT_AUDIENCE`, SA in `ADMIN_TEAM_AGENT_SAS`); a proposal applies only when the owner or a deputy approves it. Example: [`docs/team-access.md`](docs/team-access.md).
 
 Fetcher, SWR, partial-failure, and subscription-scope detail: [`docs/data-contracts.md`](docs/data-contracts.md).
 

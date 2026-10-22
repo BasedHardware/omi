@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { ADMIN_LLM_LANES, invokeAdminLlmGateway } from "@/lib/llm-gateway";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ interface ChatMessage {
 
 async function callChatLab(
   system: string,
-  messages: ChatMessage[],
+  messages: ChatMessage[]
 ): Promise<string> {
   return invokeAdminLlmGateway({
     lane: ADMIN_LLM_LANES.chatLab,
@@ -33,7 +33,7 @@ function buildSystemPrompt(promptText: string, floatingPrefix: string): string {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:write");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     if (!question || !prompt_text) {
       return NextResponse.json(
         { error: "question and prompt_text are required" },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -81,7 +81,7 @@ Respond ONLY with valid JSON in this exact format:
       // If grading response isn't valid JSON, extract what we can
       aiComment = gradingResult;
       const scoreMatch = gradingResult.match(
-        /(\d+(?:\.\d+)?)\s*(?:\/\s*5|out of 5)/,
+        /(\d+(?:\.\d+)?)\s*(?:\/\s*5|out of 5)/
       );
       if (scoreMatch) aiScore = parseFloat(scoreMatch[1]);
     }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import {
   FeedbackApiError,
   getEventContext,
@@ -15,7 +15,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> }
 ) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "users:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const { eventId } = await params;

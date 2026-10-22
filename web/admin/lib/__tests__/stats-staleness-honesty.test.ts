@@ -7,7 +7,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
  */
 
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => ({ uid: "t" })),
 }));
 
 const fetchMock = vi.fn();

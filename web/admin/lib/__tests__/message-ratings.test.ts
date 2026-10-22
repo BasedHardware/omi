@@ -10,7 +10,7 @@ vi.mock("@/lib/firebase/admin", () => ({
     }),
   }),
 }));
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
+vi.mock("@/lib/auth", () => ({ requireScope: vi.fn() }));
 
 import {
   aggregateRatedMessages,

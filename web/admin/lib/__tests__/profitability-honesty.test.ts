@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // instead of averaging them in as $0. The legacy estimated path keeps the old
 // fallback, and says so via costSource:"estimated".
 
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
+vi.mock("@/lib/auth", () => ({ requireScope: vi.fn() }));
 vi.mock("@/lib/posthog", () => ({
   withRowLimit: (q: string) =>
     `SELECT * FROM (\n${q}\n) AS _row_limit_guard\nLIMIT 50000`,

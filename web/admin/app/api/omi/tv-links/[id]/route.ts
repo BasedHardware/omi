@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { revokeTvLink } from "@/lib/tv-links";
 import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
 
@@ -9,7 +9,7 @@ export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
 ) {
-  const auth = await verifyAdmin(request);
+  const auth = await requireScope(request, "analytics:share");
   if (auth instanceof NextResponse) return auth;
 
   const params = await props.params;

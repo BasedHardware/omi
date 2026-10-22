@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
 export const dynamic = "force-dynamic";
 
@@ -65,7 +65,7 @@ export function normalizeCsatConfig(body: unknown): {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:read");
   if (authResult instanceof NextResponse) return authResult;
   const snapshot = await getDb()
     .collection(CONFIG_COLLECTION)
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:write");
   if (authResult instanceof NextResponse) return authResult;
   const { error, doc } = normalizeCsatConfig(await request.json());
   if (error) return NextResponse.json({ error }, { status: 400 });

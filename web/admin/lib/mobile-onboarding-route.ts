@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import {
   getPayload,
   setPayload,
@@ -23,7 +23,7 @@ export function mobileOnboardingCacheKey(
 // access uses admin verification. First-run and tutorial are precomputed; attach stays on-demand.
 export function mobileOnboardingHandler(kind: MobileOnboardingKind) {
   return async function GET(request: NextRequest) {
-    const auth = await verifyAdmin(request);
+    const auth = await requireScope(request, "analytics:read");
     if (auth instanceof NextResponse) return auth;
     const value = request.nextUrl.searchParams.get("days") ?? "30";
     const days = Number(value);

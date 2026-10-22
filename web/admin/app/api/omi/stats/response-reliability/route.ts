@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import admin, { getDb } from "@/lib/firebase/admin";
 import { posthogResults } from "@/lib/posthog";
 import {
@@ -56,7 +56,7 @@ async function getReliabilityChannels(
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;

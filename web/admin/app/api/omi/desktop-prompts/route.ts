@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
 export const dynamic = "force-dynamic";
 
@@ -21,12 +21,14 @@ export function normalizePrompt(body: any): { error?: string; doc?: any } {
   const triggerKind = String(body?.trigger_kind ?? "app_launch");
   if (!TRIGGER_KINDS.has(triggerKind)) {
     return {
-      error: `trigger_kind must be one of ${Array.from(TRIGGER_KINDS).join(", ")}`,
+      error: `trigger_kind must be one of ${Array.from(TRIGGER_KINDS).join(
+        ", "
+      )}`,
     };
   }
   const rolloutPct = Math.min(
     Math.max(Number(body?.rollout_pct ?? 100), 0),
-    100,
+    100
   );
   const doc: any = {
     type,
@@ -62,7 +64,7 @@ export function normalizePrompt(body: any): { error?: string; doc?: any } {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:read");
   if (authResult instanceof NextResponse) return authResult;
   const snapshot = await getDb()
     .collection("desktop_prompts")
@@ -75,7 +77,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:write");
   if (authResult instanceof NextResponse) return authResult;
   const { error, doc } = normalizePrompt(await request.json());
   if (error) return NextResponse.json({ error }, { status: 400 });

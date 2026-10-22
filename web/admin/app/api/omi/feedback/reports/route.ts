@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import {
   FeedbackApiError,
   listReportDates,
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 // Dates that have a materialized daily thumbs-down report, newest first.
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "users:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const parsed = parseInt(

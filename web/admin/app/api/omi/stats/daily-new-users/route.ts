@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getUserGrowthSeries, sliceSeries } from "@/lib/services/user-growth";
 import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 
@@ -18,7 +18,7 @@ export async function computeDailyNewUsers(daysParam: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     console.error("Daily new users error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch daily new users" },
-      { status: 500 },
+      { status: 500 }
     );
   }
 }

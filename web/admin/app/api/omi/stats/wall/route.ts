@@ -1,5 +1,5 @@
 import { after, NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { wallPayload, wallSnapshotStore } from "@/lib/wall-cache";
 import { wallPresentation } from "@/lib/wall-presentation";
 
@@ -8,7 +8,7 @@ import { localWallFixture } from "@/lib/wall-local-fixture";
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 export async function GET(request: NextRequest) {
-  const auth = await verifyAdmin(request);
+  const auth = await requireScope(request, "analytics:read");
   if (auth instanceof NextResponse) return auth;
   try {
     const payload =

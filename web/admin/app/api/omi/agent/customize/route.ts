@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 
@@ -21,7 +21,7 @@ Repo orientation:
 - Grid component: web/admin/components/dashboard/resizable-chart-grid.tsx
   (variant: "card" | "header" | "kpi"; col snap: 2/3/4/6/8/9/12; rows 1-12)
 - All API access uses useAuthToken + authenticatedFetcher (SWR reads) or
-  useAuthFetch (mutations). Server routes call verifyAdmin from @/lib/auth.
+  useAuthFetch (mutations). Server routes call requireScope from @/lib/auth.
 - Existing stats endpoints live under web/admin/app/api/omi/stats/.
 - Constraints: stay inside web/admin/. Do not touch backend/, app/, firmware/.
 - When done, run \`npx tsc --noEmit\` from web/admin/ to verify.
@@ -51,11 +51,13 @@ function defaultWorkingDir(): string {
   // The Next dev server runs from web/admin/. Edits should target the worktree
   // root (two dirs up) so the agent can touch the whole admin app and any
   // shared bits at the repo root if it has to.
-  return process.env.AGENT_WORKING_DIR ?? path.resolve(process.cwd(), "..", "..");
+  return (
+    process.env.AGENT_WORKING_DIR ?? path.resolve(process.cwd(), "..", "..")
+  );
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await verifyAdmin(request);
+  const auth = await requireScope(request, "dev:agent");
   if (auth instanceof NextResponse) return auth;
 
   let body: { prompt?: string; model?: string };
@@ -72,7 +74,7 @@ export async function POST(request: NextRequest) {
   if (prompt.length > MAX_PROMPT_LEN) {
     return NextResponse.json(
       { error: `prompt exceeds ${MAX_PROMPT_LEN} chars` },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -81,7 +83,7 @@ export async function POST(request: NextRequest) {
   if (!cmd) {
     return NextResponse.json(
       { error: `unknown model "${modelInput}". Use "claude" or "codex".` },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -95,7 +97,7 @@ export async function POST(request: NextRequest) {
       const send = (event: string, data: unknown) => {
         try {
           controller.enqueue(
-            enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+            enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
           );
         } catch {
           // controller may already be closed if the client disconnected
@@ -119,7 +121,9 @@ export async function POST(request: NextRequest) {
         });
       } catch (err: any) {
         send("error", {
-          message: `Failed to spawn ${cmd.bin}: ${err?.message ?? "unknown error"}. Is it on PATH?`,
+          message: `Failed to spawn ${cmd.bin}: ${
+            err?.message ?? "unknown error"
+          }. Is it on PATH?`,
         });
         controller.close();
         return;

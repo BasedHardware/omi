@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
 import {
   MAX_PRECOMPUTED_AGE_MS,
@@ -829,7 +829,7 @@ export async function computeInfraCosts(opts: {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {

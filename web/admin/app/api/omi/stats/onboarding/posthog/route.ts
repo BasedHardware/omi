@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import { POSTHOG_SERVED_MAX_ROWS, withRowLimit } from "@/lib/posthog";
 import {
@@ -155,7 +155,7 @@ export async function computeOnboarding(days: number) {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const searchParams = request.nextUrl.searchParams;

@@ -32,7 +32,7 @@ vi.mock("@/lib/payload-cache", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => ({ uid: "t" })),
 }));
 vi.mock("@/lib/posthog", () => ({ withRowLimit: (q: string) => q }));
 vi.mock("@/lib/stripe", () => ({ getOptionalStripe: () => null }));

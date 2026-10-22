@@ -14,7 +14,7 @@ let releaseBoundaryTimestamp: string | null = null;
 let releasePosthogFailure = false;
 
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "test" })),
+  requireScope: vi.fn(async () => ({ uid: "test" })),
 }));
 vi.mock("@/lib/payload-cache", () => ({
   getPayload: vi.fn(async () => null),
