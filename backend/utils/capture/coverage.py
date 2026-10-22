@@ -10,7 +10,14 @@ from utils.observability.reasons import ReasonFamily, reason_label, CaptureCover
 
 from config import refactor_modes
 from database import capture_coverage as store
-from models.capture_coverage import AdmitResult, CaptureKey, CoverageOrigin, CoverageRecord, FrameRange
+from models.capture_coverage import (
+    AdmitResult,
+    CaptureKey,
+    CoverageOrigin,
+    CoverageRecord,
+    FrameRange,
+    CaptureCommittedEvent,
+)
 from utils.capture_evidence import Span, coverage_union, novel_coverage
 from utils.capture.coverage_metrics import ADMIT
 
@@ -57,7 +64,27 @@ def query(uid: str, key: CaptureKey, ranges: list[FrameRange]) -> AdmitResult:
     store.key_payload(key)
     if not refactor_modes.shadow_sampled(FLAG, uid, SHADOW_SAMPLE_PERCENT):
         return AdmitResult(uncovered=_ranges(incoming))
-    return decide(ranges, store.read(uid, key))
+    records = store.read(uid, key)
+    if refactor_modes.serving_for(FLAG, uid):
+        shared = store.read_shared(uid, key)
+        if shared:
+            # The same secondary already has its own durable receipt. Replace
+            # only the proven shared interiors so the answer names the primary.
+            aliases = coverage_union(Span(r.start, r.end) for rec in shared for r in rec.ranges)
+            records = [
+                rec.model_copy(
+                    update={
+                        'ranges': _ranges(
+                            coverage_union(
+                                part for r in rec.ranges for part in novel_coverage(Span(r.start, r.end), aliases)
+                            )
+                        )
+                    }
+                )
+                for rec in records
+            ]
+            records.extend(shared)
+    return decide(ranges, records)
 
 
 def admit(uid: str, key: CaptureKey, ranges: list[FrameRange], *, origin: CoverageOrigin) -> AdmitResult:
@@ -75,3 +102,28 @@ def record(uid: str, key: CaptureKey, rec: CoverageRecord) -> None:
     if refactor_modes.shadow_sampled(FLAG, uid, SHADOW_SAMPLE_PERCENT):
         normalized(rec.ranges)
         store.record(uid, key, rec)
+
+
+def committed_events(uid: str, key: CaptureKey, ranges: list[FrameRange]) -> list[CaptureCommittedEvent]:
+    """Custody receipts for exact secondary frames, naming the confirmed primary.
+
+    Consumers emit these only after a durable reconciliation, never on wall
+    overlap or an uncommitted candidate. No receipt escapes shadow or off.
+    """
+    if not refactor_modes.serving_for(FLAG, uid):
+        return []
+    result = query(uid, key, ranges)
+    if not result.covering_conversation_id:
+        return []
+    return [
+        CaptureCommittedEvent(
+            conversation_id=result.covering_conversation_id,
+            capture_root=key.capture_root,
+            channel=key.channel,
+            clock_epoch=key.clock_epoch,
+            recording_session_id=key.recording_session_id,
+            source_start=r.start,
+            source_end=r.end,
+        )
+        for r in result.covered
+    ]
