@@ -48,8 +48,8 @@ def _error(error: TelemetryContractError) -> HTTPException:
 
 
 def _verify_admin(presented: str | None) -> None:
-    expected = os.environ.get("ADMIN_KEY", "")
-    if not expected or presented is None or not hmac.compare_digest(presented, expected):
+    expected = (os.environ.get("ADMIN_KEY") or "").strip()
+    if not expected or not presented or not hmac.compare_digest(presented.encode(), expected.encode()):
         record_ingest("forbidden")
         raise HTTPException(
             status_code=403,
