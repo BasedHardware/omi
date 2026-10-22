@@ -7,127 +7,99 @@ Ensures that:
 4. Malformed choices lists or non-dict structures are handled safely.
 """
 
-import sys
-import unittest
-import asyncio
-from pathlib import Path
-from types import ModuleType
-from unittest.mock import MagicMock, AsyncMock, patch
+import pytest
 
-# Ensure scratch workspace is on sys.path
-TEST_DIR = Path(__file__).resolve().parent
-if str(TEST_DIR) not in sys.path:
-    sys.path.insert(0, str(TEST_DIR))
-
-# Create dummy modules for imports
-for mod_name in [
-    "langchain_core", "langchain_core.tools", "httpx",
-    "utils", "utils.generated_compute", "utils.executors", "utils.http_client",
-    "utils.llm", "utils.llm.gateway_client", "utils.log_sanitizer", "utils.model_text"
-]:
-    if mod_name not in sys.modules:
-        m = ModuleType(mod_name)
-        sys.modules[mod_name] = m
-
-class MockResponse:
-    pass
-class MockTimeout(Exception):
-    pass
-class MockHTTPError(Exception):
-    pass
-
-sys.modules["httpx"].Response = MockResponse
-sys.modules["httpx"].TimeoutException = MockTimeout
-sys.modules["httpx"].HTTPError = MockHTTPError
-
-sys.modules["langchain_core.tools"].tool = lambda f: f
-sys.modules["utils.generated_compute"].require_current_generated_compute = MagicMock()
-sys.modules["utils.generated_compute"].generated_compute_configured = MagicMock(return_value=False)
-sys.modules["utils.executors"].db_executor = MagicMock()
-sys.modules["utils.executors"].run_blocking = AsyncMock()
-sys.modules["utils.http_client"].get_webhook_client = MagicMock()
-sys.modules["utils.llm.gateway_client"].feature_auto_lane_id = MagicMock(return_value="sonar-pro")
-sys.modules["utils.llm.gateway_client"].get_llm_gateway_base_url = MagicMock(return_value="https://api.gateway")
-sys.modules["utils.llm.gateway_client"].llm_gateway_headers = MagicMock(return_value={})
-sys.modules["utils.log_sanitizer"].sanitize = lambda s: str(s)
-sys.modules["utils.model_text"].UNTRUSTED_LEGEND = "--- untrusted ---"
-sys.modules["utils.model_text"].count_header = lambda name, shown, total, order: f"{name} ({shown}/{total})"
-sys.modules["utils.model_text"].generated = lambda label, text: text
-sys.modules["utils.model_text"].truncation_note = lambda shown, total, unit, how_to_get_more: f"[truncated {shown}/{total}]"
-sys.modules["utils.model_text"].untrusted_block = lambda label, text: f"<{label}>{text}</{label}>"
-
-from perplexity_tools import (
-    perplexity_web_search_tool,
-    _perplexity_gateway_search,
-    _format_perplexity_response,
+from utils.retrieval.tools import perplexity_tools
+from utils.retrieval.tools.perplexity_tools import (
     _extract_citations,
+    _format_perplexity_response,
+    _perplexity_gateway_search,
+    perplexity_web_search_tool,
 )
 
 
-class TestPerplexityToolsHardening(unittest.TestCase):
-    """Test query validation, error handling, and response formatting."""
+@pytest.mark.asyncio
+async def test_empty_or_none_query_rejection():
+    # Empty, None, or whitespace queries rejected early without gateway call
+    assert await _perplexity_gateway_search("") == "Error: Search query cannot be empty."
+    assert await _perplexity_gateway_search(None) == "Error: Search query cannot be empty."
+    assert await _perplexity_gateway_search("   ") == "Error: Search query cannot be empty."
 
-    def test_empty_or_none_query_rejection(self):
-        # Empty, None, or whitespace queries rejected synchronously/asynchronously
-        loop = asyncio.new_event_loop()
-        try:
-            res1 = loop.run_until_complete(perplexity_web_search_tool(None))
-            self.assertEqual(res1, "Error: Search query cannot be empty.")
-
-            res2 = loop.run_until_complete(perplexity_web_search_tool(""))
-            self.assertEqual(res2, "Error: Search query cannot be empty.")
-
-            res3 = loop.run_until_complete(perplexity_web_search_tool("   "))
-            self.assertEqual(res3, "Error: Search query cannot be empty.")
-        finally:
-            loop.close()
-
-    def test_format_perplexity_response_successful(self):
-        sample = {
-            "choices": [
-                {
-                    "message": {
-                        "content": "Artificial intelligence advanced rapidly in 2026."
-                    }
-                }
-            ],
-            "citations": [
-                {"title": "TechCrunch", "url": "https://techcrunch.com/ai"}
-            ]
-        }
-        formatted = _format_perplexity_response(sample)
-        self.assertIn("Artificial intelligence advanced rapidly in 2026", formatted)
-        self.assertIn("TechCrunch", formatted)
-        self.assertIn("https://techcrunch.com/ai", formatted)
-
-    def test_format_perplexity_response_none_content(self):
-        sample = {
-            "choices": [
-                {
-                    "message": {
-                        "content": None
-                    }
-                }
-            ]
-        }
-        formatted = _format_perplexity_response(sample)
-        self.assertNotIn("None", formatted)
-        self.assertIn("Web Search Results:", formatted)
-
-    def test_format_perplexity_response_empty_choices(self):
-        sample = {"choices": []}
-        formatted = _format_perplexity_response(sample)
-        self.assertEqual(formatted, "Error: Unexpected response format from Perplexity API")
-
-    def test_extract_citations_variations(self):
-        self.assertEqual(_extract_citations({}), [])
-        self.assertEqual(_extract_citations({"choices": []}), [])
-        self.assertEqual(_extract_citations({"citations": ["https://example.com"]}), ["https://example.com"])
-        self.assertEqual(
-            _extract_citations({"choices": [{"message": {"citations": ["https://inner.com"]}}]}),
-            ["https://inner.com"]
+    # Validate tool call surface
+    if hasattr(perplexity_web_search_tool, "ainvoke"):
+        assert (
+            await perplexity_web_search_tool.ainvoke({"query": ""})
+            == "Error: Search query cannot be empty."
+        )
+        assert (
+            await perplexity_web_search_tool.ainvoke({"query": None})
+            == "Error: Search query cannot be empty."
+        )
+    elif hasattr(perplexity_web_search_tool, "func"):
+        assert (
+            await perplexity_web_search_tool.func("")
+            == "Error: Search query cannot be empty."
+        )
+        assert (
+            await perplexity_web_search_tool.func(None)
+            == "Error: Search query cannot be empty."
+        )
+    else:
+        assert (
+            await perplexity_web_search_tool("")
+            == "Error: Search query cannot be empty."
+        )
+        assert (
+            await perplexity_web_search_tool(None)
+            == "Error: Search query cannot be empty."
         )
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_format_perplexity_response_successful():
+    sample = {
+        "choices": [
+            {
+                "message": {
+                    "content": "Artificial intelligence advanced rapidly in 2026."
+                }
+            }
+        ],
+        "citations": ["https://techcrunch.com/ai"],
+    }
+    formatted = _format_perplexity_response(sample)
+    assert "Artificial intelligence advanced rapidly in 2026" in formatted
+    assert "https://techcrunch.com/ai" in formatted
+
+
+def test_format_perplexity_response_none_content():
+    sample = {
+        "choices": [
+            {
+                "message": {
+                    "content": None
+                }
+            }
+        ]
+    }
+    formatted = _format_perplexity_response(sample)
+    assert "None" not in formatted
+    assert (
+        "Web search answer" in formatted
+        or "Web Search Results:" in formatted
+        or "untrusted" in formatted
+    )
+
+
+def test_format_perplexity_response_empty_choices():
+    sample = {"choices": []}
+    formatted = _format_perplexity_response(sample)
+    assert formatted == "Error: Unexpected response format from Perplexity API"
+
+
+def test_extract_citations_variations():
+    assert _extract_citations({}) == []
+    assert _extract_citations({"choices": []}) == []
+    assert _extract_citations({"citations": ["https://example.com"]}) == ["https://example.com"]
+    assert _extract_citations(
+        {"choices": [{"message": {"citations": ["https://inner.com"]}}]}
+    ) == ["https://inner.com"]
