@@ -46,6 +46,7 @@ beforeEach(() => {
 describe("authenticate: Firebase token verification failures", () => {
   it.each([
     ["a malformed or bad-signature token", "auth/argument-error"],
+    ["an invalid token", "auth/invalid-id-token"],
     ["an expired token", "auth/id-token-expired"],
     ["a revoked token", "auth/id-token-revoked"],
   ])("answers %s with 401, not 500", async (_name, code) => {

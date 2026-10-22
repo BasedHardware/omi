@@ -53,7 +53,11 @@ Enforced server-side in `lib/team/roster.ts`, for direct edits and approvals ali
   provisions nothing.
 - Two invites for one email serialize on a per-email lock doc in
   `adminProposalLocks`: the loser's transaction re-runs against the
-  winner's committed roster doc and refuses with 409.
+  winner's committed roster doc and refuses with 409. An agent's
+  `add_member` proposal for the same email takes the very same lock doc,
+  and the membership re-check runs inside the filing transaction, so an
+  overlapping invite and proposal cannot both land; while one is pending,
+  a direct invite for that email refuses with 409 until it is decided.
 - A rejected invite may leave the unverified, credential-less Firebase
   Auth account it provisioned. That orphan is harmless — no `adminData`
   doc means no admin access — and the next invite of the same email
@@ -110,7 +114,8 @@ expire 72 hours after filing; listing them is a pure read that derives the
 `expired` status, while the persisted transition and its audit entry (a
 `system` actor `proposal-expiry`, the proposer in `proposedBy`) land on the
 next write — deciding an expired proposal refuses with 410 and records the
-expiry. An owner or a deputy approves or
+expiry, and the next filing persists the expiry of any stale proposal it
+saw, so the stored pending set stays bounded. An owner or a deputy approves or
 rejects on the Team page (`POST /api/omi/team-members/proposals/{id}`, Firebase
 session with `team:manage`); approval re-runs the team management rules above,
 so a deputy cannot approve a deputy appointment, and every decision re-reads
