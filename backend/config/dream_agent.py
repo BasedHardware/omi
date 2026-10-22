@@ -4,7 +4,7 @@ import hashlib
 import math
 import os
 
-from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members
+from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members, RolloutCohortUnavailable
 from dataclasses import dataclass
 from datetime import timedelta
 from config.plan_catalog import PAID_PLAN_IDS
@@ -46,7 +46,14 @@ def _allowlisted(uid):
 
 def allowlist_uids():
     """Sorted allowlist; discovery reads only these owners under ``allowlist`` eligibility."""
-    return list(rollout_cohort_members('dream-agent'))
+    try:
+        return list(rollout_cohort_members('dream-agent'))
+    except RolloutCohortUnavailable:
+        if eligibility() == 'allowlist':
+            raise
+        # A membership outage cannot veto declared all/paid eligibility. It
+        # also cannot manufacture an allowlist exception to a paid percentage.
+        return []
 
 
 def paid_percent():
@@ -92,7 +99,10 @@ def admission_for(uid):
     is true. Every other owner, and allowlisted owners with the flag off, use
     reserved capacity.
     """
-    listed = allowlisted(uid)
+    try:
+        listed = allowlisted(uid)
+    except RolloutCohortUnavailable:
+        listed = False  # Reserved capacity only; never invent spending authority.
     if listed and on_demand_enabled():
         return 'on_demand', True
     return 'reserved', False

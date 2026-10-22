@@ -307,3 +307,13 @@ Rollback is the kill switch plus the previous image. Keep correction overlays
 and receipts intact; an older image may lack their display projection. Do not
 rewrite captured speech or erase reservations to simulate rollback. A kill switch
 is operational containment; changing source alone is not deployed recovery.
+
+
+## Dream cohort read failures
+
+Unreadable Dream membership is distinct from revocation. Declared `all` and
+paid percentage/entitlement admission continue without an allowlist override;
+unknown membership never grants on-demand authority. Allowlist-only admission
+waits and retains the due row on an unavailable membership read. Empty discovery
+and read failures emit `event=dream_cohort_health` and shared fallback metrics.
+Do not change `allowlist` to `all` as an outage workaround.
