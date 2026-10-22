@@ -240,6 +240,12 @@ class TestPreferenceToolsGuards(unittest.TestCase):
         )
         self.assertIn("Preference saved (memory_id=saved_memory_id)", res_none)
 
+        # Whitespace-only string must be treated as no replacement
+        res_ws = pt.save_user_preference_tool.func(
+            preference="Prefers dark mode", replace_memory_id="   ", config=config
+        )
+        self.assertIn("Preference saved (memory_id=saved_memory_id)", res_ws)
+
         # Integer must not raise AttributeError
         res_int = pt.save_user_preference_tool.func(
             preference="Prefers dark mode", replace_memory_id=123, config=config
@@ -256,6 +262,19 @@ class TestPreferenceToolsGuards(unittest.TestCase):
             preference="Prefers dark mode", replace_memory_id={}, config=config
         )
         self.assertIn("Preference saved (memory_id=saved_memory_id)", res_dict)
+
+    def test_replace_memory_id_valid_string_triggers_replacement_path(self):
+        """Valid non-empty replace_memory_id string triggers read_canonical_memory_item."""
+        config = {"configurable": {"user_id": "u1"}}
+        _mock_read_canonical.return_value = None
+
+        res = pt.save_user_preference_tool.func(
+            preference="Prefers dark mode", replace_memory_id="mem-123", config=config
+        )
+        _mock_read_canonical.assert_called_once()
+        self.assertEqual("u1", _mock_read_canonical.call_args[0][0])
+        self.assertEqual("mem-123", _mock_read_canonical.call_args[0][1])
+        self.assertEqual("Error updating preference: memory is unavailable or historical", res)
 
     # -------------------------------------------------------------------------
     # Test 2: preference=None, empty string "", and whitespace "   "
@@ -279,13 +298,24 @@ class TestPreferenceToolsGuards(unittest.TestCase):
         self.assertTrue(res_ws.startswith("Error:"), f"Expected Error prefix, got: {res_ws}")
         self.assertIn("cannot be empty", res_ws.lower())
 
-        # Non-string
-        res_int = pt.save_user_preference_tool.func(preference=999, config=config)
-        self.assertTrue(res_int.startswith("Error:"), f"Expected Error prefix, got: {res_int}")
-        self.assertIn("cannot be empty", res_int.lower())
+        # Non-string types
+        for val in [999, [], {}, object(), False]:
+            res_invalid = pt.save_user_preference_tool.func(preference=val, config=config)
+            self.assertTrue(res_invalid.startswith("Error:"), f"Expected Error prefix for {val}, got: {res_invalid}")
+            self.assertIn("cannot be empty", res_invalid.lower())
 
         # Ensure no write was attempted
         _mock_save_fact.assert_not_called()
+
+    def test_preference_valid_strips_whitespace(self):
+        """Valid preference with padding whitespace is stripped cleanly."""
+        config = {"configurable": {"user_id": "u1"}}
+        res = pt.save_user_preference_tool.func(
+            preference="   Prefers vim over nano   ", config=config
+        )
+        self.assertIn("Preference saved (memory_id=saved_memory_id): Prefers vim over nano", res)
+        _mock_save_fact.assert_called_once()
+        self.assertEqual("Prefers vim over nano", _mock_save_fact.call_args[0][1])
 
     # -------------------------------------------------------------------------
     # Test 3: _get_uid extraction with top-level user_id / uid
@@ -322,6 +352,18 @@ class TestPreferenceToolsGuards(unittest.TestCase):
         # 7. Empty or missing config
         self.assertEqual("", pt._get_uid({}))
         self.assertEqual("", pt._get_uid(None))
+
+        # 8. Malformed or non-dict config
+        self.assertEqual("", pt._get_uid("non_dict_config"))
+        self.assertEqual("", pt._get_uid(123))
+
+    def test_get_uid_contextvar_fallback(self):
+        """_get_uid falls back to agent_config_context when config is None."""
+        token = pt.agent_config_context.set({"configurable": {"user_id": "u_ctx_fallback"}})
+        try:
+            self.assertEqual("u_ctx_fallback", pt._get_uid(None))
+        finally:
+            pt.agent_config_context.reset(token)
 
     # -------------------------------------------------------------------------
     # Test 4: user_stated boolean coercion from string/int/bool
