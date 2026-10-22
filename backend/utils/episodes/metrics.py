@@ -115,6 +115,10 @@ EPISODE_CLIENT_REQUESTS_TOTAL = _reuse_or_create(
 )
 
 
+def _label(value: str, allowed: frozenset[str]) -> str:
+    return value if value in allowed else 'other'
+
+
 def _prime() -> None:
     """Export every bounded series at zero from process start.
 
@@ -125,35 +129,31 @@ def _prime() -> None:
     try:
         for trigger in MOMENT_TRIGGERS:
             for outcome in MOMENT_OUTCOMES:
-                EPISODE_MOMENT_UPDATES_TOTAL.labels(trigger=trigger, outcome=outcome)
+                EPISODE_MOMENT_UPDATES_TOTAL.labels(trigger=trigger, outcome=_label(outcome, MOMENT_OUTCOMES))
         for trigger in SKIP_TRIGGERS:
             EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL.labels(trigger=trigger)
         for kind in ('input', 'output'):
             EPISODE_MOMENT_TOKENS_TOTAL.labels(kind=kind)
         for reason in CLOSE_REASON_LABELS:
-            EPISODE_CLOSED_TOTAL.labels(reason=reason)
+            EPISODE_CLOSED_TOTAL.labels(reason=_label(reason, CLOSE_REASON_LABELS))
         for outcome in PROVISIONAL_OUTCOMES:
-            EPISODE_PROVISIONAL_ITEMS_TOTAL.labels(outcome=outcome)
+            EPISODE_PROVISIONAL_ITEMS_TOTAL.labels(outcome=_label(outcome, PROVISIONAL_OUTCOMES))
         for outcome in BOUNDARY_OUTCOMES:
-            EPISODE_BOUNDARY_TOTAL.labels(outcome=outcome)
+            EPISODE_BOUNDARY_TOTAL.labels(outcome=_label(outcome, BOUNDARY_OUTCOMES))
         for outcome in MOMENT_OUTCOMES:
-            EPISODE_MOMENT_LATENCY_SECONDS.labels(outcome=outcome)
+            EPISODE_MOMENT_LATENCY_SECONDS.labels(outcome=_label(outcome, MOMENT_OUTCOMES))
         for reason in CLOSE_REASON_LABELS:
-            EPISODE_WRAPUP_LATENCY_SECONDS.labels(reason=reason)
+            EPISODE_WRAPUP_LATENCY_SECONDS.labels(reason=_label(reason, CLOSE_REASON_LABELS))
         for seen in ('true', 'false'):
             EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen=seen)
         for channel in CLIENT_CHANNELS:
             for outcome in CLIENT_REQUEST_OUTCOMES:
-                EPISODE_CLIENT_REQUESTS_TOTAL.labels(channel=channel, outcome=outcome)
+                EPISODE_CLIENT_REQUESTS_TOTAL.labels(channel=channel, outcome=_label(outcome, CLIENT_REQUEST_OUTCOMES))
     except Exception:
         pass
 
 
 _prime()
-
-
-def _label(value: str, allowed: frozenset[str]) -> str:
-    return value if value in allowed else 'other'
 
 
 def estimated_cost_usd(input_tokens: int, output_tokens: int) -> float:
