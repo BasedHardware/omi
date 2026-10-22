@@ -2,14 +2,13 @@
 
 import asyncio
 import json
-import time
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import fakeredis.aioredis
 import pytest
 
-from config.vertex_reservations import PROBE_SECONDS, State
+from config.vertex_reservations import State
 from llm_gateway.gateway.dream_lanes import DREAM_MODEL
 from utils import dream_capacity
 from utils.llm.vertex_reservation_state import ReservationState
@@ -63,7 +62,6 @@ async def evidence(state, redis, successes):
         'old_model',
         'conflict',
         'malformed',
-        'probe',
     ],
 )
 async def test_unavailable_evidence_waits_without_secret_logging(monkeypatch, caplog, capacity, failure):
@@ -94,8 +92,6 @@ async def test_unavailable_evidence_waits_without_secret_logging(monkeypatch, ca
         await evidence(state, redis, {DREAM_MODEL: 0, OLD: 0})
     elif failure == 'malformed':
         await redis.set(state.key(), secret)
-    else:
-        dream_capacity._local().probe_failed_until = time.monotonic() + PROBE_SECONDS
     assert await dream_capacity.available_model() is None
     assert await dream_capacity.claim(2) is None
     assert not dream_capacity._local().slots
@@ -193,28 +189,25 @@ async def test_on_demand_requires_allowlist_and_flag_and_preserves_slot_bound(mo
 
 
 @pytest.mark.asyncio
-async def test_probe_exception_closes_admission_and_does_not_log_content(monkeypatch, caplog, capacity):
+@pytest.mark.parametrize('error', [PermissionError, ConnectionError, TimeoutError])
+async def test_probe_exception_is_advisory_and_does_not_log_content(monkeypatch, caplog, capacity, error):
     state, redis = capacity
     await evidence(state, redis, {DREAM_MODEL: 0})
-    monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: object())
-    monkeypatch.setattr(dream_capacity, '_vertex_tokens', lambda: SimpleNamespace(get_access_token=AsyncMock()))
-    monkeypatch.setattr(dream_capacity, 'probe_reservation', AsyncMock(side_effect=RuntimeError('invented secret')))
+    post = AsyncMock(side_effect=error('invented secret'))
+    monkeypatch.setattr(dream_capacity, 'get_llm_gateway_client', lambda: SimpleNamespace(post=post))
     assert await dream_capacity._probe(DREAM_MODEL, 'us') == 'inconclusive'
-    assert await dream_capacity.available_model() is None
+    assert await dream_capacity.available_model() == DREAM_MODEL
+    assert await redis.get(state.key() + ':dream-probe-failed:' + DREAM_MODEL) is None
     assert 'invented secret' not in caplog.text
 
 
 @pytest.mark.asyncio
-async def test_probe_failure_is_shared_until_strict_dedicated_success(monkeypatch, capacity):
+async def test_old_replica_probe_failure_cannot_veto_strict_shared_evidence(capacity):
     state, redis = capacity
     await evidence(state, redis, {DREAM_MODEL: 0})
-    monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: object())
-    monkeypatch.setattr(dream_capacity, '_vertex_tokens', lambda: SimpleNamespace(get_access_token=AsyncMock()))
-    probe = AsyncMock(return_value='inconclusive')
-    monkeypatch.setattr(dream_capacity, 'probe_reservation', probe)
-    await dream_capacity._probe(DREAM_MODEL, 'us')
-    dream_capacity._local_state.cache_clear()  # A different process lacks the local failure latch.
-    assert await dream_capacity.available_model() is None
-    probe.return_value = 'dedicated_success'
-    await dream_capacity._probe(DREAM_MODEL, 'us')
+    await redis.set(state.key() + ':dream-probe-failed:' + DREAM_MODEL, '1', ex=600)
     assert await dream_capacity.available_model() == DREAM_MODEL
+    dream_capacity._local_state.cache_clear()  # Another worker reads the same proof.
+    assert await dream_capacity.available_model() == DREAM_MODEL
+    await evidence(state, redis, {DREAM_MODEL: 901})
+    assert await dream_capacity.available_model() is None

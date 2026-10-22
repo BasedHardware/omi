@@ -1233,7 +1233,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/deploy-neg-coverage-exporter": {
-      "budget_p50_minutes": 10,
+      "budget_p50_minutes": 11,
       "display_name": "Deploy NEG coverage exporter",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1242,7 +1242,7 @@
       "matrix_size": 1,
       "needs": "helm-upgrade",
       "owner": "Omi backend maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Production-only follow-up after a successful listen rollout; the resolver emits its image-tag output only for explicit deploys, while kept-tag and rollback paths leave it empty. Budget covers WIF setup and the exporter Helm rollout capped at five minutes, with no PR-run cost. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input; this job is unchanged and stays manual-only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1251,7 +1251,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_listen_helm.yml/helm-upgrade": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 15,
       "display_name": "helm-upgrade",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1260,7 +1260,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. B5 (2026-10-19) adds the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan D D2 adds the listen_edge_image_digest dispatch input: when set, the job also admits the digest (one image-config read) and helm-upgrades backend/charts/listen-edge with a 600-second rollout wait after the listen rollout; manual-only, no PR runs, 15-minute placeholder p50",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1269,7 +1269,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1278,7 +1278,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the pusher_role_image_digest dispatch input (development-only backend-pusher role-image opt-in, blank by default) and admits backend-pusher qualifications; the job stays manual-only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1287,7 +1287,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_backend_pusher_auto_deploy.yml/deploy": {
-      "budget_p50_minutes": 6,
+      "budget_p50_minutes": 7,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 0,
@@ -1296,7 +1296,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change",
+      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder. 2026-10-21 plan B B2: pusher/Dockerfile now copies backend/omi_logging.py, so that file joins the qualification trigger closure; main-push only, the one-minute bump records the trigger change. 2026-10-22 plan B B3: a qualification may name the backend-pusher role image, so backend/Dockerfile.roles joins the trigger closure; expected runs stay main-push-driven with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1521,7 +1521,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_llm_gateway.yml/deploy": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "deploy",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1530,7 +1530,7 @@
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); the job stays manual-only with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1539,7 +1539,7 @@
       "runs_on": "ubuntu-latest"
     },
     "gcp_llm_gateway.yml/record_break_glass": {
-      "budget_p50_minutes": 5,
+      "budget_p50_minutes": 6,
       "display_name": "record_break_glass",
       "expected_runs_class": "non-pr-or-unsampled",
       "expected_runs_per_day": 1,
@@ -1548,7 +1548,7 @@
       "matrix_size": 1,
       "needs": "deploy",
       "owner": "CI maintainers",
-      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger",
+      "rationale": "Manual prod/dev deploy, about one dispatch a day; B5 (2026-10-19) adds only the break_glass_lock dispatch input, no new trigger. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); the audit job still runs only on a break-glass dispatch with no PR runs, and the one-minute bump records the trigger change",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4378,7 +4378,7 @@
     "gcp_backend_listen_helm.yml": {
       "name": "Upgrade Backend Listen Helm Chart",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan D D2 (lane p41-d2): listen_edge_image_digest dispatch input (blank by default) rolls backend/charts/listen-edge by admitted digest after the listen rollout; no new event trigger, no PR runs",
       "triggers": {
         "push": {
           "branches": [
@@ -4455,6 +4455,12 @@
               "description": "Short-SHA image to deploy (blank keeps the running image). Prod requires an ancestor of main.",
               "required": "false"
             },
+            "listen_edge_image_digest": {
+              "default": "",
+              "description": "Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from a build-only train summary; it must have been built from a commit the checked-out source contains (blank leaves the listen-edge release untouched)",
+              "required": "false",
+              "type": "string"
+            },
             "mode": {
               "default": "deploy",
               "description": "deploy applies the chart; rollback restores an earlier Helm revision",
@@ -4484,7 +4490,7 @@
     "gcp_backend_pusher.yml": {
       "name": "Deploy Backend Pusher to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan B B3 adds the pusher_role_image_digest dispatch input (development-only backend-pusher role-image opt-in, blank by default); manual dispatch only, no PR runs",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4529,6 +4535,11 @@
               "description": "Production Pusher only: exact digest from a successful automatic development qualification",
               "required": "false"
             },
+            "pusher_role_image_digest": {
+              "default": "",
+              "description": "Development Pusher only: backend-pusher role-image digest sha256:<64 hex> from a build-only run of this SHA (blank = build and deploy today image)",
+              "required": "false"
+            },
             "release_version": {
               "default": "",
               "description": "Release version (optional)",
@@ -4552,7 +4563,7 @@
     "gcp_backend_pusher_auto_deploy.yml": {
       "name": "Auto Deploy Backend Pusher to GKE (Development)",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths",
+      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added — a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure",
       "triggers": {
         "push": {
           "branches": [
@@ -4569,6 +4580,7 @@
             "backend/pusher/**",
             "backend/omi_logging.py",
             "backend/charts/pusher/**",
+            "backend/Dockerfile.roles",
             ".dockerignore",
             "backend/scripts/verify_pusher_source_closure.py",
             "backend/scripts/verify_pusher_live_deployment_gate.py",
@@ -4892,7 +4904,7 @@
     "gcp_llm_gateway.yml": {
       "name": "Deploy LLM Gateway to GKE",
       "owner": "CI maintainers",
-      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged",
+      "rationale": "B5 prod-train lock (2026-10-19): break_glass_lock dispatch input added; triggers otherwise unchanged. 2026-10-22 plan B B3 adds the gateway_image_digest dispatch input (backend-gateway role-image opt-in, blank by default); manual dispatch only, no PR runs",
       "triggers": {
         "workflow_dispatch": {
           "inputs": {
@@ -4926,6 +4938,11 @@
               ],
               "required": "true",
               "type": "choice"
+            },
+            "gateway_image_digest": {
+              "default": "",
+              "description": "Role-image opt-in: backend-gateway digest sha256:<64 hex> from a build-only run of the admitted SHA (blank = build and deploy today image)",
+              "required": "false"
             },
             "release_sha": {
               "default": "",

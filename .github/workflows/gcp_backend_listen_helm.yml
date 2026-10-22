@@ -79,6 +79,16 @@ on:
         required: false
         default: ''
         type: string
+      # Plan D D2: the Rust edge ships through this workflow as a second chart
+      # (backend/charts/listen-edge) next to backend-listen. The image comes from
+      # the build-only train's role-image publish (gcp_backend.yml, job
+      # build-role-images); copy its digest from that run's "Role images" summary.
+      # See backend/docs/runbooks/edge-shadow-rollout.md.
+      listen_edge_image_digest:
+        description: 'Plan D D2: listen-edge image to roll, gcr.io/<project>/listen-edge@sha256:<digest> from a build-only train summary; it must have been built from a commit the checked-out source contains (blank leaves the listen-edge release untouched)'
+        required: false
+        default: ''
+        type: string
       break_glass_lock:
         description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
         required: false
@@ -240,6 +250,61 @@ jobs:
           echo "Deploying image tag ${RESOLVED_TAG} (currently ${RUNNING_TAG:-<none>})"
           echo "BACKEND_LISTEN_IMAGE_TAG=$RESOLVED_TAG" >> "$GITHUB_ENV"
           echo "neg_coverage_exporter_image_tag=$RESOLVED_TAG" >> "$GITHUB_OUTPUT"
+
+      # Plan D D2: the listen-edge image is admitted by digest before anything is
+      # applied. The admission reads only the image config (the same imagetools
+      # inspect deploy-backend-stack uses for service_images): this project's
+      # registry, the listen-edge image, a revision label equal to its
+      # OMI_RELEASE_SHA stamp, and that revision an ancestor of the checked-out
+      # source admitted above — the image_tag rule applied to a digest, so a
+      # digest from an earlier train (or the previous one, for rollback) stays
+      # deployable after main moves on. Blank input skips every listen-edge
+      # step; nothing else in this workflow changes.
+      - name: Login to GCR for the listen-edge image read
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
+        run: gcloud auth configure-docker --quiet
+
+      - name: Set up Docker Buildx for the listen-edge image read
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
+        uses: docker/setup-buildx-action@v4
+
+      - name: Admit listen-edge image digest
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.listen_edge_image_digest != '' }}
+        env:
+          LISTEN_EDGE_IMAGE_DIGEST_INPUT: ${{ github.event.inputs.listen_edge_image_digest }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/admit_listen_edge_image.py \
+            --digest "$LISTEN_EDGE_IMAGE_DIGEST_INPUT" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --sha "$CHECKED_OUT_SHA" \
+            --github-env "$GITHUB_ENV"
+
+      # Private listen-edge env values (the shared EDGE_SHADOW_TOKEN) live only
+      # in the prod environment secret LISTEN_EDGE_PRIVATE_VALUES_YAML, the same
+      # privateEnv pattern and hygiene as LISTEN_PRIVATE_VALUES_YAML above:
+      # validated before anything is applied, never printed, removed after.
+      - name: Materialize private listen-edge values (prod only)
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && github.event.inputs.environment == 'prod' && github.event.inputs.listen_edge_image_digest != '' }}
+        env:
+          LISTEN_EDGE_PRIVATE_VALUES_YAML: ${{ secrets.LISTEN_EDGE_PRIVATE_VALUES_YAML }}
+          VALUES_FILE: ./backend/charts/listen-edge/${{ vars.ENV }}_omi_listen_edge_values.yaml
+        run: |
+          set -euo pipefail
+          if [[ -z "${LISTEN_EDGE_PRIVATE_VALUES_YAML:-}" ]]; then
+            echo "No private listen-edge values configured; chart defaults apply."
+            exit 0
+          fi
+          python3 -m pip install -q pyyaml
+          umask 077
+          PRIVATE_VALUES_FILE="$(mktemp "${RUNNER_TEMP}/listen-edge-private-values.XXXXXX")"
+          printf '%s\n' "$LISTEN_EDGE_PRIVATE_VALUES_YAML" > "$PRIVATE_VALUES_FILE"
+          unset LISTEN_EDGE_PRIVATE_VALUES_YAML
+          echo "LISTEN_EDGE_PRIVATE_VALUES_FILE=$PRIVATE_VALUES_FILE" >> "$GITHUB_ENV"
+          python3 .github/scripts/listen_helm_env_overrides.py \
+            --values-file "$VALUES_FILE" \
+            --private-values-file "$PRIVATE_VALUES_FILE" \
+            --output-argv-file /dev/null
 
       # Kept and rollback images are already serving and indexes are
       # create-only, so the rollback lane must not gain new failure modes; the
@@ -526,6 +591,42 @@ jobs:
             --namespace "$RECONCILE_NAMESPACE" \
             --service "$RECONCILE_SERVICE" \
             --backend-service "$RECONCILE_BACKEND_SERVICE"
+
+      # Plan D D2: roll the listen-edge chart after listen is verified, so the
+      # sensitive listen rollout keeps its own step sequence independent of the
+      # edge. Runs only when a digest was admitted above. Blank input never
+      # creates or touches the release: chart-only changes and rollbacks re-pass
+      # a digest explicitly (digests are immutable; any digest built from a
+      # commit main contains is admissible). mode=rollback touches the listen
+      # release only.
+      - name: Upgrade listen-edge Helm chart
+        if: ${{ (github.event.inputs.mode || 'deploy') == 'deploy' && env.LISTEN_EDGE_IMAGE_DIGEST != '' }}
+        run: |
+          set -euo pipefail
+          PRIVATE_ARGS=()
+          if [[ -n "${LISTEN_EDGE_PRIVATE_VALUES_FILE:-}" ]]; then
+            PRIVATE_ARGS=(-f "$LISTEN_EDGE_PRIVATE_VALUES_FILE")
+          fi
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-listen-edge \
+            ./backend/charts/listen-edge \
+            -f ./backend/charts/listen-edge/${{ vars.ENV }}_omi_listen_edge_values.yaml \
+            --set image.repository="${LISTEN_EDGE_IMAGE_REPOSITORY}" \
+            --set-string image.digest="${LISTEN_EDGE_IMAGE_DIGEST}" \
+            ${PRIVATE_ARGS[@]+"${PRIVATE_ARGS[@]}"}
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-listen-edge --timeout=600s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service listen-edge || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service listen-edge
+
+      - name: Show listen-edge pod status
+        if: ${{ always() && env.LISTEN_EDGE_IMAGE_DIGEST != '' }}
+        run: |
+          kubectl -n ${{ vars.ENV }}-omi-backend get pods -l app.kubernetes.io/instance=${{ vars.ENV }}-omi-listen-edge --no-headers
+
+      - name: Remove private listen-edge values file
+        if: ${{ always() && env.LISTEN_EDGE_PRIVATE_VALUES_FILE != '' }}
+        run: rm -f "$LISTEN_EDGE_PRIVATE_VALUES_FILE"
 
       - name: Show pod status
         if: always()

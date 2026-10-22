@@ -98,7 +98,7 @@
         "backend/deploy/messaging/maintenance-job.json",
         "backend/scripts/messaging_operations.py"
       ],
-      "image_built_elsewhere": "The Cloud Run job runs the admitted backend image (ADMITTED_BACKEND_IMAGE) that backend deploys built; messaging_operations.py reconciles it. The GKE chart is disabled (values.yaml enabled: false)."
+      "image_built_elsewhere": "The Cloud Run job runs the admitted backend image (ADMITTED_BACKEND_IMAGE) that backend deploys built, or the backend-workers role digest a build-only train published (plan B B3); messaging_operations.py admits exactly those two repositories and reconciles the job. The GKE chart is disabled (values.yaml enabled: false)."
     },
     "backend-listen": {
       "platform": "gke",
@@ -110,6 +110,16 @@
         ".github/workflows/gcp_backend.yml",
         ".github/workflows/gcp_backend_listen_helm.yml"
       ]
+    },
+    "listen-edge": {
+      "platform": "gke",
+      "role": "realtime",
+      "image": "listen-edge",
+      "current_image": "listen-edge",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_listen_helm.yml"
+      ],
+      "image_built_elsewhere": "The listen workflow rolls the listen-edge GKE chart by an admitted digest (LISTEN_EDGE_IMAGE_DIGEST); build-only role-image trains (role_images.yml, gcp_backend.yml) build, probe and publish the native image, and the deploy never builds it."
     },
     "pusher": {
       "platform": "gke",

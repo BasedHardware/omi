@@ -350,8 +350,6 @@ class ReservationState:
                 return 'no_active_model' if fresh else 'no_states'
             if await client.get(self.key() + ':saturated:' + model):
                 return 'saturated'
-            if await client.get(self.key() + ':dream-probe-failed:' + model):
-                return 'probe_failed'
             sample = await client.get(self.key() + ':dedicated-utilization:' + model)
             if sample is not None:
                 value = json.loads(sample)
