@@ -166,8 +166,20 @@ def test_on_realtime_segments_schedules_a_background_update(monkeypatch):
     assert scheduled == ['episode_attach', 'episode_moment']
 
 
+def test_the_first_moment_comes_early_then_the_interval_holds():
+    tracker = MomentTracker()
+    ended = []
+    for wall in range(0, 40, 10):
+        ended += tracker.observe('u', _segs(20), 'c1', 'omi', now=wall)
+    assert [m.trigger for m in ended] == ['interval']
+    assert ended[0].segments and (ended[0].ended_at - ended[0].started_at).total_seconds() >= 30
+    # After that first flush the ordinary interval applies.
+    assert tracker.observe('u', _segs(80), 'c1', 'omi', now=60) == []
+
+
 def test_steady_talk_ends_a_moment_on_the_interval():
     tracker = MomentTracker()
+    tracker._buffers['u'] = live._Buffer('c1', 'omi', 0.0, 0.0, last_flush_wall=-1.0)
     wall = 0
     ended = []
     # Twelve words every ten seconds: never a 45 s pause, 600 words only after eight minutes.

@@ -7,7 +7,9 @@
   previous one;
 - a rollover: the buffer reaches ``MOMENT_MAX_WORDS``, or the stream moves to
   another conversation;
-- an interval: the buffer has spanned ``MOMENT_MAX_SECONDS`` of steady speech;
+- an interval: the buffer has spanned ``MOMENT_MAX_SECONDS`` of steady speech, or,
+  for the first moment of a live stretch, ``FIRST_MOMENT_MIN_SECONDS`` and
+  ``FIRST_MOMENT_MIN_WORDS`` (so the episode has a title within a minute);
 - a session end: the pusher session closes (``on_session_end``), so a pod move or
   a reconnect does not strand what was buffered.
 
@@ -39,6 +41,8 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
 from config.episodes import (
+    FIRST_MOMENT_MIN_SECONDS,
+    FIRST_MOMENT_MIN_WORDS,
     MOMENT_MAX_SECONDS,
     MOMENT_MAX_WORDS,
     MOMENT_MIN_INTERVAL_SECONDS,
@@ -137,6 +141,11 @@ class MomentTracker:
                     wall - buf.first_wall >= MOMENT_MAX_SECONDS
                     and buf.words >= MOMENT_MIN_WORDS
                     and wall - buf.last_flush_wall >= MOMENT_MIN_INTERVAL_SECONDS
+                ) or (
+                    # Nothing flushed yet in this live stretch: give the episode its first notes early.
+                    buf.last_flush_wall == 0.0
+                    and buf.words >= FIRST_MOMENT_MIN_WORDS
+                    and wall - buf.first_wall >= FIRST_MOMENT_MIN_SECONDS
                 ):
                     ended.append(self._moment(buf, 'interval'))
                     self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
