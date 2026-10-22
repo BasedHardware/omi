@@ -26,10 +26,27 @@ def item_id(conversation_id: str, row: dict[str, Any]) -> str:
     return 'conv-summary:' + conversation_id + ':' + hashlib.sha256(generation(row).encode()).hexdigest()[:24]
 
 
+def _coerce_utc_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        raw = value.strip()
+        if raw.endswith('Z'):
+            raw = raw[:-1] + '+00:00'
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
+
+
 def timing(row: dict[str, Any]) -> dict[str, Any]:
     start = row.get('started_at') or row.get('created_at')
     end = row.get('finished_at') or start
-    duration = max(0, (end - start).total_seconds()) if isinstance(start, datetime) and isinstance(end, datetime) else 0
+    start_dt = _coerce_utc_datetime(start)
+    end_dt = _coerce_utc_datetime(end)
+    duration = max(0, (end_dt - start_dt).total_seconds()) if start_dt is not None and end_dt is not None else 0
     return {'started_at': start, 'duration_seconds': duration}
 
 
@@ -94,9 +111,12 @@ def list_items(uid: str, limit: int | None = None) -> list[dict[str, Any]]:
         claim_snapshot = claim_ref.get()
         if claim_snapshot.exists:
             operation = claim_snapshot.to_dict() or {}
-            if operation['state'] == 'failed' and item.get('retry', {}).get('state') == 'failed':
+            op_state = operation.get('state')
+            item_retry = item.get('retry') if isinstance(item.get('retry'), dict) else {}
+            if op_state == 'failed' and item_retry.get('state') == 'failed':
                 item['retryable'] = True  # Repair items made permanently non-retryable by the old ledger.
-            item['retry'] = {'state': operation['state'], 'operation_id': operation['operation_id']}
+            if op_state is not None:
+                item['retry'] = {'state': op_state, 'operation_id': operation.get('operation_id')}
         item['title'] = (row or {}).get('user_title') or ((row or {}).get('structured') or {}).get('title')
         item.pop('generation', None)
         item.pop('active', None)
@@ -118,11 +138,12 @@ def claim_id(conversation_id: str, revision: str) -> str:
 
 
 def lease_live(operation: dict[str, Any], now: datetime) -> bool:
-    expires = operation.get('lease_expires_at')
-    if not isinstance(expires, datetime):
-        created = operation.get('created_at')
-        expires = created + timedelta(seconds=RETRY_LEASE_SECONDS) if isinstance(created, datetime) else None
-    return isinstance(expires, datetime) and expires > now
+    now_dt = _coerce_utc_datetime(now) or now_utc()
+    expires = _coerce_utc_datetime(operation.get('lease_expires_at'))
+    if expires is None:
+        created = _coerce_utc_datetime(operation.get('created_at'))
+        expires = created + timedelta(seconds=RETRY_LEASE_SECONDS) if created is not None else None
+    return expires is not None and expires > now_dt
 
 
 class ClaimRejected(ValueError):
@@ -187,8 +208,9 @@ def claim_in_transaction(
         or (current.get('state') == 'in_progress' and not lease_live(current, now))
     )
     if item is not None and owned:
+        item_retry = item.get('retry') if isinstance(item.get('retry'), dict) else {}
         retryable = item.get('retryable') or (
-            current.get('state') == 'failed' and item.get('retry', {}).get('state') == 'failed'
+            current.get('state') == 'failed' and item_retry.get('state') == 'failed'
         )
         if not item.get('active') or not retryable:
             raise ClaimRejected('not_retryable')
