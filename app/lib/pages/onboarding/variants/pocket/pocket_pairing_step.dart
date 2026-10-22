@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/ui/ui.dart';
@@ -64,12 +65,17 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
 
   /// Connects the first Omi the scan found, exactly once per device, through the pairing page's
   /// own path. Runs after the frame so the provider is never mutated during build.
-  void _maybeConnect(OnboardingProvider provider) {
+  /// Connected for real: this step's own attempt ([OnboardingProvider.isConnected]) or the
+  /// saved pendant reconnecting on its own, which only updates [DeviceProvider].
+  static bool _isConnected(OnboardingProvider provider, DeviceProvider devices) =>
+      provider.isConnected || devices.isConnected;
+
+  void _maybeConnect(OnboardingProvider provider, DeviceProvider devices) {
     if (_done) return;
     // A connect this step started finishes only through handleTap's own callback, after its
     // settle and persistence; isConnected flips earlier than that.
     if (_attemptInFlight) return;
-    if (provider.isConnected) {
+    if (_isConnected(provider, devices)) {
       // Connected on entry, with no attempt from this step (the pendant reconnected on its own):
       // complete pairing once as connected so the walkthrough check still runs.
       if (_completingConnected) return;
@@ -93,7 +99,7 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
       if (!mounted || _done) return;
       unawaited(provider.handleTap(device: device, isFromOnboarding: true, goNext: () => _finish(true)).then((_) {
         _attemptInFlight = false;
-        if (!mounted || _done || provider.isConnected) return;
+        if (!mounted || _done || _isConnected(provider, devices)) return;
         // handleTap swallowed a failure: offer a fresh scan instead of searching forever.
         setState(() {
           _failed = true;
@@ -137,10 +143,10 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
     final l10n = context.l10n;
     final pixelRatio = MediaQuery.of(context).devicePixelRatio;
     const imageSize = 150.0;
-    return Consumer<OnboardingProvider>(
-      builder: (context, provider, _) {
-        _maybeConnect(provider);
-        final connected = provider.isConnected;
+    return Consumer2<OnboardingProvider, DeviceProvider>(
+      builder: (context, provider, devices, _) {
+        _maybeConnect(provider, devices);
+        final connected = _isConnected(provider, devices);
         final connecting = provider.isClicked && !connected;
         return Scaffold(
           backgroundColor: OmiColors.surface0,
@@ -151,7 +157,7 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
                   alignment: Alignment.centerLeft,
                   child: OmiBackButton(
                     // Mid-attempt (incl. the settle), leaving never claims a connection or opens the walkthrough.
-                    onPressed: () => _finish(provider.isConnected && !_attemptInFlight),
+                    onPressed: () => _finish(_isConnected(provider, devices) && !_attemptInFlight),
                   ),
                 ),
                 const SizedBox(height: OmiSpacing.lg),
@@ -167,7 +173,7 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
                       const SizedBox(height: OmiSpacing.xs),
                       Text(
                         connected
-                            ? provider.deviceName
+                            ? (devices.connectedDevice?.name ?? provider.deviceName)
                             : _failed
                                 ? l10n.connectionFailed
                                 : l10n.pairingPowerOnSubtitle,
