@@ -15,6 +15,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/local_recording_group.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
@@ -195,6 +196,9 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
 class InertLocalRecordingsProvider extends ChangeNotifier implements LocalRecordingsProvider {
   @override
   List<LocalRecording> get recordings => const [];
+
+  @override
+  List<LocalRecordingGroup> get homeRecordings => const [];
   @override
   Future<void> refresh() async {}
   @override

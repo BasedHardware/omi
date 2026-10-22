@@ -20,6 +20,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/local_recording_group.dart';
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart' show ConversationDetailPage;
@@ -127,6 +128,9 @@ class _StubSyncProvider extends ChangeNotifier implements SyncProvider {
 class _StubLocalRecordings extends ChangeNotifier implements LocalRecordingsProvider {
   @override
   List<LocalRecording> get recordings => const [];
+
+  @override
+  List<LocalRecordingGroup> get homeRecordings => const [];
 
   @override
   Future<void> refresh() async {}

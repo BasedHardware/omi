@@ -66,8 +66,9 @@ missing receipts for a few files cannot starve a long recording's later segments
 
 ## User workflow
 
-Saved recovery copies appear in the existing local Recordings list. They can be
-played or processed through its existing upload/job-confirmation pipeline. They
+Saved recovery copies appear as one Home entry per Watch recording session.
+Opening the entry shows the original parts in Recordings, where they can be
+played or processed through the existing upload/job-confirmation pipeline. They
 are manual, including when auto-sync is enabled: automatically retranscribing
 successful live audio would create duplicate conversations. They remain local
 until the user chooses processing or deletion. Originals may span several
@@ -105,7 +106,8 @@ to the processing services as well as releasing both mobile companions.
 - [x] After merging current main, re-verify project membership: `WatchRecordingStore.swift`
   compiles once into Runner, RunnerRayBanDat and omiWatchApp, and `SafeFoundationSinks.swift`
   has no duplicate build entries (`watch_recording_recovery_test.rb` checks the store count).
-- [ ] Complete full iPhone build/CI review and merge.
+- [x] Complete full iPhone build/CI review and merge for #22059 (merged
+  2026-10-20); physical paired-device acceptance remains separate.
 - [ ] Deploy the sync processing backend (fresh/backfill workers and inline hosts)
   before releasing the iOS build that contains the paired iPhone and Watch apps;
   an older backend ignores the explicit Process Now keep rule, so recovered Watch
@@ -121,3 +123,57 @@ recovery is pending. A new prevention fix does not prove old audio is recoverabl
 Apple requires synchronous handling of received temporary file URLs and physical
 paired-device testing for WatchConnectivity file delivery:
 https://developer.apple.com/documentation/watchconnectivity/wcsessiondelegate/session(_:didreceive:)
+
+
+## Visible Stop and session presentation (#23275)
+
+The active Watch control is a labelled native Stop recording button. It stays
+visible while recovery transfers wait; Retry transfer remains a separate action.
+The 40 mm layout fits both controls. The stopped state offers Record and retains
+saved-audio status. Recovery status never gates the recording control.
+
+The recorder validates its original start attempt after permission before
+activating AVAudioSession. Stop retires that attempt, removes the installed tap,
+stops the engine, releases converter resources and deactivates the audio session.
+Failed startup takes the same cleanup path and seals any admitted archive.
+Late permission answers cannot activate capture after cancellation or adopt a
+newer start. Audio-session and permission closures are native I/O seams; their
+production defaults preserve the real AVFoundation calls.
+
+Home uses one cached `LocalRecordingGroup` projection per original Watch session
+ID. Grouping happens before date bucketing, so late delivery and midnight do not
+produce additional Home rows. Duration sums only available parts. The underlying
+receipt-owned `.bin` files, job IDs and per-file operations remain authoritative.
+A pushed Recordings page reads the current account's group and lazily renders the
+original parts with the existing playback, detail, Process Now, share and
+confirmed deletion controls. Account clear also clears that projection, without
+deleting audio. Phone batch recordings and distinct Watch sessions stay separate.
+
+No recovery file is joined, deleted, automatically uploaded or retranscribed to
+make the Home list shorter. This follow-up adds no backend/firmware/API contract
+and requires an iPhone release with its Watch companion after merge.
+
+### Controls/grouping checklist
+
+- [x] Native Watch target compiles and the 40 mm render shows Stop and Retry.
+- [x] Five real view-model lifecycle cases pass in the Watch simulator with
+  synthetic permission/audio-session I/O; no microphone is opened by the probe.
+- [x] Native custody/presentation/relay regressions pass (24 tests).
+- [x] Grouping retains 666 original parts, stable identity, out-of-order delivery
+  and cross-midnight grouping; unrelated recordings never join.
+- [x] Production row/navigation tests pass in light/dark at 200% text size,
+  including account clear without deleting the original files.
+- [ ] Finish full app, analyzer, journeys, preflight and CI checks.
+- [ ] Merge, then release the signed iPhone app with the updated Watch companion.
+- [ ] Qualify on paired hardware: Stop must remove the microphone indicator with
+  the phone reachable and unavailable, during pending transfers and after screen
+  off/resume. Confirm saved parts still transfer and the iPhone shows one session
+  entry with playback/processing access. Simulator closure tests and screenshots
+  do not establish physical microphone, radio or background behavior.
+
+Reproduce the native policy probe in the CocoaPods Ruby environment:
+`ruby app/ios/test/watch_recording_controls_probe.rb --device <booted-watch-uuid>
+--output <temporary-output-directory>`. It compiles the actual production view,
+recorder and store with the synthetic app under `app/ios/test/fixtures/`.
+The iPhone UI fixture is `app/integration_test/watch_session_capture.dart`;
+run it in the supported dev/local_dev simulator profile and use agent-flutter.

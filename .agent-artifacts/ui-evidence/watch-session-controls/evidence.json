@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-watch-stop.png",
+      "platform": "mobile-ios",
+      "description": "Actual WatchRecorderView on the 40 mm Watch simulator, synthetic active capture and 40 pending parts; Stop and Retry transfer fit. No physical microphone or radio claim.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-home-session.png",
+      "platform": "mobile-ios",
+      "description": "Production ConversationsGroupWidget and RecordingGroupListItem on iPhone simulator; 40 synthetic Watch parts project to one Home row. Fixture shell, not an authenticated Home account.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "003-mobile-ios-session-parts.png",
+      "platform": "mobile-ios",
+      "description": "Production pushed Recordings page on iPhone simulator; original parts remain reachable after opening the grouped row.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "004-mobile-ios-recording-actions.png",
+      "platform": "mobile-ios",
+      "description": "Production recording detail sheet on iPhone simulator; synthetic playback state and existing Process Now/menu controls. No audio upload, real playback or deletion performed.",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

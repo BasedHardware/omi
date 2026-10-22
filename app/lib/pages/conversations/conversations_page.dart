@@ -25,7 +25,7 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
-import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/local_recording_group.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
@@ -33,7 +33,7 @@ import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart'
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
-import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
+import 'package:omi/pages/conversations/widgets/recording_group_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -55,7 +55,7 @@ typedef _ConversationListRow = ({
   DateTime date,
   bool isFirst,
   ServerConversation? conversation,
-  LocalRecording? recording,
+  LocalRecordingGroup? recording,
   int conversationIndex,
 });
 
@@ -63,7 +63,7 @@ typedef _ConversationPageSnapshot = ({
   List<ServerConversation> conversations,
   Map<DateTime, List<ServerConversation>> groupedConversations,
   List<ServerConversation> processingConversations,
-  List<LocalRecording> recordings,
+  List<LocalRecordingGroup> recordings,
   String previousQuery,
   String? selectedFolderId,
   String? selectedSpeakerId,
@@ -124,7 +124,7 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     conversations: conversations.conversations,
     groupedConversations: conversations.groupedConversations,
     processingConversations: conversations.processingConversations,
-    recordings: recordings.recordings,
+    recordings: recordings.homeRecordings,
     previousQuery: conversations.previousQuery,
     selectedFolderId: conversations.selectedFolderId,
     selectedSpeakerId: conversations.selectedSpeakerId,
@@ -138,7 +138,7 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     apiViewPhase: conversations.apiViewState.phase,
     conversationIdentitySignature: _identitySignature(conversations.conversations),
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
-    recordingIdentitySignature: _identitySignature(recordings.recordings),
+    recordingIdentitySignature: _identitySignature(recordings.homeRecordings),
     pendingDeleteCount: conversations.memoriesToDelete.length,
     homeEmptyExplanation: conversations.homeEmptyExplanation,
   );
@@ -147,7 +147,7 @@ _ConversationPageSnapshot _conversationPageSnapshot(
 List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
-  required Map<DateTime, List<LocalRecording>> recordingsByDate,
+  required Map<DateTime, List<LocalRecordingGroup>> recordingsByDate,
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
@@ -155,7 +155,7 @@ List<_ConversationListRow> _buildConversationListRows({
   for (var dateIndex = 0; dateIndex < dates.length; dateIndex++) {
     final date = dates[dateIndex];
     final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
-    final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
+    final recordings = recordingsByDate[date] ?? const <LocalRecordingGroup>[];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
@@ -555,14 +555,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly;
-        final recordingsByDate = <DateTime, List<LocalRecording>>{};
+        final recordingsByDate = <DateTime, List<LocalRecordingGroup>>{};
         if (showRecordings) {
           // Batch/offline-mode recordings captured locally — a separate subsystem
           // from device offline-sync (which lives on the Sync page).
           for (final rec in snapshot.recordings) {
             final dt = DateTime.fromMillisecondsSinceEpoch(rec.timerStart * 1000);
             final day = DateTime(dt.year, dt.month, dt.day);
-            (recordingsByDate[day] ??= <LocalRecording>[]).add(rec);
+            (recordingsByDate[day] ??= <LocalRecordingGroup>[]).add(rec);
           }
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
@@ -769,7 +769,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           fillingSeconds: filling[row.conversation!.id],
                         );
                       case _ConversationListRowKind.recording:
-                        return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);
+                        return RecordingGroupListItem(
+                            key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);
                       case _ConversationListRowKind.groupSpacer:
                         return const SizedBox(height: 10);
                     }

@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/gen/speaker_tag_prompts_wire.g.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/local_recording_group.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart' show RecentRecapsLoader;
 import 'package:omi/providers/capture_provider.dart';
@@ -31,6 +32,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 class _InertLocalRecordingsProvider extends ChangeNotifier implements LocalRecordingsProvider {
   @override
   List<LocalRecording> get recordings => const [];
+
+  @override
+  List<LocalRecordingGroup> get homeRecordings => const [];
 
   @override
   Future<void> refresh() async {}

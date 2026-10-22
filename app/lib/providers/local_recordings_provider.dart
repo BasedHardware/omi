@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/models/local_recording_group.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/connectivity_service.dart';
@@ -66,6 +67,18 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   List<LocalRecording> _recordings = [];
   List<LocalRecording> get recordings => _recordings;
+
+  List<LocalRecording>? _homeSource;
+  List<LocalRecordingGroup> _homeRecordings = [];
+
+  /// A cached presentation only; playback, upload and deletion still use files.
+  List<LocalRecordingGroup> get homeRecordings {
+    if (!identical(_homeSource, _recordings)) {
+      _homeSource = _recordings;
+      _homeRecordings = groupLocalRecordings(_recordings);
+    }
+    return _homeRecordings;
+  }
 
   bool _isLoading = false;
   bool get isLoading => _isLoading;
