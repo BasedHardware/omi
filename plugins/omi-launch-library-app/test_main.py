@@ -510,3 +510,17 @@ class EndpointTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_search_launches_non_string_end_date():
+    from pydantic import ValidationError
+    from models import SearchLaunchesRequest
+    import pytest
+    with pytest.raises(ValidationError):
+        SearchLaunchesRequest.model_validate({"query": "Starlink", "end_date": 20261031})
+
+
+def test_search_launches_compact_iso_date_end_of_day():
+    from models import SearchLaunchesRequest
+    req = SearchLaunchesRequest.model_validate({"query": "Starlink", "end_date": "20261031"})
+    assert req.end_date == "2026-10-31T23:59:59Z"

@@ -1,6 +1,6 @@
 import re
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import date, datetime, timezone
+from typing import Any, Optional
 
 from pydantic import (
     BaseModel,
@@ -17,7 +17,7 @@ UUID_PATTERN = re.compile(
 )
 
 
-def normalize_utc_datetime(value: str, *, end_of_day: bool = False) -> str:
+def normalize_utc_datetime(value: Any, *, end_of_day: bool = False) -> str:
     """Validate an ISO date/time and return an API-safe UTC timestamp."""
     if not isinstance(value, str):
         raise ValueError("date values must be strings")
@@ -25,6 +25,13 @@ def normalize_utc_datetime(value: str, *, end_of_day: bool = False) -> str:
     cleaned = value.strip()
     if not cleaned:
         raise ValueError("date values must not be empty")
+
+    is_date_only = False
+    try:
+        date.fromisoformat(cleaned)
+        is_date_only = True
+    except ValueError:
+        pass
 
     try:
         parsed = datetime.fromisoformat(cleaned.replace("Z", "+00:00"))
@@ -36,7 +43,7 @@ def normalize_utc_datetime(value: str, *, end_of_day: bool = False) -> str:
     else:
         parsed = parsed.astimezone(timezone.utc)
 
-    if end_of_day and len(cleaned) == 10:
+    if end_of_day and is_date_only:
         parsed = parsed.replace(hour=23, minute=59, second=59)
 
     return parsed.replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -81,7 +88,7 @@ class SearchLaunchesRequest(BaseModel):
             return None
         return normalize_utc_datetime(
             value,
-            end_of_day=info.field_name == "end_date" and len(value.strip()) == 10,
+            end_of_day=info.field_name == "end_date",
         )
 
     @model_validator(mode="after")
