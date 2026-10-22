@@ -1,0 +1,3 @@
+{
+  "change": "Fixed an SD card transfer that could stop itself while packets were still arriving"
+}
