@@ -573,6 +573,10 @@ def test_every_declared_service_maps_to_exactly_one_role_image(contracts_module)
             roles_by_image.setdefault(image, []).append(role)
     assert all(len(roles) == 1 for roles in roles_by_image.values()), roles_by_image
 
+    # native_images join the map with the role their own entry declares.
+    for name, spec in registry.get('native_images', {}).items():
+        roles_by_image.setdefault(name, []).append(spec['role'])
+
     declared = set(registry['services']) | set(registry['logging_chart_images'])
     assert declared == set(registry['services'])
     for service in declared:
@@ -696,6 +700,19 @@ def test_role_pusher_target_copies_the_pusher_source_surface(contracts_module):
                 '.github/workflows/gcp_backend_listen_helm.yml'
             ),
             'gcp_backend_listen_helm.yml never names the service as a deploy target',
+        ),
+        # Native service entries: the registry's native_images join the role -> image -> service map.
+        (
+            lambda p: p['services'].pop('listen-edge'),
+            'native image listen-edge serves no declared service',
+        ),
+        (
+            lambda p: p['services']['listen-edge'].update({'role': 'gateway'}),
+            'is not a role image of gateway',
+        ),
+        (
+            lambda p: p['services']['listen-edge'].pop('image_built_elsewhere'),
+            'a native current_image needs an image_built_elsewhere reason',
         ),
     ],
 )
