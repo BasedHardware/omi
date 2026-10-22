@@ -252,6 +252,7 @@ def test_channel_snapshot_survives_acoustic_resolution(monkeypatch):
     item.is_user = False
     processing.finish(token, uuid.uuid4().hex, conversation, {})
     assert item.is_user
+    assert item.speaker_identity_status == 'user'
     assert stored[-1].owner_anchor == 'channel'
 
 

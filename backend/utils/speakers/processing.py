@@ -183,6 +183,19 @@ def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
             for segment in conversation.transcript_segments:
                 if segment.id in labels and text_window_refusal(segment.start, segment.end) is None:
                     segment.is_user, segment.person_id = labels[segment.id]
+                    segment.speaker_identity_status = (
+                        'user'
+                        if segment.is_user
+                        else (
+                            'not_user'
+                            if segment.person_id
+                            else (
+                                getattr(segment, 'speaker_identity_status', 'unknown')
+                                if getattr(segment, 'speaker_identity_status', 'unknown') in ('ambiguous', 'no_match')
+                                else 'unknown'
+                            )
+                        )
+                    )
                     cluster = by_segment[segment.id]
                     if (
                         current.resolution
