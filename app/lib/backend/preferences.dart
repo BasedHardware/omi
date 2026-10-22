@@ -20,7 +20,6 @@ import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/startup/boot_journal.dart';
-import 'package:omi/startup/boot_recovery.dart';
 import 'package:omi/env/physical_qualification.dart';
 
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
