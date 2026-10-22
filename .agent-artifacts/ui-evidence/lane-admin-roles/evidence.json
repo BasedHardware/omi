@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-team-roles-proposals-audit.png",
+      "platform": "web",
+      "description": "Team page as owner: legacy-access banner, pending agent proposal with scope diff, roster with uid prefix, added, last sign-in, duplicate-email badges and role selects, audit log",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "002-web-team-role-change-confirm.png",
+      "platform": "web",
+      "description": "Role change confirmation showing the scopes removed",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    }
+  ]
+}
