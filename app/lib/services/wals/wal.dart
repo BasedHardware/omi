@@ -178,6 +178,10 @@ class Wal {
 
   /// Explicit phone-only custody. Never admitted to a cloud audio drain.
   bool onDeviceOnly;
+
+  /// Explicit Transcribe Later consent: only a manual upload may release this hold.
+  bool holdForUser;
+  DeviceType? deviceType;
   Map<String, dynamic>? onDeviceConversation;
 
   /// Recording-time custody evidence. Null identifies pre-fix dev records.
@@ -364,6 +368,8 @@ class Wal {
     this.status = WalStatus.inProgress,
     this.storage = WalStorage.mem,
     this.onDeviceOnly = false,
+    this.holdForUser = false,
+    this.deviceType,
     this.onDeviceConversation,
     this.capturedOnDeviceOnly,
     this.filePath,
@@ -406,6 +412,8 @@ class Wal {
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       onDeviceOnly: json['on_device_only'] == true,
+      holdForUser: json['hold_for_user'] == true,
+      deviceType: DeviceType.values.asNameMap()[json['device_type']],
       onDeviceConversation:
           json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
       capturedOnDeviceOnly: json['captured_on_device_only'] as bool?,
@@ -439,7 +447,9 @@ class Wal {
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
       clockRun: json['clock_run'] as String?,
-    )..repairLegacyImportedCustody();
+    )
+      ..frameSize = json['frame_size'] ?? mapNameToCodec(json['codec']).getFrameSize()
+      ..repairLegacyImportedCustody();
   }
 
   Map<String, dynamic> toJson() {
@@ -451,6 +461,8 @@ class Wal {
       'status': status.name,
       'storage': storage.name,
       'on_device_only': onDeviceOnly,
+      'hold_for_user': holdForUser,
+      if (deviceType != null) 'device_type': deviceType!.name,
       'on_device_conversation': onDeviceConversation,
       if (capturedOnDeviceOnly != null) 'captured_on_device_only': capturedOnDeviceOnly,
       'file_path': filePath,
@@ -461,6 +473,7 @@ class Wal {
       'storage_total_bytes': storageTotalBytes,
       'file_num': fileNum,
       'total_frames': totalFrames,
+      'frame_size': frameSize,
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,

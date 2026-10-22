@@ -1,11 +1,9 @@
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
-import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/sync_state.dart';
@@ -727,108 +725,18 @@ class StorageSyncImpl implements StorageSync {
     return transferComplete;
   }
 
-  /// Write opus frames to disk in WAL format: [frame_length_u32_le][frame_data]...
-  /// This format is compatible with /v2/sync-local-files backend endpoint.
-  /// Uses same ByteData conversion as SDCardWalSync._flushToDisk for consistency.
   int _storageFileSeq = 0;
 
-  Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart, {String? clockRun}) async {
-    final directory = await getApplicationDocumentsDirectory();
-    var fileName = wal.getFileNameByTimeStarts(timerStart, clockRun: clockRun);
-    if (await File('${directory.path}/$fileName').exists()) {
-      final dot = fileName.lastIndexOf('.');
-      final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
-      final ext = dot > 0 ? fileName.substring(dot) : '';
-      do {
-        fileName = '${stem}_u${_storageFileSeq++}$ext';
-      } while (await File('${directory.path}/$fileName').exists());
-    }
-    String filePath = '${directory.path}/$fileName';
-
-    List<int> data = [];
-    for (int i = 0; i < frames.length; i++) {
-      var frame = frames[i];
-
-      final byteFrame = ByteData(frame.length);
-      for (int j = 0; j < frame.length; j++) {
-        byteFrame.setUint8(j, frame[j]);
-      }
-      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-      data.addAll(byteFrame.buffer.asUint8List());
-    }
-
-    final file = File(filePath);
-    await file.writeAsBytes(data, flush: true);
-
-    Logger.debug('StorageSync: Wrote ${data.length} bytes (${frames.length} frames) to $filePath');
-    return file;
-  }
-
-  /// Register a downloaded chunk with LocalWalSync so it gets uploaded to backend.
-  Future<void> _writeChunkDurably(
-    Wal wal,
-    List<List<int>> chunk,
-    int timerStart,
-    int admittedGeneration, {
-    String? clockRun,
-  }) async {
+  Future<void> _writeChunkDurably(Wal wal, List<List<int>> chunk, int timerStart, int admittedGeneration,
+      {String? clockRun}) async {
     final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
-    }
-    var bytes = 0;
-    for (final f in chunk) {
-      bytes += 4 + f.length;
-    }
-    if (!await localSync.ensureStorageAdmission(bytes: bytes, admittedGeneration: admittedGeneration)) {
-      throw StateError('storage admission refused (cap/disk reserve)');
-    }
-    try {
-      var file = await _flushToDisk(wal, chunk, timerStart, clockRun: clockRun);
-      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration, clockRun: clockRun);
-    } catch (e) {
-      localSync.releaseStorageAdmission(bytes);
-      rethrow;
-    }
-  }
-
-  Future<void> _registerWithLocalSync(
-    Wal wal,
-    File file,
-    int timerStart,
-    int frameCount,
-    int admittedGeneration, {
-    String? clockRun,
-  }) async {
-    final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
-    }
-
-    int fps = wal.codec.getFramesPerSecond();
-    int seconds = fps > 0 ? frameCount ~/ fps : 0;
-
-    Wal localWal = Wal(
-      codec: wal.codec,
-      channel: wal.channel,
-      sampleRate: wal.sampleRate,
-      timerStart: timerStart,
-      filePath: file.path.split('/').last,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      device: wal.device,
-      deviceModel: wal.deviceModel,
-      seconds: seconds,
-      totalFrames: frameCount,
-      syncedFrameOffset: 0,
-      originalStorage: WalStorage.sdcard,
-      clockRun: clockRun,
-    );
-
-    await localSync.addExternalWal(localWal, admittedGeneration: admittedGeneration);
-    if (!await localSync.hasDurableWal(localWal, admittedGeneration: admittedGeneration)) {
-      throw StateError('WAL not durable after registration');
-    }
-    Logger.debug('StorageSync: Registered chunk (ts=$timerStart, ${seconds}s, $frameCount frames) with LocalWalSync');
+    if (localSync == null) throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
+    await localSync.persistDeviceChunk(
+        source: wal,
+        frames: chunk,
+        timerStart: timerStart,
+        admittedGeneration: admittedGeneration,
+        clockRun: clockRun,
+        nextCollisionSequence: () => _storageFileSeq++);
   }
 }

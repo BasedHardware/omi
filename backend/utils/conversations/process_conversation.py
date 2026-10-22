@@ -71,6 +71,7 @@ from utils.conversations.deterministic_minimum import (
 )
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
+from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
     RECOVERY_QUIET_MINIMUM_MAX_WORDS,
@@ -341,7 +342,7 @@ def _get_structured(
     llm_hashes: dict[str, str] | None = None,
 ) -> Tuple[Structured, bool]:
     try:
-        if trigger is ProcessingTrigger.SERVER_RECOVERY and not recovery_transcript_decoded:
+        if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             # An unreadable stored blob is never evidence of an empty capture.
             # Keep the pre-discard typed minimum failure before persistence.
             return Structured(), False
@@ -2442,6 +2443,7 @@ def process_conversation(
     ``DERIVED_EFFECTS_TRANSCRIPT_FIELD`` digest: the transcript the stored
     memories, tasks and goal progress were last derived from.
     """
+    silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
     force_process, is_reprocess = mode.run_now, mode.reprocess
@@ -2498,13 +2500,15 @@ def process_conversation(
             derived_effects_disposition_observer(derived_effects)
         # Sync/REST callers finalize here; leased jobs defer this metadata work
         # to finalizer.py after the fanout fence, including completed replays.
-        if current and completed is not None and not defer_derived_effects:
+        if current and completed is not None and not defer_derived_effects and not silent_backfill:
             link_duplicate_captures(uid, completed)
 
     is_initial_creation = _is_ingress_create(conversation)
     if funded_processing.enabled(uid, 'batch'):
         waiting = bool(getattr(conversation, 'processing_deferred', False))
         if (waiting and not backlog_authorized) or not funded_processing.processing_allowed(uid):
+            if silent_backfill:
+                raise RecoveryStructureUnavailableError('silent backfill processing budget unavailable')
             raw_capture = (
                 not is_initial_creation
                 and conversation.status == ConversationStatus.processing
@@ -2619,10 +2623,11 @@ def process_conversation(
         report_persistence(False)
         return cast(Conversation, conversation)
 
-    _enrich_meeting_context(uid, conversation)
+    if not silent_backfill:
+        _enrich_meeting_context(uid, conversation)
     # Everything below reads speaker_id as one voice; capture only guarantees that per piece.
     with identity_pass(None if already_observed else 'first'):
-        speaker_receipt_applied = resolve_speakers_for_processing(uid, conversation)
+        speaker_receipt_applied = False if silent_backfill else resolve_speakers_for_processing(uid, conversation)
     if speaker_receipt_observer is not None:
         speaker_receipt_observer(speaker_receipt_applied)
 
@@ -2682,7 +2687,7 @@ def process_conversation(
         conversation.discarded, relevance.as_record() if relevance is not None else None
     )
     if (
-        trigger is ProcessingTrigger.SERVER_RECOVERY
+        is_recovery_trigger(trigger)
         and not structured_is_rich(structured)
         and not explicit_recovery_discard
         and not recovery_minimum_fallback
@@ -2706,11 +2711,7 @@ def process_conversation(
         )
         sys.stdout.flush()
         raise RecoveryStructureUnavailableError('server recovery produced no enriched structure')
-    if (
-        trigger is ProcessingTrigger.SERVER_RECOVERY
-        and explicit_recovery_discard
-        and not structured_is_rich(structured)
-    ):
+    if is_recovery_trigger(trigger) and explicit_recovery_discard and not structured_is_rich(structured):
         sys.stdout.write(
             json.dumps({'event': 'selfheal_guard', 'outcome': 'accepted', 'reason': 'explicit_discard'}) + '\n'
         )
@@ -2735,7 +2736,7 @@ def process_conversation(
     if relevance is not None:
         # Server-side audit record, deliberately outside the client wire model.
         payload[RELEVANCE_DECISION_FIELD] = relevance.as_record()
-    if recovery_minimum_fallback:
+    if recovery_minimum_fallback or silent_backfill:
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True
     if conversation.processing_state is not None:
         # The payload merge-clears the stale state (an upgraded-then-reprocessed
@@ -2751,7 +2752,7 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    if recovery_minimum_fallback:
+    if recovery_minimum_fallback or silent_backfill:
         report_persistence(
             persisted,
             completed=conversation,
@@ -2765,6 +2766,13 @@ def process_conversation(
             uid,
             conversation.id,
         )
+        return conversation
+
+    if silent_backfill:
+        # Historical enrichment is summary-only. No extraction/reminder, app,
+        # goal, webhook, lazy-effects queue or notification can escape this seam.
+        if derived_effects_disposition_observer is not None:
+            derived_effects_disposition_observer(DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS)
         return conversation
 
     record_final(uid, conversation)
@@ -2938,7 +2946,7 @@ def process_conversation(
             if not (template_only or app_failed):
                 submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
-        capture_audio = trigger is not ProcessingTrigger.SERVER_RECOVERY
+        capture_audio = not is_recovery_trigger(trigger)
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:
             try:
                 audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
