@@ -4106,7 +4106,6 @@
     "paywallTrialBilledYearly": "Faktureres årlig",
     "paywallTrialSaveAmount": "Spar {amount}",
     "paywallTrialCta": "Start for {price}",
-    "paywallTrialSecondary": "Fortsett med gratisplanen",
     "paywallTrialCancelNote": "Avbryt når som helst. Ingen gebyrer, ingen straff.",
     "paywallTrialStarted": "Din {days}-dagers gratis prøveperiode av Omi Pro har startet.",
     "paywallCancelAnytime": "Avbryt når som helst.",

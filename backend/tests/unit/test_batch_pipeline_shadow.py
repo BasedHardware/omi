@@ -294,6 +294,7 @@ def test_shadow_artifact_cleanup_removes_raw_owner_receipt(repository, monkeypat
 
     reference = Mock()
     artifact = SimpleNamespace(
+        id='synthetic-artifact',  # integration's retention records touched ids for the A2 mirror refresh
         reference=reference,
         to_dict=lambda: {
             'owner_id': 'synthetic-owner',

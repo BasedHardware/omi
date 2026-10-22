@@ -124,6 +124,7 @@ from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
 from utils.observability.transcription import record_listen_no_audio_teardown, record_listen_session_accepted
+from utils.product_metrics import sanitize_app_build
 
 logger = logging.getLogger(__name__)
 
@@ -1156,7 +1157,11 @@ class ListenSessionRuntime:
             demand = getattr(self.receiver, 'live_demand', None)
             if demand is not None:
                 background.append(self.task_supervisor.create_lifetime_task(demand.run(), name='live_demand_routing'))
-            record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
+            record_listen_session_accepted(
+                source=self.request.source,
+                platform=self.client_device_context.platform,
+                app_build=sanitize_app_build(getattr(self.client_device_context, 'app_version', None)),
+            )
             if not self.use_custom_stt:
                 self._no_audio_observation = ListenNoAudioObservation()
             await self._start_pusher()

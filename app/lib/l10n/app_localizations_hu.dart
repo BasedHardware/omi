@@ -13448,9 +13448,6 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Folytatás az ingyenes csomaggal';
-
-  @override
   String get paywallTrialCancelNote => 'Bármikor lemondható. Nincsenek díjak, nincsenek büntetések.';
 
   @override

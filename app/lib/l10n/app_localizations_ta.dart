@@ -13487,9 +13487,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'இலவச திட்டத்துடன் தொடரவும்';
-
-  @override
   String get paywallTrialCancelNote => 'எந்த நேரத்திலும் ரத்து செய்யவும். கட்டணங்கள் இல்லை, அபராதங்கள் இல்லை.';
 
   @override

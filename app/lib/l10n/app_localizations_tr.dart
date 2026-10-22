@@ -13410,9 +13410,6 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Ücretsiz planla devam et';
-
-  @override
   String get paywallTrialCancelNote => 'İstediğiniz zaman iptal edin. Ücret yok, ceza yok.';
 
   @override

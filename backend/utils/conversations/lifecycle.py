@@ -481,6 +481,22 @@ def discard(uid: str, conversation_id: str) -> None:
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
+def rule_discard_outcome(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict[str, Any],
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> str:
+    """``discarded`` on a write, ``already_discarded`` for a stored hide, else ``refused``."""
+    return conversations_db.rule_discard_outcome(
+        uid,
+        conversation_id,
+        relevance_decision,
+        expected_sync_content_revision=expected_sync_content_revision,
+    )
+
+
 def discard_by_relevance(
     uid: str,
     conversation_id: str,

@@ -13,12 +13,17 @@ import wave
 import httpx
 from prometheus_client import Counter
 
-from config.prerecorded_language import language_class, language_guard_enabled
+from config.prerecorded_language import (
+    MIN_AUDIO_LID_CONFIDENCE,
+    audio_lid_confidence_floor,
+    language_class,
+    language_guard_enabled,
+)
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, normalized_stt_language
 
 MAX_PROBE_SECONDS = 30
 MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
-MIN_CONFIDENCE = 0.8
+MIN_CONFIDENCE = MIN_AUDIO_LID_CONFIDENCE
 LID_URL = 'https://platform.modulate.ai/api/velma-2-language-detection-batch'
 DETECTIONS = Counter(
     'omi_batch_pipeline_language_detection_total', 'Independent audio LID routing', ['detected_language', 'decision']
@@ -33,10 +38,12 @@ class LanguageDecision:
     language: str
     confidence: float
     evidence: str
+    probe_seconds: float | None = None
 
     @property
     def parakeet_safe(self):
-        return language_class(self.language) == 'supported' and self.confidence >= MIN_CONFIDENCE
+        minimum = audio_lid_confidence_floor(self.probe_seconds) if self.evidence == 'audio_lid' else MIN_CONFIDENCE
+        return language_class(self.language) == 'supported' and minimum <= self.confidence <= 1
 
 
 def probe_wav(audio: bytes, *, sample_rate=16000, channels=1, encoding=None) -> tuple[bytes, float]:
@@ -94,7 +101,7 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             or not 0 <= confidence <= 1
         ):
             return decision
-        decision = LanguageDecision(code.lower(), float(confidence), 'audio_lid')
+        decision = LanguageDecision(code.lower(), float(confidence), 'audio_lid', seconds)
         return decision
     except Exception:
         return decision

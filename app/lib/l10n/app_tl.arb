@@ -11529,7 +11529,6 @@
     "paywallTrialBilledYearly": "Sisingilin taun-taon",
     "paywallTrialSaveAmount": "Makatipid ng {amount}",
     "paywallTrialCta": "Simulan sa {price}",
-    "paywallTrialSecondary": "Magpatuloy sa libreng plano",
     "paywallTrialCancelNote": "Magkansela anumang oras. Walang bayad, walang multa.",
     "paywallTrialStarted": "Ang iyong {days}-araw na libreng pagsubok ng Omi Pro ay nagsimula na.",
     "paywallCancelAnytime": "Kanselahin anumang oras.",

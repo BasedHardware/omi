@@ -133,7 +133,12 @@ def settle(uid, run_id, turn, *, firestore_client=None):
         else:
             status = 'unpriced'
             row['cost_status'] = 'unpriced'
-        rows = [*(lease.get('turn_receipts') or []), row]
+        # Known-zero attempts still refund their minute hold, but are not model
+        # turns and must not consume receipt capacity during reservation retries.
+        known_zero = turn.tokens == 0 and charge == 0 and status == 'priced' and micro == 0
+        rows = list(lease.get('turn_receipts') or [])
+        if not known_zero:
+            rows.append(row)
         if len(rows) > 128:
             raise ValueError('dream_turn_cap')
         hold = lease.get('minute_hold') or {}
@@ -161,7 +166,7 @@ def settle(uid, run_id, turn, *, firestore_client=None):
         for ref, capacity in capacities:
             tx.set(ref, capacity)
         previous = _held_usd(lease)
-        priced = bool(rows) and all(item.get('cost_status') == 'priced' for item in rows)
+        priced = (bool(rows) or known_zero) and all(item.get('cost_status') == 'priced' for item in rows)
         if priced and type(micro) is int:
             actual_usd = sum(int(item['cost_micro_usd']) for item in rows) / 1000000
             observed_add = micro / 1000000

@@ -461,7 +461,7 @@ public class ProactiveAssistantsPlugin: NSObject {
   /// 60-second repeating write-only heartbeat for monitoring-duration
   /// recovery: refreshes `lastHeartbeatAt` on the persisted
   /// `MonitoringSessionRecord` so a crash has an upper bound on how long the
-  /// session actually ran. Modeled on `startSentryHeartbeat()`
+  /// session actually ran.
   /// (`OmiApp.swift`), but deliberately NOT invalidated by
   /// `pauseCaptureForSystemInterruption()` — the whole point is to keep
   /// ticking through sleep/screen-lock, which is exactly what that function

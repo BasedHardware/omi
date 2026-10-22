@@ -384,7 +384,21 @@ The original full audio remains retained throughout.
 `process_segment` explicitly reports `provider_called`, set immediately before
 `prerecorded`, never inferred from an error class. A known non-call atomically
 removes its intent (or reverts an unspent second attempt). The next claim retries
-normally. If a call may have happened, the piece waits 30 minutes. Then:
+normally. A reply the provider completed with **no words** is fenced into the
+receipt as `provider_empty` with `provider_completed_at`; recovery settles that
+piece as `transcribed` with no content, zero seconds and no usage charge
+(`settled_empty`), whether the same pass observes the checkpoint or a later pass
+resumes a `dispatched` receipt that carries it. It is never re-dispatched. A hold
+whose pieces all settle empty finalizes, settles its content ledger and purges
+like any fully successful recovery. Only a validated success-shaped reply earns
+that checkpoint: the prerecorded adapters raise on a 2xx body that is not the
+provider's success shape (Parakeet without both `text` and `segments`; Modulate
+without an `utterances` list, or with an empty one and neither `text` as a
+string nor `duration_ms` as a number beside it), so a JSON error envelope or
+partial payload is a provider failure with no completion checkpoint, and the
+dispatch stays ambiguous.
+If a call may have happened but no completion
+checkpoint exists, the piece waits 30 minutes. Then:
 
 1. A proof written in the **same transaction as conversation ingestion** identifies
    the hold, piece and deterministic conversation lineage. Recovery marks that
@@ -411,7 +425,7 @@ application TTL or is silently erased. Ordinary fully successful recovery delete
 source and frozen pieces only after content/usage settlement.
 
 `omi_stt_cap_recovery_reconciliation_total{outcome}` counts `cleared_noncall`,
-`reconciled_ingested`, `redispatched`, and `failed`. Structured
+`reconciled_ingested`, `redispatched`, `failed`, and `settled_empty`. Structured
 `event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
 content. Metric labels contain no uid, hold id or piece name. New recovery and
 its signals are inert when both dispatch and ladder enforcement are off. WS-only and inactive

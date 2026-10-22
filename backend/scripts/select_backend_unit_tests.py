@@ -158,6 +158,24 @@ FIRESTORE_INDEX_GUARD_SCHEMA_PATHS = frozenset(
 # always runs the ratchet, and a new un-awaited site cannot slip past
 # changed-file CI and only fail a later --all run. The ratchet's own test
 # asserts the walk never escapes the selection prefixes.
+# Contract (e)/(c) ratchets (legacy-sync retirement, lane 14): the reason-label AST check scans every
+# backend module's ``.labels(...)`` calls, and the batch-stage env ratchet scans the batch, enrichment,
+# workers and outbox modules. A PR that adds a violation must fail in its own changed-file CI.
+REASON_LABEL_ENUM_TESTS = ('tests/unit/test_reason_label_enums.py',)
+BATCH_STAGE_ENV_RATCHET_TESTS = ('tests/unit/test_batch_stage_env_ratchet.py',)
+BATCH_STAGE_ENV_RATCHET_PREFIXES = (
+    'backend/utils/batch_pipeline/',
+    'backend/database/batch_pipeline_',
+    'backend/utils/enrichment/',
+    'backend/utils/workers/',
+    'backend/database/outbox',
+)
+
+
+def is_reason_label_scope_path(path: str) -> bool:
+    return path.startswith('backend/') and path.endswith('.py') and not path.startswith('backend/tests/')
+
+
 BACKGROUND_TASK_RATCHET_TESTS = (
     'tests/unit/test_background_task_ratchet.py',
     'tests/unit/test_revision_drain_harness.py',
@@ -197,6 +215,33 @@ def is_firestore_index_guard_path(path: str) -> bool:
 
 
 AREA_TESTS = (
+    (
+        # Task-target routes whose expected retries must stay 409 (contract (d)). #22431 moved
+        # FirstSummaryCallbackPending and a router edit could no longer see the stale EXPECTED_RETRIES
+        # key: routers/batch_pipeline.py selected no route test. utils/enrichment/ stays unmapped on
+        # purpose so it keeps the full-suite fallback (which includes these tests).
+        ('backend/routers/batch_pipeline.py', 'backend/routers/sync.py', 'backend/utils/sync/reprocess.py'),
+        (),
+        (
+            'tests/unit/test_batch_pipeline_serving.py',
+            'tests/unit/test_sync_reprocess_coalesce.py',
+            'tests/unit/test_sync_enrichment_*.py',
+            'tests/unit/test_enrichment_route.py',
+            'tests/unit/test_task_target_retry_semantics.py',
+            'tests/unit/test_cloud_tasks_queue_model.py',
+        ),
+    ),
+    (
+        # Legacy-sync retirement shared stubs (lane 1); owners extend the test list.
+        ('backend/utils/workers/', 'backend/utils/observability/reasons.py', 'backend/utils/rollout/'),
+        (),
+        (
+            'tests/unit/test_workers_consumer_contract.py',
+            'tests/unit/test_reason_label_enums.py',
+            'tests/unit/test_runtime_percent.py',
+            'tests/unit/test_ramp_controller.py',
+        ),
+    ),
     (
         (
             'backend/config/plan_catalog',
@@ -565,6 +610,10 @@ def tests_for_changed_paths(changed_paths: list[str], all_tests: list[str]) -> t
         selected.update(test for test in FIRESTORE_INDEX_GUARD_TESTS if test in all_tests)
     if any(is_background_task_ratchet_path(path) for path in changed_paths):
         selected.update(test for test in BACKGROUND_TASK_RATCHET_TESTS if test in all_tests)
+    if any(is_reason_label_scope_path(path) for path in changed_paths):
+        selected.update(test for test in REASON_LABEL_ENUM_TESTS if test in all_tests)
+    if any(path.startswith(BATCH_STAGE_ENV_RATCHET_PREFIXES) for path in changed_paths):
+        selected.update(test for test in BATCH_STAGE_ENV_RATCHET_TESTS if test in all_tests)
     backend_paths = [path for path in changed_paths if is_selectable_backend_path(path)]
     test_paths = [path for path in backend_paths if path.startswith('backend/tests/') and path.endswith('.py')]
 

@@ -194,11 +194,9 @@ def hold_manifest(fields: dict, seconds: float, now: float, started_at: int | No
 
 def summary_after(current: dict | None, delta_seconds: float, delta_count: int) -> dict:
     data = current or {}
-    return {
-        'version': 2,
-        'seconds': max(0, float(data.get('seconds') or 0) + delta_seconds),
-        'count': max(0, int(data.get('count') or 0) + int(delta_count)),
-    }
+    count = max(0, int(data.get('count') or 0) + int(delta_count))
+    seconds = max(0, float(data.get('seconds') or 0) + delta_seconds) if count else 0.0
+    return {'version': 2, 'seconds': seconds, 'count': count}
 
 
 def remaining_seconds(row: dict) -> float:

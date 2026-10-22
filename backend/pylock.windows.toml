@@ -1083,6 +1083,18 @@ wheels = [
 ]
 
 [[packages]]
+name = "psycopg"
+version = "3.2.10"
+sdist = { url = "https://files.pythonhosted.org/packages/a9/f1/0258a123c045afaf3c3b60c22ccff077bceeb24b8dc2c593270899353bd0/psycopg-3.2.10.tar.gz", upload-time = 2025-09-08T09:13:37Z, size = 160380, hashes = { sha256 = "0bce99269d16ed18401683a8569b2c5abd94f72f8364856d56c0389bcd50972a" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/4a/90/422ffbbeeb9418c795dae2a768db860401446af0c6768bc061ce22325f58/psycopg-3.2.10-py3-none-any.whl", upload-time = 2025-09-08T09:07:50Z, size = 206586, hashes = { sha256 = "ab5caf09a9ec42e314a21f5216dbcceac528e0e05142e42eea83a3b28b320ac3" } }]
+
+[[packages]]
+name = "psycopg-binary"
+version = "3.2.10"
+marker = "implementation_name != 'pypy'"
+wheels = [{ url = "https://files.pythonhosted.org/packages/3c/22/f1b294dfc8af32a96a363aa99c0ebb530fc1c372a424c54a862dcf77ef47/psycopg_binary-3.2.10-cp311-cp311-win_amd64.whl", upload-time = 2025-09-08T09:09:32Z, size = 2888340, hashes = { sha256 = "646048f46192c8d23786cc6ef19f35b7488d4110396391e407eca695fdfe9dcd" } }]
+
+[[packages]]
 name = "ptyprocess"
 version = "0.7.0"
 sdist = { url = "https://files.pythonhosted.org/packages/20/e5/16ff212c1e452235a90aeb09066144d0c5a6a8c0834397e03f5224495c4e/ptyprocess-0.7.0.tar.gz", upload-time = 2020-12-28T15:15:30Z, size = 70762, hashes = { sha256 = "5c5d0a3b48ceee0b48485e0c26037c0acd7d29765ca3fbb5cb3831d347423220" } }

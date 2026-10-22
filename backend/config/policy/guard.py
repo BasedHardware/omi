@@ -91,7 +91,8 @@ RESOLUTION_EDGES = {
     'utils/batch_pipeline/live_upload.py': {'registered_record_response'},
     'utils/batch_pipeline/scheduler.py': {'enqueue_in_transaction'},
     'utils/conversations/transcription_shadow.py': {'_run_shadow', '_claim_shadow_owner'},
-    'utils/sync/reprocess.py': {'update', 'claim'},  # First-summary outbox CAS callbacks.
+    # First-summary outbox CAS callbacks (moved from utils/sync/reprocess.py by C2; reprocess.py is an alias).
+    'utils/enrichment/outbox.py': {'update', 'stamp_claim_policy'},
     'routers/sync.py': {'sync_local_files', 'sync_local_files_v2'},
     'routers/listen/policy.py': {'initialize_session_policy'},
 }

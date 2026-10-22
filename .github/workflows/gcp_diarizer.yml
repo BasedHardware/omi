@@ -31,10 +31,23 @@ on:
         description: 'Release version (optional)'
         required: false
         default: ''
+      image_digest:
+        description: 'batch-pipeline-worker only: deploy this already-built gcr.io digest (sha256:...) instead of rebuilding; its omi.release.tree label must equal the source tree'
+        required: false
+        default: ''
+      break_glass_lock:
+        description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
+        required: false
+        default: false
+        type: boolean
 
 # Serialize Helm writers per GPU service and environment.
+# B5 (named by David, 2026-10-19 fourth round #9): every prod deploy writer shares the
+# prod-train lock, so trains, config-trains and GPU/listen deploys never overlap and the
+# ramp controller can refuse while one runs (backend/scripts/prod_train_lock.py).
+# Break-glass keeps the pre-B5 per-target lock. Development groups are unchanged.
 concurrency:
-  group: deploy-gke-${{ github.event.inputs.service || 'diarizer' }}-${{ github.event.inputs.environment }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-gke-{0}-{1}', github.event.inputs.service || 'diarizer', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 env:
@@ -160,12 +173,16 @@ jobs:
 
       - name: Build and Push Docker image
         id: build
+        if: github.event.inputs.image_digest == ''
         env:
           IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
           DOCKERFILE: ${{ steps.target.outputs.dockerfile }}
         run: |
           image="${IMAGE_REPOSITORY}:${{ steps.vars.outputs.short_sha }}"
-          docker build -t "$image" -f "$DOCKERFILE" .
+          # B7: every image names its source commit and tree, so a digest can be promoted by tree equality.
+          docker build -t "$image" -f "$DOCKERFILE" \
+            --label "org.opencontainers.image.revision=$(git rev-parse HEAD)" \
+            --label "omi.release.tree=$(git rev-parse 'HEAD^{tree}')" .
           python3 backend/scripts/runtime_image_contracts.py smoke --dockerfile "$DOCKERFILE" --image "$image"
           docker push "$image"
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
@@ -176,6 +193,30 @@ jobs:
             fi
             echo "image_digest=$image_digest" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Verify promoted worker digest
+        id: promote
+        if: github.event.inputs.image_digest != ''
+        env:
+          IMAGE_REPOSITORY: ${{ steps.target.outputs.image_repository }}
+          IMAGE_DIGEST: ${{ github.event.inputs.image_digest }}
+        run: |
+          set -euo pipefail
+          # Digest promotion skips the 4.7 GB rebuild: the image must already be in this
+          # environment's registry and carry the tree of the admitted source (contract (i)).
+          if [[ "$SERVICE" != "batch-pipeline-worker" ]]; then
+            echo "image_digest is supported only for batch-pipeline-worker" >&2
+            exit 1
+          fi
+          if [[ ! "$IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "image_digest must be sha256:<64 hex>" >&2
+            exit 1
+          fi
+          docker buildx imagetools inspect "${IMAGE_REPOSITORY}@${IMAGE_DIGEST}" \
+            --format '{{ json .Image.Config.Labels }}' > "$RUNNER_TEMP/worker-labels.json"
+          python3 backend/scripts/check_release_tree.py image \
+            --labels-json "$RUNNER_TEMP/worker-labels.json" --sha "$(git rev-parse HEAD)"
+          echo "image_digest=$IMAGE_DIGEST" >> "$GITHUB_OUTPUT"
 
       - name: Get GKE credentials
         uses: google-github-actions/get-gke-credentials@v3
@@ -193,7 +234,7 @@ jobs:
         run: |
           if [[ "$SERVICE" == "batch-pipeline-worker" ]]; then
             helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
-              -f "./$TARGET_VALUES" --set-string "image.digest=${{ steps.build.outputs.image_digest }}"
+              -f "./$TARGET_VALUES" --set-string "image.digest=${{ steps.build.outputs.image_digest || steps.promote.outputs.image_digest }}"
           else
             helm -n "$DEPLOY_NAMESPACE" upgrade --install "$TARGET_RELEASE" "./$TARGET_CHART" \
               -f "./$TARGET_VALUES" --set-string "image.tag=${{ steps.vars.outputs.short_sha }}"

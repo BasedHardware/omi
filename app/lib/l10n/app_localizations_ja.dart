@@ -13209,9 +13209,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => '無料プランで続行';
-
-  @override
   String get paywallTrialCancelNote => 'いつでもキャンセル可能。手数料や違約金なし。';
 
   @override

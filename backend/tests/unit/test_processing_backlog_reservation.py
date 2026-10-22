@@ -271,6 +271,8 @@ def worker_reservation(reservation, monkeypatch):
             lambda uid, row: {'origin': 'live' if row['metadata'] == 'encrypted-live' else 'sync'},
         )
         monkeypatch.setattr(worker, 'recording_units_per_hour', lambda _: 3600)
+        # Integration lane 6: no open cap-hold batch reservations in these scenarios.
+        monkeypatch.setattr(worker.cap_hold_reservations, 'open_units', lambda *args, **kwargs: 0.0)
 
         async def blocking(executor, function, *args, **kwargs):
             return function(*args, **kwargs)

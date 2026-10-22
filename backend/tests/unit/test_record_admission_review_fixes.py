@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from config.batch_pipeline import RecordOwnerContention
+from config.policy import BatchUnitPolicy
 from database.batch_pipeline_intake import admit
 from database.batch_pipeline_store import FirestoreTransaction
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -269,7 +270,9 @@ async def test_desktop_record_origin_uses_the_escape_language(
         conversation_id='record',
         client_device_id='mac-1',
         client_platform='macos',
-        policy=SimpleNamespace(batch_enabled=True, live_record_enabled=live_record),
+        policy=BatchUnitPolicy(
+            batch_enabled=True, live_record_enabled=live_record
+        ),  # integration intake uses dataclasses.replace (contract (c))
     )
     if expected is None:
         assert outcome is None and not bindings

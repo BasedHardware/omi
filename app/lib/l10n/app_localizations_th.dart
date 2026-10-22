@@ -13329,9 +13329,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'ใช้แผนฟรีต่อไป';
-
-  @override
   String get paywallTrialCancelNote => 'ยกเลิกได้ทุกเมื่อ ไม่มีค่าธรรมเนียม ไม่มีค่าปรับ';
 
   @override

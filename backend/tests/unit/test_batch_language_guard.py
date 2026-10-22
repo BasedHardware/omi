@@ -8,6 +8,8 @@ from unittest.mock import Mock
 
 import pytest
 
+from config.policy import BatchUnitPolicy
+
 from config.prerecorded_language import language_class, language_guard_enabled
 from config.prerecorded_stt import TranscriptionOutcome
 from tests.unit.test_batch_pipeline_worker import item, setup_worker
@@ -166,7 +168,7 @@ async def test_new_batch_intake_routes_by_effective_sync_language(monkeypatch, l
         conversation_id=None,
         client_device_id=None,
         client_platform='ios',
-        policy=SimpleNamespace(batch_enabled=True, live_record_enabled=False),
+        policy=BatchUnitPolicy(batch_enabled=True, live_record_enabled=False),
     )
     assert (result is None) == escapes
     assert staged.call_count == (0 if escapes else 1)

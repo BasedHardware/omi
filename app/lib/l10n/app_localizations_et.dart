@@ -13390,9 +13390,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Jätka tasuta plaaniga';
-
-  @override
   String get paywallTrialCancelNote => 'Tühista igal ajal. Ei mingeid tasusid ega trahve.';
 
   @override

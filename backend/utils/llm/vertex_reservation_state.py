@@ -411,7 +411,9 @@ class ReservationState:
                 client = self.client()
                 if client is not None:
                     async with asyncio.timeout(0.3):
-                        await client.set(self.key() + ':saturated:' + model, '1', ex=120)
+                        await client.set(
+                            self.key() + ':saturated:' + model, '1', ex=RESERVATIONS[model].saturation_seconds
+                        )
             except Exception:
                 logger.warning('vertex_reservation_saturation_publish_failed model=%s', model)
         if (

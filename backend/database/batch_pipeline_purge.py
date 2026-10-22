@@ -10,6 +10,7 @@ from google.cloud import firestore
 from database._client import get_data_plane_firestore_client
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import advance_privacy_generation, finish_privacy_purge, privacy_owner_key
+from database.batch_pipeline_shadow_hook import mirror_refresh
 
 NAMESPACES = ('batch_pipeline_prod', 'batch_pipeline_dev')
 PAGE_SIZE = 100
@@ -50,9 +51,11 @@ def _references(data: dict) -> set[str]:
 
 def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: bool) -> None:
     """Unlink one job while contending on scheduler control/queue fences."""
+    touched: list[tuple[str, str]] = []  # A2 shadow: documents to re-copy after commit
 
     @firestore.transactional
     def remove(transaction):
+        touched.clear()
         job = snapshot.reference.get(transaction=transaction).to_dict() or {}
         if not job:
             return
@@ -70,6 +73,8 @@ def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: 
         predecessors = queries.predecessor_documents(client, namespace, snapshot.id, transaction)
         if predecessors and (predecessors[0].to_dict() or {}).get('owner_key') != key:
             raise RuntimeError('batch queue ownership mismatch')
+        touched.extend([('jobs', snapshot.id), ('results', snapshot.id), ('owners', key), ('queues', queue_key)])
+        touched.extend([('control', scheduler_control_key(key)), *(('jobs', p.id) for p in predecessors)])
         if queue.get('head') == snapshot.id:
             queue['head'] = job.get('next', '')
         if queue.get('tail') == snapshot.id:
@@ -91,6 +96,7 @@ def _delete_job(client: Any, namespace: str, snapshot: Any, *, retain_ordering: 
             transaction.delete(result_ref)
 
     remove(client.transaction())
+    mirror_refresh(namespace, touched)
 
 
 def purge_batch_owner(
@@ -179,6 +185,8 @@ def purge_batch_owner(
                         _erase_result(client, namespace, snapshot)
                     else:
                         snapshot.reference.delete()
+                    if table != 'jobs':
+                        mirror_refresh(namespace, [(table, snapshot.id)])
                     deleted += 1
         if conversation_id is None:
             _purge_owner_fairness(client, namespace, key)
@@ -208,6 +216,8 @@ def _purge_owner_fairness(client: Any, namespace: str, key: str) -> None:
         transaction.delete(client.collection(f'{namespace}_merge_holds').document(key))
 
     remove(client.transaction())
+    queues = [('queues', f'{priority}_{key}') for priority in range(3)]
+    mirror_refresh(namespace, [('control', scheduler_control_key(key)), ('owners', key), *queues])
 
 
 def _write_erased_result(transaction: Any, result_ref: Any, result: dict, owner_ref: Any, owner: dict) -> None:
@@ -241,3 +251,5 @@ def _erase_result(client: Any, namespace: str, snapshot: Any) -> None:
         _write_erased_result(transaction, snapshot.reference, result, owner_ref, owner)
 
     erase(client.transaction())
+    owner_key = (snapshot.to_dict() or {}).get('owner_key')
+    mirror_refresh(namespace, [('results', snapshot.id), *([('owners', owner_key)] if owner_key else [])])

@@ -9,6 +9,7 @@ from google.api_core.exceptions import NotFound
 from database import batch_pipeline_purge, user_data_deletion
 from utils.other import storage
 from utils.sync import cap_hold_recovery as recovery
+from utils.sync.cap_hold_erasure import terminal_receipts
 
 
 @pytest.fixture
@@ -37,6 +38,7 @@ def artifacts(monkeypatch):
 
     monkeypatch.setattr(recovery.cap_hold, 'get_private_cloud_sync_bucket', lambda: SimpleNamespace(blob=blob))
     reference = Mock()
+    reference.get.return_value.to_dict.side_effect = lambda: dict(row)
     snapshot = SimpleNamespace(reference=reference)
     return row, paths, objects, fault, snapshot
 
@@ -53,6 +55,7 @@ def test_erasure_removes_source_fragments_frozen_pieces_and_sidecars_before_mani
             {
                 'state': 'purged',
                 'live_custody_version': 4,
+                'terminal_receipts': terminal_receipts(row),
                 'stage_fragment_ids': ['fragment'],
                 'next_attempt_at': recovery.cap_hold.RETAINED_NEXT_ATTEMPT_AT,
             }
@@ -136,3 +139,34 @@ def test_account_wipe_enumerates_custody_and_choice_subcollections_even_without_
     assert [call.args[0].id for call in recursive.call_args_list] == names
     assert all(call.kwargs == {'client': client} for call in recursive.call_args_list)
     assert user.delete.call_count == int(root_exists)
+
+
+def test_v4_purge_reads_new_ingest_proofs_and_repeated_tombstone_keeps_barrier(artifacts):
+    row, _, objects, _, snapshot = artifacts
+    row.update(live_custody_version=4, seconds=0.01, piece_plan={})
+    current = {
+        **row,
+        'piece_ingests': {
+            'piece': {
+                'state': 'transcribed',
+                'has_content': True,
+                'conversation_id': 'destination',
+                'seconds': 0.01,
+                'attempt': 1,
+                'provider': 'modulate',
+            }
+        },
+    }
+    snapshot.reference.get.return_value.to_dict.side_effect = lambda: dict(current)
+    recovery._erase('synthetic', snapshot, row)
+    tombstone = snapshot.reference.set.call_args.args[0]
+    assert tombstone['terminal_receipts']['conversation_ids'] == ['destination']
+    assert tombstone['terminal_receipts']['pieces'][0]['outcome'] == 'transcribed'
+    assert tombstone['stage_fragment_ids'] == ['fragment']
+    assert not any(
+        key in tombstone for key in ('audio_path', 'metadata_path', 'metadata', 'piece_ingests', 'piece_plan')
+    )
+    current.clear()
+    current.update(tombstone)
+    recovery._erase('synthetic', snapshot, tombstone)
+    assert snapshot.reference.set.call_args.args[0] == tombstone
