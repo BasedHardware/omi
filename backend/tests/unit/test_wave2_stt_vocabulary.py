@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from utils.stt import vocabulary as vocab
 from utils.stt import soniox
+from utils.memory.memory_service import MemoryService
 from config import refactor_modes
 
 
@@ -86,3 +87,38 @@ def test_invalid_flags_keep_shadow(monkeypatch):
         monkeypatch.setenv(name, 'srve')
         assert refactor_modes.mode(name) == 'shadow'
         assert not refactor_modes.serving_for(name, 'synthetic-owner')
+
+
+def test_source_fill_concurrency_is_bounded(monkeypatch):
+    vocab._cache.clear()
+    calls = []
+    monkeypatch.setattr(vocab, '_sources', lambda uid: calls.append(uid) or [])
+    for _ in range(4):
+        assert vocab._fills.acquire(blocking=False)
+    try:
+        assert vocab.cached_terms('synthetic-owner') == []
+        assert calls == []
+    finally:
+        for _ in range(4):
+            vocab._fills.release()
+
+
+def test_sources_use_the_memory_authority_and_bounded_reads(monkeypatch):
+    from database import _client, person_aliases, redis_db, dream_store
+    from utils.memory.memory_service import MemoryService
+
+    received = []
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: object())
+    monkeypatch.setattr(person_aliases, 'list_people', lambda client, uid, **kw: received.append(kw) or [])
+    monkeypatch.setattr(redis_db, 'get_enabled_apps', lambda *_: [])
+    monkeypatch.setattr(dream_store, 'vocabulary', lambda *_: [])
+
+    def read(self, uid, **kwargs):
+        received.append(kwargs)
+        return []
+
+    monkeypatch.setattr(MemoryService, 'read', read)
+    assert vocab._sources('synthetic-owner') == []
+    assert received[0] == {'limit': 200}
+    assert received[1]['limit'] == 80
+    assert received[1]['budget'].remaining_documents == 240

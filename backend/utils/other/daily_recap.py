@@ -5,7 +5,6 @@ recipient queries, including their partial-read and retry contracts.
 """
 
 from datetime import datetime, timedelta, timezone
-from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 from config.refactor_modes import cohort_configured, serving_for, shadow_or_serve
@@ -61,7 +60,7 @@ def _persist(n, uid, date, existing, payload):
                 payload[field] = existing[field]
         n.daily_summaries_db.update_daily_summary(uid, existing['id'], payload)
     else:
-        payload = {**payload, 'id': payload.get('id') or str(uuid4())}
+        payload = {**payload, 'id': payload.get('id') or 'recap-' + date}
         n.daily_summaries_db.create_daily_summary(uid, payload)
     return payload
 
@@ -93,8 +92,10 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
     if not n.try_acquire_daily_summary_lock(uid, date_str):
         return None, False, n._DECLINE_LOCKED
     existing = None
+    looked_up = False
     try:
         existing = n.daily_summaries_db.get_daily_summary_by_date(uid, date_str)
+        looked_up = True
         now = datetime.now(timezone.utc)
         if now < end_date_utc + GRACE:
             _state(n, uid, date_str, existing, 'pending')
@@ -105,7 +106,7 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
             )
             or []
         )
-        fingerprint = input_fingerprint(rows)
+        fingerprint = input_fingerprint(rows, extra_revision_fields=('content_kind', 'status'))
         if (
             existing
             and existing.get('status') in ('generated', 'no_recordings')
@@ -119,6 +120,9 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
         from utils.conversations.media_consumers import eligible_conversations
 
         rows = eligible_conversations(uid, rows)
+        if not rows:
+            _state(n, uid, date_str, existing, 'no_recordings', fingerprint)
+            return None, False, n._DECLINE_NOTHING_TO_SUMMARIZE
         conversations = n.deserialize_conversations([row for row in rows if not row.get('is_locked')])
         conversations = [c for c in conversations if not c.discarded]
         if not conversations or not any(c.transcript_segments for c in conversations):
@@ -148,9 +152,15 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
         observe('recap_generation', 'error')
         # A durable failed row permits the next tick to retry; never call it generated.
         try:
-            _state(n, uid, date_str, existing, 'failed')
+            if looked_up:
+                _state(n, uid, date_str, existing, 'failed')
         except Exception:
             observe('recap_state_write', 'error')
         raise
     finally:
         n.release_daily_summary_lock(uid, date_str)
+
+
+def delivery_allowed(uid, payload):
+    """A durable pending/failed stub is never proof that the model finished."""
+    return not serving_for(FLAG, uid) or payload.get('status') == 'generated'

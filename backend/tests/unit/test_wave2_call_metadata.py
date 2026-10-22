@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import pytest
 
 from utils.conversations import call_metadata as calls
-from utils.episodes import boundary_store
+from utils.episodes import boundary_store, boundaries
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
@@ -41,6 +41,8 @@ def test_phone_and_calendar_from_positive_evidence_only():
         'https://calendar.google.com/event?id=1',
         'https://zoom.us.evil.example/j/123',
         'https://zoom.us',
+        'https://zoom.us/pricing',
+        'https://meet.google.com/about',
         'file:///tmp/call',
         'not a url',
     ],
@@ -73,12 +75,14 @@ def test_finalizer_projection_shadow_serve_and_off(monkeypatch):
     assert conversation.geolocation is original_location
     assert conversation.other_participants_location == 'remote'
     monkeypatch.setenv(calls.FLAG, 'off')
+    monkeypatch.setattr(boundaries, 'ingest_context', lambda *_: None)
     monkeypatch.setattr(boundary_store, 'windows', Mock(side_effect=AssertionError('off must not read')))
     calls.apply_call_metadata('synthetic-owner', conversation)
 
 
 def test_non_overlapping_and_stale_ongoing_signals_abstain(monkeypatch):
     monkeypatch.setenv(calls.FLAG, 'serve')
+    monkeypatch.setattr(boundaries, 'ingest_context', lambda *_: None)
     monkeypatch.setattr(boundary_store, 'windows', lambda *_: {'edge': {'started_at': NOW, 'ended_at': None}})
     loaded = Mock(return_value=[])
     monkeypatch.setattr(boundary_store, 'load', loaded)
@@ -96,3 +100,41 @@ def test_metric_registration_survives_isolated_reimports():
 
     previous = calls_metrics.COMPARISONS
     assert importlib.reload(calls_metrics).COMPARISONS is previous
+
+
+def test_existing_calendar_context_enters_the_boundary_authority(monkeypatch):
+    monkeypatch.setenv(calls.FLAG, 'serve')
+    stored = []
+    monkeypatch.setattr(boundary_store, 'record_context', lambda uid, signal, **kwargs: stored.append(signal))
+    monkeypatch.setattr(
+        boundary_store, 'windows', lambda *_: {'calendar': {'started_at': NOW, 'ended_at': NOW + timedelta(hours=1)}}
+    )
+    monkeypatch.setattr(boundary_store, 'load', lambda *_: stored)
+    context = {
+        'calendar_event_id': 'event-1',
+        'meeting_link': 'https://meet.google.com/abc-defg-hij',
+        'start_time': NOW,
+        'duration_minutes': 60,
+        'title': 'Synthetic event',
+    }
+    c = SimpleNamespace(
+        started_at=NOW, finished_at=NOW + timedelta(minutes=30), external_data={'calendar_meeting_context': context}
+    )
+    calls.apply_call_metadata('synthetic-owner', c)
+    assert c.is_call and c.calendar_event_id == 'event-1'
+    assert stored[0].kind == 'calendar_event'
+
+
+def test_existing_phone_transport_enters_the_boundary_authority(monkeypatch):
+    monkeypatch.setenv(calls.FLAG, 'serve')
+    stored = []
+    monkeypatch.setattr(boundaries, 'ingest_context', lambda *_: None)
+    monkeypatch.setattr(boundary_store, 'record', lambda uid, signals: stored.extend(signals))
+    monkeypatch.setattr(boundary_store, 'windows', lambda *_: {})
+    monkeypatch.setattr(boundary_store, 'load', lambda *_: [])
+    c = SimpleNamespace(
+        started_at=NOW, finished_at=NOW + timedelta(minutes=30), call_id='synthetic-phone-session', external_data={}
+    )
+    calls.apply_call_metadata('synthetic-owner', c)
+    assert c.is_call and c.call_platform == 'phone'
+    assert stored[0].kind == 'phone_call'

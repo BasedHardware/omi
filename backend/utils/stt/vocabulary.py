@@ -10,20 +10,24 @@ import re
 import time
 import unicodedata
 from collections import Counter, OrderedDict
-from threading import Lock
+from threading import Lock, BoundedSemaphore
 
-from config.refactor_modes import serving_for, shadow_or_serve
+from config.refactor_modes import serving_for, shadow_or_serve, shadow_sampled
 from utils.conversations.calls_metrics import observe
 
-FLAG = 'STT_VOCAB_MODE'
-STT_VOCAB_PERCENT = 'STT_VOCAB_MODE_SERVE_PERCENT'
-STT_VOCAB_DIGESTS = 'STT_VOCAB_MODE_SERVE_UID_SHA256S'
+FLAG_ENV = 'STT_VOCAB_MODE'
+FLAG = FLAG_ENV
+STT_VOCAB_PERCENT_ENV = 'STT_VOCAB_MODE_SERVE_PERCENT'
+STT_VOCAB_DIGESTS_ENV = 'STT_VOCAB_MODE_SERVE_UID_SHA256S'
+STT_VOCAB_SHADOW_PERCENT_ENV = 'STT_VOCAB_MODE_SHADOW_PERCENT'
 MAX_TERMS = 100
 MAX_CHARS = 2000
 MAX_USERS = 128
 TTL = 600
 _cache = OrderedDict()
 _lock = Lock()
+_fills = BoundedSemaphore(4)
+_loading = set()
 _STOP = frozenset(
     'The This That They Their Then There When Where What Which While After Before During User Owner Someone One Another Today Yesterday Tomorrow Monday Tuesday Wednesday Thursday Friday Saturday Sunday'.casefold().split()
 )
@@ -77,12 +81,16 @@ def build_terms(people, memories, apps, vocabulary=()):
 def _sources(uid):
     from database._client import get_firestore_client
     from database.person_aliases import list_people
-    from database.memories import get_memories
+    from utils.memory.memory_service import MemoryService
+    from utils.other.list_budget import ListReadBudget
     from database.redis_db import get_enabled_apps, get_app_cache_by_id
     from database import dream_store
 
     people = list_people(get_firestore_client(), uid, limit=200)
-    memories = get_memories(uid, limit=80)
+    budget = ListReadBudget(deadline_monotonic=time.monotonic() + 1.5, max_documents=240)
+    memories = [
+        {'content': row.content} for row in MemoryService().read(uid, limit=80, budget=budget) if not row.is_locked
+    ]
     apps = [get_app_cache_by_id(app_id) or {} for app_id in (get_enabled_apps(uid) or [])[:20]]
     return build_terms(people, memories, apps, dream_store.vocabulary(uid) or [])
 
@@ -96,7 +104,19 @@ def cached_terms(uid):
         if uid in _cache:
             _cache.move_to_end(uid)
             return list(_cache[uid][1])
-    terms = _sources(uid)
+    if not _fills.acquire(blocking=False):
+        return []
+    with _lock:
+        if uid in _loading:
+            _fills.release()
+            return []
+        _loading.add(uid)
+    try:
+        terms = _sources(uid)
+    finally:
+        with _lock:
+            _loading.discard(uid)
+        _fills.release()
     with _lock:
         _cache[uid] = (time.monotonic() + TTL, tuple(terms))
         _cache.move_to_end(uid)
@@ -112,7 +132,7 @@ async def apply_context(config, uid=None):
         from utils.byok import get_byok_uid
 
         uid = get_byok_uid()
-    if not uid:
+    if not uid or not shadow_sampled(FLAG, uid, default_percent=1.0):
         return
     try:
         from utils.executors import db_executor, run_blocking

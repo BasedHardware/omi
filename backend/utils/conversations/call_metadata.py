@@ -5,15 +5,17 @@ screen/chat roster or a calendar html page is not proof of a remote call.
 """
 
 from datetime import timedelta
+import re
 from urllib.parse import urlsplit
 
 from config.refactor_modes import serving_for, shadow_or_serve
 from utils.conversations.lifecycle_clocks import utc
 from utils.conversations.calls_metrics import observe
 
-FLAG = 'CALLS_RECAP_MODE'
-CALLS_RECAP_PERCENT = 'CALLS_RECAP_MODE_SERVE_PERCENT'
-CALLS_RECAP_DIGESTS = 'CALLS_RECAP_MODE_SERVE_UID_SHA256S'
+FLAG_ENV = 'CALLS_RECAP_MODE'
+FLAG = FLAG_ENV
+CALLS_RECAP_PERCENT_ENV = 'CALLS_RECAP_MODE_SERVE_PERCENT'
+CALLS_RECAP_DIGESTS_ENV = 'CALLS_RECAP_MODE_SERVE_UID_SHA256S'
 _PLATFORM_HOSTS = {
     'meet.google.com': 'google_meet',
     'zoom.us': 'zoom',
@@ -29,9 +31,16 @@ def meeting_platform(link):
         if parsed.scheme != 'https' or not parsed.path.strip('/'):
             return None
         host = (parsed.hostname or '').lower()
-        return next(
+        platform = next(
             (name for domain, name in _PLATFORM_HOSTS.items() if host == domain or host.endswith('.' + domain)), None
         )
+        patterns = {
+            'google_meet': r'^/(?:[a-z]{3}-[a-z]{4}-[a-z]{3}|lookup/[^/]+)/*$',
+            'zoom': r'^/(?:j/\d+|s/\d+|my/[^/]+|wc/join/\d+)/*$',
+            'teams': r'^/(?:l/meetup-join/|meet/)',
+            'webex': r'^/(?:meet/|webappng/|j\.php)',
+        }
+        return platform if platform and re.search(patterns[platform], parsed.path.casefold()) else None
     except ValueError:
         return None
 
@@ -95,12 +104,20 @@ def apply_call_metadata(uid, conversation):
     if not shadow_or_serve(FLAG):
         return conversation
     try:
-        from utils.episodes import boundary_store
+        from models.boundary_evidence import BoundarySignal
+        from utils.episodes import boundary_store, boundaries
 
         start = utc(conversation.started_at)
         end = utc(conversation.finished_at) or start
         if start is None or end is None:
             return conversation
+        external = getattr(conversation, 'external_data', None) or {}
+        boundaries.ingest_context(uid, external.get('calendar_meeting_context'))
+        # A persisted phone transport identity is positive boundary evidence too.
+        phone = None
+        if getattr(conversation, 'call_id', None):
+            phone = BoundarySignal(kind='phone_call', started_at=start, ended_at=end, external_id=conversation.call_id)
+            boundary_store.record(uid, [phone])
         # Ongoing stale signals cannot label unrelated conversations indefinitely.
         windows = boundary_store.windows(uid)
         keys = [
@@ -111,7 +128,8 @@ def apply_call_metadata(uid, conversation):
             and (utc(window.get('ended_at')) or left + timedelta(hours=4)) > start
         ]
         signals = boundary_store.load(uid, keys)
-        external = getattr(conversation, 'external_data', None) or {}
+        if phone is not None:
+            signals.append(phone)
         fields = call_fields(signals, external.get('calendar_meeting_context'))
         observe(
             'call_metadata',

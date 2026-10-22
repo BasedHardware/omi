@@ -147,3 +147,40 @@ def test_discovery_invalid_cohorts_do_not_expand_reads():
     for value in ('nan', 'inf', '-1', '101', 'broken'):
         assert not refactor_modes.cohort_configured('X_MODE', environ={'X_MODE_SERVE_PERCENT': value})
     assert refactor_modes.cohort_configured('X_MODE', environ={'X_MODE_SERVE_PERCENT': '1'})
+
+
+def test_state_id_is_stable_even_when_best_effort_lock_is_lost(producer):
+    producer.rows.clear()
+    generate()
+    first = producer.store['day']['id']
+    producer.store.clear()
+    generate()
+    assert producer.store['day']['id'] == first
+
+
+def test_failed_existing_lookup_does_not_create_duplicate_row(producer, monkeypatch):
+    monkeypatch.setattr(
+        notif.daily_summaries_db, 'get_daily_summary_by_date', Mock(side_effect=RuntimeError('lookup failed'))
+    )
+    with pytest.raises(RuntimeError, match='lookup failed'):
+        generate()
+    assert producer.writes == []
+
+
+def test_pending_stub_during_locked_delivery_retry_never_pushes(producer, monkeypatch):
+    monkeypatch.setattr(notif, 'try_acquire_daily_summary_lock', lambda *_: False)
+    producer.store['day'] = {'id': 'recap-2026-01-01', 'status': 'pending', 'generated_at': None}
+    sent = Mock()
+    monkeypatch.setattr(notif, '_deliver_current_day_summary', sent)
+    with pytest.raises(RuntimeError, match='still locked'):
+        notif._send_summary_notification(('synthetic-owner', [], 'UTC', END, True, True))
+    sent.assert_not_called()
+
+
+def test_content_kind_change_invalidates_existing_recap(producer, monkeypatch):
+    assert generate()[0]['status'] == 'generated'
+    monkeypatch.setenv('MEDIA_NOISE_MODE', 'serve')
+    producer.rows[0]['content_kind'] = 'media'
+    assert generate()[0] is None
+    assert producer.store['day']['status'] == 'no_recordings'
+    assert producer.model.call_count == 1

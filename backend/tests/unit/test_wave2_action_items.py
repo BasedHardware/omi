@@ -59,7 +59,8 @@ def test_stale_requires_exact_recording_and_actual_transcript():
     assert v2.contradicted_capture(task, captured) is None
 
 
-def test_provenance_cannot_be_overridden_by_projection():
+def test_provenance_cannot_be_overridden_by_projection(monkeypatch):
+    monkeypatch.setenv(v2.FLAG, 'serve')
     item = SimpleNamespace(
         description='Send the file',
         completed=False,
@@ -91,3 +92,14 @@ def test_prompt_changes_serve_only(monkeypatch):
     assert v2.rules_for('synthetic-owner', 'legacy') == 'legacy'
     monkeypatch.setenv(v2.FLAG, 'serve')
     assert 'offers/promises by another person to the owner' in v2.rules_for('synthetic-owner', 'legacy')
+
+
+def test_notes_task_block_swap_is_idempotent_and_keeps_other_rules(monkeypatch):
+    from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
+
+    prompt = 'Existing notes rules\n' + ACTION_ITEM_EXTRACTION_RULES + '\nExisting speaker rules'
+    assert v2.instructions_for('synthetic-owner', prompt) == prompt
+    monkeypatch.setenv(v2.FLAG, 'serve')
+    selected = v2.instructions_for('synthetic-owner', prompt)
+    assert selected == 'Existing notes rules\n' + v2.RULES + '\nExisting speaker rules'
+    assert v2.instructions_for('synthetic-owner', selected) == selected

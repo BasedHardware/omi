@@ -876,7 +876,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # trial only gates desktop features, not the recap the mobile app renders.
 
     display_date = _display_date_for_now(user_tz_name, user_data[3] if len(user_data) > 3 else None)
-    from utils.other.daily_recap import scheduled_date
+    from utils.other.daily_recap import scheduled_date, delivery_allowed
 
     display_date = scheduled_date(uid, user_tz_name, user_data[3] if len(user_data) > 3 else None, display_date)
     start_date_utc, end_date_utc = local_day_bounds_utc(display_date, user_tz_name)
@@ -913,7 +913,7 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         # 2026-10-12: a timed-out worker may finish while retaining its lock.
         # Check its durable result so contention cannot pin the cohort for the 2h TTL.
         summary_data = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-        if not summary_data:
+        if not summary_data or not delivery_allowed(uid, summary_data):
             raise RuntimeError('daily summary retry still locked')
         declined = None
     if summary_data and summary_data.get('notification_delivery_completed'):

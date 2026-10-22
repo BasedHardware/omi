@@ -17,9 +17,10 @@ from config.action_item_extraction_policy import (
 from config.refactor_modes import serving_for, shadow_or_serve
 from utils.conversations.calls_metrics import observe
 
-FLAG = 'ACTION_ITEMS_V2_MODE'
-ACTION_ITEMS_PERCENT = 'ACTION_ITEMS_V2_MODE_SERVE_PERCENT'
-ACTION_ITEMS_DIGESTS = 'ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S'
+FLAG_ENV = 'ACTION_ITEMS_V2_MODE'
+FLAG = FLAG_ENV
+ACTION_ITEMS_PERCENT_ENV = 'ACTION_ITEMS_V2_MODE_SERVE_PERCENT'
+ACTION_ITEMS_DIGESTS_ENV = 'ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S'
 RULES = '''ACTION ITEM EXTRACTION RULES (owner-involved commitments)
 - Extract commitments made by the account owner, requests accepted by the owner,
   and explicit offers/promises by another person to the owner. Keep the actual
@@ -105,3 +106,10 @@ def contradicted_capture(item, conversation):
         'status': 'cancelled',
         'stale_evidence_conversation_id': conversation.id,
     }
+
+
+def instructions_for(uid, instructions):
+    """Swap only the task block on the existing notes mount; no second extractor."""
+    from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
+
+    return instructions.replace(ACTION_ITEM_EXTRACTION_RULES, rules_for(uid, ACTION_ITEM_EXTRACTION_RULES))
