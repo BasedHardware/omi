@@ -261,7 +261,13 @@ async def test_funded_window_vad_pause_survives_cap_proxy_and_keeps_transcribing
         assert socket.send(b'\x01\x00' * 640)
         assert [segment['text'] for segment in recv.emitted] == ['Still here.']
     finally:
-        await socket.drain_and_close()
+        if mode == 'capture-setup':
+            # The first-packet failure cancels the pump. Its drain preserves
+            # cancellation, which is expected teardown for this injected arm.
+            with pytest.raises(asyncio.CancelledError):
+                await socket.drain_and_close()
+        else:
+            await socket.drain_and_close()
 
 
 @pytest.mark.asyncio
