@@ -1,11 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { computeWall, WALL_DEFINITIONS, WallSources } from "../wall-metrics";
 import type { PlanCostHistory } from "../wall-finops";
+import { INFRA_AS_OF, INFRA_MONTHLY_USD } from "../wall-cost";
 import { resetWallCache, wallPayload } from "../wall-cache";
 import { aggregateOrders, ShopOrder } from "../wall-shopify";
 import { wallSubscriptionBook } from "../stripe-subscriptions";
 import type Stripe from "stripe";
 const now = new Date("2026-10-15T12:00Z");
+/** The dated infra fallback the all-in stack books on days without a complete
+ * fresh Mercury infra row. */
+const infraDay = INFRA_MONTHLY_USD / (365.25 / 12);
 const fail = async () => {
   throw new Error("unavailable");
 };
@@ -275,7 +279,7 @@ it("uses a measured Mercury zero in the all-in stat and names the source", async
   });
   const wall = await computeWall(s, now);
   const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
-  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12));
+  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + infraDay);
   expect(metric.reason).toContain("measured SaaS (Mercury) $0.00/day");
 });
 
@@ -309,7 +313,7 @@ it("adds Modulate Mercury cash to the STT line and keeps Soniox cash out", async
   // Measured Soniox + Modulate cash + Deepgram's own cash (a Soniox
   // measurement never hides another provider); the Soniox prepaid recharge
   // never stacks on its measured line.
-  expect(metric.value).toBeCloseTo(100 + 140 + 20 + 5);
+  expect(metric.value).toBeCloseTo(100 + 140 + 20 + 5 + infraDay);
   expect(metric.reason).toContain(
     "Soniox measured $140.00/day (usage-summary line; balance series not live yet)"
   );
@@ -363,7 +367,7 @@ it("uses the Soniox balance-delta day-rate once two snapshots exist", async () =
   });
   const wall = await computeWall(s, now);
   const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
-  expect(metric.value).toBeCloseTo(100 + 140.25 + 20.5);
+  expect(metric.value).toBeCloseTo(100 + 140.25 + 20.5 + infraDay);
   expect(metric.reason).toContain(
     "Soniox measured $140.25/day (prepaid-balance Δ, as-of 2026-10-13)"
   );
@@ -411,7 +415,7 @@ it("flags a baseline-reset day and keeps the constant only below two snapshots",
   const reset = wall.metrics.find((m) => m.id === "cost.net_day")!;
   // The reset day keeps Soniox spend in the total via the dated estimate —
   // never a $0 leg that silently drops all-in cost (Luna r2 P1).
-  expect(reset.value).toBeCloseTo(100 + 5_300 / (365.25 / 12));
+  expect(reset.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + infraDay);
   expect(reset.reason).toContain(
     "Soniox balance reset on 2026-10-13: day unmeasured, new baseline taken; the dated estimate covers the day, never $0"
   );
@@ -425,7 +429,7 @@ it("flags a baseline-reset day and keeps the constant only below two snapshots",
   });
   const wall2 = await computeWall(s, now);
   const constant = wall2.metrics.find((m) => m.id === "cost.net_day")!;
-  expect(constant.value).toBeCloseTo(100 + 5_300 / (365.25 / 12));
+  expect(constant.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + infraDay);
   expect(constant.reason).toContain("1/2 balance snapshots");
 });
 
@@ -492,7 +496,7 @@ it("shows Stripe fees as unavailable with the missing scope, never a guess", asy
   expect(metric.reason).toContain("Stripe fees UNAVAILABLE");
   expect(metric.reason).toContain("missing: Stripe processing fees");
   expect(metric.value).toBeCloseTo(
-    100 + 5_300 / (365.25 / 12) + 4_800 / (365.25 / 12)
+    100 + 5_300 / (365.25 / 12) + 4_800 / (365.25 / 12) + infraDay
   );
 });
 
@@ -525,7 +529,7 @@ it("counts the Anthropic invoice only when the admin API reports spend", async (
   const zero = wall.metrics.find((m) => m.id === "cost.net_day")!;
   expect(zero.reason).toContain("Anthropic $0 API (team seats are SaaS cash)");
   expect(zero.value).toBeCloseTo(
-    100 + 5_300 / (365.25 / 12) + 4_800 / (365.25 / 12)
+    100 + 5_300 / (365.25 / 12) + 4_800 / (365.25 / 12) + infraDay
   );
 });
 
@@ -633,7 +637,10 @@ it("derives software cost per paying customer with a per-plan variable breakdown
   // measure. The only book snapshot sits at the window's exclusive end
   // (2026-10-14), so the window-end count applies, stated in the reason.
   const windowTotal =
-    30 * 100 + 30 * (5_300 / (365.25 / 12)) + 30 * (4_800 / (365.25 / 12));
+    30 * 100 +
+    30 * (5_300 / (365.25 / 12)) +
+    30 * (4_800 / (365.25 / 12)) +
+    30 * infraDay;
   expect(perCustomer.numerator).toBeCloseTo(windowTotal);
   expect(perCustomer.value).toBeCloseTo(windowTotal / 3_160);
   expect(perCustomer.denominator).toBe(3_160);
@@ -686,7 +693,7 @@ it("never reads a stale Soniox series as $0 spend or a reset (Luna P1)", async (
   const wall = await computeWall(s, now);
   const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
   // The uncovered day shows the dated console constant — never $0, never a reset.
-  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12));
+  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + infraDay);
   expect(metric.reason).toContain(
     "Soniox balance series does not cover 2026-10-13"
   );
@@ -726,7 +733,9 @@ it("labels measured Stripe fees partial while foreign-currency rows exist (Luna 
   });
   const wall = await computeWall(s, now);
   const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
-  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + 12.5);
+  expect(metric.value).toBeCloseTo(
+    100 + 5_300 / (365.25 / 12) + 12.5 + infraDay
+  );
   expect(metric.reason).toContain("measured Stripe fees $12.50/day");
   expect(metric.reason).toContain(
     "partial: 5 foreign-currency fee rows in the 30d window counted, not converted"
@@ -763,12 +772,186 @@ it("labels a measured Mercury SaaS day partial while history is under 12 months 
   const wall = await computeWall(s, now);
   const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
   // Measured SaaS replaces the dated constant; STT keeps its own estimate.
-  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + 12.5);
+  expect(metric.value).toBeCloseTo(
+    100 + 5_300 / (365.25 / 12) + 12.5 + infraDay
+  );
   expect(metric.reason).toContain("measured SaaS (Mercury) $12.50/day");
   expect(metric.reason).toContain(
     "partial: SaaS ledger history under 12 months"
   );
   expect(metric.reason).toContain("one-off vendors amortized ÷12, estimated");
+});
+
+it("counts the measured Mercury infra run rate in the all-in stat", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: { "2026-10-13": 0 },
+    saasAnnualPartial: {},
+    sttCash: { "2026-10-13": { modulate: 20 } },
+  });
+  s.infra = async () => ({
+    infraMeasured: { "2026-10-13": 32.87 },
+    infraAnnualPartial: {},
+  });
+  const wall = await computeWall(s, now);
+  const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  // The infra line adds on top of GCP and the STT legs exactly once; STT cash
+  // and the infra run rate are separate lines and never collapse.
+  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + 20 + 32.87);
+  expect(metric.reason).toContain(
+    "measured Infra non-GCP (Mercury) $32.87/day"
+  );
+  expect(metric.reason).toContain("Modulate Mercury cash $20.00/day");
+});
+
+it("labels a measured infra day partial while ledger history is under 12 months", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: { "2026-10-13": 0 },
+    saasAnnualPartial: {},
+    sttCash: {},
+  });
+  s.infra = async () => ({
+    infraMeasured: { "2026-10-13": 32.87 },
+    infraAnnualPartial: { "2026-10-13": "history_under_12_months" },
+  });
+  const wall = await computeWall(s, now);
+  const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  // Measured infra keeps its amortized run rate; the partial note carries the
+  // producer's gate with the same wording contract as the SaaS line.
+  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + 32.87);
+  expect(metric.reason).toContain(
+    "partial: infra ledger history under 12 months"
+  );
+  expect(metric.reason).toContain("one-off vendors amortized ÷12, estimated");
+});
+
+it("falls back to the dated infra constant and names a dark table a missing line, never $0", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: { "2026-10-13": 0 },
+    saasAnnualPartial: {},
+    sttCash: {},
+  });
+  // The table is dark until the first Mercury load after it ships.
+  s.infra = fail;
+  const wall = await computeWall(s, now);
+  const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + infraDay);
+  expect(metric.reason).toContain(
+    `Infra (non-GCP) fixed $${INFRA_MONTHLY_USD}/mo estimate as of ${INFRA_AS_OF}`
+  );
+  expect(metric.reason).toContain("Mercury infra run-rate table unavailable");
+  expect(metric.reason).toContain(
+    "Infra (non-GCP) run rate unavailable (mercury_infra_non_gcp_daily dark)"
+  );
+  // A day with no complete fresh row (source healthy) keeps the same dated
+  // constant without a missing line: labelled, never silent $0.
+  s.infra = async () => ({ infraMeasured: {}, infraAnnualPartial: {} });
+  const wall2 = await computeWall(s, now);
+  const metric2 = wall2.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(metric2.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + infraDay);
+  expect(metric2.reason).toContain("no complete fresh Mercury infra row");
+  expect(metric2.reason).not.toContain("missing: Infra");
+});
+
+it("includes the infra run rate in the software cost per paying customer", async () => {
+  const s = sources();
+  s.query = async () => [[0, "macos", 1_000]];
+  s.billing = async () => ({
+    daily: billingWindow(now),
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: {},
+    saasAnnualPartial: {},
+    sttCash: {},
+  });
+  s.infra = async () => ({
+    infraMeasured: Object.fromEntries(
+      billingWindow(now).map((d) => [d.date, 32.87])
+    ),
+    infraAnnualPartial: {},
+  });
+  s.finops = async () => ({
+    mrr: { "2026-10-14": { unlimited_v2: 76_000 } },
+    paying: { "2026-10-14": 3_209 },
+    payingCustomers: { "2026-10-14": 3_160 },
+    nonUsdPaying: { "2026-10-14": 0 },
+    refreshed: { "2026-10-14": "2026-10-14T14:36:00Z" },
+  });
+  const wall = await computeWall(s, now);
+  const perCustomer = wall.metrics.find(
+    (m) => m.id === "cost.per_customer_month"
+  )!;
+  const windowTotal =
+    30 * 100 +
+    30 * (5_300 / (365.25 / 12)) +
+    30 * (4_800 / (365.25 / 12)) +
+    30 * 32.87;
+  expect(perCustomer.numerator).toBeCloseTo(windowTotal);
+  expect(perCustomer.value).toBeCloseTo(windowTotal / 3_160);
 });
 
 it("labels the measured SaaS line with the producer's other partial reason verbatim", async () => {
@@ -861,7 +1044,10 @@ it("uses the average of daily paying customers over the cost window (Luna P1)", 
     (m) => m.id === "cost.per_customer_month"
   )!;
   const windowTotal =
-    30 * 100 + 30 * (5_300 / (365.25 / 12)) + 30 * (4_800 / (365.25 / 12));
+    30 * 100 +
+    30 * (5_300 / (365.25 / 12)) +
+    30 * (4_800 / (365.25 / 12)) +
+    30 * infraDay;
   expect(perCustomer.value).toBeCloseTo(windowTotal / 3_200);
   expect(perCustomer.denominator).toBe(3_200);
   expect(perCustomer.reason).toContain(

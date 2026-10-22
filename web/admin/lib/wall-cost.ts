@@ -16,6 +16,10 @@
  *         its own Mercury cash) so one provider never hides another
  *       + SaaS: a complete, fresh Mercury daily aggregate when available,
  *         otherwise a fixed monthly estimate
+ *       + Infra (non-GCP): Mercury-categorized Modal/AWS/Runpod-class cash as
+ *         a run rate with the SaaS cadence treatment (yearly and one-off
+ *         charges amortized ÷12); never GCP (billing export) or STT/fee cash
+ *         (their own lines), so no dollar is counted twice
  *       + Stripe processing fees, measured from balance transactions. When the
  *         finops key lacks the read scope the line is UNAVAILABLE, never a guess.
  * Each manual estimate carries the date it was read and goes stale past its own
@@ -27,6 +31,18 @@ import { shiftDay } from "./qualified-activity";
 
 export const SAAS_MONTHLY_USD = 4800; // "Omi Cost vs Revenue" artifact, Oct 2026 row
 export const SAAS_AS_OF = "2026-10-16";
+/** Non-GCP infra (Modal, AWS, Runpod, …) run-rate fallback, read 2026-10-23
+ * read-only from the Mercury ledger (`mercury_vendor_spend_daily`, category
+ * `infra_non_gcp`, 2026-07-04..2026-10-20) with the SaaS cadence treatment:
+ * monthly cloud bills (Cloudflare, Hetzner) run at ≈ $114/mo; the once-a-year
+ * Modal compute wire ($12,000 on 2026-01-08, the 13-month read-only check
+ * recorded in the finops README) predates the ledger and amortizes ÷12 to
+ * $1,000/mo through 2027-01-07. The `stripe_fees` vendor is excluded — its
+ * cash is the measured Stripe fee line. Replaced per day by the FinOps
+ * `mercury_infra_non_gcp_daily` run rate once that table has complete fresh
+ * rows (which cannot see the Modal wire until the ledger backfill runs). */
+export const INFRA_MONTHLY_USD = 1114;
+export const INFRA_AS_OF = "2026-10-23";
 /** Soniox console, October 2026 (read 2026-10-16): ≈ $174/day; the KB
  * transcription-cost note's ≈ $204/day agrees in order. The FinOps
  * `stt_vendor_low` model (~$10K/mo) overstated it and is no longer used.
@@ -39,6 +55,9 @@ export const STT_SOURCE = `Soniox console, Oct 2026, read ${STT_AS_OF}`;
  * so a console constant must not outlive two weeks. SaaS: a monthly constant. */
 export const STT_STALE_DAYS = 14;
 export const SAAS_STALE_DAYS = 35;
+/** The infra fallback is a monthly run-rate constant like SaaS, so the SaaS
+ * staleness threshold applies (35 days). */
+export const INFRA_STALE_DAYS = SAAS_STALE_DAYS;
 export const ESTIMATE_STALE_DAYS = SAAS_STALE_DAYS;
 export const FEES_UNAVAILABLE_REASON =
   "Stripe processing fees unavailable: the finops Stripe key needs read access to balance transactions (GET /v1/balance_transactions, 'Balance' category)";
@@ -98,6 +117,11 @@ export interface CostDay {
   saas: number;
   /** SaaS came from a complete, fresh Mercury FinOps aggregate. */
   saasMeasured: boolean;
+  /** Non-GCP infra run rate (Mercury): the measured aggregate when complete
+   * and fresh, otherwise the dated monthly constant. */
+  infra: number;
+  /** Infra came from a complete, fresh Mercury FinOps aggregate. */
+  infraMeasured: boolean;
   /** Measured Stripe processing fees; null = source unavailable, never a guess. */
   fees: number | null;
   oneTime: number;
@@ -147,7 +171,7 @@ export function oneTimeExcess(days: BillingDay[]) {
 }
 
 export interface EstimateStatus {
-  line: "STT" | "SaaS";
+  line: "STT" | "SaaS" | "Infra";
   monthlyUsd: number;
   asOf: string;
   ageDays: number;
@@ -172,6 +196,7 @@ export function estimateStatus(
     [
       ["STT", STT_MONTHLY_USD, STT_AS_OF, STT_STALE_DAYS],
       ["SaaS", SAAS_MONTHLY_USD, SAAS_AS_OF, SAAS_STALE_DAYS],
+      ["Infra", INFRA_MONTHLY_USD, INFRA_AS_OF, INFRA_STALE_DAYS],
     ] as const
   ).map(([line, monthlyUsd, asOf, staleDays]) => {
     const ageDays = age(asOf);
@@ -258,6 +283,10 @@ export interface VendorInputs {
   sttCash?: Record<string, Record<string, number>>;
   /** date → complete, fresh Mercury SaaS daily USD. */
   saasMeasured?: Record<string, number>;
+  /** date → complete, fresh Mercury non-GCP infra run-rate USD (never GCP,
+   * STT or Stripe-fee cash — those are their own lines; the producer excludes
+   * the stripe_fees vendor so this never double-counts the fee line). */
+  infraMeasured?: Record<string, number>;
   /** date → measured Stripe processing fee USD. */
   stripeFees?: Record<string, number>;
 }
@@ -388,6 +417,7 @@ export function allInCost(
   if (coverage.openai === false) missing.push("OpenAI invoice");
   if (feesUnavailable) missing.push("Stripe processing fees");
   const saasEstimate = SAAS_MONTHLY_USD / DAYS_PER_MONTH;
+  const infraEstimate = INFRA_MONTHLY_USD / DAYS_PER_MONTH;
   const daily: CostDay[] = [...days]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((d) => {
@@ -409,6 +439,8 @@ export function allInCost(
       const stt = sttLineFor(d.date, vendor);
       const measuredSaas = vendor.saasMeasured?.[d.date];
       const saas = measuredSaas ?? saasEstimate;
+      const measuredInfra = vendor.infraMeasured?.[d.date];
+      const infra = measuredInfra ?? infraEstimate;
       const fees = feesUnavailable ? null : vendor.stripeFees?.[d.date] ?? null;
       const total =
         gcp +
@@ -417,6 +449,7 @@ export function allInCost(
         anthropicCounted +
         stt.usd +
         saas +
+        infra +
         (fees ?? 0);
       return {
         date: d.date,
@@ -436,6 +469,8 @@ export function allInCost(
         sttCash: stt.cash,
         saas,
         saasMeasured: measuredSaas != null,
+        infra,
+        infraMeasured: measuredInfra != null,
         fees,
         oneTime: excess,
         total,

@@ -127,7 +127,7 @@ BigQuery `based-hardware.omi_finops` (location US, same as the billing export, s
 | `unit_cost_reconciliation` | date × pool | `pool_usd` vs `allocated_usd` vs `delta_pct` |
 | `plan_revenue_daily` | date × plan | Stripe **snapshot**; carries `snapshot_date` because Stripe is not replayable per historical day |
 | `unit_cost_user_day` | date × `uid_hash` | hashed uids only (`sha256[:16]`) |
-| `mercury_vendor_spend_daily`, `mercury_saas_daily` | date × vendor / date | Mercury aggregates (`load_mercury`; dark while Mercury is off) |
+| `mercury_vendor_spend_daily`, `mercury_saas_daily`, `mercury_infra_non_gcp_daily` | date × vendor / date | Mercury aggregates (`load_mercury`; dark while Mercury is off) |
 | `stripe_fee_daily` | date | measured Stripe processing fees (dark while the fee scope is missing) |
 | `vendor_balance_snapshot` | ts × vendor | Soniox prepaid-balance snapshots (dark while the org key is off) |
 | `vendor_balance_spend_daily` | date × vendor | daily spend derived from consecutive snapshots (gap/reset flagged) |
@@ -454,7 +454,7 @@ completeness gate below, not the cadence of any named vendor.
 | --- | --- |
 | `saas` | Non-GCP software subscriptions; drives the TV SaaS line |
 | `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs. Anthropic maps to `saas` since 2026-10-22: its Mercury cash is Claude team seats, not per-customer API spend |
-| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend, including outgoing Stripe fees; separate from SaaS |
+| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend (Modal, AWS, Runpod, …), including outgoing Stripe fees; drives the TV "Infra (non-GCP)" line. The run-rate table excludes the `stripe_fees` vendor: that cash is already measured on the `stripe_fee_daily` line, and the two must never stack |
 | `gcp` | Excluded from TV addition; already covered by GCP billing |
 | `marketing`, `fulfillment`, `hardware_cogs`, `travel_meals`, `professional_services`, `facilities`, `other_opex` | Reconciliation categories only; never included in the SaaS line |
 | `excluded` | Payroll, internal/treasury transfers, card repayments, expense reimbursements, taxes, refunds/credits and explicitly excluded hardware categories; collapsed to vendor `excluded` |
@@ -488,7 +488,7 @@ monthly/annual bills for one canonical vendor need separate verified aliases.
 
 ### BigQuery and TV contract
 
-The existing `load_bigquery.py` path loads two new date-partitioned aggregate tables:
+The existing `load_bigquery.py` path loads three date-partitioned aggregate tables:
 
 - `based-hardware.omi_finops.mercury_vendor_spend_daily`: `date`, `vendor`, `category`,
   `amount_usd` (NUMERIC, positive outgoing spend), `transaction_count`, `run_id`, `computed_at`.
@@ -497,6 +497,12 @@ The existing `load_bigquery.py` path loads two new date-partitioned aggregate ta
   (the ÷12 portion from ambiguous one-off vendors), `unmapped_usd`, `unmapped_count`,
   `coverage_days`, `annual_history_complete`, `annual_history_reason`,
   `inputs_complete`, `run_id`, `computed_at`.
+- `based-hardware.omi_finops.mercury_infra_non_gcp_daily`: identical schema at
+  `category='infra_non_gcp'` — the same run-rate treatment as SaaS over non-GCP
+  infrastructure cash (Modal, AWS, Runpod, …), feeding the TV "Infra (non-GCP)"
+  cost line. The `stripe_fees` vendor is excluded from it (measured on
+  `stripe_fee_daily` instead), and the table stays dark until the first load
+  after it ships, so the wall shows an unavailable line, never a guess.
 
 Every successful refresh replaces **all 90 dates**, including zero-spend dates,
 through the existing per-table delete/insert transaction. The daily unmapped row

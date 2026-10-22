@@ -1,16 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  FINOPS_INFRA_QUERY,
   FINOPS_MODULATE_MODELLED_QUERY,
   FINOPS_PLAN_COST_QUERY,
   FINOPS_STRIPE_FEE_QUERY,
   FINOPS_VENDOR_BALANCE_QUERY,
   parseFinopsHistory,
+  parseInfra,
   parsePlanCost,
   parseVendorBalance,
 } from "../wall-finops";
 import {
   allInCost,
   estimateStatus,
+  INFRA_AS_OF,
+  INFRA_MONTHLY_USD,
   modulateReconciliation,
   oneTimeExcess,
   SAAS_MONTHLY_USD,
@@ -44,6 +48,13 @@ const days = Array.from({ length: 21 }, (_, k) => {
 });
 const saasDay = SAAS_MONTHLY_USD / (365.25 / 12);
 const sttDay = STT_MONTHLY_USD / (365.25 / 12);
+const infraDay = INFRA_MONTHLY_USD / (365.25 / 12);
+/** Age of the infra constant at a test time, from the committed as-of date. */
+const infraAge = (at: string) =>
+  Math.floor(
+    (Date.parse(`${at}T00:00:00Z`) - Date.parse(`${INFRA_AS_OF}T00:00:00Z`)) /
+      86_400_000
+  );
 
 describe("all-in cost", () => {
   it("removes only the excess of a one-time spike", () => {
@@ -69,7 +80,9 @@ describe("all-in cost", () => {
     });
     expect(STT_MONTHLY_USD).toBe(5_300);
     expect(d.stt).toBeCloseTo(sttDay);
-    expect(d.total).toBeCloseTo(1_700 + 100 + 250 + 20 + sttDay + saasDay);
+    expect(d.total).toBeCloseTo(
+      1_700 + 100 + 250 + 20 + sttDay + saasDay + infraDay
+    );
     expect(missing).toEqual([]);
   });
 
@@ -92,7 +105,7 @@ describe("all-in cost", () => {
     const withSpend = daily.find((x) => x.date === day(19))!;
     expect(withSpend.anthropic).toBe(20);
     expect(withSpend.total).toBeCloseTo(
-      1_700 + 100 + 250 + 20 + sttDay + saasDay
+      1_700 + 100 + 250 + 20 + sttDay + saasDay + infraDay
     );
     // A reported zero (key present, no spend) is not counted and not missing.
     const flat = days.map((d) => ({
@@ -101,7 +114,7 @@ describe("all-in cost", () => {
     }));
     const zero = allInCost(flat, { openai: true, anthropic: true });
     expect(zero.daily.find((x) => x.date === day(19))!.total).toBeCloseTo(
-      1_700 + 100 + 250 + sttDay + saasDay
+      1_700 + 100 + 250 + sttDay + saasDay + infraDay
     );
     expect(zero.missing).toEqual([]);
   });
@@ -139,22 +152,38 @@ describe("all-in cost", () => {
         staleDays: 35,
         stale: false,
       },
+      {
+        line: "Infra",
+        monthlyUsd: INFRA_MONTHLY_USD,
+        asOf: INFRA_AS_OF,
+        ageDays: infraAge("2026-10-20"),
+        staleDays: 35,
+        stale: false,
+      },
     ]);
-    // STT goes stale after 14 days (David 2026-10-22) while SaaS holds to 35.
+    // STT goes stale after 14 days (David 2026-10-22) while SaaS and the infra
+    // run-rate constant hold to their monthly 35-day threshold.
     expect(
       estimateStatus(new Date("2026-10-31T00:00Z"), { SaaS: true })
     ).toEqual([
       expect.objectContaining({ line: "STT", ageDays: 15, stale: true }),
       expect.objectContaining({ line: "SaaS", ageDays: 15, stale: false }),
+      expect.objectContaining({
+        line: "Infra",
+        ageDays: infraAge("2026-10-31"),
+        stale: false,
+      }),
     ]);
+    // 2026-12-01 is past every line's threshold from each committed as-of.
     expect(
-      estimateStatus(new Date("2026-11-21T00:00Z")).every((e) => e.stale)
+      estimateStatus(new Date("2026-12-01T00:00Z")).every((e) => e.stale)
     ).toBe(true);
     expect(
-      estimateStatus(new Date("2026-11-21T00:00Z"), { SaaS: true })
+      estimateStatus(new Date("2026-12-01T00:00Z"), { SaaS: true, Infra: true })
     ).toEqual([
       expect.objectContaining({ line: "STT", stale: true }),
       expect.objectContaining({ line: "SaaS", stale: false }),
+      expect.objectContaining({ line: "Infra", stale: false }),
     ]);
   });
 
@@ -290,6 +319,49 @@ describe("all-in cost", () => {
     });
     expect(daily.find((d) => d.date === day(17))!.saas).toBeCloseTo(saasDay);
   });
+
+  it("counts the non-GCP infra run rate in the all-in total, with a dated fallback", () => {
+    const { daily } = allInCost(
+      days,
+      {},
+      {
+        infraMeasured: { [day(19)]: 41.25, [day(18)]: 0 },
+      }
+    );
+    const d19 = daily.find((d) => d.date === day(19))!;
+    expect(d19).toMatchObject({ infra: 41.25, infraMeasured: true });
+    expect(d19.total).toBeCloseTo(
+      1_700 + 100 + 250 + 20 + sttDay + saasDay + 41.25
+    );
+    // A measured zero is a measurement, not a missing line.
+    expect(daily.find((d) => d.date === day(18))).toMatchObject({
+      infra: 0,
+      infraMeasured: true,
+    });
+    // A day without a measured row keeps the dated constant — never silent $0.
+    const d17 = daily.find((d) => d.date === day(17))!;
+    expect(d17.infraMeasured).toBe(false);
+    expect(d17.infra).toBeCloseTo(infraDay);
+  });
+
+  it("keeps infra out of the STT line: each line counts its own dollars once", () => {
+    // STT cash (Modulate) and a measured infra row on the same day both land
+    // in the total exactly once; the STT fields never absorb infra dollars.
+    const { daily } = allInCost(
+      days,
+      {},
+      {
+        sttCash: { [day(19)]: { modulate: 20 } },
+        infraMeasured: { [day(19)]: 41.25 },
+      }
+    );
+    const d = daily.find((x) => x.date === day(19))!;
+    expect(d.stt).toBeCloseTo(sttDay + 20);
+    expect(d.infra).toBe(41.25);
+    expect(d.total).toBeCloseTo(
+      1_700 + 100 + 250 + 20 + sttDay + 20 + saasDay + 41.25
+    );
+  });
 });
 
 describe("FinOps plan cost reader", () => {
@@ -401,6 +473,55 @@ describe("FinOps plan cost reader", () => {
     // label the measured line partial until the ledger covers 12 months.
     expect(FINOPS_PLAN_COST_QUERY).toContain("annual_history_complete");
     expect(FINOPS_PLAN_COST_QUERY).toContain("annual_history_reason");
+  });
+});
+
+describe("FinOps infra run-rate reader", () => {
+  it("reads complete fresh rows and labels partial annual history", () => {
+    const h = parseInfra(
+      JSON.stringify({
+        infra: [
+          { day: "2026-10-13", usd: 32.87, annual_complete: true },
+          {
+            day: "2026-10-12",
+            usd: 0,
+            annual_complete: false,
+            annual_reason: "history_under_12_months",
+          },
+          {
+            day: "2026-10-11",
+            usd: 5,
+            annual_complete: false,
+            annual_reason: "uncategorized_above_threshold",
+          },
+          { day: "2026-10-10", usd: 6, annual_complete: false },
+        ],
+      })
+    );
+    // Explicit zeroes are measurements; a missing reason falls back to the
+    // short-history wording, matching the SaaS reader's contract.
+    expect(h.infraMeasured).toEqual({
+      "2026-10-13": 32.87,
+      "2026-10-12": 0,
+      "2026-10-11": 5,
+      "2026-10-10": 6,
+    });
+    expect(h.infraAnnualPartial).toEqual({
+      "2026-10-12": "history_under_12_months",
+      "2026-10-11": "uncategorized_above_threshold",
+      "2026-10-10": "history_under_12_months",
+    });
+  });
+
+  it("queries the infra table separately from the plan-cost read", () => {
+    expect(FINOPS_INFRA_QUERY).toContain("mercury_infra_non_gcp_daily");
+    expect(FINOPS_INFRA_QUERY).toContain("inputs_complete = TRUE");
+    expect(FINOPS_INFRA_QUERY).toContain(
+      "computed_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)"
+    );
+    // A dark infra table must never fail the plan/STT/SaaS read (the fee-table
+    // rule): it stays out of the plan-cost query.
+    expect(FINOPS_PLAN_COST_QUERY).not.toContain("mercury_infra_non_gcp_daily");
   });
 });
 

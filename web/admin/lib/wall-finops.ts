@@ -339,6 +339,84 @@ export async function fetchStripeFeeHistory(
   return history;
 }
 
+/** Mercury non-GCP infra run rate (Modal, AWS, Runpod, …), produced by the
+ * daily FinOps job with the same cadence treatment as the SaaS run rate:
+ * yearly and one-off charges amortize ÷12 (the one-off ambiguity is labelled
+ * `estimated` on the producer via `annual_estimated_usd`). Kept out of the
+ * plan-cost query so a dark table — it stays dark until the first load after
+ * the table ships — can never fail the plan/STT/SaaS read; it is an
+ * unavailable line like the fee table, never a guess.
+ */
+export const FINOPS_INFRA_QUERY = `
+WITH infra AS (
+  SELECT date, amount_usd,
+    annual_history_complete AS annual_complete,
+    annual_history_reason AS annual_reason,
+    ROW_NUMBER() OVER (PARTITION BY date ORDER BY computed_at DESC, run_id DESC) AS rk
+  FROM \`based-hardware.omi_finops.mercury_infra_non_gcp_daily\`
+  WHERE date >= DATE_SUB(@today, INTERVAL @days DAY) AND date <= @today
+    AND inputs_complete = TRUE
+    AND computed_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)
+)
+SELECT TO_JSON_STRING(STRUCT(
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, amount_usd AS usd,
+          IFNULL(annual_complete, FALSE) AS annual_complete, IFNULL(annual_reason, '') AS annual_reason
+        FROM infra WHERE rk = 1 ORDER BY day) AS infra
+)) AS history`;
+
+export interface InfraHistory {
+  /** date → complete, fresh Mercury non-GCP infra run-rate USD; explicit
+   * zeroes are retained. A day whose annual history is incomplete keeps its
+   * amortized value and lands in `infraAnnualPartial` with the producer's
+   * reason — measured run rate, labelled partial, like the SaaS line. */
+  infraMeasured: Record<string, number>;
+  /** infra run-rate days labelled partial: day → producer reason
+   * (`history_under_12_months` or `uncategorized_above_threshold`). */
+  infraAnnualPartial: Record<string, string>;
+}
+
+export async function fetchInfraHistory(
+  today: string,
+  days = 40
+): Promise<InfraHistory> {
+  const bq = getGcpBillingClient();
+  if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
+  let rows: { history: string }[];
+  try {
+    [rows] = await bq.query({
+      query: FINOPS_INFRA_QUERY,
+      params: { today: new BigQueryDate(today), days },
+      maximumBytesBilled: String(10 * 1024 * 1024),
+      jobTimeoutMs: 30_000,
+    });
+  } catch {
+    throw new WallSourceError(
+      "Infra (non-GCP) run rate unavailable (mercury_infra_non_gcp_daily dark: table not created yet or the daily job is stale)"
+    );
+  }
+  return parseInfra(rows[0]?.history || "{}");
+}
+
+export function parseInfra(json: string): InfraHistory {
+  const parsed = JSON.parse(json) as {
+    infra?: {
+      day: string;
+      usd: number;
+      annual_complete?: boolean | null;
+      annual_reason?: string | null;
+    }[];
+  };
+  const history: InfraHistory = { infraMeasured: {}, infraAnnualPartial: {} };
+  for (const r of parsed.infra || []) {
+    history.infraMeasured[r.day] = Number(r.usd);
+    if (r.annual_complete === false) {
+      history.infraAnnualPartial[r.day] =
+        r.annual_reason || "history_under_12_months";
+    }
+  }
+  return history;
+}
+
 /** Soniox measured day-rate, derived on the producer from prepaid-balance
  * snapshots (`vendor_balance_snapshot` → `vendor_balance_spend_daily`): the
  * organization key has no usage/invoice API, only the balance endpoint, so

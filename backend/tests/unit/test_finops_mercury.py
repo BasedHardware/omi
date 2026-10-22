@@ -607,6 +607,86 @@ def test_annual_history_gap_keeps_cash_window_complete_and_flags_seeding(mercury
     )
 
 
+def test_infra_run_rate_amortizes_one_offs_and_keeps_monthly_cash(mercury):
+    """The Infra (non-GCP) TV line gets the SaaS cadence treatment exactly:
+    Modal's once-a-year compute wire amortizes /12 (ambiguous one-off, reported
+    as estimated), monthly cloud cash stays run-rate cash, and the amortization
+    expires after its 12-month service year."""
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    rows = coverage(costs, '2026-01-01', '2026-10-17') + [
+        cash('2026-01-08', 'modal', 12000, 'infra_non_gcp'),  # the ledger's real once-a-year wire
+        cash('2026-09-18', 'aws', 300, 'infra_non_gcp'),
+        cash('2026-10-16', 'aws', 300, 'infra_non_gcp'),
+        cash('2026-09-20', 'runpod', 60, 'infra_non_gcp'),
+        cash('2026-10-16', 'runpod', 60, 'infra_non_gcp'),
+    ]
+    result = costs.infra_rows(rows, ['2026-10-17'], config)[0]
+    assert result['category'] == 'infra_non_gcp'
+    assert Decimal(result['amount_usd']) == (
+        (Decimal('300') + Decimal('300') + Decimal('60') + Decimal('60') + Decimal('12000') / 12) / costs.DAYS_PER_MONTH
+    ).quantize(Decimal('0.000000001'))
+    assert result['annual_monthly_usd'] == '1000.000000000'
+    assert result['annual_estimated_usd'] == '1000.000000000'  # the one-off ambiguity is labelled estimated
+    assert result['inputs_complete'] is True
+    # The ledger history here starts 2026-01-01, short of the 365-day gate.
+    assert result['annual_history_complete'] is False
+    assert result['annual_history_reason'] == 'history_under_12_months'
+    expired = costs.infra_rows(rows, ['2027-01-09'], config)[0]
+    assert Decimal(expired['annual_monthly_usd']) == 0  # the service year ended
+
+
+def test_infra_line_never_double_counts_other_wall_lines(mercury):
+    """STT compute vendors (Deepgram, Soniox, Modulate), GCP and SaaS cash map
+    to their own categories and can never enter the infra run rate; the one
+    in-category overlap — Mercury stripe-fee cash, measured on the fee line —
+    is excluded by name so the fees line is never counted twice."""
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    for vendor in ('soniox', 'deepgram', 'modulate'):
+        assert config['vendors'][vendor]['category'] == 'stt_vendor'
+    assert config['vendors']['gcp']['category'] == 'gcp'
+    assert config['vendors']['openai']['category'] == 'llm_vendor'
+    assert config['vendors']['anthropic']['category'] == 'saas'
+    assert config['vendors']['stripe_fees']['category'] == 'infra_non_gcp'
+    assert 'stripe_fees' in costs.INFRA_EXCLUDED_VENDORS
+    rows = coverage(costs, '2026-09-18', '2026-10-17') + [
+        cash('2026-10-17', 'stripe_fees', 500, 'infra_non_gcp'),
+        cash('2026-09-18', 'aws', 300, 'infra_non_gcp'),
+        cash('2026-10-16', 'aws', 300, 'infra_non_gcp'),
+        cash('2026-10-17', 'soniox', 1000, 'stt_vendor'),
+        cash('2026-10-17', 'deepgram', 40758.67, 'stt_vendor'),
+        cash('2026-10-17', 'openai', 200, 'llm_vendor'),
+        cash('2026-10-17', 'gcp', 2000, 'gcp'),
+        cash('2026-10-17', 'vercel', 999, 'saas'),
+    ]
+    result = costs.infra_rows(rows, ['2026-10-17'], config)[0]
+    # Only the two aws bills: the fee cash is excluded, every other category
+    # never entered the infra series.
+    assert Decimal(result['amount_usd']) == (Decimal('600') / costs.DAYS_PER_MONTH).quantize(Decimal('0.000000001'))
+    assert Decimal(result['annual_monthly_usd']) == 0
+    assert Decimal(result['annual_estimated_usd']) == 0
+
+
+def test_infra_seeding_gap_labels_partial_but_keeps_the_measured_run_rate(mercury):
+    """Same contract as SaaS: an unseeded annual history keeps the amortized
+    value (measured, best run rate) and names the blocking gate, so the wall
+    labels the line partial instead of falling back to a constant."""
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    rows = coverage(costs, '2026-07-20', '2026-10-17') + [
+        cash('2026-10-01', 'modal', 12000, 'infra_non_gcp'),
+        cash('2026-10-17', 'aws', 304.375, 'infra_non_gcp'),
+    ]
+    result = costs.infra_rows(rows, ['2026-10-17'], config)[0]
+    assert result['inputs_complete'] is True
+    assert result['annual_history_complete'] is False
+    assert result['annual_history_reason'] == 'history_under_12_months'
+    # Both vendors are seen exactly once, so both amortize /12 as estimated.
+    assert Decimal(result['annual_monthly_usd']) == Decimal('1025.364583333')
+    assert Decimal(result['annual_estimated_usd']) == Decimal('1025.364583333')
+
+
 def test_loader_keeps_old_annuals_and_replaces_the_whole_refresh_window(mercury, tmp_path, monkeypatch):
     loader = load('load_mercury')
     costs = load('mercury_costs')
@@ -628,11 +708,18 @@ def test_loader_keeps_old_annuals_and_replaces_the_whole_refresh_window(mercury,
         return len(rows)
 
     result = loader.load(tmp_path, 'run-2', '2026-10-18T00:00:00Z', ensured.append, replace, bq)
-    assert set(result) == {'mercury_vendor_spend_daily', 'mercury_saas_daily'}
+    assert set(result) == {
+        'mercury_vendor_spend_daily',
+        'mercury_saas_daily',
+        'mercury_infra_non_gcp_daily',
+    }
     assert all(len(c[2]) == 90 for c in calls)
     assert calls[0][1][0]['run_id'] == 'run-2'
     saas_tail = calls[1][1][-1]
     assert saas_tail['inputs_complete'] is True
+    infra_tail = calls[2][1][-1]
+    assert infra_tail['category'] == 'infra_non_gcp'
+    assert Decimal(infra_tail['amount_usd']) == 0  # no infra cash in this fixture
     # github's year-old bill amortizes by override; vercel is seen exactly once,
     # so its $30 is an ambiguous one-off: /12, labelled estimated (2026-10-23).
     assert Decimal(saas_tail['amount_usd']) == Decimal('10.082135524')
