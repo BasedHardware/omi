@@ -19,6 +19,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/user_provider.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/ui/ui.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 
 class _Sync extends ChangeNotifier implements SyncProvider {
   _Sync(this.wals);
@@ -123,6 +124,13 @@ Future<void> _pump(WidgetTester tester, Widget page, WalStatus status, {List<Wal
         for (final font in entry['fonts'] as List<dynamic>) {
           loader.addFont(rootBundle.load(font['asset'] as String));
         }
+        await loader.load();
+      }
+
+      for (final family in ['SF Pro Display']) {
+        final loader = FontLoader(family);
+        loader.addFont(sfProFont('SFPRODISPLAYREGULAR.OTF'));
+        loader.addFont(sfProFont('SFPRODISPLAYMEDIUM.OTF'));
         await loader.load();
       }
     });

@@ -34,6 +34,7 @@ Future<void> _loadFonts() async {
     '.SF UI Display',
     '.SF Pro Text',
     '.SF Pro Display',
+    'SF Pro Display',
     'CupertinoSystemText',
     'CupertinoSystemDisplay',
     'FlutterTest',
