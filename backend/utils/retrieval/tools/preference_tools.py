@@ -48,8 +48,10 @@ def preference_duplicate_message(preference: str, hits: Optional[list]) -> Optio
     Exact normalized content matches always count; numeric scores only count when
     the search result actually carries a relevance field.
     """
-    preferred = " ".join((preference or "").split()).casefold()
+    preferred = " ".join(str(preference or "").split()).casefold()
     for hit in hits or []:
+        if not isinstance(hit, dict):
+            continue
         memory_id = str(hit.get('memory_id') or hit.get('id') or '').strip()
         existing = f" (memory_id={memory_id})" if memory_id else ""
         raw_score = hit.get("score", hit.get("relevance_score", hit.get("vector_score")))
@@ -84,31 +86,37 @@ def _agent_config() -> Optional[Dict[str, Any]]:
 
 
 def _get_uid(config: RunnableConfig) -> str:
-    """Extract user ID from config or context variable."""
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg and 'configurable' in cfg:
-        raw_configurable = cfg.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            uid = configurable.get('user_id')
-            if uid:
-                return uid
-    ctx = _agent_config()
-    if ctx and 'configurable' in ctx:
-        raw_configurable = ctx.get('configurable')
-        if isinstance(raw_configurable, dict):
-            configurable = cast(Dict[str, Any], raw_configurable)
-            return configurable.get('user_id', '')
+    """Extract user ID from config or context variable with defensive extraction."""
+    for cfg in (cast(Optional[Dict[str, Any]], config), _agent_config()):
+        if not isinstance(cfg, dict):
+            continue
+        configurable = cfg.get('configurable')
+        if isinstance(configurable, dict):
+            uid = configurable.get('user_id') or configurable.get('uid')
+            if uid and isinstance(uid, str) and uid.strip():
+                return uid.strip()
+        uid = cfg.get('user_id') or cfg.get('uid')
+        if uid and isinstance(uid, str) and uid.strip():
+            return uid.strip()
     return ''
 
 
 def _write_provenance(uid: str, preference: str, config: RunnableConfig) -> LedgerProvenance:
     """Build retry-stable provenance without treating an inference as a user assertion."""
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config) or _agent_config()
-    configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
-    configurable = configurable if isinstance(configurable, dict) else {}
-    source_id = str(configurable.get('chat_session_id') or configurable.get('thread_id') or 'direct-agent-tool').strip()
-    normalized_preference = ' '.join(preference.split())
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if not isinstance(cfg, dict):
+        cfg = _agent_config() or {}
+    configurable = cfg.get('configurable') if isinstance(cfg, dict) else {}
+    if not isinstance(configurable, dict):
+        configurable = {}
+    source_id = str(
+        configurable.get('chat_session_id')
+        or configurable.get('thread_id')
+        or cfg.get('chat_session_id')
+        or cfg.get('thread_id')
+        or 'direct-agent-tool'
+    ).strip()
+    normalized_preference = ' '.join(str(preference or '').split())
     action_id = (
         "agent-preference:"
         + deterministic_contract_id(
@@ -120,7 +128,11 @@ def _write_provenance(uid: str, preference: str, config: RunnableConfig) -> Ledg
             },
         )[:32]
     )
-    artifact_ref = {"chat_session_id": source_id} if configurable.get('chat_session_id') else {}
+    artifact_ref = (
+        {"chat_session_id": source_id}
+        if (configurable.get('chat_session_id') or cfg.get('chat_session_id'))
+        else {}
+    )
     return LedgerProvenance(
         source_id=source_id,
         source_type="agent_chat",
@@ -205,6 +217,15 @@ def save_user_preference_tool(
         replace_memory_id: Existing memory ID to correct instead of appending.
         user_stated: Whether the user directly asserted this preference.
     """
+    if not preference or not isinstance(preference, str) or not preference.strip():
+        return "Error: Preference must be a non-empty string"
+    preference = preference.strip()
+
+    if isinstance(user_stated, str):
+        user_stated = user_stated.strip().lower() in {'true', '1', 'yes'}
+    else:
+        user_stated = bool(user_stated)
+
     uid = _get_uid(config)
     if not uid:
         return "Error: Could not determine user ID"
@@ -215,7 +236,7 @@ def save_user_preference_tool(
         logger.error("Failed to resolve preference storage error_type=%s", type(e).__name__)
         return "Error saving preference"
 
-    replacement = replace_memory_id.strip()
+    replacement = str(replace_memory_id or "").strip()
     if replacement:
         try:
             prior = read_canonical_memory_item(uid, replacement, db_client=firestore_client)
