@@ -394,7 +394,7 @@ def render_cluster_transcript(
                 if display:
                     name = ('likely ' if best.band == 'likely' else '') + display
         elif resolution_available:
-            name = owner_name if getattr(row, 'is_user', False) else names.get(getattr(row, 'person_id', None))
+            name = owner_name if getattr(row, 'is_user', False) else names.get(str(getattr(row, 'person_id', '') or ''))
         # If a fallback cluster has contradictory labels, retain no named claim.
         if key in labels and labels[key] != name:
             labels[key] = None

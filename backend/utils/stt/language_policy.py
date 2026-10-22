@@ -36,6 +36,9 @@ MIN_LEARNED_SESSIONS = 3
 # to their base form before this intentionally small equivalence map is used.
 LANGUAGE_EQUIVALENCE = {'ur': 'hi', 'hr': 'sr', 'bs': 'sr', 'id': 'ms'}
 MAX_SONIOX_LANGUAGE_HINTS = 3
+# Explicit declarations for config.refactor_modes' dynamically named cohort selectors.
+LANGUAGE_HINTS_SERVE_PERCENT_ENV = 'STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT'
+LANGUAGE_HINTS_SERVE_DIGESTS_ENV = 'STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S'
 
 
 def canonical_language(language: str | None) -> str:

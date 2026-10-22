@@ -17,12 +17,12 @@ SPEAKER_RULES = '''SPEAKER ATTRIBUTION
   contact corroborates the spoken name, but a contact entry alone does not establish that they spoke.'''
 
 
-def candidate_name(candidate: Any, people: list[dict]) -> str | None:
+def candidate_name(candidate: Any, people: list[dict[str, Any]]) -> str | None:
     names = {str(person.get('id')): str(person.get('name') or '').strip() for person in people}
     return (candidate.name or names.get(candidate.person_id) or '').strip() or None
 
 
-def render_speaker_evidence(evidence: SpeakerEvidence | None, people: list[dict]) -> str:
+def render_speaker_evidence(evidence: SpeakerEvidence | None, people: list[dict[str, Any]]) -> str:
     """List every candidate, best first, and every policy-selected notable similarity."""
     if evidence is None or evidence.status == 'unavailable':
         return SPEAKER_RULES + '\nResolution unavailable; use supported existing labels with the no-guess rule.'

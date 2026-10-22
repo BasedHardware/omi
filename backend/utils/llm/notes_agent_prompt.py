@@ -22,7 +22,6 @@ from typing import Any, Mapping, Optional
 from models.conversation_enums import CategoryEnum
 from models.structured_extraction import SALIENCE_DESCRIPTION
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
-from utils.llm.notes_lengths import length_guide, length_floor, length_ceiling
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 from utils.llm.shaped_agent import model_json
 

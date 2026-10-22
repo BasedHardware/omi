@@ -21,11 +21,11 @@ from utils.llm.notes_agent import langchain_complete, record_decision, record_ru
 from config.refactor_modes import serving_for
 from utils.llm.notes_packet import select_notes_packet
 from utils.llm.notes_agent_policy import plan_notes_agent
+from utils.llm.notes_lengths import length_guide
 from utils.llm.notes_agent_prompt import (
     PROMPT_VERSION,
     cache_key_material,
     conversation_seed,
-    length_guide,
     owner_message,
 )
 from utils.llm.prompt_cache import (

@@ -24,6 +24,9 @@ from utils.llm.output_language import resolve_output_language
 from utils.llm.speaker_evidence_prompt import render_speaker_evidence, SPEAKER_RULES
 
 FLAG = 'NOTES_PACKET_V2_MODE'
+# Explicit declarations for the registry; only config.refactor_modes reads their values.
+NOTES_SERVE_PERCENT_ENV = 'NOTES_PACKET_V2_MODE_SERVE_PERCENT'
+NOTES_SERVE_DIGESTS_ENV = 'NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S'
 PACKET_RULES = (
     '''Use the packet's output_language for the title, overview, sections, tasks, participants and events,
 regardless of the script or language of an individual transcript segment. The local capture time is already
@@ -78,7 +81,7 @@ def build_notes_packet(
     evidence: SpeakerEvidence | None = None,
 ) -> dict[str, Any]:
     """One builder. Supplemental agent lookups enrich the same contract, never replace it."""
-    people = list(inputs.get('people') or ())
+    people: list[dict[str, Any]] = list(inputs.get('people') or ())
     language = inputs.get('output_language_code') or resolve_output_language(uid or '', inputs.get('language_code'))
     owner = prefix.account_owner_name or next(iter(prefix.owner_names), None)
     spellings = list(
