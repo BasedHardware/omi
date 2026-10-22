@@ -31,7 +31,7 @@ _loading = set()
 _STOP = frozenset(
     'The This That They Their Then There When Where What Which While After Before During User Owner Someone One Another Today Yesterday Tomorrow Monday Tuesday Wednesday Thursday Friday Saturday Sunday'.casefold().split()
 )
-_PROPER = re.compile(r'\b[A-Z][\w]*(?:[ -][A-Z][\w]*){0,2}\b')
+_PROPER = re.compile(r'\b(?:[A-Z][\w]*(?:[ -][A-Z][\w]*){0,2}|[a-z][a-z0-9]*\d[a-z0-9]*)\b')
 
 
 def bounded_terms(values):

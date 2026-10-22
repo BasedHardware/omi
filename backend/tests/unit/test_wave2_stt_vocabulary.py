@@ -17,6 +17,7 @@ def test_sources_are_interleaved_deduplicated_and_frequent():
     )
     assert terms == ['Riley Vale', 'OrbitApp', 'micro1', 'QuasarTool']
     assert 'Transient' not in vocab.build_terms([], [{'content': 'Transient appears once.'}], [])
+    assert 'micro1' in vocab.build_terms([], [{'content': 'Uses micro1.'}, {'content': 'Prefers micro1.'}], [])
 
 
 def test_limits_and_pii_shaped_terms():
