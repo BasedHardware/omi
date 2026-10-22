@@ -37,6 +37,32 @@ except ImportError:
     agent_config_context = contextvars.ContextVar('agent_config', default=None)
 
 
+def _extract_user_context(
+    config: Any,
+) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[str]]:
+    """Extract user_id, configurable mapping, and resolved config, supporting top-level or nested configurable."""
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        try:
+            ctx_cfg = agent_config_context.get()
+            if ctx_cfg and isinstance(ctx_cfg, dict):
+                cfg = cast(Dict[str, Any], ctx_cfg)
+        except LookupError:
+            pass
+
+    if cfg is None or not isinstance(cfg, dict):
+        return None, None, None, "Error: Configuration not available"
+
+    configurable_raw = cfg.get('configurable')
+    configurable: Dict[str, Any] = configurable_raw if isinstance(configurable_raw, dict) else {}
+
+    uid = configurable.get('user_id') or cfg.get('user_id')
+    if not uid:
+        return None, None, None, "Error: User ID not found in configuration"
+
+    return str(uid), configurable, cfg, None
+
+
 # Bound the chat tool result so a broad request ("show me all my tasks") cannot flood the chat
 # model's context and make it freeze or refuse (issue #4927; the same fix already shipped for the
 # conversations tool in #8503). A single page can hold up to 500 items, each rendered over several
@@ -153,43 +179,12 @@ def get_action_items_tool(
         f"due_start_date: {due_start_date}, due_end_date: {due_end_date}"
     )
 
-    # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
-                logger.info(f"🔧 get_action_items_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ get_action_items_tool - config not found in context variable")
-            cfg = None
-
-    # Safely access config
-    try:
-        if cfg is None:
-            logger.info(f"❌ get_action_items_tool - config is None")
-            return "Error: Configuration not available"
-
-        if 'configurable' not in cfg:
-            logger.info(
-                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(cfg.keys()) if cfg else 'None'}"
-            )
-            return "Error: Configuration format invalid"
-
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-        if not uid:
-            logger.info(
-                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(configurable.keys()) if configurable else 'None'}"
-            )
-            return "Error: User ID not found in configuration"
-        clock = clock_for_config(cfg, uid)
-
-        logger.info(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
-    except Exception as config_error:
-        logger.error(f"❌ get_action_items_tool - error accessing config: {config_error}", exc_info=True)
-        return "Error: Configuration error."
+    uid, configurable, resolved_cfg, err = _extract_user_context(config)
+    if err:
+        return err
+    assert uid is not None
+    assert configurable is not None
+    clock = clock_for_config(resolved_cfg, uid)
 
     # Hard-scope: force conversation_id and intersect creation dates with chat_scope (#4515).
     scope = chat_scope_from_config(configurable)
@@ -205,10 +200,23 @@ def get_action_items_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Cap at 500 per call
-    if limit > 500:
+    # Coerce and clamp limit and offset
+    try:
+        limit = int(limit)
+    except (ValueError, TypeError):
+        limit = 50
+    if limit < 1:
+        limit = 1
+    elif limit > 500:
         logger.info(f"⚠️ get_action_items_tool - limit capped from {limit} to 500")
         limit = 500
+
+    try:
+        offset = int(offset)
+    except (ValueError, TypeError):
+        offset = 0
+    if offset < 0:
+        offset = 0
 
     # Parse created_at dates if provided (must be ISO format with timezone)
     start_dt = None
@@ -420,37 +428,16 @@ def create_action_item_tool(
     """
     logger.info('create_action_item_tool called')
 
-    # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
-                logger.info(f"🔧 create_action_item_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ create_action_item_tool - config not found in context variable")
-            cfg = None
-
-    if cfg is None:
-        logger.info(f"❌ create_action_item_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ create_action_item_tool - error accessing config: {e}", exc_info=True)
-        return "Error: Configuration not available"
-
-    if not uid:
-        logger.info(f"❌ create_action_item_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
-    clock = clock_for_config(cfg, uid)
-
     # Validate description
-    if not description or not description.strip():
+    if description is None or not isinstance(description, str) or not description.strip():
         return "Error: Description is required to create an action item."
+
+    uid, configurable, resolved_cfg, err = _extract_user_context(config)
+    if err:
+        return err
+    assert uid is not None
+    assert configurable is not None
+    clock = clock_for_config(resolved_cfg, uid)
     # Prepare action item data
     action_item_data: Dict[str, Any] = {
         'description': description.strip(),
@@ -609,33 +596,15 @@ def update_action_item_tool(
         f"completed: {completed}, description: {description}, due_at: {due_at}"
     )
 
-    # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
-                logger.info(f"🔧 update_action_item_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ update_action_item_tool - config not found in context variable")
-            cfg = None
+    if action_item_id is None or not str(action_item_id).strip():
+        return "Error: action_item_id is required to update an action item."
 
-    if cfg is None:
-        logger.info(f"❌ update_action_item_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ update_action_item_tool - error accessing config: {e}", exc_info=True)
-        return "Error: Configuration not available"
-
-    if not uid:
-        logger.info(f"❌ update_action_item_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
-    clock = clock_for_config(cfg, uid)
+    uid, configurable, resolved_cfg, err = _extract_user_context(config)
+    if err:
+        return err
+    assert uid is not None
+    assert configurable is not None
+    clock = clock_for_config(resolved_cfg, uid)
 
     # Check if action item exists
     resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')
