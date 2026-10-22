@@ -299,6 +299,44 @@ def test_submit_with_context_still_logs_unexpected_background_failures(caplog):
     assert any(record.levelno >= logging.ERROR and 'bg-boom' in record.message for record in caplog.records)
 
 
+def _openrouter_credit_exhausted_error():
+    # Direct BYOK OpenRouter lane's live 402 spelling (see
+    # test_conversation_structure_byok_quota.py for the prod signature).
+    import httpx
+    import openai
+
+    body = {
+        'error': {
+            'message': 'This request requires more credits, or fewer max_tokens. To increase, visit '
+            'https://openrouter.ai/settings/credits and upgrade to a paid account',
+            'code': 402,
+            'metadata': {'limit_source': 'openrouter_credits'},
+        }
+    }
+    request = httpx.Request('POST', 'https://openrouter.ai/api/v1/chat/completions')
+    response = httpx.Response(402, request=request, json=body)
+    return openai.APIStatusError(f'Error code: 402 - {body}', response=response, body=body)
+
+
+def test_submit_with_context_logs_byok_quota_halt_without_traceback(caplog):
+    """A spent BYOK provider account halts the task; that is not a background crash."""
+
+    def spent():
+        raise _openrouter_credit_exhausted_error()
+
+    with caplog.at_level(logging.INFO, logger='utils.executors'):
+        future = submit_with_context(_test_executor, spent)
+        with pytest.raises(Exception, match='requires more credits'):
+            future.result(timeout=2)
+        time.sleep(0.05)
+
+    assert any('halted reason=byok_quota' in record.message for record in caplog.records)
+    assert not any(record.levelno >= logging.ERROR for record in caplog.records)
+    # The provider's error body and the SDK traceback must not reach the log.
+    assert not any(record.exc_info not in (None, (None, None, None)) for record in caplog.records)
+    assert not any('openrouter.ai/settings/credits' in record.message for record in caplog.records)
+
+
 @pytest.mark.asyncio
 async def test_start_background_task_logs_exceptions(caplog):
     """Exceptions in background tasks must be logged, not silently swallowed."""
