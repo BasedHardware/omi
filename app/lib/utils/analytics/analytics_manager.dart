@@ -32,6 +32,8 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/services/telemetry/client_telemetry_flags.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
 
+part 'analytics_flag_reader.dart';
+
 enum ProductErrorKind { flutterFramework, uncaughtDart, startup }
 
 class AnalyticsManager {
@@ -563,23 +565,6 @@ class AnalyticsManager {
 
   void setNameAndEmail() {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
-  }
-
-  /// One fenced read per flag value: no adapter/identity, tracking off or an identity switch mid-read → null.
-  Future<T?> _readFlag<T>(Future<T> Function(AnalyticsFeatureFlagAdapter adapter) read,
-      {Duration timeout = _initTimeout}) async {
-    final adapter = _adapter;
-    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) return null;
-    if (adapter is! AnalyticsFeatureFlagAdapter) return null;
-    final epoch = _identityEpoch;
-    final identity = _settledDistinctId;
-    try {
-      final value = await read(adapter as AnalyticsFeatureFlagAdapter).timeout(timeout);
-      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) return null;
-      return value;
-    } catch (_) {
-      return null;
-    }
   }
 
   /// Off-path refresh allows the adapter's four-second request to settle.

@@ -10,7 +10,7 @@ import 'package:omi/services/capture/watch_recording_receipt.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/watch_live_coverage.dart';
-import 'package:omi/utils/analytics/analytics_manager.dart';
+import 'package:omi/services/experiments/watch_copy_dedupe.dart';
 import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 
@@ -26,7 +26,7 @@ class NativeRecordingIntake {
       {Future<Directory> Function()? directory, Future<bool> Function()? dedupeOff, WatchLiveCoverage? coverage})
       : directory = directory ?? nativeRecordingDirectory,
         coverage = coverage ?? WatchLiveCoverage(getApplicationDocumentsDirectory),
-        dedupeOff = dedupeOff ?? (() => AnalyticsManager().isFeatureEnabled('watch_copy_dedupe_off', fallback: true));
+        dedupeOff = dedupeOff ?? WatchCopyDedupePolicy.keepRecoveryCopies;
   final LocalWalSyncImpl ledger;
   final Future<Directory> Function() directory;
   final WatchLiveCoverage coverage;
