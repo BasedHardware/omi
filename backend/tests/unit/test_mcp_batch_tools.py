@@ -695,7 +695,10 @@ class TestCursorContract:
     def test_daily_summaries_cursor_roundtrip(self):
         rows = [{"date": f"2026-06-{10 + i}"} for i in range(3)]
         fake = MagicMock(side_effect=[rows, rows[2:]])
-        with patch.object(other_handler.daily_summaries_db, "get_daily_summaries", fake):
+        with (
+            patch.object(other_handler.daily_summaries_db, "get_daily_summaries", fake),
+            patch.object(other_handler.daily_summaries_db, "get_day_recording_count", return_value=137),
+        ):
             page1 = sse.execute_tool(UID, "get_daily_summaries", {"limit": 2})
             assert len(page1["daily_summaries"]) == 2
             page2 = sse.execute_tool(UID, "get_daily_summaries", {"limit": 2, "cursor": page1["next_cursor"]})

@@ -19,6 +19,7 @@ from utils.mcp_server.helpers import conversation_card
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.payloads import tool_response_serialized_chars
 from utils.mcp_server.constants import MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
+from utils.other.list_budget import ListReadBudgetExhausted
 
 NOW = datetime(2026, 10, 22, tzinfo=timezone.utc)
 OWNER = 'synthetic-owner'
@@ -342,3 +343,42 @@ def test_created_only_legacy_candidates_are_included_without_updated_filter():
             OWNER, origin='memories', filters={}, firestore_client=client
         )
     ] == ['updated', 'created-only']
+
+
+def test_summary_timestamps_have_offsets(monkeypatch):
+    monkeypatch.setattr(
+        other.screen_activity_db,
+        'get_screen_activity_summary',
+        lambda *a, **k: {
+            'apps': {'Synthetic': {'first_seen': '2026-10-22 18:00:00.000'}},
+            'coverage': {'first_observed_at': '2026-10-22 18:00:00.000'},
+        },
+    )
+    result = other.get_screen_activity(OWNER, {'summary': True, 'timezone': 'Asia/Ho_Chi_Minh'})
+    assert result['apps']['Synthetic']['first_seen'] == '2026-10-23T01:00:00+07:00'
+    assert result['coverage']['first_observed_at'].endswith('+07:00')
+
+
+def test_summary_honors_app_filter_over_whole_window(monkeypatch):
+    read = MagicMock(return_value=[{'timestamp': '2026-10-22 18:00:00.000', 'appName': 'Synthetic'}] * 501)
+    monkeypatch.setattr(other.screen_activity_db, 'get_screen_activity', read)
+    result = other.get_screen_activity(OWNER, {'summary': True, 'app': 'Synthetic', 'limit': 200})
+    assert result['total_screenshots'] == result['apps']['Synthetic']['count'] == 501
+    assert read.call_args.kwargs['app_filter'] == 'Synthetic'
+
+
+def test_daily_offset_past_window_is_empty_without_date_underflow():
+    assert other.get_daily_summaries(
+        OWNER, {'start_date': '0001-01-01', 'end_date': '0001-01-02', 'offset': 100000}
+    ) == {'daily_summaries': []}
+
+
+def test_filtered_memory_budget_exhaustion_cannot_be_empty_success(monkeypatch):
+    read = MagicMock(side_effect=ListReadBudgetExhausted('documents'))
+    monkeypatch.setattr(memory_reads, 'read_mcp_memory_candidates', read)
+    budget = object()
+    with pytest.raises(ToolExecutionError, match='request read budget exhausted'):
+        memory_reads.collect_filtered_mcp_memories(
+            SimpleNamespace(db_client=object()), OWNER, filters={}, budget=budget
+        )
+    assert read.call_args.kwargs['budget'] is budget

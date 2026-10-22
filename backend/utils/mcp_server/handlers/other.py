@@ -356,8 +356,35 @@ def screen_activity_core(
         # explicit coverage, no cursor (a cursor here could never resume).
         if cursor_token is not None:
             raise ToolExecutionError("cursor is not supported with summary=true.", code=-32602)
+        if app:
+            grouped = screen_activity_core(
+                uid,
+                start=start,
+                end=end,
+                app=app,
+                summary=False,
+                group_by='app',
+                limit=limit,
+                cursor_kind=cursor_kind,
+                timezone_name=timezone_name,
+            )
+            return {
+                'apps': {
+                    bucket['app']: {
+                        'count': bucket['count'],
+                        'first_seen': bucket['first_seen'],
+                        'last_seen': bucket['last_seen'],
+                        'window_titles': [entry['title'] for entry in bucket['top_titles']],
+                    }
+                    for bucket in grouped['buckets']
+                },
+                'total_screenshots': sum(bucket['count'] for bucket in grouped['buckets']),
+                'coverage': grouped['coverage'],
+            }
         try:
-            return screen_activity_db.get_screen_activity_summary(uid, start_date=start, end_date=end)
+            return localize_timestamps(
+                screen_activity_db.get_screen_activity_summary(uid, start_date=start, end_date=end), zone
+            )
         except FailedPrecondition as e:
             raise_screen_activity_index_error(e)
 
@@ -462,12 +489,10 @@ def get_daily_summaries(
     if start_date and end_date:
         # Offsets count calendar days when a bounded window is requested, so a
         # missing record cannot disappear between two generated summaries.
-        dates = []
-        current = datetime.strptime(end_date, '%Y-%m-%d').date() - timedelta(days=offset)
+        last = datetime.strptime(end_date, '%Y-%m-%d').date()
         first = datetime.strptime(start_date, '%Y-%m-%d').date()
-        while current >= first and len(dates) < limit:
-            dates.append(current.isoformat())
-            current -= timedelta(days=1)
+        available = max(0, (last - first).days + 1 - offset)
+        dates = [(last - timedelta(days=offset + index)).isoformat() for index in range(min(limit, available))]
         page = []
         for date in dates:
             row = daily_summaries_db.get_daily_summary_by_date(uid, date)
@@ -493,7 +518,7 @@ def get_daily_summaries(
                     count = daily_summaries_db.get_day_recording_count(uid, day_start, day_end)
                     status = 'no_recordings' if count == 0 else 'not_generated'
             page.append({'date': date, 'status': status, 'generated_at': None, 'timezone': str(zone)})
-        has_more = current >= first
+        has_more = available > limit
         consumed = len(dates)
     else:
         fetched = daily_summaries_db.get_daily_summaries(
