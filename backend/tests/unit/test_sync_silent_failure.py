@@ -814,7 +814,7 @@ class TestProcessSegmentReal:
         # Install stubs
         for mod_name in _STUB_MODULES:
             sys.modules[mod_name] = ModuleType(mod_name)
-        sys.modules['models'].__path__ = []
+        sys.modules['models'].__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'models')]
         # Keep receipt policy + allocator real: assignment.py imports them at
         # module scope, and the stubbed models.transcript_segment is not a package
         # that can load the policy's real TranscriptSegment binding.

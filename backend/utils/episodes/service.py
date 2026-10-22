@@ -36,6 +36,8 @@ from database import action_items as action_items_db
 from database import episodes as episodes_db
 from database import notifications as notification_db
 from database import users as users_db
+from utils.episodes import moment_render, boundary_runtime
+from utils.episodes.output_language import resolved_invoke
 from utils.episodes import client_gate, incremental, metrics, policy
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
@@ -106,17 +108,11 @@ def _named_segments(uid: str, segments: Sequence[Mapping[str, Any]], c: Collabor
                 }
         except Exception as error:
             logger.warning('event=episode_moment people_lookup_failed exception_type=%s', type(error).__name__)
-    out = []
-    for segment in segments:
-        item = dict(segment)
-        if item.get('person_id') and names.get(str(item['person_id'])):
-            item['person_name'] = names[str(item['person_id'])]
-        out.append(item)
-    return out
+    return moment_render.name_segments(segments, names)
 
 
 def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
-    return _new_episode(
+    return new_episode(
         conversation_id=moment.conversation_id,
         started_at=moment.started_at,
         last_activity_at=moment.ended_at,
@@ -125,7 +121,7 @@ def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
     )
 
 
-def _new_episode(
+def new_episode(
     *,
     conversation_id: str,
     started_at: datetime,
@@ -280,14 +276,16 @@ def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_
         calendar_identity=None,
         speakers=frozenset(),
     )
-    decision = policy.boundary(episode, facts)
+    decision = boundary_runtime.decision(
+        uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
+    )
     if decision.action == 'close' and episode:
         metrics.record_boundary('close')
         _close(uid, episode, decision.reason or 'gap', c, now=now)
         episode = None
     if episode is None:
         metrics.record_boundary('new')
-        base = _new_episode(
+        base = new_episode(
             conversation_id=conversation_id,
             started_at=started_at,
             last_activity_at=started_at,
@@ -360,7 +358,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         applied_until = float((episode.get('applied') or {}).get(moment.conversation_id, -1.0))
     segments = [s for s in moment.segments if _segment_end(s) > applied_until and str(s.get('text') or '').strip()]
     named = _named_segments(uid, segments, c)
-    text = incremental.render_moment(named)
+    text = incremental.render_moment(named, uid=uid, conversation_id=moment.conversation_id)
     if text.words == 0:
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_applied')
         return 'skipped_applied'
@@ -375,7 +373,9 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         calendar_identity=moment.calendar_identity,
         speakers=policy.speaker_keys(segments),
     )
-    decision = policy.boundary(episode, facts)
+    decision = boundary_runtime.decision(
+        uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
+    )
     pending = _pending(episode).get(moment.conversation_id)
     if episode and pending is not None and decision.action == policy.CONTINUE:
         # It joined provisionally at its first words; with its text in hand, settle it now.
@@ -443,7 +443,8 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
             known_item_ids=known_ids,
             now=now,
             tz_name=_tz(uid, c),
-            invoke=c.invoke,
+            invoke=resolved_invoke(uid, moment.language, c.invoke),
+            conversation_language=moment.language,
         )
     except incremental.ModelCallFailed as failure:
         metrics.record_moment_update(
@@ -596,6 +597,7 @@ def _on_finalized(
             ended_at=ended or _now(c),
             trigger='finalize',
             calendar_identity=_calendar_identity(row),
+            language=row.get('language'),
         )
         record_moment(uid, tail, c)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)

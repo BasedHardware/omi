@@ -7,6 +7,7 @@ import sys
 from datetime import date
 from pathlib import Path
 
+from feature_flag_parser_defaults import parser_defaults
 from feature_flag_registry import (
     REVIEW_GRACE_DAYS,
     RAMP_REQUIRED_FROM,
@@ -73,6 +74,9 @@ def check(root: Path, *, check_render: bool = True, as_of: date | None = None) -
         return errors, []
     warnings: list[str] = []
     flags = {entry["key"]: entry for entry in registry["flags"]}
+    for key, expected in parser_defaults(root).items():
+        if key in flags and flags[key]["fail"] != expected:
+            errors.append(f"{key}: fail must be {expected} for the shared boolean parser; regenerate the registry")
     grandfathered = sum(
         1
         for entry in registry["flags"]

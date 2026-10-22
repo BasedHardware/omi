@@ -317,7 +317,13 @@ def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
                         'response': response,
                         'rows': _rows(store),
                         'finish': calls,
-                        'logs': [record.getMessage() for record in caplog.records],
+                        # Shadow comparison telemetry is new; serving events,
+                        # persisted rows and results must retain their old bytes.
+                        'logs': [
+                            record.getMessage()
+                            for record in caplog.records
+                            if not record.getMessage().startswith('event=refactor_shadow ')
+                        ],
                     }
                 )
             )

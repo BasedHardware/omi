@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/services/on_device/on_device_runner.dart';
+import 'package:omi/services/on_device/on_device_segment_snapshot.dart';
 import 'package:omi/services/on_device/on_device_projection.dart';
 import 'package:omi/services/on_device/on_device_provenance.dart';
 import 'package:omi/services/on_device/on_device_settings.dart';
@@ -20,6 +21,8 @@ import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import '../support/on_device_fakes.dart';
+import '../support/refactor_flag_adapter.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 
 class _Listener implements IWalSyncListener {
   @override
@@ -39,6 +42,7 @@ void main() {
         .setMockMethodCallHandler(const MethodChannel('plugins.flutter.io/path_provider'), (_) async => directory.path);
   });
   tearDown(() async {
+    AnalyticsManager.resetForTesting();
     await directory.delete(recursive: true);
   });
 
@@ -233,6 +237,199 @@ void main() {
     runner.dispose();
     controller.dispose();
   });
+
+  for (final count in [10, 501]) {
+    test('disabled continuation terminalizes prepared input once without speech or upload ($count)', () async {
+      await setRefactorFlags({'clients_from_segments_chunks': false});
+      final file = await recording(frames: 100);
+      final prepared = OnDeviceSegmentSnapshot(
+          segments: List.generate(
+              count,
+              (i) => TranscriptSegment(
+                  id: '$i',
+                  text: 'synthetic',
+                  speaker: 'SPEAKER_00',
+                  isUser: false,
+                  personId: null,
+                  translations: const [],
+                  start: i.toDouble(),
+                  end: i + .5)),
+          duration: count.toDouble(),
+          language: 'en',
+          engine: 'synthetic',
+          projection: null);
+      final wal = Wal(
+          timerStart: 1700000000,
+          codec: BleAudioCodec.pcm16,
+          seconds: 1,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+          filePath: 'synthetic.bin',
+          onDeviceOnly: true,
+          onDevicePreparedUpload: prepared.toJson());
+      var saves = 0;
+      final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {
+        saves++;
+      })
+        ..testWals = [wal];
+      final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource())
+        ..debugActivate();
+      addTearDown(controller.dispose);
+      await controller.model.remove();
+      var modelCalls = 0, sends = 0;
+      final runner = OnDeviceRunner(
+          sync: sync,
+          controller: controller,
+          publish: (_) {},
+          transcribeChunk: (_, __) async {
+            modelCalls++;
+            throw StateError('must not recognize');
+          },
+          send: (_) async {
+            sends++;
+            return http.Response('', 503);
+          });
+      addTearDown(runner.dispose);
+      await runner.run(transcribeNow: true);
+      expect(runner.lastError, 'continuation_disabled');
+      expect(wal.status, WalStatus.uploadRejected);
+      expect(wal.onDevicePreparedUpload, isNull);
+      expect(wal.onDeviceUploadFailure, 'continuation_disabled');
+      final restored = Wal.fromJson(jsonDecode(jsonEncode(wal.toJson())) as Map<String, dynamic>);
+      expect(restored.onDeviceUploadFailure, 'continuation_disabled');
+      expect(restored.status, WalStatus.uploadRejected);
+      final saved = saves;
+      await runner.run(transcribeNow: true);
+      expect(saves, saved);
+      expect(modelCalls, 0);
+      expect(sends, 0);
+      expect(await file.exists(), isTrue);
+    });
+  }
+  test('continuation restart reuses the durable transcript without rerunning speech', () async {
+    await setRefactorFlags({'clients_from_segments_chunks': true});
+    await recording(frames: 100);
+    final wal = Wal(
+        timerStart: 1700000000,
+        codec: BleAudioCodec.pcm16,
+        seconds: 1,
+        status: WalStatus.miss,
+        storage: WalStorage.disk,
+        filePath: 'synthetic.bin',
+        onDeviceOnly: true);
+    var saved = <Map<String, dynamic>>[];
+    final sync = LocalWalSyncImpl(_Listener(), persistWals: (rows) async {
+      saved = rows.map((row) => Map<String, dynamic>.from(row.toJson())).toList();
+    })
+      ..testWals = [wal];
+    final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource())
+      ..debugActivate();
+    addTearDown(controller.dispose);
+    var modelCalls = 0;
+    final posts = <String>[];
+    final first = OnDeviceRunner(
+        sync: sync,
+        controller: controller,
+        publish: (_) {},
+        cloudBaseUrl: 'http://127.0.0.1:1/',
+        transcribeChunk: (_, __) async {
+          modelCalls++;
+          return OnDeviceBatchResult(
+              engine: 'synthetic',
+              text: 'synthetic',
+              words: List.generate(15030, (i) => OnDeviceWord('synthetic', i / 20000, (i + 1) / 20000)));
+        },
+        send: (request) async {
+          posts.add(request.body);
+          final body = jsonDecode(request.body) as Map;
+          return http.Response(body['chunk_index'] == 0 ? '{"id":"cloud"}' : '', body['chunk_index'] == 0 ? 200 : 503);
+        });
+    await first.run(transcribeNow: true);
+    expect(controller.lastRunFailed, isTrue);
+    expect(wal.onDeviceConversation, isNull);
+    expect(wal.onDevicePreparedUpload, isNotNull);
+    expect(saved.single['on_device_prepared_upload'], isNotNull);
+    first.dispose();
+    final restored = Wal.fromJson(jsonDecode(jsonEncode(saved.single)) as Map<String, dynamic>);
+    final restarted = LocalWalSyncImpl(_Listener(), persistWals: (_) async {})..testWals = [restored];
+    SharedPreferencesUtil().userPrimaryLanguage = 'es';
+    await controller.model.remove();
+    final rows = <ServerConversation>[];
+    final second = OnDeviceRunner(
+        sync: restarted,
+        controller: controller,
+        publish: rows.add,
+        cloudBaseUrl: 'http://127.0.0.1:1/',
+        transcribeChunk: (_, __) async {
+          modelCalls++;
+          throw StateError('prepared input must skip recognition');
+        },
+        send: (request) async {
+          if (request.method == 'POST') {
+            posts.add(request.body);
+            return http.Response('{"id":"cloud"}', 200);
+          }
+          final cloud =
+              ServerConversation(id: 'cloud', createdAt: DateTime.utc(2026), structured: Structured('Synthetic', ''));
+          return http.Response(
+              jsonEncode({...cloud.toJson(), 'transcript_segments': restored.onDevicePreparedUpload!['segments']}),
+              200);
+        });
+    addTearDown(second.dispose);
+    await second.run(transcribeNow: true);
+    expect(modelCalls, 1);
+    expect(posts, hasLength(4));
+    expect(posts[0], posts[2]);
+    expect(posts[1], posts[3]);
+    expect(rows.single.transcriptSegments, hasLength(501));
+    expect(restored.onDevicePreparedUpload, isNull);
+    expect(controller.lastRunFailed, isFalse);
+  });
+
+  for (final retire in [false, true]) {
+    test('prepared input must persist for its owner before any chunk sends (retire=$retire)', () async {
+      await setRefactorFlags({'clients_from_segments_chunks': true});
+      final audio = await recording(frames: 100);
+      final wal = Wal(
+          timerStart: 1700000000,
+          codec: BleAudioCodec.pcm16,
+          seconds: 1,
+          status: WalStatus.miss,
+          storage: WalStorage.disk,
+          filePath: 'synthetic.bin',
+          onDeviceOnly: true);
+      late LocalWalSyncImpl sync;
+      sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {
+        if (retire) {
+          sync.clearUserData();
+        } else {
+          throw StateError('index unavailable');
+        }
+      })
+        ..testWals = [wal];
+      final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource())
+        ..debugActivate();
+      addTearDown(controller.dispose);
+      var sends = 0;
+      final runner = OnDeviceRunner(
+          sync: sync,
+          controller: controller,
+          publish: (_) {},
+          cloudBaseUrl: 'http://127.0.0.1:1/',
+          transcribeChunk: (_, __) async => const OnDeviceBatchResult(
+              engine: 'synthetic', text: 'synthetic', words: [OnDeviceWord('synthetic', 0, 1)]),
+          send: (_) async {
+            sends++;
+            return http.Response('{"id":"cloud"}', 200);
+          });
+      addTearDown(runner.dispose);
+      await runner.run(transcribeNow: true);
+      expect(sends, 0);
+      expect(wal.onDeviceConversation, isNull);
+      if (!retire) expect(wal.onDevicePreparedUpload, isNull);
+      expect(await audio.exists(), isTrue);
+    });
+  }
 
   test('local summaries survive refresh only with a bound digest and the feature on', () {
     final segments = [

@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import os
 
+from config.refactor_switches import default_on as rollout_default_on
+
 ACTION_ITEM_IDENTITY_PRESERVE_ENV = 'ACTION_ITEM_IDENTITY_PRESERVE_ENABLED'
 
 _ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})
@@ -20,7 +22,7 @@ _ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})
 def _default_on(name: str) -> bool:
     """Unset or blank is on; only an explicit on-token keeps it on when set."""
     raw = os.getenv(name, '').strip().lower()
-    return not raw or raw in _ON_VALUES
+    return rollout_default_on(name, not raw or raw in _ON_VALUES)
 
 
 def action_item_identity_preserve_enabled() -> bool:

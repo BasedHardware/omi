@@ -27,6 +27,8 @@ from utils.batch_pipeline.artifacts import ArtifactStore
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.audio import with_context
 from utils.batch_pipeline.capture_decode import decode_units
+from utils.capture.batch_coverage import decode_for_intake, covered_response
+from config.refactor_modes import serving_for
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from database.outbox import OutboxKind, outbox_for
 from utils.batch_pipeline.provider_stt import provider_enqueue, resolve_route
@@ -485,7 +487,13 @@ async def accept_upload(
         iterator = (
             decode(config.max_unit_seconds)
             if decode is not None
-            else decode_units(paths, max_seconds=config.max_unit_seconds)
+            else decode_for_intake(
+                paths,
+                config.max_unit_seconds,
+                uid,
+                {**(intake_context or {}), 'client_device_id': client_device_id},
+                decoder=decode_units,
+            )
         )
         items = []
         while unit := await run_blocking(sync_executor, _next_unit, iterator):
@@ -538,9 +546,8 @@ async def accept_upload(
                     'client_device_id': client_device_id,
                     'client_platform': client_platform,
                     'conversation_id': conversation_id,
-                    # Resolved conversation/user STT language ('' when unknown).
-                    # The worker skips a Parakeet-only retry for other languages.
                     'stt_language': frozen_language,
+                    'capture_coverage_runs': list(getattr(unit, 'coverage_runs', ())),
                     'stt_language_evidence': language_decision.evidence,
                     'stt_language_confidence': language_decision.confidence,
                 },
@@ -548,6 +555,8 @@ async def accept_upload(
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)
             # Provider units are funded by the provider stage, not GPU compute admission.
             items.append(replace(item, audio_uri=uri, requires_compute_admission=not provider))
+        if not items and serving_for('CAPTURE_COVERAGE_MODE', uid):
+            return covered_response()
         binding = ProjectionBinding(
             owner_id=uid,
             job_id=public_job_id,
