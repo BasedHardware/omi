@@ -24,7 +24,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from utils.rollout_cohorts import configure_rollout_runtime
 import batch_pipeline_held_disposition as held
 from google.cloud import firestore, storage
-from google.cloud.firestore_v1.base_query import FieldFilter
 from database.batch_pipeline_quarantine_recovery import RecoveryStore
 from database.batch_pipeline_speech_redrive import SpeechRedriveStore
 from database.batch_pipeline_store import FirestoreStore
@@ -34,13 +33,14 @@ from utils.batch_pipeline.artifacts import ProtectionContext
 from utils.batch_pipeline.contracts import WorkItem
 from utils.batch_pipeline.recovery_disposition import inspect_audio, STAGES, REASONS
 from utils.batch_pipeline.speech_redrive import redrive_one
+from utils.batch_pipeline import redrive_scope as scope
 from utils.executors import storage_executor
 
 OPERATION = 'speech-empty-multilingual-paid-epoch-2-v1'
 require = held.require
 
 
-def paid_digest(census_digest, speech_count, paid_epoch):
+def paid_digest(census_digest, speech_count, paid_epoch, *, silent=False):
     return hashlib.sha256(
         json.dumps(
             {
@@ -49,6 +49,7 @@ def paid_digest(census_digest, speech_count, paid_epoch):
                 'census_sha256': census_digest,
                 'speech_count': speech_count,
                 'paid_epoch': paid_epoch,
+                'silent': silent,
             },
             sort_keys=True,
             separators=(',', ':'),
@@ -113,9 +114,13 @@ def main():
     parser.add_argument('--stage', choices=['prod'], required=True)
     parser.add_argument('--owner-env', default='DAVID_UID')
     parser.add_argument('--quarantined-before', required=True)
+    parser.add_argument('--quarantined-after', required=True)
+    parser.add_argument('--unit-ids-file', help='Private JSON list; intersect with owner/time/held selection')
+    parser.add_argument('--cohort-file', required=True, help='Create-only private dry-run manifest; required on replay')
+    parser.add_argument('--silent', action='store_true', help='Persist suppression of downstream derived effects')
     parser.add_argument('--expect-count', type=int, required=True)
     parser.add_argument('--expect-speech-count', type=int, required=True)
-    parser.add_argument('--source-census-sha256', required=True)
+    parser.add_argument('--source-census-sha256', help='Required with --apply; optional dry-run assertion')
     parser.add_argument('--paid-epoch', type=int, choices=[2], required=True)
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
@@ -139,10 +144,19 @@ def main():
     )
     uid = os.getenv(args.owner_env, '')
     require(bool(uid) and '/' not in uid, 'owner_pin_required')
-    cutoff_time = datetime.fromisoformat(args.quarantined_before.replace('Z', '+00:00'))
-    offset = cutoff_time.utcoffset()
-    require(offset is not None and offset.total_seconds() == 0, 'utc_cutoff_required')
-    cutoff = cutoff_time.timestamp()
+
+    def utc_stamp(value):
+        stamp = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        require(stamp.utcoffset() is not None and stamp.utcoffset().total_seconds() == 0, 'utc_cutoff_required')
+        return stamp.timestamp()
+
+    cutoff = utc_stamp(args.quarantined_before)
+    after = utc_stamp(args.quarantined_after)
+    require(0 < after <= cutoff, 'invalid_time_window')
+    ids = scope.unit_ids(args.unit_ids_file)
+    scope_spec = scope.scope_body(uid, 'batch_pipeline_prod', after, cutoff, args.silent, ids)
+    require(not args.apply or bool(args.source_census_sha256), 'source_census_required')
+    require(not args.apply or Path(args.cohort_file).is_file(), 'cohort_file_required')
     server_flags = held.load_server_flags(args.server_flags_file)
     secret = os.getenv('ENCRYPTION_SECRET', '').encode()
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '')
@@ -177,40 +191,56 @@ def main():
         return held.readonly_run(store, check)
 
     artifacts.authorize = authorize
-    docs = list(
-        client.collection('batch_pipeline_prod_jobs')
-        .where(filter=FieldFilter('owner_id', '==', uid))
-        .limit(1001)
-        .stream()
-    )
-    require(len(docs) <= 1000, 'owner_read_budget')
-    selected = []
+    cohort_path = Path(args.cohort_file)
+    if cohort_path.exists():
+        # Freeze the exact IDs and decisions across canary projection and replay.
+        manifest = scope.load(cohort_path, scope_spec, args.expect_count)
+        units = [tuple(unit) for unit in manifest['units']]
+    else:
+        selected = []
+        collection = client.collection('batch_pipeline_prod_jobs')
+        candidates = (
+            (collection.document(sid).get() for sid in ids) if ids is not None else scope.owner_jobs(collection, uid)
+        )
+        for doc in candidates:
+            job = doc.to_dict() or {}
+            selected_here = job.get('owner_id') == uid and scope.eligible(job, after, cutoff)
+            require(ids is None or selected_here, 'unit_not_eligible')
+            if selected_here:
+                selected.append((doc.id, held.fingerprint(job)))
+                require(len(selected) <= args.expect_count, 'cohort_count_changed')
+        require(len(selected) == args.expect_count, 'cohort_count_changed')
+        units = []
+        # Leaf fanout belongs to the CLI coordinator, never a storage worker.
+        ordered = sorted(selected)
+        for start in range(0, len(ordered), 4):
+            group = ordered[start : start + 4]
+            futures = [
+                storage_executor.submit(inspect_unit, read_store, artifacts, sid, uid, key) for sid, key in group
+            ]
+            units.extend((sid, key, future.result()) for (sid, key), future in zip(group, futures))
+        manifest = {'scope': scope_spec, 'units': [list(unit) for unit in units]}
+    census = scope.digest(manifest)
+    require(not args.source_census_sha256 or census == args.source_census_sha256, 'source_census_changed')
+    # Validate every immutable binding/intent before any mutation or paid dispatch.
     failures = {}
-    for doc in docs:
-        job = doc.to_dict() or {}
-        if 0 < job.get('quarantined_at', 0) <= cutoff and (
-            job.get('state') == 'quarantined'
-            and job.get('recovery_state') == 'failed_held'
-            or job.get('silence_disposition')
-            or job.get('speech_redrive')
-        ):
-            selected.append((doc.id, held.fingerprint(job)))
-            failures[doc.id] = epoch1_failure(job)
-    require(len(selected) == args.expect_count, 'cohort_count_changed')
-
-    units = []
-    ordered = sorted(selected)
-    # Bounded read-only fanout. Worker operations are leaves; only this CLI
-    # coordinator waits on futures. Complete the entire census before writes.
-    for start in range(0, len(ordered), 4):
-        group = ordered[start : start + 4]
-        futures = [storage_executor.submit(inspect_unit, read_store, artifacts, sid, uid, key) for sid, key in group]
-        units.extend((sid, key, future.result()) for (sid, key), future in zip(group, futures))
-    census = held.plan_digest(uid, store.namespace, cutoff, units)
-    require(census == args.source_census_sha256, 'source_census_changed')
+    digest = paid_digest(census, sum(d == 'speech' for _, _, d in units), args.paid_epoch, silent=args.silent)
+    for sid, key, decision in units:
+        job = checked_job(read_store, sid, uid, key)
+        marker = job.get('speech_redrive')
+        if marker:
+            require(
+                marker.get('plan_digest') == digest and marker.get('silent', False) is args.silent,
+                'paid_intent_changed',
+            )
+        else:
+            require(scope.eligible(job, after, cutoff), 'unit_not_eligible')
+        require(inspect_unit(read_store, artifacts, sid, uid, key) == decision, 'speech_decision_changed')
+        failures[sid] = epoch1_failure(job)
     counts = Counter(decision for _, _, decision in units)
     require(counts['speech'] == args.expect_speech_count, 'speech_count_changed')
-    digest = paid_digest(census, counts['speech'], args.paid_epoch)
+    if not cohort_path.exists():
+        scope.write(cohort_path, manifest)
     output = {
         'mode': 'apply' if args.apply else 'dry_run',
         'operation': OPERATION,
@@ -221,6 +251,7 @@ def main():
         # Not in the digest: the approved census is unchanged by this report.
         'speech_epoch1_failures': dict(Counter(failures[sid] for sid, _, decision in units if decision == 'speech')),
         'paid_epoch': args.paid_epoch,
+        'silent': args.silent,
         'unpinned_policy': 'server_flags' if server_flags else 'refuse',
         'source_census_sha256': census,
         'plan_sha256': digest,
@@ -233,20 +264,30 @@ def main():
         # Per-unit mutation consumes its persisted recovery owner part.
         require(args.approve_plan_sha256 == digest, 'approval_digest_changed')
         outcomes = Counter()
+        stopped = False
         # Always the same sorted prefix. Increasing the limit includes receipts
         # from the canary; it never silently selects one extra unattempted unit.
         for sid, key, _decision in [u for u in units if u[2] == 'speech'][: args.apply_limit]:
             job = checked_job(read_store, sid, uid, key)
-            outcomes[redrive_one(store, artifacts, sid, uid, digest, job['recovery'], server_flags=server_flags)] += 1
+            outcome = redrive_one(
+                store, artifacts, sid, uid, digest, job['recovery'], server_flags=server_flags, silent=args.silent
+            )
+            outcomes[outcome] += 1
+            if not scope.successful(outcome):
+                stopped = True
+                break
         output['outcomes'] = dict(outcomes)
+        output['stopped'] = stopped
         del output['paid_stt_calls'], output['firestore_writes']
     print(json.dumps(output, indent=2, sort_keys=True))
+    if args.apply and stopped:
+        sys.exit(2)
 
 
 if __name__ == '__main__':
     try:
         main()
-    except held.Refused as error:
+    except (held.Refused, scope.ScopeRefused) as error:
         print(json.dumps({'outcome': 'refused', 'reason': str(error)}))
         sys.exit(2)
     except Exception:

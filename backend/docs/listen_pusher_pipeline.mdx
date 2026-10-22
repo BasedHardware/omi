@@ -6239,6 +6239,19 @@ Runtime STT-cap and ladder execution scope shares the 60-second, environment-fen
 Firestore token cache; session admission does not wait for it. Existing live sessions
 retain admitted state until reconnect. See [runtime ramp and rollback](stt-cap-dispatch.md#runtime-cohort-no-restart).
 
+### Silent operator held-unit redrive
+
+The paid epoch-2 operator can freeze an owner/time/ID-scoped held-only cohort and
+use `--silent`. The intent and assignment receipt retain that choice; assignment
+stamps `sync_silent_redrive_revision` transactionally with the transcript.
+Enrichment for that exact revision regenerates notes while deferring derived
+reminders/notifications and creation webhooks. Silent projection retains donor
+cleanup debt rather than cancelling client reminders. Later ordinary revisions
+resume ordinary processing. Serving and enrichment code must be deployed before
+paid silent apply; CLI-only rollout cannot guarantee silence. See
+[the scoped redrive runbook](runbooks/scoped-batch-redrive.md) for digest approval,
+canary/remainder prefix semantics and stop conditions.
+
 ### Stale reconnect recovery
 
 Reconnect recovery claims at most ten `in_progress` rows older than one hour,
@@ -6246,9 +6259,12 @@ newest eligible first. A per-user `conversation_recovery_state/stale_in_progress
 CAS cursor advances before attempts, including refusals/errors; value cursors
 survive row deletion. Subsequent reconnects page toward older rows, wrap after
 the tail, and wait at least one minute between page claims. Each call reads at
-most two ten-row pages plus cursor state; concurrent reconnects cannot claim the
-same cursor generation. A process crash can postpone its claimed page until the
-next pass, but cannot pin later pages. Recovery remains reconnect-driven.
+most two ten-row pages plus cursor/deletion-marker state. Concurrent reconnects
+cannot claim the same cursor generation. The claim transaction checks the durable
+account-deletion marker before writing, so an erasure cannot be followed by
+recreated cursor data. Query, cursor and marker share the customer data plane.
+A process crash can postpone its claimed page until the next pass, but cannot pin
+later pages. Recovery remains reconnect-driven.
 
 Discarded, deleted, locked and deferred rows remain protected. The outcome log
 has only the conversation ID and a bounded disposition; it has no UID/content.

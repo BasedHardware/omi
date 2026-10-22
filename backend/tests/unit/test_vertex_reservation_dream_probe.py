@@ -92,19 +92,25 @@ async def gateway_probe(monkeypatch):
                 dream_capacity._local_state.cache_clear()
 
 
-async def seed(state, redis, age):
+async def seed(state, redis, age, *, old_lease_seconds=600, target_lease_seconds=0):
     seconds, micros = await redis.time()
     now = seconds + micros / 1_000_000
     await redis.set(
         state.key(),
-        json.dumps({'evidence': {MODEL: {'success_at': now - age}}, 'leases': {OLD: now + 600}}),
+        json.dumps(
+            {
+                'evidence': {MODEL: {'success_at': now - age}},
+                'leases': {OLD: now + old_lease_seconds, MODEL: now + target_lease_seconds},
+            }
+        ),
     )
 
 
 @pytest.mark.asyncio
-async def test_cold_admission_recovers_via_gateway_without_backend_vertex_permission(gateway_probe):
+@pytest.mark.parametrize('old_lease_seconds', [600, -1])
+async def test_cold_admission_recovers_via_gateway_without_backend_vertex_permission(gateway_probe, old_lease_seconds):
     state, redis, requests, _ = gateway_probe
-    await seed(state, redis, 901)
+    await seed(state, redis, 901, old_lease_seconds=old_lease_seconds)
     # Old replicas' advisory failures must not veto fresh gateway proof.
     await redis.set(state.key() + ':dream-probe-failed:' + MODEL, '1', ex=600)
     token = set_usage_context('synthetic-owner', 'synthetic-feature')
@@ -122,6 +128,100 @@ async def test_cold_admission_recovers_via_gateway_without_backend_vertex_permis
     slot = await dream_capacity.claim(2)
     assert slot and not slot[0].startswith('dream-local:')
     await dream_capacity.release(slot)
+
+
+@pytest.mark.asyncio
+async def test_stale_admission_bypasses_snapshot_and_claims_only_dream_model(gateway_probe):
+    state, redis, requests, _ = gateway_probe
+    await seed(state, redis, 901, old_lease_seconds=-1)
+    # A read-only refresh in this process must not suppress a subsequent claim.
+    await state.refresh()
+    before = json.loads(await redis.get(state.key()))['leases'][OLD]
+    assert await dream_capacity.available_model() is None
+    await asyncio.gather(*state._probe_tasks)
+    assert len(requests) == 1
+    assert json.loads(await redis.get(state.key()))['leases'][OLD] == before
+    assert await dream_capacity.available_model() == MODEL
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'env,value',
+    [
+        ('OMI_VERTEX_RESERVATION_STATES', json.dumps({OLD: 'inactive'})),
+        ('OMI_VERTEX_RESERVATION_STATES', json.dumps({MODEL: 'active'})),
+        ('OMI_VERTEX_RESERVATION_STATES', json.dumps({MODEL: 'inactive'})),
+        ('OMI_VERTEX_PT_MODEL', OLD),
+        ('OMI_VERTEX_PT_MODEL', MODEL),
+    ],
+)
+async def test_stale_dream_proof_is_independent_of_desktop_routing_overrides(gateway_probe, monkeypatch, env, value):
+    state, redis, requests, _ = gateway_probe
+    monkeypatch.setenv(env, value)
+    await seed(state, redis, 901, old_lease_seconds=-1)
+    assert await dream_capacity.available_model() is None
+    await asyncio.gather(*state._probe_tasks)
+    assert len(requests) == 1
+    assert await dream_capacity.available_model() == MODEL
+
+
+@pytest.mark.asyncio
+async def test_stale_probe_is_leased_across_replicas_and_retries_after_expiry(gateway_probe, monkeypatch):
+    state, redis, requests, reply = gateway_probe
+    reply['status'] = 403  # No fresh evidence: every admission keeps asking for a probe.
+    await seed(state, redis, 901, old_lease_seconds=-1)
+    replicas = [state, ReservationState(redis), ReservationState(redis)]
+    try:
+        await asyncio.gather(
+            *(
+                replica.refresh(dream_capacity._probe, probe_model=MODEL, fresh_seconds=900, apply_overrides=False)
+                for replica in replicas
+            )
+        )
+        await asyncio.gather(*(task for replica in replicas for task in replica._probe_tasks))
+        assert len(requests) == 1
+        for replica in replicas:
+            monkeypatch.setattr(dream_capacity, 'reservation_state', replica)
+            assert await dream_capacity.available_model() is None
+            await asyncio.gather(*replica._probe_tasks)
+        assert len(requests) == 1
+        # Advance the lease, without a real-clock sleep or shortening its window.
+        doc = json.loads(await redis.get(state.key()))
+        doc['leases'][MODEL] = 0
+        await redis.set(state.key(), json.dumps(doc))
+        assert await dream_capacity.available_model() is None
+        await asyncio.gather(*replicas[-1]._probe_tasks)
+        assert len(requests) == 2
+    finally:
+        for replica in replicas[1:]:
+            await replica.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('fresh_seconds,age,expected_calls', [(900, 899, 0), (60, 61, 1)])
+async def test_admission_probes_only_at_dream_freshness_threshold(
+    gateway_probe, monkeypatch, fresh_seconds, age, expected_calls
+):
+    state, redis, requests, _ = gateway_probe
+    monkeypatch.setenv('DREAM_RESERVATION_FRESH_SECONDS', str(fresh_seconds))
+    await seed(state, redis, age, old_lease_seconds=-1)
+    assert (await dream_capacity.available_model() == MODEL) is (expected_calls == 0)
+    await asyncio.gather(*state._probe_tasks)
+    assert len(requests) == expected_calls
+    assert await dream_capacity.available_model() == MODEL
+
+
+@pytest.mark.asyncio
+async def test_stale_admission_respects_existing_target_lease(gateway_probe):
+    state, redis, requests, _ = gateway_probe
+    await seed(state, redis, 901, old_lease_seconds=-1, target_lease_seconds=600)
+    # Neither another service's target lease nor the expired 2.5 lease is stolen.
+    await state.refresh()
+    before = json.loads(await redis.get(state.key()))['leases']
+    assert await dream_capacity.available_model() is None
+    assert not state._probe_tasks
+    assert requests == []
+    assert json.loads(await redis.get(state.key()))['leases'] == before
 
 
 @pytest.mark.asyncio
@@ -168,3 +268,16 @@ async def test_gateway_probe_kill_switch_makes_no_call_and_keeps_fresh_evidence(
     assert await dream_capacity._probe(MODEL, 'us') == 'inconclusive'
     assert await dream_capacity.available_model() == MODEL
     assert requests == []
+
+
+@pytest.mark.asyncio
+async def test_stale_admission_kill_switch_makes_no_call_or_claim(gateway_probe, monkeypatch):
+    state, redis, requests, _ = gateway_probe
+    monkeypatch.setenv('DREAM_GATEWAY_PROBE_ENABLED', 'false')
+    await seed(state, redis, 901, old_lease_seconds=-1)
+    await state.refresh()
+    before = json.loads(await redis.get(state.key()))['leases']
+    assert await dream_capacity.available_model() is None
+    assert not state._probe_tasks
+    assert requests == []
+    assert json.loads(await redis.get(state.key()))['leases'] == before
