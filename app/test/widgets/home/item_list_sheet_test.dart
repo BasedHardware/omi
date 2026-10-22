@@ -279,6 +279,7 @@ void main() {
             'CupertinoSystemDisplay',
             '.SF UI Text',
             '.SF UI Display',
+            'SF Pro Display',
             'FlutterTest'
           ]) {
             final loader = FontLoader(family)

@@ -122,7 +122,7 @@ Future<void> loadFonts() async {
     }
     await loader.load();
   }
-  for (final name in ['.SF UI Text', '.SF UI Display', '.SF Pro Text', 'CupertinoSystemText']) {
+  for (final name in ['.SF UI Text', '.SF UI Display', '.SF Pro Text', 'SF Pro Display', 'CupertinoSystemText']) {
     final loader = FontLoader(name)..addFont(sfProFont('SFPRODISPLAYREGULAR.OTF'));
     await loader.load();
   }

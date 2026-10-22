@@ -25,7 +25,7 @@ Future<void> loadFonts() async {
     }
     await loader.load();
   }
-  for (final family in ['.SF UI Text', '.SF UI Display']) {
+  for (final family in ['.SF UI Text', '.SF UI Display', 'SF Pro Display']) {
     final loader = FontLoader(family);
     for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
       loader.addFont(sfProFont('SFPRODISPLAY$font.OTF'));
