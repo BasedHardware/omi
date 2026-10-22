@@ -50,6 +50,7 @@
   exports as an Atom 1.0 feed for any feed reader.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
+* [`local_recap_markdown.md`](local_recap_markdown.md) — export Omi Desktop daily activity recaps into structured Markdown notes.
 * [`action_items_org.md`](action_items_org.md) — turn an action-item export
   into an Org-mode file with TODO/DONE headings and agenda DEADLINEs.
 * [`action_items_opml.md`](action_items_opml.md) — convert an action-item JSON export to OPML 2.0 for OmniFocus, Workflowy, and Logseq.
