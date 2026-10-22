@@ -20,7 +20,6 @@ import 'package:omi/services/capture/capture_policy.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 import 'package:omi/startup/boot_journal.dart';
-import 'package:omi/startup/boot_recovery.dart';
 import 'package:omi/env/physical_qualification.dart';
 
 typedef CapturePolicyBridge = Future<Object?> Function(String method, Map<String, Object> arguments);
@@ -90,9 +89,8 @@ class SharedPreferencesUtil {
 
   static Future<void> init({FlutterSecureStorage? secureStorage, bool? mirrorNativeAuthToken}) async {
     _preferences = await SharedPreferences.getInstance();
-    final hadStoredAppearance = _preferences!.containsKey(appearanceModeKey);
     if (!PhysicalQualification.enabled) await _quarantineBootSettings();
-    await _migrateAppearanceDefault(hadStoredAppearance: hadStoredAppearance);
+    await _migrateAppearanceDefault();
     _mirrorNativeAuthToken = mirrorNativeAuthToken ?? Platform.isAndroid;
     await _loadCapturePolicy();
     await _reconcileNativeCapturePolicy();
@@ -119,34 +117,32 @@ class SharedPreferencesUtil {
     await _syncNativeAuthToken(_authTokenCache);
   }
 
-  /// Pin the default once, before this launch creates other preferences. Existing
-  /// installs without a choice keep System; fresh installs keep Light even after
-  /// onboarding. A quarantined appearance value retains the Light error fallback.
-  static Future<void> _migrateAppearanceDefault({required bool hadStoredAppearance}) async {
+  /// Pin Light for everyone who never chose an appearance by hand. The Oct 4 2026
+  /// upgrade (#20355) gave existing installs System, so phones in dark mode opened a
+  /// dark Omi without anyone asking for it; that migrated value is flipped to Light
+  /// once. The migration marker is only ever written here, so a stored System whose
+  /// marker still says System came from the migration, not from Settings. Explicit
+  /// Dark, and System chosen after a Light default, are kept.
+  static Future<void> _migrateAppearanceDefault() async {
     final prefs = _preferences!;
-    if (prefs.containsKey(appearanceModeKey)) return;
-
-    final lastVersion = prefs.get('lastKnownAppVersion');
-    final bootSchema = prefs.get(BootRecovery.schemaKey);
-    final existingInstall = prefs.get('onboardingCompleted') == true ||
-        (lastVersion is String && lastVersion.trim().isNotEmpty) ||
-        (bootSchema is int && bootSchema > 0);
     final savedDefault = prefs.get(appearanceDefaultMigrationKey);
-    final String mode;
-    if (hadStoredAppearance) {
-      mode = 'light';
-    } else if (savedDefault is String && (savedDefault == 'light' || savedDefault == 'system')) {
-      mode = savedDefault;
-    } else {
-      mode = existingInstall ? 'system' : 'light';
+    if (prefs.containsKey(appearanceModeKey)) {
+      if (prefs.get(appearanceModeKey) == 'system' && savedDefault == 'system') {
+        await _persistAppearanceDecision(prefs, 'light', savedDefault: savedDefault);
+      }
+      return;
     }
+    await _persistAppearanceDecision(prefs, 'light', savedDefault: savedDefault);
+  }
 
-    // Save the decision before attempting the appearance write. Later startup
-    // stages stamp boot/version/onboarding history, which must not change this
-    // decision if the appearance write fails and the next process retries it.
-    // Attempt each write independently: either durable value is sufficient.
-    // If both fail, the cached choice still works this boot, but no decision can
-    // survive a process restart without a successful storage write.
+  /// Save the decision before attempting the appearance write. Later startup
+  /// stages stamp boot/version/onboarding history, which must not change this
+  /// decision if the appearance write fails and the next process retries it.
+  /// Attempt each write independently: either durable value is sufficient.
+  /// If both fail, the cached choice still works this boot, but no decision can
+  /// survive a process restart without a successful storage write.
+  static Future<void> _persistAppearanceDecision(SharedPreferences prefs, String mode,
+      {required Object? savedDefault}) async {
     for (final key in [if (savedDefault != mode) appearanceDefaultMigrationKey, appearanceModeKey]) {
       try {
         if (!await prefs.setString(key, mode)) {
