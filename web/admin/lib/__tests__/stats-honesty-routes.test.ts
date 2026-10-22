@@ -21,6 +21,8 @@ vi.mock("@/lib/payload-cache", () => ({
 vi.mock("@/lib/stripe", () => ({
   getOptionalStripe: () => stripe,
   getStripe: () => stripe,
+  getOptionalStripeRead: () => stripe,
+  getStripeRead: () => stripe,
 }));
 
 const PLAN_PRODUCT = Object.keys(OMI_PLAN_PRODUCTS)[0];
