@@ -404,15 +404,22 @@ class RingStorageSyncImpl implements RingStorageSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _resetSyncState();
     _isSyncing = true;
+    // A recording page can hold a Wal from before setDevice() rebuilt the list,
+    // so mark the listed instance the sync UI reads.
+    final walToSync = _wals.where((w) => w.storage == wal.storage && w.id == wal.id).firstOrNull ?? wal;
+    walToSync.isSyncing = true;
+    walToSync.syncStartedAt = DateTime.now();
+    walToSync.syncMethod = SyncMethod.ble;
+    listener.onWalUpdated();
     try {
       progress?.onWalSyncedProgress(0.0);
-      final complete = await _syncRing(wal, progress: progress);
+      final complete = await _syncRing(walToSync, progress: progress);
       if (!complete) {
         // Like an incomplete syncAll: unadvanced records stay on the device and
         // the wal stays miss, but the caller must not report a finished transfer.
         throw Exception('Device transfer incomplete; recording kept on device');
       }
-      wal.status = WalStatus.synced;
+      walToSync.status = WalStatus.synced;
       progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
     } catch (e) {
       Logger.debug('RingStorageSync.syncWal: error: $e');
@@ -422,6 +429,12 @@ class RingStorageSyncImpl implements RingStorageSync {
       for (final w in _wals) {
         w.deviceDownloadFraction = null;
       }
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      walToSync.syncSpeedKBps = null;
+      walToSync.deviceDownloadFraction = null;
+      walToSync.syncMethod = SyncMethod.ble;
       listener.onWalUpdated();
     }
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
@@ -787,7 +800,11 @@ class RingStorageSyncImpl implements RingStorageSync {
           final consumedBytes = recordsConsumed * RingProtocol.recordSize;
           final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
           wal.deviceDownloadFraction = pct;
+          wal.syncSpeedKBps = _currentSpeedKBps;
+          final remainingBytes = wal.storageTotalBytes - consumedBytes;
+          wal.syncEtaSeconds = _currentSpeedKBps > 0 ? (remainingBytes / 1024 / _currentSpeedKBps).round() : null;
           progress?.onWalSyncedProgress(pct, speedKBps: _currentSpeedKBps, phase: SyncPhase.downloadingFromDevice);
+          listener.onWalUpdated();
         }
       }
 

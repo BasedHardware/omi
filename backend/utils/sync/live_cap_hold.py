@@ -26,6 +26,7 @@ from utils.observability.held_content import record_capture
 from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec, live_cap_staging, live_cap_upload
 from utils.sync.live_cap_publication import Publication
 from utils.sync.live_cap_tail import TailGrace
+from utils.sync.live_cap_capture import OrderedCapture
 
 logger = logging.getLogger(__name__)
 
@@ -153,6 +154,7 @@ class LiveHeldAudio:
         self._charged: set[str] = set()
         self._publications: dict[str, Publication] = {}
         self._tails = TailGrace()
+        self._capture = OrderedCapture()
         self._lock = asyncio.Lock()
 
     def append(self, data: bytes, rate: int, timestamp: float, conversation_id: str | None, channel: int = 0) -> None:
@@ -214,8 +216,10 @@ class LiveHeldAudio:
             raise RuntimeError('live held audio persistence backpressure')
 
     def buffered_seconds(self) -> float:
-        return sum(len(item[0]) / (2 * item[1]) for item in self.pending) + sum(
-            len(value[0]) / (2 * key[1]) for key, value in self.buffers.items()
+        return (
+            self._capture.seconds
+            + sum(len(item[0]) / (2 * item[1]) for item in self.pending)
+            + sum(len(value[0]) / (2 * key[1]) for key, value in self.buffers.items())
         )
 
     async def _packet_parts(self, data: bytes, rate: int):
@@ -297,6 +301,13 @@ class LiveHeldAudio:
 
     async def _flush(self, *, force: bool = False, seal: bool = True, final: bool = False) -> None:
         async with self._lock:
+            for span in self._capture.take(self.bound, force=force or final):
+                key = (0, span.rate, span.owner)
+                if key in self.buffers:
+                    self._queue(key)  # Distinct capture runs keep their holes.
+                self.append(bytes(span.data), span.rate, span.timestamp, span.owner)
+                if key in self.buffers:
+                    self._tails.opened[key] = min(self._tails.opened[key], span.opened)
             seal_tail = self._tails.expired()
             for key in list(self.buffers):
                 seconds = len(self.buffers[key][0]) / (2 * key[1])
@@ -483,12 +494,15 @@ class LiveHeldAudio:
                             timestamp = (
                                 timeline.wall(first) if timeline is not None else time.time() - (end - first) / rate
                             )
-                            self.append(
-                                data[(first - start) * 2 : (last - start) * 2],
-                                rate,
-                                timestamp,
-                                receiver._owner_for_sample(first),
-                            )
+                            part = data[(first - start) * 2 : (last - start) * 2]
+                            if self.buffered_seconds() + len(part) / (2 * rate) > self.bound + 1e-9:
+                                raise RuntimeError('live held audio packet exceeds custody bound')
+                            self.paused = True
+                            owner = receiver._owner_for_sample(first)
+                            if self.fragmented:
+                                self._capture.add(first, part, rate, timestamp, owner)
+                            else:
+                                self.append(part, rate, timestamp, owner)
                 cursor = max(cursor, right)
                 if cursor >= end:
                     break

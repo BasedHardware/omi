@@ -6152,6 +6152,19 @@ futures and any known generation; recovery never deletes an uncertain source.
 The 8-second bound covers uploading one fragment, not an entire flush: summary
 initialization, capacity, receipt transactions, recovery, sealing, queue draining
 and lock waits retain their existing budgets.
+Single-channel cap decisions can arrive out of capture order: queued provider
+suppression callbacks may precede the receiver's decision for older PCM.
+`OrderedCapture` assembles the already-deduplicated denied spans by integer
+capture sample before encoding or allocating a source group. Only adjacent
+samples with the same owner, rate, UTC month and compatible wall projection
+join. The queue shares the existing aggregate 15-second PCM bound; pressure,
+close and explicit barriers drain it immediately, and its original monotonic
+age survives transfer into the encoder buffer. Periodic updater ticks do not
+publish isolated short callback runs before the bound/age. This prevents
+arrival-order clock discontinuities from minting single-part source groups.
+The fragment kill switch retains the original capture writer. Direct append
+paths (including multichannel) keep their transition-tail grace below.
+
 Transition/resume force-flushes give PCM tails below 250 ms a one-second grace
 from buffer opening. Compatible capture can join before encoding; channel,
 conversation owner, rate, UTC year/month and the existing 100 ms continuity
@@ -6225,3 +6238,23 @@ Operator redrive payloads may carry `redrive_mode: 'minimal'` to re-transcribe p
 Runtime STT-cap and ladder execution scope shares the 60-second, environment-fenced
 Firestore token cache; session admission does not wait for it. Existing live sessions
 retain admitted state until reconnect. See [runtime ramp and rollback](stt-cap-dispatch.md#runtime-cohort-no-restart).
+
+### Stale reconnect recovery
+
+Reconnect recovery claims at most ten `in_progress` rows older than one hour,
+newest eligible first. A per-user `conversation_recovery_state/stale_in_progress`
+CAS cursor advances before attempts, including refusals/errors; value cursors
+survive row deletion. Subsequent reconnects page toward older rows, wrap after
+the tail, and wait at least one minute between page claims. Each call reads at
+most two ten-row pages plus cursor state; concurrent reconnects cannot claim the
+same cursor generation. A process crash can postpone its claimed page until the
+next pass, but cannot pin later pages. Recovery remains reconnect-driven.
+
+Discarded, deleted, locked and deferred rows remain protected. The outcome log
+has only the conversation ID and a bounded disposition; it has no UID/content.
+`omi_stale_recovery_outcome_total{outcome}` distinguishes accepted handoff/empty
+deletion, not-admitted, error, oversized-close attempt, cancellation and current-session skip.
+Unexpected metric inputs fold to the shared reason enum’s `unknown` bucket.
+Acceptance is not worker completion. `STALE_IN_PROGRESS_RECOVERY_ENABLED=false`
+is the default-on feature's kill switch; it disables this reconnect sweep only.
+The new descending status/activity composite must be READY before shipment.

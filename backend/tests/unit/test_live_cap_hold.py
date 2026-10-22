@@ -162,8 +162,9 @@ def test_capture_replay_and_successful_prefix_are_never_held_twice(host, receive
     receiver._observe_cap_capture(pcm, 16000, 16000, False)
     receiver._observe_cap_capture(pcm, 16000, 16000, False)  # Replayed held tail.
     assert receiver.live_hold.pending_bytes == 0
-    buffer, timestamp = next(iter(receiver.live_hold.buffers.values()))
-    assert bytes(buffer) == pcm and timestamp == 101
+    assert receiver.live_hold.buffered_seconds() == 1
+    (span,) = receiver.live_hold._capture.spans
+    assert bytes(span.data) == pcm and span.timestamp == 101
 
 
 async def test_receive_cap_transition_and_resume_have_no_gap_or_paid_overlap(

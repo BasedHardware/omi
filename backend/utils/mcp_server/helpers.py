@@ -106,10 +106,17 @@ def bounded_transcript_segments(
             truncated = True
         item = {key: segment.get(key) for key in allowed_keys if key in segment}
         if item.get('original_text') is not None:
-            item['original_text'] = str(item['original_text'])[:remaining_chars]
+            # The budget covers every text field the segment returns. Charging only
+            # `text` let a corrected segment spend the budget twice.
+            original_text = str(item['original_text'])
+            remaining_after_text = max_chars - used_chars - len(text)
+            if len(original_text) > remaining_after_text:
+                original_text = original_text[:remaining_after_text]
+                truncated = True
+            item['original_text'] = original_text
         item["text"] = text
         bounded.append(item)
-        used_chars += len(text)
+        used_chars += len(text) + len(item.get('original_text') or "")
         if truncated:
             break
 
