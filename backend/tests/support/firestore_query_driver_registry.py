@@ -1019,13 +1019,6 @@ _add(DriverEntry('database.conversations.get_last_completed_conversation', base=
 _add(DriverEntry('database.conversations.get_processing_conversations', base={'uid': UID}))
 _add(
     DriverEntry(
-        'database.conversations.get_stale_in_progress_conversations',
-        base={'uid': UID, 'older_than_seconds': 3600},
-        neutrals={'limit': _LIMIT},
-    )
-)
-_add(
-    DriverEntry(
         'database.stale_conversation_recovery.get_stale_recovery_page',
         base={'uid': UID, 'cutoff': T0},
         neutrals={'now': (T1, 'claim clock; does not change serving query')},

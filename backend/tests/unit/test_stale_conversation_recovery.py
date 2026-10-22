@@ -112,3 +112,20 @@ async def test_noop_route_is_not_reported_as_success(monkeypatch, caplog):
         assert await live.LiveConversationController(host).schedule_finalization('poison') is False
     assert 'outcome=terminal' in caplog.text
     host.request_conversation_processing.assert_not_called()
+
+
+async def test_isolated_success_counts_accepted(caplog):
+    controller = live.LiveConversationController(host_for(None))
+    before = STALE_RECOVERY_OUTCOME_TOTAL.labels(outcome='accepted')._value.get()
+    with caplog.at_level('INFO'):
+        await controller._finalize_isolated(AsyncMock(return_value=True), 'accepted', stage='stale_in_progress')
+    assert STALE_RECOVERY_OUTCOME_TOTAL.labels(outcome='accepted')._value.get() == before + 1
+    assert 'Listen stale recovery outcome=accepted conversation=accepted' in caplog.text
+
+
+async def test_default_on_scans_when_switch_is_unset(monkeypatch):
+    monkeypatch.delenv('STALE_IN_PROGRESS_RECOVERY_ENABLED', raising=False)
+    host = host_for(None)
+    host.persistence.call = AsyncMock(return_value=[])
+    await live.LiveConversationController(host).recover_stale_in_progress()
+    assert host.persistence.call.await_args.args[0] is recovery.get_stale_recovery_page

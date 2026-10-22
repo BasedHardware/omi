@@ -53,9 +53,6 @@ logger = logging.getLogger(__name__)
 # conversation within the ~2-minute conversation timeout, so an hour of silence
 # proves no session owns the row — including one on another device.
 STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
-# Per-session recovery bound: spreads a large backlog across sessions instead of
-# fanning dozens of LLM finalizations out of one reconnect.
-STALE_IN_PROGRESS_RECOVERY_BATCH = 10
 RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
 
 
