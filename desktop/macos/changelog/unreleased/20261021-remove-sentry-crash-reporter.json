@@ -1,0 +1,3 @@
+{
+  "change": "Removed the Sentry crash/error reporter; Report an Issue now saves your note plus redacted diagnostics locally on this Mac instead of sending anything"
+}

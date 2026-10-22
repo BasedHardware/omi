@@ -156,7 +156,7 @@ actor RewindDatabase {
   }
 
   /// Handle corruption/I/O failures from cleanup and other maintenance operations.
-  /// Those paths can otherwise run repeatedly and emit the same Sentry error forever.
+  /// Those paths can otherwise run repeatedly and emit the same error forever.
   private func recoverFromMaintenanceError(_ error: Error, operation: String) async {
     guard dbQueue != nil else { return }
     guard isRecoverableDatabaseError(error) else { return }
