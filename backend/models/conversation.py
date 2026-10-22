@@ -604,6 +604,7 @@ class Conversation(BaseModel):
     # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
     capture_group: Optional[CaptureGroup] = None
 
+    content_kind: Optional[Literal['conversation', 'media', 'noise']] = None
     discarded: bool = False
     # True for conversations created via an external data import (e.g. Limitless ZIP).
     # Distinct from source=limitless, which also covers pendant/sync uploads of Limitless audio.
@@ -769,6 +770,7 @@ class ConversationSyncConflictResponse(BaseModel):
 
 
 class CreateConversation(BaseModel):
+    content_kind: Optional[Literal['conversation', 'media', 'noise']] = None
     started_at: datetime
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
@@ -804,6 +806,7 @@ class CreateConversation(BaseModel):
 
 
 class ExternalIntegrationCreateConversation(BaseModel):
+    content_kind: Optional[Literal['conversation', 'media', 'noise']] = None
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str
