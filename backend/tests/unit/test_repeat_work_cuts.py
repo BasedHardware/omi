@@ -343,7 +343,9 @@ async def test_deferred_eager_task_survives_tombstone_and_builds_after_rollback(
     (conversation_build if schema == 2 else file_build).assert_called_once()
     upload.assert_called_once()
     if schema == 2:
-        assert row['conversation_audio']['audio_files_fingerprint'] == fingerprint
+        assert row['conversation_audio']['audio_files_fingerprint'] == storage.compute_audio_files_fingerprint(
+            files, origin=row['started_at'], source_identity=True
+        )
 
 
 @pytest.mark.asyncio

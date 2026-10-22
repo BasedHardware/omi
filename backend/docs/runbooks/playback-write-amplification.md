@@ -109,7 +109,8 @@ Pusher no longer starts full-conversation rebuilds on chunk flush. Metrics:
 
 Server metadata `conversation_audio_artifact_fingerprint` selects the immutable
 object while client URL shapes stay stable. Existing legacy artifact keys remain
-readable through old stamps. On-demand
+readable through old stamps. New stamps use the strong source fingerprint already
+recognized by rollback readers, so they can also locate the immutable MP3. On-demand
 rollout settings are unchanged. Per-file and dense conversation objects are both
 retained for released clients; this PR does not collapse those two formats into
 one incompatible API. No lifecycle rules or workflow files are changed.

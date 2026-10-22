@@ -3841,7 +3841,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             audio_files, origin=conversation.get('started_at') or conversation.get('created_at'), source_identity=True
         )
         stamp = conversation.get('conversation_audio') or {}
-        if stamp.get('audio_files_fingerprint') == fingerprint and (
+        if stamp.get('audio_files_fingerprint') in (fingerprint, artifact_fingerprint) and (
             not conversation.get('conversation_audio_artifact_fingerprint')
             or conversation['conversation_audio_artifact_fingerprint'] == artifact_fingerprint
         ):
@@ -3932,7 +3932,7 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             {
                 'conversation_audio_artifact_fingerprint': artifact_fingerprint,
                 'conversation_audio': {
-                    'audio_files_fingerprint': fingerprint,
+                    'audio_files_fingerprint': artifact_fingerprint,
                     'duration': wall_duration,
                     'captured_duration': captured_duration,
                     'spans': spans,

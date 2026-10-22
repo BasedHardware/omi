@@ -136,6 +136,21 @@ async def test_http_retry_after_stamp_failure_reuses_published_audio(monkeypatch
     encoder.assert_called_once()
     assert row['conversation_audio_artifact_fingerprint'] in published
 
+    # The pre-fix reader has no private artifact-key field. Its existing
+    # source-identity stamp path must still locate the published immutable MP3.
+    legacy_row = {key: value for key, value in row.items() if key != 'conversation_audio_artifact_fingerprint'}
+    lookup = Mock(return_value='cached')
+    monkeypatch.setattr(sync.sync_playback, 'get_conversation_playback_signed_url', lookup)
+    monkeypatch.setattr(sync.sync_playback, 'get_conversation_playback_unavailable_fingerprint', lambda *_: None)
+    monkeypatch.setattr(sync.sync_playback, 'enqueue_conversation_artifact_build', Mock())
+    result = sync.sync_playback._conversation_audio_urls_entry(
+        'synthetic', 'conversation', row['audio_files'], legacy_row
+    )
+    assert result['status'] == 'cached'
+    lookup.assert_called_once_with(
+        'synthetic', 'conversation', fingerprint=row['conversation_audio']['audio_files_fingerprint']
+    )
+
 
 def test_timeline_origin_change_invalidates_immutable_playback(monkeypatch):
     from utils.other import storage
