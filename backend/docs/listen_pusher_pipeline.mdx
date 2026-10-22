@@ -2120,6 +2120,27 @@ every budget; a blip on that probe now defers to the transactional open
 boundary uncaught and killing the reconnect, and the transactional open
 stays the authority on existence — its tombstone fence still applies.
 
+Since 2026-10-22 the renewal's caller learned the cadence half of the same
+family. `note_audio_activity` armed its once-per-minute throttle before
+spawning the renewal and discarded the result, so a renewal that reported
+False — exactly the classified transients above; the write layer wrote
+nothing — had no retry until the NEXT audio activity after the minute
+boundary. Every blipped minute decayed `lease_expires_at` for its full
+interval while audio kept flowing, and five consecutive blipped minutes
+expired the five-minute fence entirely: SERVER_RECOVERY admission
+(`_has_active_recording_session_lease`) stopped refusing and would
+re-admit and re-finalize a conversation a live socket still owned. The
+controller now redrives a failed renewal inside the same cycle: a 15-second
+`host.wait` (the session's shutdown event wakes it immediately) and at most
+three redrive attempts, so the whole schedule stays inside one
+once-per-minute window. A committed renewal (True), a raise contained with
+`recording session lease renewal redrive crashed`, and a shutdown wake
+between attempts each end the cycle; the next minute of audio re-arms a
+fresh cycle either way. The wait budget is deliberate: a permanently
+unavailable data plane still costs at most four renewal attempts per
+audio-activity minute, never an unbounded loop, and an idle session still
+arms nothing at all — audio activity remains the only trigger.
+
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. The
 durable receipt projection remains on the finalization write path. The disabled

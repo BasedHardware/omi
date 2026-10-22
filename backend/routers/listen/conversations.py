@@ -52,6 +52,16 @@ STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
 # fanning dozens of LLM finalizations out of one reconnect.
 STALE_IN_PROGRESS_RECOVERY_BATCH = 10
 RECORDING_SESSION_LEASE_RENEW_INTERVAL = timedelta(minutes=1)
+# A renewal that reports False wrote nothing (contention burst, retired
+# transaction id, data-plane blip — the bounded transients
+# ``_is_recording_session_transient`` absorbs). Waiting out the rest of the
+# minute re-arms the renewal only with the NEXT audio activity after that
+# boundary, so back-to-back failed minutes decayed the five-minute fence
+# toward recovery re-admission while audio kept flowing. Redrive on a short
+# cadence inside the same cycle instead; the bound keeps a permanently dead
+# Firestore from turning one audio frame into an unbounded retry loop.
+RECORDING_SESSION_LEASE_RETRY_DELAY_SECONDS = 15.0
+RECORDING_SESSION_LEASE_RETRY_ATTEMPTS = 3
 
 
 def resolve_onboarding_provenance_marker(host: Any) -> Optional[str]:
@@ -77,7 +87,17 @@ class LiveConversationController:
         self._last_recording_session_lease_renewal: datetime | None = None
 
     def note_audio_activity(self) -> None:
-        """Renew the active recording fence at most once per minute."""
+        """Renew the active recording fence at most once per minute.
+
+        A renewal that reports False wrote nothing (the bounded transients
+        ``_is_recording_session_transient`` absorbs), so the wait until the
+        next audio activity is fence decay, not backoff: recovery admission
+        bites the moment ``lease_expires_at`` passes. Failed cycles therefore
+        redrive on a short cadence inside the same minute, still bounded so a
+        permanently unavailable data plane cannot turn one audio frame into an
+        unbounded retry loop, and every wait wakes on the session's own
+        shutdown event so teardown is never stretched by redrive.
+        """
         conversation_id = self.host.state.current_conversation_id
         recording_session_id = self.host.recording_session_id
         if not conversation_id or not recording_session_id:
@@ -88,14 +108,59 @@ class LiveConversationController:
             return
         self._last_recording_session_lease_renewal = now
         self.host.spawn(
-            self.host.persistence.call(
-                lifecycle_service.renew_live_recording_session_lease,
+            self._renew_recording_session_lease_with_redrive(
                 self.host.request.uid,
                 recording_session_id,
                 conversation_id,
             ),
             name='recording_session_lease_renewal',
         )
+
+    async def _renew_recording_session_lease_with_redrive(
+        self,
+        uid: str,
+        recording_session_id: str,
+        conversation_id: str,
+    ) -> None:
+        """Renew once, then redrive only while attempts wrote nothing.
+
+        True ends the cycle: the fence moved. A False — the transient decay
+        signal, or the rarer identity/phase-fence refusal and missing-row
+        reads — redrives on the short cadence. Refusals converge to the same
+        False without ever writing, so the bounded attempts cost a few reads
+        and nothing else; the transient case is the one that matters, because
+        each skipped retry is fence decay while audio still flows. This method
+        is best-effort plumbing inside a spawned task, so a structural failure
+        underneath it (a host teardown race, a permanent rejection) must not
+        escape: ``create_named_task`` logs unhandled task exceptions as ERROR
+        and supervise treats a crashed bg task as the session ending, so the
+        crash is contained here, logged with its identity, and the next
+        audio-activity minute re-arms the cycle.
+        """
+        for attempt in range(1 + RECORDING_SESSION_LEASE_RETRY_ATTEMPTS):
+            try:
+                renewed = await self.host.persistence.call(
+                    lifecycle_service.renew_live_recording_session_lease,
+                    uid,
+                    recording_session_id,
+                    conversation_id,
+                )
+                if renewed:
+                    return
+                if attempt < RECORDING_SESSION_LEASE_RETRY_ATTEMPTS:
+                    # A wake from the session's shutdown event means teardown
+                    # began while this redrive slept: end the cycle here instead
+                    # of issuing one more lease write into a draining session.
+                    if await self.host.wait(RECORDING_SESSION_LEASE_RETRY_DELAY_SECONDS):
+                        return
+            except Exception:
+                logger.exception(
+                    'recording session lease renewal redrive crashed uid=%s session=%s conversation=%s',
+                    uid,
+                    recording_session_id,
+                    conversation_id,
+                )
+                return
 
     async def _continuity_row(self, row: dict[str, Any]) -> dict[str, Any]:
         if calendar_continuity_identity(row) is None:
