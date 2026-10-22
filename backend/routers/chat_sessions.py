@@ -143,7 +143,16 @@ def get_chat_sessions(
     starred: bool | None = Query(None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    return chat_db.get_chat_sessions(uid, app_id=app_id, limit=limit, offset=offset, starred=starred)
+    sessions = chat_db.get_chat_sessions(uid, app_id=app_id, limit=limit, offset=offset, starred=starred)
+    return ChatSessionResponse.deserialize_many_safe(
+        sessions,
+        on_error=lambda record, exc: logger.warning(
+            'Skipping malformed chat session %s for uid=%s: %s',
+            record.get('id') if isinstance(record, dict) else None,
+            uid,
+            type(exc).__name__,
+        ),
+    )
 
 
 @router.get('/v2/chat-sessions/{session_id}', tags=['chat-sessions'], response_model=ChatSessionResponse)
@@ -151,7 +160,10 @@ def get_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    result = chat_db.get_chat_session_by_id(uid, session_id)
+    clean_session_id = session_id.strip() if session_id else ""
+    if not clean_session_id:
+        raise HTTPException(status_code=400, detail='Invalid session ID')
+    result = chat_db.get_chat_session_by_id(uid, clean_session_id)
     if result is None:
         raise HTTPException(status_code=404, detail='Chat session not found')
     return result
@@ -163,7 +175,13 @@ def update_chat_session(
     request: UpdateChatSessionRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    result = chat_db.update_chat_session(uid, session_id, title=request.title, starred=request.starred)
+    clean_session_id = session_id.strip() if session_id else ""
+    if not clean_session_id:
+        raise HTTPException(status_code=400, detail='Invalid session ID')
+    clean_title = request.title.strip() if request.title is not None else None
+    if request.title is not None and not clean_title:
+        raise HTTPException(status_code=400, detail='Title cannot be empty')
+    result = chat_db.update_chat_session(uid, clean_session_id, title=clean_title, starred=request.starred)
     if result is None:
         raise HTTPException(status_code=404, detail='Chat session not found')
     return result
@@ -174,7 +192,10 @@ def delete_chat_session(
     session_id: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    chat_db.delete_chat_session(uid, session_id, cascade_messages=True)
+    clean_session_id = session_id.strip() if session_id else ""
+    if not clean_session_id:
+        raise HTTPException(status_code=400, detail='Invalid session ID')
+    chat_db.delete_chat_session(uid, clean_session_id, cascade_messages=True)
     return {'status': 'ok'}
 
 
@@ -362,23 +383,52 @@ def generate_session_title(
     ),
 ):
     """Generate a title for a chat session based on its messages."""
-    require_generated_compute(uid, 'session_titles')
-    conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
-    prompt = (
-        "Generate a short, descriptive title (max 6 words) for this chat conversation. "
-        "Return ONLY the title text, no quotes or punctuation.\n\n"
-        f"{conversation}"
-    )
-    # `BaseChatModel.invoke(...).content` is typed `str | list[str | dict]` by
-    # langchain's stubs; session-title responses are plain strings, so reach
-    # the response through `Any` and annotate the result as `str`.
-    with track_usage(uid, Features.CHAT):
-        response = cast(Any, get_llm('session_titles').invoke(prompt))
-    title: str = response.content.strip().strip('"\'')
-    if not title:
-        title = 'New Chat'
+    session_id = request.session_id.strip() if request.session_id else ""
+    if not session_id:
+        raise HTTPException(status_code=400, detail="Invalid session ID")
 
-    chat_db.update_chat_session(uid, request.session_id, title=title)
+    # Validate session exists
+    session = chat_db.get_chat_session_by_id(uid, session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+
+    title = "New Chat"
+    try:
+        require_generated_compute(uid, 'session_titles')
+        conversation = '\n'.join(f"{m.sender}: {m.text}" for m in request.messages[:10])
+        prompt = (
+            "Generate a short, descriptive title (max 6 words) for this chat conversation. "
+            "Return ONLY the title text, no quotes or punctuation.\n\n"
+            f"{conversation}"
+        )
+        with track_usage(uid, Features.CHAT):
+            response = cast(Any, get_llm('session_titles').invoke(prompt))
+
+        # Safely extract string content across str, list of dicts, or other LLM response structures
+        raw_content = getattr(response, "content", response)
+        if isinstance(raw_content, list):
+            content_text = " ".join(
+                block.get("text", "") if isinstance(block, dict) else str(block)
+                for block in raw_content
+            )
+        elif isinstance(raw_content, str):
+            content_text = raw_content
+        else:
+            content_text = str(raw_content) if raw_content is not None else ""
+
+        candidate_title = content_text.strip().strip('"\'')
+        if candidate_title:
+            title = candidate_title[:100].strip()
+    except Exception as exc:
+        logger.warning("generate_session_title LLM generation failed for uid=%s session_id=%s: %s", uid, session_id, exc)
+        # Fallback gracefully to first human message or "New Chat"
+        first_human_msg = next((m.text.strip() for m in request.messages if m.sender == "human" and m.text.strip()), None)
+        if first_human_msg:
+            title = first_human_msg[:30].strip()
+        else:
+            title = "New Chat"
+
+    chat_db.update_chat_session(uid, session_id, title=title)
     return {'title': title}
 
 
