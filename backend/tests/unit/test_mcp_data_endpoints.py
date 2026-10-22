@@ -198,6 +198,8 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid(monkeyp
     authorization = SimpleNamespace(allowed=True)
     memory_service = MagicMock()
     memory_service.read.return_value = []
+    memory_service.read_mcp_filtered.return_value = ([], 0)
+    memory_service.read_page.return_value = SimpleNamespace(memories=[], next_cursor=None, truncated=False)
     shared_budget = rest.list_read_budget_for_request(None, route='mcp-memories')
     with (
         patch.object(rest, 'list_read_budget_for_request', return_value=shared_budget) as make_budget,
@@ -217,12 +219,15 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid(monkeyp
         )
 
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
-    if budget_enabled and sort != 'scoring_desc':
+    reader = memory_service.read_mcp_filtered if sort == 'created_desc' else memory_service.read_page
+    assert reader.call_args.args == ('auth-user',)
+    if budget_enabled and sort == 'created_desc':
         make_budget.assert_called_once_with(None, route='mcp-memories', owner_uid='auth-user', context=auth_context)
-        memory_service.read.assert_called_once_with('auth-user', limit=5000, offset=0, budget=shared_budget)
+        assert memory_service.read_mcp_filtered.call_args.kwargs['budget'] is shared_budget
     else:
         make_budget.assert_not_called()
-        memory_service.read.assert_called_once_with('auth-user', limit=100, offset=0)
+        assert 'budget' not in reader.call_args.kwargs
+    memory_service.read.assert_not_called()
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
@@ -316,6 +321,7 @@ def test_oauth_authentication_carries_memory_identity_into_advertised_memory_too
     }
     service = MagicMock()
     service.read.return_value = []
+    service.read_mcp_filtered.return_value = ([], 0)
     service.search_mcp.return_value = []
     grant_state = {
         'grants': {
@@ -451,6 +457,7 @@ def test_get_memories_advertises_and_executes_default_limit_20():
 
     service = MagicMock()
     service.read.return_value = []
+    service.read_mcp_filtered.return_value = ([], 0)
     with (
         patch.object(
             sse_memories, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
@@ -463,20 +470,21 @@ def test_get_memories_advertises_and_executes_default_limit_20():
     assert result['scanned_count'] == 0
 
 
-def test_get_memories_created_desc_scan_never_claims_a_complete_capped_sort():
+def test_get_memories_created_desc_never_trusts_an_incomplete_service_prefix():
     service = MagicMock()
-    service.read.side_effect = lambda _uid, *, limit, offset: [
-        SimpleNamespace(model_dump=lambda mode: {'id': 'synthetic', 'content': 'Fact'}) for _ in range(limit)
-    ]
+    service.read.return_value = []
+    service.read_mcp_filtered.side_effect = sse.ToolExecutionError(
+        'memory_filter_window_exceeded: narrow the filter', code=-32009, http_status=413
+    )
     with (
         patch.object(
             sse_memories, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
         ),
         patch.object(sse_memories, 'MemoryService', return_value=service),
-        pytest.raises(sse.ToolExecutionError, match='memory_scan_incomplete'),
+        pytest.raises(sse.ToolExecutionError, match='memory_filter_window_exceeded'),
     ):
         sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
-    assert service.read.call_count == 50
+    service.read.assert_not_called()
 
 
 def test_get_memories_locked_null_content_does_not_crash():
@@ -490,6 +498,7 @@ def test_get_memories_locked_null_content_does_not_crash():
             }
         )
     ]
+    service.read_mcp_filtered.return_value = ([row.model_dump(mode='json') for row in service.read.return_value], 1)
     with (
         patch.object(
             sse_memories, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
@@ -514,6 +523,7 @@ def test_rest_get_memories_locked_null_content_does_not_crash():
             }
         )
     ]
+    service.read_mcp_filtered.return_value = ([row.model_dump(mode='json') for row in service.read.return_value], 1)
     with (
         patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
         patch.object(sse_memories, 'MemoryService', return_value=service),
@@ -1234,6 +1244,7 @@ def _allowed_empty_result():
 def _rest_universal_patches(result):
     service = MagicMock()
     service.read.return_value = []
+    service.read_mcp_filtered.return_value = ([], 0)
     service.search_mcp.return_value = []
     return (
         patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=result),
@@ -1248,6 +1259,7 @@ def _rest_universal_patches(result):
 def _sse_universal_patches(result):
     service = MagicMock()
     service.read.return_value = []
+    service.read_mcp_filtered.return_value = ([], 0)
     service.search_mcp.return_value = []
     return (
         patch.object(sse_memories, 'authorize_memory_external_default_memory_read', return_value=result),

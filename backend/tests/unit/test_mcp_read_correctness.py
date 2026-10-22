@@ -418,3 +418,55 @@ def test_malformed_optional_call_metadata_does_not_drop_the_card():
     )
     assert result['id'] == 'a'
     assert all(result[key] is None for key in ('source', 'is_call', 'call_platform', 'calendar_event_id'))
+
+
+def test_default_global_sort_uses_complete_candidates_not_service_prefix(monkeypatch):
+    read = MagicMock(return_value=([{'id': 'old-created'}, {'id': 'new-created'}], 620))
+    monkeypatch.setattr(memories, 'read_filtered_mcp_memories', read)
+    prefix = MagicMock(side_effect=AssertionError('incomplete service prefix must not be used'))
+    monkeypatch.setattr(memories, 'MemoryService', prefix)
+    result = memories.memories_page_core(OWNER, limit=20, sort='created_desc', cursor_kind='test')
+    assert len(result['memories']) == 2 and result['scanned_count'] == 620
+    assert result['matched_count'] == 2 and not result['scan_truncated']
+    prefix.assert_not_called()
+
+
+def test_candidate_merge_preserves_universal_scoring_order(monkeypatch):
+    old = {'id': 'canonical-old', 'created_at': NOW - timedelta(days=1), 'updated_at': NOW - timedelta(days=1)}
+    new = {'id': 'historical-new', 'created_at': NOW}
+
+    def model(row):
+        return SimpleNamespace(model_dump=lambda **k: dict(row))
+
+    canonical = SimpleNamespace(id=old['id'])
+    historical = SimpleNamespace(id=new['id'], to_dict=lambda: dict(new))
+    monkeypatch.setattr(memory_reads, 'read_mcp_memory_candidates', MagicMock(side_effect=[[canonical], [historical]]))
+    monkeypatch.setattr(memory_reads, 'read_canonical_scan_page', lambda *a, **k: ([(model(old), None)], True))
+    service = SimpleNamespace(
+        db_client=object(),
+        canonical_statuses=lambda *a: {},
+        historical_suppression_reason=lambda *a, **k: None,
+        history=SimpleNamespace(_adapt_scan_payloads=lambda *a, **k: [(SimpleNamespace(memory=model(new)), None)]),
+    )
+    rows, scanned = memory_reads.collect_filtered_mcp_memories(service, OWNER, filters={'sort': 'scoring_desc'})
+    assert [row['id'] for row in rows] == ['historical-new', 'canonical-old']
+    assert scanned == 2
+
+
+def test_native_offset_resumes_after_emitted_rows_without_materializing(monkeypatch):
+    def mem(cid):
+        return SimpleNamespace(model_dump=lambda **k: {'id': cid})
+
+    service = MagicMock()
+    service.read_page.side_effect = [
+        SimpleNamespace(memories=[mem('a'), mem('b'), mem('c')], next_cursor='native-after-c', truncated=False),
+        SimpleNamespace(memories=[mem('d')], next_cursor=None, truncated=False),
+    ]
+    monkeypatch.setattr(memories, 'MemoryService', lambda **k: service)
+    first = memories.memories_page_core(OWNER, limit=2, offset=1, sort='updated_desc', cursor_kind='test')
+    second = memories.memories_page_core(
+        OWNER, limit=2, cursor_token=first['next_cursor'], sort='updated_desc', cursor_kind='test'
+    )
+    assert [row['id'] for row in first['memories']] == ['b', 'c']
+    assert [row['id'] for row in second['memories']] == ['d']
+    service.read_mcp_filtered.assert_not_called()

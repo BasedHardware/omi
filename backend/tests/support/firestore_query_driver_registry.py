@@ -1062,7 +1062,7 @@ _add(
     DriverEntry(
         'database.mcp_memory_queries.read_mcp_memory_candidates',
         base={'uid': UID},
-        neutrals={'budget': _BUDGET},
+        neutrals={'budget': _BUDGET, 'max_candidates': _LIMIT},
         domains={
             'origin': ['memory_items', 'memories'],
             'filters': [

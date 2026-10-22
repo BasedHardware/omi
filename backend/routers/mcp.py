@@ -475,9 +475,9 @@ def get_memories(
             updated_after=parsed_updated_after,
             sort=sort,
             categories=[category.value for category in category_list],
-            # The released REST list scanned up to 5000 raw rows through
-            # collect_filtered_memories; keep that window instead of the
-            # smaller MCP tool cap.
+            # Preserve the released REST candidate window. The shared
+            # reader proves completeness within this cap or returns an
+            # explicit bound error instead of a partial sorted prefix.
             max_scan=5000,
             cursor_kind="rest_get_memories",
             **({'budget': budget} if budget is not None else {}),

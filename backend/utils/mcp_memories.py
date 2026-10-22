@@ -209,7 +209,7 @@ def parse_mcp_bool(value: Any, field_name: str, *, default: bool) -> bool:
     return default if parsed is None else parsed
 
 
-def _datetime_timestamp(value: Any) -> Optional[float]:
+def memory_timestamp(value: Any) -> Optional[float]:
     if isinstance(value, datetime):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
@@ -257,7 +257,7 @@ def filter_and_sort_memories(
 ) -> List[Dict[str, Any]]:
     category_set = {c for c in categories} if categories else None
     filtered: List[Dict[str, Any]] = []
-    updated_after_ts = _datetime_timestamp(updated_after) if updated_after else None
+    updated_after_ts = memory_timestamp(updated_after) if updated_after else None
     for memory in memories:
         if category_set is not None:
             mem_category = memory.get('category')
@@ -273,22 +273,20 @@ def filter_and_sort_memories(
         if not include_sensitive and is_sensitive_memory(memory):
             continue
         if updated_after_ts is not None:
-            updated_at = _datetime_timestamp(memory.get('updated_at'))
+            updated_at = memory_timestamp(memory.get('updated_at'))
             if updated_at is None or updated_at < updated_after_ts:
                 continue
         filtered.append(memory)
 
     if sort == 'created_desc':
-        filtered.sort(key=lambda item: _datetime_timestamp(item.get('created_at')) or float('-inf'), reverse=True)
+        filtered.sort(key=lambda item: memory_timestamp(item.get('created_at')) or float('-inf'), reverse=True)
     elif sort == 'updated_desc':
-        filtered.sort(key=lambda item: _datetime_timestamp(item.get('updated_at')) or float('-inf'), reverse=True)
+        filtered.sort(key=lambda item: memory_timestamp(item.get('updated_at')) or float('-inf'), reverse=True)
     elif sort == 'manual_first':
         filtered.sort(
             key=lambda item: (
                 bool(item.get('manually_added')),
-                _datetime_timestamp(item.get('updated_at'))
-                or _datetime_timestamp(item.get('created_at'))
-                or float('-inf'),
+                memory_timestamp(item.get('updated_at')) or memory_timestamp(item.get('created_at')) or float('-inf'),
             ),
             reverse=True,
         )

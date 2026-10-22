@@ -664,33 +664,29 @@ class TestCursorContract:
         assert exc.value.code == -32602
 
     def test_memories_cursor_roundtrip_advances_offset(self):
-        collected = {"memories": [{"id": f"m{i}"} for i in range(20)], "has_more": True, "more_in_window": True}
-        collector = MagicMock(return_value=dict(collected))
+        read = MagicMock(return_value=([{'id': f'm{i}'} for i in range(21)], 42))
         with (
-            patch.object(memories_handler, "collect_filtered_memories", collector),
-            patch.object(memories_handler, "authorize_memory_external_default_memory_read", return_value=ALLOWED),
-            patch.object(memories_handler, "MemoryService"),
+            patch.object(memories_handler, 'read_filtered_mcp_memories', read),
+            patch.object(memories_handler, 'authorize_memory_external_default_memory_read', return_value=ALLOWED),
         ):
-            page1 = sse.execute_tool(UID, "get_memories", {"limit": 20}, _memory_ctx())
-            sse.execute_tool(UID, "get_memories", {"cursor": page1["next_cursor"]}, _memory_ctx())
-        assert collector.call_args.kwargs["offset"] == 20
+            first = sse.execute_tool(UID, 'get_memories', {'limit': 20}, _memory_ctx())
+            second = sse.execute_tool(UID, 'get_memories', {'cursor': first['next_cursor']}, _memory_ctx())
+        assert [row['id'] for row in second['memories']] == ['m20']
+        assert not second['has_more']
 
     def test_memories_cursor_rejects_filter_change(self):
-        collected = {"memories": [{"id": "m0"}], "has_more": True, "more_in_window": True}
+        read = MagicMock(return_value=([{'id': f'm{i}'} for i in range(21)], 42))
         with (
-            patch.object(memories_handler, "collect_filtered_memories", return_value=dict(collected)),
-            patch.object(memories_handler, "authorize_memory_external_default_memory_read", return_value=ALLOWED),
-            patch.object(memories_handler, "MemoryService"),
+            patch.object(memories_handler, 'read_filtered_mcp_memories', read),
+            patch.object(memories_handler, 'authorize_memory_external_default_memory_read', return_value=ALLOWED),
         ):
-            page1 = sse.execute_tool(UID, "get_memories", {"limit": 20}, _memory_ctx())
+            first = sse.execute_tool(UID, 'get_memories', {'limit': 20}, _memory_ctx())
             with pytest.raises(ToolExecutionError) as exc:
                 sse.execute_tool(
-                    UID,
-                    "get_memories",
-                    {"cursor": page1["next_cursor"], "categories": ["work"]},
-                    _memory_ctx(),
+                    UID, 'get_memories', {'cursor': first['next_cursor'], 'categories': ['work']}, _memory_ctx()
                 )
         assert exc.value.code == -32602
+        assert read.call_count == 1
 
     def test_daily_summaries_cursor_roundtrip(self):
         rows = [{"date": f"2026-06-{10 + i}"} for i in range(3)]
@@ -1027,12 +1023,13 @@ class TestMemoryKeysetPage:
         service.read_page.assert_called_once()
         service.read.assert_not_called()
 
-    def test_default_created_desc_uses_bounded_scan_not_read_page(self):
+    def test_default_created_desc_uses_complete_candidate_window(self):
         service = MagicMock()
-        service.read.return_value = []
-        with self._read_auth(), patch.object(memories_handler, "MemoryService", return_value=service):
-            sse.execute_tool(UID, "get_memories", {"limit": 5}, _memory_ctx())
-        service.read.assert_called_once()
+        service.read_mcp_filtered.return_value = ([], 0)
+        with self._read_auth(), patch.object(memories_handler, 'MemoryService', return_value=service):
+            sse.execute_tool(UID, 'get_memories', {'limit': 5}, _memory_ctx())
+        service.read_mcp_filtered.assert_called_once()
+        service.read.assert_not_called()
         service.read_page.assert_not_called()
 
     def test_truncated_inner_page_flags_scan_truncated_without_cursor(self):
@@ -1058,10 +1055,7 @@ class TestMemoryKeysetPage:
     def test_bounded_scan_walk_terminates_at_scan_cap(self):
         service = MagicMock()
 
-        def _read(_uid, *, limit, offset):
-            return [_Mem(f"m{offset + i}") for i in range(max(0, min(limit, 200 - offset)))]
-
-        service.read.side_effect = _read
+        service.read_mcp_filtered.return_value = ([{'id': f'm{i}'} for i in range(200)], 200)
         seen = []
         pages = 0
         cursor = None
@@ -1076,8 +1070,7 @@ class TestMemoryKeysetPage:
                 cursor = result.get("next_cursor")
                 if cursor is None:
                     break
-        # 200 scanned candidates drain in ten 20-item pages, then the walk
-        # ends honestly: scan_truncated stays visible, no dangling cursor.
+        # The complete 200-row candidate window drains without a dangling cursor.
         assert pages == 10
         assert cursor is None
         assert result["scan_truncated"] is False

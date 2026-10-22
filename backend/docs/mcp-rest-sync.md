@@ -123,9 +123,9 @@ New composite indexes are declared in the registry and generated manifest. While
 an index builds, the bounded single-field fallback retains the timestamp bound,
 rechecks every predicate, and emits fallback telemetry. A candidate set above
 5000 rows per store returns `memory_filter_window_exceeded`, never a successful
-partial empty page. Narrow the filter. Unfiltered global sorts scan up to 5000
-rows and return `memory_scan_incomplete` when their complete order cannot be
-proved. Use `updated_desc` with a cursor for larger exports.
+partial empty page. Narrow the filter. Unfiltered `created_desc` and `manual_first` use the same complete bounded
+candidate window; they never globally sort an unproved prefix of the universal
+service view. Candidate overflow returns `memory_filter_window_exceeded`. Use `updated_desc` with a cursor for larger exports.
 `scanned_count` counts deduplicated candidate documents examined before policy
 filtering; `matched_count` counts eligible matches in the materialized filtered
 window.
