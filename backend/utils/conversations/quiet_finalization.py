@@ -5,8 +5,11 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from google.api_core.exceptions import InvalidArgument
+
 from config.listen_quiet_finalization import enabled
 from database import conversation_quiet_checks as checks_db
+from database._client import is_document_size_limit_error
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
@@ -19,6 +22,8 @@ from utils.metrics import CONVERSATION_ORPHANED_UNFINALIZED
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+
+DOCUMENT_SIZE_LIMIT = 'document_size_limit'
 
 
 def _dispatch(check: dict[str, Any]) -> None:
@@ -89,14 +94,39 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
             checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
         return 'empty_deleted' if deleted else 'deferred'
     CONVERSATION_ORPHANED_UNFINALIZED.inc()
-    result = lifecycle.request_finalization(
-        check['uid'],
-        check['conversation_id'],
-        has_byok_keys=False,
-        trigger=ProcessingTrigger.SERVER_RECOVERY,
-        require_cloud_tasks=True,
-        recovery_cutoff=check['recovery_cutoff'],
-        require_expired_recording_lease=True,
-        firestore_client=firestore_client,
-    )
+    try:
+        result = lifecycle.request_finalization(
+            check['uid'],
+            check['conversation_id'],
+            has_byok_keys=False,
+            trigger=ProcessingTrigger.SERVER_RECOVERY,
+            require_cloud_tasks=True,
+            recovery_cutoff=check['recovery_cutoff'],
+            require_expired_recording_lease=True,
+            firestore_client=firestore_client,
+        )
+    except InvalidArgument as error:
+        if not is_document_size_limit_error(error):
+            raise
+        # The conversation row sits at Firestore's 1 MiB ceiling, so the
+        # admission stamp can never be written: every reserved wake would fail
+        # the same way (#23341). Retire the successor this run already
+        # dispatched instead of answering 5xx into an endless retry; the
+        # conversation itself is left untouched.
+        checks_db.stop_quiet_check(
+            job_id,
+            check['dispatch_generation'],
+            failure_code=DOCUMENT_SIZE_LIMIT,
+            firestore_client=firestore_client,
+        )
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='quiet_check',
+            to_mode='held',
+            reason=DOCUMENT_SIZE_LIMIT,
+            outcome='exhausted',
+            log=logger,
+        )
+        logger.warning('event=quiet_finalization outcome=held reason=%s generation=%s', DOCUMENT_SIZE_LIMIT, generation)
+        return DOCUMENT_SIZE_LIMIT
     return result['status']

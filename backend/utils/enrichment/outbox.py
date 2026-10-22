@@ -22,7 +22,7 @@ from urllib.parse import urlsplit
 from time import monotonic
 
 from google.cloud import firestore
-from google.api_core.exceptions import AlreadyExists, FailedPrecondition, NotFound
+from google.api_core.exceptions import AlreadyExists, FailedPrecondition, InvalidArgument, NotFound
 from prometheus_client import Counter
 
 from utils.conversations import summary_delivery
@@ -36,8 +36,9 @@ from config.summary_guarantee import (
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
 from config.repeat_work import revision_reuse
-from database._client import get_firestore_client
+from database._client import get_firestore_client, is_document_size_limit_error
 from database.summary_processing import record_empty_failure, EMPTY_BLOCKED_REASON
+from utils.observability.fallback import record_fallback
 
 Row: TypeAlias = dict[str, Any]
 ResultT = TypeVar('ResultT')
@@ -55,6 +56,8 @@ LIVE_DEFER_SECONDS = 120
 HANDLER_PATHS = ('/v2/sync-jobs/run', '/v2/enrichment/run')
 COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into an existing enrichment obligation')
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
+# A conversation row at Firestore's 1 MiB ceiling refuses every enrichment write (#23341).
+HELD_DOCUMENT_SIZE_LIMIT = 'document_size_limit'
 
 
 class FirstSummaryCallbackPending(RuntimeError):
@@ -177,8 +180,6 @@ def _dispatch_binding() -> dict[str, str] | None:
         binding = enrichment_config.dispatch_binding()
         if valid_dispatch_binding(binding):
             return binding
-        from utils.observability.fallback import record_fallback
-
         record_fallback(
             component='sync_dispatch',
             from_mode='enrichment_queue',
@@ -522,11 +523,17 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
     superseded = False
     retry_revision = None
     empty_blocked = False
+    held_reason: str | None = None
     process_context = None
     if row.get('effects_only'):
         from utils.conversations.lazy_enrichment import enrich_settled
 
-        enrich_settled(row['uid'], row['conversation_id'], row['language'])
+        try:
+            enrich_settled(row['uid'], row['conversation_id'], row['language'])
+        except InvalidArgument as error:
+            if not is_document_size_limit_error(error):
+                raise
+            held_reason = HELD_DOCUMENT_SIZE_LIMIT
     else:
 
         lane_token = summary_delivery.LANE_CONTEXT.set(
@@ -566,6 +573,10 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             output = None
             superseded = True
             retry_revision = error.retry_revision
+        except InvalidArgument as error:
+            if not is_document_size_limit_error(error):
+                raise
+            held_reason = HELD_DOCUMENT_SIZE_LIMIT
         except summary_delivery.SummaryOutputUnavailable:
             if not process_context or not record_empty_failure(
                 get_firestore_client(), COLLECTION, document_id, owner, task_token
@@ -581,6 +592,33 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
 
     if empty_blocked:
         return 'blocked'
+
+    if held_reason is not None:
+        # No retry of the same write can ever land, so the obligation is held
+        # dormant with its reason instead of re-woken on every sweep. The
+        # conversation is not touched: the content stays, only the enrichment
+        # debt is parked until something shrinks the row.
+
+        def hold(old: Row | None) -> tuple[Row | None, None]:
+            if old is None or old.get('owner') != owner or old.get('task_token') != task_token:
+                return old, None
+            parked = dict(old)
+            parked.update(
+                dormant=True, due_at=None, lease_until=0, owner=None, held_reason=held_reason, held_at=current
+            )
+            return parked, None
+
+        _mutate(document_id, hold)
+        record_fallback(
+            component='sync_dispatch',
+            from_mode='enrichment_outbox',
+            to_mode='held',
+            reason=held_reason,
+            outcome='exhausted',
+            log=logger,
+        )
+        logger.warning('event=sync_reprocess outcome=held reason=%s', held_reason)
+        return 'held'
 
     if process_context and process_context.get('redirect_to'):
         from utils.enrichment.custody import transfer_redirect
