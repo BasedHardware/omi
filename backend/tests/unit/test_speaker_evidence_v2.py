@@ -181,7 +181,7 @@ def profile(vector, seconds=8):
     )
 
 
-@pytest.mark.parametrize('vector', [[0, 0], [float('nan'), 1], [0, 1], [1, 0, 0]])
+@pytest.mark.parametrize('vector', [[0, 0], [float('nan'), 1], [1e308, 1e308], [0, 1], [1, 0, 0]])
 def test_bad_person_samples_cannot_replace_enrollment(vector):
     person = dict(speaker_embedding=[1, 0], speech_samples=['base.wav'], speech_samples_version=3)
     with pytest.raises(ValueError):

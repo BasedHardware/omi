@@ -220,8 +220,9 @@ def build_evidence(
     similarities = []
     for i, a in enumerate(clusters):
         for b in clusters[i + 1 :]:
-            if a.id in centroids and b.id in centroids and centroids[a.id].shape == centroids[b.id].shape:
-                similarity = float(np.dot(centroids[a.id], centroids[b.id]))
+            a_vector, b_vector = centroids.get(a.id), centroids.get(b.id)
+            if a_vector is not None and b_vector is not None and a_vector.shape == b_vector.shape:
+                similarity = float(np.dot(a_vector, b_vector))
                 if isfinite(similarity) and similarity >= policy.SIMILARITY_FLOOR:
                     pair = (max(-1.0, min(1.0, similarity)), a.id, b.id)
                     if len(similarities) < MAX_SIMILARITIES:

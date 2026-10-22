@@ -18,7 +18,7 @@ def unit(vector):
     except (TypeError, ValueError):
         return None
     norm = np.linalg.norm(array)
-    return array / norm if array.size and np.isfinite(array).all() and norm > 0 else None
+    return array / norm if array.size and np.isfinite(array).all() and np.isfinite(norm) and norm > 0 else None
 
 
 def identities(cluster):
@@ -63,10 +63,13 @@ def merge_surplus(clusters, centroids, hint, *, channel_ids=()):
         _, a, b = heapq.heappop(heap)
         if a not in active or b not in active:
             continue
+        a_vector, b_vector = vectors[a], vectors[b]
+        if a_vector is None or b_vector is None:
+            continue
         left, right = active.pop(a), active.pop(b)
         weight = max(left.speech_seconds, 0.001)
         other = max(right.speech_seconds, 0.001)
-        vectors[fresh] = unit(vectors[a] * weight + vectors[b] * other)
+        vectors[fresh] = unit(a_vector * weight + b_vector * other)
         constraints[fresh] = constraints[a] | constraints[b]
         channels[fresh] = channels[a] | channels[b]
         by_key = {(c.person_id, c.source): c for c in left.candidates}

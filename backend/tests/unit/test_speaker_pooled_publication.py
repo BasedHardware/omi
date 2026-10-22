@@ -90,3 +90,25 @@ def test_bad_new_sample_keeps_enrollment_and_returns_unpublished(world, monkeypa
     )
     assert result is None
     assert world.store.rows[world.person_path] == before
+
+
+def test_malformed_pool_metadata_cannot_break_shadow_legacy_publication(world, monkeypatch):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'shadow')
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SERVE_PERCENT', '0')
+    row = world.store.rows[world.person_path]
+    row['person_voice_confirmations'] = [{'invalid': True}]
+    account, person = world.person_path[1], world.person_path[-1]
+    users.replace_person_speech_profile(
+        account,
+        person,
+        row.get('updated_at'),
+        'legacy.wav',
+        '',
+        [1, 0, 0],
+        world.conversation_path[-1],
+        ['s1', 's2'],
+        expected_receipt_generation=0,
+    )
+    stored = world.store.rows[world.person_path]
+    assert stored['speaker_embedding'] == [1, 0, 0]
+    assert stored['speech_samples'] == ['legacy.wav']

@@ -11,6 +11,7 @@ from utils.owner_voice_evidence import pool_owner_vectors
 from utils.stt.voiceprints import usable_person_voiceprint
 from utils.speakers import policy
 from utils.speakers.refinement import unit
+from utils.observability.fallback import record_fallback
 
 MAX_CONTRIBUTIONS = 5
 POOL_KEY = 'person_voice_confirmations'
@@ -37,6 +38,20 @@ def shadow_profile(uid, person, profile):
             agrees = proposed['speaker_embedding'] == profile.get('speaker_embedding')
         except PersonVoiceQualityError:
             agrees = False
+        except Exception as error:
+            QUALITY.labels(outcome='error').inc()
+            logger.warning(
+                'event=refactor_shadow lane=L2 check=person_pool outcome=error exception_type=%s', type(error).__name__
+            )
+            record_fallback(
+                component='other',
+                from_mode='person_pool_shadow',
+                to_mode='legacy_profile',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+            return
         logger.info('event=refactor_shadow lane=L2 check=person_pool outcome=%s', 'agree' if agrees else 'disagree')
 
 
