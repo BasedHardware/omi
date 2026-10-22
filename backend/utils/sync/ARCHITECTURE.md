@@ -16,6 +16,19 @@ Keep HTTP routing and database implementations outside this package. Changes mus
 
 ## Capture assignment
 
+The capture refactor's `CAPTURE_COVERAGE_MODE` defaults to shadow. Its committed
+source-frame ledger and shared bridge/incoming dedupe live in
+[`../capture/`](../capture/README.md). Serve checks WAL/batch audio before STT,
+keeps only proven uncovered frame ranges, and records surviving transcript
+frame interiors after assignment. Shadow retains the legacy paths described
+below and reports would-skip audio and dedupe disagreements. Known capture
+positions never use speaker labels or wall time as coverage evidence.
+
+Serve can bind a ledger-derived same-key owner and accepts discovered open
+same-key live rows before their first transcript. The database discovery layer
+still needs the integration change described in the L1 report for unledgered
+open rows without device metadata; assignment itself revalidates each hint.
+
 The 2026-09-19 incident was **sync adopting live-flap stubs**: failed live STT caused reconnects about every 35 seconds, creating empty conversations with near-zero extent. The legacy timestamp lookup chose a different nearest stub for each 60-second WAL, even within an ordered job. The observed jobs were legacy backfill without explicit targets or turnstile timeouts. Cross-job lookup/create races addressed by #15106 are a separate, older class.
 
 `lifecycle.ingest_sync_conversation` admits uploads through `database.conversations.assign_sync_conversation`. `assignment.py` computes connected capture components in one Firestore transaction, using codecs supplied by the database adapter. Every transactional read precedes writes. Decode/storage errors propagate; there is no uncoordinated create fallback.
