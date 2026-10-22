@@ -35,6 +35,7 @@ def redrive_one(
     expected_recovery,
     *,
     server_flags,
+    silent=False,
     clock=time.time,
     stt=transcribe,
     gpu_padded_retry_empty=False
@@ -53,7 +54,7 @@ def redrive_one(
         return 'disabled'
     protocol = SpeechRedriveStore(store, server_flags=server_flags)
     job = protocol.prepare(
-        sid, uid, plan_digest, expected_recovery, clock(), gpu_padded_retry_empty=gpu_padded_retry_empty
+        sid, uid, plan_digest, expected_recovery, clock(), gpu_padded_retry_empty=gpu_padded_retry_empty, silent=silent
     )
     marker = job['speech_redrive']
     token = marker['token']

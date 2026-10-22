@@ -125,7 +125,7 @@ MOMENT_MIN_INTERVAL_SECONDS = 60
 # --------------------------------------------------------------------------- close detection
 
 # Below this gap a new conversation simply continues the episode (it is the
-# live split itself, ``utils/conversation_continuity.DEFAULT_GAP_SECONDS``).
+# live split itself, ``models/conversation_continuity.DEFAULT_GAP_SECONDS``).
 CONTINUE_GAP_SECONDS = 120
 # At or above this gap the episode is over without asking: the next speech opens
 # a new episode (reason ``gap``), and a read that finds an episode this idle

@@ -762,6 +762,11 @@ MEETING_NOTES_EVIDENCE_WAIT_TOTAL = Counter(
     ['outcome'],
 )
 
+CONVERSATION_ORPHANED_UNFINALIZED = Counter(
+    'omi_conversation_orphaned_unfinalized',
+    'Quiet content-bearing conversations observed without a finalization job and with no live recording lease',
+)
+
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',
     'Durable listen finalization jobs replayed by the reconciler',

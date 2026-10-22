@@ -8,7 +8,7 @@ precondition is checked against current data, not the caller's snapshot.
 
 Partition, exclusions and gap arithmetic follow the sync bridge
 (``utils/sync/live_overlap.compatible_capture`` / ``assignment.auto_mergeable`` and
-``utils/conversation_continuity``) so the two merge paths agree on what a
+``models/conversation_continuity``) so the two merge paths agree on what a
 device partition and a user-managed row are.
 """
 
