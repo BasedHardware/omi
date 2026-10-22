@@ -82,7 +82,6 @@ async def prepare(source: Publication, upload: Callable[[], dict]) -> None:
                 record_publication_retry('retried_ok', transport_cause(last_error) or 'timeout')
                 record_staging_retry('retried_ok')
             return
-        cause = transport_cause(last_error)
         if not transient(last_error):
             record_staging_retry('permanent')
             raise last_error
