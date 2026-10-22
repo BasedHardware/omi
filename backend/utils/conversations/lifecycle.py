@@ -26,7 +26,7 @@ from database.firestore_transaction_retry import (
     FirestoreContentionExhausted,
     is_transaction_contention,
 )
-from database._client import is_expired_transaction_error
+from database._client import is_expired_transaction_error, is_transient_availability_error
 from models.conversation_enums import ConversationStatus
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
@@ -102,6 +102,18 @@ def _is_recording_session_transient(error: BaseException) -> bool:
       ×70/30m as ``recording session lease renewal failed`` tracebacks, and
       its ``open_recording_session`` sibling added ×33 more).
 
+    - availability blips: a 503 ``ServiceUnavailable`` / 504
+      ``DeadlineExceeded`` / 500 ``InternalServerError`` from the data plane
+      mid-transaction — the same momentary shapes ``conversation_scan`` and
+      ``mcp_auth_read`` already retry. The write layer's transaction budgets
+      replay contention but deliberately pass an unrelated provider failure
+      through untouched, so one blip on the renewal — the write the session
+      issues every single minute of a live recording — surfaced as a full
+      traceback (prod backend-listen 2026-10-22: the renewal boundary
+      ×32/30m, after the contention/retired-id drains). Nothing was written;
+      the next minute's audio activity re-arms the renewal, so this is the
+      bounded transient, not a failed write.
+
     A retirement that survives the restart budget is the same bounded
     transient by construction: a fresh transaction was already minted for
     every replay, so a drain means the burst outlived the budget, not that a
@@ -114,6 +126,7 @@ def _is_recording_session_transient(error: BaseException) -> bool:
         isinstance(error, FirestoreContentionExhausted)
         or is_transaction_contention(error)
         or is_expired_transaction_error(error)
+        or is_transient_availability_error(error)
     )
 
 
@@ -885,12 +898,33 @@ def open_live_recording_session(
     A recording-session document can outlive a deliberately deleted empty
     conversation. Such a binding is a tombstone, never an authority to create
     the old conversation ID again.
+
+    The probe read runs before the transactional open, outside every retry
+    budget, so one data-plane availability blip on it used to escape this
+    boundary uncaught and kill the reconnect's open. Degrading the probe to
+    "no existing binding" costs nothing: the transactional open below is the
+    authority on existence (it re-reads the document inside its own retry
+    budgets and its tombstone fence still applies), and a real permanent
+    failure resurfaces there with the boundary's own classification.
     """
-    existing = recording_sessions_db.get_recording_session(
-        uid,
-        recording_session_id,
-        firestore_client=firestore_client,
-    )
+    try:
+        existing = recording_sessions_db.get_recording_session(
+            uid,
+            recording_session_id,
+            firestore_client=firestore_client,
+        )
+    except Exception as error:
+        if recording_session_mode() == 'enforce':
+            raise
+        if not is_transient_availability_error(error):
+            raise
+        logger.warning(
+            'recording session open probe contended; deferring to the transactional open uid=%s session=%s proposed=%s',
+            uid,
+            recording_session_id,
+            proposed_conversation_id,
+        )
+        existing = None
     binding = open_recording_session(
         uid,
         recording_session_id,

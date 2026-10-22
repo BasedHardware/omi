@@ -2096,6 +2096,30 @@ traceback and the `omi_fallback_total` degradation event). The boundary
 arm is deliberately mode-independent: cleanup fail-open only ever delays a
 delete of an empty row, so there is no enforce raise to preserve.
 
+Since 2026-10-22 the same four boundaries learned the availability half of
+the transient family. The write layer's budgets replay contention and
+retired ids but deliberately pass an unrelated provider failure through
+untouched, so one momentary data-plane blip — 503 `ServiceUnavailable`,
+504 `DeadlineExceeded`, 500 `InternalServerError`, the same set
+`conversation_scan` and `mcp_auth_read` already retry — walked out of the
+budget into the failed-write arm: a full traceback plus an
+`omi_fallback_total` degradation event for a failure nothing was written
+for and the session's own cadence re-attempts (the renewal every minute of
+a live recording, the open every reconnect, the event every callback).
+The boundaries classify that availability set through
+`is_transient_availability_error` in the shared
+`_is_recording_session_transient` test, so a blip keeps the log-only
+transient arm — WARNING (`recording session lease renewal contended` /
+`open contended` / `event contended` / `cleanup contended`), no stack
+trace, no degradation event — while `PermissionDenied`, the 1 MiB
+`InvalidArgument`, and every deterministic refusal keep the failed-write
+classification with its traceback. The live-open boundary also probes the
+session document with a plain read before its transactional open, outside
+every budget; a blip on that probe now defers to the transactional open
+(`recording session open probe contended`) instead of escaping the
+boundary uncaught and killing the reconnect, and the transactional open
+stays the authority on existence — its tombstone fence still applies.
+
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. The
 durable receipt projection remains on the finalization write path. The disabled

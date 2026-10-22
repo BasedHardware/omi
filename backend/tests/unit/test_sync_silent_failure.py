@@ -824,6 +824,7 @@ class TestProcessSegmentReal:
         # test here raises a Firestore error, so the stub answers "not one".
         sys.modules['database._client'].is_document_size_limit_error = lambda error: False
         sys.modules['database._client'].is_expired_transaction_error = lambda error: False
+        sys.modules['database._client'].is_transient_availability_error = lambda error: False
         sys.modules['database._client'].FIRESTORE_DOCUMENT_KINDS = frozenset({'none'})
         sys.modules['database._client'].firestore_document_kind = lambda error: 'none'
         sys.modules['database._client'].firestore_error_document_path = lambda error: None

@@ -4,7 +4,13 @@ from threading import Lock
 from typing import Any
 
 import os
-from google.api_core.exceptions import Aborted, InvalidArgument
+from google.api_core.exceptions import (
+    Aborted,
+    DeadlineExceeded,
+    InternalServerError,
+    InvalidArgument,
+    ServiceUnavailable,
+)
 from google.cloud import firestore
 
 from database.document_ids import document_id_from_seed
@@ -30,6 +36,7 @@ __all__ = [
     "get_users_uid",
     "is_document_size_limit_error",
     "is_expired_transaction_error",
+    "is_transient_availability_error",
     "run_transactional",
 ]
 
@@ -312,6 +319,30 @@ def is_expired_transaction_error(error: BaseException) -> bool:
     the dead id, so the read-path ``Aborted`` has to be recognized here.
     """
     return isinstance(error, (InvalidArgument, Aborted)) and _EXPIRED_TRANSACTION_MARKER in str(error).lower()
+
+
+# Google availability codes whose answer changes on a redial: the data plane is
+# momentarily unable or too slow to answer this attempt (503 unavailable, 504
+# deadline, 500 internal). Conversation_scan's query retry and mcp_auth_read's
+# read retry both replay exactly this set; the same evidence is a bounded
+# transient for the recording-session writers — nothing was written, and the
+# operation's natural cadence (the next minute's lease renewal, the next
+# reconnect's open, the next lifecycle event) is the retry.
+_TRANSIENT_AVAILABILITY_ERRORS = (ServiceUnavailable, DeadlineExceeded, InternalServerError)
+
+
+def is_transient_availability_error(error: BaseException) -> bool:
+    """True for a momentary Firestore availability failure a redial can answer.
+
+    Covers the transport-level transient set the rest of ``database/`` already
+    retries (``conversation_scan._scan_retry``, ``mcp_auth_read``): 503
+    ``ServiceUnavailable``, 504 ``DeadlineExceeded``, 500 ``InternalServerError``.
+    Deliberately narrower than "any exception": permanent refusals
+    (``PermissionDenied``, ``FailedPrecondition``, the document-size
+    ``InvalidArgument``) and deterministic schema failures keep their callers'
+    failed-write classification.
+    """
+    return isinstance(error, _TRANSIENT_AVAILABILITY_ERRORS)
 
 
 _DOCUMENT_SIZE_LIMIT_MARKER = "exceeds the maximum allowed size"

@@ -77,8 +77,10 @@ def make_database_client_stub() -> ModuleType:
     client_mod.run_transactional = lambda client, operation: operation(client.transaction())
     # The lifecycle owner classifies the retired-transaction 400 through this
     # seam at import time; the stub must answer it so process_conversation and
-    # the routers import cleanly under memory isolation.
+    # the routers import cleanly under memory isolation. The availability
+    # half of the same classifier rides the same import.
     client_mod.is_expired_transaction_error = lambda error: False
+    client_mod.is_transient_availability_error = lambda error: False
     # The data-plane seam (database/_client.py's get_data_plane_firestore_client()):
     # memory_apply_store, jit_proactivity_store, and screen/frame sync import
     # `data_plane_db` at their module boundary instead of the shared `db` above.
