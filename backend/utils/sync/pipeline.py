@@ -1443,6 +1443,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         'client_platform': client_platform,
         'geolocation': geolocation,
         'source_position_map': source_position_map,
+        'recording_session_id': recording_session_id,
         'lineage_binding': lineage_binding,
         'sync_lane': sync_lane,
         'origin': cap_dispatch_lane,

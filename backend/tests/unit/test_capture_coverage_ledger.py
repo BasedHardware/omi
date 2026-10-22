@@ -52,6 +52,15 @@ def test_overlap_subtraction_and_multiple_conversation_owners(ledger, identity):
     assert result.covering_conversation_id is None
 
 
+def test_retry_does_not_reorder_multiple_records(ledger, identity):
+    uid, key = identity
+    coverage.record(uid, key, rec('first', 'live', (10, 20)))
+    coverage.record(uid, key, rec('second', 'sync', (30, 40)))
+    before = sum(len(tx.sets) for tx in ledger.transactions)
+    coverage.record(uid, key, rec('first', 'live', (10, 20)))
+    assert sum(len(tx.sets) for tx in ledger.transactions) == before
+
+
 @pytest.mark.parametrize(
     'field,value',
     [
@@ -288,3 +297,13 @@ def test_ledger_target_is_only_a_serve_binding_hint(ledger, identity, tmp_path, 
     assert sync_coverage.covering_target(uid, (mapping(key), 0), path) == 'committed'
     monkeypatch.setenv(coverage.FLAG, 'shadow')
     assert sync_coverage.covering_target(uid, (mapping(key), 0), path) is None
+
+
+@pytest.mark.parametrize('mode,expected', [('shadow', 1), ('serve', 0)])
+def test_cap_held_segment_rechecks_before_paid_recovery(ledger, identity, tmp_path, monkeypatch, mode, expected):
+    uid, key = identity
+    coverage.record(uid, key, rec('committed', 'live', (0, 10)))
+    path = wav(tmp_path)
+    monkeypatch.setenv(coverage.FLAG, mode)
+    paths, _, _, _ = sync_coverage.held_segment(uid, path, {'source_position_map': [mapping(key), 0]})
+    assert len(paths) == expected

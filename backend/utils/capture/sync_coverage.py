@@ -179,3 +179,36 @@ def record_sync(
             )
     except Exception as error:
         failed('record', error)
+
+
+def held_segment(uid, path, meta):
+    """Recheck an old VAD hold before paying for its recovery transcription."""
+    position = meta.get('source_position_map')
+    original = ({path}, {path: tuple(position) if position else None}, {}, {})
+    if not position or not refactor_modes.shadow_or_serve(coverage.FLAG):
+        return original
+    import wave
+
+    try:
+        mapping, sample_start = position
+        with wave.open(path, 'rb') as audio:
+            count = audio.getnframes()
+        first, last = source_coordinate(mapping, sample_start), source_coordinate(mapping, sample_start + count)
+        # Splitting through a source frame needs a richer sample receipt; abstain.
+        if first is None or last is None or first[1] or last[1]:
+            return original
+        frame_start = mapping['claim']['source_frame_start']
+        offsets = mapping['offsets'][first[0] - frame_start : last[0] - frame_start + 1]
+        claim = {**mapping['claim'], 'source_frame_start': first[0], 'frame_count': last[0] - first[0]}
+        subset = {**mapping, 'claim': claim, 'offsets': [value - sample_start for value in offsets]}
+        paths, maps, _ = trim_maps(
+            uid,
+            [path],
+            {path: subset},
+            device_id=meta.get('client_device_id'),
+            recording_session_id=meta.get('recording_session_id'),
+        )
+        return set(paths), {p: (m, 0) for p, m in maps.items()}, {}, {}
+    except Exception as error:
+        failed('held_admit', error)
+        return original

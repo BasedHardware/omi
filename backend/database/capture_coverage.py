@@ -44,7 +44,10 @@ def merge_record(document: dict, key: CaptureKey, rec: CoverageRecord) -> dict:
     )
     spans = coverage_union(Span(r.start, r.end) for r in [*(previous.ranges if previous else []), *rec.ranges])
     merged = rec.model_copy(update={'ranges': [FrameRange(start=s.start, end=s.end) for s in spans]})
-    rows = [row.model_dump() for row in records if row is not previous] + [merged.model_dump()]
+    rows = sorted(
+        [row.model_dump() for row in records if row is not previous] + [merged.model_dump()],
+        key=lambda row: (row['conversation_id'], row['origin']),
+    )
     result = {'version': 1, 'key': payload, 'records': rows}
     if len(rows) > MAX_RECORDS or sum(len(row['ranges']) for row in rows) > MAX_INTERVALS:
         raise ValueError('capture coverage capacity exceeded')

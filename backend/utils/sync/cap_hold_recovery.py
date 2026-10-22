@@ -292,6 +292,11 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                         target_conversation_id=context.get('target_conversation_id'),
                         geolocation=geolocation,
                         source_position_map=context.get('source_position_map'),
+                        **(
+                            {'recording_session_id': context['recording_session_id']}
+                            if context.get('recording_session_id')
+                            else {}
+                        ),
                         lineage_binding=context.get('lineage_binding'),
                         sync_lane=meta.get('sync_lane', 'fresh'),
                         cap_recovery=True,
