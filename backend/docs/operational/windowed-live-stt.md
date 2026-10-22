@@ -1,5 +1,33 @@
 # Windowed TDT live rollout
 
+## Funded window finalize and local-send attribution
+
+The funded cap proxy advertises the underlying window class. Managed VAD pauses
+therefore call `finalize(vad_pause=True)` through that proxy. The proxy must
+forward the provider arguments; a narrower signature raises a local `TypeError`,
+which the send boundary reports as `send_failed` even though no HTTP request or
+WebSocket failed. The cap proxy preserves this call with
+`STT_CAP_FINALIZE_FORWARD_ENABLED` on by default. `false`, `0`, or `off` selects
+generic no-argument finalize as an emergency fallback without recreating the
+signature exception. Held providers remain unopened in either mode.
+Generic finalize omits the ordinary-speech guard, so sub-second speech blips
+may flush earlier in that emergency mode.
+
+`omi_stt_local_send_failures_total{provider,phase,exception_class}` and the
+`event=live_stt_local_send_failure` log distinguish raw send/refusal, usage
+accounting, capture mapping, finalize and the caller boundary. Labels and log
+fields are bounded; exception messages, content, IDs and endpoints are omitted.
+Logs also record raw dead/closed state and whether the socket is a cap proxy.
+These diagnostics do not change provider-health classification, routing stages,
+admission caps, deadlines or GPU placement. They count local boundary events,
+not unique failed sessions; caller and inner diagnostics can overlap.
+
+For a listen train carrying this fix, compare the new finalize/TypeError count,
+`send_failed` settlements, gate recovery stages, transcript availability and
+window POST latency against the previous release. Preserve the automatic gate;
+do not delete health keys or force an unbench. Deploy only in the approved
+22:00–13:00Z window unless the lead rules otherwise.
+
 The September 2026 live-chain incident exposed three different contracts:
 configured order did not govern connection fallback; account-state refusals were
 retried as transient failures; the healthy batch TDT model was not a live leg.

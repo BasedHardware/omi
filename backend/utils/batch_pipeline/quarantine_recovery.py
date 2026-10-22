@@ -28,6 +28,7 @@ from config.batch_pipeline import (
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_policy import load_stage_policy, refresh_disabled_recovery
 from config.policy import RecoveryPolicy, kill_switch
+from config.stt_provider_policy import HELD_RECOVERY_SECOND_PROVIDER
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
 from database.batch_pipeline_quarantine_recovery import RecoveryStore, recovery_candidates, cancel_fenced_recovery
 from utils.batch_pipeline.contracts import WorkItem, projection_speech_spans
@@ -55,8 +56,10 @@ logger = logging.getLogger(__name__)
 REWAKE_AFTER_HELD_SECONDS = 120
 # Consecutive failed custody probes before a new wake is minted regardless.
 MAX_WAKE_PROBE_ERRORS = 3
-# Billing label for config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER.
-SECOND_PROVIDER = 'deepgram'
+# Billing label from config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER.
+# None means no second provider exists (Deepgram retired 2026-08-27, no
+# contract); eligibility answers False and the second call never dispatches.
+SECOND_PROVIDER = HELD_RECOVERY_SECOND_PROVIDER
 SECOND_PROVIDER_CALLS = Counter(
     'omi_batch_recovery_second_provider_total',
     'Second multilingual recovery calls after a valid-empty Modulate response',
@@ -198,6 +201,10 @@ def record_accepted(owner_id, provider, seconds):
 
 
 def second_provider_eligible(job, empty):
+    # Deepgram retired 2026-08-27; with no second provider configured, the
+    # unit settles through Modulate-only recovery instead of a second call.
+    if SECOND_PROVIDER is None:
+        return False
     speech = sum(span['end'] - span['start'] for span in empty.spans)
     guarded = (job.get('worker_failure') or {}).get('reason') == 'unsupported_language'
     return second_multilingual_enabled() and (

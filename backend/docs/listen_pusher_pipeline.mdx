@@ -32,6 +32,12 @@ Denial preserves receiving and existing audio storage paths; accepted provider
 work drains. Custom/on-device STT and flag-off metering retain their behavior.
 The [dispatch contract](stt-cap-dispatch.md) also documents sync holds, recovery,
 BYOK funding, additive metrics and the per-client activation decision.
+The cap proxy forwards provider-specific finalize arguments, including window
+VAD `finalize(vad_pause=True)`. `STT_CAP_FINALIZE_FORWARD_ENABLED` defaults on;
+false/0/off uses generic finalize without reopening held providers. That emergency
+mode can flush sub-second speech fragments earlier because it omits the ordinary
+speech guard. See [windowed live STT](operational/windowed-live-stt.md) for bounded
+local-send phase/exception attribution and the listen-train acceptance checks.
 Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
 ingestion, and atomically checkpoints ingest proof alongside the conversation.
 Before every new recovery provider intent (including retries), an always-on,
