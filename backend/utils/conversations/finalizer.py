@@ -28,6 +28,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.episode_runtime import process_with_episode_budget
+from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import smart_merge_step
 from utils.conversations.smart_merge_policy import is_donor
@@ -204,7 +205,9 @@ async def finalize_persisted_conversation(
     if fenced is not None:
         return fenced
 
-    if conversation.status != ConversationStatus.completed:
+    silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
+
+    if not silent_backfill and conversation.status != ConversationStatus.completed:
         outcome = await await_meeting_evidence(uid, conversation_id, conversation_data, trigger=trigger)
         if outcome != 'not_applicable':
             # Transcript tail segments can land during the wait. Process the durable row as it
@@ -218,7 +221,7 @@ async def finalize_persisted_conversation(
 
     stage = 'geolocation'
     try:
-        if is_donor(conversation_data):
+        if is_donor(conversation_data) and not silent_backfill:
             # Resume precedes the fanout fence, but never the job ownership fence.
             # A worker can wake after expiry/reclaim or after the job terminalizes.
             stage = 'donor_resume_admission'
@@ -270,9 +273,9 @@ async def finalize_persisted_conversation(
         # canonical start-time snapshot. Redis remains only a compatibility
         # fallback for clients released before that contract.
         persisted_geolocation = getattr(conversation, 'geolocation', None)
-        if isinstance(persisted_geolocation, Geolocation):
+        if isinstance(persisted_geolocation, Geolocation) and not silent_backfill:
             conversation.geolocation = await async_resolve_geolocation(persisted_geolocation)
-        else:
+        elif not silent_backfill:
             geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
             if geolocation:
                 record_fallback(
@@ -298,7 +301,8 @@ async def finalize_persisted_conversation(
         stage = 'processing'
         if conversation.status != ConversationStatus.completed:
             await warm_rollout_cohorts(uid)
-            _maybe_start_shadow(uid, conversation)
+            if not silent_backfill:
+                _maybe_start_shadow(uid, conversation)
         persistence: dict[str, bool] = {'owned': True}
         derived_effects: list = []
         derived_disposition: list[DerivedEffectsDisposition] = [DerivedEffectsDisposition.RUN]
@@ -341,7 +345,7 @@ async def finalize_persisted_conversation(
 
         # Producer rollback never abandons an already reserved retained recording.
         # Persist its obligation before the finalization job can complete.
-        if conversation_data.get('record_lane_owner') == 'batch_live_v1':
+        if not silent_backfill and conversation_data.get('record_lane_owner') == 'batch_live_v1':
             await run_blocking(db_executor, register_recording, uid, {**conversation_data, **conversation.model_dump()})
 
         # Ownership fence before any canonical side effect.  The lifecycle
@@ -359,6 +363,22 @@ async def finalize_persisted_conversation(
             dispatch_generation,
             lease_epoch,
         )
+        if silent_backfill:
+            if fanout['status'] == 'completed':
+                return ConversationFinalizationDisposition.completed
+            if fanout['status'] == 'fenced':
+                return ConversationFinalizationDisposition.fenced
+            if fanout['status'] != 'claimed':
+                raise ConversationFinalizationError('fanout_lease_conflict')
+            if not await run_blocking(
+                db_executor,
+                lifecycle_service.complete_finalization_fanout,
+                finalization_job_id,
+                dispatch_generation,
+                lease_epoch,
+            ):
+                raise ConversationFinalizationError('fanout_completion_conflict')
+            return ConversationFinalizationDisposition.completed
         if fanout['status'] == 'claimed':
             # Folding into the preceding conversation happens behind the claim and
             # before any derived effect of this one; a donor skips all of them.
@@ -597,7 +617,7 @@ async def _load_admitted_conversation(
         uid,
         conversation_id,
         read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
-        include_transcript_decode_status=trigger is ProcessingTrigger.SERVER_RECOVERY,
+        include_transcript_decode_status=is_recovery_trigger(trigger),
     )
     if not conversation_data:
         # A prior delivery can have durably completed fanout just before the
@@ -623,9 +643,15 @@ async def _load_admitted_conversation(
         )
         return ConversationFinalizationDisposition.fenced, None, None
 
+    if trigger is ProcessingTrigger.SILENT_BACKFILL and conversation_data.get('record_lane_owner'):
+        return ConversationFinalizationDisposition.fenced, None, None
     for _ in range(3):
         try:
-            owner = await run_blocking(db_executor, reserve_recording, uid, conversation_data)
+            owner = (
+                None
+                if trigger is ProcessingTrigger.SILENT_BACKFILL
+                else await run_blocking(db_executor, reserve_recording, uid, conversation_data)
+            )
             break
         except RecordOwnerContention:
             # Listen may append between the existing read and CAS. Refresh in
@@ -636,7 +662,7 @@ async def _load_admitted_conversation(
                 uid,
                 conversation_id,
                 read_site=FirestoreReadSite.FINALIZER_JOB_REPLAY,
-                include_transcript_decode_status=trigger is ProcessingTrigger.SERVER_RECOVERY,
+                include_transcript_decode_status=is_recovery_trigger(trigger),
             )
             if not conversation_data:
                 return ConversationFinalizationDisposition.fenced, None, None

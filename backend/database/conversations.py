@@ -1253,7 +1253,7 @@ def persist_processing_result_with_lifecycle(
             ):
                 raise RecoveryStructureUnavailableError('server recovery discard lost to protected content')
         decision = write_data.get('relevance_decision')
-        if isinstance(decision, dict) and decision.get('trigger') == 'server_recovery':
+        if isinstance(decision, dict) and decision.get('trigger') in {'server_recovery', 'silent_backfill'}:
             # Recovery enriches the durable capture; neither model normalization
             # nor a stale snapshot owns its encoding, audio, or speaker metadata.
             for field in (
