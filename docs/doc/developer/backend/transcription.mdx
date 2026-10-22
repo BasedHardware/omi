@@ -814,3 +814,17 @@ PTT, multi-channel, custom STT and BYOK stay outside this rollout. Provider chan
 retain session-relative audio timestamps and separate speaker epochs. Detailed
 controls, capacity arithmetic and rollback are in
 [`backend/docs/operational/windowed-live-stt.md`](https://github.com/BasedHardware/omi/blob/main/backend/docs/operational/windowed-live-stt.md).
+
+### Committed capture and continuation uploads
+
+First-party capture clients can receive `capture_committed` events after transcript
+and source-frame coverage are durable. A receipt identifies a capture stream and
+an exact frame interval; transport acknowledgement alone does not establish a
+saved transcript. Clients retain audio when identity or interval coverage is
+unknown.
+
+Long on-device transcripts can use indexed continuation chunks sharing one client
+session identity. Chunks are immutable while staged, retries are idempotent, and
+incomplete assembly does not create a completed conversation. Clients must retain
+retryable audio when continuation or exact frame admission is unavailable. These
+capabilities are additive and depend on server/client rollout support.

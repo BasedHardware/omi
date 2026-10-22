@@ -3,13 +3,13 @@ import { getDb } from "@/lib/firebase/admin";
 import { requireScope } from "@/lib/auth";
 import { hasScope } from "@/lib/admin-access";
 import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
-import { getStripe } from "@/lib/stripe";
+import { getStripeRead } from "@/lib/stripe";
 import { updateUserSubscriptionDetails } from "@/lib/utils/user-subscription";
 export const dynamic = "force-dynamic";
 
 // Function to fetch Stripe payment details
 async function fetchStripePaymentDetails(paymentId: string) {
-  const stripe = getStripe();
+  const stripe = getStripeRead();
   try {
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentId);
 

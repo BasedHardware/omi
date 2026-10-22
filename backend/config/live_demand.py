@@ -1,8 +1,11 @@
 """Dark-by-default phase-4 live demand cohort; invalid settings retain vendors."""
 
-import hashlib
 import math
 import os
+
+from config.refactor_switches import default_off
+
+from config.policy.batch import cohort_bucket
 
 from config.rollout_cohorts import in_rollout_cohort
 from dataclasses import dataclass
@@ -28,12 +31,12 @@ class LiveDemandConfig:
             return self.admitted
         if not self.enabled or not uid:
             return False
-        bucket = int.from_bytes(hashlib.sha256(('live-demand:' + uid).encode()).digest()[:8], 'big')
+        bucket = cohort_bucket(uid, 'live-demand', bits=64)
         return (
             (uid in self.uids)
             if explicit
             else in_rollout_cohort(uid, 'stt-live-demand', legacy_members=tuple(self.uids))
-        ) or bucket / 2**64 * 100 < self.percent
+        ) or bucket < self.percent
 
 
 def resolve_live_demand(*, flags=None) -> LiveDemandConfig:
@@ -55,7 +58,9 @@ def resolve_live_demand(*, flags=None) -> LiveDemandConfig:
         if not math.isfinite(percent) or not 0 <= percent <= 100 or not math.isfinite(dwell) or not 5 <= dwell <= 300:
             return LiveDemandConfig()
         return LiveDemandConfig(
-            env.get('STT_LIVE_DEMAND_ENABLED', 'false').lower() == 'true',
+            default_off(
+                'STT_LIVE_DEMAND_ENABLED', env.get('STT_LIVE_DEMAND_ENABLED', 'false').lower() == 'true', environ=env
+            ),
             percent,
             frozenset(filter(None, (uid.strip() for uid in env.get('STT_LIVE_DEMAND_UID_ALLOWLIST', '').split(',')))),
             dwell,

@@ -65,6 +65,9 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
+from config.refactor_modes import serving_for
+from utils.llm.notes_short_clip import quiet_minimum
+from utils.llm.output_language import resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
     deterministic_minimum_title,
@@ -344,12 +347,22 @@ def _get_structured(
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             # An unreadable stored blob is never evidence of an empty capture.
-            # Keep the pre-discard typed minimum failure before persistence.
             return Structured(), False
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
-        user_language = users_db.get_user_language_preference(uid) or language_code
+        user_language = (
+            resolve_output_language(uid, language_code)
+            if serving_for('NOTES_PACKET_V2_MODE', uid)
+            else users_db.get_user_language_preference(uid) or language_code
+        )
+        minimum = quiet_minimum(uid, conversation, tz=tz)
+        if minimum is not None:
+            if relevance_observer is not None:
+                relevance_observer(RelevanceDecision('keep', 'rule', 'content_below_floor', trigger))
+            if recovery_minimum_fallback_observer is not None:
+                recovery_minimum_fallback_observer()
+            return minimum, False
         prompt_conversation_id = (
             conversation_id
             or getattr(conversation, 'id', None)
@@ -357,7 +370,6 @@ def _get_structured(
             or str(uuid.uuid4())
         )
 
-        # Extract calendar context from external_data
         direct_calendar_context = getattr(conversation, 'calendar_meeting_context', None)
         calendar_context: Optional[CalendarMeetingContext] = (
             direct_calendar_context
@@ -375,8 +387,7 @@ def _get_structured(
                 if calendar_data:
                     calendar_context = CalendarMeetingContext(**calendar_data)
 
-        # Source records provenance; segment uploads can carry integration labels
-        # without the text-only fields of an external-integration create request.
+        # Segment uploads can carry provenance without external text-only fields.
         if isinstance(conversation, ExternalIntegrationCreateConversation) and (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
@@ -455,8 +466,7 @@ def _get_structured(
         transcript_text, action_items_transcript, speaker_map = conversation_transcripts_for_llm(uid, main_conv, people)
         has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
-        # Transcript span, not the wall window: `started_at` is the streaming-session
-        # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
+        # Use transcript span: session wall windows inflate short clips (#4056).
         duration_seconds: Optional[float] = conversation_duration_seconds(main_conv)
         segments = main_conv.transcript_segments or []
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
@@ -473,20 +483,14 @@ def _get_structured(
                     neighbor_position=neighbor.position if neighbor else None,
                 )
 
-        # Only described photos reach the model (ConversationPhoto.photos_as_string).
         has_described_photos = any((photo.description or '').strip() for photo in main_conv.photos or [])
         if trigger is ProcessingTrigger.SERVER_RECOVERY and recovery_minimum_terminal_enabled():
-            # A clear rule-level discard (empty transcript, filler, mic check)
-            # is what ordinary capture-end processing would have concluded, so
-            # recovery records the same verdict as an explicit server-recovery
-            # discard instead of surfacing an untitled row with nothing in it.
-            # Discard stays restorable (Show discarded), and no paid LLM call runs.
+            # Content-free rule discards remain restorable in recovery, without paid calls.
             ordinary = decide_relevance(
                 trigger=ProcessingTrigger.CAPTURE_END,
                 texts=[segment.text for segment in segments],
                 speech_seconds=None,
-                # An undescribed photo still contains user data, so never
-                # classify that capture as obvious transcript filler.
+                # An undescribed photo is user data, never obvious transcript filler.
                 has_photos=bool(main_conv.photos),
                 user_kept=user_kept,
                 exempt=is_release_probe_uid(uid),
@@ -532,9 +536,7 @@ def _get_structured(
                     ),
                     False,
                 )
-        # Jev replaces conv_discard only for transcript-only conversations, the
-        # population it was measured on; photos and wake-word invocations keep
-        # the existing model prompt (#14835).
+        # Jev covers transcript-only captures; photos/wake words keep their model (#14835).
         arm = relevance_arm(prompt_conversation_id)
         jev_discard: Optional[Callable[[], Optional[float]]] = None
         jev_transcript = relevance_transcript(segments)
@@ -548,10 +550,7 @@ def _get_structured(
             speech_seconds=sum(max(0.0, segment.end - segment.start) for segment in segments) if segments else None,
             has_photos=has_described_photos,
             user_kept=user_kept,
-            # The release probe's terminal contract only completes through a
-            # kept conversation (gate convention, utils/release_probe.py); its
-            # synthetic transcript's durable word count varies with STT yield
-            # (run 35583992730), so no tier may judge it.
+            # Release-probe STT yield varies; every tier must retain it (run 35583992730).
             exempt=is_release_probe_uid(uid),
             trusted_wake_word=has_wake_word_marker,
             model_discards=model_discards,
@@ -576,7 +575,6 @@ def _get_structured(
         if decision.discard:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
-        # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
 
         roster: Optional[MeetingRoster] = None
@@ -728,6 +726,8 @@ def trigger_conversation_apps(
     Omi"): no preferred app and no suggestion runs, so no template result is
     produced or paid for.
     """
+    if serving_for('NOTES_PACKET_V2_MODE', uid):
+        language_code = resolve_output_language(uid, conversation.language or language_code)
     if first_party_only and app_id:
         raise ValueError('first_party_only excludes an explicit app selection')
     if usage_attribution is None:

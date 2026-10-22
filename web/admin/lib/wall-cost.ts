@@ -1,18 +1,29 @@
-/** All-in daily cost for the TV wall ("count every cost line", David 2026-10-16).
+/** All-in daily cost for the TV wall ("count every cost line", David 2026-10-16;
+ * scope 2026-10-22: software cost per customer — no marketing, hardware or COGS).
  *
  * total = GCP net of credits (spend-based CUD arrives as FEE_UTILIZATION_OFFSET
  *         credits) − one-time incident excess
- *       + OpenAI + Anthropic invoices (billing-mode legs)
- *       + STT: a measured FinOps vendor line when one exists for the day,
- *         otherwise a constant read from the Soniox console ("estimate")
+ *       + OpenAI invoice (billing-mode leg)
+ *       + Anthropic invoice ONLY on days the admin API reports non-zero spend:
+ *         its Mercury cash is Claude team seats, which is SaaS, not per-customer
+ *         cost (David 2026-10-22)
+ *       + STT: Soniox measured from prepaid-balance deltas (the org key has
+ *         no usage API) once ≥2 snapshots exist and the day is covered by the
+ *         series — a stale or broken series falls back to the dated console
+ *         constant, flagged, never $0 or a phantom reset; Modulate modelled
+ *         (measured volume × committed price, no vendor API exists) else
+ *         Mercury cash; Deepgram combines independently (measured usage, else
+ *         its own Mercury cash) so one provider never hides another
  *       + SaaS: a complete, fresh Mercury daily aggregate when available,
- *         otherwise a fixed monthly estimate.
- * Each estimate carries the date it was read; past ESTIMATE_STALE_DAYS the
- * series flags it stale so the board can say so unless the latest day is
- * measured.
+ *         otherwise a fixed monthly estimate
+ *       + Stripe processing fees, measured from balance transactions. When the
+ *         finops key lacks the read scope the line is UNAVAILABLE, never a guess.
+ * Each manual estimate carries the date it was read and goes stale past its own
+ * line's threshold (STT 14 days, David 2026-10-22; SaaS 35 days).
  * A line that cannot be sourced is reported in `missing`, never dropped silently.
  */
 import { isLlmService } from "./services/gcp-billing";
+import { shiftDay } from "./qualified-activity";
 
 export const SAAS_MONTHLY_USD = 4800; // "Omi Cost vs Revenue" artifact, Oct 2026 row
 export const SAAS_AS_OF = "2026-10-16";
@@ -23,8 +34,27 @@ export const SAAS_AS_OF = "2026-10-16";
 export const STT_MONTHLY_USD = 5300;
 export const STT_AS_OF = "2026-10-16";
 export const STT_SOURCE = `Soniox console, Oct 2026, read ${STT_AS_OF}`;
-/** A manual estimate older than this is flagged stale on the cost frames. */
-export const ESTIMATE_STALE_DAYS = 35;
+/** A manual estimate older than its line's threshold is flagged stale on the
+ * cost frames. STT: 14 days (David 2026-10-22) — a daily measured feed exists,
+ * so a console constant must not outlive two weeks. SaaS: a monthly constant. */
+export const STT_STALE_DAYS = 14;
+export const SAAS_STALE_DAYS = 35;
+export const ESTIMATE_STALE_DAYS = SAAS_STALE_DAYS;
+export const FEES_UNAVAILABLE_REASON =
+  "Stripe processing fees unavailable: the finops Stripe key needs read access to balance transactions (GET /v1/balance_transactions, 'Balance' category)";
+/** The Soniox measured day-rate needs the org-key balance snapshots the daily
+ * finops job takes; dark table or unmounted key = unavailable, never a guess. */
+export const SONIOX_UNAVAILABLE_REASON =
+  "Soniox measured STT unavailable: the balance-snapshot line is dark (org key unmounted or the producer table not created yet)";
+/** Modulate has no usage or balance API; the modelled line needs the
+ * Prometheus per-provider seconds series and the committed rate-card price. */
+export const MODULATE_UNAVAILABLE_REASON =
+  "Modulate modelled STT unavailable: the Prometheus modulate audio-seconds series or the committed rate-card price is missing";
+/** Mercury STT cash is invoiced spend for vendors with no usage feed
+ * (Modulate ~$0.6k/mo). Soniox Mercury cash is prepaid auto-recharge
+ * (ledger 2026-08..10: near-daily $100–$700 top-ups), never a daily rate, so
+ * it reconciles monthly against the measured usage line and is never added
+ * to a day. Deepgram cash counts only on days without any measured line. */
 const DAYS_PER_MONTH = 365.25 / 12;
 /** A GCP service-day is a one-time incident when it exceeds its trailing
  * 14-day median by both $500 and 2× (e.g. the 2026-09-07 Coldline migration:
@@ -41,13 +71,35 @@ export interface CostDay {
   gcp: number;
   vertexLlm: number;
   openai: number | null;
+  /** Reported Anthropic admin-API spend for the day (null = leg off). Only
+   * non-zero values are counted in `total`; seats live in the SaaS line. */
   anthropic: number | null;
   stt: number;
-  /** STT came from a measured FinOps vendor line, not the console constant. */
+  /** STT came from a measured vendor line (Soniox balance delta or Deepgram
+   * usage), not the console constant; Modulate modelled volume is NOT measured. */
   sttMeasured: boolean;
+  /** The Soniox leg of the day is measured (balance delta or usage line). */
+  sttSonioxMeasured: boolean;
+  /** Producer flag on the measured Soniox day ('gap_spread' | 'baseline_reset'
+   * | 'snapshot_gap'). */
+  sttFlag: string | null;
+  /** The Soniox share of the STT line (balance-delta when measured). */
+  sttSonioxUsd: number;
+  /** The Modulate share of the STT line (modelled volume or Mercury cash). */
+  sttModulateUsd: number;
+  /** Modulate dollars came from the modelled volume line, not Mercury cash. */
+  sttModulateModelled: boolean;
+  /** The Deepgram share of the STT line (measured usage or Mercury cash). */
+  sttDeepgramUsd: number;
+  /** Deepgram dollars came from the measured usage line, not Mercury cash. */
+  sttDeepgramMeasured: boolean;
+  /** Mercury cash included for STT vendors with no usage feed that day. */
+  sttCash: number;
   saas: number;
   /** SaaS came from a complete, fresh Mercury FinOps aggregate. */
   saasMeasured: boolean;
+  /** Measured Stripe processing fees; null = source unavailable, never a guess. */
+  fees: number | null;
   oneTime: number;
   total: number;
 }
@@ -99,46 +151,243 @@ export interface EstimateStatus {
   monthlyUsd: number;
   asOf: string;
   ageDays: number;
+  /** This line's own threshold in days; an estimate older than it is `stale`. */
+  staleDays: number;
   stale: boolean;
 }
 
-/** Age of each manual cost constant on `now` (UTC days). */
+/** Age of each manual cost constant on `now` (UTC days), against its own line's
+ * staleness threshold: STT 14 days, SaaS 35 days. `broken` marks a line whose
+ * measured feed stopped (e.g. the Soniox snapshot series no longer covering the
+ * cutoff day): such a line is stale NOW, not only once its constant ages out —
+ * a stale snapshot must never present the dated constant as current. */
 export function estimateStatus(
   now: Date,
-  measured: Partial<Record<EstimateStatus["line"], boolean>> = {}
+  measured: Partial<Record<EstimateStatus["line"], boolean>> = {},
+  broken: Partial<Record<EstimateStatus["line"], boolean>> = {}
 ): EstimateStatus[] {
   const age = (asOf: string) =>
     Math.floor((now.getTime() - Date.parse(`${asOf}T00:00:00Z`)) / 86_400_000);
   return (
     [
-      ["STT", STT_MONTHLY_USD, STT_AS_OF],
-      ["SaaS", SAAS_MONTHLY_USD, SAAS_AS_OF],
+      ["STT", STT_MONTHLY_USD, STT_AS_OF, STT_STALE_DAYS],
+      ["SaaS", SAAS_MONTHLY_USD, SAAS_AS_OF, SAAS_STALE_DAYS],
     ] as const
-  ).map(([line, monthlyUsd, asOf]) => {
+  ).map(([line, monthlyUsd, asOf, staleDays]) => {
     const ageDays = age(asOf);
     return {
       line,
       monthlyUsd,
       asOf,
       ageDays,
-      stale: !measured[line] && ageDays > ESTIMATE_STALE_DAYS,
+      staleDays,
+      stale: (!measured[line] && ageDays > staleDays) || Boolean(broken[line]),
     };
   });
 }
 
-/** Measured date maps replace their dated estimates for those days. */
+/** Assemble the Soniox balance series for `VendorInputs` from the raw FinOps
+ * read. `lastDay` is the last day a spend row covers — the series ends there,
+ * and later days fall back to the dated constant instead of reading as $0. */
+export function sonioxBalanceInputs(
+  soniox: {
+    snapshots: number;
+    asOf: string | null;
+    spend: Record<string, number | null>;
+    flags: Record<string, string>;
+  } | null,
+  cutoff: string
+): SonioxBalanceInputs | undefined {
+  if (!soniox) return undefined;
+  const days = Object.keys(soniox.spend).sort();
+  return {
+    ready: soniox.snapshots >= 2,
+    firstDay: days[0] ?? soniox.asOf ?? cutoff,
+    lastDay: days.at(-1) ?? soniox.asOf ?? cutoff,
+    asOf: soniox.asOf,
+    spend: soniox.spend,
+    flags: soniox.flags,
+  };
+}
+
+/** True when the live Soniox series exists but no longer covers `day` (the
+ * snapshot pull stopped): uncovered days show the dated console constant, the
+ * line must say so, and its estimate is stale immediately. */
+export function sonioxSeriesBroken(
+  vendor: VendorInputs | undefined,
+  day: string
+): boolean {
+  const bal = vendor?.sonioxBalance;
+  return !!bal?.ready && day > bal.lastDay;
+}
+
+/** Measured vendor inputs by date; every map is optional and absent means the
+ * source is unavailable (never a silent zero). */
+export interface SonioxBalanceInputs {
+  /** ≥2 snapshots exist: the derived day-rate series is live (before that the
+   * labelled dated console constant stays, David 2026-10-22). */
+  ready: boolean;
+  /** first UTC day covered by the derived spend series. */
+  firstDay: string;
+  /** last UTC day covered by a published spend row. Days after it have NO
+   * measured value: they fall back to the dated constant, flagged — a stale
+   * snapshot series must never read as $0 spend. */
+  lastDay: string;
+  /** latest snapshot's UTC day, shown as the as-of date. */
+  asOf: string | null;
+  /** date → measured daily USD (null = flagged baseline-reset day). */
+  spend: Record<string, number | null>;
+  /** date → producer flag ('gap_spread' | 'baseline_reset' | 'snapshot_gap'). */
+  flags: Record<string, string>;
+}
+export interface ModulateModelledInputs {
+  /** date → modelled USD (measured volume × committed price). */
+  byDay: Record<string, { usd: number; priceAsOf?: string }>;
+  price: number | null;
+  priceAsOf: string | null;
+}
+export interface VendorInputs {
+  /** date → measured STT vendor → USD (`soniox`/`deepgram`/…), kept
+   * provider-specific so each provider combines with its own cash. */
+  sttMeasured?: Record<string, Record<string, number>>;
+  /** Soniox prepaid-balance day-rate series (replaces the usage line). */
+  sonioxBalance?: SonioxBalanceInputs;
+  /** Modulate modelled volume line (no vendor API exists). */
+  modulateModelled?: ModulateModelledInputs;
+  /** date → Mercury STT-vendor cash by vendor (soniox / deepgram / modulate). */
+  sttCash?: Record<string, Record<string, number>>;
+  /** date → complete, fresh Mercury SaaS daily USD. */
+  saasMeasured?: Record<string, number>;
+  /** date → measured Stripe processing fee USD. */
+  stripeFees?: Record<string, number>;
+}
+
+/** A date inside the live series with no published row: never a phantom
+ * `baseline_reset` (that label is reserved for an actual lower cumulative
+ * balance) and never silent $0 spend. */
+export const SONIOX_GAP_FLAG = "snapshot_gap";
+
+/** One day's STT line. Soniox: the measured balance-delta day-rate, but only
+ * on days the snapshot series actually covers (`firstDay`..`lastDay`) AND the
+ * day has a published row; a covered day with no row (snapshot gap) or a reset
+ * row falls back to the labelled estimate — the FinOps usage line, else the
+ * dated console constant — unmeasured and flagged, and beyond the last covered
+ * day the same dated fallback returns. An unknown day is NEVER booked as $0:
+ * that would silently drop Soniox spend from the all-in total (Luna r2 P1).
+ * Modulate: the modelled volume line when present, otherwise Mercury cash
+ * (labelled). Soniox Mercury cash is never added (prepaid recharge, not a
+ * rate). Deepgram combines independently: measured usage when the FinOps line
+ * has it, its Mercury cash otherwise — never suppressed by a Soniox
+ * measurement. */
+export function sttLineFor(
+  date: string,
+  { sttMeasured, sonioxBalance, modulateModelled, sttCash }: VendorInputs
+) {
+  const cash = sttCash?.[date] || {};
+  const vendors = sttMeasured?.[date] || {};
+  const bal = sonioxBalance;
+  const inSeries = !!bal?.ready && date >= bal.firstDay && date <= bal.lastDay;
+  const spend = inSeries ? bal!.spend[date] : undefined;
+  const flag = inSeries ? bal!.flags[date] : undefined;
+  // Labelled fallback for any day without a published Soniox row: the FinOps
+  // usage line when it has one, else the dated console constant.
+  const fallbackUsd = vendors.soniox ?? STT_MONTHLY_USD / DAYS_PER_MONTH;
+  const soniox = inSeries
+    ? {
+        usd: spend ?? fallbackUsd,
+        measured: spend != null,
+        flag:
+          spend == null
+            ? flag ?? SONIOX_GAP_FLAG
+            : flag === "gap_spread"
+            ? "gap_spread"
+            : null,
+      }
+    : {
+        usd: fallbackUsd,
+        measured: vendors.soniox != null,
+        flag: null,
+      };
+  const modelled = modulateModelled?.byDay[date];
+  const modulateCash = cash.modulate ?? 0;
+  const modulate = modelled
+    ? { usd: modelled.usd, modelled: true }
+    : { usd: modulateCash, modelled: false };
+  // Per-provider: Deepgram's own measured line wins over its cash; a Soniox
+  // measurement never hides Deepgram dollars again.
+  const deepgramMeasured = vendors.deepgram ?? null;
+  const deepgram = deepgramMeasured ?? cash.deepgram ?? 0;
+  return {
+    usd: soniox.usd + modulate.usd + deepgram,
+    measured: soniox.measured || deepgramMeasured != null,
+    sonioxMeasured: soniox.measured,
+    flag: soniox.flag,
+    sonioxUsd: soniox.usd,
+    modulateUsd: modulate.usd,
+    modulateModelled: modulate.modelled,
+    deepgramUsd: deepgram,
+    deepgramMeasured: deepgramMeasured != null,
+    cash:
+      (modulate.modelled ? 0 : modulateCash) +
+      (deepgramMeasured != null ? 0 : cash.deepgram ?? 0),
+  };
+}
+
+/** Modulate monthly reconciliation: modelled volume-line USD vs Mercury cash
+ * (vendor map `modulate` → stt_vendor) over the trailing `days` ending at
+ * `end` inclusive. Mercury cash is summed over EVERY day of the window,
+ * independently of modelled-row coverage — a date with cash but no Prometheus
+ * row (batch usage, a missing metric day) must widen the variance, not
+ * disappear. Null when the modelled line has no days in the window. */
+export function modulateReconciliation(
+  modelled: ModulateModelledInputs | undefined,
+  sttCash: Record<string, Record<string, number>> | undefined,
+  end: string,
+  days = 30
+): { modelledUsd: number; cashUsd: number; variancePct: number | null } | null {
+  if (!modelled) return null;
+  const start = shiftDay(new Date(`${end}T00:00:00Z`), -(days - 1))
+    .toISOString()
+    .slice(0, 10);
+  let modelledUsd = 0;
+  let observed = 0;
+  for (const [day, row] of Object.entries(modelled.byDay)) {
+    if (day < start || day > end) continue;
+    modelledUsd += row.usd;
+    observed++;
+  }
+  if (!observed) return null;
+  let cashUsd = 0;
+  for (
+    let d = new Date(`${start}T00:00:00Z`);
+    d <= new Date(`${end}T00:00:00Z`);
+    d = shiftDay(d, 1)
+  ) {
+    cashUsd += sttCash?.[d.toISOString().slice(0, 10)]?.modulate ?? 0;
+  }
+  return {
+    modelledUsd,
+    cashUsd,
+    variancePct:
+      modelledUsd > 0 ? (100 * (cashUsd - modelledUsd)) / modelledUsd : null,
+  };
+}
+
+/** Measured date maps replace their dated estimates for those days; an
+ * unavailable source stays visible in `missing` and never becomes a guess. */
 export function allInCost(
   days: BillingDay[],
   coverage: { openai?: boolean; anthropic?: boolean } = {},
-  sttMeasured: Record<string, number> = {},
-  saasMeasured: Record<string, number> = {}
+  vendor: VendorInputs = {},
+  /** The fee source itself is unreachable (missing key scope) — distinct from
+   * a day simply not being loaded yet. */
+  feesUnavailable: string | null = null
 ) {
   const oneTime = oneTimeExcess(days);
   const missing: string[] = [];
   if (coverage.openai === false) missing.push("OpenAI invoice");
-  if (coverage.anthropic === false) missing.push("Anthropic invoice");
+  if (feesUnavailable) missing.push("Stripe processing fees");
   const saasEstimate = SAAS_MONTHLY_USD / DAYS_PER_MONTH;
-  const sttUsd = STT_MONTHLY_USD / DAYS_PER_MONTH;
   const daily: CostDay[] = [...days]
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((d) => {
@@ -148,31 +397,49 @@ export function allInCost(
       const hasComponents = d.components != null;
       const openai = coverage.openai === false ? null : c.openai ?? 0;
       const anthropic = coverage.anthropic === false ? null : c.anthropic ?? 0;
+      // Team seats are SaaS cash (Mercury); the API leg counts only real spend.
+      const anthropicCounted =
+        anthropic != null && anthropic > 0 ? anthropic : 0;
       // Without components the billing total is GCP + invoices already.
       const gcpNet = hasComponents
         ? (c.gcpInfra ?? 0) + (c.vertexLlm ?? 0)
         : d.total;
       const vertexLlm = (c.vertexLlm ?? 0) - llmExcess;
       const gcp = gcpNet - excess - vertexLlm;
-      const measured = sttMeasured[d.date];
-      const stt = measured ?? sttUsd;
-      const measuredSaas = saasMeasured[d.date];
+      const stt = sttLineFor(d.date, vendor);
+      const measuredSaas = vendor.saasMeasured?.[d.date];
       const saas = measuredSaas ?? saasEstimate;
+      const fees = feesUnavailable ? null : vendor.stripeFees?.[d.date] ?? null;
       const total =
-        gcp + vertexLlm + (openai ?? 0) + (anthropic ?? 0) + stt + saas;
+        gcp +
+        vertexLlm +
+        (openai ?? 0) +
+        anthropicCounted +
+        stt.usd +
+        saas +
+        (fees ?? 0);
       return {
         date: d.date,
         gcp,
         vertexLlm,
         openai,
         anthropic,
-        stt,
-        sttMeasured: measured != null,
+        stt: stt.usd,
+        sttMeasured: stt.measured,
+        sttSonioxMeasured: stt.sonioxMeasured,
+        sttFlag: stt.flag,
+        sttSonioxUsd: stt.sonioxUsd,
+        sttModulateUsd: stt.modulateUsd,
+        sttModulateModelled: stt.modulateModelled,
+        sttDeepgramUsd: stt.deepgramUsd,
+        sttDeepgramMeasured: stt.deepgramMeasured,
+        sttCash: stt.cash,
         saas,
         saasMeasured: measuredSaas != null,
+        fees,
         oneTime: excess,
         total,
       };
     });
-  return { daily, oneTime, missing };
+  return { daily, oneTime, missing, feesUnavailable };
 }

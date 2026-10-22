@@ -511,3 +511,39 @@ class TestDailyRecapNotDesktopPaywalled:
         gen_mock.assert_called_once()
         daily_db.create_daily_summary.assert_called_once()
         send_mock.assert_called_once()
+
+
+def test_v2_recap_regenerates_in_place_on_revision_and_reuses_unchanged_inputs(notification_harness, monkeypatch):
+    from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
+
+    harness, module = notification_harness, notification_harness.module
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'serve')
+    monkeypatch.setattr(module, 'generated_compute_allowed', lambda *_args: True)
+    monkeypatch.setattr(module, 'try_acquire_daily_summary_lock', lambda *_args: True)
+    monkeypatch.setattr(module, 'release_daily_summary_lock', MagicMock())
+    monkeypatch.setattr(module, '_conversation_has_summary_content', lambda *_args: True)
+    monkeypatch.setattr(module, 'bound_daily_summary_conversations', lambda _uid, _date, rows: rows)
+    conversation = SimpleNamespace(transcript_segments=[SimpleNamespace(text='synthetic speech')], discarded=False)
+    monkeypatch.setattr(module, 'deserialize_conversations', lambda *_args: [conversation])
+    data = [{'id': 'synthetic-a', 'sync_content_revision': 1}]
+    harness.conversations_db.get_conversations.return_value = data
+    existing = {'id': 'same-recap', FINGERPRINT_FIELD: input_fingerprint(data), 'notification_delivery_completed': True}
+    harness.daily_summaries_db.get_daily_summary_by_date.return_value = existing
+    harness.daily_summaries_db.update_daily_summary = MagicMock()
+    harness.generate_summary.return_value = {'id': 'new-generator-id', 'headline': 'Updated synthetic recap'}
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    result, created, declined = module._generate_and_store_daily_summary(
+        'synthetic-account', '2026-01-01', start, start
+    )
+    assert result == existing and not created and declined is None
+    harness.generate_summary.assert_not_called()
+    data[0]['sync_content_revision'] = 2
+    result, created, declined = module._generate_and_store_daily_summary(
+        'synthetic-account', '2026-01-01', start, start
+    )
+    assert created and declined is None
+    assert result['id'] == 'same-recap' and result['notification_delivery_completed'] is True
+    harness.daily_summaries_db.create_daily_summary.assert_not_called()
+    args = harness.daily_summaries_db.update_daily_summary.call_args.args
+    assert args[1] == 'same-recap' and args[2][FINGERPRINT_FIELD] == input_fingerprint(data)
+    harness.generate_summary.assert_called_once()

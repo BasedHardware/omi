@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
-import { getOptionalStripe } from "@/lib/stripe";
+import { getOptionalStripeRead } from "@/lib/stripe";
 import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import {
   AllSubscriptionSourcesFailedError,
@@ -23,7 +23,7 @@ function cacheKey(): string {
 export { cacheKey as subscriptionsCacheKey };
 
 export async function computeSubscriptions() {
-  const stripe = getOptionalStripe();
+  const stripe = getOptionalStripeRead();
 
   if (!stripe) {
     return {

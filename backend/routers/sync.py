@@ -1,5 +1,6 @@
 from database import sync_redrive
 from utils.sync import minimal_redrive, redrive_policy, playback_build
+from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
@@ -238,6 +239,7 @@ async def _offer_shadow_upload(**kwargs) -> None:
 
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
+router.include_router(coverage_router)
 
 
 @router.post('/v2/sync-capture-manifest', response_model=SyncCaptureManifestResponse)
@@ -1865,7 +1867,6 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     if job and job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
     # A read can reconcile a proven content completion without rewriting Redis,
-    # binding a run lease or competing with the worker's terminal authority.
     from utils.sync.completed_status import get_completed_legacy_status
 
     try:
@@ -3297,7 +3298,6 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
         ):
             # Pure future downloads share this instance with a possible next
             # task. They hold no Cloud Tasks slot, job lock, ledger claim, or
-            # conversation authority. A cross-instance delivery simply misses.
             start_background_task(
                 run_blocking(storage_executor, warm_owner, uid, job_id, sequencer_epoch),
                 name='sync:owner-prefetch',

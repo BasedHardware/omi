@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
 import type Stripe from "stripe";
-import { getStripe } from "@/lib/stripe";
+import { getStripeRead } from "@/lib/stripe";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
-  const stripe = getStripe();
+  const stripe = getStripeRead();
 
   try {
     const { searchParams } = new URL(request.url);

@@ -157,7 +157,7 @@ def conversations_db():
     """Load the production query function against a minimal in-memory Firestore seam."""
     # Load the pure policy/registry before the fixture closes the utils import path.
     import config.dream_agent  # noqa: F401
-    from utils.conversations import summary_delivery
+    from utils.conversations import summary_delivery, lifecycle_clocks
     from database import sync_live_overlap
     from utils.sync import live_overlap
 
@@ -233,6 +233,7 @@ def conversations_db():
         "utils": utils,
         "utils.conversations": utils_conversations,
         "utils.conversations.summary_delivery": summary_delivery,
+        "utils.conversations.lifecycle_clocks": lifecycle_clocks,
         "utils.llm": utils_llm,
         "utils.llm.model_constants": utils_llm_model_constants,
         "utils.encryption": AutoMockModule("utils.encryption"),

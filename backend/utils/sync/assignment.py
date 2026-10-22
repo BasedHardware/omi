@@ -6,9 +6,7 @@ no expiring lock that lets a late worker overwrite a newer transcript.
 """
 
 from copy import deepcopy
-from datetime import datetime
 import logging
-import math
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
@@ -38,6 +36,9 @@ from utils.sync.live_speech_dedupe import (
     pinned_audio_timeline,
 )
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
+from utils.sync.assignment_telemetry import lineage_span_delta_bucket as _lineage_span_delta_bucket
+from utils.capture.dedupe import choose_segments
+from utils.capture.identity import assignment_keys_compatible, persist_identity
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.live_overlap import choose_live_overlap, compatible_capture, live_overlap_enabled
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
@@ -64,11 +65,11 @@ _T = TypeVar('_T')
 SYNC_CONVERSATION_BYTE_BUDGET = FIRESTORE_MAX_DOCUMENT_BYTES - 124 * 1024  # 900 KiB
 
 
-def capture_mismatch(left: dict, right: dict) -> str:
-    """Which partition fields differ, as one of sixteen fixed tokens.
+def capture_mismatch(left: dict, right: dict, uid: str | None = None) -> str:
+    """Which partition fields differ, using fixed tokens and no field values.
 
-    ``none`` exactly when ``compatible_capture`` holds: every field is compared
-    for equality, so two locked captures match. Never exposes field values.
+    Legacy checks match ``compatible_capture``. Serving also requires equality
+    of explicit capture keys; two locked captures still match.
     """
     fields = [
         name for key, name in (('source', 'source'), ('client_device_id', 'device')) if left.get(key) != right.get(key)
@@ -77,6 +78,8 @@ def capture_mismatch(left: dict, right: dict) -> str:
         fields.append('lock')
     if left.get(SYNC_CLOCK_RUN_FIELD) != right.get(SYNC_CLOCK_RUN_FIELD):
         fields.append('clock')
+    if not assignment_keys_compatible(left, right, uid):
+        fields.append('capture_key')
     return '_'.join(fields) or 'none'
 
 
@@ -128,45 +131,6 @@ def auto_mergeable(row: dict) -> bool:
         or row.get('has_transcript_corrections')
         or row.get('visibility', 'private') not in (None, 'private')
     )
-
-
-def _row_epoch(value: Any) -> float:
-    return value.timestamp() if isinstance(value, datetime) else float(value)
-
-
-def _lineage_span_delta_bucket(
-    stamp_fallback: bool, live_target_id: Optional[str], current: Optional[dict], result: dict
-) -> str:
-    """Fixed extent-growth bucket for a stamp-fallback append to the explicit live row.
-
-    Growth compares row ``started_at``/``finished_at`` only — never transcript
-    sums, ids or text. A rollover elsewhere leaves the live extent unchanged,
-    which is a zero growth, not a stretch of the new sync row.
-    """
-    if not stamp_fallback:
-        return 'none'
-    if not live_target_id:
-        return 'unknown'
-    if current is None or result.get('id') != live_target_id:
-        return '0'
-    try:
-        grown_end = _row_epoch(result.get('finished_at'))
-        grown_start = _row_epoch(result.get('started_at'))
-        prior_end = _row_epoch(current.get('finished_at'))
-        prior_start = _row_epoch(current.get('started_at'))
-    except Exception:
-        return 'unknown'
-    endpoints = (grown_end, grown_start, prior_end, prior_start)
-    if not all(map(math.isfinite, endpoints)) or grown_end < grown_start or prior_end < prior_start:
-        return 'unknown'
-    growth = (grown_end - grown_start) - (prior_end - prior_start)
-    if growth <= 0:
-        return '0'
-    if growth <= 60:
-        return '0_60'
-    if growth <= 300:
-        return '60_300'
-    return 'gt_300'
 
 
 def _flatten_rejected(reason: str) -> SyncAssignmentConflict:
@@ -335,7 +299,7 @@ def assign_in_transaction(
     temporal_live = False
     if not target_id and live_candidate_ids and live_overlap_enabled():
         live_rows = [row for cid in live_candidate_ids if (row := load(cid)) and cid not in full_ids]
-        live_id = choose_live_overlap(live_rows, incoming)
+        live_id = choose_live_overlap(live_rows, incoming, uid=user_ref.id)
         if live_id:
             target_id, target = live_id, load(live_id)
             temporal_live = True
@@ -343,7 +307,7 @@ def assign_in_transaction(
     if target and not target.get('deleted'):
         # Explicit capture proof is authoritative even before live STT produced
         # words. Only timestamp hints must exclude live-owned rows.
-        mismatch = capture_mismatch(target, incoming)
+        mismatch = capture_mismatch(target, incoming, user_ref.id)
         if mismatch != 'none':
             if redirected:
                 raise SyncAssignmentConflict('sync target provenance mismatch', subtype=Reason.PROVENANCE_MISMATCH)
@@ -374,7 +338,7 @@ def assign_in_transaction(
         and target is not None
         and sync_live_dedupe_active_for(user_ref.id)
     )
-    anchor_mismatch = capture_mismatch(own_anchor, incoming) if own_anchor else 'none'
+    anchor_mismatch = capture_mismatch(own_anchor, incoming, user_ref.id) if own_anchor else 'none'
     if anchor_mismatch != 'none':
         logger.warning('event=sync_assignment_target outcome=anchor_rejected mismatch=%s', anchor_mismatch)
         # The stored retry anchor changed source, device or lock state since it
@@ -417,7 +381,12 @@ def assign_in_transaction(
             candidates = []
             for cid in sorted(ids - matched.keys()):
                 raw = load(cid)
-                if raw and not raw.get('deleted') and interval_matches(raw, extent):
+                if (
+                    raw
+                    and not raw.get('deleted')
+                    and interval_matches(raw, extent)
+                    and assignment_keys_compatible(raw, incoming, user_ref.id)
+                ):
                     # Live and user-managed rows can only be explicit targets.
                     if not auto_mergeable(raw) and cid != plan_target_id:
                         continue
@@ -492,7 +461,17 @@ def assign_in_transaction(
                 duration = segment['end'] - segment['start']
                 segment['start'] = segment['timestamp'] - origin
                 segment['end'] = segment['start'] + duration
+            # refactor: superseded by utils.capture.dedupe when CAPTURE_COVERAGE_MODE=serve
             retained = dedupe_segments_for_merge(origin, existing, new, text_match_slop_seconds=0)
+            retained = choose_segments(
+                user_ref.id,
+                'bridge',
+                existing,
+                new,
+                retained,
+                incoming_row=row,
+                reference_row=result,
+            )
             if row['id'] != canonical:
                 for segment in retained:
                     if not segment.get('speaker_id_scope'):
@@ -567,6 +546,18 @@ def assign_in_transaction(
                 # broader clock-offset matches still require the batch gate.
                 single_match_slop_seconds=2 if plan_target and result['sync_live_target'] else 0,
             )
+        # refactor: superseded by utils.capture.dedupe when CAPTURE_COVERAGE_MODE=serve
+        survivors = choose_segments(
+            user_ref.id,
+            'incoming',
+            existing,
+            new,
+            survivors,
+            incoming_row=incoming,
+            reference_row=live_row or result,
+            conversation_rows=records,
+            proof=capture_covered_indices,
+        )
         surviving = {id(segment) for segment in survivors}
         kept = tuple(i for i, segment in indexed_new if id(segment) in surviving)
         for segment in survivors:
@@ -601,6 +592,7 @@ def assign_in_transaction(
                 result['capture_evidence'] = bounded_envelope(combined)
             else:
                 result['capture_evidence'] = incoming['capture_evidence']
+        persist_identity(user_ref.id, result, incoming, live_row)
         result['has_content'] = bool(segments)
         result['sync_content_revision'] = max([row.get('sync_content_revision') or 0 for row in records] + [0]) + 1
         verdict, rule = fragment_rule(segments)

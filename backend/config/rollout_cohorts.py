@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 from typing import Any, Callable
 
@@ -169,7 +168,10 @@ def parse_cohort(raw: str | None) -> tuple[frozenset[str], int] | None:
 
 def cohort_bucket(uid: str) -> int:
     """Existing free-tier-cohort salt/bucket; stable across hosts and widening."""
-    return int(hashlib.sha256(('free-tier-cohort:' + uid).encode()).hexdigest()[:8], 16) % 100
+    # Lazy import: policy.batch also imports runtime_percent from this module.
+    from config.policy.batch import cohort_bucket as bucket
+
+    return int(bucket(uid, 'free-tier-cohort', formula='modulo'))
 
 
 def cohort_admits(uid: str, raw: str | None) -> bool:

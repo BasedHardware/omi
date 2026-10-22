@@ -318,6 +318,10 @@ def _seed_row(store, cid, *, started_at, segments=(), status='in_progress'):
 
 def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    from database import capture_coverage as coverage_store
+    from routers.listen.coverage import record_committed
+
+    monkeypatch.setattr(coverage_store, '_client', lambda: store)
 
     def _row(cid):
         return store.rows.get(('users', UID, 'conversations', cid)) or {}
@@ -333,7 +337,7 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     class _Persistence:
         @staticmethod
         async def call(fn, *args, **kwargs):
-            if fn is conversations_db.update_conversation_segments:
+            if fn is conversations_db.update_conversation_segments or fn is record_committed:
                 return fn(*args, **kwargs)
             if fn is conversations_db.update_conversation_finished_at:
                 _uid, cid, finished = args

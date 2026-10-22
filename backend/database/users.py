@@ -1,3 +1,5 @@
+from config.refactor_modes import serving_for
+from utils.speakers.person_pool import pool_profile, retract_profile, remove_sample
 from config.firestore_read_levers import lever_enabled
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
@@ -1124,6 +1126,11 @@ def _replace_speech_profile_transaction(
     if person.get('updated_at') != expected_updated_at:
         return None  # Deleted, corrected or replaced while audio work was in flight.
     old_samples = person.get('speech_samples', [])
+    # refactor: superseded by utils.speakers.person_pool when SPEAKER_EVIDENCE_MODE=serve
+    if source and serving_for('SPEAKER_EVIDENCE_MODE', source[0]):
+        profile, old_samples = pool_profile(person, profile)
+    elif person.get('person_voice_confirmations') is not None:
+        profile = {**profile, 'person_voice_confirmations': None, 'person_voice_base': None}
     transaction.update(person_ref, {**profile, 'updated_at': datetime.now(timezone.utc)})
     return old_samples
 
@@ -1171,8 +1178,10 @@ def _invalidate_speech_profile_transaction(transaction, person_ref, conversation
     source = person.get('speech_sample_source') or {}
     # Always fence in-flight teaching, even when it has not published provenance yet.
     update = {'updated_at': datetime.now(timezone.utc)}
-    removed = []
-    if source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(segment_ids):
+    pooled, removed = retract_profile(person, [conversation_id], segment_ids)
+    if person.get('person_voice_confirmations') is not None:
+        update.update(pooled)
+    elif source.get('conversation_id') == conversation_id and set(source.get('segment_ids', [])) & set(segment_ids):
         removed = person.get('speech_samples', [])
         update.update(
             speech_samples=[], speech_sample_transcripts=[], speaker_embedding=None, speech_sample_source=None
@@ -1219,24 +1228,14 @@ def _remove_sample_transaction(transaction, person_ref, sample_path: str) -> boo
             'speaker_embedding': None,
             'speech_sample_source': None,
             'updated_at': datetime.now(timezone.utc),
+            **remove_sample(person_data, sample_path),
         },
     )
     return True
 
 
 def remove_person_speech_sample(uid: str, person_id: str, sample_path: str) -> bool:
-    """
-    Remove a speech sample path from person's speech_samples list.
-    Also removes the corresponding transcript at the same index to keep arrays in sync.
-
-    Args:
-        uid: User ID
-        person_id: Person ID
-        sample_path: GCS path to remove
-
-    Returns:
-        True if removed, False if person or sample not found
-    """
+    """Remove sample, transcript and pooled vector; False if already absent."""
     person_ref = db.collection('users').document(uid).collection('people').document(person_id)
     transaction = db.transaction()
     return _remove_sample_transaction(transaction, person_ref, sample_path)

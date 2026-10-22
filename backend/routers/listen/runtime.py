@@ -23,6 +23,7 @@ from database.live_language_profile import get_live_language_sessions
 from config.rollout_cohorts import warm_rollout_cohorts
 from config.occasion_conversations import occasion_timeout
 from utils.episodes import client_gate as episode_client_gate
+from models.capture_coverage import CaptureCommittedEvent
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -241,11 +242,13 @@ class ListenSessionRuntime:
     async def drain(self, tasks: List[asyncio.Task[Any]], *, timeout: float, label: str) -> None:
         await drain_tasks(tasks, timeout=timeout, label=label, cancel=False)
 
-    async def asend_event(self, event: MessageEvent) -> bool:
+    async def asend_event(self, event: MessageEvent | CaptureCommittedEvent) -> bool:
         if not self.state.active:
             return False
         try:
-            await self.request.websocket.send_json(event.to_json())
+            await self.request.websocket.send_json(
+                event.model_dump(mode='json') if isinstance(event, CaptureCommittedEvent) else event.to_json()
+            )
             return True
         except WebSocketDisconnect:
             self.state.active = False
@@ -258,7 +261,7 @@ class ListenSessionRuntime:
             logger.error('Listen event delivery failed type=%s', type(error).__name__)
         return False
 
-    def send_event(self, event: MessageEvent) -> None:
+    def send_event(self, event: MessageEvent | CaptureCommittedEvent) -> None:
         if self.state.active:
             self.spawn(self.asend_event(event), name='message_event')
 

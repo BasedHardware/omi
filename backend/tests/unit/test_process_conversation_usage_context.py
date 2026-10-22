@@ -79,6 +79,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         return str(uuid.UUID(bytes=seed_hash[:16], version=4))
 
     client_mod.document_id_from_seed = _document_id_from_seed
+    client_mod.run_transactional = MagicMock()
     add("database._client", client_mod)
 
     vector_db = add("database.vector_db", AutoMockModule("database.vector_db"))

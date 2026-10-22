@@ -191,3 +191,15 @@ def test_refresh_reminder_uses_existing_silent_transport():
             {'completed': False, 'status': None, 'deleted': False},
         )
     ]
+
+
+def test_merge_completion_preserves_data_only_background_transport():
+    from utils.notification_dispatch import dispatch_merge_completed
+
+    calls = []
+    transport = ModuleType('utils.notifications')
+    transport.send_merge_completed_message = lambda *args: calls.append(args)
+    with stub_modules({'utils.notifications': transport}):
+        result = dispatch_merge_completed('synthetic', 'survivor', ['source-a', 'source-b'])
+    assert result.status == NotificationDispatchStatus.DISPATCHED
+    assert calls == [('synthetic', 'survivor', ['source-a', 'source-b'])]

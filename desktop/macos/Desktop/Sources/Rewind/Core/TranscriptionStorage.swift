@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import GRDB
 
-private func withConversationCacheScope<T>(
+func withConversationCacheScope<T>(
   _ scope: ConversationCacheWriteScope?,
   generation: Int?,
   operation: () throws -> T
@@ -26,7 +26,7 @@ actor TranscriptionStorage {
   }
 
   /// Ensure database is initialized before use
-  private func ensureInitialized() async throws -> DatabasePool {
+  func ensureInitialized() async throws -> DatabasePool {
     guard let databasePool = try await repository.databasePool() else {
       throw TranscriptionStorageError.databaseNotInitialized
     }
@@ -561,7 +561,8 @@ actor TranscriptionStorage {
     for segId in segmentIds {
       try await db.write { database in
         try database.execute(
-          sql: "UPDATE transcription_segments SET personId = ?, isUser = ? WHERE sessionId = ? AND segmentId = ?",
+          sql:
+            "UPDATE transcription_segments SET personId = ?, isUser = ?, speakerLabelSource = 'manual' WHERE sessionId = ? AND segmentId = ?",
           arguments: [personId, isUser, sessionId, segId]
         )
       }
@@ -624,7 +625,7 @@ actor TranscriptionStorage {
         try database.execute(
           sql: """
             UPDATE transcription_segments
-            SET isUser = ?, personId = ?
+            SET isUser = ?, personId = ?, speakerLabelSource = 'manual'
             WHERE sessionId = ? AND segmentId IN (
                 SELECT value FROM json_each(?)
             )
@@ -638,7 +639,7 @@ actor TranscriptionStorage {
         try database.execute(
           sql: """
             UPDATE transcription_segments
-            SET isUser = ?, personId = ?
+            SET isUser = ?, personId = ?, speakerLabelSource = 'manual'
             WHERE sessionId = ? AND segmentOrder IN (
                 SELECT value FROM json_each(?)
             )
@@ -648,27 +649,6 @@ actor TranscriptionStorage {
         updatedRows += database.changesCount
       }
       return updatedRows
-    }
-  }
-
-  @discardableResult
-  func updateLiveSpeakerAssignment(
-    sessionId: Int64,
-    speakerId: Int,
-    personId: String
-  ) async throws -> Int {
-    let db = try await ensureInitialized()
-
-    return try await db.write { database -> Int in
-      try database.execute(
-        sql: """
-          UPDATE transcription_segments
-          SET isUser = ?, personId = ?
-          WHERE sessionId = ? AND speaker = ?
-          """,
-        arguments: [false, personId, sessionId, speakerId]
-      )
-      return database.changesCount
     }
   }
 
@@ -1007,62 +987,6 @@ actor TranscriptionStorage {
   }
 
   /// Upsert segments from a ServerConversation.
-  /// Replaces backend-owned transcript fields while preserving existing local speaker assignments.
-  /// Skips when incoming segments are empty to avoid wiping locally-cached data
-  /// (list endpoints often return conversations without transcript segments).
-  func upsertSegmentsFromServerConversation(
-    _ conversation: ServerConversation,
-    sessionId: Int64,
-    cacheScope: ConversationCacheWriteScope? = nil,
-    cacheGeneration: Int? = nil
-  ) async throws {
-    guard !conversation.transcriptSegments.isEmpty else { return }
-
-    let db = try await ensureInitialized()
-
-    try await db.write { database in
-      try withConversationCacheScope(cacheScope, generation: cacheGeneration) {
-        guard let session = try TranscriptionSessionRecord.fetchOne(database, key: sessionId), !session.deleted else {
-          return
-        }
-        let existingSegments =
-          try TranscriptionSegmentRecord
-          .filter(Column("sessionId") == sessionId)
-          .fetchAll(database)
-        var existingBySegmentId: [String: TranscriptionSegmentRecord] = [:]
-        var existingByOrder: [Int: TranscriptionSegmentRecord] = [:]
-        for segment in existingSegments {
-          if let segmentId = segment.segmentId {
-            existingBySegmentId[segmentId] = segment
-          }
-          existingByOrder[segment.segmentOrder] = segment
-        }
-
-        // Delete existing segments for this session
-        try database.execute(
-          sql: "DELETE FROM transcription_segments WHERE sessionId = ?",
-          arguments: [sessionId]
-        )
-
-        // Insert new segments
-        for (index, segment) in conversation.transcriptSegments.enumerated() {
-          var record = TranscriptionSegmentRecord.from(segment, sessionId: sessionId, segmentOrder: index)
-          let existing = segment.backendId.flatMap { existingBySegmentId[$0] } ?? existingByOrder[index]
-          if let existing, existing.hasSpeakerAssignment {
-            record.isUser = existing.isUser
-            record.personId = existing.personId
-          }
-          _ = try record.inserted(database)
-        }
-
-        log("TranscriptionStorage: Upserted \(conversation.transcriptSegments.count) segments for session \(sessionId)")
-      }
-    }
-    if let session = try await getSession(id: sessionId), session.status == .completed {
-      LocalEmbeddingIndexer.scheduleFinalizedSessionIndex(sessionId: sessionId)
-    }
-  }
-
   /// Sync a full ServerConversation (session + segments) to local storage
   @discardableResult
   func syncServerConversation(

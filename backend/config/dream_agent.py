@@ -1,8 +1,11 @@
 """Live global kill switch, eligibility and hard all-user Dream ceilings."""
 
-import hashlib
+from config.refactor_switches import default_off as rollout_default_off
+
 import math
 import os
+
+from config.policy.batch import cohort_bucket
 
 from config.rollout_cohorts import in_rollout_cohort, rollout_cohort_members, RolloutCohortUnavailable
 from dataclasses import dataclass
@@ -24,7 +27,10 @@ FINISH_MARGIN_SECONDS = 30
 def enabled():
     from config.dream_control import allowed
 
-    return os.getenv('DREAM_AGENT_ENABLED', 'false').strip().lower() == 'true' and allowed()
+    return (
+        rollout_default_off('DREAM_AGENT_ENABLED', os.getenv('DREAM_AGENT_ENABLED', 'false').strip().lower() == 'true')
+        and allowed()
+    )
 
 
 def mode():
@@ -66,7 +72,7 @@ def paid_percent():
 
 def in_paid_ramp(uid):
     """Stable per-owner bucket, so widening the percent only ever adds owners."""
-    bucket = int(hashlib.sha256(('dream-agent-paid:' + uid).encode()).hexdigest()[:8], 16) % 100
+    bucket = cohort_bucket(uid, 'dream-agent-paid', formula='modulo')
     return bucket < paid_percent()
 
 
@@ -89,7 +95,9 @@ def hunt_interval(size_bucket):
 
 
 def on_demand_enabled():
-    return os.getenv('DREAM_ON_DEMAND_ENABLED', '').strip().lower() in {'1', 'true', 'yes'}
+    return rollout_default_off(
+        'DREAM_ON_DEMAND_ENABLED', os.getenv('DREAM_ON_DEMAND_ENABLED', '').strip().lower() in {'1', 'true', 'yes'}
+    )
 
 
 def admission_for(uid):

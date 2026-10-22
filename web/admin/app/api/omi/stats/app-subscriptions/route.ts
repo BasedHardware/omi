@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
-import { getStripe } from "@/lib/stripe";
+import { getStripeRead } from "@/lib/stripe";
 import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import {
   AllSubscriptionSourcesFailedError,
@@ -19,7 +19,7 @@ function cacheKey(): string {
 export { cacheKey as appSubscriptionsCacheKey };
 
 export async function computeAppSubscriptions() {
-  const stripe = getStripe();
+  const stripe = getStripeRead();
 
   // Same status set as every other subscription metric (MRR_STATUSES): a `past_due` marketplace
   // subscription is still a live subscription, and counting only `active` here made this route
