@@ -146,12 +146,33 @@ jobs:
       - name: Deploy to Cloud Run Job
         id: deploy
         run: |
+          # Required mounts: a missing resource here must fail the deploy.
+          secrets=/run/secrets/finops/OMI_PROMETHEUS_TOKEN/OMI_PROMETHEUS_TOKEN=OMI_PROMETHEUS_TOKEN:latest
+          secrets+=,/run/secrets/finops/STRIPE_API_KEY/STRIPE_API_KEY=STRIPE_API_KEY:latest
+          secrets+=,/run/secrets/finops/OPENAI_ADMIN_KEY/OPENAI_ADMIN_KEY=WEB_ADMIN_OPENAI_COST_API_KEY:latest
+          secrets+=,/run/secrets/finops/ANTHROPIC_ADMIN_API_KEY/ANTHROPIC_ADMIN_API_KEY=WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest
+          secrets+=,/run/secrets/finops/MCP_POSTHOG_API_KEY/MCP_POSTHOG_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest
+          secrets+=,/run/secrets/finops/SONIOX_API_KEY/SONIOX_API_KEY=SONIOX_API_KEY:latest
+          secrets+=,/run/secrets/finops/finops-mercury-readonly/finops-mercury-readonly=finops-mercury-readonly:latest
+          # Optional vendor organization keys (Soniox balance snapshots, Modulate).
+          # The producer skips an unmounted key as an unavailable line, but a Secret
+          # Manager resource that does not exist in the target project would fail
+          # `gcloud run jobs deploy` before the job could take that path, so mount
+          # each only when the resource exists. Existence only: no payload is read.
+          for name in FINOPS_SONIOX_ORG_KEY FINOPS_MODULATE_ORG_KEY; do
+            if gcloud secrets describe "$name" --project="${{ vars.GCP_PROJECT_ID }}" --format='value(name)' >/dev/null 2>&1; then
+              secrets+=",/run/secrets/finops/$name/$name=$name:latest"
+              echo "optional secret $name: mounted"
+            else
+              echo "optional secret $name: not provisioned in this project; line stays unavailable"
+            fi
+          done
           gcloud run jobs deploy "${{ env.SERVICE }}" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="${{ env.REGION }}" \
             --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
             --service-account="finops-writer@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-            --set-secrets=/run/secrets/finops/OMI_PROMETHEUS_TOKEN/OMI_PROMETHEUS_TOKEN=OMI_PROMETHEUS_TOKEN:latest,/run/secrets/finops/STRIPE_API_KEY/STRIPE_API_KEY=STRIPE_API_KEY:latest,/run/secrets/finops/OPENAI_ADMIN_KEY/OPENAI_ADMIN_KEY=WEB_ADMIN_OPENAI_COST_API_KEY:latest,/run/secrets/finops/ANTHROPIC_ADMIN_API_KEY/ANTHROPIC_ADMIN_API_KEY=WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest,/run/secrets/finops/MCP_POSTHOG_API_KEY/MCP_POSTHOG_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest,/run/secrets/finops/SONIOX_API_KEY/SONIOX_API_KEY=SONIOX_API_KEY:latest,/run/secrets/finops/finops-mercury-readonly/finops-mercury-readonly=finops-mercury-readonly:latest,/run/secrets/finops/FINOPS_SONIOX_ORG_KEY/FINOPS_SONIOX_ORG_KEY=FINOPS_SONIOX_ORG_KEY:latest,/run/secrets/finops/FINOPS_MODULATE_ORG_KEY/FINOPS_MODULATE_ORG_KEY=FINOPS_MODULATE_ORG_KEY:latest \
+            --set-secrets="$secrets" \
             --set-env-vars=FINOPS_LOCK_BUCKET=${{ vars.GCP_PROJECT_ID }}-finops-runs,FINOPS_AUTH=cloudrun,FINOPS_WRITER_SA=finops-writer@based-hardware.iam.gserviceaccount.com,FINOPS_MERCURY_ENABLED=true \
             --region="${{ env.REGION }}" \
             --max-retries=1 \

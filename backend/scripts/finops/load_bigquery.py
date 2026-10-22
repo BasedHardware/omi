@@ -83,6 +83,10 @@ SCHEMAS = {
         ("snapshot_date", "DATE"),
         ("run_id", "STRING"),
         ("computed_at", "TIMESTAMP"),
+        # Added 2026-10-22 (nullable; `ensure_columns` adds them to the live table).
+        # Book-wide distinct counts repeated on every plan row of a snapshot.
+        ("paying_customers", "INT64"),
+        ("non_usd_paying_subs", "INT64"),
     ],
     "unit_cost_user_day": [
         ("date", "DATE"),
@@ -350,6 +354,44 @@ def ensure_table(name: str) -> None:
     sys.stderr.write("created table %s\n" % name)
 
 
+# Columns appended to a table after it first shipped. A pre-existing table is
+# created by `ensure_table` only when absent, so these are added in place
+# (nullable, metadata-only DDL) before the first load that carries them; the
+# daily job therefore keeps working on the old table and old artifacts
+# (missing values load as NULL).
+ADDED_COLUMNS = {"plan_revenue_daily": ("paying_customers", "non_usd_paying_subs")}
+
+
+def ensure_columns(name: str, show=None, run=None) -> list[str]:
+    """Add any `ADDED_COLUMNS[name]` missing from the live table; returns what was added."""
+    added_names = ADDED_COLUMNS.get(name, ())
+    if not added_names:
+        return []
+    ref = "%s:%s.%s" % (PROJECT, DATASET, name)
+    show = show or (
+        lambda: subprocess.run(
+            _bq_cmd() + ["--project_id=" + PROJECT, "show", "--format=json", ref], capture_output=True, text=True
+        )
+    )
+    p = show()
+    if p.returncode != 0:
+        raise SystemExit("bq show %s failed:\n%s" % (name, p.stderr[-2000:]))
+    present = {f["name"] for f in json.loads(p.stdout).get("schema", {}).get("fields", [])}
+    types = dict(SCHEMAS[name])
+    missing = [c for c in added_names if c not in present]
+    if not missing:
+        return []
+    sql = "ALTER TABLE `%s.%s.%s`\n%s;" % (
+        PROJECT,
+        DATASET,
+        name,
+        ",\n".join("ADD COLUMN IF NOT EXISTS %s %s" % (c, types[c]) for c in missing),
+    )
+    (run or (lambda s: bq(["query", "--use_legacy_sql=false", "--format=none"], stdin=s)))(sql)
+    sys.stderr.write("table %s: added columns %s\n" % (name, ", ".join(missing)))
+    return missing
+
+
 def load_replace(name: str, rows: list[dict], dates: list[str], extra_delete: str = "") -> int:
     """Delete the run's dates then insert, in one transaction. Idempotent per date.
 
@@ -472,6 +514,9 @@ def build_rows(
                         "trialing_subs": x["trialing_subs"],
                         "mrr_usd": x["mrr_usd"],
                         "arpu_usd": x["arpu_usd"],
+                        # NULL on artifacts written before the columns existed.
+                        "paying_customers": x.get("paying_customers"),
+                        "non_usd_paying_subs": x.get("non_usd_paying_subs"),
                         "snapshot_date": snapshot_date,
                         "run_id": run_id,
                         "computed_at": computed_at,
@@ -505,6 +550,7 @@ def main() -> None:
     loaded = {}
     for name in ("unit_cost_daily", "unit_cost_reconciliation", "plan_revenue_daily", "unit_cost_user_day"):
         ensure_table(name)
+        ensure_columns(name)
         loaded[name] = load_replace(name, tables[name], dates)
     loaded.update(load_mercury.load(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq))
     loaded.update(load_stripe_fees(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace))

@@ -107,6 +107,12 @@ const finopsMrr = Object.fromEntries(
 const finopsHistory = {
   mrr: finopsMrr,
   paying: Object.fromEntries(Object.keys(finopsMrr).map((day) => [day, 1_500])),
+  payingCustomers: Object.fromEntries(
+    Object.keys(finopsMrr).map((day) => [day, 1_480])
+  ),
+  nonUsdPaying: Object.fromEntries(
+    Object.keys(finopsMrr).map((day) => [day, 0])
+  ),
   refreshed: Object.fromEntries(
     Object.keys(finopsMrr).map((day) => [day, `${day}T14:36:00Z`])
   ),
@@ -128,9 +134,10 @@ function sources(): SeriesSources & WallSources {
       plans: {},
       sttMeasured: {},
       saasMeasured: {},
+      saasAnnualPartial: {},
       sttCash: {},
     })),
-    fees: vi.fn(async () => ({})),
+    fees: vi.fn(async () => ({ fees: {}, foreign: {} })),
   };
 }
 const value = (wall: WallPayload, id: string) =>
@@ -395,6 +402,8 @@ describe("v3 series agree with the v2 snapshot", () => {
         )
       ),
       paying: finopsHistory.paying,
+      payingCustomers: finopsHistory.payingCustomers,
+      nonUsdPaying: finopsHistory.nonUsdPaying,
       refreshed: finopsHistory.refreshed,
     }));
     const wall = await computeWall(s, now);
@@ -437,6 +446,8 @@ describe("v3 series agree with the v2 snapshot", () => {
         Object.entries(finopsMrr).filter(([day]) => day !== hole)
       ),
       paying: finopsHistory.paying,
+      payingCustomers: finopsHistory.payingCustomers,
+      nonUsdPaying: finopsHistory.nonUsdPaying,
       refreshed: finopsHistory.refreshed,
     }));
     const wall = await computeWall(s, now);
@@ -512,8 +523,9 @@ describe("margin by plan (allocated estimate)", () => {
     architect: 200,
   };
   const legs = async (
-    sttMeasured: Record<string, number> = {},
-    saasMeasured: Record<string, number> = {}
+    sttMeasured: Record<string, Record<string, number>> = {},
+    saasMeasured: Record<string, number> = {},
+    saasAnnualPartial: Record<string, boolean> = {}
   ) => ({
     billing: await billing(),
     // FinOps cost settles ~D−3: days 6..3, with day 5 missing.
@@ -521,12 +533,15 @@ describe("margin by plan (allocated estimate)", () => {
       plans: { [day(6)]: plans(1), [day(4)]: plans(1.1), [day(3)]: plans(1) },
       sttMeasured,
       saasMeasured,
+      saasAnnualPartial,
       sttCash: {},
     },
     // The book is missing day 4 (like 2026-09-29) and has today's snapshot.
     finops: {
       mrr: Object.fromEntries([7, 6, 5, 3, 2, 1, 0].map((k) => [day(k), book])),
       paying: {},
+      payingCustomers: {},
+      nonUsdPaying: {},
       refreshed: {},
     },
   });
@@ -583,7 +598,12 @@ describe("margin by plan (allocated estimate)", () => {
 
   it("prefers a measured FinOps STT line and labels it measured", async () => {
     const estimate = assembleSeries("health", await legs(), null, now);
-    const f = assembleSeries("health", await legs({ [day(3)]: 99 }), null, now);
+    const f = assembleSeries(
+      "health",
+      await legs({ [day(3)]: { soniox: 99 } }),
+      null,
+      now
+    );
     const at = (rows: Row[]) =>
       rows.find((r) => String(r.date).startsWith(day(3)))!;
     expect(at(f.cost)).toMatchObject({ stt: 99, sttSource: "measured" });
@@ -640,6 +660,69 @@ describe("margin by plan (allocated estimate)", () => {
     expect(f.marginStatus[0].text).toBe(
       "Margin through — · STT estimate · SaaS estimate as of Oct 16 (stale) · Stripe fees unavailable (finops key scope)"
     );
+  });
+
+  it("keeps modelled Modulate and cash out of the STT measured series (Luna P2)", async () => {
+    const base = await legs({ [day(3)]: { soniox: 99, deepgram: 11 } });
+    const f = assembleSeries(
+      "health",
+      {
+        ...base,
+        planCost: {
+          ...base.planCost,
+          sttCash: { [day(3)]: { deepgram: 5, modulate: 20 } },
+        },
+        modulate: {
+          byDay: {
+            [day(3)]: {
+              usd: 20.5,
+              seconds: 1_230_000,
+              pricePerHour: 0.06,
+              priceAsOf: "2026-10-18",
+            },
+          },
+          price: 0.06,
+          priceAsOf: "2026-10-18",
+        },
+      },
+      null,
+      now
+    );
+    const at = f.cost.find((r) => String(r.date).startsWith(day(3)))!;
+    // Measured = Soniox usage + measured Deepgram ONLY; the modelled Modulate
+    // dollars have their own series and never enter "STT measured".
+    expect(at.stt).toBeCloseTo(99 + 11 + 20.5);
+    expect(at.sttMeasuredUsd).toBeCloseTo(110);
+    expect(at.sttModulateModelledUsd).toBeCloseTo(20.5);
+    expect(at.sttEstimateUsd).toBeNull();
+    expect(at.sttCashUsd).toBeNull(); // measured Deepgram wins over its cash; modelled wins over Modulate cash
+    expect(
+      (at.sttMeasuredUsd as number) + (at.sttModulateModelledUsd as number)
+    ).toBeCloseTo(at.stt as number);
+  });
+
+  it("reads plan cost and both vendor STT legs as health legs", async () => {
+    const s = sources();
+    const vendorBalance = vi.fn(async () => ({
+      snapshots: 0,
+      latestTs: null,
+      asOf: null,
+      spend: {},
+      flags: {},
+    }));
+    const modulate = vi.fn(async () => ({
+      byDay: {},
+      price: null,
+      priceAsOf: null,
+    }));
+    await seriesPayload("health", Promise.resolve(null), now, {
+      ...s,
+      vendorBalance,
+      modulate,
+    });
+    expect(s.planCost).toHaveBeenCalledWith(isoDay(now));
+    expect(vendorBalance).toHaveBeenCalledWith(isoDay(now));
+    expect(modulate).toHaveBeenCalledWith(isoDay(now));
   });
 
   it("reads plan cost as a health leg", async () => {

@@ -8,10 +8,12 @@
  *         its Mercury cash is Claude team seats, which is SaaS, not per-customer
  *         cost (David 2026-10-22)
  *       + STT: Soniox measured from prepaid-balance deltas (the org key has
- *         no usage API) once ≥2 snapshots exist, else the dated console
- *         constant; Modulate modelled (measured volume × committed price, no
- *         vendor API exists) else Mercury cash; Deepgram cash only on days
- *         with no measured line
+ *         no usage API) once ≥2 snapshots exist and the day is covered by the
+ *         series — a stale or broken series falls back to the dated console
+ *         constant, flagged, never $0 or a phantom reset; Modulate modelled
+ *         (measured volume × committed price, no vendor API exists) else
+ *         Mercury cash; Deepgram combines independently (measured usage, else
+ *         its own Mercury cash) so one provider never hides another
  *       + SaaS: a complete, fresh Mercury daily aggregate when available,
  *         otherwise a fixed monthly estimate
  *       + Stripe processing fees, measured from balance transactions. When the
@@ -73,9 +75,13 @@ export interface CostDay {
    * non-zero values are counted in `total`; seats live in the SaaS line. */
   anthropic: number | null;
   stt: number;
-  /** STT came from a measured FinOps vendor line, not the console constant. */
+  /** STT came from a measured vendor line (Soniox balance delta or Deepgram
+   * usage), not the console constant; Modulate modelled volume is NOT measured. */
   sttMeasured: boolean;
-  /** Producer flag on the measured Soniox day ('gap_spread' | 'baseline_reset'). */
+  /** The Soniox leg of the day is measured (balance delta or usage line). */
+  sttSonioxMeasured: boolean;
+  /** Producer flag on the measured Soniox day ('gap_spread' | 'baseline_reset'
+   * | 'snapshot_gap'). */
   sttFlag: string | null;
   /** The Soniox share of the STT line (balance-delta when measured). */
   sttSonioxUsd: number;
@@ -83,6 +89,10 @@ export interface CostDay {
   sttModulateUsd: number;
   /** Modulate dollars came from the modelled volume line, not Mercury cash. */
   sttModulateModelled: boolean;
+  /** The Deepgram share of the STT line (measured usage or Mercury cash). */
+  sttDeepgramUsd: number;
+  /** Deepgram dollars came from the measured usage line, not Mercury cash. */
+  sttDeepgramMeasured: boolean;
   /** Mercury cash included for STT vendors with no usage feed that day. */
   sttCash: number;
   saas: number;
@@ -147,10 +157,14 @@ export interface EstimateStatus {
 }
 
 /** Age of each manual cost constant on `now` (UTC days), against its own line's
- * staleness threshold: STT 14 days, SaaS 35 days. */
+ * staleness threshold: STT 14 days, SaaS 35 days. `broken` marks a line whose
+ * measured feed stopped (e.g. the Soniox snapshot series no longer covering the
+ * cutoff day): such a line is stale NOW, not only once its constant ages out —
+ * a stale snapshot must never present the dated constant as current. */
 export function estimateStatus(
   now: Date,
-  measured: Partial<Record<EstimateStatus["line"], boolean>> = {}
+  measured: Partial<Record<EstimateStatus["line"], boolean>> = {},
+  broken: Partial<Record<EstimateStatus["line"], boolean>> = {}
 ): EstimateStatus[] {
   const age = (asOf: string) =>
     Math.floor((now.getTime() - Date.parse(`${asOf}T00:00:00Z`)) / 86_400_000);
@@ -167,9 +181,44 @@ export function estimateStatus(
       asOf,
       ageDays,
       staleDays,
-      stale: !measured[line] && ageDays > staleDays,
+      stale: (!measured[line] && ageDays > staleDays) || Boolean(broken[line]),
     };
   });
+}
+
+/** Assemble the Soniox balance series for `VendorInputs` from the raw FinOps
+ * read. `lastDay` is the last day a spend row covers — the series ends there,
+ * and later days fall back to the dated constant instead of reading as $0. */
+export function sonioxBalanceInputs(
+  soniox: {
+    snapshots: number;
+    asOf: string | null;
+    spend: Record<string, number | null>;
+    flags: Record<string, string>;
+  } | null,
+  cutoff: string
+): SonioxBalanceInputs | undefined {
+  if (!soniox) return undefined;
+  const days = Object.keys(soniox.spend).sort();
+  return {
+    ready: soniox.snapshots >= 2,
+    firstDay: days[0] ?? soniox.asOf ?? cutoff,
+    lastDay: days.at(-1) ?? soniox.asOf ?? cutoff,
+    asOf: soniox.asOf,
+    spend: soniox.spend,
+    flags: soniox.flags,
+  };
+}
+
+/** True when the live Soniox series exists but no longer covers `day` (the
+ * snapshot pull stopped): uncovered days show the dated console constant, the
+ * line must say so, and its estimate is stale immediately. */
+export function sonioxSeriesBroken(
+  vendor: VendorInputs | undefined,
+  day: string
+): boolean {
+  const bal = vendor?.sonioxBalance;
+  return !!bal?.ready && day > bal.lastDay;
 }
 
 /** Measured vendor inputs by date; every map is optional and absent means the
@@ -180,11 +229,15 @@ export interface SonioxBalanceInputs {
   ready: boolean;
   /** first UTC day covered by the derived spend series. */
   firstDay: string;
+  /** last UTC day covered by a published spend row. Days after it have NO
+   * measured value: they fall back to the dated constant, flagged — a stale
+   * snapshot series must never read as $0 spend. */
+  lastDay: string;
   /** latest snapshot's UTC day, shown as the as-of date. */
   asOf: string | null;
   /** date → measured daily USD (null = flagged baseline-reset day). */
   spend: Record<string, number | null>;
-  /** date → producer flag ('gap_spread' | 'baseline_reset'). */
+  /** date → producer flag ('gap_spread' | 'baseline_reset' | 'snapshot_gap'). */
   flags: Record<string, string>;
 }
 export interface ModulateModelledInputs {
@@ -194,8 +247,9 @@ export interface ModulateModelledInputs {
   priceAsOf: string | null;
 }
 export interface VendorInputs {
-  /** date → measured STT USD from FinOps usage lines (Deepgram legacy). */
-  sttMeasured?: Record<string, number>;
+  /** date → measured STT vendor → USD (`soniox`/`deepgram`/…), kept
+   * provider-specific so each provider combines with its own cash. */
+  sttMeasured?: Record<string, Record<string, number>>;
   /** Soniox prepaid-balance day-rate series (replaces the usage line). */
   sonioxBalance?: SonioxBalanceInputs;
   /** Modulate modelled volume line (no vendor API exists). */
@@ -208,21 +262,28 @@ export interface VendorInputs {
   stripeFees?: Record<string, number>;
 }
 
-/** One day's STT line. Soniox: the measured balance-delta day-rate once the
- * snapshot series is live (≥2 snapshots), otherwise the labelled dated
- * console constant; a baseline-reset day inside the series is unmeasured and
- * flagged, never the constant again. Modulate: the modelled volume line when
- * present, otherwise Mercury cash (labelled). Soniox Mercury cash is never
- * added (prepaid recharge, not a rate). Deepgram cash only on days without a
- * measured Soniox line, so no vendor counts twice. */
+/** A date inside the live series with no published row: never a phantom
+ * `baseline_reset` (that label is reserved for an actual lower cumulative
+ * balance) and never silent $0 spend. */
+export const SONIOX_GAP_FLAG = "snapshot_gap";
+
+/** One day's STT line. Soniox: the measured balance-delta day-rate, but only
+ * on days the snapshot series actually covers (`firstDay`..`lastDay`); beyond
+ * the last covered day the dated console constant returns, unmeasured and
+ * flagged, so a broken snapshot pull can never read as $0 spend or a reset.
+ * A baseline-reset day inside the series is unmeasured and flagged. Modulate:
+ * the modelled volume line when present, otherwise Mercury cash (labelled).
+ * Soniox Mercury cash is never added (prepaid recharge, not a rate). Deepgram
+ * combines independently: measured usage when the FinOps line has it, its
+ * Mercury cash otherwise — never suppressed by a Soniox measurement. */
 export function sttLineFor(
   date: string,
   { sttMeasured, sonioxBalance, modulateModelled, sttCash }: VendorInputs
 ) {
   const cash = sttCash?.[date] || {};
-  const usage = sttMeasured?.[date];
+  const vendors = sttMeasured?.[date] || {};
   const bal = sonioxBalance;
-  const inSeries = !!bal?.ready && date >= bal.firstDay;
+  const inSeries = !!bal?.ready && date >= bal.firstDay && date <= bal.lastDay;
   const spend = inSeries ? bal!.spend[date] : undefined;
   const flag = inSeries ? bal!.flags[date] : undefined;
   const soniox = inSeries
@@ -231,14 +292,14 @@ export function sttLineFor(
         measured: spend != null,
         flag:
           spend == null
-            ? flag ?? "baseline_reset"
+            ? flag ?? SONIOX_GAP_FLAG
             : flag === "gap_spread"
             ? "gap_spread"
             : null,
       }
     : {
-        usd: usage ?? STT_MONTHLY_USD / DAYS_PER_MONTH,
-        measured: usage != null,
+        usd: vendors.soniox ?? STT_MONTHLY_USD / DAYS_PER_MONTH,
+        measured: vendors.soniox != null,
         flag: null,
       };
   const modelled = modulateModelled?.byDay[date];
@@ -246,21 +307,32 @@ export function sttLineFor(
   const modulate = modelled
     ? { usd: modelled.usd, modelled: true }
     : { usd: modulateCash, modelled: false };
-  const deepgram = soniox.measured ? 0 : cash.deepgram ?? 0;
+  // Per-provider: Deepgram's own measured line wins over its cash; a Soniox
+  // measurement never hides Deepgram dollars again.
+  const deepgramMeasured = vendors.deepgram ?? null;
+  const deepgram = deepgramMeasured ?? cash.deepgram ?? 0;
   return {
     usd: soniox.usd + modulate.usd + deepgram,
-    measured: soniox.measured,
+    measured: soniox.measured || deepgramMeasured != null,
+    sonioxMeasured: soniox.measured,
     flag: soniox.flag,
     sonioxUsd: soniox.usd,
     modulateUsd: modulate.usd,
     modulateModelled: modulate.modelled,
-    cash: (modulate.modelled ? 0 : modulateCash) + deepgram,
+    deepgramUsd: deepgram,
+    deepgramMeasured: deepgramMeasured != null,
+    cash:
+      (modulate.modelled ? 0 : modulateCash) +
+      (deepgramMeasured != null ? 0 : cash.deepgram ?? 0),
   };
 }
 
 /** Modulate monthly reconciliation: modelled volume-line USD vs Mercury cash
  * (vendor map `modulate` → stt_vendor) over the trailing `days` ending at
- * `end` inclusive. Null when the modelled line has no days in the window. */
+ * `end` inclusive. Mercury cash is summed over EVERY day of the window,
+ * independently of modelled-row coverage — a date with cash but no Prometheus
+ * row (batch usage, a missing metric day) must widen the variance, not
+ * disappear. Null when the modelled line has no days in the window. */
 export function modulateReconciliation(
   modelled: ModulateModelledInputs | undefined,
   sttCash: Record<string, Record<string, number>> | undefined,
@@ -272,15 +344,21 @@ export function modulateReconciliation(
     .toISOString()
     .slice(0, 10);
   let modelledUsd = 0;
-  let cashUsd = 0;
   let observed = 0;
   for (const [day, row] of Object.entries(modelled.byDay)) {
     if (day < start || day > end) continue;
     modelledUsd += row.usd;
-    cashUsd += sttCash?.[day]?.modulate ?? 0;
     observed++;
   }
   if (!observed) return null;
+  let cashUsd = 0;
+  for (
+    let d = new Date(`${start}T00:00:00Z`);
+    d <= new Date(`${end}T00:00:00Z`);
+    d = shiftDay(d, 1)
+  ) {
+    cashUsd += sttCash?.[d.toISOString().slice(0, 10)]?.modulate ?? 0;
+  }
   return {
     modelledUsd,
     cashUsd,
@@ -342,10 +420,13 @@ export function allInCost(
         anthropic,
         stt: stt.usd,
         sttMeasured: stt.measured,
+        sttSonioxMeasured: stt.sonioxMeasured,
         sttFlag: stt.flag,
         sttSonioxUsd: stt.sonioxUsd,
         sttModulateUsd: stt.modulateUsd,
         sttModulateModelled: stt.modulateModelled,
+        sttDeepgramUsd: stt.deepgramUsd,
+        sttDeepgramMeasured: stt.deepgramMeasured,
         sttCash: stt.cash,
         saas,
         saasMeasured: measuredSaas != null,

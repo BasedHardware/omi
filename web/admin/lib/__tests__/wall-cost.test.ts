@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   FINOPS_MODULATE_MODELLED_QUERY,
   FINOPS_PLAN_COST_QUERY,
+  FINOPS_STRIPE_FEE_QUERY,
   FINOPS_VENDOR_BALANCE_QUERY,
+  parseFinopsHistory,
   parsePlanCost,
   parseVendorBalance,
 } from "../wall-finops";
@@ -12,6 +14,9 @@ import {
   modulateReconciliation,
   oneTimeExcess,
   SAAS_MONTHLY_USD,
+  SONIOX_GAP_FLAG,
+  sonioxBalanceInputs,
+  sonioxSeriesBroken,
   sttLineFor,
   STT_MONTHLY_USD,
 } from "../wall-cost";
@@ -158,12 +163,13 @@ describe("all-in cost", () => {
       days,
       {},
       {
-        sttMeasured: { [day(19)]: 99 },
+        sttMeasured: { [day(19)]: { soniox: 99 } },
       }
     );
     expect(daily.find((d) => d.date === day(19))).toMatchObject({
       stt: 99,
       sttMeasured: true,
+      sttSonioxMeasured: true,
     });
     expect(daily.find((d) => d.date === day(18))).toMatchObject({
       sttMeasured: false,
@@ -180,19 +186,21 @@ describe("all-in cost", () => {
       days,
       {},
       {
-        sttMeasured: { [day(19)]: 99 },
+        sttMeasured: { [day(19)]: { soniox: 99 } },
         sttCash,
       }
     );
-    // Measured day: usage + Modulate only; Soniox prepaid and Deepgram cash
-    // (a measured line exists that day) must not stack on top.
+    // Measured Soniox day: usage + Modulate cash + Deepgram's OWN cash (a
+    // Soniox measurement never hides another provider); Soniox prepaid cash
+    // never stacks on its measured line.
     expect(daily.find((d) => d.date === day(19))).toMatchObject({
-      stt: 99 + 20,
-      sttCash: 20,
+      stt: 99 + 20 + 5,
+      sttCash: 25,
       sttMeasured: true,
+      sttDeepgramUsd: 5,
+      sttDeepgramMeasured: false,
     });
-    // No measured line: the dated Soniox constant + Modulate (+ Deepgram cash,
-    // which has no measured line that day).
+    // No measured line: the dated Soniox constant + Modulate cash.
     expect(daily.find((d) => d.date === day(18))).toMatchObject({
       stt: sttDay + 10,
       sttCash: 10,
@@ -208,6 +216,38 @@ describe("all-in cost", () => {
     expect(deepgramOnly.daily.find((d) => d.date === day(18))!.stt).toBeCloseTo(
       sttDay + 7
     );
+  });
+
+  it("keeps every STT provider separate: Deepgram measured usage is its own line", () => {
+    // A day with both providers measured counts both; a Deepgram-only usage
+    // aggregate is never presented as Soniox (the constant stays for Soniox).
+    const both = allInCost(
+      days,
+      {},
+      {
+        sttMeasured: { [day(19)]: { soniox: 99, deepgram: 11 } },
+        sttCash: { [day(19)]: { deepgram: 5 } },
+      }
+    );
+    expect(both.daily.find((d) => d.date === day(19))).toMatchObject({
+      stt: 110,
+      sttSonioxUsd: 99,
+      sttDeepgramUsd: 11,
+      sttDeepgramMeasured: true,
+      sttCash: 0, // measured Deepgram wins over its cash
+      sttMeasured: true,
+    });
+    const deepgramOnly = allInCost(
+      days,
+      {},
+      { sttMeasured: { [day(19)]: { deepgram: 11 } } }
+    );
+    const d = deepgramOnly.daily.find((x) => x.date === day(19))!;
+    expect(d.sttSonioxMeasured).toBe(false);
+    expect(d.sttSonioxUsd).toBeCloseTo(sttDay);
+    expect(d.sttDeepgramUsd).toBe(11);
+    expect(d.sttMeasured).toBe(true);
+    expect(d.stt).toBeCloseTo(sttDay + 11);
   });
 
   it("adds measured Stripe fees and reports the line unavailable, never guessed", () => {
@@ -294,10 +334,14 @@ describe("FinOps plan cost reader", () => {
             settled: true,
           },
         ],
-        stt: [{ day: "2026-10-13", usd: 143 }],
+        stt: [
+          { day: "2026-10-13", component: "stt_soniox_measured", usd: 143 },
+          { day: "2026-10-13", component: "stt_deepgram_measured", usd: 11 },
+        ],
         saas: [
-          { day: "2026-10-13", usd: 0 },
-          { day: "2026-10-12", usd: 8.5 },
+          { day: "2026-10-13", usd: 0, annual_complete: true },
+          { day: "2026-10-12", usd: 8.5, annual_complete: true },
+          { day: "2026-10-11", usd: 9.5, annual_complete: false },
         ],
         sttCash: [
           { day: "2026-10-13", vendor: "modulate", usd: 19.8 },
@@ -312,8 +356,11 @@ describe("FinOps plan cost reader", () => {
           plus: { usd: 90, users: 95, varUsd: 0, varUsers: 0 },
         },
       },
-      sttMeasured: { "2026-10-13": 143 },
+      // Provider-specific: soniox and deepgram stay separate (Luna P1).
+      sttMeasured: { "2026-10-13": { soniox: 143, deepgram: 11 } },
+      // An incomplete annual history keeps the day OFF the measured line.
       saasMeasured: { "2026-10-13": 0, "2026-10-12": 8.5 },
+      saasAnnualPartial: { "2026-10-11": true },
       sttCash: { "2026-10-13": { modulate: 19.8, soniox: 500 } },
     });
   });
@@ -326,6 +373,65 @@ describe("FinOps plan cost reader", () => {
     expect(FINOPS_PLAN_COST_QUERY).toContain("mercury_saas_daily");
     expect(FINOPS_PLAN_COST_QUERY).toContain("variable_total");
     expect(FINOPS_PLAN_COST_QUERY).toContain("mercury_vendor_spend_daily");
+    // The annual-history status is selected and can gate the measured line.
+    expect(FINOPS_PLAN_COST_QUERY).toContain("annual_history_complete");
+  });
+});
+
+describe("FinOps book history: customer counts and fee coverage", () => {
+  it("takes the book-wide paying-customer count per snapshot day, never the plan-row sum", () => {
+    const history = parseFinopsHistory(
+      JSON.stringify({
+        mrr: [
+          {
+            day: "2026-10-13",
+            plan: "unlimited",
+            mrr_usd: 60,
+            paying_subs: 2_000,
+            paying_customers: 3_050,
+            non_usd_paying_subs: 1,
+            refreshed: "2026-10-13T14:36:00Z",
+          },
+          {
+            day: "2026-10-13",
+            plan: "plus",
+            mrr_usd: 16,
+            paying_subs: 1_100,
+            paying_customers: 3_050,
+            non_usd_paying_subs: 1,
+            refreshed: "2026-10-13T14:36:00Z",
+          },
+        ],
+      })
+    );
+    // paying_customers repeats on every plan row: take, do not sum (6,100 wrong).
+    expect(history.payingCustomers["2026-10-13"]).toBe(3_050);
+    expect(history.nonUsdPaying["2026-10-13"]).toBe(1);
+    // The item-based plan sum stays as the pre-migration fallback.
+    expect(history.paying["2026-10-13"]).toBe(3_100);
+  });
+
+  it("parses a legacy table read without the customer-count columns", () => {
+    const history = parseFinopsHistory(
+      JSON.stringify({
+        mrr: [
+          {
+            day: "2026-10-13",
+            plan: "unlimited",
+            mrr_usd: 60,
+            paying_subs: 2_000,
+            refreshed: "2026-10-13T14:36:00Z",
+          },
+        ],
+      })
+    );
+    expect(history.payingCustomers).toEqual({});
+    expect(history.nonUsdPaying).toEqual({});
+    expect(history.paying["2026-10-13"]).toBe(2_000);
+  });
+
+  it("carries the foreign-fee count so the wall can label coverage partial", () => {
+    expect(FINOPS_STRIPE_FEE_QUERY).toContain("foreign_transaction_count");
   });
 });
 
@@ -335,6 +441,7 @@ describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => 
   ) => ({
     ready: true,
     firstDay: "2026-10-11",
+    lastDay: "2026-10-13",
     asOf: "2026-10-13",
     spend: { "2026-10-12": 175.5, "2026-10-13": 140.25 },
     flags: {},
@@ -348,6 +455,7 @@ describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => 
     });
     expect(line.usd).toBeCloseTo(140.25 + 20);
     expect(line.measured).toBe(true);
+    expect(line.sonioxMeasured).toBe(true);
     expect(line.sonioxUsd).toBeCloseTo(140.25);
     expect(line.modulateUsd).toBeCloseTo(20);
     expect(line.modulateModelled).toBe(false);
@@ -355,7 +463,7 @@ describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => 
     // a legacy usage-summary row never overrides the live balance series
     const legacy = sttLineFor("2026-10-13", {
       sonioxBalance: bal(),
-      sttMeasured: { "2026-10-13": 99 },
+      sttMeasured: { "2026-10-13": { soniox: 99 } },
     });
     expect(legacy.sonioxUsd).toBeCloseTo(140.25);
   });
@@ -378,6 +486,26 @@ describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => 
     expect(line.measured).toBe(false);
     expect(line.sonioxUsd).toBe(0);
     expect(line.flag).toBe("baseline_reset");
+  });
+
+  it("never turns a stale snapshot series into $0 spend or a false reset (Luna P1)", () => {
+    // The pull stopped after 2026-10-13: days beyond the last covered day are
+    // NOT $0-as-reset — they fall back to the dated, unmeasured constant.
+    const line = sttLineFor("2026-10-20", {
+      sonioxBalance: bal({ asOf: "2026-10-13" }),
+    });
+    expect(line.sonioxMeasured).toBe(false);
+    expect(line.measured).toBe(false);
+    expect(line.sonioxUsd).toBeCloseTo(STT_MONTHLY_USD / (365.25 / 12));
+    expect(line.flag).toBeNull();
+  });
+
+  it("flags a covered day with no published row as a snapshot gap, not a baseline reset", () => {
+    const line = sttLineFor("2026-10-12", {
+      sonioxBalance: bal({ spend: { "2026-10-13": 140.25 } }),
+    });
+    expect(line.flag).toBe(SONIOX_GAP_FLAG);
+    expect(line.measured).toBe(false);
   });
 
   it("keeps the labelled dated constant until 2 snapshots exist and before the series starts", () => {
@@ -406,17 +534,58 @@ describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => 
     expect(line.cash).toBe(0); // Mercury cash never stacks under the modelled line
   });
 
-  it("keeps Deepgram cash off days with a measured Soniox balance line", () => {
+  it("counts Deepgram cash on its own line even when Soniox is measured (Luna P1)", () => {
     const line = sttLineFor("2026-10-13", {
       sonioxBalance: bal(),
       sttCash: { "2026-10-13": { deepgram: 7 } },
     });
-    expect(line.usd).toBeCloseTo(140.25);
+    expect(line.usd).toBeCloseTo(140.25 + 7);
+    expect(line.cash).toBeCloseTo(7);
     const none = sttLineFor("2026-10-10", {
       sonioxBalance: bal(),
       sttCash: { "2026-10-10": { deepgram: 7 } },
     });
     expect(none.usd).toBeCloseTo(STT_MONTHLY_USD / (365.25 / 12) + 7);
+  });
+
+  it("derives series bounds and staleness from the FinOps balance read", () => {
+    const inputs = sonioxBalanceInputs(
+      {
+        snapshots: 3,
+        asOf: "2026-10-13",
+        spend: { "2026-10-12": 175.5, "2026-10-13": null },
+        flags: { "2026-10-13": "baseline_reset" },
+      },
+      "2026-10-20"
+    )!;
+    expect(inputs.ready).toBe(true);
+    expect(inputs.firstDay).toBe("2026-10-12");
+    expect(inputs.lastDay).toBe("2026-10-13");
+    // The wall's cutoff is past the last covered day: the series is broken.
+    expect(sonioxSeriesBroken({ sonioxBalance: inputs }, "2026-10-18")).toBe(
+      true
+    );
+    expect(sonioxSeriesBroken({ sonioxBalance: inputs }, "2026-10-13")).toBe(
+      false
+    );
+    // Not-yet-live series (1 snapshot) is not "broken", just not ready.
+    const one = sonioxBalanceInputs(
+      { snapshots: 1, asOf: "2026-10-13", spend: {}, flags: {} },
+      "2026-10-20"
+    )!;
+    expect(one.ready).toBe(false);
+    expect(sonioxSeriesBroken({ sonioxBalance: one }, "2026-10-20")).toBe(
+      false
+    );
+    expect(sonioxBalanceInputs(null, "2026-10-20")).toBeUndefined();
+    // A broken series makes the STT estimate stale immediately (Luna P1):
+    // age-based staleness alone would wait out the constant's threshold.
+    const stale = estimateStatus(
+      new Date("2026-10-22T00:00:00Z"),
+      { STT: false },
+      { STT: true }
+    ).find((e) => e.line === "STT")!;
+    expect(stale.stale).toBe(true);
   });
 
   it("reconciles Modulate modelled spend against Mercury cash over the trailing window", () => {
@@ -447,6 +616,25 @@ describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => 
         "2026-10-11"
       )
     ).toBeNull();
+  });
+
+  it("counts Mercury cash on dates with no modelled row (Luna P2)", () => {
+    // Batch usage or a missing metric day: cash exists where the modelled line
+    // does not. The reconciliation sums Mercury over the WHOLE window.
+    const modelled = {
+      byDay: { "2026-10-10": { usd: 10 } },
+      price: 0.06,
+      priceAsOf: "2026-10-18",
+    };
+    const cash: Record<string, Record<string, number>> = {
+      "2026-10-10": { modulate: 12 },
+      "2026-10-11": { modulate: 30 }, // cash-only date
+      "2026-10-12": { modulate: 8 }, // cash-only date
+    };
+    const recon = modulateReconciliation(modelled, cash, "2026-10-12", 30)!;
+    expect(recon.modelledUsd).toBeCloseTo(10);
+    expect(recon.cashUsd).toBeCloseTo(50);
+    expect(recon.variancePct).toBeCloseTo(400);
   });
 });
 

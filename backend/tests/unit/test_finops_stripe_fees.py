@@ -29,13 +29,33 @@ def stripe(monkeypatch):
     return load("pull_stripe")
 
 
-def txn(created_epoch, fee, amount, type_="charge", currency="usd"):
+def txn(created_epoch, fee, amount, type_="charge", currency="usd", fee_details="default"):
     return {
         "id": "txn_%d_%d" % (created_epoch, fee),
         "object": "balance_transaction",
         "created": created_epoch,
         "amount": amount,
         "fee": fee,
+        # When present, fee_details is the authoritative breakdown and must sum
+        # to `fee` (the producer cross-checks; see test below). By default the
+        # fixture mirrors the API's own consistency.
+        "fee_details": (
+            (
+                [
+                    {
+                        "amount": fee,
+                        "application": None,
+                        "currency": currency,
+                        "description": "Stripe processing fees",
+                        "type": "stripe_fee",
+                    }
+                ]
+                if fee
+                else []
+            )
+            if fee_details == "default"
+            else fee_details
+        ),
         "net": amount - fee,
         "currency": currency,
         "type": type_,
@@ -47,13 +67,37 @@ def epoch(day):
 
 
 def test_fees_sum_per_utc_day_net_of_refunds_and_foreign_counted(stripe):
+    # Refund representation follows the documented contract
+    # (docs.stripe.com/api/balance_transactions/object): `fee` is "Represented
+    # as a positive integer when assessed"; the funds direction lives in
+    # `amount` ("A positive value represents funds charged to another party,
+    # and a negative value represents funds sent to another party"). A refund
+    # hands the previously assessed fee back as a negative `fee_details` entry
+    # (type stripe_fee) with a matching negative `fee`, so summing the API's
+    # signed `fee` field nets the refund on the refund's own day.
     page = {
         "object": "list",
         "has_more": False,
         "data": [
             txn(epoch("2026-10-01"), 441, 19900),  # charge fee $4.41
             txn(epoch("2026-10-01"), 320, 12000, type_="payment"),
-            txn(epoch("2026-10-01"), -205, -9500, type_="refund"),  # fee returned
+            # documented refund shape: funds returned (amount negative), fee
+            # returned (fee_details negative, fee negative)
+            txn(
+                epoch("2026-10-01"),
+                -205,
+                -9500,
+                type_="refund",
+                fee_details=[
+                    {
+                        "amount": -205,
+                        "application": None,
+                        "currency": "usd",
+                        "description": "Refund of previous Stripe fee",
+                        "type": "stripe_fee",
+                    }
+                ],
+            ),
             txn(epoch("2026-10-02"), 105, 5000, type_="payout"),
             txn(epoch("2026-10-02"), 99, 4800, currency="eur"),  # counted, never summed
         ],
@@ -67,6 +111,30 @@ def test_fees_sum_per_utc_day_net_of_refunds_and_foreign_counted(stripe):
     assert by_day["2026-10-02"]["volume_usd"] == 0
     assert by_day["2026-10-02"]["foreign_transaction_count"] == 1
     assert "txn_" not in json.dumps(rows)  # no identifiers persist
+
+
+def test_fee_details_breakdown_disagreement_is_a_shape_error(stripe):
+    # fee_details is the authority when present: a row whose breakdown does not
+    # sum to `fee` is rejected, never summed on a guess.
+    mismatch = txn(
+        epoch("2026-10-01"),
+        441,
+        19900,
+        fee_details=[
+            {
+                "amount": 300,
+                "application": None,
+                "currency": "usd",
+                "description": "Stripe processing fees",
+                "type": "stripe_fee",
+            }
+        ],
+    )
+    with pytest.raises(stripe.FeeUnavailable, match="fee_details"):
+        stripe.aggregate_fees(
+            lambda path, **params: {"object": "list", "has_more": False, "data": [mismatch]},
+            ["2026-10-01"],
+        )
 
 
 def test_fees_paginate_with_created_window_and_exclusive_end(stripe):

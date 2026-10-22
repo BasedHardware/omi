@@ -40,10 +40,15 @@ import { aggregatePeriod, Metric, MetricId, WallPayload } from "./wall-metrics";
 import { fetchShopifyWeek } from "./wall-shopify";
 import {
   fetchFinopsHistory,
+  fetchModulateModelled,
   fetchPlanCostHistory,
   fetchStripeFeeHistory,
+  fetchVendorBalanceHistory,
   FinopsHistory,
+  ModulateModelledDay,
   PlanCostHistory,
+  StripeFeeHistory,
+  VendorBalanceHistory,
 } from "./wall-finops";
 import { wallFailure } from "./wall-source-error";
 import { COLD_STORE_WAIT, wallRefreshSettled } from "./wall-cache";
@@ -52,6 +57,8 @@ import {
   CostDay,
   estimateStatus,
   FEES_UNAVAILABLE_REASON,
+  sonioxBalanceInputs,
+  sonioxSeriesBroken,
 } from "./wall-cost";
 import { createHash } from "crypto";
 import {
@@ -144,7 +151,15 @@ export interface SeriesSources {
   finops: (today: string) => Promise<FinopsHistory>;
   planCost: (today: string) => Promise<PlanCostHistory>;
   /** Measured Stripe fees; throws while the fee table is dark (missing scope). */
-  fees?: (today: string) => Promise<Record<string, number>>;
+  fees?: (today: string) => Promise<StripeFeeHistory>;
+  /** Soniox balance-derived day-rate; throws while that table is dark. */
+  vendorBalance?: (today: string) => Promise<VendorBalanceHistory>;
+  /** Modulate modelled volume line; throws while its table is dark. */
+  modulate?: (today: string) => Promise<{
+    byDay: Record<string, ModulateModelledDay>;
+    price: number | null;
+    priceAsOf: string | null;
+  }>;
   /** Shared cross-instance state; process memory when absent (tests). */
   store?: SeriesStore;
   /** Lease holder id; one per process by default. */
@@ -164,6 +179,8 @@ export const defaultSeriesSources: SeriesSources = {
   finops: fetchFinopsHistory,
   planCost: fetchPlanCostHistory,
   fees: fetchStripeFeeHistory,
+  vendorBalance: fetchVendorBalanceHistory,
+  modulate: fetchModulateModelled,
   // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
   store: process.env.K_REVISION
     ? firestoreSeriesStore
@@ -186,8 +203,16 @@ export interface Legs {
   finops?: FinopsHistory;
   /** FinOps plan cost (margin by plan); settled about D−3. */
   planCost?: PlanCostHistory;
-  /** Measured Stripe processing fees by day (missing = the leg is unavailable). */
-  fees?: Record<string, number>;
+  /** Measured Stripe processing fees (missing = the leg is unavailable). */
+  fees?: StripeFeeHistory;
+  /** Soniox balance series (missing = the leg is unavailable). */
+  vendorBalance?: VendorBalanceHistory;
+  /** Modulate modelled volume line (missing = the leg is unavailable). */
+  modulate?: {
+    byDay: Record<string, ModulateModelledDay>;
+    price: number | null;
+    priceAsOf: string | null;
+  };
   billing?: Billing;
   shopify?: {
     date: string;
@@ -203,7 +228,16 @@ const LEGS_FOR: Record<SeriesName, LegName[]> = {
   activation: ["activationHistory", "captureSource"],
   retention: ["curve", "retainedHistory", "establishedHistory", "growth"],
   revenue: ["finops", "mauPrior", "mauDaily", "shopify"],
-  health: ["billing", "finops", "mauPrior", "mauDaily", "planCost", "fees"],
+  health: [
+    "billing",
+    "finops",
+    "mauPrior",
+    "mauDaily",
+    "planCost",
+    "fees",
+    "vendorBalance",
+    "modulate",
+  ],
 };
 
 /** Shift period numbers of a chunk read at an older end date. */
@@ -344,6 +378,14 @@ export function legJobs(
       sources.fees
         ? sources.fees(isoDay(now))
         : Promise.reject(new Error("Stripe fee source unavailable")),
+    vendorBalance: () =>
+      sources.vendorBalance
+        ? sources.vendorBalance(isoDay(now))
+        : Promise.reject(new Error("Soniox balance source unavailable")),
+    modulate: () =>
+      sources.modulate
+        ? sources.modulate(isoDay(now))
+        : Promise.reject(new Error("Modulate modelled source unavailable")),
     billing: async () => {
       const bill = await sources.billing();
       if (!bill || bill.summary.costSource !== "billing")
@@ -717,25 +759,41 @@ export function healthFrames(
 ) {
   const end = utcDay(now);
   const cutoff = isoDay(shiftDay(end, -2));
-  // Same all-in model as the snapshot's cost stats (every cost line counted).
-  // The fee leg is unavailable, not zero, while the FinOps fee table is dark.
+  // Same all-in model as the snapshot's cost stats (every cost line counted),
+  // including the Soniox balance series and the Modulate modelled line so the
+  // chart's STT matches the stat. The fee leg is unavailable, not zero, while
+  // the FinOps fee table is dark.
   const feesUnavailable = legs.fees ? null : FEES_UNAVAILABLE_REASON;
+  const vendor = {
+    sttMeasured: legs.planCost?.sttMeasured,
+    sonioxBalance: sonioxBalanceInputs(legs.vendorBalance ?? null, cutoff),
+    modulateModelled: legs.modulate ?? undefined,
+    sttCash: legs.planCost?.sttCash,
+    saasMeasured: legs.planCost?.saasMeasured,
+    stripeFees: legs.fees?.fees,
+  };
   const allIn = allInCost(
     (legs.billing?.daily || []).filter((d) => d.date <= cutoff),
     legs.billing?.summary.coverage,
-    {
-      sttMeasured: legs.planCost?.sttMeasured,
-      sttCash: legs.planCost?.sttCash,
-      saasMeasured: legs.planCost?.saasMeasured,
-      stripeFees: legs.fees,
-    },
+    vendor,
     feesUnavailable
   );
   const latestCostDay = allIn.daily.find((d) => d.date === cutoff);
-  const estimates = estimateStatus(now, {
-    STT: latestCostDay?.sttMeasured,
-    SaaS: latestCostDay?.saasMeasured,
-  });
+  // A Soniox series that stopped covering the cutoff day puts the dated
+  // constant back in use: stale now, not once the constant ages out.
+  const estimates = estimateStatus(
+    now,
+    {
+      STT: latestCostDay?.sttMeasured,
+      SaaS: latestCostDay?.saasMeasured,
+    },
+    {
+      STT:
+        !!latestCostDay &&
+        sonioxSeriesBroken(vendor, latestCostDay.date) &&
+        !latestCostDay.sttMeasured,
+    }
+  );
   // 1 when a manual estimate is older than its line's staleness threshold.
   const estimateStale = estimates.some((e) => e.stale) ? 1 : 0;
   const days = allIn.daily;
@@ -744,7 +802,7 @@ export function healthFrames(
     (net?.trend || []).map((t) => [t.date, t.value])
   );
   const lastFeeDay =
-    Object.keys(legs.fees || {})
+    Object.keys(legs.fees?.fees || {})
       .sort()
       .at(-1) ?? null;
   const cost = days.slice(-60).map((d) => {
@@ -762,8 +820,14 @@ export function healthFrames(
         : d.sttCash
         ? "estimate+cash"
         : "estimate",
-      sttEstimateUsd: d.sttMeasured ? null : d.stt - d.sttCash,
-      sttMeasuredUsd: d.sttMeasured ? d.stt : null,
+      // The measured series carries ONLY measured dollars: the Soniox balance
+      // delta (or usage line) plus measured Deepgram. Modelled Modulate and
+      // every dated constant stay out of it (they have their own series).
+      sttEstimateUsd: d.sttSonioxMeasured ? null : d.sttSonioxUsd,
+      sttMeasuredUsd:
+        (d.sttSonioxMeasured ? d.sttSonioxUsd : 0) +
+        (d.sttDeepgramMeasured ? d.sttDeepgramUsd : 0),
+      sttModulateModelledUsd: d.sttModulateModelled ? d.sttModulateUsd : null,
       sttCashUsd: d.sttCash || null,
       saas: d.saas,
       saasSource: d.saasMeasured ? "measured" : "estimate",

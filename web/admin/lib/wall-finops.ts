@@ -6,9 +6,28 @@ import { WallSourceError } from "./wall-source-error";
  * plan_revenue_daily repeats rows across producer runs: keep the latest
  * computed_at per snapshot_date/plan and select by snapshot_date (the contract's
  * `date` vs `snapshot_date` offset). Known gaps, disclosed on the board: unmapped
- * enterprise prices are dropped and two JPY subscriptions are booked as yen/100.
+ * enterprise prices are dropped; non-USD payers are counted but their MRR is
+ * excluded (no implicit FX, `non_usd_paying_subs` marks the figure partial).
  */
 export const FINOPS_HISTORY_QUERY = `
+WITH revenue AS (
+  SELECT FORMAT_DATE('%F', snapshot_date) AS day, plan, mrr_usd, paying_subs,
+    MAX(computed_at) OVER (PARTITION BY snapshot_date) AS refreshed,
+    MAX(paying_customers) OVER (PARTITION BY snapshot_date) AS paying_customers,
+    MAX(non_usd_paying_subs) OVER (PARTITION BY snapshot_date) AS non_usd_paying_subs,
+    ROW_NUMBER() OVER (PARTITION BY snapshot_date, plan ORDER BY computed_at DESC) AS rn
+  FROM \`based-hardware.omi_finops.plan_revenue_daily\`
+  WHERE snapshot_date >= DATE_SUB(@today, INTERVAL @days DAY) AND snapshot_date <= @today
+)
+SELECT TO_JSON_STRING(STRUCT(
+  ARRAY(SELECT AS STRUCT day, plan, mrr_usd, paying_subs, paying_customers, non_usd_paying_subs, refreshed
+        FROM revenue WHERE rn = 1 ORDER BY day) AS mrr
+)) AS history`;
+
+/** Same read before the `paying_customers`/`non_usd_paying_subs` columns existed
+ * (the daily job adds them on its next run); the wall then falls back to the
+ * per-plan item sums and labels the denominator item-based. */
+const FINOPS_HISTORY_QUERY_LEGACY = `
 WITH revenue AS (
   SELECT FORMAT_DATE('%F', snapshot_date) AS day, plan, mrr_usd, paying_subs,
     MAX(computed_at) OVER (PARTITION BY snapshot_date) AS refreshed,
@@ -26,6 +45,11 @@ export interface FinopsHistory {
   mrr: Record<string, Record<string, number>>;
   /** snapshot_date → total paying subscriptions (trialing excluded). */
   paying: Record<string, number>;
+  /** snapshot_date → distinct paying customers (repeated book-wide count).
+   * Empty when the table predates the column; the wall falls back to `paying`. */
+  payingCustomers: Record<string, number>;
+  /** snapshot_date → paying customers whose price is not USD (MRR partial). */
+  nonUsdPaying: Record<string, number>;
   /** snapshot_date → producer computed_at, the book's own as-of watermark. */
   refreshed: Record<string, string>;
 }
@@ -37,6 +61,7 @@ export async function fetchFinopsHistory(
   const bq = getGcpBillingClient();
   if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
   let rows: { history: string }[];
+  let history: FinopsHistory;
   try {
     [rows] = await bq.query({
       query: FINOPS_HISTORY_QUERY,
@@ -44,10 +69,21 @@ export async function fetchFinopsHistory(
       maximumBytesBilled: String(100 * 1024 * 1024),
       jobTimeoutMs: 30_000,
     });
+    history = parseFinopsHistory(rows[0]?.history || "{}");
   } catch {
-    throw new WallSourceError("FinOps aggregate query failed", true);
+    try {
+      [rows] = await bq.query({
+        query: FINOPS_HISTORY_QUERY_LEGACY,
+        params: { today: new BigQueryDate(today), days },
+        maximumBytesBilled: String(100 * 1024 * 1024),
+        jobTimeoutMs: 30_000,
+      });
+      history = parseFinopsHistory(rows[0]?.history || "{}");
+    } catch {
+      throw new WallSourceError("FinOps aggregate query failed", true);
+    }
   }
-  return parseFinopsHistory(rows[0]?.history || "{}");
+  return history;
 }
 
 export function parseFinopsHistory(json: string): FinopsHistory {
@@ -57,14 +93,27 @@ export function parseFinopsHistory(json: string): FinopsHistory {
       plan: string;
       mrr_usd: number;
       paying_subs: number;
+      paying_customers?: number | null;
+      non_usd_paying_subs?: number | null;
       refreshed: string;
     }[];
   };
-  const history: FinopsHistory = { mrr: {}, paying: {}, refreshed: {} };
+  const history: FinopsHistory = {
+    mrr: {},
+    paying: {},
+    payingCustomers: {},
+    nonUsdPaying: {},
+    refreshed: {},
+  };
   for (const r of parsed.mrr || []) {
     (history.mrr[r.day] ||= {})[r.plan] = Number(r.mrr_usd);
     history.paying[r.day] =
       (history.paying[r.day] || 0) + Number(r.paying_subs);
+    // Book-wide counts repeat on every plan row: take, do not sum.
+    if (r.paying_customers != null)
+      history.payingCustomers[r.day] = Number(r.paying_customers);
+    if (r.non_usd_paying_subs != null)
+      history.nonUsdPaying[r.day] = Number(r.non_usd_paying_subs);
     const t = Date.parse(r.refreshed);
     history.refreshed[r.day] = Number.isFinite(t)
       ? new Date(t).toISOString()
@@ -74,11 +123,14 @@ export function parseFinopsHistory(json: string): FinopsHistory {
 }
 
 /** FinOps plan cost by day: the latest run's `fully_loaded` and `variable_total`
- * plan rows (USD and cost-active user-days) from `unit_cost_daily`, measured STT
- * vendor lines, complete fresh Mercury SaaS aggregates, and Mercury STT-vendor
- * cash by vendor (Modulate has no usage feed; Soniox/Deepgram cash is a
- * cross-check that must not be stacked on their measured usage). Each source
- * keeps its own latest run so a vendor line never hides plan rows. Incomplete or
+ * plan rows (USD and cost-active user-days) from `unit_cost_daily`, per-vendor
+ * measured STT lines (provider-specific, never collapsed: Soniox and Deepgram
+ * stay separate so each provider combines with its own cash), Mercury SaaS
+ * aggregates (complete inputs AND complete annual history — an annual-history
+ * gap keeps the day off the measured line), and Mercury STT-vendor cash by
+ * vendor (Modulate has no usage feed; Soniox/Deepgram cash is a cross-check
+ * that must not be stacked on their measured usage). Each source keeps its own
+ * latest run so a vendor line never hides plan rows. Incomplete or
  * older-than-3-day Mercury rows are omitted and the TV keeps its dated estimate.
  */
 export const FINOPS_PLAN_COST_QUERY = `
@@ -91,6 +143,7 @@ WITH runs AS (
       OR (segment_type = 'total' AND REGEXP_CONTAINS(component, r'^stt_[a-z]+_measured$')))
 ), mercury AS (
   SELECT date, amount_usd,
+    annual_history_complete AS annual_complete,
     ROW_NUMBER() OVER (PARTITION BY date ORDER BY computed_at DESC, run_id DESC) AS rk
   FROM \`based-hardware.omi_finops.mercury_saas_daily\`
   WHERE date >= DATE_SUB(@today, INTERVAL @days DAY) AND date <= @today
@@ -111,9 +164,9 @@ SELECT TO_JSON_STRING(STRUCT(
           SUM(IF(component = 'variable_total', users, NULL)) AS varUsers,
           ANY_VALUE(inputs_settled) AS settled
         FROM runs WHERE rk = 1 AND segment_type = 'plan' GROUP BY day, plan ORDER BY day, plan) AS plans,
-  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, SUM(usd) AS usd
-        FROM runs WHERE rk = 1 AND segment_type = 'total' GROUP BY day ORDER BY day) AS stt,
-  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, amount_usd AS usd
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, component, SUM(usd) AS usd
+        FROM runs WHERE rk = 1 AND segment_type = 'total' GROUP BY day, component ORDER BY day, component) AS stt,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, amount_usd AS usd, IFNULL(annual_complete, FALSE) AS annual_complete
         FROM mercury WHERE rk = 1 ORDER BY day) AS saas,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, vendor,
           amount_usd AS usd
@@ -131,10 +184,16 @@ export interface PlanCostHistory {
       { usd: number; users: number; varUsd: number; varUsers: number }
     >
   >;
-  /** date → measured STT vendor USD (empty until the FinOps line exists). */
-  sttMeasured: Record<string, number>;
-  /** date → complete, fresh Mercury SaaS USD; explicit zeroes are retained. */
+  /** date → measured STT vendor → USD (`stt_<vendor>_measured`), kept
+   * provider-specific (soniox / deepgram / …) so vendors never collapse. */
+  sttMeasured: Record<string, Record<string, number>>;
+  /** date → complete, fresh Mercury SaaS USD; explicit zeroes are retained.
+   * A day whose annual history is incomplete is listed in `saasAnnualPartial`
+   * instead and keeps the wall's dated estimate. */
   saasMeasured: Record<string, number>;
+  /** Mercury SaaS days held back because the seeded annual history is
+   * incomplete (inputs_complete was true; the annual window was not). */
+  saasAnnualPartial: Record<string, boolean>;
   /** date → Mercury STT-vendor cash by vendor (soniox/deepgram/modulate). */
   sttCash: Record<string, Record<string, number>>;
 }
@@ -170,8 +229,8 @@ export function parsePlanCost(json: string): PlanCostHistory {
       varUsers: number | null;
       settled: boolean | null;
     }[];
-    stt?: { day: string; usd: number }[];
-    saas?: { day: string; usd: number }[];
+    stt?: { day: string; component: string; usd: number }[];
+    saas?: { day: string; usd: number; annual_complete?: boolean | null }[];
     sttCash?: { day: string; vendor: string; usd: number }[];
   };
   const unsettled = new Set(
@@ -181,6 +240,7 @@ export function parsePlanCost(json: string): PlanCostHistory {
     plans: {},
     sttMeasured: {},
     saasMeasured: {},
+    saasAnnualPartial: {},
     sttCash: {},
   };
   for (const r of parsed.plans || []) {
@@ -193,9 +253,21 @@ export function parsePlanCost(json: string): PlanCostHistory {
       varUsers: Number(r.varUsers ?? 0),
     };
   }
-  for (const r of parsed.stt || []) history.sttMeasured[r.day] = Number(r.usd);
-  for (const r of parsed.saas || [])
-    history.saasMeasured[r.day] = Number(r.usd);
+  // `stt_soniox_measured` -> soniox: the vendor key of the per-provider line.
+  for (const r of parsed.stt || []) {
+    const vendor = r.component.replace(/^stt_/, "").replace(/_measured$/, "");
+    (history.sttMeasured[r.day] ||= {})[vendor] =
+      (history.sttMeasured[r.day]?.[vendor] || 0) + Number(r.usd);
+  }
+  for (const r of parsed.saas || []) {
+    if (r.annual_complete === false) {
+      // Complete cash inputs but an incompletely seeded annual history: not
+      // measured — the day keeps the dated estimate and is disclosed.
+      history.saasAnnualPartial[r.day] = true;
+    } else {
+      history.saasMeasured[r.day] = Number(r.usd);
+    }
+  }
   for (const r of parsed.sttCash || [])
     (history.sttCash[r.day] ||= {})[r.vendor] = Number(r.usd);
   return history;
@@ -207,20 +279,35 @@ export function parsePlanCost(json: string): PlanCostHistory {
  * does not exist: that is an unavailable line reported on the wall, never an
  * estimate (David 2026-10-22). Kept out of the plan-cost query so a missing
  * table can never fail the plan/STT/SaaS read.
+ * `foreign_transaction_count` is carried alongside: those rows sit in a
+ * non-USD balance and carry no conversion data of their own, so their fees are
+ * NOT in `fee_usd` — the wall labels the line partial rather than calling the
+ * USD figure complete.
  */
 export const FINOPS_STRIPE_FEE_QUERY = `
-SELECT FORMAT_DATE('%F', date) AS day, fee_usd
+SELECT FORMAT_DATE('%F', date) AS day, fee_usd, foreign_transaction_count
 FROM \`based-hardware.omi_finops.stripe_fee_daily\`
 WHERE date >= DATE_SUB(@today, INTERVAL @days DAY) AND date <= @today
 ORDER BY day`;
 
+export interface StripeFeeHistory {
+  /** date → measured net fee USD (USD rows only). */
+  fees: Record<string, number>;
+  /** date → balance transactions held in a non-USD currency that day. */
+  foreign: Record<string, number>;
+}
+
 export async function fetchStripeFeeHistory(
   today: string,
   days = 40
-): Promise<Record<string, number>> {
+): Promise<StripeFeeHistory> {
   const bq = getGcpBillingClient();
   if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
-  let rows: { day: string; fee_usd: string | number }[];
+  let rows: {
+    day: string;
+    fee_usd: string | number;
+    foreign_transaction_count: string | number;
+  }[];
   try {
     [rows] = await bq.query({
       query: FINOPS_STRIPE_FEE_QUERY,
@@ -234,9 +321,12 @@ export async function fetchStripeFeeHistory(
       "Stripe fees unavailable (finops key lacks balance-transaction read scope)"
     );
   }
-  const fees: Record<string, number> = {};
-  for (const r of rows) fees[r.day] = Number(r.fee_usd);
-  return fees;
+  const history: StripeFeeHistory = { fees: {}, foreign: {} };
+  for (const r of rows) {
+    history.fees[r.day] = Number(r.fee_usd);
+    history.foreign[r.day] = Number(r.foreign_transaction_count ?? 0);
+  }
+  return history;
 }
 
 /** Soniox measured day-rate, derived on the producer from prepaid-balance

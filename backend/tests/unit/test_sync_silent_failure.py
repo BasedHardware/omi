@@ -403,7 +403,7 @@ class TestAppSideSyncBehavior:
 
     def test_app_keeps_wals_retryable_on_failed_reconcile(self):
         """App keeps uploaded WALs retryable when sync v2 reconciliation fails."""
-        source = self._read_app_file('services/wals/local_wal_sync.dart')
+        source = self._read_app_file('services/wals/wal_job_reconciliation.dart')
         if source is None:
             pytest.skip("App source not available")
 

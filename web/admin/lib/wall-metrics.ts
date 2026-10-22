@@ -33,6 +33,7 @@ import {
   FinopsHistory,
   ModulateModelledDay,
   PlanCostHistory,
+  StripeFeeHistory,
   VendorBalanceHistory,
 } from "./wall-finops";
 import { WallJobCache } from "./wall-job-cache";
@@ -44,7 +45,10 @@ import {
   modulateReconciliation,
   SAAS_AS_OF,
   SAAS_MONTHLY_USD,
+  sonioxBalanceInputs,
+  SONIOX_GAP_FLAG,
   SONIOX_UNAVAILABLE_REASON,
+  sonioxSeriesBroken,
   STT_MONTHLY_USD,
   STT_SOURCE,
 } from "./wall-cost";
@@ -153,7 +157,7 @@ export interface WallSources {
   /** FinOps Stripe book history (MRR/paying by snapshot day). */
   finops?: (today: string) => Promise<FinopsHistory>;
   /** Measured Stripe processing fees; throws while the fee table is dark. */
-  fees?: (today: string) => Promise<Record<string, number>>;
+  fees?: (today: string) => Promise<StripeFeeHistory>;
   /** Soniox balance-derived day-rate; throws while that table is dark. */
   vendorBalance?: (today: string) => Promise<VendorBalanceHistory>;
   /** Modulate modelled volume line; throws while its table is dark. */
@@ -424,6 +428,7 @@ export async function computeWall(
   let retryableFailures = 0;
   // Set by the billing job for the derived per-customer stat (same invocation).
   let windowPlans: PlanCostHistory | null = null;
+  let windowFinops: FinopsHistory | null = null;
   const jobs: (() => Promise<void>)[] = [];
   const guarded =
     (ids: MetricId[], source: string, job: () => Promise<void>) => async () => {
@@ -657,14 +662,20 @@ export async function computeWall(
         .filter((day) => day <= isoDay(shiftDay(end, -1)))
         .sort();
       const snap = snapshotDays.at(-1);
+      windowFinops = finops;
       if (finops && snap) {
         const plans = finops.mrr[snap];
         const usd = Object.values(plans).reduce((s, v) => s + v, 0);
+        const nonUsd = finops.nonUsdPaying[snap] ?? 0;
         m.value = usd;
         m.numerator = usd;
-        m.denominator = finops.paying[snap] ?? null;
+        // Distinct paying customers; the item-based plan sum is only a
+        // pre-migration fallback (labelled below).
+        const customers = finops.payingCustomers[snap];
+        m.denominator = customers ?? (finops.paying[snap] || null);
         m.breakdown = plans;
-        m.partial = false;
+        // Non-USD payers are counted but their MRR is not in the USD figure.
+        m.partial = nonUsd > 0;
         const refreshed = finops.refreshed[snap] ?? null;
         stamp(
           m,
@@ -673,6 +684,14 @@ export async function computeWall(
           `FinOps Stripe book snapshot ${snap}: coupons applied, annual ÷ 12, trialing excluded, produced ${
             refreshed?.slice(0, 10) ?? "unknown time"
           }.` +
+            (nonUsd
+              ? ` ${nonUsd} non-USD paying subscription${
+                  nonUsd === 1 ? "" : "s"
+                } counted but excluded from MRR (native currency, no implicit FX).`
+              : "") +
+            (customers == null
+              ? " Denominator is the subscription-item sum (table predates paying_customers)."
+              : "") +
             (book
               ? ` Live Stripe cross-check $${Math.round(
                   book.usd
@@ -780,8 +799,9 @@ export async function computeWall(
               ? vendorBalanceResult.value
               : null;
           // ≥2 snapshots = the derived day-rate series is live (David
-          // 2026-10-22); before that the dated console constant stays.
-          const sonioxReady = (vendorBalance?.snapshots ?? 0) >= 2;
+          // 2026-10-22); before that the dated console constant stays. The
+          // series ends at its last covered day — later days fall back to the
+          // dated constant, flagged, never $0 spend or a phantom reset.
           const modulate =
             modulateResult.status === "fulfilled" ? modulateResult.value : null;
           // Source failures (not empty data): the cache keeps the last good cost.
@@ -794,24 +814,13 @@ export async function computeWall(
           // SaaS, and measured Stripe fees.
           const vendor = {
             sttMeasured: planCost?.sttMeasured,
-            sonioxBalance: vendorBalance
-              ? {
-                  ready: sonioxReady,
-                  firstDay:
-                    Object.keys(vendorBalance.spend).sort()[0] ??
-                    vendorBalance.asOf ??
-                    cutoff,
-                  asOf: vendorBalance.asOf,
-                  spend: vendorBalance.spend,
-                  flags: vendorBalance.flags,
-                }
-              : undefined,
+            sonioxBalance: sonioxBalanceInputs(vendorBalance, cutoff),
             modulateModelled: modulate ?? undefined,
             sttCash: planCost?.sttCash,
             saasMeasured: planCost?.saasMeasured,
             stripeFees:
               feesResult.status === "fulfilled"
-                ? feesResult.value ?? undefined
+                ? feesResult.value?.fees
                 : undefined,
           };
           const cost = allInCost(
@@ -828,32 +837,62 @@ export async function computeWall(
             { stale }: { stale: boolean },
             label: string
           ) => (stale ? `${label} STALE` : label);
-          const sttEstimate = estimateStatus(now, {
-            STT: last.sttMeasured,
-          }).find((e) => e.line === "STT")!;
+          // A balance series that no longer covers the cutoff day means the
+          // STT constant is back in use: stale NOW, not once it ages out.
+          const sonioxBroken = sonioxSeriesBroken(vendor, last.date);
+          const sttEstimate = estimateStatus(
+            now,
+            { STT: last.sttMeasured },
+            { STT: sonioxBroken && !last.sttMeasured }
+          ).find((e) => e.line === "STT")!;
           const missingLines = [...cost.missing];
           if (sonioxUnavailable) missingLines.push("Soniox measured STT");
           if (modulateUnavailable) missingLines.push("Modulate modelled STT");
-          // Soniox: the balance-delta day-rate once the snapshot series is live
-          // (≥2 snapshots); before that the labelled dated constant (round 1's
-          // stale rule), with the legacy usage line still winning over neither.
+          // Soniox: the balance-delta day-rate while the snapshot series covers
+          // the day; a covered-but-unpublished row is a disclosed gap, never a
+          // reset; beyond the last covered day the dated constant returns with
+          // the break stated. `baseline_reset` stays reserved for an actual
+          // lower cumulative balance (the producer's null-usd row).
+          const bal = vendor.sonioxBalance;
+          const sonioxUsage = vendor.sttMeasured?.[last.date]?.soniox;
+          const covered =
+            !!bal &&
+            bal.ready &&
+            last.date >= bal.firstDay &&
+            last.date <= bal.lastDay;
           const sonioxText =
-            sonioxReady && vendorBalance
-              ? last.sttMeasured
-                ? `Soniox measured $${last.sttSonioxUsd.toFixed(
-                    2
-                  )}/day (prepaid-balance Δ, as-of ${
-                    vendorBalance.asOf ?? "?"
-                  })${
-                    last.sttFlag === "gap_spread"
-                      ? ", gap-spread estimate over a missed run"
-                      : ""
-                  }`
-                : `Soniox balance reset on ${last.date}: day unmeasured, new baseline taken`
+            bal && vendorBalance
+              ? covered
+                ? last.sttFlag === "baseline_reset"
+                  ? `Soniox balance reset on ${last.date}: day unmeasured, new baseline taken`
+                  : last.sttFlag === SONIOX_GAP_FLAG
+                  ? `Soniox ${last.date}: no published spend row (snapshot gap) — unmeasured, never booked as $0 or a reset`
+                  : `Soniox measured $${last.sttSonioxUsd.toFixed(
+                      2
+                    )}/day (prepaid-balance Δ, as-of ${
+                      vendorBalance.asOf ?? "?"
+                    })${
+                      last.sttFlag === "gap_spread"
+                        ? ", gap-spread estimate over a missed run"
+                        : ""
+                    }`
+                : bal.ready
+                ? staleEstimate(
+                    sttEstimate,
+                    `Soniox balance series does not cover ${
+                      last.date
+                    } (last covered day ${bal.lastDay}, as-of ${
+                      vendorBalance.asOf ?? "?"
+                    }): the day shows the dated console constant, not $0 spend`
+                  )
+                : staleEstimate(
+                    sttEstimate,
+                    `Soniox-console constant $${STT_MONTHLY_USD}/mo (${STT_SOURCE}); ${vendorBalance.snapshots}/2 balance snapshots`
+                  )
               : !vendorBalance && sonioxUnavailable
               ? `Soniox measured line UNAVAILABLE (${sonioxUnavailable})`
-              : last.sttMeasured
-              ? `Soniox measured $${last.sttSonioxUsd.toFixed(
+              : sonioxUsage != null
+              ? `Soniox measured $${sonioxUsage.toFixed(
                   2
                 )}/day (usage-summary line; balance series not live yet)`
               : staleEstimate(
@@ -864,6 +903,13 @@ export async function computeWall(
                       : "no balance series"
                   }`
                 );
+          // Deepgram combines independently: its measured usage or its own
+          // Mercury cash, never hidden by a Soniox measurement.
+          const deepgramText = last.sttDeepgramUsd
+            ? `; Deepgram ${
+                last.sttDeepgramMeasured ? "measured" : "Mercury cash"
+              } $${last.sttDeepgramUsd.toFixed(2)}/day`
+            : "";
           // Modulate: modelled volume × committed price when present; Mercury
           // cash is the labelled fallback and always the monthly cross-check.
           const recon = modulateReconciliation(
@@ -878,7 +924,9 @@ export async function computeWall(
                 modulate?.priceAsOf
               })`
             : `Modulate Mercury cash${
-                last.sttCash ? ` $${last.sttCash.toFixed(2)}/day` : ""
+                last.sttModulateUsd
+                  ? ` $${last.sttModulateUsd.toFixed(2)}/day`
+                  : ""
               }${
                 modulateUnavailable
                   ? " (modelled line unavailable)"
@@ -899,17 +947,35 @@ export async function computeWall(
                     }${recon.variancePct.toFixed(1)}%`
               }).`
             : "";
-          const sttLine = `STT ${sonioxText}; ${modulateText}${reconText}`;
+          const sttLine = `STT ${sonioxText}${deepgramText}; ${modulateText}${reconText}`;
+          const annualPartial = planCost?.saasAnnualPartial?.[last.date];
           const saasLine = last.saasMeasured
             ? `measured SaaS (Mercury) $${last.saas.toFixed(2)}/day`
             : `SaaS fixed $${SAAS_MONTHLY_USD}/mo estimate as of ${SAAS_AS_OF} (${
                 planCostResult.status === "rejected"
                   ? "Mercury feed unavailable"
+                  : annualPartial
+                  ? "Mercury cash complete but annual history incomplete — amortizes only seeded annual bills, gated as partial, not measured"
                   : "no complete fresh Mercury row"
               })`;
+          // Foreign-currency fee rows sit in a non-USD balance and carry no
+          // conversion data: counted here so the USD figure is labelled partial
+          // instead of silently complete.
+          const feesForeign =
+            feesResult.status === "fulfilled" && feesResult.value
+              ? Object.entries(feesResult.value.foreign)
+                  .filter(
+                    ([day]) => day <= cutoff && day > isoDay(shiftDay(end, -32))
+                  )
+                  .reduce((s, [, n]) => s + n, 0)
+              : 0;
           const feesLine =
             last.fees != null
-              ? `measured Stripe fees $${last.fees.toFixed(2)}/day`
+              ? `measured Stripe fees $${last.fees.toFixed(2)}/day${
+                  feesForeign
+                    ? ` (partial: ${feesForeign} foreign-currency fee rows in the 30d window counted, not converted)`
+                    : ""
+                }`
               : `Stripe fees UNAVAILABLE (finops key lacks balance-transaction read scope)`;
           const anthropicLine =
             last.anthropic != null && last.anthropic > 0
@@ -1046,14 +1112,48 @@ export async function computeWall(
       a.sourceFailure = m.sourceFailure || mau.sourceFailure;
   }
   // Software cost per paying customer (David 2026-10-22): the same 30-day
-  // all-in software cost as cost/MAU, over paying customers from the FinOps
-  // book. The breakdown exposes per-plan variable cost (FinOps
-  // `variable_total` ÷ cost-active user-days × 30.44) when the window has it.
+  // all-in software cost as cost/MAU, over a payer count measured over the
+  // SAME window as the cost — the average of daily paying customers from the
+  // FinOps book, stated; the window-end snapshot count and the item-based sum
+  // (pre-migration) are labelled fallbacks. The breakdown exposes per-plan
+  // variable cost (FinOps `variable_total` ÷ cost-active user-days × 30.44)
+  // when the window has it.
   {
     const p = metrics["cost.per_customer_month"];
     const m = metrics["revenue.mrr"];
     const perMau = metrics["cost.per_mau_month"];
-    const paying = m.denominator;
+    const window = completeWindow(30, now, 1);
+    // Assigned inside the Billing/Stripe callbacks above (like windowPlans).
+    const book = windowFinops as FinopsHistory | null;
+    let paying: number | null = null;
+    let basis = "";
+    if (book) {
+      const inWindow = Object.keys(book.payingCustomers)
+        .filter((d) => d >= isoDay(window.start) && d < isoDay(window.end))
+        .sort();
+      if (inWindow.length) {
+        paying =
+          inWindow.reduce((s, d) => s + book.payingCustomers[d], 0) /
+          inWindow.length;
+        basis = `denominator = average of ${inWindow.length} daily paying-customer snapshots inside the window`;
+      } else {
+        // No snapshot inside the window: the window-end count (the book's own
+        // latest day, at or before the window's exclusive end), stated.
+        const snaps = Object.keys(book.payingCustomers)
+          .filter((d) => d <= isoDay(window.end))
+          .sort();
+        const snap = snaps.at(-1);
+        if (snap) {
+          paying = book.payingCustomers[snap];
+          basis = `denominator = window-end paying-customer snapshot ${snap}`;
+        }
+      }
+    }
+    if (paying == null && m.denominator) {
+      paying = m.denominator;
+      basis =
+        "denominator = subscription-item sum (book predates the paying-customers column)";
+    }
     if (p.numerator != null && paying) {
       p.value = p.numerator / paying;
       p.denominator = paying;
@@ -1082,7 +1182,7 @@ export async function computeWall(
         p,
         perMau.windowStart ? new Date(perMau.windowStart) : shiftDay(end, -31),
         perMau.windowEnd ? new Date(perMau.windowEnd) : end,
-        `Same-window 30-day all-in software cost / paying customers (FinOps book${
+        `Same-window 30-day all-in software cost / paying customers (${basis}; FinOps book${
           m.dataThrough ? ` through ${String(m.dataThrough).slice(0, 10)}` : ""
         }). ${perMau.reason ?? ""}${
           p.breakdown

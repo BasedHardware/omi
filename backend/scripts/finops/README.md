@@ -536,14 +536,44 @@ The raw directory must belong to a fully assembled FinOps run; do not invoke the
 normal loader with only Mercury inputs. No backfill, database write or deployment
 was run as part of this implementation.
 
+## Subscription book rules (2026-10-22, round 3)
+
+The same `pull_stripe.py` run writes the book first (`raw/stripe_plan_mrr.json`):
+
+* **Currency scale follows the price**: zero-decimal currencies (JPY, KRW, VND,
+  … — <https://docs.stripe.com/currencies#zero-decimal>) are NOT divided by 100;
+  three-decimal currencies (BHD, JOD, KWD, OMR) divide by 1000. A JPY ¥1,200
+  price is 1,200 major units, never "$12".
+* **`mrr_usd` is USD only.** A non-USD price is never booked as dollars (no
+  implicit FX): its customer still counts as paying, its native monthly amount
+  is reported per currency (`non_usd_mrr_native` in the artifact), and
+  `non_usd_paying_subs` lets the wall label the figure partial.
+* **Customers, not items.** `paying_subs` counts a customer once per plan,
+  never per subscription item; `paying_customers` (new nullable
+  `plan_revenue_daily` column, added to a live table by the loader's one-shot
+  `ALTER TABLE … ADD COLUMN IF NOT EXISTS`) is the book-wide distinct customer
+  count repeated on every plan row — the wall takes MAX per snapshot day, not
+  the plan-row sum, and falls back to the sum (labelled item-based) on rows
+  written before the column existed. Old artifacts load with NULL.
+
 ## Measured Stripe processing fees
 
 `pull_stripe.py --end <date>` refreshes the trailing 90 posted UTC days of
 balance transactions into `raw/stripe_fee_daily.json`: per day the signed `fee`
-sum across **all** transaction types (a refund carries a negative fee, so fees
-are net of refunds on the refund's own day), gross `charge`/`payment` volume,
-the row count, and how many rows were non-USD (counted, never summed — no
-implicit FX). Only aggregates are persisted; no transaction or customer ids.
+sum across **all** transaction types, gross `charge`/`payment` volume, the row
+count, and how many rows were non-USD (counted, never summed — no implicit FX).
+Fee semantics follow the documented contract
+(<https://docs.stripe.com/api/balance_transactions/object>): `fee` is
+"Represented as a positive integer when assessed", the funds direction lives in
+`amount`, and a refund hands the previously assessed fee back as negative
+`fee_details` entries (type `stripe_fee`) matching a negative `fee` — so summing
+the API's signed `fee` nets refunds on the refund's own day. When `fee_details`
+is present it is authoritative: a breakdown that does not sum to `fee` is a
+shape failure, never a guessed number. A charge converted into the account's
+USD balance already arrives as a `usd` row (`exchange_rate` set, per the docs'
+EUR example), so the non-USD count covers only balances held in other
+currencies; the wall labels the fee line partial while that count is non-zero.
+Only aggregates are persisted; no transaction or customer ids.
 The loader writes `omi_finops.stripe_fee_daily` (date-partitioned, idempotent
 per date, replaced with each refresh) and is **dark while the fee source is
 unavailable**: a restricted Stripe key without balance-transaction read scope
@@ -553,7 +583,8 @@ no table is created or read, and the daily job is unaffected. Transport or
 shape failures also skip (`reason=error`) rather than publish a guessed number
 or lose the subscription book, which is written first.
 
-The TV reads it through `wall-finops.ts` (`fetchStripeFeeHistory`), kept
+The TV reads it through `wall-finops.ts` (`fetchStripeFeeHistory`, carrying
+`foreign_transaction_count` so the wall can label coverage), kept
 outside the plan-cost query so a dark fee table can never fail the plan/STT/SaaS
 legs; the wall shows the fee line as unavailable with the missing scope until
 the first successful pull creates the table.
