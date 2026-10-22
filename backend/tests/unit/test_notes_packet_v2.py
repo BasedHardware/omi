@@ -511,3 +511,20 @@ def test_ceiling_repair_preserves_grounded_content_of_one_long_bullet():
     assert repaired['sections'] and repaired['sections'][0]['body_markdown'].startswith('- synthetic')
     assert contract.body_words(repaired['sections']) == 170
     assert 'length_bounded' in repairs
+
+
+def test_citations_cannot_reference_segments_removed_from_language_inputs():
+    from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
+
+    rows = in_profile_segments(FIXTURES['english_with_noise']['segments'])
+    text, mapping = render_cluster_transcript(rows, names={})
+    context = build_conversation_prompt_prefix(
+        conversation_id='synthetic-conversation',
+        transcript=text,
+        started_at=START,
+        timezone_name='UTC',
+        language_code='en',
+        speaker_map=mapping,
+        transcript_segment_ids=['synthetic-en', 'synthetic-noise'],
+    )
+    assert context.transcript_segment_ids == frozenset({'synthetic-en'})

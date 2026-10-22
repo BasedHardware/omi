@@ -87,6 +87,7 @@ class SpeakerMap(dict[Any, Optional[str]]):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.owner_name = owner_name
+        self.source_segment_ids: Optional[frozenset[str]] = None
         self.clusters: tuple[SpeakerCluster, ...] = tuple(clusters)
 
 
@@ -373,6 +374,7 @@ def render_cluster_transcript(
                 by_segment[segment_id] = cluster
     keys: dict[Any, str] = {}
     labels = SpeakerMap(owner_name=owner_name)
+    labels.source_segment_ids = frozenset(str(row.id) for row in rows if getattr(row, 'id', None))
     turns = []
     wake_ids = find_wake_word_segment_ids(rows) if mark_wake_words else frozenset()
     for index, row in enumerate(rows):
