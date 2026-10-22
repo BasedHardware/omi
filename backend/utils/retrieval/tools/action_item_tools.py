@@ -39,8 +39,8 @@ except ImportError:
 
 def _extract_user_context(
     config: Any,
-) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[str]]:
-    """Extract user_id and configurable mapping from config, supporting top-level or nested configurable."""
+) -> Tuple[Optional[str], Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[str]]:
+    """Extract user_id, configurable mapping, and resolved config, supporting top-level or nested configurable."""
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         try:
@@ -51,16 +51,16 @@ def _extract_user_context(
             pass
 
     if cfg is None or not isinstance(cfg, dict):
-        return None, None, "Error: Configuration not available"
+        return None, None, None, "Error: Configuration not available"
 
     configurable_raw = cfg.get('configurable')
     configurable: Dict[str, Any] = configurable_raw if isinstance(configurable_raw, dict) else {}
 
     uid = configurable.get('user_id') or cfg.get('user_id')
     if not uid:
-        return None, None, "Error: User ID not found in configuration"
+        return None, None, None, "Error: User ID not found in configuration"
 
-    return str(uid), configurable, None
+    return str(uid), configurable, cfg, None
 
 
 # Bound the chat tool result so a broad request ("show me all my tasks") cannot flood the chat
@@ -179,12 +179,12 @@ def get_action_items_tool(
         f"due_start_date: {due_start_date}, due_end_date: {due_end_date}"
     )
 
-    uid, configurable, err = _extract_user_context(config)
+    uid, configurable, resolved_cfg, err = _extract_user_context(config)
     if err:
         return err
     assert uid is not None
     assert configurable is not None
-    clock = clock_for_config(config, uid)
+    clock = clock_for_config(resolved_cfg, uid)
 
     # Hard-scope: force conversation_id and intersect creation dates with chat_scope (#4515).
     scope = chat_scope_from_config(configurable)
@@ -432,12 +432,12 @@ def create_action_item_tool(
     if description is None or not isinstance(description, str) or not description.strip():
         return "Error: Description is required to create an action item."
 
-    uid, configurable, err = _extract_user_context(config)
+    uid, configurable, resolved_cfg, err = _extract_user_context(config)
     if err:
         return err
     assert uid is not None
     assert configurable is not None
-    clock = clock_for_config(config, uid)
+    clock = clock_for_config(resolved_cfg, uid)
     # Prepare action item data
     action_item_data: Dict[str, Any] = {
         'description': description.strip(),
@@ -599,12 +599,12 @@ def update_action_item_tool(
     if action_item_id is None or not str(action_item_id).strip():
         return "Error: action_item_id is required to update an action item."
 
-    uid, configurable, err = _extract_user_context(config)
+    uid, configurable, resolved_cfg, err = _extract_user_context(config)
     if err:
         return err
     assert uid is not None
     assert configurable is not None
-    clock = clock_for_config(config, uid)
+    clock = clock_for_config(resolved_cfg, uid)
 
     # Check if action item exists
     resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')
