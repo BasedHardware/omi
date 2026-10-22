@@ -65,6 +65,35 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _safe_int(val: Any, default: int) -> int:
+    """Safely coerce int or numeric string, rejecting booleans, None, and invalid types."""
+    if val is None or isinstance(val, bool):
+        return default
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_config_and_uid(config: RunnableConfig) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any], Optional[str]]:
+    """Extract config dict, non-None configurable dict, and user ID with top-level fallbacks."""
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+    if cfg is None:
+        return None, {}, None
+
+    configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
+    configurable = configurable if isinstance(configurable, dict) else {}
+    uid = (
+        configurable.get('user_id')
+        or (cfg.get('user_id') if isinstance(cfg, dict) else None)
+        or (cfg.get('uid') if isinstance(cfg, dict) else None)
+    )
+    return cfg, configurable, str(uid) if uid else None
+
+
+
 def _scoped_conversation_fetch(
     uid: str,
     conversation_id: str,
@@ -270,11 +299,11 @@ def _render_addressable_conversations(conversations, *, configurable, admitted_i
 def get_conversations_tool(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    limit: int = 20,
-    offset: int = 0,
+    limit: Any = 20,
+    offset: Any = 0,
     include_discarded: bool = False,
-    statuses: Optional[str] = "processing,completed",
-    max_transcript_segments: int = 0,
+    statuses: Any = "processing,completed",
+    max_transcript_segments: Any = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
@@ -324,24 +353,14 @@ def get_conversations_tool(
     logger.info(f"   include_timestamps: {include_timestamps}")
     # print(f"   config: {config}")
 
-    # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 get_conversations_tool - got config from context variable")
+    limit = _safe_int(limit, 20)
+    offset = _safe_int(offset, 0)
+    max_transcript_segments = _safe_int(max_transcript_segments, 0)
 
+    cfg, configurable, uid = _get_config_and_uid(config)
     if cfg is None:
         logger.info(f"❌ get_conversations_tool - config is None")
         return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ get_conversations_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
     if not uid:
         logger.info(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
@@ -363,6 +382,8 @@ def get_conversations_tool(
     end_dt = None
 
     if start_date:
+        if not isinstance(start_date, str):
+            return f"Error: start_date must be an ISO format string: {start_date}"
         try:
             # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
@@ -373,6 +394,8 @@ def get_conversations_tool(
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
     if end_date:
+        if not isinstance(end_date, str):
+            return f"Error: end_date must be an ISO format string: {end_date}"
         try:
             # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
@@ -386,8 +409,10 @@ def get_conversations_tool(
 
     # Parse statuses if provided
     status_list: List[str] = []
-    if statuses:
+    if isinstance(statuses, str):
         status_list = [s.strip() for s in statuses.split(',') if s.strip()]
+    elif isinstance(statuses, (list, tuple, set)):
+        status_list = [str(s).strip() for s in statuses if str(s).strip()]
 
     locked_count = 0
     try:
@@ -453,8 +478,8 @@ def get_conversations_tool(
             # Get all person IDs from all conversations
             all_person_ids: Set[str] = set()
             for conv_data in conversations_data:
-                segments = conv_data.get('transcript_segments', [])
-                all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
+                segments = conv_data.get('transcript_segments', []) if isinstance(conv_data, dict) else []
+                all_person_ids.update([s.get('person_id') for s in (segments or []) if isinstance(s, dict) and s.get('person_id')])
 
             logger.info(f"🔍 get_conversations_tool - Found {len(all_person_ids)} unique person IDs")
 
@@ -525,11 +550,11 @@ def get_conversations_tool(
 
 @tool
 def search_conversations_tool(
-    query: str,
+    query: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    limit: int = 5,
-    max_transcript_segments: int = 0,
+    limit: Any = 5,
+    max_transcript_segments: Any = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
@@ -588,26 +613,17 @@ def search_conversations_tool(
         Formatted string with matching conversations, including transcripts, summaries, action items, events, and
         metadata.
     """
-    logger.info("🔧 search_conversations_tool query_len=%s", len(query or ''))
+    if not isinstance(query, str) or not query.strip():
+        return "Error: Search query cannot be empty"
+    query = query.strip()
 
-    # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 search_conversations_tool - got config from context variable")
+    limit = _safe_int(limit, 5)
+    max_transcript_segments = _safe_int(max_transcript_segments, 0)
 
+    cfg, configurable, uid = _get_config_and_uid(config)
     if cfg is None:
         logger.info(f"❌ search_conversations_tool - config is None")
         return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_conversations_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
     if not uid:
         logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
@@ -636,6 +652,8 @@ def search_conversations_tool(
     end_dt = None
 
     if start_date:
+        if not isinstance(start_date, str):
+            return f"Error: start_date must be an ISO format string: {start_date}"
         try:
             dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if dt.tzinfo is None:
@@ -647,6 +665,8 @@ def search_conversations_tool(
             return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
 
     if end_date:
+        if not isinstance(end_date, str):
+            return f"Error: end_date must be an ISO format string: {end_date}"
         try:
             dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if dt.tzinfo is None:
@@ -825,8 +845,8 @@ def search_conversations_tool(
             # Get all person IDs
             all_person_ids: Set[str] = set()
             for conv_data in conversations_data:
-                segments = conv_data.get('transcript_segments', [])
-                all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
+                segments = conv_data.get('transcript_segments', []) if isinstance(conv_data, dict) else []
+                all_person_ids.update([s.get('person_id') for s in (segments or []) if isinstance(s, dict) and s.get('person_id')])
 
             logger.info(f"🔍 search_conversations_tool - Found {len(all_person_ids)} unique person IDs")
 
