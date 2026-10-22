@@ -425,13 +425,13 @@ def get_user_goal(uid: str, *, firestore_client: Any = None) -> Optional[Dict[st
     return goals[0]
 
 
-def get_user_goals(uid: str, limit: int = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
+def get_user_goals(uid: str, limit: Optional[int] = 3, *, firestore_client: Any = None) -> List[Dict[str, Any]]:
     collection = _get_db(firestore_client).collection(users_collection).document(uid).collection(goals_collection)
-    query = collection.where(filter=FieldFilter('is_active', '==', True)).limit(limit)
+    query = collection.where(filter=FieldFilter('is_active', '==', True))
     goals = _normalize_goal_documents(query.stream())
     goals = [goal for goal in goals if goal['status'] not in {GoalStatus.achieved.value, GoalStatus.abandoned.value}]
     goals.sort(key=_goal_created_at_sort_key)
-    return goals[:limit]
+    return goals[:limit] if limit is not None and limit >= 0 else goals
 
 
 def get_all_goals(
