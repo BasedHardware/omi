@@ -1,6 +1,7 @@
 """Encrypted, compressed evidence under the owning conversation, without changing its revision."""
 
 import base64
+import json
 import zlib
 from typing import Any
 
@@ -8,6 +9,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client, run_transactional
 from database.conversation_revisions import firestore_revision_datetime
+from database.read_boundary import parse_payload_strict
 from models.speaker_evidence import SpeakerEvidence
 from utils.encryption import decrypt, encrypt
 
@@ -70,4 +72,6 @@ def get_evidence(uid: str, conversation_id: str, *, firestore_client: Any = None
     payload = inflater.decompress(compressed, MAX_DECODED_BYTES + 1)
     if len(payload) > MAX_DECODED_BYTES or not inflater.eof:
         raise ValueError('speaker evidence exceeds decoded size budget')
-    return SpeakerEvidence.model_validate_json(payload)
+    return parse_payload_strict(
+        SpeakerEvidence, json.loads(payload), document_path='users/*/conversations/*/speaker_evidence/current'
+    )

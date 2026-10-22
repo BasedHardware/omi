@@ -44,3 +44,20 @@ def test_stale_source_revision_cannot_publish():
             account, 'c', record, expected_updated_at=datetime.now(timezone.utc), firestore_client=client
         )
     assert (*parent, 'speaker_evidence', 'current') not in client.rows
+
+
+def test_malformed_record_uses_safe_shared_read_boundary(caplog):
+    import base64
+    import json
+    import zlib
+    from database.read_boundary import MalformedDocError
+
+    account = str(uuid.uuid4())
+    parent = ('users', account, 'conversations', 'c')
+    raw = json.dumps({'status': 'invalid', 'policy_version': 'private-calibration-marker'})
+    encoded = storage.encrypt(base64.b64encode(zlib.compress(raw.encode())).decode(), account)
+    client = StrictFirestore({parent: {}, (*parent, 'speaker_evidence', 'current'): {'version': 1, 'payload': encoded}})
+    with pytest.raises(MalformedDocError) as error:
+        storage.get_evidence(account, 'c', firestore_client=client)
+    assert 'private-calibration-marker' not in caplog.text
+    assert account not in caplog.text and account not in str(error.value)
