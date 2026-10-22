@@ -26,6 +26,13 @@ _MEMO_MAX = 50_000
 _memo: dict[str, float] = {}
 _memo_lock = threading.Lock()
 
+# Live work asks "can this user's app show episodes?" at every new conversation and every
+# ended moment. The answer changes rarely (an install, a 14-day expiry), so each process
+# keeps it briefly instead of reading Redis each time; an app that just started calling the
+# API is seen within this window.
+SEEN_CACHE_SECONDS = 120
+_seen_cache: dict[str, tuple[bool, float]] = {}
+
 
 def _claim(uid: str, wall: float) -> bool:
     """True when this process should consider a refresh now; records the attempt."""
@@ -54,6 +61,9 @@ def note_client_seen(uid: str, *, now: Optional[float] = None) -> bool:
     if not uid:
         return False
     wall = time.time() if now is None else now
+    with _memo_lock:
+        # This process just saw the app: its own live work need not wait out the read cache.
+        _seen_cache[uid] = (True, wall)
     if not _claim(uid, wall):
         return False
     remaining = marker_db.get_client_seen_ttl(uid)
@@ -71,6 +81,24 @@ def client_seen(uid: str) -> bool:
     return bool(uid) and marker_db.has_client_seen(uid)
 
 
+def client_seen_cached(uid: str, *, now: Optional[float] = None) -> bool:
+    """``client_seen`` behind a short per-process cache. Blocking (Redis) on a miss."""
+    if not uid:
+        return False
+    wall = time.time() if now is None else now
+    with _memo_lock:
+        cached = _seen_cache.get(uid)
+    if cached is not None and wall - cached[1] < SEEN_CACHE_SECONDS:
+        return cached[0]
+    seen = client_seen(uid)
+    with _memo_lock:
+        _seen_cache[uid] = (seen, wall)
+        if len(_seen_cache) > _MEMO_MAX:
+            _seen_cache.clear()
+            _seen_cache[uid] = (seen, wall)
+    return seen
+
+
 def episode_work_enabled(uid: str) -> bool:
     """Admission and a capable client. Blocking (Redis): call from a worker thread."""
     return episodes_enabled_for(uid) and client_seen(uid)
@@ -79,3 +107,4 @@ def episode_work_enabled(uid: str) -> bool:
 def reset_for_tests() -> None:
     with _memo_lock:
         _memo.clear()
+        _seen_cache.clear()
