@@ -56,6 +56,8 @@ def _build_pipeline_fakes() -> dict:
     # cleanup removes their modules while Prometheus retains their collectors,
     # and the next isolated segment fails before reaching its provider.
     importlib.import_module('utils.stt.batch_language')
+    importlib.import_module('utils.speakers.context')
+    importlib.import_module('utils.stt.transcript_admission')
     importlib.import_module('utils.batch_pipeline.language_metrics')
     importlib.import_module('utils.observability.sync_phases')
     fakes: dict = {}

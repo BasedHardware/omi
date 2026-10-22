@@ -96,7 +96,7 @@ def test_legacy_multisample_provenance_is_retained_and_sample_removal_keeps_rema
         'speech_samples': ['old-a.wav', 'old-b.wav'],
         'speech_sample_transcripts': ['', ''],
     }
-    pooled, removed = pool_profile(legacy, profile('new', [0, 1]))
+    pooled, removed = pool_profile(legacy, profile('new', [0.8, 0.6]))
     assert removed == []
     assert pooled['speech_samples'] == ['old-a.wav', 'old-b.wav', 'new.wav']
     remaining = remove_sample(pooled, 'new.wav')
@@ -111,13 +111,13 @@ def test_migrated_legacy_aggregate_retracts_and_replaces_as_one_conversation_con
         'speech_samples': ['old-a.wav', 'old-b.wav'],
         'speech_sample_transcripts': ['', ''],
     }
-    pooled, _ = pool_profile(legacy, profile('new', [0, 1]))
+    pooled, _ = pool_profile(legacy, profile('new', [0.8, 0.6]))
     from utils.speech_profile_deletion import teaching_segment_ids_for_deleted_sample
 
     assert teaching_segment_ids_for_deleted_sample(pooled, 'legacy') == ['s']
     undone, removed = retract_profile(pooled, ['legacy'], ['s'])
-    assert undone['speaker_embedding'] == [0, 1]
+    assert np.allclose(undone['speaker_embedding'], [0.8, 0.6])
     assert set(removed) == {'old-a.wav', 'old-b.wav'}
-    replaced, removed = pool_profile(legacy, profile('legacy', [0, 1]))
-    assert replaced['speaker_embedding'] == [0, 1]
+    replaced, removed = pool_profile(legacy, profile('legacy', [0.8, 0.6]))
+    assert np.allclose(replaced['speaker_embedding'], [0.8, 0.6])
     assert set(removed) == {'old-a.wav', 'old-b.wav'}
