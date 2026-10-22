@@ -202,7 +202,8 @@ def test_enqueue_uses_only_opaque_job_routing_fields():
     assert url == ''
     assert task_id == 'listen-finalization-9ee6f9ce-d6dc-4b5d-bf13-f80eb4fabd36-7'
     assert payload == {'job_id': '9ee6f9ce-d6dc-4b5d-bf13-f80eb4fabd36', 'dispatch_generation': 7}
-    assert set(enqueue.call_args.kwargs) == {'audience', 'invoker_sa'}
+    assert set(enqueue.call_args.kwargs) == {'audience', 'invoker_sa', 'schedule_at'}
+    assert enqueue.call_args.kwargs['schedule_at'] is None
 
 
 def test_worker_rejects_task_payloads_with_content_or_credentials():

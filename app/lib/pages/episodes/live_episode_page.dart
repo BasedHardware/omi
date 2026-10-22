@@ -292,7 +292,9 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   }) {
     final l10n = context.l10n;
     final dates = OmiDateFormat.of(context);
-    final started = episode?.startedAt ?? now.subtract(EpisodePresentation.elapsed(null, provider, now));
+    final anchor = context.read<EpisodeProvider?>()?.liveAnchor;
+    final started =
+        episode?.startedAt ?? now.subtract(EpisodePresentation.elapsed(null, provider, now, anchor: anchor));
     final title = (episode?.title ?? '').trim().isEmpty ? l10n.episodeListeningNow : episode!.title;
     // Named from the transcript's own speaker resolution, so the header and the lines agree.
     final people = EpisodePresentation.participants(
@@ -327,7 +329,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                       builder: (context, time) => Text(
                         listening
                             ? l10n.episodeLiveFor(EpisodePresentation.runningLength(
-                                EpisodePresentation.elapsed(episode, provider, time), l10n))
+                                EpisodePresentation.elapsed(episode, provider, time, anchor: anchor), l10n))
                             : captureStateLabel(l10n, state),
                         key: const Key('live_episode_status'),
                         style: meta.copyWith(

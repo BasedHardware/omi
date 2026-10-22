@@ -14,5 +14,5 @@ class MomentInput:
     segments: Sequence[Mapping[str, Any]]
     started_at: datetime
     ended_at: datetime
-    trigger: str  # pause | rollover | finalize
+    trigger: str  # pause | rollover | interval | session_end | finalize
     calendar_identity: Optional[str] = None

@@ -309,6 +309,7 @@ def with_listen_finalization_orphan_env(payload: str) -> str:
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "LISTEN_QUIET_FINALIZATION_ENABLED", "value": "true"},\n'
         '        {"name": "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS", "value": "900"},',
     )
 

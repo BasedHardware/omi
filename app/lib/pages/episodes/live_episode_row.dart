@@ -42,20 +42,29 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   @override
   Widget build(BuildContext context) {
     final episodes = context.watch<EpisodeProvider>();
-    final capture = context.watch<CaptureProvider>();
+    // Only what the row draws: the capture state, its start and whether it streams. Transcript
+    // lines, socket chatter and BLE samples no longer rebuild the row (the 1 s clock still ticks).
+    final (state, _, _) = context.select<CaptureProvider, (CaptureDisplayState, DateTime?, String?)>(
+      (c) => (EpisodePresentation.displayState(c), c.liveCaptureStartedAt, EpisodePresentation.streamingSource(c)),
+    );
     return LiveEpisodeClock(
       clock: episodes.now,
-      builder: (context, now) => _row(context, episodes, capture, now),
+      builder: (context, now) => _row(context, episodes, context.read<CaptureProvider>(), state, now),
     );
   }
 
-  Widget _row(BuildContext context, EpisodeProvider episodes, CaptureProvider capture, DateTime now) {
+  Widget _row(
+    BuildContext context,
+    EpisodeProvider episodes,
+    CaptureProvider capture,
+    CaptureDisplayState state,
+    DateTime now,
+  ) {
     final l10n = context.l10n;
     final episode = episodes.live;
-    final state = EpisodePresentation.displayState(capture);
     final listening = EpisodePresentation.isListening(state);
     final elapsed = EpisodePresentation.runningLength(
-      EpisodePresentation.elapsed(episode, capture, now),
+      EpisodePresentation.elapsed(episode, capture, now, anchor: episodes.liveAnchor),
       l10n,
     );
     final title = (episode?.title ?? '').trim().isEmpty ? l10n.episodeListeningNow : episode!.title;

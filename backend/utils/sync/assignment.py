@@ -42,7 +42,7 @@ from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.live_overlap import choose_live_overlap, compatible_capture, live_overlap_enabled
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
 from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
-from utils.conversation_continuity import intervals_connect
+from models.conversation_continuity import intervals_connect
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
 if TYPE_CHECKING:

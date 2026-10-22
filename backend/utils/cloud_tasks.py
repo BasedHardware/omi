@@ -511,7 +511,9 @@ def listen_finalization_binding() -> dict[str, str]:
     }
 
 
-def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> None:
+def enqueue_listen_finalization_job(
+    job_id: str, dispatch_generation: int, *, schedule_at: Optional[int] = None
+) -> None:
     """Wake the finalizer with opaque routing data only.
 
     The Firestore job is canonical.  The task intentionally contains neither a
@@ -525,6 +527,7 @@ def enqueue_listen_finalization_job(job_id: str, dispatch_generation: int) -> No
         {'job_id': job_id, 'dispatch_generation': dispatch_generation},
         audience=_listen_finalization_audience(),
         invoker_sa=_listen_finalization_invoker_sa(),
+        schedule_at=schedule_at,
     )
 
 

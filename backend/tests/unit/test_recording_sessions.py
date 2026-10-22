@@ -18,6 +18,7 @@ from database import recording_sessions
 from routers.listen.conversations import LiveConversationController
 from routers.listen.receiver import ListenReceiver
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import quiet_finalization
 
 
 def _stored_conversation(segments: list[dict[str, Any]], *, level: str = 'standard') -> dict[str, Any]:
@@ -595,6 +596,8 @@ class _ResumeSessionController(LiveConversationController):
 
 async def test_resume_reuses_the_lifecycle_snapshot_instead_of_reading_twice(recording_store, monkeypatch):
     monkeypatch.setattr(lifecycle_service, 'recording_session_mode', lambda: 'enforce')
+    arms = []
+    monkeypatch.setattr(quiet_finalization, 'arm', lambda *a, **kw: arms.append((a, kw)))
 
     get_conversation_calls: list[str] = []
     conversation = {
@@ -626,6 +629,7 @@ async def test_resume_reuses_the_lifecycle_snapshot_instead_of_reading_twice(rec
         get_conversation_calls == []
     ), f'transactional snapshot should avoid a second read, got {get_conversation_calls}'
     assert host.state.current_conversation_id == 'conversation-old'
+    assert arms == [(('uid', 'conversation-old', 120), {'requires_byok': False})]
 
 
 def _stored_conversation_with_audio(audio_files: list[dict[str, Any]]) -> dict[str, Any]:
