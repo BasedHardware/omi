@@ -272,11 +272,11 @@ def _render_addressable_conversations(conversations, *, configurable, admitted_i
 def get_conversations_tool(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    limit: int = 20,
-    offset: int = 0,
+    limit: Any = 20,
+    offset: Any = 0,
     include_discarded: bool = False,
     statuses: Optional[str] = "processing,completed",
-    max_transcript_segments: int = 0,
+    max_transcript_segments: Any = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
@@ -352,13 +352,22 @@ def get_conversations_tool(
         return f"Error: {scope_err}"
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
-    max_transcript_segments = int(max_transcript_segments)
+    try:
+        max_transcript_segments = int(max_transcript_segments)
+    except (TypeError, ValueError):
+        return f"Error: Invalid max_transcript_segments format: {max_transcript_segments}"
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
         logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
 
-    limit = int(limit)
-    offset = int(offset)
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        return f"Error: Invalid limit format: {limit}"
+    try:
+        offset = int(offset)
+    except (TypeError, ValueError):
+        return f"Error: Invalid offset format: {offset}"
 
     # Parse dates if provided (always in UTC)
     start_dt = None
@@ -530,8 +539,8 @@ def search_conversations_tool(
     query: str,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
-    limit: int = 5,
-    max_transcript_segments: int = 0,
+    limit: Any = 5,
+    max_transcript_segments: Any = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
@@ -626,12 +635,18 @@ def search_conversations_tool(
         return f"Error: {scope_err}"
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
-    max_transcript_segments = int(max_transcript_segments)
+    try:
+        max_transcript_segments = int(max_transcript_segments)
+    except (TypeError, ValueError):
+        return f"Error: Invalid max_transcript_segments format: {max_transcript_segments}"
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
         logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
 
-    limit = int(limit)
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        return f"Error: Invalid limit format: {limit}"
 
     # Parse dates to timestamps if provided
     starts_at = None
