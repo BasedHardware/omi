@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   proposalsError: null as Error | null,
   auditError: null as Error | null,
   fetchWithAuth: vi.fn(),
+  toast: vi.fn(),
 }));
 
 vi.mock("@/hooks/useTeamMembers", () => ({
@@ -42,7 +43,7 @@ vi.mock("@/hooks/useAuthToken", () => ({
 }));
 
 vi.mock("@/hooks/use-toast", () => ({
-  useToast: () => ({ toast: vi.fn() }),
+  useToast: () => ({ toast: state.toast }),
 }));
 
 import TeamPage from "../page";
@@ -81,6 +82,7 @@ beforeEach(() => {
   state.entries = [];
   state.proposalsError = null;
   state.auditError = null;
+  state.toast.mockReset();
   state.fetchWithAuth
     .mockReset()
     .mockResolvedValue(new Response("{}", { status: 200 }));
@@ -233,6 +235,46 @@ describe("TeamPage", () => {
     const [url, init] = state.fetchWithAuth.mock.calls[0];
     expect(url).toBe("/api/omi/team-members/proposals/p1");
     expect(JSON.parse(init.body)).toEqual({ decision: "approve" });
+  });
+
+  it("warns the approver when an approved add-person invite email fails", async () => {
+    state.viewer = OWNER_VIEWER;
+    state.proposals = [
+      {
+        id: "p2",
+        kind: "add_member",
+        status: "pending",
+        proposedBy: { type: "agent", email: "agent@x.iam.gserviceaccount.com" },
+        reason: "new hire",
+        createdAt: "2026-10-22T00:00:00.000Z",
+        expiresAt: "2026-10-25T00:00:00.000Z",
+        target: { uid: null, email: "new@example.com" },
+        before: null,
+        after: { roleLabel: "Support", scopes: ["users:read"] },
+        change: { accessRole: "support" },
+      },
+    ];
+    state.fetchWithAuth.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          proposal: { id: "p2", status: "approved", emailSent: false },
+        }),
+        { status: 200 }
+      )
+    );
+    render(<TeamPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Approve Add person/ }));
+    await waitFor(() => expect(state.toast).toHaveBeenCalled());
+    expect(state.toast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "Approved, but the invite email failed",
+        description: expect.stringContaining("new@example.com"),
+      })
+    );
+    expect(state.toast).not.toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Proposal approved" })
+    );
   });
 
   it("lists audit events with actor, target and before/after", () => {

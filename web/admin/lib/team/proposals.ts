@@ -93,6 +93,8 @@ export interface Proposal {
   };
   decidedAt?: string;
   decidedBy?: { uid: string; email: string | null };
+  /** Approved add_member only: false when the sign-in email could not be sent. */
+  emailSent?: boolean;
 }
 
 type Data = Record<string, unknown>;
@@ -197,11 +199,13 @@ export async function createProposal(
   // The per-agent cap and the one-pending-per-target rule are checked inside
   // a transaction that also writes a lock doc for the agent and one for the
   // target, so overlapping requests conflict and retry instead of both passing.
+  // The target identity is the member's uid (or the invitee's email for
+  // add_member): any kind of pending change on one target is the same lock,
+  // so two different kinds cannot both be pending.
   const locks = db.collection(LOCK_COLLECTION);
   const agentLock = locks.doc(`agent-${digest(agentEmail.toLowerCase())}`);
-  const targetLock = locks.doc(
-    `target-${digest(`${input.kind}|${target.uid ?? target.email}`)}`
-  );
+  const targetKey = target.uid ?? target.email ?? "";
+  const targetLock = locks.doc(`target-${digest(targetKey)}`);
   await db.runTransaction(async (tx) => {
     await tx.get(agentLock);
     await tx.get(targetLock);
@@ -221,16 +225,12 @@ export async function createProposal(
       throw new TeamError(429, "Too many pending proposals from this agent.");
     }
     const duplicate = live.find(
-      (p) =>
-        p.kind === input.kind &&
-        (target.uid
-          ? p.target.uid === target.uid
-          : p.target.email === target.email)
+      (p) => (p.target.uid ?? p.target.email ?? "") === targetKey
     );
     if (duplicate) {
       throw new TeamError(
         409,
-        `Proposal ${duplicate.id} already covers this change.`
+        `Proposal ${duplicate.id} is already pending for this target.`
       );
     }
     const stamp = { updatedAt: new Date(now).toISOString() };
@@ -377,7 +377,7 @@ export async function decideProposal(
   };
 
   if (proposal.kind === "add_member") {
-    await addMember(
+    const applied = await addMember(
       actor,
       {
         email: proposal.target.email!,
@@ -386,6 +386,32 @@ export async function decideProposal(
       },
       approval
     );
+    if (!applied.emailSent) {
+      // The grant landed but the person never heard about it. The approver
+      // is told in the response; the audit log records why they had to
+      // reach out by hand.
+      await db.runTransaction(async (tx) => {
+        audit(tx, {
+          action: "member.invite_failed",
+          actor: humanAuditActor(actor),
+          target: {
+            uid: applied.teamMember.id,
+            email: applied.teamMember.email,
+          },
+          before: null,
+          after: proposal.after,
+          proposalId: id,
+          proposedBy: proposal.proposedBy.email,
+        });
+      });
+    }
+    return {
+      ...proposal,
+      status: "approved",
+      decidedAt,
+      decidedBy,
+      emailSent: applied.emailSent,
+    };
   } else if (proposal.kind === "remove_member") {
     await removeMember(actor, proposal.target.uid!, approval);
   } else {

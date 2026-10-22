@@ -31,6 +31,7 @@ export type AuditAction =
   | "member.added"
   | "member.removed"
   | "member.role_changed"
+  | "member.invite_failed"
   | "proposal.created"
   | "proposal.approved"
   | "proposal.rejected"

@@ -21,7 +21,7 @@ vi.mock("@/lib/firebase/admin", () => ({
 }));
 vi.mock("@/lib/dev-auth", () => ({ DEV_BYPASS_ENABLED: false }));
 vi.mock("@/lib/email/invite", () => ({
-  sendAdminInviteEmail: async () => ({ sent: true }),
+  sendAdminInviteEmail: vi.fn(async () => ({ sent: true })),
 }));
 
 import { GET as rosterGET } from "../route";
@@ -31,6 +31,7 @@ import { POST as decidePOST } from "@/app/api/omi/team-members/proposals/[id]/ro
 import { GET as humanProposalsGET } from "@/app/api/omi/team-members/proposals/route";
 import { GET as humanRosterGET } from "@/app/api/omi/team-members/route";
 import { GET as userDataGET } from "@/app/api/omi/fair-use/flagged/route";
+import { sendAdminInviteEmail } from "@/lib/email/invite";
 import { MAX_PENDING_PER_AGENT, PROPOSAL_TTL_MS } from "@/lib/team/proposals";
 
 const AUDIENCE = "https://admin.omi.me/api/agent/team";
@@ -304,6 +305,40 @@ describe("proposals", () => {
     ).toBe(409);
   });
 
+  it("refuses a pending proposal of another kind for the same target", async () => {
+    expect(
+      (
+        await propose({
+          kind: "set_role",
+          uid: ADMIN,
+          accessRole: "support",
+          reason: "to support",
+        })
+      ).status
+    ).toBe(201);
+    expect(
+      (await propose({ kind: "remove_member", uid: ADMIN, reason: "gone" }))
+        .status
+    ).toBe(409);
+    expect(proposals().size).toBe(1);
+  });
+
+  it("files only one of two overlapping proposals of different kinds for the same target", async () => {
+    const statuses = (
+      await Promise.all([
+        propose({
+          kind: "set_role",
+          uid: ADMIN,
+          accessRole: "support",
+          reason: "a",
+        }),
+        propose({ kind: "remove_member", uid: ADMIN, reason: "b" }),
+      ])
+    ).map((r) => r.status);
+    expect(statuses.sort()).toEqual([201, 409]);
+    expect(proposals().size).toBe(1);
+  });
+
   it("applies on owner or deputy approval, once, with the approver and proposer audited", async () => {
     state.auth.add({ uid: "new-uid", email: "new@example.com" });
     const { proposal } = await (
@@ -357,6 +392,59 @@ describe("proposals", () => {
     expect(proposals().get(proposal.id).status).toBe("pending");
     expect((await decide(OWNER, proposal.id, "approve")).status).toBe(200);
     expect(members().get(ADMIN).accessRole).toBe("deputy");
+  });
+
+  it("tells the approver when an approved add-person invite email fails, and audits it", async () => {
+    vi.mocked(sendAdminInviteEmail).mockResolvedValueOnce({
+      sent: false,
+      reason: "not-configured",
+    });
+    const failedProposal = (
+      await (
+        await propose({
+          kind: "add_member",
+          email: "new@example.com",
+          accessRole: "support",
+          reason: "new hire",
+        })
+      ).json()
+    ).proposal;
+    const approved = await decide(OWNER, failedProposal.id, "approve");
+    expect(approved.status).toBe(200);
+    expect((await approved.json()).proposal.emailSent).toBe(false);
+    expect(members().get("new-uid-1")).toMatchObject({
+      accessRole: "support",
+      addedBy: OWNER,
+    });
+    expect(
+      state.db
+        .rows("adminAuditLog")
+        .find((e: any) => e.action === "member.invite_failed")
+    ).toMatchObject({
+      actor: { type: "human", id: OWNER },
+      target: { uid: "new-uid-1", email: "new@example.com" },
+      proposalId: failedProposal.id,
+      proposedBy: AGENT,
+    });
+
+    // A delivered invite reports plain success and writes no such entry.
+    const delivered = (
+      await (
+        await propose({
+          kind: "add_member",
+          email: "ok@example.com",
+          accessRole: "viewer",
+          reason: "fine",
+        })
+      ).json()
+    ).proposal;
+    const ok = await decide(OWNER, delivered.id, "approve");
+    expect((await ok.json()).proposal.emailSent).toBe(true);
+    expect(
+      state.db
+        .rows("adminAuditLog")
+        .filter((e: any) => e.action === "member.invite_failed")
+    ).toHaveLength(1);
   });
 
   it("removes on approval and records rejection without change", async () => {

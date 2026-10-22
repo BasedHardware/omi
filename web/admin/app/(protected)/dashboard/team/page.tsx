@@ -80,6 +80,7 @@ const AUDIT_LABEL: Record<AuditEntry["action"], string> = {
   "member.added": "Added",
   "member.removed": "Removed",
   "member.role_changed": "Role changed",
+  "member.invite_failed": "Invite email failed",
   "proposal.created": "Proposal filed",
   "proposal.approved": "Proposal approved",
   "proposal.rejected": "Proposal rejected",
@@ -142,7 +143,9 @@ export default function TeamPage() {
     key: string,
     url: string,
     init: RequestInit,
-    success: { title: string; description: string },
+    success:
+      | { title: string; description: string }
+      | ((data: any) => { title: string; description: string }),
     failure: string
   ) => {
     setBusy(key);
@@ -152,9 +155,10 @@ export default function TeamPage() {
         const data = await response.json().catch(() => ({}));
         throw new Error(data.error || failure);
       }
+      const data = await response.json().catch(() => null);
       await refresh();
-      toast(success);
-      return true;
+      toast(typeof success === "function" ? success(data) : success);
+      return data ?? true;
     } catch (err) {
       toast({
         title: failure,
@@ -207,15 +211,28 @@ export default function TeamPage() {
       `${proposal.id}:${decision}`,
       `/api/omi/team-members/proposals/${encodeURIComponent(proposal.id)}`,
       { method: "POST", body: JSON.stringify({ decision }) },
-      {
-        title:
-          decision === "approve" ? "Proposal approved" : "Proposal rejected",
-        description:
-          decision === "approve"
-            ? `${PROPOSAL_LABEL[proposal.kind]} for ${
-                proposal.target.email ?? proposal.target.uid
-              } is applied.`
-            : "Nothing changed.",
+      (data) => {
+        const label = `${PROPOSAL_LABEL[proposal.kind]} for ${
+          proposal.target.email ?? proposal.target.uid
+        }`;
+        if (
+          decision === "approve" &&
+          proposal.kind === "add_member" &&
+          data?.proposal?.emailSent === false
+        ) {
+          return {
+            title: "Approved, but the invite email failed",
+            description: `${label} is applied, but the sign-in email could not be sent. Tell them to open https://admin.omi.me and sign in with ${proposal.target.email}.`,
+          };
+        }
+        return {
+          title:
+            decision === "approve" ? "Proposal approved" : "Proposal rejected",
+          description:
+            decision === "approve"
+              ? `${label} is applied.`
+              : "Nothing changed.",
+        };
       },
       decision === "approve" ? "Could not approve" : "Could not reject"
     );

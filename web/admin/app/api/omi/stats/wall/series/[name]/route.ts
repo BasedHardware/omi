@@ -12,7 +12,10 @@ export async function GET(
   request: NextRequest,
   props: { params: Promise<{ name: string }> }
 ) {
-  const auth = await requireScope(request, "analytics:read");
+  // revenue, health and headline frames carry MRR, hardware revenue and
+  // cost data; the usage-only series ride the same board, so the whole
+  // route is a finance read, like /wall and the Grafana embed.
+  const auth = await requireScope(request, "finance:read");
   if (auth instanceof NextResponse) return auth;
   const { name } = await props.params;
   if (!SERIES_NAMES.includes(name as SeriesName))

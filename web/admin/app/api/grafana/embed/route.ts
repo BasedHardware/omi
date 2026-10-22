@@ -6,7 +6,9 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(request: NextRequest) {
-  const admin = await requireScope(request, "analytics:read");
+  // The Business board (omi-tv-v2) carries revenue, MRR, Shopify and
+  // cost-vs-revenue panels, so minting an embed is a finance read.
+  const admin = await requireScope(request, "finance:read");
   if (admin instanceof NextResponse) return admin;
   const headers = {
     "Cache-Control": "no-store",

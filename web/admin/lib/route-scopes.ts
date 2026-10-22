@@ -18,7 +18,6 @@ export const ROUTE_POLICIES: Record<string, RoutePolicy> = {
   "GET /api/omi/access": "member",
 
   // Analytics
-  "GET /api/grafana/embed": "analytics:read",
   "GET /api/omi/stats/activation": "analytics:read",
   "GET /api/omi/stats/conversation-count": "analytics:read",
   "GET /api/omi/stats/crash-rate": "analytics:read",
@@ -39,14 +38,16 @@ export const ROUTE_POLICIES: Record<string, RoutePolicy> = {
   "GET /api/omi/stats/response-reliability": "analytics:read",
   "GET /api/omi/stats/retention/posthog": "analytics:read",
   "GET /api/omi/stats/viral-metrics": "analytics:read",
-  "GET /api/omi/stats/wall": "analytics:read",
-  "GET /api/omi/stats/wall/series/[name]": "analytics:read",
   "GET /api/omi/csat/stats": "analytics:read",
   "GET /api/omi/tv-links": "analytics:share",
   "POST /api/omi/tv-links": "analytics:share",
   "DELETE /api/omi/tv-links/[id]": "analytics:share",
 
   // Finance
+  // The omi-tv-v2 Business board exposes revenue, MRR, Shopify and cost
+  // panels; the wall aggregate and its series (revenue, health, headline)
+  // carry MRR, hardware revenue and all-in cost.
+  "GET /api/grafana/embed": "finance:read",
   "GET /api/omi/stats/app-subscriptions": "finance:read",
   "GET /api/omi/stats/infra-costs": "finance:read",
   "GET /api/omi/stats/mrr-trends": "finance:read",
@@ -55,6 +56,8 @@ export const ROUTE_POLICIES: Record<string, RoutePolicy> = {
   "GET /api/omi/stats/revenue": "finance:read",
   "GET /api/omi/stats/subscription-trends": "finance:read",
   "GET /api/omi/stats/subscriptions": "finance:read",
+  "GET /api/omi/stats/wall": "finance:read",
+  "GET /api/omi/stats/wall/series/[name]": "finance:read",
   "GET /api/omi/subscriptions": "finance:read",
   "GET /api/omi/payouts": "finance:read",
   "GET /api/omi/all-payouts": "finance:read",

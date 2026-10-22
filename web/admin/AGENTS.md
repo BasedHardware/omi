@@ -9,5 +9,6 @@
 Fetcher, SWR, partial-failure, and subscription-scope detail: [`docs/data-contracts.md`](docs/data-contracts.md).
 
 `/dashboard` embeds uid `omi-tv-v2` from the Business org on `monitor.omi.me`;
-see `grafana/README.md` and the private provisioning workflow.
+that embed API and `/api/omi/stats/wall*` need `finance:read`.
+See `grafana/README.md` and the private provisioning workflow.
 TV kiosk share links: `/dashboard/tv-links` (admin) → `/tv/view/<token>` (no login); [`docs/tv-mode.md`](docs/tv-mode.md).

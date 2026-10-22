@@ -152,6 +152,33 @@ describe.each(scoped.map((h) => [h.key, h] as const))("%s", (_key, h) => {
 });
 
 describe("special policies", () => {
+  it("pins financial data endpoints to finance:read", () => {
+    // The omi-tv-v2 board, the mixed wall aggregate and its series (revenue,
+    // health, headline) all expose revenue, MRR or cost data.
+    const financial = [
+      "GET /api/grafana/embed",
+      "GET /api/omi/stats/wall",
+      "GET /api/omi/stats/wall/series/[name]",
+    ];
+    for (const key of financial) {
+      expect(ROUTE_POLICIES[key], key).toBe("finance:read");
+    }
+  });
+
+  it("refuses an analytics-only member the business board and the wall", async () => {
+    state.db.table("adminData").set("viewer", { accessRole: "viewer" });
+    for (const key of [
+      "GET /api/grafana/embed",
+      "GET /api/omi/stats/wall",
+      "GET /api/omi/stats/wall/series/[name]",
+    ]) {
+      const h = ALL.find((entry) => entry.key === key)!;
+      const response = await call(h, firebaseToken("viewer"));
+      expect(response.status, key).toBe(403);
+      expect((await response.json()).scope, key).toBe("finance:read");
+    }
+  });
+
   it("lets any member read their own access, and nobody else", async () => {
     const access = ALL.find((h) => h.key === "GET /api/omi/access")!;
     state.db.table("adminData").set("viewer", {

@@ -8,7 +8,9 @@ import { localWallFixture } from "@/lib/wall-local-fixture";
 export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 export async function GET(request: NextRequest) {
-  const auth = await requireScope(request, "analytics:read");
+  // The wall mixes usage stats with MRR, hardware revenue and all-in cost;
+  // finance:read governs the whole aggregate.
+  const auth = await requireScope(request, "finance:read");
   if (auth instanceof NextResponse) return auth;
   try {
     const payload =
