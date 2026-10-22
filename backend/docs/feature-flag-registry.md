@@ -442,6 +442,7 @@ and an explicit empty literal renders as `''`.
 | `mobile-speech-analyzer-disabled` | Force existing iOS freemium fallback to SFSpeech; false or absent selects SpeechAnalyzer on supported iOS 26 devices/locales | mobile | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | dazheng |
 | `negative_feedback_remediation_kill` | Stop negative-feedback remediation on macOS | macos | posthog | inverted | — | — | — | expected (kill) | keep | keep | — | unowned |
 | `screen_task_jev_gate` | Default-on screen OCR text dedupe gate using Jev; explicit false is the kill switch; flag read failures keep it on | macos | posthog | open | — | — | — | expected (enable) | keep | keep | — | dazheng |
+| `watch_copy_dedupe_off` | True keeps and uploads Watch recovery copies; false deduplicates copies covered at least 95% by server-reachable live custody | mobile | posthog | closed | — | — | — | expected (kill) | keep | keep | — | dazheng |
 
 ### config_switch
 

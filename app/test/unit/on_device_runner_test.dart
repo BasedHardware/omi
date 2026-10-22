@@ -110,7 +110,6 @@ void main() {
         sync: sync,
         controller: controller,
         publish: rows.add,
-        recordings: () => [],
         transcribeChunk: (bytes, language) async {
           calls++;
           final duration = (bytes.length - 44) / 32000;
@@ -157,7 +156,6 @@ void main() {
         sync: sync,
         controller: controller,
         publish: rows.add,
-        recordings: () => [],
         transcribeChunk: (_, __) async {
           sync.clearUserData();
           return const OnDeviceBatchResult(engine: 'synthetic', text: 'Test.', words: [OnDeviceWord('Test.', 0, 1)]);
@@ -207,7 +205,6 @@ void main() {
         sync: sync,
         controller: controller,
         publish: rows.add,
-        recordings: () => [],
         cloudBaseUrl: 'http://127.0.0.1:1/',
         transcribeChunk: (_, __) async => const OnDeviceBatchResult(
             engine: 'synthetic', text: 'A synthetic test.', words: [OnDeviceWord('A synthetic test.', 0, 1)]),

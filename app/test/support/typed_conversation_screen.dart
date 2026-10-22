@@ -107,13 +107,18 @@ PendingWorkStore inertPendingWorkStore() => PendingWorkStore(
 Future<Widget> buildTypedConversationScreen(
   ConversationProvider provider, {
   SyncProvider? sync,
+  LocalRecordingsProvider? recordingsProvider,
+  ThemeData? theme,
+  bool initializePreferences = true,
   RecentRecapsLoader loadRecaps = _noRecaps,
   PendingWorkStore? pendingWork,
 }) async {
-  SharedPreferences.setMockInitialValues({});
-  await SharedPreferencesUtil.init();
+  if (initializePreferences) {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+  }
 
-  final recordings = _InertLocalRecordingsProvider();
+  final recordings = recordingsProvider ?? _InertLocalRecordingsProvider();
   final folders = FolderProvider(foldersFetcher: () async => <Folder>[]);
   final home = HomeProvider();
   final device = _InertDeviceProvider();
@@ -129,6 +134,8 @@ Future<Widget> buildTypedConversationScreen(
   );
 
   return MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: theme,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: const [Locale('en')],
     home: MultiProvider(

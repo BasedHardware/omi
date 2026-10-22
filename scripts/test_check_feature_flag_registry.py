@@ -152,6 +152,17 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("desktop/macos/Desktop/Sources/Feature.swift:1", errors)
         self.assertIn("web/admin/src/flags.ts:1", errors)
 
+    def test_dart_kill_switch_constant_is_cataloged(self) -> None:
+        self.write("app/lib/services/experiments/watch_copy_dedupe.dart",
+                   "class Policy { static const killSwitchFlag = 'watch_copy_dedupe_off'; }\n")
+        self.assertIn("unregistered feature flag: watch_copy_dedupe_off", "\n".join(self.errors()))
+        kill = flag("watch_copy_dedupe_off", kind="posthog", surfaces=["mobile"],
+                    lifecycle="ops_kill", decision="keep", terminal="keep",
+                    posthog={"row": "expected", "role": "kill"})
+        kill.pop("review_by")
+        self.write("config/feature-flags.yaml", self.yaml([flag(), kill]))
+        self.assertEqual([], self.errors())
+
     def test_swift_sdk_constant_read_is_a_real_surface_not_an_unconditional_declaration(self) -> None:
         key = "fixture-remote-stop"
         self.write(
