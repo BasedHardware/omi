@@ -109,7 +109,7 @@ def build_evidence(
     receipt = receipt or {}
     roster = unique_roster(roster)
     hint = participant_hint(roster, segments)
-    channel_ids = set(channel_ids)
+    channel_set = set(channel_ids)
     groups: dict[tuple, list] = defaultdict(list)
     refs = []
     for segment in segments:
@@ -120,7 +120,7 @@ def build_evidence(
         scope = _get(segment, 'speaker_id_scope')
         resolved = resolution.speaker_ids.get(sid) if resolution else None
         key = ('resolved', resolved) if resolved is not None else (scope, speaker)
-        key = (*key, sid in channel_ids)
+        key = (*key, sid in channel_set)
         groups[key].append(segment)
         refs.append(EvidenceSegment(id=sid, speaker_id=speaker, speaker_id_scope=_receipt_scope(segment, scope)))
     references = {ref.id: ref.model_dump() for ref in refs}

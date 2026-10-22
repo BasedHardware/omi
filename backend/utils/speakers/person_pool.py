@@ -1,6 +1,6 @@
 """Reversible person voiceprint contributions. Pure; publication fences live in DB."""
 
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, NoReturn
 from math import isfinite
 import logging
 
@@ -23,7 +23,7 @@ class PersonVoiceQualityError(ValueError):
     pass
 
 
-def reject(reason):
+def reject(reason) -> NoReturn:
     QUALITY.labels(outcome=reason).inc()
     logger.info('event=refactor_shadow lane=L2 check=person_sample_quality outcome=disagree')
     raise PersonVoiceQualityError(reason)
