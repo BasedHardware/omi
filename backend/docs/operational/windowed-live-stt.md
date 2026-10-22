@@ -10,6 +10,8 @@ WebSocket failed. The cap proxy preserves this call with
 `STT_CAP_FINALIZE_FORWARD_ENABLED` on by default. `false`, `0`, or `off` selects
 generic no-argument finalize as an emergency fallback without recreating the
 signature exception. Held providers remain unopened in either mode.
+Generic finalize omits the ordinary-speech guard, so sub-second speech blips
+may flush earlier in that emergency mode.
 
 `omi_stt_local_send_failures_total{provider,phase,exception_class}` and the
 `event=live_stt_local_send_failure` log distinguish raw send/refusal, usage

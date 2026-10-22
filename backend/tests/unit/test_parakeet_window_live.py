@@ -201,7 +201,7 @@ def receiver():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('mode', ['forward', 'generic', 'legacy-signature'])
+@pytest.mark.parametrize('mode', ['forward', 'generic', 'legacy-signature', 'capture-setup'])
 async def test_funded_window_vad_pause_survives_cap_proxy_and_keeps_transcribing(monkeypatch, caplog, mode):
     from utils import stt_cap_dispatch as cap
 
@@ -225,23 +225,33 @@ async def test_funded_window_vad_pause_survives_cap_proxy_and_keeps_transcribing
     assert isinstance(socket.raw, window.WindowedParakeetSocket)
     assert type(socket.raw) is cap.CapSocket
     raw = socket.raw.raw
+    if mode == 'capture-setup':
+        from utils.stt import live_session
+
+        monkeypatch.setattr(live_session, 'set_cap_capture', Mock(side_effect=RuntimeError('private capture detail')))
     finalize = Mock(wraps=raw.finalize)
     monkeypatch.setattr(raw, 'finalize', finalize)
     try:
         for data, frames in [(b'\x01\x00' * 640, 50), (bytes(1280), 25)]:
             for _ in range(frames):
                 accepted = socket.send(data)
-                if mode == 'legacy-signature' and not accepted:
-                    assert socket.normalized_death_reason == 'send_failed'
+                if mode in {'legacy-signature', 'capture-setup'} and not accepted:
+                    reason, phase, error = (
+                        ('send_failed', 'finalize', 'TypeError')
+                        if mode == 'legacy-signature'
+                        else ('connection_lost', 'capture_mapping', 'RuntimeError')
+                    )
+                    assert socket.normalized_death_reason == reason
                     assert (
-                        'phase=finalize exception_class=TypeError raw_dead=false raw_closed=false proxy=cap'
+                        f'phase={phase} exception_class={error} raw_dead=false raw_closed=false proxy=cap'
                         in caplog.text
                     )
+                    assert 'private capture detail' not in caplog.text
                     assert client.requests == []
                     return
                 assert accepted
                 await _REAL_SLEEP(0)
-        assert mode != 'legacy-signature', 'baseline protocol did not reproduce the VAD pause failure'
+        assert mode not in {'legacy-signature', 'capture-setup'}, 'expected local failure did not reproduce'
         assert finalize.call_count > 0
         assert finalize.call_args.kwargs == ({'vad_pause': True} if forward else {})
         await _wait_requests(client, 1)

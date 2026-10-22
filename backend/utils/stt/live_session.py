@@ -1099,15 +1099,17 @@ class LiveLegSocket(STTSocket):
                     self._expire_rescue()
                     return False
                 try:
+                    send_phase = 'capture_mapping'
                     token = capture_spans.set(sent_spans) if self._soniox_wire_ledger else None
                     try:
                         set_cap_capture(self.raw, audio, sent_spans)
+                        send_phase = 'raw_send'
                         sent = self.raw.send(audio)
                     finally:
                         if token is not None:
                             capture_spans.reset(token)
                 except Exception as error:
-                    record_local_send_failure(self.service, 'raw_send', self.raw, error)
+                    record_local_send_failure(self.service, send_phase, self.raw, error)
                     # A raised send is transport evidence unless the socket
                     # already owns a more specific bounded cause.
                     self._latch_failure(reason='connection_lost')
@@ -1127,6 +1129,7 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     self._dead = True
                     return False
+                send_phase = 'usage_accounting'
                 if self._routing_cohort is not None and getattr(self.raw, 'idle_close_enabled', False) is not True:
                     self._routing_cohort.paid_audio(self.service.value, len(audio) / (self.sample_rate * 2))
                 if not self.window:

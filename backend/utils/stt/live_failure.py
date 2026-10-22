@@ -36,6 +36,7 @@ from utils.stt.live_reason import (
 from config.live_stt_recovery import recovery_enabled, session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.live_outcome import LiveLegOutcome
+from utils.stt.local_send_diagnostics import record_local_send_failure
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -706,14 +707,10 @@ async def send_live_stt_audio(
         try:
             accepted = stt_socket.send(audio)
         except Exception as error:
-            from utils.stt.local_send_diagnostics import record_local_send_failure
-
             record_local_send_failure(provider, 'send_call', stt_socket, error)
             await _recoverable_failure('send_failed')
             return False
     except Exception as error:
-        from utils.stt.local_send_diagnostics import record_local_send_failure
-
         record_local_send_failure(provider, 'send_call', stt_socket, error)
         await _recoverable_failure('send_failed')
         return False
