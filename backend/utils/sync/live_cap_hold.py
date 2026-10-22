@@ -15,15 +15,23 @@ import hashlib
 import json
 from typing import Any
 import os
-from utils.sync.cap_hold_lifecycle import ACTIVE as _ACTIVE, observe_publication
+from utils.sync.cap_hold_lifecycle import ACTIVE as _ACTIVE, observe_publication, SHUTDOWN_DELIVERY_SECONDS
 
 from google.cloud import firestore
 
-from database._client import get_firestore_client, run_transactional
+from database._client import get_firestore_client, run_transactional, is_retryable_firestore_transaction_error
 from database.legal_holds import external_write_fence
 from utils.executors import db_executor, storage_executor, run_blocking
-from utils.observability.held_content import record_capture
-from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec, live_cap_staging, live_cap_upload
+from utils.observability.held_content import record_capture, PCM_CUSTODY_SECONDS
+from utils.sync import (
+    cap_hold,
+    live_cap_manifest,
+    live_cap_capacity,
+    live_cap_codec,
+    live_cap_staging,
+    live_cap_upload,
+    live_cap_journal,
+)
 from utils.sync.live_cap_publication import Publication
 from utils.sync.live_cap_tail import TailGrace
 from utils.sync.live_cap_capture import OrderedCapture
@@ -36,10 +44,33 @@ MAX_MONTHLY_BYTES = 96 * 1024**3
 MAX_MONTHLY_CHUNKS = 3_000_000
 CHUNK_SECONDS = 60
 MAX_PENDING_SECONDS = 15
+MAX_POD_PENDING_SECONDS = 600
+
+
+class StagingDeferred(RuntimeError):
+    """Both staging stores are temporarily unavailable; this sink owns PCM."""
+
+
+def pod_pending_seconds() -> float:
+    seconds = sum(hold.buffered_seconds() for hold in list(_ACTIVE))
+    try:
+        PCM_CUSTODY_SECONDS.set(seconds)
+    except Exception:
+        logger.warning('event=held_content_metric outcome=dropped')
+    return seconds
 
 
 def fragments_enabled() -> bool:
     return os.getenv('CAP_HOLD_LIVE_FRAGMENT_ENABLED', 'true').lower() == 'true'
+
+
+def _encode_audio(uid: str, data: bytes, rate: int, fragmented: bool) -> bytes:
+    with cap_hold.recovery_directory(uid) as directory:
+        path = str(Path(directory) / 'source.opus')
+        live_cap_codec.encode(
+            path, data, rate, **({'max_bytes': live_cap_staging.MAX_FRAGMENT_BYTES} if fragmented else {})
+        )
+        return Path(path).read_bytes()
 
 
 def _upload_audio(
@@ -59,9 +90,7 @@ def _upload_audio(
     """
     with cap_hold.recovery_directory(uid) as directory:
         path = str(Path(directory) / f'{start:.6f}.opus')
-        live_cap_codec.encode(
-            path, data, rate, **({'max_bytes': live_cap_staging.MAX_FRAGMENT_BYTES} if group is not None else {})
-        )
+        Path(path).write_bytes(data)
         return cap_hold.upload_held_audio(
             uid,
             path,
@@ -84,15 +113,39 @@ async def _publish_audio(
     source: Publication,
     metadata: dict,
     duration: float,
-) -> None:
-    await live_cap_upload.prepare(
-        source, lambda: _upload_audio(uid, data, rate, start, group, source, metadata, duration)
-    )
-    # Only the coordinator can advance to commit. A late upload cannot do so.
-    if group is None:
-        await run_blocking(storage_executor, live_cap_manifest.publish, uid, '', source, metadata, duration)
-    else:
-        await run_blocking(storage_executor, live_cap_staging.append, uid, '', group, source, metadata, duration)
+) -> bool:
+    encoded = await run_blocking(storage_executor, _encode_audio, uid, data, rate, group is not None)
+    try:
+        await live_cap_upload.prepare(
+            source, lambda: _upload_audio(uid, encoded, rate, start, group, source, metadata, duration)
+        )
+        # Only the coordinator can commit; an upload worker cannot publish late.
+        if group is None:
+            await run_blocking(storage_executor, live_cap_manifest.publish, uid, '', source, metadata, duration)
+        else:
+            await run_blocking(storage_executor, live_cap_staging.append, uid, '', group, source, metadata, duration)
+    except live_cap_staging.SourceSealed:
+        raise
+    except Exception as publication_error:
+        # The source identity never changes. Late uploads cannot commit, and
+        # the journal is retired only by the same fragment-claim sealer.
+        try:
+            await run_blocking(
+                storage_executor,
+                live_cap_journal.defer,
+                uid,
+                encoded,
+                source,
+                metadata,
+                duration,
+                standalone=group is None,
+            )
+        except Exception as error:
+            if live_cap_upload.transient(error) or is_retryable_firestore_transaction_error(error):
+                raise StagingDeferred('live staging retains process custody') from error
+            raise publication_error from error
+        return False
+    return True
 
 
 def reserve(
@@ -181,6 +234,8 @@ class LiveHeldAudio:
             return
         if self.buffered_seconds() + len(data) / (2 * rate) > self.bound + 1e-9:
             raise RuntimeError('live held audio packet exceeds custody bound')
+        if pod_pending_seconds() + len(data) / (2 * rate) > MAX_POD_PENDING_SECONDS + 1e-9:
+            raise RuntimeError('live held audio pod custody bound reached')
         if len(data) % 2:
             raise ValueError('held PCM must contain whole PCM16 samples')
         self.paused = True
@@ -228,9 +283,13 @@ class LiveHeldAudio:
         if rate <= 0 or len(data) % 2:
             raise ValueError('held PCM requires whole samples and a positive rate')
         while data:
-            frames = int((self.bound - self.buffered_seconds()) * rate + 1e-6)
+            available = min(self.bound - self.buffered_seconds(), MAX_POD_PENDING_SECONDS - pod_pending_seconds())
+            frames = int(available * rate + 1e-6)
             if frames <= 0:
-                await self.flush(force=True, seal=False, final=True)
+                # Force a durable handoff before accepting any bytes past the
+                # session or pod bound. No oldest-chunk eviction is allowed.
+                sink = self if self.buffered_seconds() else max(list(_ACTIVE), key=lambda h: h.buffered_seconds())
+                await sink.flush(force=True, seal=False, final=True)
                 continue
             size = min(len(data), frames * 2)
             yield data[:size]
@@ -264,17 +323,33 @@ class LiveHeldAudio:
         custody.add_done_callback(observe_publication)
         try:
             await asyncio.shield(custody)
+        except StagingDeferred:
+            if final:
+                raise  # At close/bound, no more volatile custody is safe.
         except asyncio.CancelledError:
             # Keep ownership until the executor has stopped using the scratch
             # file. Shutdown also awaits active sinks before closing clients.
             # The sink retains the task and the lock; its own coroutine keeps
             # scratch/PCM alive. Socket and lifespan close await the same lock.
             raise
+        except Exception as error:
+            if final or not (live_cap_upload.transient(error) or is_retryable_firestore_transaction_error(error)):
+                raise
+            # Reservation/summary faults also leave every unretired sample in
+            # this sink. A full bound or close must still prove durable custody.
+            logger.warning('event=stt_cap_live_held outcome=flush_deferred exception_type=%s', type(error).__name__)
 
     async def _seal_group(self) -> None:
         if self._group is None:
             return
-        await run_blocking(storage_executor, live_cap_staging.seal, self.host.request.uid, self._group.identity)
+        try:
+            await run_blocking(storage_executor, live_cap_staging.seal, self.host.request.uid, self._group.identity)
+        except Exception as error:
+            if not self._group_parts:
+                raise
+            # Every part already has a durable staging receipt. No compose or
+            # follow-up read failure can revoke that custody; redrive owns seal.
+            logger.warning('event=stt_cap_live_held outcome=seal_deferred exception_type=%s', type(error).__name__)
         self.seconds += self._group_seconds
         self._group = None
         self._group_key = None
@@ -285,7 +360,7 @@ class LiveHeldAudio:
         if self.capacity is not None and self.capacity.month != month:
             await run_blocking(db_executor, live_cap_capacity.release, self.capacity)
             self.capacity = None
-        if self.capacity is None or (self.capacity.used == live_cap_capacity.BLOCK_GROUPS and self._group is None):
+        if self.capacity is None or self.capacity.used == live_cap_capacity.BLOCK_GROUPS:
             from uuid import uuid4
 
             # Preserve the acquisition key across an ambiguous transaction reply.
@@ -368,7 +443,7 @@ class LiveHeldAudio:
                         self._group = Publication(self.host.request.uid)
                         self._group_key = key
                     try:
-                        await _publish_audio(
+                        published = await _publish_audio(
                             self.host.request.uid,
                             data,
                             rate,
@@ -389,7 +464,7 @@ class LiveHeldAudio:
                             raise RuntimeError('live held audio lacks reserved capacity')
                         self._group = Publication(self.host.request.uid)
                         self._group_key = key
-                        await _publish_audio(
+                        published = await _publish_audio(
                             self.host.request.uid,
                             data,
                             rate,
@@ -400,14 +475,19 @@ class LiveHeldAudio:
                             duration,
                         )
                     # Reserve one minute slot for the group's peak footprint.
-                    if self._group_parts == 0:
+                    if published:
+                        if self._group_parts == 0:
+                            capacity.consume()
+                        self._group_parts += 1
+                        self._group_seconds += duration
+                        self._group_end = start + duration
+                    else:
                         capacity.consume()
+                        if self._group_parts == 0:
+                            self._group = None
                     self._capacity_uncertain = False
-                    self._group_parts += 1
-                    self._group_seconds += duration
-                    self._group_end = start + duration
                 else:
-                    await _publish_audio(
+                    published = await _publish_audio(
                         self.host.request.uid,
                         data,
                         rate,
@@ -420,10 +500,11 @@ class LiveHeldAudio:
                     capacity.consume()
                     self._capacity_uncertain = False
                 # No await between durable publication and retiring bytes.
-                if not self.fragmented:
+                if not self.fragmented and published:
                     self.seconds += duration
                 self.pending.popleft()
                 self.pending_bytes -= len(data)
+                pod_pending_seconds()
                 self._charged.discard(identity)
                 self._publications.pop(identity, None)
                 if self.fragmented and (
@@ -497,6 +578,8 @@ class LiveHeldAudio:
                             part = data[(first - start) * 2 : (last - start) * 2]
                             if self.buffered_seconds() + len(part) / (2 * rate) > self.bound + 1e-9:
                                 raise RuntimeError('live held audio packet exceeds custody bound')
+                            if pod_pending_seconds() + len(part) / (2 * rate) > MAX_POD_PENDING_SECONDS + 1e-9:
+                                raise RuntimeError('live held audio pod custody bound reached')
                             self.paused = True
                             owner = receiver._owner_for_sample(first)
                             if self.fragmented:
@@ -528,12 +611,26 @@ class LiveHeldAudio:
                 pass
             if receiver._cap_hold_stop.is_set():
                 return
-            await receiver._emit_stt_cap_live_held()
-            if self.paused and not receiver.cap_admission.funded_paused and not receiver.cap_paused:
-                await self.flush(force=True)
-                await self.notice(paused=False)
+            try:
+                await receiver._emit_stt_cap_live_held()
+                if self.paused and not receiver.cap_admission.funded_paused and not receiver.cap_paused:
+                    await self.flush(force=True)
+                    await self.notice(paused=False)
+            except Exception as error:
+                # Updater errors cannot escape to the WS lifetime supervisor.
+                # PCM stays in this sink; receive/close retry the same identity.
+                logger.error('event=stt_cap_live_held outcome=update_deferred exception_type=%s', type(error).__name__)
 
     async def finish_updates(self, updates: asyncio.Task | None, stop: asyncio.Event) -> None:
+        try:
+            async with asyncio.timeout(SHUTDOWN_DELIVERY_SECONDS):
+                await self._finish_updates(updates, stop)
+        except TimeoutError:
+            if self.buffered_seconds():
+                raise
+            _ACTIVE.discard(self)
+
+    async def _finish_updates(self, updates: asyncio.Task | None, stop: asyncio.Event) -> None:
         stop.set()
         if updates is not None:
             try:
@@ -546,10 +643,27 @@ class LiveHeldAudio:
 
     async def close(self) -> None:
         try:
+            async with asyncio.timeout(SHUTDOWN_DELIVERY_SECONDS):
+                await self._close()
+        except TimeoutError:
+            if self.buffered_seconds():
+                raise
+            # A slow refund/seal/notice cannot revoke already durable custody.
+            _ACTIVE.discard(self)
+
+    async def _close(self) -> None:
+        try:
             await self.flush(force=True, final=True)
             if self.capacity is not None and not self._capacity_uncertain:
-                await run_blocking(db_executor, live_cap_capacity.release, self.capacity)
-                self.capacity = None
+                try:
+                    await run_blocking(db_executor, live_cap_capacity.release, self.capacity)
+                    self.capacity = None
+                except Exception as error:
+                    # Audio already has durable custody. A failed quota refund
+                    # cannot justify an internal-error close or erase that data.
+                    logger.warning(
+                        'event=stt_cap_live_held outcome=refund_deferred exception_type=%s', type(error).__name__
+                    )
             await self.notice()
             _ACTIVE.discard(self)
         finally:
