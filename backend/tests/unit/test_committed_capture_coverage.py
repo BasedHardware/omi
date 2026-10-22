@@ -17,6 +17,7 @@ from tests.unit.test_listen_audio_timeline_stack import _Stack
 from routers.listen.transcripts import TranscriptProcessor
 from utils.capture_evidence import SourcePositionMap
 from utils.committed_capture import CommittedCaptureMap, PROOF_KIND
+from utils.stt.transcript_admission import AdmissionState
 
 
 def _conversation(cid, t0):
@@ -519,6 +520,7 @@ async def test_large_callback_notes_stay_bounded_while_enqueue_admission_owns_sp
     try:
         stack.receiver.capture_timeline.accept(b'\x01\x00' * SPF, 1000.0, 0.0)
         processor = object.__new__(TranscriptProcessor)
+        processor.media_admission = AdmissionState()
         processor.host = stack.host
         processor.segment_buffer = deque(maxlen=4)
         processor._v2_legacy_fallback = deque(maxlen=4)

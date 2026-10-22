@@ -132,10 +132,11 @@ def encode_cache(entries: CacheEntries, evidence_seconds: Optional[Mapping[str, 
             }
     except Exception:
         match_scores.record_failure(logger, reason='malformed_doc')
+    energies = speaker_evidence.energy_metadata()
     header = json.dumps(
         {
             'v': CACHE_FORMAT_VERSION,
-            'energies': speaker_evidence.energy_metadata(),
+            **({'energies': energies} if energies else {}),
             **optional_header,
             'ids': ids,
             'durations': [round(entries[i][0], 3) for i in ids],
