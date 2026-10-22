@@ -93,11 +93,13 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final peopleNamed = _peopleCount(capture);
     // Paused (or waiting) shows no clock: a time that keeps counting while nothing listens misleads.
     final status = listening ? l10n.episodeLiveFor(elapsed) : captureStateLabel(l10n, state);
-    final rest = [
-      status,
+    final details = [
       if (peopleNamed >= 2) l10n.peopleCount(peopleNamed),
       if (topics.isNotEmpty) topics,
-    ].join(' · ');
+    ];
+    final rest = [status, ...details].join(' · ');
+    // What the live region announces: the state, people and topics, never the ticking clock.
+    final announced = [captureStateLabel(l10n, state), ...details].join(' · ');
     void open() {
       OmiHaptics.selection();
       PlatformManager.instance.analytics.liveTranscriptCardClicked(
@@ -114,7 +116,10 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
       child: Semantics(
         button: true,
         liveRegion: true,
-        label: '$title, $rest',
+        // A live region is re-announced whenever its label changes; the length ticks every second,
+        // so only the clock rides in the value, which is read on focus but never announced.
+        label: '$title, $announced',
+        value: listening ? elapsed : null,
         onTap: open,
         excludeSemantics: true,
         child: Material(

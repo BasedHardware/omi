@@ -1,0 +1,3 @@
+{
+  "change": "VoiceOver and TalkBack no longer re-read the live episode every second; they speak when it starts, pauses or reconnects"
+}

@@ -297,6 +297,32 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       expect(tester.takeException(), isNull);
     });
+    testWidgets('the status live region announces the capture state, not every clock tick', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final capture = _LiveCapture();
+      addTearDown(capture.dispose);
+      final clock = tester.binding.clock;
+      final start = clock.now();
+      final episode = Episode(
+        id: 'quiet',
+        live: true,
+        startedAt: start.subtract(const Duration(seconds: 57)),
+        lastActivityAt: start,
+      );
+      final episodes = _episodes(live: episode, clock: clock.now);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+      final before = tester.getSemantics(find.byKey(const Key('live_episode_status'))).getSemanticsData();
+      await tester.pump(const Duration(seconds: 1));
+      final after = tester.getSemantics(find.byKey(const Key('live_episode_status'))).getSemanticsData();
+      expect(before.flagsCollection.isLiveRegion, isTrue);
+      // VoiceOver and TalkBack re-announce a live region when its label changes.
+      expect(after.label, before.label, reason: 'a 1 s tick must not change the announced label');
+      expect(before.value, contains('57s'), reason: 'the running length is still read on focus');
+      expect(after.value, contains('58s'));
+      await _unmount(tester);
+      semantics.dispose();
+    });
     testWidgets('with episodes on it shows the running notes, captured tasks, moments and Wrap Up Now', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
@@ -422,6 +448,45 @@ void main() {
       await tester.pump(const Duration(seconds: 1));
       expect(find.textContaining('Live · 1m', findRichText: true), findsOneWidget);
       await _unmount(tester);
+    });
+    testWidgets('the row\'s live region announces the capture state, not every clock tick', (tester) async {
+      final semantics = tester.ensureSemantics();
+      final capture = _LiveCapture();
+      addTearDown(capture.dispose);
+      final clock = tester.binding.clock;
+      final start = clock.now();
+      final episodes = _episodes(
+        live: Episode(
+          id: 'quiet',
+          live: true,
+          startedAt: start.subtract(const Duration(seconds: 59)),
+          lastActivityAt: start,
+          moments: [
+            EpisodeMoment(
+              id: 'm1',
+              conversationId: 'c1',
+              startedAt: start.subtract(const Duration(seconds: 50)),
+              endedAt: start,
+              startOffset: 0,
+              endOffset: 50,
+              heading: 'Where to eat',
+            ),
+          ],
+        ),
+        clock: clock.now,
+      );
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      final before = tester.getSemantics(find.byKey(const Key('home_live_episode_row'))).getSemanticsData();
+      await tester.pump(const Duration(seconds: 1));
+      final after = tester.getSemantics(find.byKey(const Key('home_live_episode_row'))).getSemanticsData();
+      expect(before.flagsCollection.isLiveRegion, isTrue);
+      expect(after.label, before.label, reason: 'a 1 s tick must not re-announce the whole row');
+      expect(before.label, contains('Where to eat'), reason: 'topics stay in the announced label');
+      expect(before.value, contains('59s'), reason: 'the running length is still read on focus');
+      expect(after.value, contains('1m'));
+      await _unmount(tester);
+      semantics.dispose();
     });
     testWidgets('a pendant lease lapsing mid-stream keeps the running length (no 0s)', (tester) async {
       final clock = tester.binding.clock;

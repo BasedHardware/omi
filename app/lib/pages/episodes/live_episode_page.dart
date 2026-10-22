@@ -328,17 +328,28 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                         const SizedBox(width: 6),
                         LiveEpisodeClock(
                           clock: context.read<EpisodeProvider>().now,
-                          builder: (context, time) => Text(
-                            listening
-                                ? l10n.episodeLiveFor(EpisodePresentation.runningLength(
-                                    EpisodePresentation.elapsed(episode, provider, time, anchor: anchor), l10n))
-                                : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
-                            key: const Key('live_episode_status'),
-                            style: meta.copyWith(
-                              color: listening ? OmiColors.success : OmiColors.textSecondary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          builder: (context, time) {
+                            final state = captureStateLabel(l10n, EpisodePresentation.displayState(provider));
+                            final length = listening
+                                ? EpisodePresentation.runningLength(
+                                    EpisodePresentation.elapsed(episode, provider, time, anchor: anchor), l10n)
+                                : null;
+                            // The live region announces label changes, so the state is the label and the
+                            // 1 s length is the value: read on focus, never announced on every tick.
+                            return Semantics(
+                              label: state,
+                              value: length,
+                              excludeSemantics: true,
+                              child: Text(
+                                length != null ? l10n.episodeLiveFor(length) : state,
+                                key: const Key('live_episode_status'),
+                                style: meta.copyWith(
+                                  color: listening ? OmiColors.success : OmiColors.textSecondary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                       ],
                     ),
