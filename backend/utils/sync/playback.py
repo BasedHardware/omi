@@ -198,7 +198,7 @@ def _conversation_audio_urls_entry(
         )
         if stamped == source_fingerprint:
             cached_fingerprint, immutable = source_fingerprint, True
-    artifact_fingerprint = stamp.get('artifact_fingerprint')
+    artifact_fingerprint = (conversation or {}).get('conversation_audio_artifact_fingerprint')
     current_artifact = (
         compute_audio_files_fingerprint(
             audio_files,
@@ -213,8 +213,11 @@ def _conversation_audio_urls_entry(
             uid,
             conversation_id,
             **(
-                {'fingerprint': stamp.get('artifact_fingerprint') or cached_fingerprint}
-                if immutable or stamp.get('artifact_fingerprint')
+                {
+                    'fingerprint': (conversation or {}).get('conversation_audio_artifact_fingerprint')
+                    or cached_fingerprint
+                }
+                if immutable or (conversation or {}).get('conversation_audio_artifact_fingerprint')
                 else {}
             ),
         )

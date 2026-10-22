@@ -134,7 +134,7 @@ async def test_http_retry_after_stamp_failure_reuses_published_audio(monkeypatch
         assert (await client.post('/v2/audio-merge-jobs/run', json=payload)).json()['status'] == 'exists'
     assert len(published) == 1 and len(commits) == 2
     encoder.assert_called_once()
-    assert row['conversation_audio']['artifact_fingerprint'] in published
+    assert row['conversation_audio_artifact_fingerprint'] in published
 
 
 def test_timeline_origin_change_invalidates_immutable_playback(monkeypatch):
@@ -147,8 +147,10 @@ def test_timeline_origin_change_invalidates_immutable_playback(monkeypatch):
         started_at=1000.0,
         conversation_audio=dict(
             audio_files_fingerprint=storage.compute_audio_files_fingerprint(files),
-            artifact_fingerprint=storage.compute_audio_files_fingerprint(files, origin=1000.0, source_identity=True),
         ),
+    )
+    row['conversation_audio_artifact_fingerprint'] = storage.compute_audio_files_fingerprint(
+        files, origin=1000.0, source_identity=True
     )
     row['started_at'] = 990.0
     lookup, enqueue = Mock(return_value='stale-url'), Mock()

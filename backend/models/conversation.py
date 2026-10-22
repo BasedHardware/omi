@@ -363,11 +363,11 @@ class ConversationAudio(BaseModel):
     """Stamp for the conversation-level playback artifact (playback/{uid}/{conv}/conversation.mp3).
 
     audio_files_fingerprint identifies the audio_files content the artifact was
-    built from; a mismatch means the artifact must be rebuilt.
+    built from; a mismatch with the doc's current audio_files means the artifact
+    is stale and must be rebuilt.
     """
 
     audio_files_fingerprint: str
-    artifact_fingerprint: Optional[str] = None
     duration: float  # wall-clock seconds: last span wall_offset + len
     captured_duration: float  # seconds of actual audio: sum of span lens
     spans: List[ConversationAudioSpan] = []

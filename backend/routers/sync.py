@@ -3842,7 +3842,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         )
         stamp = conversation.get('conversation_audio') or {}
         if stamp.get('audio_files_fingerprint') == fingerprint and (
-            not stamp.get('artifact_fingerprint') or stamp['artifact_fingerprint'] == artifact_fingerprint
+            not conversation.get('conversation_audio_artifact_fingerprint')
+            or conversation['conversation_audio_artifact_fingerprint'] == artifact_fingerprint
         ):
             existing = await run_blocking(
                 storage_executor,
@@ -3850,8 +3851,8 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
                 uid,
                 conversation_id,
                 **(
-                    {'fingerprint': stamp.get('artifact_fingerprint') or fingerprint}
-                    if demand or stamp.get('artifact_fingerprint')
+                    {'fingerprint': conversation.get('conversation_audio_artifact_fingerprint') or fingerprint}
+                    if demand or conversation.get('conversation_audio_artifact_fingerprint')
                     else {}
                 ),
             )
@@ -3929,15 +3930,15 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             uid,
             conversation_id,
             {
+                'conversation_audio_artifact_fingerprint': artifact_fingerprint,
                 'conversation_audio': {
                     'audio_files_fingerprint': fingerprint,
-                    'artifact_fingerprint': artifact_fingerprint,
                     'duration': wall_duration,
                     'captured_duration': captured_duration,
                     'spans': spans,
                     'content_type': 'audio/mpeg',
                     'built_at': datetime.now(timezone.utc),
-                }
+                },
             },
         )
         if demand:

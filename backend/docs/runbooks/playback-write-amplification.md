@@ -107,7 +107,9 @@ if duplicate workers outlive the run lock. Obsolete per-file tasks are skipped.
 Pusher no longer starts full-conversation rebuilds on chunk flush. Metrics:
 `omi_playback_writes_total{outcome="cache_hit|generated|skipped"}`, with no IDs. The backend-sync GMP export filter explicitly retains this counter.
 
-Existing legacy artifact keys remain readable through old stamps. On-demand
+Server metadata `conversation_audio_artifact_fingerprint` selects the immutable
+object while client URL shapes stay stable. Existing legacy artifact keys remain
+readable through old stamps. On-demand
 rollout settings are unchanged. Per-file and dense conversation objects are both
 retained for released clients; this PR does not collapse those two formats into
 one incompatible API. No lifecycle rules or workflow files are changed.
