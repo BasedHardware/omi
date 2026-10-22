@@ -11,20 +11,23 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from functools import partial
 from typing import Any
 
 from google.api_core.exceptions import InvalidArgument
 
 from database import conversation_finalization_jobs as jobs_db
 from database._client import is_document_size_limit_error
-from services.conversation_selfheal import run_selfheal_tick
+from services.conversation_selfheal import STALE_AFTER, run_selfheal_tick
+from utils.conversations import quiet_finalization
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
     is_listen_finalization_dispatch_enabled,
 )
 from utils.metrics import (
+    CONVERSATION_ORPHANED_UNFINALIZED,
     LISTEN_FINALIZATION_BYOK_ABANDONMENTS_TOTAL,
     LISTEN_FINALIZATION_DEAD_LETTER_TOTAL,
     LISTEN_FINALIZATION_DURABLE_JOBS,
@@ -64,13 +67,51 @@ def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -
 
     if not is_listen_finalization_dispatch_enabled():
         return {'scanned': 0, 'enqueued': 0, 'verified': 0, 'refused': 0, 'errors': 0, 'mode': 'off'}
-    return run_selfheal_tick(
+    if not quiet_finalization.enabled():
+        return run_selfheal_tick(
+            firestore_client=firestore_client,
+            mode='heal',
+            dry_run=False,
+            use_configured_uid_allowlist=False,
+            wedge_runner=_skip_capture_wedge,
+            stale_after=STALE_AFTER,
+            content_due_scan=False,
+        )
+    result = run_selfheal_tick(
         firestore_client=firestore_client,
         mode='heal',
         dry_run=False,
         use_configured_uid_allowlist=False,
         wedge_runner=_skip_capture_wedge,
+        stale_after=timedelta(minutes=5),
+        content_due_scan=True,
+        cursor_getter=partial(jobs_db.get_in_progress_content_sweep_cursor, quiet=True),
+        cursor_advancer=partial(jobs_db.advance_in_progress_content_sweep_cursor, quiet=True),
     )
+    CONVERSATION_ORPHANED_UNFINALIZED.inc(result.get('enqueued', 0))
+    # The indexed fast path cannot see markerless photo/transcript rows and
+    # deliberately refuses unknown leases. Keep their existing two-hour
+    # recovery on its own cursor and previous five-minute scan cadence.
+    legacy_cursor = jobs_db.get_in_progress_content_sweep_cursor(firestore_client=firestore_client)
+    updated_at = legacy_cursor.get('updated_at')
+    if isinstance(updated_at, datetime):
+        updated_at = updated_at if updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - updated_at < timedelta(minutes=5):
+            return result | {'legacy': {'mode': 'cooldown'}}
+    legacy = run_selfheal_tick(
+        firestore_client=firestore_client,
+        mode='heal',
+        dry_run=False,
+        use_configured_uid_allowlist=False,
+        wedge_runner=_skip_capture_wedge,
+        stale_after=STALE_AFTER,
+        content_due_scan=False,
+    )
+    CONVERSATION_ORPHANED_UNFINALIZED.inc(legacy.get('enqueued', 0))
+    combined = result | {'legacy': legacy}
+    for key in ('scanned', 'enqueued', 'verified', 'refused', 'errors'):
+        combined[key] = int(result.get(key, 0)) + int(legacy.get(key, 0))
+    return combined
 
 
 def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int | float]:
@@ -100,6 +141,14 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
         job_id = candidate.get('job_id')
         if not isinstance(job_id, str) or not job_id:
             result['skipped'] += 1
+            continue
+        if candidate.get('kind') == 'listen_quiet_check':
+            try:
+                quiet_finalization.run(job_id, int(candidate['dispatch_generation']), firestore_client=firestore_client)
+                result['requeued'] += 1
+            except Exception:
+                logger.exception('quiet finalization reconciliation failed')
+                result['enqueue_failed'] += 1
             continue
         try:
             claimed = jobs_db.claim_finalization_replay(

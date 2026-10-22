@@ -21,6 +21,7 @@ from services.conversation_finalization import (
 from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import quiet_finalization
 from utils.conversations.processing_trigger import trigger_for_finalization_job
 from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
@@ -151,6 +152,9 @@ async def run_listen_finalization_job(
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
 
     job_id, dispatch_generation = parsed
+    if job_id.startswith('quiet-'):
+        status = await run_blocking(db_executor, quiet_finalization.run, job_id, dispatch_generation)
+        return JSONResponse(status_code=200, content={'status': status})
     from utils.conversations.demand_processing import admit
 
     if not await run_blocking(db_executor, admit, job_id, token=dispatch_generation):

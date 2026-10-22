@@ -75,6 +75,8 @@ class CaptureHarness:
 
     async def call(self, fn: Any, *args: Any, **kwargs: Any) -> Any:
         name = fn.__name__
+        if name == 'arm':
+            return fn(*args, firestore_client=self.store, **kwargs)
         if name == 'open_live_recording_session':
             uid, sid, proposed = args
             was_bound = sid in self.bindings
@@ -410,7 +412,7 @@ async def test_calendar_meeting_reconnect_and_lifecycle_continue_until_scheduled
     'empty,device,eligible', [(False, 'phone', False), (False, 'other', False), (True, 'phone', False)]
 )
 def test_meeting_continuation_keeps_device_and_empty_generation_fences(empty, device, eligible):
-    from utils.conversation_continuity import resumable_continuation
+    from models.conversation_continuity import resumable_continuation
 
     now = datetime(2026, 10, 7, tzinfo=timezone.utc)
     row = dict(
@@ -466,7 +468,7 @@ def test_metadata_only_continuation_lookup_reads_stored_calendar_context():
     ],
 )
 def test_missing_or_invalid_calendar_context_keeps_120_second_boundary(context):
-    from utils.conversation_continuity import resumable_continuation
+    from models.conversation_continuity import resumable_continuation
 
     now = datetime(2026, 10, 7, tzinfo=timezone.utc)
     row = dict(
@@ -484,7 +486,7 @@ def test_missing_or_invalid_calendar_context_keeps_120_second_boundary(context):
 
 
 def test_compressed_empty_recording_does_not_extend_meeting_deadline():
-    from utils.conversation_continuity import continuation_timeout
+    from models.conversation_continuity import continuation_timeout
 
     now = datetime(2026, 10, 7, tzinfo=timezone.utc)
     row = dict(
@@ -554,7 +556,7 @@ def test_calendar_id_only_continuation_resolves_exact_users_meeting(identity):
 )
 def test_calendar_id_fallback_does_not_join_a_different_event(record):
     from database.document_ids import calendar_meeting_doc_id
-    from utils.conversation_continuity import resumable_continuation
+    from models.conversation_continuity import resumable_continuation
 
     store = StrictFirestore()
     now = datetime(2026, 10, 7, tzinfo=timezone.utc)
