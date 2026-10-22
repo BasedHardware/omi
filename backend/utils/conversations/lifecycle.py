@@ -224,7 +224,7 @@ def transition(
     conversation_id: str,
     target: ConversationStatus,
     *,
-    expected: ConversationStatus | None = None,
+    expected: ConversationStatus,
     extra_updates: dict[str, Any] | None = None,
 ) -> bool:
     """Apply one typed status transition, failing closed on an invalid state.
@@ -238,20 +238,13 @@ def transition(
     if not conversation:
         raise LifecycleTransitionError(f'conversation {conversation_id} does not exist')
     current = _status_value(conversation.get('status'))
-    if expected is not None and current != expected.value:
+    if current != expected.value:
         return False
     if target.value not in _STATUS_TRANSITIONS.get(current, set()):
         raise LifecycleTransitionError(f'invalid lifecycle transition {current}->{target.value}')
-    if expected is not None:
-        return conversations_db.claim_conversation_status(
-            uid,
-            conversation_id,
-            expected,
-            target,
-            extra_updates=extra_updates,
-        )
-    conversations_db.transition_conversation_status(uid, conversation_id, target)
-    return True
+    return conversations_db.claim_conversation_status(
+        uid, conversation_id, expected, target, extra_updates=extra_updates
+    )
 
 
 def admit_processing(uid: str, conversation_id: str, *, extra_updates: dict[str, Any] | None = None) -> bool:
@@ -475,7 +468,7 @@ def recover_deferred_processing_failure(uid: str, conversation_id: str) -> bool:
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:
-    return transition(uid, conversation_id, ConversationStatus.merging)
+    return transition(uid, conversation_id, ConversationStatus.merging, expected=ConversationStatus.completed)
 
 
 def discard(uid: str, conversation_id: str) -> None:

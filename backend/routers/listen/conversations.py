@@ -920,11 +920,8 @@ class LiveConversationController:
     def _occasion_span_exceeded(self, conversation: dict[str, Any]) -> bool:
         if not getattr(self.host, 'occasion_mode', False):
             return False
-        started = conversation.get('started_at')
-        if not isinstance(started, datetime):
-            return False
-        started = started if started.tzinfo else started.replace(tzinfo=timezone.utc)
-        return (self.clock() - started).total_seconds() >= OCCASION_MAX_SPAN_SECONDS
+        started = persisted_started_seconds(conversation.get('started_at'))
+        return started is not None and self.clock().timestamp() - started >= OCCASION_MAX_SPAN_SECONDS
 
     async def _occasion_attach_target(self) -> Optional[str]:
         """The user's open conversation when this session may continue it as the same occasion."""
