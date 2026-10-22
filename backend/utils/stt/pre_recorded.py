@@ -233,11 +233,9 @@ def _get_deepgram_client() -> DeepgramClient:
 
 
 def _deepgram_client_for_request() -> DeepgramClient:
-    """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
-    byok = get_byok_key('deepgram')
-    if byok:
-        return DeepgramClient(byok, _deepgram_options())
-    return _get_deepgram_client()
+    """Fail closed: Deepgram retired 2026-08-27 (no contract); do not route or add keys."""
+    logger.error('Deepgram pre-recorded STT is retired (2026-08-27, no contract); refusing the call')
+    raise PrerecordedSTTConfigurationError(PrerecordedSTTService.DEEPGRAM, 'DEEPGRAM_RETIRED')
 
 
 # Languages supported by nova-3

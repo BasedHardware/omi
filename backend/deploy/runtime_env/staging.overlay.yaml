@@ -141,7 +141,6 @@ cloud_run:
     GEMINI_API_KEY: staging-gemini-api-key
     OPENROUTER_API_KEY: staging-openrouter-api-key
     GROQ_API_KEY: staging-groq-api-key
-    DEEPGRAM_API_KEY: staging-deepgram-api-key
     SONIOX_API_KEY: staging-soniox-api-key
     HUGGINGFACE_TOKEN: staging-huggingface-token
     FIREBASE_API_KEY: staging-firebase-api-key
@@ -158,7 +157,6 @@ cloud_run:
     - GEMINI_API_KEY
     - OPENROUTER_API_KEY
     - GROQ_API_KEY
-    - DEEPGRAM_API_KEY
     - SONIOX_API_KEY
     - HUGGINGFACE_TOKEN
     - FIREBASE_API_KEY

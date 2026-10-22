@@ -175,12 +175,10 @@ def test_parakeet_scales_conservatively_without_relaxing_admission():
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
-def test_self_hosted_deepgram_has_no_chart_callers(environment):
+def test_serving_charts_have_no_deepgram_callers(environment):
     for chart in ('backend-listen', 'pusher'):
         pod = render(chart, environment)['Deployment']['spec']['template']['spec']
         assert audit.classify(pod['containers'][0]['env']) == []
-    for version in ('nova-2', 'nova-3'):
-        assert not list((CHARTS / 'deepgram-self-hosted' / version).glob('*_omi_*.yaml'))
 
 
 @pytest.mark.parametrize(
