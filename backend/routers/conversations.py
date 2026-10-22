@@ -2343,22 +2343,7 @@ def merge_conversations(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),
 ):
-    """
-    Merge multiple conversations into a new conversation (async).
-
-    Flow:
-    1. Validates conversations (locked? completed?)
-    2. Returns immediately with 200 OK
-    3. Background task creates new merged conversation
-    4. Background task deletes source conversations
-    5. FCM notification sent on completion
-
-    The merged conversation will have:
-    - A new ID (source conversations are deleted)
-    - Merged transcript segments with adjusted timestamps
-    - Copied audio chunks
-    - Regenerated title, summary, action items, memories via process_conversation()
-    """
+    """Admit completed sources, merge into a new ID asynchronously, then notify the client."""
     from utils.conversations.merge_conversations import validate_merge_compatibility, perform_merge_async
 
     # Validate minimum number of conversations
@@ -2380,11 +2365,15 @@ def merge_conversations(
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_message)
 
-    # Set all source conversations to 'merging' status so user knows they're being processed
+    # CAS every source; a concurrent status change aborts and restores our prior claims.
+    admitted = []
     for conv_id in request.conversation_ids:
-        lifecycle_service.begin_merge(uid, conv_id)
+        if not lifecycle_service.begin_merge(uid, conv_id):
+            for prior_id in admitted:
+                lifecycle_service.complete(uid, prior_id)
+            raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
+        admitted.append(conv_id)
 
-    # Start background merge task
     background_tasks.add_task(
         perform_merge_async,
         uid=uid,

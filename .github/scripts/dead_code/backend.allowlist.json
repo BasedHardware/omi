@@ -41,10 +41,6 @@
       "reason": "Production capture and claim validation were removed with the legacy writer. backend/testing/episode_notes/prompts.py still imports EvidenceItem and render_episode_evidence for synthetic evaluation; runner.py imports restore_episode_claim_ids. Retain these evaluation adapters without restoring production capture."
     },
     {
-      "path": "backend/models/boundary_evidence.py",
-      "reason": "Refactor contract (backend/docs/capture_speaker_notes_refactor.md) on the shared base branch; the five refactor lanes wire it in their PRs. Remove this entry once imported."
-    },
-    {
       "path": "backend/utils/conversations/episode_selection.py",
       "reason": "The L3 retired evidence writer is archived under backend/testing/episode_notes/writer_runtime.py, which still imports this helper for deterministic evidence selection. This conversations module is outside L3 file ownership; the integrator can archive it with its owner. It has no production serving caller."
     },

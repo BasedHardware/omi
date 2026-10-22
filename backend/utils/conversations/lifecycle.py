@@ -224,34 +224,32 @@ def transition(
     conversation_id: str,
     target: ConversationStatus,
     *,
-    expected: ConversationStatus | None = None,
+    expected: ConversationStatus,
     extra_updates: dict[str, Any] | None = None,
+    expected_fields: dict[str, Any] | None = None,
+    allow_discarded: bool = False,
 ) -> bool:
     """Apply one typed status transition, failing closed on an invalid state.
 
-    A discard does not block one.  It is the system's verdict that a
-    conversation held nothing, and a later sync can arrive carrying the speech
-    it was missing; treating it as terminal left such a conversation stuck at
-    whatever status it was wearing when the verdict was made.
+    Processing admission keeps its discard fence. Explicit user merges may
+    include completed discarded sources while preserving their verdict.
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise LifecycleTransitionError(f'conversation {conversation_id} does not exist')
     current = _status_value(conversation.get('status'))
-    if expected is not None and current != expected.value:
+    if current != expected.value:
         return False
     if target.value not in _STATUS_TRANSITIONS.get(current, set()):
         raise LifecycleTransitionError(f'invalid lifecycle transition {current}->{target.value}')
-    if expected is not None:
-        return conversations_db.claim_conversation_status(
-            uid,
-            conversation_id,
-            expected,
-            target,
-            extra_updates=extra_updates,
-        )
-    conversations_db.transition_conversation_status(uid, conversation_id, target)
-    return True
+    guards = {}
+    if expected_fields is not None:
+        guards['expected_fields'] = expected_fields
+    if allow_discarded:
+        guards['allow_discarded'] = True
+    return conversations_db.claim_conversation_status(
+        uid, conversation_id, expected, target, extra_updates=extra_updates, **guards
+    )
 
 
 def admit_processing(uid: str, conversation_id: str, *, extra_updates: dict[str, Any] | None = None) -> bool:
@@ -298,6 +296,7 @@ def complete(uid: str, conversation_id: str) -> bool:
         conversation_id,
         ConversationStatus.merging,
         ConversationStatus.completed,
+        allow_discarded=True,
     )
 
 
@@ -475,7 +474,14 @@ def recover_deferred_processing_failure(uid: str, conversation_id: str) -> bool:
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:
-    return transition(uid, conversation_id, ConversationStatus.merging)
+    return transition(
+        uid,
+        conversation_id,
+        ConversationStatus.merging,
+        expected=ConversationStatus.completed,
+        expected_fields={'deleted': False, 'is_locked': False},
+        allow_discarded=True,
+    )
 
 
 def discard(uid: str, conversation_id: str) -> None:

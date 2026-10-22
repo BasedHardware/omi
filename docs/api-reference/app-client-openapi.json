@@ -47487,7 +47487,7 @@
     },
     "/v1/conversations/merge": {
       "post": {
-        "description": "Merge multiple conversations into a new conversation (async).\n\nFlow:\n1. Validates conversations (locked? completed?)\n2. Returns immediately with 200 OK\n3. Background task creates new merged conversation\n4. Background task deletes source conversations\n5. FCM notification sent on completion\n\nThe merged conversation will have:\n- A new ID (source conversations are deleted)\n- Merged transcript segments with adjusted timestamps\n- Copied audio chunks\n- Regenerated title, summary, action items, memories via process_conversation()",
+        "description": "Admit completed sources, merge into a new ID asynchronously, then notify the client.",
         "operationId": "merge_conversations_v1_conversations_merge_post",
         "parameters": [
           {

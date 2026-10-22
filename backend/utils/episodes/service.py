@@ -36,7 +36,8 @@ from database import action_items as action_items_db
 from database import episodes as episodes_db
 from database import notifications as notification_db
 from database import users as users_db
-from utils.episodes import moment_render
+from utils.episodes import moment_render, boundary_runtime
+from utils.episodes.output_language import resolved_invoke
 from utils.episodes import client_gate, incremental, metrics, policy
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
@@ -275,7 +276,9 @@ def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_
         calendar_identity=None,
         speakers=frozenset(),
     )
-    decision = policy.boundary(episode, facts)
+    decision = boundary_runtime.decision(
+        uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
+    )
     if decision.action == 'close' and episode:
         metrics.record_boundary('close')
         _close(uid, episode, decision.reason or 'gap', c, now=now)
@@ -370,7 +373,9 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         calendar_identity=moment.calendar_identity,
         speakers=policy.speaker_keys(segments),
     )
-    decision = policy.boundary(episode, facts)
+    decision = boundary_runtime.decision(
+        uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
+    )
     pending = _pending(episode).get(moment.conversation_id)
     if episode and pending is not None and decision.action == policy.CONTINUE:
         # It joined provisionally at its first words; with its text in hand, settle it now.
@@ -438,7 +443,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
             known_item_ids=known_ids,
             now=now,
             tz_name=_tz(uid, c),
-            invoke=c.invoke,
+            invoke=resolved_invoke(uid, moment.language, c.invoke),
         )
     except incremental.ModelCallFailed as failure:
         metrics.record_moment_update(
@@ -591,6 +596,7 @@ def _on_finalized(
             ended_at=ended or _now(c),
             trigger='finalize',
             calendar_identity=_calendar_identity(row),
+            language=row.get('language'),
         )
         record_moment(uid, tail, c)
         episode = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
