@@ -44,7 +44,7 @@ def render_calendar_event(event: Dict[str, Any], index: int, clock: DisplayClock
     if 'dateTime' in start:
         try:
             start_dt = datetime.fromisoformat(str(start['dateTime']).replace('Z', '+00:00'))
-            end_dt = datetime.fromisoformat(str(end['dateTime']).replace('Z', '+00:00')) if 'dateTime' in end else start_dt
+            end_dt = datetime.fromisoformat(str(end['dateTime']).replace('Z', '+00:00'))
             result += f"   When: {format_span(start_dt, end_dt, clock)}\n"
         except (ValueError, TypeError, KeyError):
             result += "   When: unknown time (event timestamp could not be parsed)\n"
@@ -58,7 +58,7 @@ def render_calendar_event(event: Dict[str, Any], index: int, clock: DisplayClock
         else:
             inclusive_end = end_day[0] - timedelta(days=1)
             inclusive_end_label = all_day_date(
-                inclusive_end.isoformat(),
+                inclusive_end.isoformat(),  # not-model-facing: local date parsing helper input
                 clock,
             )
             if inclusive_end_label and inclusive_end > start_day[0]:
