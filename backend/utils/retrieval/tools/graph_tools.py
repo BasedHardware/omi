@@ -34,15 +34,19 @@ def _resolve_uid(config: RunnableConfig | None) -> Optional[str]:
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
-    if not cfg:
+    if not cfg or not isinstance(cfg, dict):
         return None
     try:
         raw_configurable = cfg.get('configurable')
         if isinstance(raw_configurable, dict):
-            configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            return configurable.get('user_id')
+            uid = raw_configurable.get('user_id') or raw_configurable.get('uid')
+            if uid:
+                return str(uid)
+        uid = cfg.get('user_id') or cfg.get('uid')
+        if uid:
+            return str(uid)
         return None
-    except (KeyError, TypeError):
+    except Exception:
         return None
 
 
@@ -69,12 +73,23 @@ def traverse_knowledge_graph_tool(
     """
     logger.info("traverse_knowledge_graph_tool entity=%s hops=%s", entity, hops)
 
+    if not entity or not isinstance(entity, str) or not entity.strip():
+        return "Error: Entity name must be a non-empty string"
+
+    clean_entity = entity.strip()
+
+    try:
+        hops_val = int(hops)
+    except (ValueError, TypeError):
+        hops_val = 1
+    hops_val = max(1, min(2, hops_val))
+
     uid = _resolve_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
 
     try:
-        result = traverse_knowledge_graph(uid, entity, hops=hops)
+        result = traverse_knowledge_graph(uid, clean_entity, hops=hops_val)
         return format_traversal_result(result)
     except Exception as exc:
         logger.exception("traverse_knowledge_graph_tool failed uid=%s: %s", uid, sanitize(str(exc)))
