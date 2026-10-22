@@ -32,10 +32,12 @@ Future<Directory> custodyDirectory() async {
 
 Future<LocalWalSyncImpl> custodyLedger(
     {SyncUploadGate? gate,
+    DateTime Function()? now,
     Future<void> Function(List<Wal>)? persist,
     Future<SyncJobFetch> Function(String)? fetch}) async {
   final ledger = LocalWalSyncImpl(CustodyListener(),
       uploadGate: gate,
+      now: now,
       freeDiskBytes: () async => 4 * 1024 * 1024 * 1024,
       persistWals: persist,
       jobStatusFetcher: fetch);

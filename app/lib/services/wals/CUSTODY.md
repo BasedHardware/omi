@@ -85,7 +85,8 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
 6. **Home shows only what waits for the user.** Home lists `holdForUser` recordings only, one row
    per file, including accepted jobs in the processing state. A manual recording keeps its hold
    until the job completes (or the synchronous result completes); failure leaves the hold in place
-   for another explicit retry. This replaces acceptance-time release to preserve Home recovery. Everything else is visible on the Sync page, as every other custody WAL already is.
+   for another explicit retry. Acceptance wakes the shared coordinator to reconcile even when
+   automatic uploading is disabled. This replaces acceptance-time release to preserve Home recovery. Everything else is visible on the Sync page, as every other custody WAL already is.
 
 Native batch directory and WAL documents directory must match. A mismatch emits
 `Native Custody Observed / directory_mismatch` and defers intake before inaccessible files are indexed.
