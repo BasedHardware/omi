@@ -6152,6 +6152,19 @@ futures and any known generation; recovery never deletes an uncertain source.
 The 8-second bound covers uploading one fragment, not an entire flush: summary
 initialization, capacity, receipt transactions, recovery, sealing, queue draining
 and lock waits retain their existing budgets.
+Single-channel cap decisions can arrive out of capture order: queued provider
+suppression callbacks may precede the receiver's decision for older PCM.
+`OrderedCapture` assembles the already-deduplicated denied spans by integer
+capture sample before encoding or allocating a source group. Only adjacent
+samples with the same owner, rate, UTC month and compatible wall projection
+join. The queue shares the existing aggregate 15-second PCM bound; pressure,
+close and explicit barriers drain it immediately, and its original monotonic
+age survives transfer into the encoder buffer. Periodic updater ticks do not
+publish isolated short callback runs before the bound/age. This prevents
+arrival-order clock discontinuities from minting single-part source groups.
+The fragment kill switch retains the original capture writer. Direct append
+paths (including multichannel) keep their transition-tail grace below.
+
 Transition/resume force-flushes give PCM tails below 250 ms a one-second grace
 from buffer opening. Compatible capture can join before encoding; channel,
 conversation owner, rate, UTC year/month and the existing 100 ms continuity
