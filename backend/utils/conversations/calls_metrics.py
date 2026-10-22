@@ -21,9 +21,8 @@ def _counter() -> Counter:
         return Counter('omi_calls_refactor_shadow_total', 'V4 deterministic comparisons', ['check', 'outcome'])
     except ValueError:
         # Prometheus has no public collector lookup; mirror the notes metrics reload seam.
-        return cast(
-            Counter, REGISTRY._names_to_collectors['omi_calls_refactor_shadow_total']
-        )  # pyright: ignore[reportPrivateUsage]
+        collectors = REGISTRY._names_to_collectors  # pyright: ignore[reportPrivateUsage]
+        return cast(Counter, collectors['omi_calls_refactor_shadow_total'])
 
 
 COMPARISONS = _counter()
