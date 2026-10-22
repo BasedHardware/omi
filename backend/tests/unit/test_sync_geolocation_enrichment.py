@@ -70,6 +70,7 @@ def _build_pipeline_fakes() -> dict:
         'database.sync_jobs',
         'database.sync_ledger',
         'database.sync_empty_recovery',
+        'database.sync_cap_recovery',
         'database.owner_profile_updates',
         'database.firestore_read_metrics',
         'models.conversation',

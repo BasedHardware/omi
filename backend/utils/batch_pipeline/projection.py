@@ -832,7 +832,7 @@ class Projector:
                     else finish_sync_bridges(
                         binding.owner_id,
                         receipt['conversation_id'],
-                        **({'silent': True} if receipt.get('silent_redrive') else {}),
+                        silent=receipt.get('silent_redrive') is True,
                     )
                 )
             if receipt.get('audio_required') and not binding.native_record:

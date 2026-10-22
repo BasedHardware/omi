@@ -1,5 +1,3 @@
-from utils.conversations.silent_redrive import is_silent_redrive
-
 """Sync local-files pipeline: decode → VAD → fair-use → STT → conversation merge.
 
 Extracted from routers/sync.py so the router stays thin and utils never imports routers.
@@ -9,6 +7,7 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
