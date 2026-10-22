@@ -509,3 +509,91 @@ def test_legacy_quota_wire_omits_ladder_state():
     assert 'uses_shared_budget' not in payload
     assert 'chat_at_cap' not in payload
     assert ChatUsageQuota(**payload, uses_shared_budget=True).model_dump(mode='json')['uses_shared_budget'] is True
+
+
+# ── FREE_CHAT_QUESTIONS_PER_DAY ─────────────────────────────────────────────
+
+
+_DAY_RESET_AT = 1735776000  # 2025-01-02T00:00:00Z
+
+
+class TestFreeDailyChatCap:
+    """A positive FREE_CHAT_QUESTIONS_PER_DAY replaces the Free plan's monthly cap with a UTC-day cap."""
+
+    def _usage(self, questions):
+        def _get(uid, *, firestore_client=None, period='month'):
+            assert period == 'day'
+            return {'questions': questions, 'cost_usd': 0.0, 'reset_at': _DAY_RESET_AT}
+
+        return _get
+
+    def test_snapshot_uses_the_daily_window_and_limit(self, monkeypatch):
+        monkeypatch.setenv('FREE_CHAT_QUESTIONS_PER_DAY', '5')
+        sub_mod = _reload_subscription_module()
+        _db_users_mod.get_user_valid_subscription = MagicMock(return_value=_make_subscription(PlanType.basic))
+        _db_user_usage_mod.get_monthly_chat_usage = self._usage(4)
+
+        snapshot = sub_mod.get_chat_quota_snapshot('uid123')
+
+        assert snapshot['allowed'] is True
+        assert snapshot['limit'] == 5.0 and snapshot['used'] == 4.0
+        assert snapshot['period'] == 'day'
+        assert snapshot['reset_at'] == _DAY_RESET_AT
+        assert snapshot['resets_at'] == '2025-01-02T00:00:00+00:00'
+
+    def test_enforcement_402_names_the_day_window(self, monkeypatch):
+        from fastapi import HTTPException
+
+        monkeypatch.setenv('FREE_CHAT_QUESTIONS_PER_DAY', '5')
+        sub_mod = _reload_subscription_module()
+        _db_users_mod.get_user_valid_subscription = MagicMock(return_value=_make_subscription(PlanType.basic))
+        _db_users_mod.is_byok_active = MagicMock(return_value=False)
+        _db_user_usage_mod.get_monthly_chat_usage = self._usage(5)
+
+        with pytest.raises(HTTPException) as exc_info:
+            sub_mod.enforce_chat_quota('uid123')
+
+        assert exc_info.value.status_code == 402
+        detail = exc_info.value.detail
+        assert detail['error'] == 'quota_exceeded'
+        assert detail['plan_type'] == 'basic'
+        assert detail['period'] == 'day'
+        assert detail['resets_at'] == '2025-01-02T00:00:00+00:00'
+        assert detail['limit'] == 5.0 and detail['used'] == 5
+
+    def test_paid_plans_keep_their_monthly_window(self, monkeypatch):
+        monkeypatch.setenv('FREE_CHAT_QUESTIONS_PER_DAY', '5')
+        monkeypatch.setenv('NEO_CHAT_QUESTIONS_PER_MONTH', '2000')
+        sub_mod = _reload_subscription_module()
+        _db_users_mod.get_user_valid_subscription = MagicMock(return_value=_make_subscription(PlanType.unlimited))
+        seen = {}
+
+        def _get(uid, *, firestore_client=None, period='month'):
+            seen['period'] = period
+            return {'questions': 100, 'cost_usd': 0.0, 'reset_at': _RESET_AT}
+
+        _db_user_usage_mod.get_monthly_chat_usage = _get
+        snapshot = sub_mod.get_chat_quota_snapshot('uid123')
+        assert seen['period'] == 'month'
+        assert snapshot['limit'] == 2000.0
+        assert 'period' not in snapshot and 'resets_at' not in snapshot
+
+    def test_off_keeps_the_monthly_cap_and_detail(self, monkeypatch):
+        from fastapi import HTTPException
+
+        monkeypatch.delenv('FREE_CHAT_QUESTIONS_PER_DAY', raising=False)
+        sub_mod = _reload_subscription_module()
+        _db_users_mod.get_user_valid_subscription = MagicMock(return_value=_make_subscription(PlanType.basic))
+        _db_users_mod.is_byok_active = MagicMock(return_value=False)
+        seen = {}
+
+        def _get(uid, *, firestore_client=None, period='month'):
+            seen['period'] = period
+            return {'questions': 30, 'cost_usd': 0.0, 'reset_at': _RESET_AT}
+
+        _db_user_usage_mod.get_monthly_chat_usage = _get
+        with pytest.raises(HTTPException) as exc_info:
+            sub_mod.enforce_chat_quota('uid123')
+        assert seen['period'] == 'month'
+        assert exc_info.value.detail['limit'] == 30.0
+        assert 'period' not in exc_info.value.detail and 'resets_at' not in exc_info.value.detail

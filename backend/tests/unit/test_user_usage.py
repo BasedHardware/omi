@@ -701,3 +701,22 @@ def test_mixed_document_attributes_only_the_unaccounted_residual(mock_db):
     assert by_plan["operator"]["questions"] == 2
     assert by_plan["_unattributed"]["questions"] == 3, "only the 3 unaccounted questions"
     assert sum(r["questions"] for r in by_plan.values()) == usage["questions"] == 5
+
+
+def test_daily_period_reads_only_today_and_resets_at_next_utc_midnight(mock_db):
+    _setup_docs(
+        mock_db,
+        {
+            "2026-06-22": {"backend_chat": {"quota_questions": 7}},  # yesterday — excluded
+            "2026-06-23": {"backend_chat": {"quota_questions": 3}, "desktop_chat": {"quota_questions": 2}},
+            "2026-06-24": {"backend_chat": {"quota_questions": 9}},  # tomorrow — excluded
+        },
+    )
+    now = datetime(2026, 6, 23, 15, 30, tzinfo=timezone.utc)
+    r = user_usage.get_monthly_chat_usage("uid", now=now, period='day')
+    assert r["questions"] == 5, r
+    assert r["reset_at"] == int(datetime(2026, 6, 24, tzinfo=timezone.utc).timestamp())
+    # The month window still counts all three days and resets at the next month.
+    r = user_usage.get_monthly_chat_usage("uid", now=now)
+    assert r["questions"] == 21, r
+    assert r["reset_at"] == int(datetime(2026, 7, 1, tzinfo=timezone.utc).timestamp())

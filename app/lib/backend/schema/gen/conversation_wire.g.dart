@@ -990,6 +990,7 @@ class GeneratedConversation {
   final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
+  final bool retentionLocked;
   final bool screenshotSharingEnabled;
   final String? source;
   final GeneratedConversationSpeakers? speakerResolution;
@@ -1045,6 +1046,7 @@ class GeneratedConversation {
     this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
+    this.retentionLocked = false,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
     this.speakerResolution,
@@ -1102,6 +1104,7 @@ class GeneratedConversation {
       processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
+      retentionLocked: _required(_readFieldValue<bool>(_readField(json, const ["retention_locked"]), "retention_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "retention_locked"),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       speakerResolution: _readFieldValue<GeneratedConversationSpeakers>(_readField(json, const ["speaker_resolution"]), "speaker_resolution", (value) => _readObject(value, GeneratedConversationSpeakers.fromJson), requiredField: false, nullable: true),
@@ -1160,6 +1163,7 @@ class GeneratedConversation {
       'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
+      'retention_locked': retentionLocked,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
       'speaker_resolution': speakerResolution?.toJson(),
@@ -1407,6 +1411,7 @@ class GeneratedConversationSearchItem {
   final bool processingDeferred;
   final String? processingMemoryId;
   final String? processingState;
+  final bool retentionLocked;
   final bool screenshotSharingEnabled;
   final String? source;
   final GeneratedConversationSpeakers? speakerResolution;
@@ -1463,6 +1468,7 @@ class GeneratedConversationSearchItem {
     this.processingDeferred = false,
     this.processingMemoryId,
     this.processingState,
+    this.retentionLocked = false,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
     this.speakerResolution,
@@ -1521,6 +1527,7 @@ class GeneratedConversationSearchItem {
       processingDeferred: _required(_readFieldValue<bool>(_readField(json, const ["processing_deferred"]), "processing_deferred", _readBool, requiredField: false, nullable: false, defaultValue: false), "processing_deferred"),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
+      retentionLocked: _required(_readFieldValue<bool>(_readField(json, const ["retention_locked"]), "retention_locked", _readBool, requiredField: false, nullable: false, defaultValue: false), "retention_locked"),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
       speakerResolution: _readFieldValue<GeneratedConversationSpeakers>(_readField(json, const ["speaker_resolution"]), "speaker_resolution", (value) => _readObject(value, GeneratedConversationSpeakers.fromJson), requiredField: false, nullable: true),
@@ -1580,6 +1587,7 @@ class GeneratedConversationSearchItem {
       'processing_deferred': processingDeferred,
       'processing_memory_id': processingMemoryId,
       'processing_state': processingState,
+      'retention_locked': retentionLocked,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
       'speaker_resolution': speakerResolution?.toJson(),

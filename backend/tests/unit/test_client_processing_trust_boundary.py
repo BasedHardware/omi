@@ -498,6 +498,8 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('models/conversation.py', 'project_shared_conversation', 'model_dump'),
         DumpSite('models/conversation.py', 'as_dict_cleaned_dates', 'model_dump'),
         DumpSite('utils/conversations/render.py', 'conversation_to_dict', 'model_dump'),
+        # Static onboarding seed row written fully formed; no client_processing input exists.
+        DumpSite('routers/conversations.py', 'seed_onboarding_conversation', 'model_dump'),
         DumpSite('utils/app_integrations.py', '_single', 'conversation_to_dict'),
         DumpSite('utils/webhooks.py', '_build_conversation_webhook_payload_sync', 'conversation_to_dict'),
         DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
@@ -651,6 +653,9 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'processing_conversation_id',
         'status',
         'is_locked',
+        # Free-plan retention lock (FREE_RETENTION_LOCK_DAYS). Stamped on list reads,
+        # never stored; a plain client flag like is_locked, not projection-family.
+        'retention_locked',
         'deferred',
         'data_protection_level',
         'folder_id',

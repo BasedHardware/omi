@@ -516,3 +516,46 @@ def test_noncohort_owner_keeps_legacy_launch_parity(sub, monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'uid:other')
     monkeypatch.delenv('SUBSCRIPTION_LAUNCH_DATE', raising=False)
     assert sub.get_monthly_usage_for_subscription('synthetic') == {}
+
+
+# --- FREE_TRANSCRIPTION_HARD_PAUSE --------------------------------------------------------
+
+
+def _basic_exhausted(row) -> bool:
+    """Rows the hard pause is meant to change: a basic plan past its cap riding Omi's key."""
+    return row[1].get('plan') == PlanType.basic and row[4] == 'plan_allowance_exhausted'
+
+
+@pytest.mark.parametrize('raw', ['true', '1'])
+def test_hard_pause_blocks_an_exhausted_free_plan(monkeypatch, sub, raw) -> None:
+    monkeypatch.setenv('FREE_TRANSCRIPTION_HARD_PAUSE', raw)
+    _situate(monkeypatch, sub, plan=PlanType.basic, used_seconds=BASIC_CAP)
+    allowance = sub.resolve_transcription_allowance('uid', source='desktop')
+    assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == ('blocked', 0, 'plan_allowance_exhausted')
+    assert allowance.limit_seconds == BASIC_CAP
+    assert allowance.managed is False
+
+
+@pytest.mark.parametrize(
+    'label, situation, mode, remaining, reason',
+    [row for row in MATRIX if not _basic_exhausted(row)],
+    ids=[row[0] for row in MATRIX if not _basic_exhausted(row)],
+)
+def test_hard_pause_leaves_every_other_row_identical(
+    monkeypatch, sub, label, situation, mode, remaining, reason
+) -> None:
+    monkeypatch.setenv('FREE_TRANSCRIPTION_HARD_PAUSE', 'true')
+    _situate(monkeypatch, sub, **situation)
+    allowance = sub.resolve_transcription_allowance('uid', source='desktop')
+    assert (allowance.mode, allowance.remaining_seconds, allowance.reason) == (mode, remaining, reason), label
+
+
+def test_hard_pause_off_keeps_on_device_fallback(monkeypatch, sub) -> None:
+    for raw in (None, 'false', '0', 'nope'):
+        if raw is None:
+            monkeypatch.delenv('FREE_TRANSCRIPTION_HARD_PAUSE', raising=False)
+        else:
+            monkeypatch.setenv('FREE_TRANSCRIPTION_HARD_PAUSE', raw)
+        _situate(monkeypatch, sub, plan=PlanType.basic, used_seconds=BASIC_CAP + 1)
+        allowance = sub.resolve_transcription_allowance('uid', source='desktop')
+        assert (allowance.mode, allowance.reason) == ('on_device', 'plan_allowance_exhausted'), raw

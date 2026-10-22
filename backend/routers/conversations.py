@@ -66,8 +66,10 @@ from utils.conversations.mcp_transcript_search import (
     merge_typesense_page_with_transcript_hits,
     search_transcript_conversation_ids,
 )
-from models.conversation_enums import ConversationStatus, ConversationVisibility
+from models.conversation_enums import CategoryEnum, ConversationSource, ConversationStatus, ConversationVisibility
 from models.conversation_photo import ConversationPhoto
+from models.structured import ActionItem, Structured
+from utils.free_plan_retention import annotate_retention_lock, is_retention_locked, retention_lock_days_for_user
 from models.geolocation import Geolocation
 from models.app import App
 from pydantic import BaseModel, Field, ValidationError
@@ -991,10 +993,73 @@ def get_conversations(
     )
 
     redact_conversations_for_list(conversations)
+    annotate_retention_lock(uid, conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
     return conversations
+
+
+ONBOARDING_SEED_CONVERSATION_ID = 'onboarding-seed'
+ONBOARDING_SEED_TITLE = 'Get Started with Omi'
+ONBOARDING_SEED_OVERVIEW = (
+    'Omi records your conversations and writes the summary and to-dos for you. '
+    'Ask it anything from the Ask bar. '
+    'Your memories build up over time, so the more you use Omi the more it knows.'
+)
+ONBOARDING_SEED_ACTION_ITEM = 'Try asking Omi a question'
+
+
+@router.post('/v1/onboarding/seed-conversation', response_model=Conversation, tags=['conversations'])
+def seed_onboarding_conversation(uid: str = Depends(auth.get_current_user_uid)):
+    """Create the one static "Get Started" conversation for a new account; idempotent per uid.
+
+    The row is fully formed on write (completed, no transcript, no audio), so
+    nothing downstream runs: no LLM processing, notifications, memory
+    extraction or other paid work. The fixed id makes a repeat call return the
+    existing row; a row the user deleted stays deleted.
+    """
+    existing = conversations_db.get_conversation(
+        uid, ONBOARDING_SEED_CONVERSATION_ID, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+    )
+    if existing is None:
+        now = datetime.now(timezone.utc)
+        seed = Conversation(
+            id=ONBOARDING_SEED_CONVERSATION_ID,
+            created_at=now,
+            started_at=now,
+            finished_at=now,
+            source=ConversationSource.onboarding,
+            language='en',
+            structured=Structured(
+                title=ONBOARDING_SEED_TITLE,
+                overview=ONBOARDING_SEED_OVERVIEW,
+                emoji='👋',
+                category=CategoryEnum.other,
+                action_items=[
+                    ActionItem(
+                        description=ONBOARDING_SEED_ACTION_ITEM,
+                        created_at=now,
+                        conversation_id=ONBOARDING_SEED_CONVERSATION_ID,
+                    )
+                ],
+            ),
+            status=ConversationStatus.completed,
+            discarded=False,
+            is_locked=False,
+        )
+        # retention_locked is a list-read stamp, never a stored field.
+        lifecycle_service.create_completed_conversation(
+            uid, seed.model_dump(exclude={'retention_locked'}), idempotent=True
+        )
+        existing = conversations_db.get_conversation(
+            uid, ONBOARDING_SEED_CONVERSATION_ID, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+        )
+        if existing is None:
+            raise HTTPException(status_code=500, detail='Onboarding conversation could not be created')
+    if conversations_db.is_soft_deleted(existing):
+        raise HTTPException(status_code=404, detail='Conversation not found')
+    return redact_conversations_for_list([existing])[0]
 
 
 @router.get('/v1/conversations/count', tags=['conversations'], response_model=ConversationsCountResponse)
@@ -1071,6 +1136,11 @@ def get_conversation_by_id(
         raise HTTPException(status_code=404, detail="Conversation not found")
     if not conversations_db.is_visible_conversation(conversation, include_discarded=show_discarded):
         raise HTTPException(status_code=404, detail="Conversation not found")
+    # Free-plan retention lock: an old row answers 402 before any on-open work
+    # (deferred enrichment, translation) is spent on it.
+    retention_days = retention_lock_days_for_user(uid)
+    if retention_days and is_retention_locked(conversation, retention_days):
+        raise HTTPException(status_code=402, detail={'error': 'retention_locked', 'days': retention_days})
     # A desktop conversation stored raw (deferred) for a freemium/Neo user is
     # enriched on first open. Other conversations are returned unchanged.
     if conversation.get('deferred') and not conversation.get('processing_deferred'):
