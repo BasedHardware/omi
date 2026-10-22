@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from uuid import uuid4
 
-from config.vertex_reservations import RESERVATIONS, State
+from config.vertex_reservations import PROBE_TIMEOUT_SECONDS, RESERVATIONS, State
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
 from utils.http_client import get_desktop_gemini_client, get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
@@ -98,7 +98,7 @@ async def _probe(model, location):
                         'reasoning_effort': 'none',
                         'google': {'dream_capacity_mode': 'reserved', 'dream_reserved_only': True},
                     },
-                    timeout=30,
+                    timeout=PROBE_TIMEOUT_SECONDS,
                 )
             logger.info('dream_capacity_probe source=gateway model=%s status=%d', model, response.status_code)
             failure = None
@@ -116,7 +116,8 @@ async def _probe(model, location):
             outcome = await probe_reservation(
                 get_desktop_gemini_client(), _vertex_tokens().get_access_token, model, location
             )
-    except Exception:
+    except Exception as exc:
+        logger.info('dream_capacity_probe error=%s model=%s', type(exc).__name__, model)
         outcome = 'inconclusive'
     if outcome == 'capacity_error':
         await mark_saturated(model)
