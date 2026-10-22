@@ -76,7 +76,6 @@ from config.transcription_final_pass import authoritative_for
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
-from config.repeat_work import playback_on_demand
 from utils.other.playback_identity import source_fingerprint, retain_aliases
 from utils.other.storage import list_audio_chunks
 from utils.observability.fallback import record_fallback
@@ -2009,7 +2008,7 @@ def update_conversation(
         if owner in {'batch_live_v1', 'batch_sync_v1'}:
             record_owner_out[conversation_id] = owner
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-    if playback_on_demand() and isinstance(update_data.get('audio_files'), list):
+    if isinstance(update_data.get('audio_files'), list):
         update_data = {
             **update_data,
             'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
@@ -2133,7 +2132,7 @@ def create_audio_files_from_chunks(
         List of AudioFile objects
     """
     # Get all chunks for this conversation
-    chunks = list_audio_chunks(uid, conversation_id)
+    chunks = list_audio_chunks(uid, conversation_id, source_identity=True)
     if not chunks:
         return []
 
@@ -2167,7 +2166,7 @@ def _finalize_audio_file_group(
         return None
 
     # Generate file ID
-    source_hash = source_fingerprint(chunk_group) if playback_on_demand() else None
+    source_hash = source_fingerprint(chunk_group)
     file_id = (
         str(uuid.uuid5(uuid.NAMESPACE_OID, f'{uid}/{conversation_id}/{source_hash}'))
         if source_hash

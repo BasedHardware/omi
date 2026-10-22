@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState } from "react";
 import { Loader2, Send, StopCircle } from "lucide-react";
 import { useAuthFetch } from "@/hooks/useAuthToken";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
 
 type Model = "claude" | "codex";
 
@@ -19,6 +20,7 @@ const MODEL_LABEL: Record<Model, string> = {
 
 export function AgentPromptWidget() {
   const { fetchWithAuth } = useAuthFetch();
+  const { access, can } = useAdminAccess();
   const [prompt, setPrompt] = useState("");
   const [model, setModel] = useState<Model>("claude");
   const [state, setState] = useState<RunState>({ kind: "idle" });
@@ -127,17 +129,27 @@ export function AgentPromptWidget() {
   };
 
   const lines =
-    state.kind === "running" || state.kind === "finished" || state.kind === "error"
+    state.kind === "running" ||
+    state.kind === "finished" ||
+    state.kind === "error"
       ? state.lines
       : [];
   const showLog = state.kind !== "idle";
   const running = state.kind === "running";
 
+  if (access && !can("dev:agent")) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Your role does not include the dashboard coding agent (dev:agent).
+      </p>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col gap-2">
       <p className="text-xs text-muted-foreground">
-        Describe a change. The agent runs locally with full repo access, edits files in
-        your worktree, and Next HMR reloads the dashboard as it goes.
+        Describe a change. The agent runs locally with full repo access, edits
+        files in your worktree, and Next HMR reloads the dashboard as it goes.
       </p>
 
       {!showLog && (
@@ -156,7 +168,8 @@ export function AgentPromptWidget() {
         >
           {lines.length === 0 && running && (
             <div className="flex items-center gap-2 text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin" /> waiting for output…
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> waiting for
+              output…
             </div>
           )}
           {lines.map((l, i) => (
@@ -170,12 +183,16 @@ export function AgentPromptWidget() {
             </pre>
           )}
           {state.kind === "finished" && (
-            <pre className={`mt-2 ${state.code === 0 ? "text-green-600" : "text-amber-600"}`}>
+            <pre
+              className={`mt-2 ${
+                state.code === 0 ? "text-green-600" : "text-amber-600"
+              }`}
+            >
               {state.code === 0
                 ? "✓ done (exit 0)"
                 : state.code == null
-                  ? "■ stopped"
-                  : `✗ exited ${state.code}`}
+                ? "■ stopped"
+                : `✗ exited ${state.code}`}
             </pre>
           )}
         </div>

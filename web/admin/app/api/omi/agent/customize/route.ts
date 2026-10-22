@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
+import { localAgentEnabled, localAgentSpawnEnv } from "@/lib/local-agent";
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 
@@ -21,7 +22,7 @@ Repo orientation:
 - Grid component: web/admin/components/dashboard/resizable-chart-grid.tsx
   (variant: "card" | "header" | "kpi"; col snap: 2/3/4/6/8/9/12; rows 1-12)
 - All API access uses useAuthToken + authenticatedFetcher (SWR reads) or
-  useAuthFetch (mutations). Server routes call verifyAdmin from @/lib/auth.
+  useAuthFetch (mutations). Server routes call requireScope from @/lib/auth.
 - Existing stats endpoints live under web/admin/app/api/omi/stats/.
 - Constraints: stay inside web/admin/. Do not touch backend/, app/, firmware/.
 - When done, run \`npx tsc --noEmit\` from web/admin/ to verify.
@@ -51,37 +52,52 @@ function defaultWorkingDir(): string {
   // The Next dev server runs from web/admin/. Edits should target the worktree
   // root (two dirs up) so the agent can touch the whole admin app and any
   // shared bits at the repo root if it has to.
-  return process.env.AGENT_WORKING_DIR ?? path.resolve(process.cwd(), "..", "..");
+  return (
+    process.env.AGENT_WORKING_DIR ?? path.resolve(process.cwd(), "..", "..")
+  );
+}
+
+/** Reports whether the local agent endpoint is usable; the widget hides while false. */
+export async function GET(request: NextRequest) {
+  const auth = await requireScope(request, "dev:agent");
+  if (auth instanceof NextResponse) return auth;
+  return auth.json({ enabled: localAgentEnabled() });
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await verifyAdmin(request);
+  const auth = await requireScope(request, "dev:agent");
   if (auth instanceof NextResponse) return auth;
+
+  // The spawn is a local-development tool only: outside it (or without the
+  // explicit opt-in) the endpoint does not exist, whatever the caller's role.
+  if (!localAgentEnabled()) {
+    return new NextResponse(null, { status: 404 });
+  }
 
   let body: { prompt?: string; model?: string };
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return auth.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const prompt = (body.prompt ?? "").trim();
   if (!prompt) {
-    return NextResponse.json({ error: "prompt is required" }, { status: 400 });
+    return auth.json({ error: "prompt is required" }, { status: 400 });
   }
   if (prompt.length > MAX_PROMPT_LEN) {
-    return NextResponse.json(
+    return auth.json(
       { error: `prompt exceeds ${MAX_PROMPT_LEN} chars` },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
   const modelInput = (body.model ?? "claude") as Model;
   const cmd = COMMANDS[modelInput];
   if (!cmd) {
-    return NextResponse.json(
+    return auth.json(
       { error: `unknown model "${modelInput}". Use "claude" or "codex".` },
-      { status: 400 },
+      { status: 400 }
     );
   }
 
@@ -95,7 +111,7 @@ export async function POST(request: NextRequest) {
       const send = (event: string, data: unknown) => {
         try {
           controller.enqueue(
-            enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+            enc.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
           );
         } catch {
           // controller may already be closed if the client disconnected
@@ -114,12 +130,14 @@ export async function POST(request: NextRequest) {
       try {
         child = spawn(cmd.bin, [...cmd.args, fullPrompt], {
           cwd,
-          env: process.env,
+          env: localAgentSpawnEnv(),
           stdio: ["ignore", "pipe", "pipe"],
         });
       } catch (err: any) {
         send("error", {
-          message: `Failed to spawn ${cmd.bin}: ${err?.message ?? "unknown error"}. Is it on PATH?`,
+          message: `Failed to spawn ${cmd.bin}: ${
+            err?.message ?? "unknown error"
+          }. Is it on PATH?`,
         });
         controller.close();
         return;

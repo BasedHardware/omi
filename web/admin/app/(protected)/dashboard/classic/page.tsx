@@ -23,6 +23,8 @@ import {
 } from "lucide-react";
 import useSWR from "swr";
 import { useAuthToken, authenticatedFetcher } from "@/hooks/useAuthToken";
+import { useAdminAccess } from "@/hooks/useAdminAccess";
+import { useLocalAgentEnabled } from "@/hooks/useLocalAgent";
 import {
   Bar,
   Line,
@@ -491,6 +493,19 @@ const tooltipStyle = {
 };
 
 const SOFTWARE_USER_GOAL = 1_000_000;
+
+// KPIs fed by finance-scoped endpoints (revenue, subscriptions,
+// profitability, infra-cost). A viewer without finance:read gets neither
+// the fetches nor the tiles — no zeros, no stuck loading states.
+const FINANCE_KPI_IDS = new Set([
+  "kpi-mrr",
+  "kpi-arr",
+  "kpi-subscriptions",
+  "kpi-cost-per-user-mobile",
+  "kpi-cost-per-user-desktop",
+  "kpi-total-users-macos",
+  "kpi-total-users-mobile",
+]);
 const ONE_MILLION_ORDER_REVISION = "1m-growth-v2";
 const ONE_MILLION_PRIORITY_IDS = [
   "header-1m-growth",
@@ -512,6 +527,11 @@ const ONE_MILLION_PRIORITY_IDS = [
 
 export default function AnalyticsPage() {
   const { token } = useAuthToken();
+  // The server's requireScope stays the authority; the scopes only shape
+  // which endpoints are fetched and which tiles render.
+  const { access, can } = useAdminAccess();
+  const canSeeFinance = access ? can("finance:read") : false;
+  const localAgent = useLocalAgentEnabled();
   const [months, setMonths] = useState(12);
   const [retentionDays, setRetentionDays] = useState(30);
   const [retentionPlatform, setRetentionPlatform] = useState("macos");
@@ -525,12 +545,18 @@ export default function AnalyticsPage() {
 
   const swrOpts = { revalidateOnFocus: false };
 
+  // Finance endpoints need finance:read; without it they are not fetched at
+  // all, so no revenue/subscription/profitability/infra-cost request is
+  // made and their tiles are hidden instead of showing zeros.
+  const financeKey = (url: string) =>
+    token && canSeeFinance ? [url, token] : null;
+
   const {
     data: revenue,
     isLoading: revenueLoading,
     error: revenueError,
   } = useSWR<RevenueData>(
-    token ? ["/api/omi/stats/revenue", token] : null,
+    financeKey("/api/omi/stats/revenue"),
     authFetcher,
     swrOpts
   );
@@ -542,7 +568,7 @@ export default function AnalyticsPage() {
   } = useSWR<{
     data: MrrTrendPoint[];
   }>(
-    token ? [`/api/omi/stats/mrr-trends?months=${months}`, token] : null,
+    financeKey(`/api/omi/stats/mrr-trends?months=${months}`),
     authFetcher,
     swrOpts
   );
@@ -554,9 +580,7 @@ export default function AnalyticsPage() {
   } = useSWR<{
     data: SubscriptionTrendPoint[];
   }>(
-    token
-      ? [`/api/omi/stats/subscription-trends?months=${months}`, token]
-      : null,
+    financeKey(`/api/omi/stats/subscription-trends?months=${months}`),
     authFetcher,
     swrOpts
   );
@@ -566,7 +590,7 @@ export default function AnalyticsPage() {
     isLoading: subCountsLoading,
     error: subCountsError,
   } = useSWR<SubscriptionCounts>(
-    token ? ["/api/omi/stats/subscriptions", token] : null,
+    financeKey("/api/omi/stats/subscriptions"),
     authFetcher,
     swrOpts
   );
@@ -662,7 +686,7 @@ export default function AnalyticsPage() {
     isLoading: profitLoading,
     error: profitError,
   } = useSWR<ProfitabilityData>(
-    token ? [`/api/omi/stats/profitability?${profitQuery}`, token] : null,
+    financeKey(`/api/omi/stats/profitability?${profitQuery}`),
     authFetcher,
     swrOpts
   );
@@ -684,7 +708,7 @@ export default function AnalyticsPage() {
     };
   }
   const { data: infraCosts } = useSWR<InfraCostsData>(
-    token ? [`/api/omi/stats/infra-costs?days=${profitDays}`, token] : null,
+    financeKey(`/api/omi/stats/infra-costs?days=${profitDays}`),
     authFetcher,
     swrOpts
   );
@@ -3250,7 +3274,7 @@ export default function AnalyticsPage() {
   ]);
 
   const topKpiAndNewWidgets = useMemo<ChartItem[]>(() => {
-    return [
+    const items: ChartItem[] = [
       {
         id: "ai-prompt",
         title: "Customize this dashboard",
@@ -3427,7 +3451,16 @@ export default function AnalyticsPage() {
           ),
       },
     ];
+    // The agent card appears only while the server reports the local agent
+    // endpoint enabled; the finance KPIs only with finance:read.
+    return items.filter(
+      (item) =>
+        (canSeeFinance || !FINANCE_KPI_IDS.has(item.id)) &&
+        (localAgent || item.id !== "ai-prompt")
+    );
   }, [
+    canSeeFinance,
+    localAgent,
     mrr,
     arr,
     totalSubs,
@@ -4017,16 +4050,25 @@ export default function AnalyticsPage() {
       ...responseReliabilityItems,
       ...topKpiAndNewWidgets,
 
-      profitabilityHeader,
-      profitabilityControls,
-      ...profitCharts,
-
-      revenueHeader,
-      revenueControls,
-      ...revenueCharts,
+      // Revenue and profitability come from finance-scoped endpoints; a
+      // viewer without finance:read gets neither the sections nor their
+      // controls. The macOS total-users KPIs read the profitability
+      // summary, so they hide with it (DAU/WAU/MAU are analytics).
+      ...(canSeeFinance
+        ? [
+            profitabilityHeader,
+            profitabilityControls,
+            ...profitCharts,
+            revenueHeader,
+            revenueControls,
+            ...revenueCharts,
+          ]
+        : []),
 
       macosHeader,
-      ...macosKpis,
+      ...macosKpis.filter(
+        (item) => canSeeFinance || !FINANCE_KPI_IDS.has(item.id)
+      ),
       ...macosGrowthCharts,
 
       notificationsHeader,
@@ -4043,6 +4085,7 @@ export default function AnalyticsPage() {
       ...chatRatingsItems,
     ];
   }, [
+    canSeeFinance,
     growthGoalItems,
     responseReliabilityItems,
     topKpiAndNewWidgets,

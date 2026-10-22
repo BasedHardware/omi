@@ -273,13 +273,13 @@ def _old_peer_wiring(mp, old_pusher, old_storage):
     for attr in (
         'get_audio_bytes_webhook_seconds',
         'is_audio_bytes_app_enabled',
-        'is_audio_merge_dispatch_enabled',
         'schedule_person_voice_learning_retry',
         'run_authorized_person_learning',
         'PUSHER_ACTIVE_WS_CONNECTIONS',
         'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS',
     ):
         mp.setattr(old_pusher, attr, getattr(f.pusher, attr))
+    mp.setattr(old_pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     if old_storage is not None:
         mp.setattr(old_storage, '_get_storage_client', lambda: storage_module._get_storage_client())
         mp.setattr(old_storage, 'private_cloud_sync_bucket', storage_module.private_cloud_sync_bucket)
