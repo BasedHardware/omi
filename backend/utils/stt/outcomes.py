@@ -86,11 +86,20 @@ class TranscriptionFailure(RuntimeError):
         super().__init__(public_message)
 
     def as_detail(self) -> dict[str, Any]:
-        """Safe, machine-readable HTTP/SSE payload."""
+        """Safe, machine-readable HTTP/SSE payload.
+
+        The released app-client decoders reject unknown ``outcome`` values, so
+        server-only outcomes map onto their public counterpart here; the
+        ``error`` code keeps the precision (``stt_provider_budget_exhausted``).
+        """
 
         return {
             'error': self.error_code,
-            'outcome': self.outcome.value,
+            'outcome': (
+                TranscriptionOutcome.UPSTREAM_ERROR.value
+                if self.outcome is TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED
+                else self.outcome.value
+            ),
             'provider': self.provider,
             'retryable': self.retryable,
             'message': self.public_message,
