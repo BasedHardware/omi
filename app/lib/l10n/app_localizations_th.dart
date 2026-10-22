@@ -14410,4 +14410,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceControls => 'การควบคุม';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'นอกจากนี้: $items';
+  }
 }

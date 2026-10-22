@@ -14284,4 +14284,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get deviceControls => '제어';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return '그 외: $items';
+  }
 }

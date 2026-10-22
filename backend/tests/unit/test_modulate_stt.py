@@ -146,19 +146,18 @@ class TestLanguageRouting(unittest.TestCase):
 @pytest.mark.parametrize('models', [['dg-nova-3'], ['dg-nova-3', 'modulate-velma-2']])
 @pytest.mark.parametrize('language', ['en', 'fr'])
 @pytest.mark.parametrize('multi_language', [False, True])
-def test_configured_cloud_deepgram_serves_available_streaming_languages(models, language, multi_language):
-    # Hosted Deepgram was restored for live streaming, not PTT or prerecorded
-    # audio. Preserve both its current enabled behavior and the refusal tests
-    # above when the policy explicitly disables a deployment.
+def test_retired_deepgram_never_serves_streaming_languages(models, language, multi_language):
+    # Deepgram retired 2026-08-27: even a chain that still lists dg-nova-3 with
+    # a resolvable client never selects it; Velma takes the session.
     with (
         patch('utils.stt.streaming.stt_service_models', models),
         patch('utils.stt.streaming.is_dg_self_hosted', False),
         patch('utils.stt.streaming._deepgram_is_available', return_value=True),
     ):
         assert get_stt_service_for_language(language, multi_lang_enabled=multi_language) == (
-            STTService.deepgram,
+            STTService.modulate,
             'multi' if multi_language else language,
-            'nova-3',
+            'velma-2',
         )
 
 
@@ -556,6 +555,75 @@ class TestModulatePrerecorded(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+
+    def _budget_refusal_client(self, status_code: int, body: str):
+        """httpx.Client whose POST answers a non-2xx status with the given body."""
+        import httpx
+
+        request = httpx.Request('POST', 'https://modulate-developer-apis.com/api/velma-2-stt-batch')
+        response = httpx.Response(status_code, content=body.encode(), request=request)
+        mock_response = MagicMock()
+        mock_response.status_code = status_code
+        mock_response.text = body
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError('error', request=request, response=response)
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.post.return_value = mock_response
+        return mock_client
+
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    @patch('utils.stt.pre_recorded.httpx.Client')
+    def test_http_402_is_a_typed_budget_failure(self, mock_client_cls):
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_client_cls.return_value = self._budget_refusal_client(402, '{"error": "Payment required"}')
+
+        with self.assertRaises(TranscriptionFailure) as exc_info:
+            modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+
+        failure = exc_info.exception
+        self.assertEqual(failure.outcome, TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED)
+        self.assertEqual(failure.provider, 'modulate')
+        self.assertFalse(failure.retryable)
+        self.assertEqual(failure.error_code, 'stt_provider_budget_exhausted')
+        # Out-of-credits is terminal: the retry ladder must not re-dial it.
+        self.assertEqual(mock_client_cls.return_value.post.call_count, 1)
+
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    @patch('utils.stt.pre_recorded.httpx.Client')
+    def test_429_with_insufficient_credits_body_is_a_budget_failure(self, mock_client_cls):
+        from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_client_cls.return_value = self._budget_refusal_client(429, '{"error": "Insufficient Credits."}')
+
+        with self.assertRaises(TranscriptionFailure) as exc_info:
+            modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+
+        self.assertEqual(exc_info.exception.outcome, TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED)
+        self.assertEqual(exc_info.exception.provider, 'modulate')
+        self.assertEqual(mock_client_cls.return_value.post.call_count, 1)
+
+    # Pins the legacy 3-attempt ladder under the fail-fast kill switch; the default
+    # (2 POSTs) is asserted in test_prerecorded_vendor_fail_fast.py.
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key', 'STT_PRERECORDED_VENDOR_FAIL_FAST': 'false'})
+    @patch('utils.stt.pre_recorded.httpx.Client')
+    def test_plain_429_stays_a_retryable_upstream_error(self, mock_client_cls):
+        from utils.stt.outcomes import TranscriptionFailure
+        from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
+
+        mock_client_cls.return_value = self._budget_refusal_client(429, '{"error": "Too many requests"}')
+
+        with self.assertRaises(RuntimeError) as exc_info:
+            modulate_prerecorded_from_bytes(b'\x00' * 100, 16000)
+
+        # Not budget: the plain 429 keeps the generic retry-ladder handling
+        # (3 attempts, then the plain RuntimeError wrap).
+        self.assertNotIsInstance(exc_info.exception, TranscriptionFailure)
+        self.assertNotIn('budget', str(exc_info.exception))
+        self.assertEqual(mock_client_cls.return_value.post.call_count, 3)
 
 
 class TestRecvLoop(unittest.TestCase):

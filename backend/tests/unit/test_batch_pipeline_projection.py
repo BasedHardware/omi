@@ -349,7 +349,7 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', str(enabled).lower())
     policy = resolve_stage_policy(binding.owner_id, 'projection')
-    monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_: 'synthetic-conversation')
+    monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_, **kw: 'synthetic-conversation')
     playback = Mock(side_effect=ValueError('private-error-must-never-be-logged'))
     projector = projection.Projector(Mock(), Mock(), playback=playback)
     receipt = {

@@ -70,6 +70,8 @@ CLOSED_HELPERS = frozenset(
         'utils.sync.cap_hold_reservations._bounded_outcome',  # lane 8 cap-hold: OUTCOMES else 'unknown'
         'utils.translation_core.metrics._bounded_provider',  # fixed provider set else 'other'
         'utils.translation_core.metrics._bounded_reason',  # fixed skip-reason set else 'other'
+        'utils.stt.local_send_diagnostics.bounded_local_send_provider',  # PROVIDERS (or enum .value) else 'other'
+        'utils.episodes.metrics._label',  # value if in the given frozenset vocabulary else 'other'
     }
 )
 

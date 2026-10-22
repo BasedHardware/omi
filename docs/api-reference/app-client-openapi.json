@@ -31974,6 +31974,22 @@
             "title": "Participants",
             "type": "array"
           },
+          "salience": {
+            "anyOf": [
+              {
+                "enum": [
+                  "highlight",
+                  "background"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "'highlight' when the person would want this as its own entry (time with people, a meeting or call, plans, decisions, ideas, tasks); 'background' when it is worth keeping but not a highlight (media or TV playing, ambient chatter, a passing remark, a trivial errand). Absent on legacy notes",
+            "title": "Salience"
+          },
           "sections": {
             "description": "Detailed, free-form note sections in the model-chosen structure",
             "items": {

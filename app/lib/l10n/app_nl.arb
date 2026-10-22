@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} van {total} min",
     "deviceRecently": "Recent",
     "deviceDisconnectedFor": "{duration} niet verbonden",
-    "deviceControls": "Bediening"
+    "deviceControls": "Bediening",
+    "homeBackgroundLine": "Ook: {items}"
 }

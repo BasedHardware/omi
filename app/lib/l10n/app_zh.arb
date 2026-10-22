@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done}/{total} 分钟",
     "deviceRecently": "最近",
     "deviceDisconnectedFor": "断开连接 {duration}",
-    "deviceControls": "控制"
+    "deviceControls": "控制",
+    "homeBackgroundLine": "另外：{items}"
 }

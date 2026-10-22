@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} no {total} min",
     "deviceRecently": "Nesen",
     "deviceDisconnectedFor": "Atvienots {duration}",
-    "deviceControls": "Vadīklas"
+    "deviceControls": "Vadīklas",
+    "homeBackgroundLine": "Arī: {items}"
 }

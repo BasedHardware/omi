@@ -147,6 +147,7 @@ def test_on_realtime_segments_schedules_a_background_update(monkeypatch):
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     tracker = MomentTracker()
     monkeypatch.setattr(live, 'tracker', tracker)
+    live.sessions.clear()
 
     def fake_start(coro, *, name):
         scheduled.append(name)
@@ -156,7 +157,61 @@ def test_on_realtime_segments_schedules_a_background_update(monkeypatch):
     tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
     monkeypatch.setattr(live.time, 'time', lambda: 1000.0)
     asyncio.run(live.on_realtime_segments('u', _segs(3), 'c2', 'omi'))
-    assert scheduled == ['episode_moment']
+    # The new conversation attaches at its first words; the old one's moment ends.
+    assert scheduled == ['episode_attach', 'episode_moment']
+    asyncio.run(live.on_realtime_segments('u', _segs(3), 'c2', 'omi'))
+    assert scheduled == ['episode_attach', 'episode_moment']
     monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
     asyncio.run(live.on_realtime_segments('u', _segs(3), 'c3', 'omi'))
+    assert scheduled == ['episode_attach', 'episode_moment']
+
+
+def test_the_first_moment_comes_early_then_the_interval_holds():
+    tracker = MomentTracker()
+    ended = []
+    for wall in range(0, 40, 10):
+        ended += tracker.observe('u', _segs(20), 'c1', 'omi', now=wall)
+    assert [m.trigger for m in ended] == ['interval']
+    assert ended[0].segments and (ended[0].ended_at - ended[0].started_at).total_seconds() >= 30
+    # After that first flush the ordinary interval applies.
+    assert tracker.observe('u', _segs(80), 'c1', 'omi', now=60) == []
+
+
+def test_steady_talk_ends_a_moment_on_the_interval():
+    tracker = MomentTracker()
+    tracker._buffers['u'] = live._Buffer('c1', 'omi', 0.0, 0.0, last_flush_wall=-1.0)
+    wall = 0
+    ended = []
+    # Twelve words every ten seconds: never a 45 s pause, 600 words only after eight minutes.
+    while wall <= config.MOMENT_MAX_SECONDS + 10:
+        ended += tracker.observe('u', _segs(12), 'c1', 'omi', now=wall)
+        wall += 10
+    assert [m.trigger for m in ended] == ['interval']
+    assert (ended[0].ended_at - ended[0].started_at).total_seconds() >= config.MOMENT_MAX_SECONDS
+
+
+def test_session_end_flushes_the_buffer(monkeypatch):
+    tracker = MomentTracker()
+    tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
+    # Another session's conversation (a parallel capture on this pod) keeps its buffer.
+    assert tracker.flush('u', 'c-other') is None
+    moment = tracker.flush('u', 'c1')
+    assert moment.trigger == 'session_end' and moment.conversation_id == 'c1'
+    assert tracker.flush('u', 'c1') is None and tracker.flush('u', None) is None
+
+    scheduled = []
+    monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(live, 'tracker', tracker)
+    monkeypatch.setattr(
+        live.executors, 'start_background_task', lambda coro, *, name: scheduled.append(name) or coro.close()
+    )
+    tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
+    asyncio.run(live.on_session_end('u', 'c1'))
+    asyncio.run(live.on_session_end('u', 'c1'))
     assert scheduled == ['episode_moment']
+
+
+def test_alternating_devices_attach_each_conversation_once():
+    counter = live._SessionCounter()
+    seen = [counter.first_moment('u', cid) for cid in ['phone', 'omi', 'phone', 'omi', 'phone']]
+    assert seen == [True, True, False, False, False]

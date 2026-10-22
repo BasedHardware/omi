@@ -5,6 +5,7 @@ from collections import deque
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from unittest.mock import Mock
 
 import httpx
 import numpy as np
@@ -197,6 +198,76 @@ def receiver():
         _telemetry_platform=lambda: 'ios',
         emitted=emitted,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('mode', ['forward', 'generic', 'legacy-signature', 'capture-setup'])
+async def test_funded_window_vad_pause_survives_cap_proxy_and_keeps_transcribing(monkeypatch, caplog, mode):
+    from utils import stt_cap_dispatch as cap
+
+    forward = mode != 'generic'
+    monkeypatch.setenv('STT_CAP_FINALIZE_FORWARD_ENABLED', str(forward).lower())
+    if mode == 'legacy-signature':
+        # Exact old proxy protocol: reject the provider's keyword at binding,
+        # before entering finalize or making any HTTP request.
+        monkeypatch.setattr(cap.CapSocket, 'finalize', lambda self: self.raw.finalize())
+    monkeypatch.setattr(cap, 'customer_funded', lambda _provider: False)
+    monkeypatch.setattr(cap, 'record_audio', Mock())
+    state = cap.LiveAdmission('synthetic')
+    state.managed, state.remaining = True, None
+    recv = receiver()
+    recv.cap_admission = state
+    client = Client(data={'segments': [{'text': 'Still here.', 'start': 0, 'end': 1.8}]})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    socket = await LiveChainSession(recv).connect(16000)
+    # Use the real cap proxy, window, VAD hangover, managed leg and POST pump.
+    # The proxy advertises its provider class; this is the production dispatch.
+    assert isinstance(socket.raw, window.WindowedParakeetSocket)
+    assert type(socket.raw) is cap.CapSocket
+    raw = socket.raw.raw
+    if mode == 'capture-setup':
+        from utils.stt import live_session
+
+        monkeypatch.setattr(live_session, 'set_cap_capture', Mock(side_effect=RuntimeError('private capture detail')))
+    finalize = Mock(wraps=raw.finalize)
+    monkeypatch.setattr(raw, 'finalize', finalize)
+    try:
+        for data, frames in [(b'\x01\x00' * 640, 50), (bytes(1280), 25)]:
+            for _ in range(frames):
+                accepted = socket.send(data)
+                if mode in {'legacy-signature', 'capture-setup'} and not accepted:
+                    reason, phase, error = (
+                        ('send_failed', 'finalize', 'TypeError')
+                        if mode == 'legacy-signature'
+                        else ('connection_lost', 'capture_mapping', 'RuntimeError')
+                    )
+                    assert socket.normalized_death_reason == reason
+                    assert (
+                        f'phase={phase} exception_class={error} raw_dead=false raw_closed=false proxy=cap'
+                        in caplog.text
+                    )
+                    assert 'private capture detail' not in caplog.text
+                    assert client.requests == []
+                    return
+                assert accepted
+                await _REAL_SLEEP(0)
+        assert mode not in {'legacy-signature', 'capture-setup'}, 'expected local failure did not reproduce'
+        assert finalize.call_count > 0
+        assert finalize.call_args.kwargs == ({'vad_pause': True} if forward else {})
+        await _wait_requests(client, 1)
+        for _ in range(10):
+            await _REAL_SLEEP(0)
+        assert not socket.is_connection_dead
+        assert socket.send(b'\x01\x00' * 640)
+        assert [segment['text'] for segment in recv.emitted] == ['Still here.']
+    finally:
+        if mode == 'capture-setup':
+            # The first-packet failure cancels the pump. Its drain preserves
+            # cancellation, which is expected teardown for this injected arm.
+            with pytest.raises(asyncio.CancelledError):
+                await socket.drain_and_close()
+        else:
+            await socket.drain_and_close()
 
 
 @pytest.mark.asyncio

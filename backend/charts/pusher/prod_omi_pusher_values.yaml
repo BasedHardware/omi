@@ -114,6 +114,8 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
   - name: STT_CAP_DISPATCH_COHORT
@@ -403,12 +405,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
-  # Retain the cloud/BYOK credential; self-hosted Deepgram is retired.
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -505,8 +501,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL

@@ -14518,4 +14518,9 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get deviceControls => 'Кіраванне';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Таксама: $items';
+  }
 }

@@ -7,6 +7,7 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
@@ -260,6 +261,7 @@ _SYNC_FAILURE_REASON_CODES = {
     'stt_empty_unexpected',
     'stt_invalid_input',
     'stt_provider_configuration_error',
+    'stt_provider_budget_exhausted',
     'stt_timeout',
     'stt_upstream_error',
     'sync_backfill_dispatch_unavailable',
@@ -519,6 +521,9 @@ def _deferred_segment_labels(
 _SYNC_ERROR_CODE_OUTCOMES = {
     'stt_provider_configuration_error': TranscriptionOutcome.CONFIG_ERROR,
     'stt_timeout': TranscriptionOutcome.TIMEOUT,
+    # Budget outranks the generic upstream error so a job that hit an
+    # out-of-credits provider keeps the actionable outcome at rollup.
+    'stt_provider_budget_exhausted': TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED,
     'stt_upstream_error': TranscriptionOutcome.UPSTREAM_ERROR,
     'stt_empty_unexpected': TranscriptionOutcome.EMPTY_UNEXPECTED,
     'stt_invalid_input': TranscriptionOutcome.INVALID_INPUT,
@@ -1088,6 +1093,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     if language == _LINEAGE_RETRY_LANGUAGE:
         language = conversation.language or 'en'
 
+    silent_redrive = is_silent_redrive(conversation_data)
     was_discarded = conversation.discarded
     prior_decision = conversation_data.get('relevance_decision')
     # process_conversation persists relevance_decision.trigger == 'sync_update'.
@@ -1105,6 +1111,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         language_code=language or 'en',
         conversation=conversation,
         trigger=ProcessingTrigger.SYNC_UPDATE,
+        defer_derived_effects=silent_redrive,
         user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
         persistence_observer=_require_current_conversation_persistence,
         # Deserialize drops relevance_decision. The raw row still has it:
@@ -1128,7 +1135,12 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # reprocess path deliberately suppresses webhooks. Emit exactly at the
     # discarded -> visible transition so pendant conversations reach developer
     # integrations without duplicating events on ordinary later reprocessing.
-    if conversation.source == ConversationSource.limitless and was_discarded and not processed_conversation.discarded:
+    if (
+        not silent_redrive
+        and conversation.source == ConversationSource.limitless
+        and was_discarded
+        and not processed_conversation.discarded
+    ):
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')
@@ -1510,6 +1522,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     path,
                     selector=get_prerecorded_service,
                     before_probe=lambda: not cap_enforced() or sync_allowed(uid, lane=cap_dispatch_lane),
+                    cohort_key=uid,
                 ),
             )
             if (

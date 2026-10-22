@@ -168,7 +168,7 @@ BODY_DIGEST = {
     'database.action_items._apply_action_item_date_filters': 'b69dc9810414753e0b0715560b872121566b965f36bdefc5b91869587037336f',
     'database.action_items._harvest_legacy_docs': 'f4b8069a91feae96d257470687bc383bb0652b002a009e79979815be58814f9a',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'c7310ad7eaab2e1085c5493e4e2b6c7f618ea88f0aae670e4b4f84dd3e828b59',
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'da1c77bb80e1dcc7de8919af11d0e4647ce454ff6158b23ad32f5425af5d980e',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
@@ -828,7 +828,10 @@ _add(
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.scan_in_progress_conversations',
-        domains={'resume_after_path': [None, 'users/shape-user/conversations/c-1']},
+        domains={
+            'resume_after_path': [None, 'users/shape-user/conversations/c-1'],
+            'content_due_before': [None, T0],
+        },
         neutrals={'page_size': _PAGE, 'max_scan': (200, 'scan bound; fixed, not filter-affecting')},
     )
 )
@@ -3021,6 +3024,10 @@ def _messaging_claim(client, combo, trial):
     client.documents['channel_identities/link/inbox/job'] = {'status': 'pending', 'created_at': T0, 'payload': '{}'}
 
 
+def _messaging_supersede(client, combo, trial):
+    client.documents['channel_identities/link/inbox/job'] = {'status': 'running', 'created_at': T0, 'chat': 'c'}
+
+
 def _messaging_decryption(client):
     return unittest.mock.patch('utils.encryption.decrypt', lambda value, uid: '{}')
 
@@ -3042,6 +3049,7 @@ for method, base, setup in (
         _messaging_session,
     ),
     ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
+    ('superseding_pending', {'path': 'channel_identities/link/inbox/job'}, _messaging_supersede),
     ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
     ('delete_account', {'uid': UID}, None),
 ):

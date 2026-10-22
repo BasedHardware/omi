@@ -14576,4 +14576,9 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get deviceControls => 'Χειριστήρια';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Επίσης: $items';
+  }
 }

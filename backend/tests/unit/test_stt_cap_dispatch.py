@@ -100,6 +100,29 @@ async def test_held_constructor_resumes_after_reset_without_reopening_capture(mo
     raw.finish.assert_called_once()
 
 
+@pytest.mark.parametrize('flag', [None, 'true', 'false', '0', 'off'])
+def test_cap_proxy_preserves_provider_finalize_arguments(monkeypatch, flag):
+    if flag is None:
+        monkeypatch.delenv('STT_CAP_FINALIZE_FORWARD_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('STT_CAP_FINALIZE_FORWARD_ENABLED', flag)
+    raw = Mock(finalize=Mock(return_value='finalized'))
+    state = cap.LiveAdmission('synthetic')
+    socket = cap.CapSocket(state, 'parakeet', 16000, AsyncMock(), raw)
+    assert socket.finalize(vad_pause=True) == 'finalized'
+    if flag in {'false', '0', 'off'}:
+        raw.finalize.assert_called_once_with()
+    else:
+        raw.finalize.assert_called_once_with(vad_pause=True)
+
+
+def test_cap_finalize_while_held_never_opens_provider():
+    factory = AsyncMock()
+    socket = cap.CapSocket(cap.LiveAdmission('synthetic'), 'parakeet', 16000, factory)
+    assert socket.finalize(vad_pause=True) is None
+    factory.assert_not_called()
+
+
 async def test_resumed_registry_leg_unwraps_nested_provider_and_debits_once(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     state = cap.LiveAdmission('synthetic')
@@ -531,3 +554,18 @@ def test_actual_receiver_active_admission_requires_identity_without_fallback(mon
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
     with pytest.raises(error):
         receiver.ListenReceiver(_identity_trap_host(shape, False), [], {})
+
+
+def test_actual_receiver_idle_cohort_armed_still_never_touches_identity(monkeypatch):
+    """The Soniox idle cohort resolves its uid lazily; even with the cohort
+    armed, receiver construction must not consult the listen request's identity
+    on a cap-bypass path (identity traps raise on touch)."""
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '30')
+    monkeypatch.setattr(receiver, 'session_recovery_enabled', lambda host: False)
+    value = receiver.ListenReceiver(_identity_trap_host('request_raises', False), [], {})
+    assert value.soniox_idle_budget is not None

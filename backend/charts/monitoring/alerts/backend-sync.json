@@ -1300,5 +1300,132 @@
       "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-sync-provider-budget-exhausted",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync STT - provider out of credits/budget (top up)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome=\"provider_budget_exhausted\"}[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 3",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-22T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Sync/prerecorded transcription jobs are failing because an STT vendor says the account is out of credits or budget",
+      "threshold": "sum by (namespace) increase(omi_sync_transcription_job_total{outcome=provider_budget_exhausted}[15m]) >= 3, for 5m",
+      "user_impact": "Offline sync, prerecorded and voice-message transcription fail for everyone routed to that vendor until the account is topped up; live sessions may also lose the vendor as a fallback.",
+      "scope": "gmp-cloud-run omi_sync_transcription_job_total{outcome=provider_budget_exhausted} on backend-sync and backend-sync-backfill. The outcome comes from #23234 (Modulate 402, or 429 'Insufficient credits'). Sibling of omi-stt-provider-budget (live). Silent until #23234 is deployed to Cloud Run.",
+      "verification": "No history: the outcome value is new in #23234. The 2026-10-22 02:00Z Modulate credits outage produced ~200 upstream_error jobs per 30m that would have carried this outcome; at >= 3 per 15m it would have paged within ~20m instead of the ~60m the generic sync failure-rate rules took.",
+      "evaluated_bad": "Modulate 429 'Insufficient credits' 2026-10-22 from ~02:00Z (classified as upstream_error at the time)",
+      "evaluated_good": "0 provider_budget_exhausted jobs (normal operation)",
+      "safe_next_action": "Top up the named vendor account (owner: David). Do not rotate keys. Check the live page omi-stt-provider-budget for the same vendor and the kind=account circuit.",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-provider-budget-exhausted"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
   }
 ]

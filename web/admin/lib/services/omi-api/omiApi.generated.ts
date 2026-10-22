@@ -5237,6 +5237,7 @@ export interface Structured {
   note_claims?: Array<NoteClaim> | null;
   overview?: string;
   participants?: Array<Participant>;
+  salience?: "highlight" | "background" | null;
   sections?: Array<Section>;
   title?: string;
 }

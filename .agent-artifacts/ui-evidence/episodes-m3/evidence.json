@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-background-day-line.png",
+      "platform": "mobile-ios",
+      "description": "Home, episodes on: the day's two background conversations folded into one Also line under the day header",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-home-background-day-line-open.png",
+      "platform": "mobile-ios",
+      "description": "Home after tapping the Also line: the background conversations shown as rows",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

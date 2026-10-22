@@ -205,6 +205,9 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://172.16.48.49/diarizer
+          LISTEN_QUIET_FINALIZATION_ENABLED:
+            value: 'true'
+            category: ops_kill
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -340,6 +343,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          LISTEN_QUIET_FINALIZATION_ENABLED:
+            value: 'true'
+            category: ops_kill
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
@@ -695,6 +701,7 @@ environments:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
+          - DEEPGRAM_API_KEY
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -897,6 +904,9 @@ environments:
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
               value: http://172.16.48.49/diarizer
+            LISTEN_QUIET_FINALIZATION_ENABLED:
+              value: 'true'
+              category: ops_kill
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -1153,6 +1163,9 @@ environments:
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
               value: http://172.16.48.49/diarizer
+            LISTEN_QUIET_FINALIZATION_ENABLED:
+              value: 'true'
+              category: ops_kill
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -1261,6 +1274,7 @@ environments:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
+          - DEEPGRAM_API_KEY
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -1433,6 +1447,9 @@ environments:
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
               value: http://172.16.48.49/diarizer
+            LISTEN_QUIET_FINALIZATION_ENABLED:
+              value: 'true'
+              category: ops_kill
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -1533,6 +1550,7 @@ environments:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
+          - DEEPGRAM_API_KEY
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -1683,6 +1701,9 @@ environments:
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
               value: http://172.16.48.49/diarizer
+            LISTEN_QUIET_FINALIZATION_ENABLED:
+              value: 'true'
+              category: ops_kill
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -1757,6 +1778,7 @@ environments:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
+          - DEEPGRAM_API_KEY
           - HOSTED_PUSHER_API_URL
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -2317,6 +2339,9 @@ environments:
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
             value: http://172.16.160.20/diarizer
+          LISTEN_QUIET_FINALIZATION_ENABLED:
+            value: 'true'
+            category: ops_kill
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -2531,6 +2556,9 @@ environments:
         - memory.canonical.mutate
         values_file: backend/charts/pusher/prod_omi_pusher_values.yaml
         env:
+          LISTEN_QUIET_FINALIZATION_ENABLED:
+            value: 'true'
+            category: ops_kill
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: live, category: rollout}
@@ -2837,6 +2865,7 @@ environments:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
+          - DEEPGRAM_API_KEY
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -3060,6 +3089,9 @@ environments:
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
               value: http://172.16.160.20/diarizer
+            LISTEN_QUIET_FINALIZATION_ENABLED:
+              value: 'true'
+              category: ops_kill
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -3142,7 +3174,7 @@ environments:
             OMI_MESSAGING_LINK_TARGETS: {value: '{"telegram":{"provider":"telegram","address":"omi_chat_bot","deep_link_template":"https://t.me/{address}?start={proof}"},"imessage":{"provider":"linq","address":"+12062808403"}}',
               category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '25', category: rollout}
+            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -3409,6 +3441,9 @@ environments:
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
               value: http://172.16.160.20/diarizer
+            LISTEN_QUIET_FINALIZATION_ENABLED:
+              value: 'true'
+              category: ops_kill
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -3509,7 +3544,7 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '25', category: rollout}
+            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -3606,6 +3641,7 @@ environments:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
+          - DEEPGRAM_API_KEY
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -3775,6 +3811,9 @@ environments:
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
               value: http://172.16.160.20/diarizer
+            LISTEN_QUIET_FINALIZATION_ENABLED:
+              value: 'true'
+              category: ops_kill
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -3867,7 +3906,7 @@ environments:
             TRANSCRIPTION_SYNC_FINAL_PASS_HOURLY_REQUESTS: {value: '15000', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '25', category: rollout}
+            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -3960,6 +3999,7 @@ environments:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
+          - DEEPGRAM_API_KEY
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -4107,6 +4147,9 @@ environments:
             HOSTED_SPEAKER_EMBEDDING_API_URL:
               category: service_discovery
               value: http://172.16.160.20/diarizer
+            LISTEN_QUIET_FINALIZATION_ENABLED:
+              value: 'true'
+              category: ops_kill
             LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
               value: '900'
               category: reliability
@@ -4166,7 +4209,7 @@ environments:
             CAPTURE_SHARED_SPEECH_PERCENT: {value: '0', category: rollout}
             OMI_SHAPED_AGENT_MODE: {value: 'on', category: rollout}
             DREAM_AGENT_ENABLED: {value: 'true', category: rollout}
-            DREAM_AGENT_PAID_PERCENT: {value: '25', category: rollout}
+            DREAM_AGENT_PAID_PERCENT: {value: '100', category: rollout}
             DREAM_AGENT_CONCURRENCY:
               value: '8'
               category: reliability
@@ -4215,6 +4258,7 @@ environments:
           forbidden_env:
           - DEEPGRAM_SELF_HOSTED_ENABLED
           - DEEPGRAM_SELF_HOSTED_URL
+          - DEEPGRAM_API_KEY
           - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
           - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
           - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH

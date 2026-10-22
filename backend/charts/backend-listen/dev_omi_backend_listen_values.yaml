@@ -371,6 +371,8 @@ env:
     value: "on"
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
+  - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
   - name: GOOGLE_MAPS_API_KEY
@@ -450,8 +452,6 @@ env:
     value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED

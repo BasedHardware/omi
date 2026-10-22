@@ -4441,5 +4441,6 @@
     "deviceCatchingUpProgress": "{done} z {total} min",
     "deviceRecently": "Ostatnio",
     "deviceDisconnectedFor": "Rozłączono na {duration}",
-    "deviceControls": "Sterowanie"
+    "deviceControls": "Sterowanie",
+    "homeBackgroundLine": "Także: {items}"
 }

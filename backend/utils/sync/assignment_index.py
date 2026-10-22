@@ -8,7 +8,7 @@ from collections.abc import ValuesView
 from datetime import timedelta, timezone
 from typing import TYPE_CHECKING
 
-from utils.conversation_continuity import DEFAULT_GAP_SECONDS
+from models.conversation_continuity import DEFAULT_GAP_SECONDS
 from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
 
 if TYPE_CHECKING:

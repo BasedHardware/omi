@@ -25628,6 +25628,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Controls'**
   String get deviceControls;
+
+  /// Home, under a day header: one line listing that day's background conversations (TV playing, a passing remark), each as its title and length, joined by ' · '. Tapping it shows them. Episodes beta only.
+  ///
+  /// In en, this message translates to:
+  /// **'Also: {items}'**
+  String homeBackgroundLine(String items);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done} od {total} min",
     "deviceRecently": "Nedavno",
     "deviceDisconnectedFor": "Prekinjeno {duration}",
-    "deviceControls": "Kontrolniki"
+    "deviceControls": "Kontrolniki",
+    "homeBackgroundLine": "Tudi: {items}"
 }

@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done}/{total} منٹ",
     "deviceRecently": "حال ہی میں",
     "deviceDisconnectedFor": "{duration} تک منقطع",
-    "deviceControls": "کنٹرولز"
+    "deviceControls": "کنٹرولز",
+    "homeBackgroundLine": "نیز: {items}"
 }

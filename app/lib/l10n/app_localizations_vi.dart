@@ -14483,4 +14483,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceControls => 'Điều khiển';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Ngoài ra: $items';
+  }
 }

@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done}/{total} মিনিট",
     "deviceRecently": "সম্প্রতি",
     "deviceDisconnectedFor": "{duration} ধরে সংযোগ বিচ্ছিন্ন",
-    "deviceControls": "নিয়ন্ত্রণ"
+    "deviceControls": "নিয়ন্ত্রণ",
+    "homeBackgroundLine": "এছাড়াও: {items}"
 }

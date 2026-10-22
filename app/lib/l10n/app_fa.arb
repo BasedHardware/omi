@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done} از {total} دقیقه",
     "deviceRecently": "اخیراً",
     "deviceDisconnectedFor": "قطع اتصال به مدت {duration}",
-    "deviceControls": "کنترل‌ها"
+    "deviceControls": "کنترل‌ها",
+    "homeBackgroundLine": "همچنین: {items}"
 }
