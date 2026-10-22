@@ -269,6 +269,7 @@ class LiveHeldAudio:
         self.buffers[key][1] = start
         if self.buffered_seconds() > self.bound + 1e-9:
             raise RuntimeError('live held audio persistence backpressure')
+        pod_pending_seconds()
 
     def buffered_seconds(self) -> float:
         return (
@@ -602,6 +603,7 @@ class LiveHeldAudio:
         if len(merged) > 512:
             merged = [(0, merged[-512][1]), *merged[-511:]]
         receiver._cap_decided_spans = merged
+        pod_pending_seconds()
 
     async def run_updates(self, receiver: Any) -> None:
         while not receiver._cap_hold_stop.is_set():
