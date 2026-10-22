@@ -166,6 +166,14 @@ and tool results pass through the gateway's Vertex translation and accounting.
 Gemini routes are reserved capacity only, with no shared/pay-as-you-go Gemini
 fallback. The configured non-Gemini fallback policy is preserved.
 
+The synthetic 3.8 reservation probe uses the same reserved verifier route with
+service auth and no owner identity, rather than the backend's Vertex ADC. The
+gateway publishes strict completed PT evidence to shared Redis; HTTP success
+alone cannot create evidence. Auth and transport failures are inconclusive and
+do not create a failed-probe admission veto. Fresh shared evidence, readable
+headroom and shared concurrency slots remain required. Legacy 2.5 discovery
+keeps its direct dedicated probe.
+
 The stable contract, instructions, tool schemas and seed prefix are repeated
 unchanged across turns for Vertex implicit caching on provisioned throughput.
 No explicit cache resource is needed for this route. Hits come from reported

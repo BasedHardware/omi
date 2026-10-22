@@ -10,9 +10,10 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from uuid import uuid4
 
-from config.vertex_reservations import RESERVATIONS, State, PROBE_SECONDS
+from config.vertex_reservations import RESERVATIONS, State
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
-from utils.http_client import get_desktop_gemini_client
+from utils.http_client import get_desktop_gemini_client, get_llm_gateway_client, get_llm_gateway_semaphore
+from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
 from utils.llm.vertex_reservation_probe import probe_reservation
 from utils.llm.vertex_reservation_state import reservation_state
 from llm_gateway.gateway.dream_lanes import DREAM_MODEL
@@ -28,7 +29,6 @@ logger = logging.getLogger(__name__)
 class LocalCapacity:
     cooldowns: dict[str, float] = field(default_factory=dict)
     slots: dict[int, tuple[str, float]] = field(default_factory=dict)
-    probe_failed_until: float = 0
 
 
 @lru_cache(maxsize=1)
@@ -70,38 +70,60 @@ def _vertex_tokens():
     return VertexAccessTokenSupplier()
 
 
+def gateway_probe_enabled():
+    """Kill switch for the gateway reservation probe; on unless 0/false/off/no."""
+    return os.getenv('DREAM_GATEWAY_PROBE_ENABLED', 'true').strip().lower() not in {'0', 'false', 'off', 'no'}
+
+
 async def _probe(model, location):
-    local = _local()
-    if model == DREAM_MODEL:
-        location = 'us'
     try:
-        outcome = await probe_reservation(
-            get_desktop_gemini_client(), _vertex_tokens().get_access_token, model, location
-        )
+        if model == DREAM_MODEL and not gateway_probe_enabled():
+            # Off: no probe call; admission relies on fresh evidence from real turns.
+            outcome = 'inconclusive'
+        elif model == DREAM_MODEL:
+            # Use the real Dream route/identity. The gateway publishes strict PT
+            # evidence itself; a gateway HTTP 200 alone must never teach success.
+            headers = llm_gateway_headers(feature='dream_reservation_probe')
+            headers.pop('X-Omi-User-Uid', None)
+            headers['X-Omi-LLM-Feature'] = 'dream_reservation_probe'
+            async with get_llm_gateway_semaphore():
+                response = await get_llm_gateway_client().post(
+                    get_llm_gateway_base_url() + '/v1/chat/completions',
+                    headers=headers,
+                    json={
+                        'model': 'omi:auto:dream-verify',
+                        'messages': [{'role': 'user', 'content': 'Reply OK.'}],
+                        'stream': False,
+                        'max_completion_tokens': 16,
+                        'reasoning_effort': 'none',
+                        'google': {'dream_capacity_mode': 'reserved', 'dream_reserved_only': True},
+                    },
+                    timeout=30,
+                )
+            logger.info('dream_capacity_probe source=gateway model=%s status=%d', model, response.status_code)
+            failure = None
+            if response.is_error:
+                try:
+                    failure = response.json().get('error', {}).get('failure_class')
+                except (ValueError, AttributeError):
+                    pass
+            outcome = (
+                'capacity_error'
+                if response.status_code == 429 or failure in {'reserved_capacity_unavailable', 'provider_429_omi_paid'}
+                else 'inconclusive'
+            )
+        else:
+            outcome = await probe_reservation(
+                get_desktop_gemini_client(), _vertex_tokens().get_access_token, model, location
+            )
     except Exception:
         outcome = 'inconclusive'
     if outcome == 'capacity_error':
         await mark_saturated(model)
-    elif outcome == 'dedicated_success':
-        if model == DREAM_MODEL:
-            local.probe_failed_until = 0
-    else:
-        if model == DREAM_MODEL:
-            local.probe_failed_until = time.monotonic() + PROBE_SECONDS
-        logger.warning('dream_capacity_probe outcome=probe_failed model=%s', model)
-    if model == DREAM_MODEL:
-        try:
-            client = reservation_state.client()
-            if client is not None:
-                async with asyncio.timeout(0.3):
-                    key = reservation_state.key() + ':dream-probe-failed:' + model
-                    if outcome == 'dedicated_success':
-                        await client.delete(key)
-                    elif outcome != 'capacity_error':
-                        await client.set(key, '1', ex=PROBE_SECONDS)
-        except Exception:
-            # Admission independently requires a readable shared store.
-            local.probe_failed_until = time.monotonic() + PROBE_SECONDS
+    elif outcome == 'inconclusive':
+        # Auth/transport failures are not saturation. Admission still requires
+        # fresh shared evidence, readable headroom and shared concurrency slots.
+        logger.info('dream_capacity_probe outcome=inconclusive model=%s', model)
     return outcome
 
 
@@ -129,8 +151,6 @@ async def available_model(*, mode='reserved', owner_allowlisted=False):
         states = await reservation_state.refresh(_probe, apply_overrides=False)
         if states.get(DREAM_MODEL) != State.ACTIVE:
             return _decision(DREAM_MODEL, 'no_states' if not states else 'no_active_model', waiting=True)
-        if local.probe_failed_until > time.monotonic():
-            return _decision(DREAM_MODEL, 'probe_failed', waiting=True)
         fresh_seconds = float(os.getenv('DREAM_RESERVATION_FRESH_SECONDS', '900'))
         utilization_limit = float(os.getenv('DREAM_DEDICATED_UTILIZATION_LIMIT', '0.7'))
         if not 0 < fresh_seconds <= 900 or not 0 < utilization_limit <= 1:
