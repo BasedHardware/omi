@@ -50,7 +50,9 @@ def action_items_for_write(
     """Project only admitted extraction items to the shared initial/refresh write payload."""
     from config.refactor_modes import serving_for
 
-    if serving_for('MEDIA_NOISE_MODE', uid) and getattr(conversation, 'content_kind', None) in ('media', 'noise'):
+    from utils.conversations.media_consumers import is_excluded
+
+    if is_excluded(uid, conversation, consumer='action_items'):
         return []
     if serving_for('ACTION_ITEMS_V2_MODE', uid) and not conversation.id:
         raise ValueError('extracted action items require conversation provenance')

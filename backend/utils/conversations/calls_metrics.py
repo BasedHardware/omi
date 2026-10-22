@@ -40,6 +40,7 @@ _CHECKS = frozenset(
         'recap_state_write',
         'action_admission',
         'stt_vocab',
+        'media_consumer',
     )
 )
 

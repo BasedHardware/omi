@@ -80,6 +80,9 @@ def test_provenance_cannot_be_overridden_by_projection(monkeypatch):
 
 
 def test_media_suppression_is_v2_gated(monkeypatch):
+    from utils.conversations import media_consumers
+
+    monkeypatch.setattr(media_consumers, '_policy', lambda: lambda *_a, **_k: True)
     conversation = SimpleNamespace(id='conversation-1', content_kind='media')
     monkeypatch.setenv('MEDIA_NOISE_MODE', 'serve')
     assert (

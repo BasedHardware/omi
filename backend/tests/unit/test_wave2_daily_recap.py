@@ -178,6 +178,9 @@ def test_pending_stub_during_locked_delivery_retry_never_pushes(producer, monkey
 
 
 def test_content_kind_change_invalidates_existing_recap(producer, monkeypatch):
+    from utils.conversations import media_consumers
+
+    monkeypatch.setattr(media_consumers, '_policy', lambda: lambda uid, row, **kw: row.get('content_kind') == 'media')
     assert generate()[0]['status'] == 'generated'
     monkeypatch.setenv('MEDIA_NOISE_MODE', 'serve')
     producer.rows[0]['content_kind'] = 'media'
@@ -207,3 +210,21 @@ def test_spend_denial_does_not_erase_an_already_generated_day(producer, monkeypa
     assert generate()[0] == original
     assert producer.store['day']['status'] == 'generated'
     assert producer.store['day']['generated_at'] == original['generated_at']
+
+
+def test_media_dependency_delegates_to_v2_and_preserves_rollback(monkeypatch):
+    from utils.conversations import media_consumers
+
+    calls = []
+
+    def policy(uid, row, **kwargs):
+        calls.append(kwargs['consumer'])
+        return row.get('content_kind') == 'media'
+
+    monkeypatch.setattr(media_consumers, '_policy', lambda: policy)
+    rows = [{'content_kind': 'media'}, {'content_kind': 'conversation'}]
+    assert media_consumers.eligible_conversations('synthetic-owner', rows) == rows
+    assert calls == []
+    monkeypatch.setenv('MEDIA_NOISE_MODE', 'serve')
+    assert media_consumers.eligible_conversations('synthetic-owner', rows) == rows[1:]
+    assert calls == ['daily_summary', 'daily_summary']
