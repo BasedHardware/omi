@@ -10,7 +10,7 @@ import pytest
 from database import stale_conversation_recovery as recovery
 from routers.listen import conversations as live
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from utils.observability.stale_recovery import STALE_RECOVERY_OUTCOME_TOTAL
+from utils.observability.stale_recovery import STALE_RECOVERY_OUTCOME_TOTAL, record_stale_recovery_outcome
 
 NOW = datetime(2026, 10, 22, 4, tzinfo=timezone.utc)
 
@@ -129,3 +129,13 @@ async def test_default_on_scans_when_switch_is_unset(monkeypatch):
     host.persistence.call = AsyncMock(return_value=[])
     await live.LiveConversationController(host).recover_stale_in_progress()
     assert host.persistence.call.await_args.args[0] is recovery.get_stale_recovery_page
+
+
+def test_unexpected_metric_input_folds_to_unknown():
+    before = STALE_RECOVERY_OUTCOME_TOTAL.labels(outcome='unknown')._value.get()
+    record_stale_recovery_outcome('private account diagnostic')
+    assert STALE_RECOVERY_OUTCOME_TOTAL.labels(outcome='unknown')._value.get() == before + 1
+    labels = {
+        sample.labels['outcome'] for metric in STALE_RECOVERY_OUTCOME_TOTAL.collect() for sample in metric.samples
+    }
+    assert 'private account diagnostic' not in labels
