@@ -34,14 +34,14 @@ void main() {
       ),
     ));
     await tester.pump(const Duration(milliseconds: 100));
-    final fade = tester.widget<FadeTransition>(find.byType(FadeTransition));
-    final before = fade.opacity.value;
+    final dotFade = find.descendant(of: find.byType(OmiLiveDot), matching: find.byType(FadeTransition));
+    final before = tester.widget<FadeTransition>(dotFade).opacity.value;
 
     surroundings.paints = 0;
     for (var frame = 0; frame < 60; frame++) {
       await tester.pump(const Duration(milliseconds: 16));
     }
-    final after = tester.widget<FadeTransition>(find.byType(FadeTransition)).opacity.value;
+    final after = tester.widget<FadeTransition>(dotFade).opacity.value;
 
     expect(after, isNot(before), reason: 'the dot must still animate across the window');
     expect(surroundings.paints, 0, reason: 'The pulsing dot must repaint only itself, not the display list around it.');
@@ -63,7 +63,11 @@ void main() {
       ),
     ));
     await tester.pump(const Duration(milliseconds: 100));
-    expect(find.byType(FadeTransition), findsNothing, reason: 'a still dot has no animation');
+    expect(
+      find.descendant(of: find.byType(OmiLiveDot), matching: find.byType(FadeTransition)),
+      findsNothing,
+      reason: 'a still dot has no animation',
+    );
     surroundings.paints = 0;
     for (var frame = 0; frame < 60; frame++) {
       await tester.pump(const Duration(milliseconds: 16));

@@ -1,0 +1,3 @@
+{
+  "change": "The live episode page keeps up with a long running capture: opening it, switching between its Summary and Transcript tabs and scrolling no longer stutter while new lines arrive, and a new line no longer re-scans the whole transcript to place moment markers and speaker names"
+}
