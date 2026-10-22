@@ -131,17 +131,22 @@ def _build_quota_exceeded_reply(
     unit = detail.get('unit')
     limit = detail.get('limit')
     reset_at = detail.get('reset_at')
+    # FREE_CHAT_QUESTIONS_PER_DAY: the Free cap is a UTC-day window, so the copy says daily.
+    window = 'daily' if detail.get('period') == 'day' else 'monthly'
     if unit == 'cost_usd' and isinstance(limit, (int, float)):
-        limit_phrase = f"your ${int(limit)} monthly AI compute budget"
+        limit_phrase = f"your ${int(limit)} {window} AI compute budget"
     elif isinstance(limit, (int, float)):
-        limit_phrase = f"your {int(limit)} monthly chat question limit"
+        limit_phrase = f"your {int(limit)} {window} chat question limit"
     else:
-        limit_phrase = "your monthly chat limit"
+        limit_phrase = f"your {window} chat limit"
     reset_phrase = ''
     if reset_at:
         try:
             reset_dt = datetime.fromtimestamp(int(reset_at), tz=timezone.utc)
-            reset_phrase = f' Your limit resets on {reset_dt.strftime("%B %-d")}.'
+            if window == 'daily':
+                reset_phrase = ' Your limit resets at midnight UTC.'
+            else:
+                reset_phrase = f' Your limit resets on {reset_dt.strftime("%B %-d")}.'
         except (TypeError, ValueError):
             pass
 

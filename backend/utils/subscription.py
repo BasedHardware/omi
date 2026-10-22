@@ -39,6 +39,7 @@ from utils.transcription_allowance import TranscriptionAllowance
 from utils.observability.fallback import record_fallback
 import logging
 from config import ladder_v1 as ladder_policy
+from config import free_plan as free_plan_policy
 from utils import ladder_v1
 
 logger = logging.getLogger(__name__)
@@ -1132,7 +1133,12 @@ def get_chat_quota_snapshot(
         shared_budget = ladder_v1.budget_snapshot(uid, subscription, firestore_client=firestore_client)
     plan = subscription.plan if subscription else PlanType.basic
     limits = get_plan_limits(plan)
-    usage = user_usage_db.get_monthly_chat_usage(uid, firestore_client=firestore_client)
+    # FREE_CHAT_QUESTIONS_PER_DAY: the Free plan's question cap becomes per UTC day.
+    # The same llm_usage counters are read, over today's doc instead of the month's.
+    daily_limit = free_plan_policy.free_chat_questions_per_day() if plan == PlanType.basic else 0
+    usage = user_usage_db.get_monthly_chat_usage(
+        uid, firestore_client=firestore_client, period='day' if daily_limit else 'month'
+    )
 
     chat_unit = get_plan_allocation(plan, 'chat')['unit']
     if chat_unit == 'usd_cent':
@@ -1142,7 +1148,12 @@ def get_chat_quota_snapshot(
     elif chat_unit == 'question':
         unit = 'questions'
         used = float(usage['questions'])
-        limit_value = float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
+        if daily_limit:
+            limit_value = float(daily_limit)
+        else:
+            limit_value = (
+                float(limits.chat_questions_per_month) if limits.chat_questions_per_month is not None else None
+            )
     else:
         raise ValueError(f'{plan.value}.chat has unsupported catalog unit {chat_unit!r}')
 
@@ -1158,6 +1169,9 @@ def get_chat_quota_snapshot(
         'allowed': allowed,
         'reset_at': usage['reset_at'],
     }
+    if daily_limit and unit == 'questions':
+        result['period'] = 'day'
+        result['resets_at'] = datetime.fromtimestamp(usage['reset_at'], tz=timezone.utc).isoformat()
     if shared_budget is not None:
         # Preserve the installed-client unit enum; the v2 sheet owns the shared meter.
         result['allowed'] = shared_budget['budget_percent'] < 100
@@ -1275,18 +1289,20 @@ def enforce_chat_quota(
     if plan_uses_overage(plan):
         return
 
-    raise HTTPException(
-        status_code=402,
-        detail={
-            'error': 'quota_exceeded',
-            'plan': get_plan_display_name(plan),
-            'plan_type': plan.value,
-            'unit': snapshot['unit'],
-            'used': round(snapshot['used'], 4),
-            'limit': snapshot['limit'],
-            'reset_at': snapshot['reset_at'],
-        },
-    )
+    detail: Dict[str, Any] = {
+        'error': 'quota_exceeded',
+        'plan': get_plan_display_name(plan),
+        'plan_type': plan.value,
+        'unit': snapshot['unit'],
+        'used': round(snapshot['used'], 4),
+        'limit': snapshot['limit'],
+        'reset_at': snapshot['reset_at'],
+    }
+    if snapshot.get('period') == 'day':
+        # FREE_CHAT_QUESTIONS_PER_DAY: tell the client the window and its ISO-8601 UTC reset.
+        detail['period'] = 'day'
+        detail['resets_at'] = snapshot['resets_at']
+    raise HTTPException(status_code=402, detail=detail)
 
 
 def enforce_desktop_chat_quota(uid: str, platform: Optional[str] = None, *, byok_exempt: bool = True) -> None:
@@ -1807,6 +1823,12 @@ def resolve_transcription_allowance(
         if remaining > 0:
             return TranscriptionAllowance(
                 TRANSCRIPTION_MODE_MANAGED, remaining, 'plan_within_allowance', limit_seconds=allowance
+            )
+        # FREE_TRANSCRIPTION_HARD_PAUSE: an exhausted Free plan pauses transcription
+        # (nothing opens) instead of falling back to the free on-device engine.
+        if subscription.plan == PlanType.basic and free_plan_policy.free_transcription_hard_pause():
+            return TranscriptionAllowance(
+                TRANSCRIPTION_MODE_BLOCKED, 0, 'plan_allowance_exhausted', limit_seconds=allowance
             )
         return TranscriptionAllowance(
             TRANSCRIPTION_MODE_ON_DEVICE, 0, 'plan_allowance_exhausted', limit_seconds=allowance

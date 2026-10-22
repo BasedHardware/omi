@@ -618,6 +618,10 @@ class Conversation(BaseModel):
 
     status: Optional[ConversationStatus] = ConversationStatus.completed
     is_locked: bool = False
+    # Free-plan retention lock (FREE_RETENTION_LOCK_DAYS): the row is older than the Free
+    # plan's retention window, so its detail read answers 402 retention_locked. Stamped on
+    # list reads only, never stored. Distinct from is_locked (held behind the usage cap).
+    retention_locked: bool = False
     # Lazy processing (freemium cost cut): True when this desktop conversation was stored as a
     # raw transcript with no LLM enrichment yet — enrichment runs on first open
     # (get_conversation_by_id → process_conversation). Cleared once enriched.

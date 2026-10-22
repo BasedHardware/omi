@@ -57,6 +57,24 @@ def _current_month_llm_usage_docs(llm_usage_ref: Any, now: datetime) -> Iterable
     )
 
 
+def _current_day_llm_usage_docs(llm_usage_ref: Any, now: datetime) -> Iterable[Any]:
+    """Stream only today's ``llm_usage/{YYYY-MM-DD}`` doc (the per-UTC-day Free chat cap).
+
+    Same document-id range shape as the month scan, bounded to one day.
+    """
+    start = llm_usage_ref.document(now.strftime('%Y-%m-%d'))
+    end = llm_usage_ref.document((now + timedelta(days=1)).strftime('%Y-%m-%d'))
+    return (
+        llm_usage_ref.where(filter=FieldFilter(_DOCUMENT_ID_FIELD, '>=', start))
+        .where(filter=FieldFilter(_DOCUMENT_ID_FIELD, '<', end))
+        .stream()
+    )
+
+
+def _next_utc_midnight(now: datetime) -> int:
+    return int((datetime(now.year, now.month, now.day, tzinfo=timezone.utc) + timedelta(days=1)).timestamp())
+
+
 def get_monthly_bucket_call_count(
     uid: str, bucket: str, now: Optional[datetime] = None, *, firestore_client: Any | None = None
 ) -> int:
@@ -168,9 +186,13 @@ def _accumulate_plan_data(row: Dict[str, Any], value: Dict[str, Any]) -> None:
 
 
 def get_monthly_chat_usage(
-    uid: str, now: Optional[datetime] = None, *, firestore_client: Any | None = None
+    uid: str, now: Optional[datetime] = None, *, firestore_client: Any | None = None, period: str = 'month'
 ) -> Dict[str, Any]:
     """Sum current-month chat usage from `users/{uid}/llm_usage/{YYYY-MM-DD}` docs.
+
+    ``period='day'`` narrows the window to the current UTC day (today's single
+    doc) and reports ``reset_at`` as the next UTC midnight; everything else
+    about the counting is identical. Used by the Free per-day chat cap.
 
     Returns keys:
       - questions: total user-initiated chat calls (desktop/backend quota counters + legacy backend `chat.*`)
@@ -188,7 +210,11 @@ def get_monthly_chat_usage(
     cost_usd = 0.0
     document_count = 0
     usage_by_plan: Dict[str, Dict[str, Any]] = {}
-    for snap in _current_month_llm_usage_docs(llm_usage_ref, now):
+    daily = period == 'day'
+    docs = (
+        _current_day_llm_usage_docs(llm_usage_ref, now) if daily else _current_month_llm_usage_docs(llm_usage_ref, now)
+    )
+    for snap in docs:
         document_count += 1
         data: Dict[str, Any] = _typed_doc(snap)
         questions_before_document = questions
@@ -288,9 +314,12 @@ def get_monthly_chat_usage(
         document_count,
     )
 
-    # Compute end-of-month boundary in UTC for the reset timestamp.
-    next_year, next_month = _next_month(now)
-    reset_at = int(datetime(next_year, next_month, 1, tzinfo=timezone.utc).timestamp())
+    # Compute the bucket boundary in UTC for the reset timestamp.
+    if daily:
+        reset_at = _next_utc_midnight(now)
+    else:
+        next_year, next_month = _next_month(now)
+        reset_at = int(datetime(next_year, next_month, 1, tzinfo=timezone.utc).timestamp())
 
     return {
         'questions': questions,

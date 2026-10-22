@@ -9228,6 +9228,11 @@
               }
             ]
           },
+          "retention_locked": {
+            "default": false,
+            "title": "Retention Locked",
+            "type": "boolean"
+          },
           "screenshot_sharing_enabled": {
             "default": true,
             "title": "Screenshot Sharing Enabled",
@@ -10493,6 +10498,11 @@
                 "type": "null"
               }
             ]
+          },
+          "retention_locked": {
+            "default": false,
+            "title": "Retention Locked",
+            "type": "boolean"
           },
           "screenshot_sharing_enabled": {
             "default": true,

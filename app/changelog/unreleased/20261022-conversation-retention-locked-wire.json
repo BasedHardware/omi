@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Generated conversation wire model gains an optional retention_locked field (default false); no app code reads it yet"
+}

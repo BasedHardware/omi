@@ -2625,6 +2625,13 @@ _add(
 )
 _add(
     CoveredByEntry(
+        'database.user_usage._current_day_llm_usage_docs',
+        covered_by=('database.user_usage.get_monthly_chat_usage',),
+        reason='day-scoped doc scan observed in the chat usage driver under period=day (FREE_CHAT_QUESTIONS_PER_DAY)',
+    )
+)
+_add(
+    CoveredByEntry(
         'database.user_usage._local_period_usage',
         covered_by=('database.user_usage.get_current_user_usage',),
         reason='period usage helper reached by the current usage driver',
@@ -2654,7 +2661,13 @@ _add(
         domains={'now': [None, T0]},
     )
 )
-_add(DriverEntry('database.user_usage.get_monthly_chat_usage', base={'uid': UID}, domains={'now': [None, T0]}))
+_add(
+    DriverEntry(
+        'database.user_usage.get_monthly_chat_usage',
+        base={'uid': UID},
+        domains={'now': [None, T0], 'period': ['month', 'day']},
+    )
+)
 _add(DriverEntry('database.user_usage.get_monthly_history_for_year', base={'uid': UID, 'date': T0}))
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats', base={'uid': UID, 'date': T0}))
 _add(DriverEntry('database.user_usage.get_monthly_usage_stats_since', base={'uid': UID, 'date': T0, 'start_date': T0}))
