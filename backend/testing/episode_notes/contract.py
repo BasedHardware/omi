@@ -1,6 +1,6 @@
 """Pure episode prompt contract shared by production and synthetic evaluation."""
 
-from utils.llm.episode_policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
+from testing.episode_notes.policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
 from utils.llm.meeting_notes_rich_prompts import (
     PERSON_NAME_RULE,
     PERSON_REFERENCE_RULE,

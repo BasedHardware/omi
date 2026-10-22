@@ -277,7 +277,7 @@ def test_compact_evidence_preserves_provenance_and_trusted_metadata():
 
 def test_episode_person_provenance_and_relevance_rules_are_shared():
     from testing.episode_notes.runner import JUDGE_PROMPT, REFERENCE_PROMPT
-    from utils.llm.episode_policy import EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE
+    from testing.episode_notes.policy import EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE
     from utils.llm.meeting_notes_rich_prompts import RICH_PERSON_RULES
 
     for rule in [EPISODE_PROVENANCE_RULE, EPISODE_RELEVANCE_RULE]:
