@@ -269,6 +269,24 @@ def test_language_metrics_survive_the_actual_sync_export_allowlist():
         assert re.fullmatch(keep, collector._name + '_total')
 
 
+def test_language_gate_and_vendor_guard_metrics_survive_the_sync_export_allowlist():
+    import re
+    import yaml
+    from utils.stt import language_gate, vendor_guard
+
+    source = Path(__file__).parents[3] / 'backend/deploy/cloud_run_gmp_sync.yaml'
+    relabeling = yaml.safe_load(source.read_text())['spec']['endpoints'][0]['metricRelabeling']
+    keep = next(rule['regex'] for rule in relabeling if rule['action'] == 'keep')
+    for counter in (
+        language_gate.SELF_REQUESTS,
+        language_gate.SHADOW,
+        language_gate.ENFORCED,
+        vendor_guard.VENDOR_AUDIO_SECONDS,
+    ):
+        assert re.fullmatch(keep, counter._name + '_total')
+    assert re.fullmatch(keep, vendor_guard.BREAKER_OPEN_GAUGE._name)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'code,confidence,frozen',

@@ -14544,4 +14544,9 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceControls => 'Comenzi';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'De asemenea: $items';
+  }
 }

@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done}/{total} நிமி.",
     "deviceRecently": "சமீபத்தில்",
     "deviceDisconnectedFor": "{duration} இணைப்பு துண்டிக்கப்பட்டது",
-    "deviceControls": "கட்டுப்பாடுகள்"
+    "deviceControls": "கட்டுப்பாடுகள்",
+    "homeBackgroundLine": "மேலும்: {items}"
 }

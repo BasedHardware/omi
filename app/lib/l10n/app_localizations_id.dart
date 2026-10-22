@@ -14496,4 +14496,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kontrol';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Juga: $items';
+  }
 }

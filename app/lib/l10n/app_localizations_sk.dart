@@ -14478,4 +14478,9 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceControls => 'Ovládanie';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Tiež: $items';
+  }
 }

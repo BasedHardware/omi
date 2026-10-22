@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done} מתוך {total} דק׳",
     "deviceRecently": "לאחרונה",
     "deviceDisconnectedFor": "מנותק למשך {duration}",
-    "deviceControls": "פקדים"
+    "deviceControls": "פקדים",
+    "homeBackgroundLine": "גם: {items}"
 }

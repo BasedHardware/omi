@@ -14518,4 +14518,9 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kontrole';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Također: $items';
+  }
 }

@@ -14580,4 +14580,9 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deviceControls => 'கட்டுப்பாடுகள்';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'மேலும்: $items';
+  }
 }

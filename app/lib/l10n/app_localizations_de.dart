@@ -14590,4 +14590,9 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get deviceControls => 'Steuerung';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Außerdem: $items';
+  }
 }

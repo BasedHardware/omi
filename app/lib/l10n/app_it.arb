@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} di {total} min",
     "deviceRecently": "Di recente",
     "deviceDisconnectedFor": "Disconnesso per {duration}",
-    "deviceControls": "Controlli"
+    "deviceControls": "Controlli",
+    "homeBackgroundLine": "Inoltre: {items}"
 }

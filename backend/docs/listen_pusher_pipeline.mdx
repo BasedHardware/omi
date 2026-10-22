@@ -32,6 +32,12 @@ Denial preserves receiving and existing audio storage paths; accepted provider
 work drains. Custom/on-device STT and flag-off metering retain their behavior.
 The [dispatch contract](stt-cap-dispatch.md) also documents sync holds, recovery,
 BYOK funding, additive metrics and the per-client activation decision.
+The cap proxy forwards provider-specific finalize arguments, including window
+VAD `finalize(vad_pause=True)`. `STT_CAP_FINALIZE_FORWARD_ENABLED` defaults on;
+false/0/off uses generic finalize without reopening held providers. That emergency
+mode can flush sub-second speech fragments earlier because it omits the ordinary
+speech guard. See [windowed live STT](operational/windowed-live-stt.md) for bounded
+local-send phase/exception attribution and the listen-train acceptance checks.
 Sync recovery fences a provider-bound `dispatched` receipt before paid STT or
 ingestion, and atomically checkpoints ingest proof alongside the conversation.
 Before every new recovery provider intent (including retries), an always-on,
@@ -1144,6 +1150,33 @@ no index migration, and no automatic clearing of historical discard flags or lin
 UI grouping, transcript merging, multi-capture chain consolidation, and link
 reconciliation after later user edits/discards remain follow-ups.
 
+
+## Occasion conversations (episodes cohort)
+
+For the episodes beta cohort, the live conversation is the occasion instead of
+being split on silence and stitched back together by smart merge afterwards
+(`backend/config/occasion_conversations.py`, ruling David 2026-10-22).
+
+- **Admission** happens once per session in `runtime._bootstrap`:
+  `client_gate.occasion_mode(uid, source)` requires `OCCASION_CONVERSATIONS_ENABLED`
+  (on unless set off), the episodes cohort, and the per-user client-seen marker,
+  and fails closed on any read error. Desktop sources and multi-channel
+  (phone-call) sessions are never admitted, so their boundaries are unchanged.
+- **Silence window.** An admitted session's `conversation_creation_timeout` is at
+  least `OCCASION_GAP_SECONDS` (15 min, a constant); a longer user setting wins.
+- **Reconnects.** When a new recording id opens a session, `_occasion_attach_target`
+  proposes the user's open conversation instead of a fresh id when it is
+  `in_progress`, not deleted, discarded or locked, from the same device and an
+  attachable source, under the span cap, and resumable under the extended
+  timeout (`event=occasion_attach`). The recording-session transaction then
+  binds the new recording id to it and restamps
+  `external_data.recording_session_id`, which sync lineage accepts.
+- **Span cap.** `lifecycle_loop` turns `continue_current` into
+  `process_and_create_new` once a conversation has spanned
+  `OCCASION_MAX_SPAN_SECONDS` (3 h, smart merge's cap)
+  (`event=occasion_span_rollover`).
+- **Off** restores the 2-minute split and per-recording conversations at the
+  next session; open sessions keep the timeout they started with.
 
 ## Same-occasion folding across a silence split (smart merge)
 
@@ -4121,6 +4154,20 @@ their existing paths.
 Every reopen starts a new provider speaker scope (see below), so the VAD policy
 keeps the prod values. Lower VAD thresholds wait for speaker scope to survive a
 reopen: keep the conversation scope and remap the new socket's `SPEAKER_N`.
+
+A uid-hash treatment cohort can run tighter values on a static percent of users
+without touching the global knobs: `SONIOX_IDLE_COHORT_PERCENT` (default `0`,
+the cohort kill switch) selects sessions by
+`cohort_bucket(uid, 'soniox-idle-close', bits=64)`, and in-cohort sessions read
+`SONIOX_IDLE_COHORT_CLOSE_SECONDS`, `SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR`
+and `SONIOX_IDLE_COHORT_REARM_SECONDS` when set, each falling back to the
+global knob when unset. Out-of-cohort sessions always keep the global values,
+and `SONIOX_IDLE_CLOSE_SECONDS=0` disables the idle wrapper for everyone
+either way. The receiver-owned budget resolves the arm once per logical session,
+consulting the listen request's uid only while the cohort is armed (percent > 0
+plus at least one override), so identity-bypass and unauthenticated paths never
+touch `request.uid`; the `omi_soniox_idle_cohort_*` companions carry the same
+closes/reopens/latency/avoided series labelled `arm=control|treatment`.
 
 The first raw VAD silence decision starts a monotonic timer. After the threshold
 and the normal VAD hangover, a skipped-silence chunk schedules a planned close:

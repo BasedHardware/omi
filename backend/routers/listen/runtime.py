@@ -21,6 +21,8 @@ from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
 from config.rollout_cohorts import warm_rollout_cohorts
+from config.occasion_conversations import occasion_timeout
+from utils.episodes import client_gate as episode_client_gate
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -199,6 +201,7 @@ class ListenSessionRuntime:
         self.private_cloud_sync_enabled = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
+        self.occasion_mode = False
         self.lc3_frame_duration_us: Optional[int] = None
         self.task_supervisor = WebSocketTaskSupervisor(
             uid=request.uid, label='listen', gauge=BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
@@ -700,6 +703,13 @@ class ListenSessionRuntime:
         self.conversation_creation_timeout = effective_conversation_timeout(
             request.conversation_timeout, self.is_multi_channel
         )
+        # Occasion conversations (Episodes M3): for the episodes beta cohort a live conversation
+        # spans the whole occasion, so lulls and reconnects inside the window continue it.
+        self.occasion_mode = not self.is_multi_channel and bool(
+            await self.persistence.call(episode_client_gate.occasion_mode, request.uid, request.source)
+        )
+        if self.occasion_mode:
+            self.conversation_creation_timeout = occasion_timeout(self.conversation_creation_timeout)
         decision = normalize_codec_frame(request.codec)
         self.request = replace(request, codec=decision.codec)
         self.lc3_frame_duration_us = decision.lc3_frame_duration_us

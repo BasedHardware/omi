@@ -5399,6 +5399,7 @@ public enum OmiAPI {
     public let noteClaims: [NoteClaim]?
     public let overview: String?
     public let participants: [Participant]?
+    public let salience: String?
     public let sections: [Section]?
     public let title: String?
 
@@ -5412,6 +5413,7 @@ public enum OmiAPI {
       case noteClaims = "note_claims"
       case overview
       case participants
+      case salience
       case sections
       case title
     }
@@ -5427,11 +5429,12 @@ public enum OmiAPI {
       noteClaims = try c.decodeIfPresent([NoteClaim].self, forKey: .noteClaims)
       overview = try c.decodeIfPresent(String.self, forKey: .overview)
       participants = try c.decodeIfPresent([Participant].self, forKey: .participants)
+      salience = try c.decodeIfPresent(String.self, forKey: .salience)
       sections = try c.decodeIfPresent([Section].self, forKey: .sections)
       title = try c.decodeIfPresent(String.self, forKey: .title)
     }
 
-    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, insights: [Insight]? = nil, meetingType: String? = nil, noteClaims: [NoteClaim]? = nil, overview: String? = nil, participants: [Participant]? = nil, sections: [Section]? = nil, title: String? = nil) {
+    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, insights: [Insight]? = nil, meetingType: String? = nil, noteClaims: [NoteClaim]? = nil, overview: String? = nil, participants: [Participant]? = nil, salience: String? = nil, sections: [Section]? = nil, title: String? = nil) {
       self.actionItems = actionItems
       self.category = category
       self.emoji = emoji
@@ -5441,6 +5444,7 @@ public enum OmiAPI {
       self.noteClaims = noteClaims
       self.overview = overview
       self.participants = participants
+      self.salience = salience
       self.sections = sections
       self.title = title
     }
