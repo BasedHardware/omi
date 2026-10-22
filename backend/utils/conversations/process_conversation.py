@@ -2507,6 +2507,8 @@ def process_conversation(
     if funded_processing.enabled(uid, 'batch'):
         waiting = bool(getattr(conversation, 'processing_deferred', False))
         if (waiting and not backlog_authorized) or not funded_processing.processing_allowed(uid):
+            if silent_backfill:
+                raise RecoveryStructureUnavailableError('silent backfill processing budget unavailable')
             raw_capture = (
                 not is_initial_creation
                 and conversation.status == ConversationStatus.processing

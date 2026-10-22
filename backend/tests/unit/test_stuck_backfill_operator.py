@@ -157,3 +157,31 @@ def test_resume_with_changed_batch_size_refuses_instead_of_skipping_items(operat
     with pytest.raises(operator.db.BackfillConflict, match='incomplete_batch_requires_review'):
         operator.apply(client, plan('noise', 2), 'digest', args)
     assert close.call_count == 2
+
+
+def test_completed_but_budget_deferred_row_is_not_operator_success(operator, runtime, monkeypatch):
+    client, args, ref, reserve = runtime
+    item = plan('substantive', 1)['rows'][0]
+    job = {
+        'uid': item['uid'],
+        'conversation_id': item['id'],
+        'processing_trigger': 'silent_backfill',
+        'delivery_policy': operator.db.POLICY,
+        'backfill_run_id': 'run',
+        'dispatch_generation': 1,
+        'status': 'completed',
+        'fanout_status': 'completed',
+        'terminal_outcome': 'success',
+    }
+    monkeypatch.setattr(operator.jobs, 'get_finalization_job', lambda *_args, **_kwargs: job)
+    row = {
+        'status': 'completed',
+        'finalization_job_id': 'job',
+        'terminal_no_derived_effects': True,
+        'processing_deferred': True,
+    }
+    ref.collection.return_value.document.return_value.get.return_value = SimpleNamespace(to_dict=lambda: row)
+    with pytest.raises(operator.db.BackfillConflict, match='canary_row_failed'):
+        operator.wait_job(
+            client, plan('substantive', 1), 'digest', item, {'job_id': 'job', 'dispatch_generation': 1}, 1
+        )

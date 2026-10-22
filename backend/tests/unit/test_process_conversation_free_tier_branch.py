@@ -1092,3 +1092,14 @@ async def test_silent_job_retry_and_completed_replay_never_fan_out(
     )
     assert result.value == ('fenced' if fanout_status == 'fenced' else 'completed')
     assert complete.call_count == (1 if fanout_status == 'claimed' else 0)
+
+
+def test_silent_backfill_budget_denial_cannot_persist_a_title_only_success(monkeypatch, pc):
+    monkeypatch.setattr(pc.funded_processing, 'enabled', lambda *_: True)
+    monkeypatch.setattr(pc.funded_processing, 'processing_allowed', lambda *_: False)
+    spies = _spy_managed_effects(monkeypatch, pc)
+    payloads = _capture_all_persists(monkeypatch, pc)
+    with pytest.raises(pc.RecoveryStructureUnavailableError, match='processing budget unavailable'):
+        pc.process_conversation('uid', 'en', _existing_desktop(), trigger=pc.ProcessingTrigger.SILENT_BACKFILL)
+    assert payloads == []
+    spies['get_structured'].assert_not_called()

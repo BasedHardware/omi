@@ -217,6 +217,8 @@ def wait_job(
                 row.get('status') == 'completed'
                 and not row.get('discarded')
                 and not row.get('deleted')
+                and not row.get('processing_deferred')
+                and row.get('processing_state') != 'local_pending'
                 and row.get('finalization_job_id') == intent['job_id']
                 and row.get('terminal_no_derived_effects') is True,
                 'canary_row_failed',

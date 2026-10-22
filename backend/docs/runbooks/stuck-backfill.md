@@ -23,6 +23,8 @@ The completed row records `terminal_no_derived_effects=true`. The winning
 finalization claim closes without external integrations, push/proactive/client
 created delivery, smart merge, duplicate linking, keyframes, voice learning or
 episode/Dream/persona triggers. List reads see the normal completed row.
+A processing-budget denial fails silent substantive work before a deferred
+title-only row can be persisted or accepted as a successful backfill.
 No global notification/Dream switches are changed. A later explicit user action
 may reprocess the row normally; the historical job itself always stays silent.
 
