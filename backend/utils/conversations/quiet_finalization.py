@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import timezone
 from typing import Any
 
 from config.listen_quiet_finalization import enabled
@@ -14,6 +15,7 @@ from utils.cloud_tasks import (
     is_listen_finalization_dispatch_enabled,
 )
 from utils.conversations import lifecycle
+from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.metrics import CONVERSATION_ORPHANED_UNFINALIZED
 from utils.observability.fallback import record_fallback
@@ -89,14 +91,55 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
             checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
         return 'empty_deleted' if deleted else 'deferred'
     CONVERSATION_ORPHANED_UNFINALIZED.inc()
-    result = lifecycle.request_finalization(
-        check['uid'],
-        check['conversation_id'],
-        has_byok_keys=False,
-        trigger=ProcessingTrigger.SERVER_RECOVERY,
-        require_cloud_tasks=True,
-        recovery_cutoff=check['recovery_cutoff'],
-        require_expired_recording_lease=True,
-        firestore_client=firestore_client,
-    )
+    try:
+        result = lifecycle.request_finalization(
+            check['uid'],
+            check['conversation_id'],
+            has_byok_keys=False,
+            trigger=ProcessingTrigger.SERVER_RECOVERY,
+            require_cloud_tasks=True,
+            recovery_cutoff=check['recovery_cutoff'],
+            require_expired_recording_lease=True,
+            firestore_client=firestore_client,
+        )
+    except Exception as error:
+        failure = classify_finalization_failure(error, check['conversation_id'])
+        if not failure.conversation_at_size_limit:
+            raise
+        # The row sits at Firestore's 1 MiB document ceiling: the finalization
+        # binding grows the document, so every redelivery of this check fails
+        # identically (the grpc_helpers InvalidArgument 400 group). Close it
+        # through the lifecycle owner's in_progress terminal — the one write
+        # the document still accepts — fenced by the same recovery cutoff this
+        # admission already passed, like the live listen path's _close_oversized.
+        cutoff = check['recovery_cutoff']
+        evaluated_at = check['updated_at']
+        quiet_for = (evaluated_at if evaluated_at.tzinfo else evaluated_at.replace(tzinfo=timezone.utc)) - (
+            cutoff if cutoff.tzinfo else cutoff.replace(tzinfo=timezone.utc)
+        )
+        close = lifecycle.close_oversized_in_progress_conversation(
+            check['uid'],
+            check['conversation_id'],
+            quiet_for=quiet_for,
+        )
+        record_fallback(
+            component='pusher',
+            from_mode='quiet_finalization_admission',
+            to_mode='unstampable_terminal',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        logger.warning(
+            'Quiet finalization hit the document size limit conversation=%s close=%s',
+            check['conversation_id'],
+            close,
+        )
+        if close in {'closed', 'missing'}:
+            # Terminal or gone. Stop the due index so the reconciler cannot
+            # re-arm an admission that can never commit; any refusal leaves
+            # the check armed, because an active writer, a row that shrank or
+            # a new durable owner each change the next attempt.
+            checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
+        return f'oversized_{close}'
     return result['status']

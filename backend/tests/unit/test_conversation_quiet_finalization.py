@@ -488,3 +488,70 @@ def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store
     monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
     assert checks.quiet_deadline(row, 120, uid='synthetic') == NOW - timedelta(minutes=3)
     assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) is None
+from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgument
+
+
+def _size_limit_error(conversation_id: str) -> Exception:
+    return FirestoreInvalidArgument(
+        "400 Document 'projects/based-hardware/databases/(default)/documents/users/synthetic/"
+        f"conversations/{conversation_id}' cannot be written because its size (1,048,679 bytes) "
+        'exceeds the maximum allowed size of 1,048,576 bytes.'
+    )
+
+
+def test_oversized_row_is_closed_and_the_check_stops_instead_of_redelivering_forever(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+
+    def refuse(error_uid, error_conversation_id, **kwargs):
+        raise _size_limit_error(error_conversation_id)
+
+    monkeypatch.setattr(lifecycle, 'request_finalization', refuse)
+    closed = {}
+
+    def record_close(uid, conversation_id, *, quiet_for):
+        closed['args'] = (uid, conversation_id, quiet_for)
+        return 'closed'
+
+    monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', record_close)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'oversized_closed'
+    uid, conversation_id, quiet_for = closed['args']
+    assert (uid, conversation_id) == ('synthetic', 'old')
+    # The terminal fence is the check's own recovery cutoff: an instant the
+    # failed admission already proved the row stale against, so the close
+    # demands exactly the quiet the check itself measured.
+    from models.conversation_continuity import continuation_timeout
+
+    assert quiet_for == timedelta(seconds=continuation_timeout(store.rows[ROW], 120))
+    assert _job(store)['status'] == 'quiet_done'
+    assert 'finalization_job_id' not in store.rows[ROW]
+
+
+def test_oversized_close_refusal_leaves_the_check_armed_for_the_next_replay(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+
+    def refuse(error_uid, error_conversation_id, **kwargs):
+        raise _size_limit_error(error_conversation_id)
+
+    monkeypatch.setattr(lifecycle, 'request_finalization', refuse)
+    monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', lambda *a, **k: 'recent_write')
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'oversized_recent_write'
+    assert _job(store)['status'] == 'waiting_quiet'
+    assert _job(store)['dispatch_generation'] == 2
+
+
+@pytest.mark.parametrize(
+    'error',
+    [
+        _size_limit_error('other-conversation'),
+        FirestoreInvalidArgument('400 some other 400'),
+        ValueError('unrelated'),
+    ],
+)
+def test_only_this_rows_permanent_size_rejection_is_contained(store, monkeypatch, error):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+    monkeypatch.setattr(lifecycle, 'request_finalization', lambda *a, **k: (_ for _ in ()).throw(error))
+    with pytest.raises(type(error)):
+        quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
