@@ -295,6 +295,46 @@ class TestGmailToolsSanitization(unittest.IsolatedAsyncioTestCase):
             self.assertIn("alice@example.com", result)
             self.assertIn("Here are the notes from our sync.", result)
 
+    def test_parse_gmail_message_handles_none_and_malformed_payload(self):
+        # 1. Non-dict message
+        parsed_non_dict = gt.parse_gmail_message(None)
+        self.assertEqual(parsed_non_dict["subject"], "(No subject)")
+        self.assertEqual(parsed_non_dict["body"], "")
+
+        # 2. None payload
+        parsed_none_payload = gt.parse_gmail_message({"id": "m_none", "payload": None})
+        self.assertEqual(parsed_none_payload["subject"], "(No subject)")
+        self.assertEqual(parsed_none_payload["body"], "")
+
+        # 3. None parts and None body in part
+        malformed_parts_msg = {
+            "id": "m_part",
+            "payload": {
+                "headers": [{"name": None, "value": "ignored"}, {"name": "Subject", "value": "Safe Subject"}],
+                "parts": [
+                    None,
+                    {"mimeType": "text/plain", "body": None},
+                    {"mimeType": "text/plain", "body": {"data": None}},
+                    {"mimeType": "text/html", "body": {"data": "invalid===padding"}},
+                ],
+            },
+        }
+        parsed_malformed = gt.parse_gmail_message(malformed_parts_msg)
+        self.assertEqual(parsed_malformed["subject"], "Safe Subject")
+        self.assertEqual(parsed_malformed["body"], "")
+
+    async def test_get_gmail_messages_clamps_negative_and_overflow_max_results(self):
+        with patch.object(gt, "google_api_request", new_callable=AsyncMock) as mock_api:
+            mock_api.return_value = {"messages": []}
+
+            # Negative max_results clamped to at least 1
+            await gt.get_gmail_messages("token", max_results=-10)
+            self.assertEqual(mock_api.call_args[1]["params"]["maxResults"], 1)
+
+            # Overflow max_results clamped to 50
+            await gt.get_gmail_messages("token", max_results=100)
+            self.assertEqual(mock_api.call_args[1]["params"]["maxResults"], 50)
+
 
 if __name__ == "__main__":
     unittest.main()
