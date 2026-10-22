@@ -114,11 +114,19 @@ def render_moment(
     conversation_id: str | None = None,
 ) -> MomentText:
     """Speaker-labelled lines, consecutive lines from one voice joined, head and tail kept."""
+    legacy = _legacy_moment(segments)
     if shadow_or_serve('NOTES_PACKET_V2_MODE'):
-        text, words = render_segments(segments, evidence=get_evidence(uid, conversation_id))
-        shadow('moment_render', 'disagree' if segments else 'agree', rendered_chars=len(text), words=words)
-        if serving_for('NOTES_PACKET_V2_MODE', uid):
+        serving = serving_for('NOTES_PACKET_V2_MODE', uid)
+        # Shadow compares renderers without the evidence read; only the serving cohort pays for it.
+        evidence = get_evidence(uid, conversation_id) if serving else None
+        text, words = render_segments(segments, evidence=evidence)
+        shadow('moment_render', 'agree' if text == legacy[0] else 'disagree', rendered_chars=len(text), words=words)
+        if serving:
             return MomentText(_bounded_moment(text), words)
+    return MomentText(_bounded_moment(legacy[0]), legacy[1])
+
+
+def _legacy_moment(segments: Sequence[Mapping[str, Any]]) -> tuple[str, int]:
     # refactor: superseded by moment_render.render_segments when NOTES_PACKET_V2_MODE=serve
     lines: list[list[str]] = []
     words = 0
@@ -132,8 +140,7 @@ def render_moment(
             lines[-1][1] += ' ' + text
         else:
             lines.append([label, text])
-    rendered = '\n'.join(f'{label}: {text}' for label, text in lines)
-    return MomentText(_bounded_moment(rendered), words)
+    return '\n'.join(f'{label}: {text}' for label, text in lines), words
 
 
 def _bounded_moment(rendered: str) -> str:

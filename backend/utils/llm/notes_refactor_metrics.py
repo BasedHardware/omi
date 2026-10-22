@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from enum import StrEnum
 from utils.observability.reasons import ReasonFamily, reason_label
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 
 
 class NotesRefactorOutcome(StrEnum):
@@ -20,8 +20,18 @@ class NotesRefactorOutcome(StrEnum):
 
 
 logger = logging.getLogger(__name__)
-SHADOW = Counter('omi_notes_refactor_shadow_total', 'L3 deterministic shadow comparisons', ['check', 'outcome'])
-RESULTS = Counter('omi_notes_refactor_results_total', 'L3 serving results', ['check', 'outcome'])
+
+
+def _counter(name: str, documentation: str) -> Counter:
+    # Re-imports (test harnesses that re-exec importers) must reuse the registered collector.
+    try:
+        return Counter(name, documentation, ['check', 'outcome'])
+    except ValueError:
+        return REGISTRY._names_to_collectors[name]  # type: ignore[return-value]
+
+
+SHADOW = _counter('omi_notes_refactor_shadow_total', 'L3 deterministic shadow comparisons')
+RESULTS = _counter('omi_notes_refactor_results_total', 'L3 serving results')
 
 
 def shadow(check: str, outcome: str, **sizes: int) -> None:

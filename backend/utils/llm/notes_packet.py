@@ -151,7 +151,8 @@ def _select_packet(
     words: int,
     inputs: Mapping[str, Any],
 ) -> dict[str, Any]:
-    evidence = get_evidence(uid, prefix.conversation_id)
+    # Shadow builds the packet without the evidence read; only the serving cohort pays for it.
+    evidence = get_evidence(uid, prefix.conversation_id) if serving_for(FLAG, uid) else None
     inputs = dict(inputs)
     if not serving_for(FLAG, uid) and not inputs.get('output_language_code'):
         # Shadow uses already supplied language data and never adds a preference read.
