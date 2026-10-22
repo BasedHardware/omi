@@ -37,7 +37,11 @@ Native recordings, by marker (the marker is parsed in exactly one place, `BatchR
 | `omibatchphoneauto` | the phone mic had no network | auto |
 | `omibatchlimitless` | Limitless flash drained in batch mode | auto (it may be the only copy) |
 | `omibatchwatch` | Apple Watch recovery copy, one per minute | dropped when the live safety copy already covers it; otherwise auto |
-| `omibatchoverflow` | on-device overflow | left to `services/on_device` (already `onDeviceOnly` custody) |
+| `omibatchoverflow` | on-device overflow | admitted by `services/on_device/on_device_overflow_intake.dart` as `onDeviceOnly` custody |
+
+Overflow discovery runs before native migration retires the legacy owners file, and also in
+`OnDeviceRunner` (foreground and background). This replaces the old dependency on the Home
+provider's scan: keeping that dependency would strand overflow once Home becomes a ledger view.
 
 ## Invariants (each has a test)
 
@@ -48,8 +52,10 @@ Native recordings, by marker (the marker is parsed in exactly one place, `BatchR
    or when a Watch copy is proven redundant (invariant 5).
 3. **Owner before anything.** A WAL's `ownerUid` is set before it is listed, played, uploaded or
    deleted. Watch copies take the owner from their iPhone receipt. Other native files take the
-   signed-in uid at intake, the same as every other producer, so whoever scans first can no
-   longer claim them.
+   signed-in uid at intake, the same as every other producer. Once registered, the ledger
+   keeps that owner across account changes. During upgrade, an existing legacy owners-file stamp
+   is preserved (including parked foreign-account WALs); a malformed owners file defers migration
+   rather than reassigning private audio. New ownership is never assigned while signed out.
 4. **Idempotent intake.** Registering the same native file twice is a no-op, keyed by file name.
    A file already uploaded under the old path (its job id in the legacy `localRecordingJobs`
    sidecar) is registered as `uploaded` with that job id, so the shared poller finishes it rather
@@ -58,7 +64,12 @@ Native recordings, by marker (the marker is parsed in exactly one place, `BatchR
    wall-clock ranges of Watch audio that the phone received live and made durable in custody.
    A Watch copy that the journal covers to ≥ 95% is redundant: it is acknowledged (its iPhone
    receipt stays, so retransmission cannot bring it back) and deleted without upload. Kill switch:
-   PostHog flag `watch_copy_dedupe_off`; when set, every Watch copy is kept and uploaded.
+   PostHog flag `watch_copy_dedupe_off`; when set, unknown, or unreadable, every Watch copy is kept
+   and uploaded. Only an explicitly resolved false enables dedupe. Journal ranges are owner-scoped,
+   merged and expire after seven days; they are written only after the live WAL and index are durable.
+   Watch live frames are retained even after socket sends (a send is not server confirmation).
+   Before judging a new Watch receipt, intake checkpoints the live Watch tail without ending its
+   capture session: the 60-second receipt can precede the ordinary 105-second disk flush.
 6. **Home shows only what waits for the user.** Home lists `holdForUser` recordings only, one row
    per file. Everything else is visible on the Sync page, as every other custody WAL already is.
 
@@ -73,3 +84,14 @@ Follow-up for the backend architecture plan (not in this change): a `capture_com
 event and a coverage query, so the client can release live-covered custody by the server's word
 instead of the transcript-coverage heuristic, and the batch pipeline must apply S1 coverage before
 the legacy coverage trim is deleted (plan C, C11).
+
+## Guards
+
+| Invariant | Behavioral guard under `app/test/` |
+|---|---|
+| 1 | `unit/local_recordings_auto_upload_test.dart` (lib source scan) |
+| 2 | `unit/wal_upload_resilience_test.dart`, WAL reconcile/retention tests, `unit/watch_custody_dedupe_test.dart` |
+| 3 | `unit/local_recordings_owner_test.dart` |
+| 4 | `unit/local_recordings_auto_upload_test.dart`, `unit/sync_poll_storm_test.dart` |
+| 5 | `unit/watch_custody_dedupe_test.dart` |
+| 6 | `widgets/phone_custody_home_render_test.dart` (real conversations page) |

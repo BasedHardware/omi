@@ -12,7 +12,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/models/local_recording.dart';
+import 'package:omi/services/on_device/on_device_overflow_intake.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/services/on_device/on_device_projection.dart';
@@ -57,14 +57,12 @@ class OnDeviceRunner with WidgetsBindingObserver {
       {required this.sync,
       required this.controller,
       required this.publish,
-      required this.recordings,
       this.transcribeChunk,
       this.send,
       this.cloudBaseUrl});
   final LocalWalSyncImpl sync;
   final OnDeviceTranscriptionController controller;
   final void Function(ServerConversation) publish;
-  final List<LocalRecording> Function() recordings;
   final Future<OnDeviceBatchResult> Function(Uint8List, String)? transcribeChunk;
   final ApiSend? send;
   final String? cloudBaseUrl;
@@ -133,24 +131,8 @@ class OnDeviceRunner with WidgetsBindingObserver {
         controller.completedRecordingNames.clear();
         _publishedGeneration = generation;
       }
-      var all = await sync.getAllWals();
-      for (final recording in recordings().where((r) => r.fileName.startsWith('audio_omibatchoverflow_'))) {
-        if (all.any((w) => w.filePath == recording.fileName)) continue;
-        if (generation != sync.sessionGeneration) return;
-        await sync.addExternalWal(
-            Wal(
-                timerStart: recording.timerStart,
-                codec: recording.codec,
-                seconds: recording.seconds,
-                sampleRate: 16000,
-                status: WalStatus.miss,
-                storage: WalStorage.disk,
-                device: 'omibatchoverflow',
-                filePath: recording.fileName,
-                onDeviceOnly: true),
-            admittedGeneration: generation);
-      }
-      all = await sync.getAllWals();
+      await intakeOnDeviceOverflow(sync);
+      final all = await sync.getAllWals();
       for (final wal in all.where((w) => w.onDeviceConversation != null)) {
         if (generation != sync.sessionGeneration || _cancelled) return;
         if (wal.filePath != null) controller.completedRecordingNames.add(wal.filePath!);

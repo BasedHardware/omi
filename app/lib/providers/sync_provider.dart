@@ -513,7 +513,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         onTransferFinished: _keepAlive.release,
         onConnectivityRestored: _walService.getSyncs().phone.resetExhaustedAutoRetries,
         networkChanges: ConnectivityService().onNetworkChange,
-        hasPendingWork: () => pendingWals.isNotEmpty || uploadedWals.isNotEmpty,
+        hasPendingWork: () => pendingWals.any((wal) => !wal.holdForUser) || uploadedWals.isNotEmpty,
         onPassTimedOut: _onTransferPassTimedOut,
       );
       _periodicSync?.dispose();
@@ -642,6 +642,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   static bool _isUploadStallCandidate(Wal wal) =>
       wal.storage == WalStorage.disk &&
       !wal.onDeviceOnly &&
+      !wal.holdForUser &&
       wal.status == WalStatus.miss &&
       (wal.isSyncing || wal.retryCount < walMaxAutoRetries);
 

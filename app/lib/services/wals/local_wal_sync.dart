@@ -1,5 +1,10 @@
 import 'package:omi/services/capture/local_stt_custody.dart';
 import 'dart:async';
+import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/wals/native_recording_intake.dart';
+import 'package:omi/services/wals/watch_live_coverage.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
+import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'dart:io';
 import 'dart:math';
 
@@ -28,6 +33,7 @@ import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/services/wals/sync_job_policy.dart';
 import 'package:omi/services/wals/sync_upload_batch.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
+import 'package:omi/services/on_device/on_device_overflow_intake.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
 import 'package:omi/services/wals/wal_evidence_runs.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -87,6 +93,7 @@ bool canClaimLiveCapture(List<Wal> batch, List<Wal> pendingForConversation, int 
 @visibleForTesting
 bool isAutoUploadEligible(Wal wal) =>
     !wal.onDeviceOnly &&
+    !wal.holdForUser &&
     wal.status == WalStatus.miss &&
     wal.storage == WalStorage.disk &&
     wal.retryCount < walMaxAutoRetries;
@@ -144,6 +151,49 @@ bool isDefinitiveUploadRefusal(Object error) =>
 typedef WalCoverageTelemetryEmitter = void Function(Map<String, Object?> fields);
 
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
+  /// A cheap view invalidation signal: unrelated live/device sync changes do
+  /// not make Home walk the complete WAL index and stat its manual files.
+  final ValueNotifier<int> heldRevision = ValueNotifier(0);
+  DeviceType? sourceDeviceType;
+  DeviceType? _bufferDeviceType;
+  late final WatchLiveCoverage watchCoverage = WatchLiveCoverage(getApplicationDocumentsDirectory, now: _now);
+  late final NativeRecordingIntake nativeIntake = NativeRecordingIntake(this, coverage: watchCoverage);
+  Future<void> intakeNativeRecordings() async {
+    await walReady;
+    await intakeOnDeviceOverflow(this);
+    await nativeIntake.scan();
+  }
+
+  /// A minute recovery receipt can arrive before the normal flush timer. Seal
+  /// its live tail first, keeping the active session identity and capture route.
+  Future<void> checkpointWatchAudio() {
+    final generation = _sessionGeneration;
+    return _enqueueBuffer(() async {
+      if (!_isCurrent(generation) || _bufferDeviceType != DeviceType.appleWatch) return;
+      await _finalizeCurrentSession(generation);
+      await _flush(generation);
+    });
+  }
+
+  void _onNativeRecordingFinalized(String _) => _runNativeIntake();
+  void _runNativeIntake() {
+    unawaited(intakeNativeRecordings().then((_) async {
+      await RecordingTransferCoordinator.instance.wake(WakeTrigger.cooldownElapsed);
+    }).catchError((e) {
+      Logger.debug('Native recording intake deferred: $e');
+    }));
+  }
+
+  Wal? nativeWalForFileName(String name) {
+    for (final wal in [..._wals, ..._foreignWals, ..._retiredWals]) {
+      if (wal.filePath == name) return wal;
+    }
+    return null;
+  }
+
+  Future<bool> nativeWalIsDurable(Wal wal, int generation) async =>
+      _isCurrent(generation) && _confirmedDurableWalKeys.contains(_durableKey(wal));
+
   List<Wal> _wals = [];
 
   bool _pendingPhoneOnly = false;
@@ -251,6 +301,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       }
     }
     _wals = admitted;
+    heldRevision.value++;
     _foreignWals
       ..clear()
       ..addAll(foreign);
@@ -288,6 +339,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _admissionReservations.clear();
     _liveProofPendingWalIds.clear();
     _pendantBlockedByStorage = false;
+    heldRevision.value++;
   }
 
   /// Completes when _initializeWals() finishes loading WALs from disk.
@@ -422,18 +474,25 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       Logger.debug("LocalWalSync: WAL id collision on ${wal.id}; admitting both on distinct file paths");
     }
     if (!_isCurrent(admittedGeneration)) return;
-    _wals.add(wal);
+    if (_walAdmittedAtLoad(wal)) {
+      _wals.add(wal);
+    } else {
+      _foreignWals.add(wal);
+    }
     final reservedBytes = await _walFileLength(wal);
     if (reservedBytes != null) _consumeAdmission(reservedBytes);
     await _evaluateRetentionPressure();
     await _saveWalsToFile(admittedGeneration);
     _notifyUpdated(admittedGeneration);
+    if (_isCurrent(admittedGeneration) && wal.holdForUser && _wals.contains(wal)) heldRevision.value++;
     Logger.debug("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
   }
 
   @override
   void start() {
     _initializeWals();
+    BleBridge.instance.addBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
+    _runNativeIntake();
     _chunkingTimer = _periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
       final generation = _sessionGeneration;
       await _enqueueBuffer(() async => _chunk(generation));
@@ -454,6 +513,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _runNativeIntake();
       final generation = _sessionGeneration;
       unawaited(_reportStaleWalsWhenReady(generation));
     }
@@ -483,6 +543,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final stale = _wals
         .where(
           (w) =>
+              !w.holdForUser &&
               w.status == WalStatus.miss &&
               w.storage == WalStorage.disk &&
               walAudioSeconds(w) > 0 &&
@@ -592,6 +653,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @override
   Future stop() async {
     final generation = _sessionGeneration;
+    BleBridge.instance.removeBatchRecordingFinalizedListener(_onNativeRecordingFinalized);
     _chunkingTimer?.cancel();
     _flushingTimer?.cancel();
     _pendantTimer?.cancel();
@@ -621,6 +683,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       _frames = [];
       _pendingPhoneOnly = false;
       _frameSynced = [];
+      _bufferDeviceType = sourceDeviceType;
       if (deviceInfo != null) setDeviceInfo(deviceInfo.id, deviceInfo.model);
       _framesPerSecond = codec.getFramesPerSecond();
       _codec = codec;
@@ -633,6 +696,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   void setDeviceInfo(String? deviceId, String? deviceModel) {
+    _bufferDeviceType = sourceDeviceType;
     _deviceId = deviceId;
     _deviceModel = deviceModel;
   }
@@ -684,14 +748,15 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     } else {
       final live = _liveEvidenceFor(evidenceFrames);
 
-      bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+      bool shouldStored =
+          _bufferDeviceType == DeviceType.appleWatch || SharedPreferencesUtil().unlimitedLocalStorageEnabled;
       if (!shouldStored) {
         shouldStored = _frameSynced.sublist(low, high).any((synced) => !synced);
       }
 
       if (shouldStored) {
         final syncedOffset = syncedPrefixCount(_frameSynced.sublist(low, high));
-        Logger.debug("${low} - ${high} - ${syncedOffset} - ${chunkFrameCount} - ${_framesPerSecond}");
+        Logger.debug("$low - $high - $syncedOffset - $chunkFrameCount - $_framesPerSecond");
 
         Wal wal;
         var walIdx = _wals.indexWhere(
@@ -712,6 +777,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
             status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
             device: _deviceId ?? "omi",
             deviceModel: _deviceModel ?? "Omi",
+            deviceType: _bufferDeviceType,
             seconds: chunkFrameCount ~/ _framesPerSecond,
             totalFrames: chunkFrameCount,
             syncedFrameOffset: syncedOffset,
@@ -795,7 +861,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     for (final run in walEvidenceRunRanges(selection)) {
       final runFrames = selection.sublist(run.start, run.end);
       final runSynced = selectionSynced.sublist(run.start, run.end);
-      final shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled || runSynced.any((synced) => !synced);
+      final shouldStored = _bufferDeviceType == DeviceType.appleWatch ||
+          SharedPreferencesUtil().unlimitedLocalStorageEnabled ||
+          runSynced.any((synced) => !synced);
       if (!shouldStored) continue;
       final syncedOffset = syncedPrefixCount(runSynced);
       final frameCount = run.end - run.start;
@@ -827,6 +895,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",
+          deviceType: _bufferDeviceType,
           seconds: frameCount ~/ _framesPerSecond,
           totalFrames: frameCount,
           syncedFrameOffset: syncedOffset,
@@ -939,6 +1008,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
         device: _deviceId ?? "omi",
         deviceModel: _deviceModel ?? "Omi",
+        deviceType: _bufferDeviceType,
         seconds: frameCount ~/ _framesPerSecond,
         totalFrames: frameCount,
         syncedFrameOffset: syncedOffset,
@@ -1044,6 +1114,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     if (indexSaved) {
       for (final wal in durableWals) {
+        if (wal.deviceType == DeviceType.appleWatch && wal.ownerUid != null && _isCurrent(generation)) {
+          try {
+            await watchCoverage.record(wal.ownerUid!, wal.timerStart.toDouble(),
+                wal.timerStart + wal.totalFrames * wal.frameSize / wal.sampleRate);
+          } catch (e) {
+            Logger.debug('Watch coverage journal unavailable: $e');
+          }
+        }
         wal.data = [];
       }
       for (final wal in List<Wal>.from(_wals)) {
@@ -1451,6 +1529,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         if (type == FileSystemEntityType.file || type == FileSystemEntityType.link) {
           if (!_fileReferencedByOtherWal(wal, fullPath.split('/').last)) {
             await File(fullPath).delete();
+            final sidecar = File(nativeBatchGeolocationSidecarPath(fullPath));
+            if (await sidecar.exists()) await sidecar.delete();
             if (!_isCurrent(generation)) return false;
           }
         } else if (type != FileSystemEntityType.notFound) {
@@ -1463,6 +1543,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
 
     final removed = _wals.remove(wal) | _retiredWals.remove(wal) | _foreignWals.remove(wal);
+    if (removed && wal.holdForUser && _isCurrent(generation)) heldRevision.value++;
     return removed;
   }
 
@@ -1565,7 +1646,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
     // Same shouldStored check as _chunk(): one unconfirmed frame is enough to
     // retain the session. A transport send is not transcript confirmation.
-    bool shouldStored = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+    bool shouldStored =
+        _bufferDeviceType == DeviceType.appleWatch || SharedPreferencesUtil().unlimitedLocalStorageEnabled;
     if (!shouldStored) {
       shouldStored = _frameSynced.sublist(0, high).any((synced) => !synced);
     }
@@ -1595,6 +1677,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           status: syncedOffset == chunkFrameCount ? WalStatus.synced : WalStatus.miss,
           device: _deviceId ?? "omi",
           deviceModel: _deviceModel ?? "Omi",
+          deviceType: _bufferDeviceType,
           seconds: chunkFrameCount ~/ _framesPerSecond,
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
@@ -1674,7 +1757,10 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final generation = _sessionGeneration;
     var reset = 0;
     for (final wal in _wals) {
-      if (wal.status != WalStatus.miss || wal.storage != WalStorage.disk || wal.retryCount < walMaxAutoRetries) {
+      if (wal.holdForUser ||
+          wal.status != WalStatus.miss ||
+          wal.storage != WalStorage.disk ||
+          wal.retryCount < walMaxAutoRetries) {
         continue;
       }
       wal.retryCount = 0;
@@ -1715,7 +1801,8 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     for (final wal in stamped) {
       // Only phone-side pending copies and transport-only synced ones (socket sends, never
       // server-confirmed) are judged; in-flight, durable and terminal copies never regress.
-      final eligible = !wal.isSyncing &&
+      final eligible = !wal.holdForUser &&
+          !wal.isSyncing &&
           (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
           (wal.status == WalStatus.miss || wal.status == WalStatus.synced && wal.syncedAt == 0);
       if (!eligible) continue;
@@ -2245,7 +2332,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           'terminal': definitive,
         });
       } catch (e) {
-        print('Local WAL upload batch failed: $e, continuing with remaining files');
+        Logger.debug('Local WAL upload batch failed: $e, continuing with remaining files');
         batchesFailed++;
         if (!isTransientNetworkError(e)) {
           resp.localUploadPermanentFailures++;
@@ -2293,6 +2380,20 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
+    if (wal.isSyncing || wal.status == WalStatus.uploaded || wal.status == WalStatus.synced) return null;
+    final held = wal.holdForUser;
+    final generation = _sessionGeneration;
+    wal.isSyncing = true;
+    if (held) heldRevision.value++;
+    try {
+      return await _syncWal(wal: wal, progress: progress);
+    } finally {
+      wal.isSyncing = false;
+      if (held && _isCurrent(generation)) heldRevision.value++;
+    }
+  }
+
+  Future<SyncLocalFilesResponse?> _syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     if (wal.onDeviceOnly) return null;
     final generation = _sessionGeneration;
     await _enqueueBuffer(() => _flush(generation));
@@ -2343,7 +2444,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         }
       } catch (e) {
         wal.markCorrupted();
-        print(e.toString());
+        Logger.debug(e.toString());
         DebugLogManager.logError(e, null, 'Single WAL corrupted: unexpected error - ${e.toString()}', {
           'walId': wal.id,
         });
@@ -2383,6 +2484,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         telemetrySource: _uploadTelemetrySource([walToSync]),
       );
 
+      walToSync.holdForUser = false;
       if (result.completed != null) {
         final r = result.completed!;
         resp.newConversationIds.addAll(r.newConversationIds.where((id) => !resp.newConversationIds.contains(id)));
@@ -2421,6 +2523,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       walToSync.syncEtaSeconds = null;
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
+      if (walToSync.holdForUser) rethrow;
       return resp;
     } on SyncOfflineQueueQuarantinedException {
       DebugLogManager.logEvent('single_wal_cutover_quarantined', {'walId': wal.id});
@@ -2429,6 +2532,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       walToSync.syncEtaSeconds = null;
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
+      if (walToSync.holdForUser) rethrow;
       return resp;
     } on SyncRecoveryWindowExceededException {
       // Terminal: older than the server's automatic-recovery window. A manual
@@ -2436,6 +2540,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
+      walToSync.markOutsideRecoveryWindow();
       final retired = _retireOutsideRecoveryWindow([walToSync]);
       DebugLogManager.logEvent('single_wal_outside_recovery_window', {
         'walId': wal.id,
@@ -2460,11 +2565,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       walToSync.syncEtaSeconds = null;
       rethrow;
     } catch (e) {
+      walToSync.retryCount++;
       Logger.debug('Single WAL upload failed: $e');
       DebugLogManager.logError(e, null, 'Single WAL upload failed: ${e.toString()}', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
       rethrow;
     }
 
@@ -2491,7 +2599,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     if (rejectedBatch.isEmpty) return const [];
     final provenTooOld = rejectedBatch.map((w) => w.timerStart).reduce(min);
     final retired = _wals
-        .where((w) => w.status == WalStatus.miss && w.storage == WalStorage.disk && w.timerStart <= provenTooOld)
+        .where((w) =>
+            !w.holdForUser &&
+            w.status == WalStatus.miss &&
+            w.storage == WalStorage.disk &&
+            w.timerStart <= provenTooOld)
         .toList();
     for (final wal in retired) {
       wal.markOutsideRecoveryWindow();
@@ -2760,5 +2872,72 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       _notifyUpdated(generation);
     }
     return resp;
+  }
+}
+
+/// All device drains use this transaction: admission, identical length-prefixed
+/// bytes, flushed file, indexed WAL, then proof of durability before device ACK.
+/// Naming callbacks preserve the producer's existing collision sequence.
+extension DeviceChunkPersistence on LocalWalSync {
+  Future<Wal> persistDeviceChunk({
+    required Wal source,
+    required List<List<int>> frames,
+    required int timerStart,
+    required int admittedGeneration,
+    required int Function() nextCollisionSequence,
+    String? clockRun,
+    String Function()? fileName,
+    BleAudioCodec? codec,
+    int? seconds,
+    int? channel,
+    int? sampleRate,
+    String? deviceModel,
+    WalStorage originalStorage = WalStorage.sdcard,
+  }) async {
+    if (frames.isEmpty) throw StateError('refusing to persist an empty chunk');
+    final data = encodeWalFrames(frames);
+    if (!await ensureStorageAdmission(bytes: data.length, admittedGeneration: admittedGeneration)) {
+      throw StateError('storage admission refused (cap/disk reserve)');
+    }
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      var name = fileName?.call() ?? source.getFileNameByTimeStarts(timerStart, clockRun: clockRun) as String;
+      if (fileName != null) {
+        while (await File('${dir.path}/$name').exists()) {
+          name = fileName();
+        }
+      } else if (await File('${dir.path}/$name').exists()) {
+        final dot = name.lastIndexOf('.');
+        final stem = dot > 0 ? name.substring(0, dot) : name;
+        final ext = dot > 0 ? name.substring(dot) : '';
+        do {
+          name = '${stem}_u${nextCollisionSequence()}$ext';
+        } while (await File('${dir.path}/$name').exists());
+      }
+      await File('${dir.path}/$name').writeAsBytes(data, flush: true);
+      final fps = source.codec.getFramesPerSecond();
+      final wal = Wal(
+          codec: codec ?? source.codec,
+          channel: channel ?? source.channel,
+          sampleRate: sampleRate ?? source.sampleRate,
+          timerStart: timerStart,
+          filePath: name,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+          device: source.device,
+          deviceModel: deviceModel ?? source.deviceModel,
+          seconds: seconds ?? (fps > 0 ? frames.length ~/ fps : 0),
+          totalFrames: frames.length,
+          originalStorage: originalStorage,
+          clockRun: clockRun);
+      await addExternalWal(wal, admittedGeneration: admittedGeneration);
+      if (!await hasDurableWal(wal, admittedGeneration: admittedGeneration)) {
+        throw StateError('WAL not durable after registration');
+      }
+      return wal;
+    } catch (_) {
+      releaseStorageAdmission(data.length);
+      rethrow;
+    }
   }
 }
