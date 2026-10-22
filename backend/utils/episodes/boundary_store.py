@@ -75,8 +75,20 @@ def record(uid: str, signals: list[BoundarySignal], *, firestore_client: Any = N
             entries[key] = {'started_at': signal.started_at, 'ended_at': signal.ended_at}
         entries = {k: v for k, v in entries.items() if v.get('ended_at') is None or v['ended_at'] >= now - RETENTION}
         if len(entries) > MAX_SIGNALS:
-            # Refuse excess active/recent evidence explicitly; never drop a hard edge.
-            raise BoundaryCapacityError('too many recent boundary signals')
+            # Payloads remain durable after index eviction. The occasion/merge
+            # horizon is three hours; preserve every active or recent edge.
+            oldest = sorted(
+                (
+                    key
+                    for key, window in entries.items()
+                    if window.get('ended_at') is not None and window['ended_at'] < now - timedelta(hours=3)
+                ),
+                key=lambda key: entries[key]['ended_at'],
+            )
+            for key in oldest[: max(0, len(entries) - MAX_SIGNALS)]:
+                del entries[key]
+        if len(entries) > MAX_SIGNALS:
+            raise BoundaryCapacityError('too many active or recent boundary signals')
         for key, signal in writes.items():
             transaction.set(
                 records.document(key), {'content': encrypt(signal.model_dump_json(), uid), 'updated_at': now}

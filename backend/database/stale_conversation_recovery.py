@@ -47,7 +47,8 @@ def get_stale_recovery_page(
 ) -> list[dict[str, Any]]:
     """Claim at most ten rows, newest eligible first, resuming past prior attempts.
 
-    Read at most two pages (20 rows), cursor state and the deletion marker. A transaction CAS
+    Read at most three bounded pages in shadow (tail, wrap and head probe),
+    plus cursor state and the deletion marker. A transaction CAS
     advances the cursor *before* processing, so refusals, errors, cancellations,
     or a worker dying cannot pin the head. A short/empty tail wraps on the next
     claim. No snapshot lookup is needed for the cursor: deleted rows still make

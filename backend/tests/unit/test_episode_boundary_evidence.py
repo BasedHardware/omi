@@ -153,3 +153,20 @@ async def test_off_mode_never_offloads_boundary_storage(monkeypatch):
     assert await merge_permitted(controller, {})
     await ingest_calendar(controller, {})
     controller.host.persistence.call.assert_not_awaited()
+
+
+def test_full_index_evicts_old_terminal_edges_but_preserves_active_signals(store):
+    current = datetime.now(timezone.utc)
+    state = ('users', ACCOUNT, 'capture_boundary_state', 'v1')
+    store.rows[state] = {
+        'entries': {
+            f'old-{i:03}': {'started_at': current - timedelta(hours=6), 'ended_at': current - timedelta(hours=5)}
+            for i in range(boundary_store.MAX_SIGNALS)
+        }
+    }
+    fresh = BoundarySignal(kind='phone_call', external_id='fresh-test', started_at=current)
+    assert boundary_store.record(ACCOUNT, [fresh], firestore_client=store) == 1
+    known = boundary_store.windows(ACCOUNT, firestore_client=store)
+    assert len(known) == boundary_store.MAX_SIGNALS
+    assert boundary_store.signal_id(fresh) in known
+    assert 'old-000' not in known
