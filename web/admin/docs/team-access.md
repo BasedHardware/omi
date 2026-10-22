@@ -46,6 +46,9 @@ Enforced server-side in `lib/team/roster.ts`, for direct edits and approvals ali
 - Nobody changes or removes themselves. Nobody changes or removes an
   owner — not even another owner.
 - Only an owner appoints, changes or removes a deputy.
+- Every mutation re-reads the actor's `adminData` doc inside its own
+  transaction and re-authorizes from it, so a demotion or removal landing
+  mid-flight aborts the in-flight change.
 - Every add, removal, role change and proposal event writes an `adminAuditLog`
   entry (`at`, `action`, `actor`, `target`, `before`, `after`, and the
   proposal and proposer when one was approved) in the same transaction.
@@ -94,11 +97,16 @@ or other allowlisted agent, an owner, unknown uids or roles, a second pending
 proposal for the same target (409), and more than 20 pending per agent (429).
 Overlapping requests are serialized by per-agent and per-target lock docs
 (`adminProposalLocks`) read and written in the filing transaction. Proposals
-expire 72 hours after filing; expiry is audited with a `system` actor
-(`proposal-expiry`) and the proposer in `proposedBy`. An owner or a deputy approves or
+expire 72 hours after filing; listing them is a pure read that derives the
+`expired` status, while the persisted transition and its audit entry (a
+`system` actor `proposal-expiry`, the proposer in `proposedBy`) land on the
+next write — deciding an expired proposal refuses with 410 and records the
+expiry. An owner or a deputy approves or
 rejects on the Team page (`POST /api/omi/team-members/proposals/{id}`, Firebase
 session with `team:manage`); approval re-runs the team management rules above,
-so a deputy cannot approve a deputy appointment.
+so a deputy cannot approve a deputy appointment, and every decision re-reads
+the approver's `adminData` inside its transaction, so a demotion or removal
+that lands mid-flight aborts the change.
 
 ### Configuration
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin, { getDb, getAdminAuth } from "@/lib/firebase/admin";
 import { requireScope } from "@/lib/auth";
+import { hasScope } from "@/lib/admin-access";
+import { redactBilling } from "@/lib/organizations";
 import { getStripe } from "@/lib/stripe";
 import { updateUserSubscriptionDetails } from "@/lib/utils/user-subscription";
 export const dynamic = "force-dynamic";
@@ -39,19 +41,24 @@ export async function GET(request: NextRequest) {
     const organizationsRef = db.collection("organisations");
     const snapshot = await organizationsRef.orderBy("added_on", "desc").get();
 
-    const organizations = snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-      added_on: doc.data().added_on?.toDate?.()?.toISOString() || null,
-      max_seats: doc.data().max_seats || null,
-      subscription: doc.data().subscription || null, // Database field name
-      employees:
-        doc.data().employees?.map((emp: any) => ({
-          ...emp,
-          added_at: emp.added_at?.toDate?.()?.toISOString() || null,
-          removed_at: emp.removed_at?.toDate?.()?.toISOString() || null,
-        })) || [],
-    }));
+    const organizations = snapshot.docs.map((doc) =>
+      redactBilling(
+        {
+          id: doc.id,
+          ...doc.data(),
+          added_on: doc.data().added_on?.toDate?.()?.toISOString() || null,
+          max_seats: doc.data().max_seats || null,
+          subscription: doc.data().subscription || null, // Database field name
+          employees:
+            doc.data().employees?.map((emp: any) => ({
+              ...emp,
+              added_at: emp.added_at?.toDate?.()?.toISOString() || null,
+              removed_at: emp.removed_at?.toDate?.()?.toISOString() || null,
+            })) || [],
+        },
+        authResult.access
+      )
+    );
 
     return NextResponse.json({ organizations });
   } catch (error) {
@@ -94,6 +101,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid Stripe payment ID format. Must start with "pi_"' },
         { status: 400 }
+      );
+    }
+
+    // Attaching billing is a finance action, not a partner-metadata edit.
+    if (stripe_payment_id && !hasScope(authResult.access, "finance:write")) {
+      return NextResponse.json(
+        {
+          error: "Attaching a Stripe payment requires finance:write.",
+          scope: "finance:write",
+        },
+        { status: 403 }
       );
     }
 
@@ -189,15 +207,18 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      organization: {
-        id: orgRef.id,
-        ...organisationData,
-        added_on: now.toDate().toISOString(),
-        employees: organisationData.employees.map((emp) => ({
-          ...emp,
-          added_at: emp.added_at.toDate().toISOString(),
-        })),
-      },
+      organization: redactBilling(
+        {
+          id: orgRef.id,
+          ...organisationData,
+          added_on: now.toDate().toISOString(),
+          employees: organisationData.employees.map((emp) => ({
+            ...emp,
+            added_at: emp.added_at.toDate().toISOString(),
+          })),
+        },
+        authResult.access
+      ),
     });
   } catch (error) {
     console.error("Error creating organization:", error);

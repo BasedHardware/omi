@@ -4,6 +4,7 @@ import { getDb } from "@/lib/firebase/admin";
 import {
   ROLE_IDS,
   SCOPES,
+  hasScope,
   type RoleId,
   type ScopeOverrides,
 } from "@/lib/admin-access";
@@ -14,6 +15,7 @@ import {
   addMember,
   assignmentSnapshot,
   audit,
+  currentActor,
   humanAuditActor,
   removeMember,
   setMemberRole,
@@ -277,8 +279,24 @@ async function expireStale(docs: { id: string; data: Proposal }[]) {
 }
 
 /**
+ * Derives the displayed status: a pending proposal past its expiry reads as
+ * expired whether or not a write has persisted the transition yet. Reads
+ * never mutate; the transition (and its audit entry) persists on the next
+ * write — deciding, or an agent filing against the same target.
+ */
+export function displayedStatus(
+  proposal: Pick<Proposal, "status" | "expiresAt">,
+  now = Date.now()
+): ProposalStatus {
+  return proposal.status === "pending" && Date.parse(proposal.expiresAt) <= now
+    ? "expired"
+    : proposal.status;
+}
+
+/**
  * Every pending proposal (so an actionable one never falls off the page),
- * plus the most recent history, newest first.
+ * plus the most recent history, newest first. Pure: expiry is derived per
+ * response; nothing is written.
  */
 export async function listProposals(limit = 100): Promise<Proposal[]> {
   const db = getDb();
@@ -294,11 +312,11 @@ export async function listProposals(limit = 100): Promise<Proposal[]> {
   for (const doc of [...pending.docs, ...recent.docs]) {
     byId.set(doc.id, doc.data() as Proposal);
   }
-  const docs = Array.from(byId, ([id, data]) => ({ id, data }));
-  await expireStale(docs);
-  return docs
-    .map(({ id, data }) => ({ ...data, id }))
-    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return Array.from(byId, ([id, data]) => ({
+    ...data,
+    id,
+    status: displayedStatus(data),
+  })).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 /**
@@ -328,6 +346,16 @@ export async function decideProposal(
 
   if (decision === "reject") {
     await db.runTransaction(async (tx) => {
+      // The reject decision is a team mutation: re-authorize from the
+      // actor's current doc so a mid-flight demotion cannot reject with
+      // authority they just lost.
+      const acting = await currentActor(tx, actor);
+      if (!hasScope(acting.access, "team:manage")) {
+        throw new TeamError(
+          403,
+          "Only an owner or a deputy can decide proposals."
+        );
+      }
       const fresh = await tx.get(ref);
       if ((fresh.data() as Proposal).status !== "pending") {
         throw new TeamError(409, "This proposal was decided meanwhile.");

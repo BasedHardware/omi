@@ -13,6 +13,62 @@ import type { Scope } from "@/lib/admin-access";
  */
 export type RoutePolicy = Scope | "member" | "team-agent" | { open: string };
 
+/**
+ * The financial wall: every route that can surface revenue, MRR, cost,
+ * subscription, payout or billing data — directly, through a capability
+ * (TV share links, the kiosk embed), or mixed into partner data
+ * (organization billing fields). The tests in
+ * `lib/__tests__/route-scopes.test.ts` walk this list, and fail when a new
+ * finance-scoped route is not audited into it.
+ *
+ * - "policy": the entry's ROUTE_POLICIES scope must be exactly that scope.
+ * - "tv-share": an unauthenticated capability route; the share token is
+ *   honored only while its issuer still holds finance:read.
+ * - "tv-links": link management under analytics:share; minting requires
+ *   finance:read and the share tokens are redacted without it.
+ * - "partners-with-billing": partner routes; billing fields are redacted
+ *   without finance:read and billing mutations require finance:write.
+ */
+export type FinancialWall =
+  | { policy: "finance:read" | "finance:write" }
+  | { tvShare: true }
+  | { tvLinks: true }
+  | { partnersWithBilling: true };
+
+export const FINANCIAL_ROUTES: Record<string, FinancialWall> = {
+  // Direct financial data, pinned by policy.
+  "GET /api/grafana/embed": { policy: "finance:read" },
+  "GET /api/omi/stats/app-subscriptions": { policy: "finance:read" },
+  "GET /api/omi/stats/infra-costs": { policy: "finance:read" },
+  "GET /api/omi/stats/mrr-trends": { policy: "finance:read" },
+  "GET /api/omi/stats/plan-economics": { policy: "finance:read" },
+  "GET /api/omi/stats/profitability": { policy: "finance:read" },
+  "GET /api/omi/stats/revenue": { policy: "finance:read" },
+  "GET /api/omi/stats/subscription-trends": { policy: "finance:read" },
+  "GET /api/omi/stats/subscriptions": { policy: "finance:read" },
+  "GET /api/omi/stats/wall": { policy: "finance:read" },
+  "GET /api/omi/stats/wall/series/[name]": { policy: "finance:read" },
+  "GET /api/omi/subscriptions": { policy: "finance:read" },
+  "GET /api/omi/payouts": { policy: "finance:read" },
+  "GET /api/omi/all-payouts": { policy: "finance:read" },
+  "GET /api/omi/users-with-stripe": { policy: "finance:read" },
+  "GET /api/omi/affiliates": { policy: "finance:read" },
+  "GET /api/omi/affiliate-payouts": { policy: "finance:read" },
+  "POST /api/omi/affiliate-payouts": { policy: "finance:write" },
+
+  // The TV capability wall: the omi-tv-v2 Business board (revenue, MRR,
+  // Shopify and cost panels) reached without a login.
+  "POST /api/grafana/tv-embed": { tvShare: true },
+  "GET /api/omi/tv-links": { tvLinks: true },
+  "POST /api/omi/tv-links": { tvLinks: true },
+  "DELETE /api/omi/tv-links/[id]": { tvLinks: true },
+
+  // Organization documents mix partner metadata with Stripe billing.
+  "GET /api/organizations": { partnersWithBilling: true },
+  "POST /api/organizations": { partnersWithBilling: true },
+  "PATCH /api/organizations/[id]": { partnersWithBilling: true },
+};
+
 export const ROUTE_POLICIES: Record<string, RoutePolicy> = {
   // Session
   "GET /api/omi/access": "member",
@@ -146,7 +202,9 @@ export const ROUTE_POLICIES: Record<string, RoutePolicy> = {
 
   // Not admin routes
   "GET /api/grafana/jwks": { open: "public signing keys for Grafana" },
-  "POST /api/grafana/tv-embed": { open: "TV share-link capability token" },
+  "POST /api/grafana/tv-embed": {
+    open: "TV share-link capability token; issuer's finance:read re-checked",
+  },
   "POST /api/internal/precompute": { open: "x-cron-secret scheduler header" },
   "GET /api/public/user-growth": { open: "public aggregate counts only" },
 };

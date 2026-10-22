@@ -25,7 +25,8 @@ import {
   isScope,
   type Scope,
 } from "@/lib/admin-access";
-import { ROUTE_POLICIES } from "@/lib/route-scopes";
+import { FINANCIAL_ROUTES, ROUTE_POLICIES } from "@/lib/route-scopes";
+import { hashTvToken } from "@/lib/tv-links";
 
 const ROOT = resolve(__dirname, "../..");
 const METHOD =
@@ -68,13 +69,16 @@ function concrete(path: string) {
   return path.replace(/\[(\w+)\]/g, "x1");
 }
 
-async function call(h: Handler, token: string | null) {
+async function call(h: Handler, token: string | null, body?: unknown) {
   const mod = await import(/* @vite-ignore */ h.file);
-  const body = ["GET", "HEAD", "DELETE", "OPTIONS"].includes(h.method)
-    ? undefined
-    : {};
+  const payload =
+    body !== undefined
+      ? body
+      : ["GET", "HEAD", "DELETE", "OPTIONS"].includes(h.method)
+      ? undefined
+      : {};
   return mod[h.method](
-    adminRequest(token, h.method, concrete(h.path), body),
+    adminRequest(token, h.method, concrete(h.path), payload),
     paramsFor(h.path)
   ) as Promise<Response>;
 }
@@ -152,26 +156,37 @@ describe.each(scoped.map((h) => [h.key, h] as const))("%s", (_key, h) => {
 });
 
 describe("special policies", () => {
-  it("pins financial data endpoints to finance:read", () => {
-    // The omi-tv-v2 board, the mixed wall aggregate and its series (revenue,
-    // health, headline) all expose revenue, MRR or cost data.
-    const financial = [
-      "GET /api/grafana/embed",
-      "GET /api/omi/stats/wall",
-      "GET /api/omi/stats/wall/series/[name]",
-    ];
-    for (const key of financial) {
-      expect(ROUTE_POLICIES[key], key).toBe("finance:read");
+  it("pins every FINANCIAL_ROUTES policy entry to its finance scope", () => {
+    for (const [key, wall] of Object.entries(FINANCIAL_ROUTES)) {
+      expect(
+        ROUTE_POLICIES[key],
+        `${key} is missing from ROUTE_POLICIES`
+      ).toBeDefined();
+      if ("policy" in wall) {
+        expect(ROUTE_POLICIES[key], key).toBe(wall.policy);
+      }
     }
   });
 
-  it("refuses an analytics-only member the business board and the wall", async () => {
+  it("audits every finance-scoped route into FINANCIAL_ROUTES", () => {
+    const financeScoped = Object.entries(ROUTE_POLICIES)
+      .filter(
+        ([, policy]) => policy === "finance:read" || policy === "finance:write"
+      )
+      .map(([key]) => key);
+    expect(
+      financeScoped.filter((key) => !(key in FINANCIAL_ROUTES)),
+      "a new finance-scoped route must be audited into FINANCIAL_ROUTES"
+    ).toEqual([]);
+  });
+
+  it("refuses an analytics-only member every finance-scoped route", async () => {
+    // The omi-tv-v2 board, the mixed wall aggregate and its series (revenue,
+    // health, headline) all expose revenue, MRR or cost data; so do the
+    // subscription, payout and affiliate listings.
     state.db.table("adminData").set("viewer", { accessRole: "viewer" });
-    for (const key of [
-      "GET /api/grafana/embed",
-      "GET /api/omi/stats/wall",
-      "GET /api/omi/stats/wall/series/[name]",
-    ]) {
+    for (const [key, wall] of Object.entries(FINANCIAL_ROUTES)) {
+      if (!("policy" in wall) || !key.startsWith("GET")) continue;
       const h = ALL.find((entry) => entry.key === key)!;
       const response = await call(h, firebaseToken("viewer"));
       expect(response.status, key).toBe(403);
@@ -198,5 +213,221 @@ describe("special policies", () => {
   )("%s refuses human tokens, even the owner's", async (_key, h) => {
     state.db.table("adminData").set("owner", { owner: true });
     expect((await call(h, firebaseToken("owner"))).status).toBe(401);
+  });
+});
+
+describe("the financial wall on TV share links", () => {
+  const route = (key: string) => ALL.find((entry) => entry.key === key)!;
+
+  /** Deputy minus finance:read: can manage links, must not see the board. */
+  const SHARER = {
+    accessRole: "deputy" as const,
+    scopeOverrides: { deny: ["finance:read" as const] },
+  };
+
+  function seedTvLink(createdBy: string) {
+    const token = "tv-token".padEnd(43, "x");
+    state.db.table("admin_tv_links").set(hashTvToken(token), {
+      tokenHash: hashTvToken(token),
+      token,
+      prefix: token.slice(0, 8),
+      label: "Office TV",
+      createdBy,
+      createdAt: Date.now(),
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: null,
+    });
+    return token;
+  }
+
+  it("refuses to mint a link without finance:read, and writes nothing", async () => {
+    state.db.table("adminData").set("sharer", SHARER);
+    const response = await call(
+      route("POST /api/omi/tv-links"),
+      firebaseToken("sharer")
+    );
+    expect(response.status).toBe(403);
+    expect((await response.json()).scope).toBe("finance:read");
+    expect(state.db.table("admin_tv_links").size).toBe(0);
+  });
+
+  it("lets a finance:read holder mint one", async () => {
+    state.db.table("adminData").set("owner", { owner: true });
+    const response = await call(
+      route("POST /api/omi/tv-links"),
+      firebaseToken("owner")
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).link.status).toBe("active");
+  });
+
+  it("redacts share tokens in the list without finance:read", async () => {
+    seedTvLink("owner");
+    state.db.table("adminData").set("sharer", SHARER);
+    state.db.table("adminData").set("owner", { owner: true });
+
+    const denied = await call(
+      route("GET /api/omi/tv-links"),
+      firebaseToken("sharer")
+    );
+    expect(denied.status).toBe(200);
+    const deniedLinks = (await denied.json()).links;
+    expect(deniedLinks).toHaveLength(1);
+    expect(deniedLinks[0]).toMatchObject({
+      token: null,
+      path: null,
+      label: "Office TV",
+    });
+
+    const allowed = await call(
+      route("GET /api/omi/tv-links"),
+      firebaseToken("owner")
+    );
+    expect((await allowed.json()).links[0].token).toMatch(/^tv-token/);
+  });
+
+  it.each([
+    ["demoted to viewer", { accessRole: "viewer" }],
+    [
+      "denied finance:read",
+      { accessRole: "deputy", scopeOverrides: { deny: ["finance:read"] } },
+    ],
+    ["removed from adminData", null],
+  ])("stops a kiosk embed whose issuer was %s", async (_name, issuerDoc) => {
+    const token = seedTvLink("issuer");
+    if (issuerDoc) state.db.table("adminData").set("issuer", issuerDoc);
+    const { POST } = await import("@/app/api/grafana/tv-embed/route");
+    const dead = await POST(
+      adminRequest(null, "POST", "/api/grafana/tv-embed", { token })
+    );
+    expect(dead.status).toBe(403);
+    // The link did not even refresh lastUsedAt.
+    expect(
+      state.db.table("admin_tv_links").get(hashTvToken(token))!.lastUsedAt
+    ).toBeNull();
+  });
+
+  it("keeps a kiosk embed working while the issuer holds finance:read", async () => {
+    const token = seedTvLink("issuer");
+    state.db.table("adminData").set("issuer", { owner: true });
+    const { POST } = await import("@/app/api/grafana/tv-embed/route");
+    // The embed flag is off in tests: validation passing gets this far and
+    // stops, proving the token resolved without minting anything.
+    const alive = await POST(
+      adminRequest(null, "POST", "/api/grafana/tv-embed", { token })
+    );
+    expect(alive.status).toBe(200);
+    expect(await alive.json()).toEqual({ enabled: false });
+  });
+});
+
+describe("the financial wall on organization billing", () => {
+  const route = (key: string) => ALL.find((entry) => entry.key === key)!;
+  const subscription = {
+    subscription_id: "pi_secret",
+    customer_id: "cus_secret",
+    plan: "unlimited",
+    status: "active",
+    current_period_end: 1735689600,
+  };
+
+  function seedOrganisation() {
+    // The dynamic [id] params resolve to "x1" (paramsFor), so the PATCH
+    // tests can reach this document.
+    state.db.table("organisations").set("x1", {
+      organisation_name: "Acme",
+      added_on: "2026-01-01T00:00:00.000Z",
+      subscription,
+      employees: [],
+    });
+  }
+
+  it("redacts subscription for partners:read without finance:read", async () => {
+    seedOrganisation();
+    state.db.table("adminData").set("partner", {
+      accessRole: "deputy",
+      scopeOverrides: { deny: ["finance:read"] },
+    });
+    const response = await call(
+      route("GET /api/organizations"),
+      firebaseToken("partner")
+    );
+    expect(response.status).toBe(200);
+    const org = (await response.json()).organizations[0];
+    expect(org).toMatchObject({
+      organisation_name: "Acme",
+      subscription: null,
+    });
+  });
+
+  it("shows subscription to finance:read", async () => {
+    seedOrganisation();
+    state.db.table("adminData").set("owner", { owner: true });
+    const response = await call(
+      route("GET /api/organizations"),
+      firebaseToken("owner")
+    );
+    expect((await response.json()).organizations[0].subscription).toEqual(
+      subscription
+    );
+  });
+
+  it.each([
+    [
+      "POST /api/organizations",
+      "creating an org with a payment",
+      {
+        organisation_name: "Beta",
+        admin_name: "Bee",
+        admin_email: "bee@example.com",
+        stripe_payment_id: "pi_abc",
+      },
+    ],
+    [
+      "PATCH /api/organizations/[id]",
+      "setting an org payment",
+      { stripe_payment_id: "pi_abc" },
+    ],
+    [
+      "PATCH /api/organizations/[id]",
+      "clearing an org payment",
+      { stripe_payment_id: "" },
+    ],
+  ])("refuses %s without finance:write", async (key, _name, body) => {
+    seedOrganisation();
+    state.db.table("adminData").set("partner", {
+      accessRole: "deputy",
+      scopeOverrides: { deny: ["finance:write"] },
+    });
+    const response = await call(route(key), firebaseToken("partner"), body);
+    expect(response.status).toBe(403);
+    expect((await response.json()).scope).toBe("finance:write");
+    expect(state.db.table("organisations").get("x1")!.subscription).toEqual(
+      subscription
+    );
+    expect(state.db.table("organisations").size).toBe(1);
+  });
+
+  it("still lets partners:write edit org metadata without billing", async () => {
+    seedOrganisation();
+    state.db.table("adminData").set("partner", {
+      accessRole: "deputy",
+      scopeOverrides: { deny: ["finance:read", "finance:write"] },
+    });
+    const response = await call(
+      route("PATCH /api/organizations/[id]"),
+      firebaseToken("partner"),
+      { organisation_name: "Gamma" }
+    );
+    expect(response.status).toBe(200);
+    const org = (await response.json()).organization;
+    expect(org).toMatchObject({
+      organisation_name: "Gamma",
+      subscription: null,
+    });
+    expect(state.db.table("organisations").get("x1")!.organisation_name).toBe(
+      "Gamma"
+    );
   });
 });

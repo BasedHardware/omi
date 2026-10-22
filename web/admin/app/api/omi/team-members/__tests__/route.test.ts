@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   FakeAuth,
+  FakeDocRef,
   FakeFirestore,
 } from "@/lib/__tests__/support/fake-firestore";
 import {
@@ -522,5 +523,120 @@ describe("GET /api/omi/team-members/audit", () => {
       "member.removed",
       "member.role_changed",
     ]);
+  });
+});
+
+describe("in-flight authority: mutations re-read the actor's doc", () => {
+  /**
+   * Changes the actor's adminData doc the moment their mutation's
+   * transaction first re-reads it — after the read, before the commit. The
+   * fake's conflict detection retries the transaction, so the retry must
+   * re-authorize from the changed doc and abort.
+   */
+  function changeActorInsideTransaction(
+    uid: string,
+    doc: Record<string, any> | null
+  ) {
+    const realGet = FakeDocRef.prototype.get;
+    let reads = 0;
+    FakeDocRef.prototype.get = async function (this: FakeDocRef) {
+      const result = await realGet.call(this);
+      if (this.collection === "adminData" && this.id === uid) {
+        reads += 1;
+        // 1: authenticate() before the handler; 2: the transaction's read.
+        if (reads === 2) {
+          if (doc) members().set(uid, doc);
+          else members().delete(uid);
+          state.db.bump("adminData", uid);
+        }
+      }
+      return result;
+    };
+    return () => {
+      FakeDocRef.prototype.get = realGet;
+    };
+  }
+
+  it("aborts a role change when the actor is demoted mid-flight", async () => {
+    const restore = changeActorInsideTransaction(DEPUTY, {
+      email: "deputy@example.com",
+      accessRole: "viewer",
+    });
+    try {
+      const response = await PATCH(
+        as(DEPUTY, "PATCH", { uid: ARCHIT, accessRole: "viewer" })
+      );
+      expect(response.status).toBe(403);
+    } finally {
+      restore();
+    }
+    expect(members().get(ARCHIT).accessRole).toBeUndefined();
+    expect(auditRows()).toEqual([]);
+  });
+
+  it("aborts a removal when the actor is demoted mid-flight", async () => {
+    const restore = changeActorInsideTransaction(DEPUTY, {
+      email: "deputy@example.com",
+      accessRole: "viewer",
+    });
+    try {
+      expect((await DELETE(as(DEPUTY, "DELETE", { uid: ARCHIT }))).status).toBe(
+        403
+      );
+    } finally {
+      restore();
+    }
+    expect(members().has(ARCHIT)).toBe(true);
+    expect(auditRows()).toEqual([]);
+  });
+
+  it("aborts an addition when the actor is demoted mid-flight", async () => {
+    state.auth.add({ uid: "x", email: "x@example.com" });
+    const restore = changeActorInsideTransaction(ARCHIT, {
+      email: "architdraftid@gmail.com",
+      accessRole: "viewer",
+    });
+    try {
+      const response = await POST(
+        as(ARCHIT, "POST", { email: "x@example.com" })
+      );
+      expect(response.status).toBe(403);
+    } finally {
+      restore();
+    }
+    expect(members().has("x")).toBe(false);
+    expect(state.sendAdminInviteEmail).not.toHaveBeenCalled();
+    expect(auditRows()).toEqual([]);
+  });
+
+  it("aborts a deputy appointment when the owner is demoted mid-flight", async () => {
+    const restore = changeActorInsideTransaction(OWNER, {
+      email: "kodjima33@gmail.com",
+      accessRole: "viewer",
+    });
+    try {
+      expect(
+        (await PATCH(as(OWNER, "PATCH", { uid: ARCHIT, accessRole: "deputy" })))
+          .status
+      ).toBe(403);
+    } finally {
+      restore();
+    }
+    expect(members().get(ARCHIT).accessRole).toBeUndefined();
+    expect(members().get(ARCHIT).role).toBe("Admin");
+    expect(auditRows()).toEqual([]);
+  });
+
+  it("aborts a removal when the actor's doc is deleted mid-flight", async () => {
+    const restore = changeActorInsideTransaction(DEPUTY, null);
+    try {
+      expect((await DELETE(as(DEPUTY, "DELETE", { uid: ARCHIT }))).status).toBe(
+        403
+      );
+    } finally {
+      restore();
+    }
+    expect(members().has(ARCHIT)).toBe(true);
+    expect(auditRows()).toEqual([]);
   });
 });

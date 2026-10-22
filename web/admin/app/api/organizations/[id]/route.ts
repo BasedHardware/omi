@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/firebase/admin";
 import { requireScope } from "@/lib/auth";
+import { hasScope } from "@/lib/admin-access";
+import { redactBilling } from "@/lib/organizations";
 import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
 import { getStripe } from "@/lib/stripe";
 import { updateUserSubscriptionDetails } from "@/lib/utils/user-subscription";
@@ -110,6 +112,22 @@ export async function PATCH(
       );
     }
 
+    // Setting or clearing billing is a finance action, not a partner-metadata
+    // edit; the check runs before any Firestore or Stripe work.
+    if (
+      stripe_payment_id !== undefined &&
+      !hasScope(authResult.access, "finance:write")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Changing an organization's Stripe payment requires finance:write.",
+          scope: "finance:write",
+        },
+        { status: 403 }
+      );
+    }
+
     const orgRef = db.collection("organisations").doc(organizationId);
     const orgDoc = await orgRef.get();
 
@@ -175,19 +193,22 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      organization: {
-        id: updatedDoc.id,
-        ...updatedData,
-        added_on: updatedData?.added_on?.toDate?.()?.toISOString() || null,
-        max_seats: updatedData?.max_seats || null,
-        subscription: updatedData?.subscription || null, // Database field name
-        employees:
-          updatedData?.employees?.map((emp: any) => ({
-            ...emp,
-            added_at: emp.added_at?.toDate?.()?.toISOString() || null,
-            removed_at: emp.removed_at?.toDate?.()?.toISOString() || null,
-          })) || [],
-      },
+      organization: redactBilling(
+        {
+          id: updatedDoc.id,
+          ...updatedData,
+          added_on: updatedData?.added_on?.toDate?.()?.toISOString() || null,
+          max_seats: updatedData?.max_seats || null,
+          subscription: updatedData?.subscription || null, // Database field name
+          employees:
+            updatedData?.employees?.map((emp: any) => ({
+              ...emp,
+              added_at: emp.added_at?.toDate?.()?.toISOString() || null,
+              removed_at: emp.removed_at?.toDate?.()?.toISOString() || null,
+            })) || [],
+        },
+        authResult.access
+      ),
     });
   } catch (error) {
     console.error("Error updating organization:", error);

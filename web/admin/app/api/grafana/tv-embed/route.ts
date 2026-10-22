@@ -7,8 +7,9 @@ export const runtime = "nodejs";
 
 /**
  * Capability-authenticated kiosk embed. The TV share token is validated
- * server-side before the private Business embed is minted, so revocation and
- * expiry keep working for existing TV links.
+ * server-side before the private Business embed is minted, so revocation,
+ * expiry, and the issuer still holding finance:read keep working for
+ * existing TV links.
  * Flag-off keeps the TV page unavailable until the private Business embed is
  * enabled; it never falls back to the retired same-origin Grafana instance.
  */

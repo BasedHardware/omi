@@ -1,15 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
+import { hasScope } from "@/lib/admin-access";
 import { createTvLink, listTvLinks } from "@/lib/tv-links";
 
 export const dynamic = "force-dynamic";
+
+/** The only shareable board is the financial Business one, so its share
+ * links need finance:read; without a non-financial board there is nothing
+ * a non-finance issuer may share. */
+function boardScopeDenied() {
+  return NextResponse.json(
+    {
+      error:
+        "TV links open the Business board (revenue and cost panels), which requires finance:read.",
+      scope: "finance:read",
+    },
+    { status: 403 }
+  );
+}
 
 export async function GET(request: NextRequest) {
   const auth = await requireScope(request, "analytics:share");
   if (auth instanceof NextResponse) return auth;
 
   try {
-    const links = await listTvLinks();
+    const links = await listTvLinks({
+      // The share token is the capability to view the financial board; it
+      // stays visible only to callers who could mint one themselves.
+      revealTokens: hasScope(auth.access, "finance:read"),
+    });
     return NextResponse.json({ links });
   } catch (error) {
     console.error("list TV links:", error);
@@ -23,6 +42,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   const auth = await requireScope(request, "analytics:share");
   if (auth instanceof NextResponse) return auth;
+  if (!hasScope(auth.access, "finance:read")) return boardScopeDenied();
 
   const raw = await request.text();
   let parsed: unknown = {};

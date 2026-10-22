@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
+import { hasScope } from "@/lib/admin-access";
 import { revokeTvLink } from "@/lib/tv-links";
 import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
 
@@ -19,7 +20,11 @@ export async function DELETE(
   }
 
   try {
-    const link = await revokeTvLink(id);
+    const link = await revokeTvLink(id, {
+      // Revocation stays open to every link manager, but the revoked link's
+      // token is only echoed back to callers who may hold it.
+      revealToken: hasScope(auth.access, "finance:read"),
+    });
     if (!link) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }

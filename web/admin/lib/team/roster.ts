@@ -163,6 +163,25 @@ function errorCode(error: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * The request's actor snapshot can go stale while the mutation is in
+ * flight. Every team mutation re-reads `adminData/{uid}` inside its own
+ * transaction and re-derives access from that doc, so a demotion or removal
+ * that lands first aborts the in-flight mutation instead of applying it.
+ */
+export async function currentActor(
+  tx: Tx,
+  actor: HumanActor
+): Promise<HumanActor> {
+  const snap = await tx.get(
+    getDb().collection(ADMIN_COLLECTION).doc(actor.uid)
+  );
+  if (!snap.exists) {
+    throw new TeamError(403, "Your admin access was removed.");
+  }
+  return { ...actor, access: accessFor(snap.data() as Data) };
+}
+
 /** Applied-change context when a human approves an agent proposal. */
 export interface ApprovalContext {
   proposalId: string;
@@ -233,6 +252,15 @@ export async function addMember(
   };
 
   await db.runTransaction(async (tx) => {
+    // Re-authorize from the actor's current doc, not the request snapshot.
+    const acting = await currentActor(tx, actor);
+    if (!hasScope(acting.access, "team:invite")) {
+      throw new TeamError(
+        403,
+        "Only an owner, a deputy or an admin can invite."
+      );
+    }
+    assertNoBroaderThanActor(acting, input.accessRole, overrides);
     if ((await tx.get(memberRef)).exists) {
       throw new TeamError(409, `${email} already has admin access.`);
     }
@@ -285,7 +313,8 @@ export async function removeMember(
   return db.runTransaction(async (tx) => {
     const doc = await tx.get(memberRef);
     const data = doc.exists ? (doc.data() as Data) : undefined;
-    assertCanChange(actor, uid, data, "remove");
+    // Re-authorize from the actor's current doc, not the request snapshot.
+    assertCanChange(await currentActor(tx, actor), uid, data, "remove");
     await approval?.check(tx);
     approval?.commit(tx);
     tx.delete(memberRef);
@@ -319,8 +348,11 @@ export async function setMemberRole(
   return db.runTransaction(async (tx) => {
     const doc = await tx.get(memberRef);
     const data = doc.exists ? (doc.data() as Data) : undefined;
-    assertCanChange(actor, uid, data, "change");
-    assertNoBroaderThanActor(actor, accessRole, scopeOverrides);
+    // Re-authorize from the actor's current doc, not the request snapshot,
+    // so a mid-flight demotion cannot appoint or keep broad access flowing.
+    const acting = await currentActor(tx, actor);
+    assertCanChange(acting, uid, data, "change");
+    assertNoBroaderThanActor(acting, accessRole, scopeOverrides);
     const update = {
       accessRole,
       role: ROLES[accessRole].label,

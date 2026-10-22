@@ -5,6 +5,7 @@ import { OAuth2Client } from "google-auth-library";
 import { CertificateFormat } from "google-auth-library/build/src/auth/oauth2client";
 import {
   FakeAuth,
+  FakeDocRef,
   FakeFirestore,
 } from "@/lib/__tests__/support/fake-firestore";
 import {
@@ -558,7 +559,7 @@ describe("proposals", () => {
     );
   });
 
-  it("expires stale proposals when the Team page lists them", async () => {
+  it("shows stale proposals as expired on a pure read, persisting nothing", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-22T00:00:00Z"));
     await propose({ kind: "remove_member", uid: ADMIN, reason: "left" });
@@ -578,8 +579,79 @@ describe("proposals", () => {
       )
     ).json();
     expect(agentView.proposals[0].status).toBe("expired");
-    expect(
-      actions().filter((a: string) => a === "proposal.expired")
-    ).toHaveLength(1);
+
+    // A read wrote nothing: the stored status and the audit log are
+    // untouched, and deciding still refuses and lands the transition.
+    const { id } = list.proposals[0];
+    expect(proposals().get(id).status).toBe("pending");
+    expect(actions()).toEqual(["proposal.created"]);
+    expect((await decide(OWNER, id, "approve")).status).toBe(410);
+    expect(proposals().get(id).status).toBe("expired");
+    expect(actions()).toEqual(["proposal.created", "proposal.expired"]);
+  });
+
+  describe("in-flight authority: decisions re-read the approver's doc", () => {
+    /**
+     * Demotes the approver the moment the decision's transaction first
+     * re-reads their doc — after the read, before the commit. The fake's
+     * conflict detection retries, and the re-read must abort the decision.
+     */
+    function demoteApproverInsideTransaction() {
+      const realGet = FakeDocRef.prototype.get;
+      let reads = 0;
+      FakeDocRef.prototype.get = async function (this: FakeDocRef) {
+        const result = await realGet.call(this);
+        if (this.collection === "adminData" && this.id === OWNER) {
+          reads += 1;
+          // 1: authenticate() before the handler; 2: the transaction's read.
+          if (reads === 2) {
+            members().set(OWNER, {
+              email: "owner@example.com",
+              accessRole: "viewer",
+            });
+            state.db.bump("adminData", OWNER);
+          }
+        }
+        return result;
+      };
+      return () => {
+        FakeDocRef.prototype.get = realGet;
+      };
+    }
+
+    it("aborts an approval when the approver is demoted mid-flight", async () => {
+      state.auth.add({ uid: "new-uid", email: "new@example.com" });
+      const { proposal } = await (
+        await propose({
+          kind: "add_member",
+          email: "new@example.com",
+          accessRole: "support",
+          reason: "new hire",
+        })
+      ).json();
+      const restore = demoteApproverInsideTransaction();
+      try {
+        expect((await decide(OWNER, proposal.id, "approve")).status).toBe(403);
+      } finally {
+        restore();
+      }
+      expect(members().has("new-uid")).toBe(false);
+      expect(proposals().get(proposal.id).status).toBe("pending");
+    });
+
+    it("aborts a rejection when the approver is demoted mid-flight", async () => {
+      const { proposal } = await (
+        await propose({ kind: "remove_member", uid: ADMIN, reason: "left" })
+      ).json();
+      const restore = demoteApproverInsideTransaction();
+      try {
+        expect((await decide(OWNER, proposal.id, "reject")).status).toBe(403);
+      } finally {
+        restore();
+      }
+      expect(proposals().get(proposal.id).status).toBe("pending");
+      expect(actions()).toEqual(["proposal.created"]);
+      expect(members().has(ADMIN)).toBe(true);
+    });
   });
 });
