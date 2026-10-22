@@ -2,12 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 import json
-import sys
-from types import ModuleType
 from unittest.mock import MagicMock
-
-if 'stripe' not in sys.modules:
-    sys.modules['stripe'] = ModuleType('stripe')
 
 from database import messaging, messaging_albums
 from utils import encryption
