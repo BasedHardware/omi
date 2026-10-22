@@ -1745,6 +1745,18 @@ def _extract_memories_canonical(
         conversation.id,
         replacement_payloads,
     )
+    # Decision work starts only after durable capture. Failure retains the source
+    # and is observable; Dream's paid/allowlist cleanup ramp cannot gate intake.
+    if replacement_payloads and not is_locked:
+        from utils.memory.canonical_consolidation import complete_observation_intake
+
+        complete_observation_intake(
+            uid,
+            memory_ids=[memory.id for memory, *_ in parsed_memories if memory.id],
+            db_client=db_client,
+            now=datetime.now(timezone.utc),
+            run_id=f'observation-intake:{conversation.id}',
+        )
     if llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client):
         record_feature(uid, conversation, 'l1', 'durable')
         conversation.l1_llm_input_hash = l1_digest

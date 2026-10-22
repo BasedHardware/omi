@@ -816,7 +816,9 @@ def test_identical_user_review_is_idempotent_without_corroboration_inflation(mon
     assert second.last_corroborated_at == first.last_corroborated_at
 
 
-def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(monkeypatch, caplog):
+@pytest.mark.parametrize('enabled', [True, False])
+def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(monkeypatch, caplog, enabled):
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'true' if enabled else 'false')
     uid = "uid-expired"
     _set_canonical(monkeypatch, uid)
     db = _Db(uid)
@@ -851,7 +853,9 @@ def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(mon
     )
     db.docs[f"users/{uid}/memory_items/{item.memory_id}"] = item.model_dump(mode="json")
     db.docs[f"users/{uid}/memory_evidence/{evidence.evidence_id}"] = evidence.model_dump(mode="json")
-    assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == [item.memory_id]
+    assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == (
+        [item.memory_id] if enabled else []
+    )
     caplog.set_level("INFO", logger="utils.memory.short_term_promotion")
 
     with pytest.MonkeyPatch.context() as local_patch:
@@ -866,6 +870,12 @@ def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(mon
             run_id="run-expiry",
         )
 
+    if enabled:
+        assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == [item.memory_id]
+        assert report.lifecycle_created_count == 0
+        assert report.lifecycle_terminal_count == 0
+        assert db.docs[f"users/{uid}/memory_items/{item.memory_id}"]["status"] == "active"
+        return
     assert read_canonical_memories(uid, db_client=db, now=NOW) == []
     assert report.lifecycle_created_count == 1
     assert report.lifecycle_terminal_count == 1

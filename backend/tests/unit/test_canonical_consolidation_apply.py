@@ -25,6 +25,7 @@ from tests.unit.memory_import_isolation import (
 )
 
 canonical_consolidation = None
+observation_intake = None
 ConsolidationAgentDecision = None
 apply_consolidation_decision = None
 
@@ -41,6 +42,7 @@ def _consolidation_apply_import_isolation():
 
     module = importlib.import_module("utils.memory.canonical_consolidation")
     globals()["canonical_consolidation"] = module
+    globals()['observation_intake'] = module
     globals()["ConsolidationAgentDecision"] = module.ConsolidationAgentDecision
     globals()["apply_consolidation_decision"] = module.apply_consolidation_decision
     yield
@@ -314,7 +316,8 @@ def test_promotion_and_supersession_share_one_commit_and_remove_old_assertion():
         ("reject", MemoryItemStatus.hidden),
     ],
 )
-def test_nonpromote_routes_are_terminal_archive_outcomes(route: str, expected_status: MemoryItemStatus):
+def test_nonpromote_routes_are_terminal_archive_outcomes(route: str, expected_status: MemoryItemStatus, monkeypatch):
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'false')
     source = _item(f"mem_{route}", "A broad but non-durable observation.")
     db = _db_for_items(source)
     decision = ConsolidationAgentDecision(
@@ -376,7 +379,7 @@ def test_expired_review_is_not_requeued_by_consolidation_replay():
     db.docs[review_path].update({'status': 'expired', 'permitted_uses': []})
     before = {path: dict(row) for path, row in db.docs.items()}
 
-    assert stored.tier == MemoryTier.archive
+    assert stored.tier == MemoryTier.short_term
     _apply(source, decision, db)
 
     assert db.docs == before
@@ -527,3 +530,196 @@ def test_already_processed_required_promote_rebinds_memory_text_to_l2_content():
         item_revision=stored.item_revision,
         promotion=stored.promotion or {},
     )
+
+
+def test_free_owner_observation_gets_receipted_decision_without_dream_membership(monkeypatch):
+    """Post-retirement regression: ordinary processed rows had no route writer."""
+    monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', 'allowlist')
+    monkeypatch.setenv('DREAM_AGENT_UID_ALLOWLIST', '')
+    source = _item('mem_ordinary', 'Enjoys hiking in Seattle.')
+    source.subject_entity_id = 'user'
+    source.promotion = {'source_attribution': {'subject_entity_id': 'user', 'subject_attribution': 'user'}}
+    # Expiry is not a decision; backlogged rows must also reach intake.
+    source.captured_at = NOW - timedelta(days=4)
+    db = _db_for_items(source)
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='ordinary',
+        planner=lambda items: [_promote_decision(items[0])],
+    )
+    stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+    assert report.promoted_memory_ids == [source.memory_id]
+    assert stored.tier == MemoryTier.long_term
+    assert stored.promotion['admission_receipt']
+    assert stored.graph_ready
+
+
+def test_observation_failure_preserves_committed_capture(monkeypatch):
+    source = _item('mem_retry', 'Enjoys hiking.')
+    db = _db_for_items(source)
+    before = dict(db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+
+    def fail(items):
+        raise RuntimeError('synthetic planner unavailable')
+
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='retry',
+        planner=fail,
+    )
+    assert report.failed_memory_ids == [source.memory_id]
+    assert db.docs[f'users/{UID}/memory_items/{source.memory_id}'] == before
+
+
+def test_review_stays_short_term_and_rollback_restores_archive(monkeypatch):
+    for enabled, expected in [('true', MemoryTier.short_term), ('false', MemoryTier.archive)]:
+        monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', enabled)
+        source = _item('mem_review_switch', 'A synthetic observation awaiting confirmation.')
+        db = _db_for_items(source)
+        _apply(source, ConsolidationAgentDecision(source_memory_id=source.memory_id, route='review'), db)
+        stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+        assert stored.tier == expected
+        assert stored.promotion['route'] == 'review'
+
+
+@pytest.mark.parametrize(
+    'field,value',
+    [
+        ('status', MemoryItemStatus.hidden),
+        ('processing_state', ProcessingState.blocked),
+        ('source_state', SourceState.tombstoned),
+    ],
+)
+def test_observation_intake_never_resurrects_fenced_rows(field, value):
+    source = _item('mem_fenced', 'A synthetic observation.')
+    source = source.model_copy(update={field: value})
+    db = _db_for_items(source)
+    canonical_consolidation._read_control_state(UID, db_client=db)
+    before = dict(db.docs)
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='fenced',
+        planner=lambda items: pytest.fail('fenced row reached planner'),
+    )
+    assert not report.decided_memory_ids
+    assert db.docs == before
+
+
+@pytest.mark.parametrize('promotion', [{'is_locked': True}, {'user_review': False}, {'required': True}])
+def test_observation_intake_preserves_locks_rejection_and_explicit_intake(promotion):
+    source = _item('mem_locked', 'A synthetic observation.')
+    source.promotion = promotion
+    db = _db_for_items(source)
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='locked',
+        planner=lambda items: pytest.fail('protected row reached planner'),
+    )
+    assert not report.decided_memory_ids
+
+
+@pytest.mark.parametrize('unsafe', ['partition', 'foreign_evidence', 'unknown_subject', 'supersedes'])
+def test_observation_intake_validates_whole_batch_before_writing(unsafe):
+    source = _item('mem_unsafe', 'A synthetic observation.')
+    db = _db_for_items(source)
+    canonical_consolidation._read_control_state(UID, db_client=db)
+    before = dict(db.docs)
+    decision = _promote_decision(source)
+    if unsafe == 'partition':
+        decisions = []
+    else:
+        changes = {
+            'foreign_evidence': {'evidence_ids': ['foreign']},
+            'unknown_subject': {'subject_entity_id': 'invented'},
+            'supersedes': {'supersedes': ['unseen']},
+        }
+        decisions = [decision.model_copy(update=changes[unsafe])]
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='unsafe',
+        planner=lambda items: decisions,
+    )
+    assert report.failed_memory_ids == [source.memory_id]
+    assert db.docs == before
+
+
+def test_restricted_observation_gets_review_without_provider_call():
+    from unittest.mock import Mock
+
+    source = _item('mem_restricted', 'Sensitive fixture content.')
+    source.sensitivity_labels = ['credential']
+    model = Mock(side_effect=AssertionError('restricted evidence reached provider'))
+    decisions = observation_intake.plan_observation_intake([source], llm=model)
+    assert [d.route for d in decisions] == ['review']
+    model.invoke.assert_not_called()
+
+
+@pytest.mark.parametrize('changed_field', ['source_generation', 'writer_epoch', 'writer_mode'])
+def test_observation_generation_race_keeps_source_undecided(changed_field):
+    source = _item('mem_generation', 'Enjoys hiking in Seattle.')
+    source.subject_entity_id = 'user'
+    source.promotion = {'source_attribution': {'subject_entity_id': 'user', 'subject_attribution': 'user'}}
+    db = _db_for_items(source)
+
+    def race(items):
+        state = db.docs[f'users/{UID}/memory_state/apply_control']
+        if changed_field == 'writer_mode':
+            state[changed_field] = 'ledger'
+        else:
+            state[changed_field] += 1
+        return [_promote_decision(items[0])]
+
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[source.memory_id],
+        db_client=db,
+        now=NOW,
+        run_id='generation',
+        planner=race,
+    )
+    assert report.failed_memory_ids == [source.memory_id]
+    stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+    assert stored.tier == MemoryTier.short_term
+    assert not (stored.promotion or {}).get('route')
+
+
+@pytest.mark.asyncio
+async def test_observation_recovery_separates_db_and_model_steps(monkeypatch):
+    from utils import executors
+
+    source = _item('mem_recovery', 'Enjoys hiking in Seattle.')
+    source.subject_entity_id = 'user'
+    source.promotion = {'source_attribution': {'subject_entity_id': 'user', 'subject_attribution': 'user'}}
+    db = _db_for_items(source)
+    pools = []
+
+    async def blocking(pool, fn, *args, **kwargs):
+        pools.append(pool)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(executors, 'run_blocking', blocking)
+    monkeypatch.setattr(observation_intake, '_pending_observation_ids', lambda *args, **kwargs: [source.memory_id])
+    monkeypatch.setattr(observation_intake, 'plan_observation_intake', lambda items: [_promote_decision(items[0])])
+    report = await observation_intake.complete_pending_observation_intake(
+        UID,
+        db_client=db,
+        now=NOW,
+        run_id='recovery',
+    )
+    assert report.promoted_memory_ids == [source.memory_id]
+    assert pools == [executors.db_executor, executors.db_executor, executors.llm_executor, executors.db_executor]
