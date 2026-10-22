@@ -10,6 +10,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from database import users as users_db
 
 from config.refactor_modes import serving_for, uid_digest
 from models.speaker_evidence import SpeakerEvidence, VoiceCluster, SpeakerCandidate, ClusterSimilarity
@@ -34,8 +35,12 @@ def isolated_flags(monkeypatch):
         monkeypatch.delenv(flag + '_SERVE_PERCENT', raising=False)
         monkeypatch.delenv(flag + '_SERVE_UID_SHA256S', raising=False)
     monkeypatch.setattr(packet, 'get_evidence', lambda *_args: None)
-    monkeypatch.setattr(packet, 'conversation_people_names', lambda *_args: FIXTURES['contact_spelling']['people'])
-    monkeypatch.setattr(output_language.users_db, 'get_user_language_preference', lambda *_args: 'en')
+    from utils.llm import known_spellings
+
+    monkeypatch.setattr(
+        known_spellings, 'conversation_people_names', lambda *_args: FIXTURES['contact_spelling']['people']
+    )
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: 'en')
 
 
 def prefix(**kwargs):
@@ -71,7 +76,7 @@ def test_local_capture_time_is_converted_in_code(tz, expected):
 
 @pytest.mark.parametrize('preference,conversation,expected', [('en', 'zh', 'en'), ('', 'fr', 'fr'), (None, None, 'en')])
 def test_language_preference_precedes_noisy_conversation_language(monkeypatch, preference, conversation, expected):
-    monkeypatch.setattr(output_language.users_db, 'get_user_language_preference', lambda *_args: preference)
+    monkeypatch.setattr(users_db, 'get_user_language_preference', lambda *_args: preference)
     assert output_language.resolve_output_language('synthetic-account', conversation) == expected
 
 

@@ -1,5 +1,6 @@
 """Finalize adapter: record evidence once, compare in shadow, project in cohort."""
 
+from utils.observability.reasons import ReasonFamily, reason_label, RefactorShadowOutcome
 from contextvars import ContextVar
 from dataclasses import dataclass, field
 import logging
@@ -61,7 +62,8 @@ def _roster(uid: str, conversation: Any) -> list[dict]:
     try:
         from utils.episodes.boundaries import boundary_roster
 
-        candidates.extend({'name': person.name} for person in boundary_roster(uid, conversation.id))
+        times = {name: getattr(conversation, name, None) for name in ('started_at', 'finished_at', 'last_speech_at')}
+        candidates.extend({'name': person.name} for person in boundary_roster(uid, conversation.id, conversation=times))
     except Exception as error:
         logger.warning(
             'event=refactor_shadow lane=L2 check=boundary_roster outcome=error exception_type=%s', type(error).__name__
@@ -114,7 +116,7 @@ def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
                 )
             ).lower()
         ).inc()
-        AGREEMENT.labels(outcome=outcome).inc()
+        AGREEMENT.labels(outcome=reason_label(ReasonFamily.PARITY, outcome, RefactorShadowOutcome)).inc()
         logger.info('event=refactor_shadow lane=L2 check=project_labels outcome=%s', outcome)
         if serving_for(FLAG, uid) and receipt is not None:
             for segment in conversation.transcript_segments:

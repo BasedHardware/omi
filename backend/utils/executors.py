@@ -37,7 +37,7 @@ import logging
 import queue
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar
+from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cast
 
 from prometheus_client import REGISTRY, Gauge
 from config.occasion_conversations import LIFECYCLE_V2_MODE_ENV
@@ -66,13 +66,17 @@ _TASKS = frozenset(
 )
 
 
-def _gauge(name: str, description: str):
-    existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
-    if existing is not None:
-        if not isinstance(existing, Gauge) or getattr(existing, '_labelnames', None) != ('executor', 'task'):
+def _gauge(name: str, description: str) -> Gauge:
+    try:
+        return Gauge(name, description, ['executor', 'task'])
+    except ValueError:
+        existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
+        if getattr(existing, '_type', None) != 'gauge' or getattr(existing, '_labelnames', None) != (
+            'executor',
+            'task',
+        ):
             raise ValueError(f'executor metric {name} already has a different shape')
-        return existing
-    return Gauge(name, description, ['executor', 'task'])
+        return cast(Gauge, existing)
 
 
 EXECUTOR_ACTIVE = _gauge('omi_executor_task_active', 'Active worker tasks by bounded task kind.')

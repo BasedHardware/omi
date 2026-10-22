@@ -125,7 +125,9 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
             logger.error('listen BYOK ownership reclaim failed rows=%s', recovery['errors'])
     except Exception:
         logger.exception('listen BYOK ownership reclaim scan failed')
-    dispatch_enabled = is_listen_finalization_dispatch_enabled()
+    if not is_listen_finalization_dispatch_enabled():
+        _publish_job_metrics(firestore_client=firestore_client)
+        return result
 
     stale_after = jobs_db.get_finalization_reconcile_stale_after()
     try:
@@ -149,9 +151,6 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
             except Exception:
                 logger.warning('event=conversation_merge outcome=reconciliation_error')
                 result['enqueue_failed'] += 1
-            continue
-        if not dispatch_enabled:
-            result['skipped'] += 1
             continue
         if candidate.get('kind') == 'listen_quiet_check':
             try:

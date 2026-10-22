@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
-from config.refactor_modes import shadow_or_serve
+from config.refactor_modes import shadow_or_serve, serving_for
 from models.capture_coverage import CaptureCommittedEvent, CaptureKey, CoverageRecord, FrameRange
 from utils.committed_capture import PROOF_KIND
 from utils.capture_evidence import unknown_envelope
@@ -59,6 +59,8 @@ def record_committed(
             observe('live_coverage', None)
             continue
         observe('live_coverage', True)
+        if not serving_for('CAPTURE_COVERAGE_MODE', uid):
+            continue
         events.extend(
             CaptureCommittedEvent(
                 conversation_id=conversation_id,
@@ -86,8 +88,9 @@ async def publish_committed(host: Any, conversation_id: str, snapshot: dict[str,
         recording_session_id=getattr(host, 'recording_session_id', None),
         device_id=getattr(getattr(host, 'client_device_context', None), 'client_device_id', None),
     )
-    for event in events:
-        host.send_event(event)
+    if serving_for('CAPTURE_COVERAGE_MODE', host.request.uid):
+        for event in events:
+            host.send_event(event)
 
 
 def committed_snapshot(host: Any, conversation_id: str, segments) -> dict:

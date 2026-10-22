@@ -31,8 +31,10 @@ def snapshot():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('durable', [False, True])
 @pytest.mark.parametrize('lifecycle_mode', ['shadow', 'serve'])
-async def test_ack_only_after_successful_durable_segment_write(monkeypatch, durable, lifecycle_mode):
+@pytest.mark.parametrize('capture_mode', ['shadow', 'serve'])
+async def test_ack_only_after_successful_durable_segment_write(monkeypatch, durable, lifecycle_mode, capture_mode):
     monkeypatch.setenv('LIFECYCLE_V2_MODE', lifecycle_mode)
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', capture_mode)
     order = []
     segment = TranscriptSegment(id='segment-test', text='', speaker='SPEAKER_00', is_user=False, start=0, end=1)
 
@@ -65,7 +67,9 @@ async def test_ack_only_after_successful_durable_segment_write(monkeypatch, dura
     processor.cache = transcripts.ConversationCache(None)
     current = SimpleNamespace(id='conversation-test', transcript_segments=[])
     await processor._update_live_conversation(current, [segment], [], datetime.now(timezone.utc), None)
-    expected = ['durable', 'ledger', 'event'] if durable else ['durable']
+    expected = ['durable', 'ledger'] if durable else ['durable']
+    if durable and capture_mode == 'serve':
+        expected.append('event')
     if durable and lifecycle_mode == 'shadow':
         expected.append('legacy_timestamp')
     assert order == expected
@@ -88,11 +92,13 @@ def test_committed_frame_ranges_are_recorded_before_events(monkeypatch, mode):
     monkeypatch.setitem(sys.modules, 'utils.capture.coverage', authority)
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', mode)
     events = coverage.record_committed('test-account', 'conversation-test', snapshot())
-    assert len(records) == len(events) == 1
+    assert len(records) == 1
+    assert len(events) == (1 if mode == 'serve' else 0)
     key, record = records[0]
     assert key.channel == 'mono' and key.clock_epoch == '0'
     assert [(r.start, r.end) for r in record.ranges] == [(10, 15)]
-    assert (events[0].source_start, events[0].source_end) == (10, 15)
+    if events:
+        assert (events[0].source_start, events[0].source_end) == (10, 15)
     authority.record = Mock(side_effect=RuntimeError('fixture unavailable'))
     assert coverage.record_committed('test-account', 'conversation-test', snapshot()) == []
 

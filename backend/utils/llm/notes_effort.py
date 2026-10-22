@@ -2,7 +2,6 @@
 
 from typing import Any
 from utils.llm.notes_observability import current_run
-from utils.observability.fallback import record_fallback
 
 
 def bind_notes_effort(model: Any, effort: str) -> Any:
@@ -19,6 +18,8 @@ def bind_notes_effort(model: Any, effort: str) -> Any:
         if run is not None:
             run.effort = 'default'
             run.violations.add('effort_unsupported_model')
+        from utils.observability.fallback import record_fallback
+
         record_fallback(
             component='conversation_notes',
             from_mode='episode_effort',

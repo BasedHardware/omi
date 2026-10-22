@@ -350,3 +350,14 @@ def test_provider_manifest_does_not_change_shadow_targeting(identity, monkeypatc
         item, {'result': {'result_uri': 'fixture'}}, binding, finish=False, policy=ProjectionPolicy()
     )
     projector.store.session.return_value.persist.assert_called_once()
+
+
+@pytest.mark.parametrize('mode', ['off', 'shadow', 'serve', 'invalid'])
+def test_optional_sync_identity_preserves_unpositioned_legacy_payload(monkeypatch, mode):
+    monkeypatch.setenv(coverage.FLAG, mode)
+    incoming = {'id': 'unpositioned'}
+    sync_coverage.annotate_identity(incoming)
+    assert incoming == {'id': 'unpositioned'}
+    positioned = {'capture_evidence': {'capability': 'source_position'}}
+    sync_coverage.annotate_identity(positioned)
+    assert positioned == {'capture_evidence': {'capability': 'source_position'}}

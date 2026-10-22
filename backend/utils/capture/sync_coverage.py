@@ -131,8 +131,14 @@ async def apply_sync_coverage(
 
 
 def annotate_identity(incoming, device_id=None, recording_session_id=None):
-    if refactor_modes.shadow_or_serve(coverage.FLAG):
-        incoming['capture_evidence'].update(client_device_id=device_id, recording_session_id=recording_session_id)
+    evidence = incoming.get('capture_evidence')
+    if refactor_modes.shadow_or_serve(coverage.FLAG) and isinstance(evidence, dict):
+        # Unpositioned legacy uploads have no envelope. Missing optional identity
+        # must not turn a successful upload into an exception or rewrite its row.
+        if device_id:
+            evidence['client_device_id'] = device_id
+        if recording_session_id:
+            evidence['recording_session_id'] = recording_session_id
 
 
 def covering_target(uid, source_position_map, path, *, device_id=None, recording_session_id=None):

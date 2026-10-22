@@ -14,7 +14,6 @@ from zoneinfo import ZoneInfo
 
 from config.refactor_modes import serving_for, shadow_or_serve
 from models.speaker_evidence import SpeakerEvidence
-from utils.llm.known_spellings import conversation_people_names
 from utils.conversations.wake_word import WAKE_WORD_PROMPT_RULES
 from utils.llm.conversation_notes_prompts import conversation_note_density
 from utils.llm.notes_lengths import length_guide
@@ -160,7 +159,12 @@ def _select_packet(
         inputs['output_language_code'] = legacy.get('response_language') or inputs.get('language_code') or 'en'
     if 'people' not in inputs:
         try:
-            inputs['people'] = conversation_people_names(uid) if uid and serving_for(FLAG, uid) else []
+            if uid and serving_for(FLAG, uid):
+                from utils.llm.known_spellings import conversation_people_names
+
+                inputs['people'] = conversation_people_names(uid)
+            else:
+                inputs['people'] = []
         except Exception:
             inputs['people'] = []
             shadow('contact_spellings', 'error')

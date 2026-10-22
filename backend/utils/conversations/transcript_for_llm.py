@@ -22,8 +22,6 @@ from typing import Any, Iterable, List, Optional, Protocol, Sequence
 
 from config.refactor_modes import serving_for
 from database.auth import get_user_name
-from utils.llm.notes_language_inputs import in_profile_segments
-from utils.llm.notes_packet import get_evidence
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
@@ -283,6 +281,9 @@ def conversation_transcript_and_speaker_map(
     profile_name = get_user_name(uid, use_default=False)
     people_map = {person.id: person.name for person in people} if people else {}
     if serving_for('NOTES_PACKET_V2_MODE', uid):
+        from utils.llm.notes_packet import get_evidence
+        from utils.llm.notes_language_inputs import in_profile_segments
+
         return render_cluster_transcript(
             in_profile_segments(segments),
             names=people_map,

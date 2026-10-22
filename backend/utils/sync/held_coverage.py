@@ -1,5 +1,6 @@
 """Read-only S1 proof for a held WAV, never an inference from its capture clock."""
 
+from utils.observability.reasons import ReasonFamily, reason_label, CaptureCoverageOutcome
 from dataclasses import dataclass
 import wave
 from typing import Any
@@ -70,7 +71,9 @@ def observe(decision: HeldProof, origin: str, outcome: str) -> None:
     ]
     if seconds > 0:
         try:
-            SECONDS.labels(origin=origin, outcome=outcome).inc(seconds)
+            SECONDS.labels(
+                origin=origin, outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, CaptureCoverageOutcome)
+            ).inc(seconds)
         except Exception:
             pass
 

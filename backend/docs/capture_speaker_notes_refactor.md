@@ -79,3 +79,14 @@ false/unknown; custody release requires an explicit true opt-in. No serving coho
 is set in a manifest. Rollback disables new admission, while durable lifecycle jobs
 continue reconciling. Runtime TTL activation, PostHog row configuration and cohort
 expansion are separate operator work.
+
+The reviewed TTL declaration is `backend/deploy/from-segments-retention.json`.
+A credential-free plan is available with:
+
+```sh
+python backend/scripts/batch_pipeline_ttl.py --project demo-refactor-integration \
+  --policy backend/deploy/from-segments-retention.json
+```
+
+The default CLI policy remains the existing batch-completion policy; explicitly
+select the staging declaration for its separately authorized apply.

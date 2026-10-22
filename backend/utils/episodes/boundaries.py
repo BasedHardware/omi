@@ -116,13 +116,17 @@ def merge_allowed(uid: str, left: Mapping[str, Any], right: Mapping[str, Any], *
     return allowed if serving_for(EPISODE_BOUNDARIES_MODE_ENV, uid) else True
 
 
-def boundary_roster(uid: str, conversation_id: str) -> list[BoundaryParticipant]:
+def boundary_roster(
+    uid: str, conversation_id: str, *, conversation: Mapping[str, Any] | None = None
+) -> list[BoundaryParticipant]:
     """Roster candidates only; L2 owns identity probabilities and projections."""
     if not shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
         return []
-    from database.conversations import get_conversation
+    if conversation is None:
+        from database.conversations import get_conversation
 
-    row = get_conversation(uid, conversation_id)
+        conversation = get_conversation(uid, conversation_id)
+    row = conversation
     if not row:
         return []
     start = utc(row.get('started_at'))

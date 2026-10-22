@@ -6,6 +6,8 @@ transcriptions are still fenced/deduplicated by the assignment transaction.
 
 from __future__ import annotations
 
+from utils.observability.reasons import ReasonFamily, reason_label, CaptureCoverageOutcome
+
 from config import refactor_modes
 from database import capture_coverage as store
 from models.capture_coverage import AdmitResult, CaptureKey, CoverageOrigin, CoverageRecord, FrameRange
@@ -59,7 +61,11 @@ def query(uid: str, key: CaptureKey, ranges: list[FrameRange]) -> AdmitResult:
 def admit(uid: str, key: CaptureKey, ranges: list[FrameRange], *, origin: CoverageOrigin) -> AdmitResult:
     result = query(uid, key, ranges)
     outcome = 'covered' if result.covered and not result.uncovered else 'partial' if result.covered else 'uncovered'
-    ADMIT.labels(origin=origin, basis=result.basis, outcome=outcome).inc()
+    ADMIT.labels(
+        origin=origin,
+        basis=result.basis,
+        outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, CaptureCoverageOutcome),
+    ).inc()
     return result
 
 

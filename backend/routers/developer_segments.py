@@ -29,6 +29,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 CONTINUATION_FLAG_KEY = 'CLIENTS_FROM_SEGMENTS_CHUNKS_MODE'
+CONTINUATION_PERCENT_ENV = 'CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_PERCENT'
+CONTINUATION_DIGESTS_ENV = 'CLIENTS_FROM_SEGMENTS_CHUNKS_MODE_SERVE_UID_SHA256S'
 STAGING_TTL = timedelta(days=7)
 SHADOW = Counter('omi_clients_refactor_shadow_total', 'L5 bounded shadow comparisons', ['check', 'outcome'])
 

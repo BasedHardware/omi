@@ -212,7 +212,9 @@ def test_boundary_roster_reaches_evidence_as_prior_and_never_a_voice_label(monke
     from models.boundary_evidence import BoundaryParticipant
     from utils.episodes import boundaries
 
-    monkeypatch.setattr(boundaries, 'boundary_roster', lambda *args: [BoundaryParticipant(name='Fixture Attendee')])
+    monkeypatch.setattr(
+        boundaries, 'boundary_roster', lambda *args, **kwargs: [BoundaryParticipant(name='Fixture Attendee')]
+    )
     candidates = processing._roster(uuid.uuid4().hex, SimpleNamespace(id='fixture', external_data={}))
     record = evidence.build_evidence([segment('a')], roster=candidates)
     roster = [candidate for voice in record.clusters for candidate in voice.candidates if candidate.source == 'roster']

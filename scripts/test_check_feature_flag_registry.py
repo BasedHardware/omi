@@ -123,12 +123,17 @@ class RegistryFixture(unittest.TestCase):
         )
 
     def errors(self) -> list[str]:
-        return check(self.root, check_render=False)[0]
+        return check(self.root, check_render=False, as_of=date(2026, 10, 1))[0]
 
     def test_kill_after_readout_is_a_reviewed_nonterminal_experiment(self) -> None:
         self.write("backend/docs/experiment.md", "Pre-registered readout")
-        row = flag(lifecycle="experiment", decision="kill_after_readout", terminal="undecided",
-                   review_by="2026-10-30", prereg="backend/docs/experiment.md")
+        row = flag(
+            lifecycle="experiment",
+            decision="kill_after_readout",
+            terminal="undecided",
+            review_by="2026-10-30",
+            prereg="backend/docs/experiment.md",
+        )
         self.assertEqual(validate_registry({"flags": [row], "ignore": [], "retired": []}, root=self.root), [])
         for changes in ({"terminal": "off"}, {"lifecycle": "rollout"}):
             errors = validate_registry({"flags": [{**row, **changes}], "ignore": [], "retired": []}, root=self.root)
@@ -181,12 +186,20 @@ class RegistryFixture(unittest.TestCase):
         self.assertIn("web/admin/src/flags.ts:1", errors)
 
     def test_dart_kill_switch_constant_is_cataloged(self) -> None:
-        self.write("app/lib/services/experiments/watch_copy_dedupe.dart",
-                   "class Policy { static const killSwitchFlag = 'watch_copy_dedupe_off'; }\n")
+        self.write(
+            "app/lib/services/experiments/watch_copy_dedupe.dart",
+            "class Policy { static const killSwitchFlag = 'watch_copy_dedupe_off'; }\n",
+        )
         self.assertIn("unregistered feature flag: watch_copy_dedupe_off", "\n".join(self.errors()))
-        kill = flag("watch_copy_dedupe_off", kind="posthog", surfaces=["mobile"],
-                    lifecycle="ops_kill", decision="keep", terminal="keep",
-                    posthog={"row": "expected", "role": "kill"})
+        kill = flag(
+            "watch_copy_dedupe_off",
+            kind="posthog",
+            surfaces=["mobile"],
+            lifecycle="ops_kill",
+            decision="keep",
+            terminal="keep",
+            posthog={"row": "expected", "role": "kill"},
+        )
         kill.pop("review_by")
         self.write("config/feature-flags.yaml", self.yaml([flag(), kill]))
         self.assertEqual([], self.errors())
@@ -424,7 +437,7 @@ class RegistryFixture(unittest.TestCase):
             ".github/actions/deploy/action.yml",
             'run: gcloud run services update backend-listen --update-env-vars "EXAMPLE_PERCENT=10,EXAMPLE_UID_ALLOWLIST=uid"\n',
         )
-        errors, _ = check(self.root, check_render=False)
+        errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 1))
         self.assertIn("duplicate ramp/allowlist declaration: EXAMPLE_PERCENT", "\n".join(errors))
         self.assertIn("duplicate ramp/allowlist declaration: EXAMPLE_UID_ALLOWLIST", "\n".join(errors))
 
@@ -438,7 +451,7 @@ class RegistryFixture(unittest.TestCase):
 
     def test_rendered_doc_mismatch_requires_regeneration(self) -> None:
         self.write("backend/docs/feature-flag-registry.md", "<!-- feature-flag-registry as-of: 2026-09-24 -->\nstale\n")
-        self.assertIn("rendered doc drift", "\n".join(check(self.root)[0]))
+        self.assertIn("rendered doc drift", "\n".join(check(self.root, as_of=date(2026, 10, 1))[0]))
 
     def test_renderer_resolves_shared_cohort_mapping(self) -> None:
         tree = _parse_mapping(
@@ -554,7 +567,7 @@ class RegistryFixture(unittest.TestCase):
         )
         registry = load_registry(self.root / "config/feature-flags.yaml")
         self.write("backend/docs/feature-flag-registry.md", render(self.root, registry, date(2026, 9, 24)))
-        self.assertEqual(check(self.root)[0], [])
+        self.assertEqual(check(self.root, as_of=date(2026, 10, 1))[0], [])
 
     def test_retired_name_must_not_be_read_and_is_exempt_from_stale(self) -> None:
         old = {
