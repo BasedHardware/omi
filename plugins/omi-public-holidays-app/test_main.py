@@ -29,6 +29,11 @@ def _install_dependency_stubs():
     class HTTPError(Exception):
         pass
 
+    class HTTPStatusError(HTTPError):
+        def __init__(self, message, request=None, response=None):
+            super().__init__(message)
+            self.response = response
+
     class AsyncClient:
         def __init__(self, *args, **kwargs):
             self.is_closed = False
@@ -37,6 +42,7 @@ def _install_dependency_stubs():
             raise AssertionError("tests must stub the HTTP response")
 
     httpx.HTTPError = HTTPError
+    httpx.HTTPStatusError = HTTPStatusError
     httpx.AsyncClient = AsyncClient
     sys.modules["httpx"] = httpx
 
@@ -322,6 +328,49 @@ class RequestJsonTests(unittest.IsolatedAsyncioTestCase):
             await main._request_json("/NextPublicHolidays/US")
         self.assertEqual(len(_RecordingClient.instances), 2)
         self.assertIs(main.app.state.http_client, _RecordingClient.instances[-1])
+
+
+
+class FixRegressionTests(unittest.IsolatedAsyncioTestCase):
+    def test_next_holiday_default_limit_is_eight(self):
+        req = main.NextHolidayRequest(country_code="US")
+        self.assertEqual(req.limit, 8)
+
+    async def test_omi_tools_manifest_year_not_required(self):
+        manifest = await main.omi_tools()
+        tools = {t["name"]: t for t in manifest["tools"]}
+        self.assertEqual(tools["get_public_holidays"]["parameters"]["required"], ["country_code"])
+        self.assertEqual(tools["get_long_weekends"]["parameters"]["required"], ["country_code"])
+        self.assertIn("defaults to the current UTC year", manifest["tools"][0]["parameters"]["properties"]["year"]["description"])
+
+    async def test_request_json_maps_404_error(self):
+        class _Status404Client:
+            is_closed = False
+            async def get(self, url):
+                resp = _FakeResponse()
+                resp.status_code = 404
+                resp.raise_for_status = lambda: (_ for _ in ()).throw(main.httpx.HTTPStatusError("404", response=resp))
+                return resp
+
+        main.app.state = types.SimpleNamespace(http_client=_Status404Client())
+        with self.assertRaises(main.httpx.HTTPError) as ctx:
+            await main._request_json("/NextPublicHolidays/XX", country_code="XX")
+        self.assertIn("unknown country code XX; call list_supported_countries for valid codes", str(ctx.exception))
+
+    async def test_request_json_maps_400_error(self):
+        class _Status400Client:
+            is_closed = False
+            async def get(self, url):
+                resp = _FakeResponse()
+                resp.status_code = 400
+                resp.text = '"The specified year 1975 is not supported."'
+                resp.raise_for_status = lambda: (_ for _ in ()).throw(main.httpx.HTTPStatusError("400", response=resp))
+                return resp
+
+        main.app.state = types.SimpleNamespace(http_client=_Status400Client())
+        with self.assertRaises(main.httpx.HTTPError) as ctx:
+            await main._request_json("/PublicHolidays/1975/US", country_code="US")
+        self.assertIn("invalid request parameters: The specified year 1975 is not supported.", str(ctx.exception))
 
 
 if __name__ == "__main__":
