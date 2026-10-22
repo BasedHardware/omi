@@ -526,6 +526,45 @@ def test_processing_admission_guard_still_rolls_back_a_byok_account_state_halt(m
     assert 'credit balance' not in caplog.text
 
 
+def test_processing_admission_guard_bounds_the_rollback_failure_log_during_a_byok_halt(monkeypatch, caplog):
+    """When the typed BYOK halt coincides with a rollback failure (e.g. a
+    Firestore outage), the nested rollback log must also stay bounded: an
+    exception traceback there formats the rollback error's implicit
+    ``__context__`` chain back to the original HTTPException and its provider
+    error body — the exact body this guard exists to keep out of logs.
+    """
+    _quiet_heartbeat(monkeypatch)
+    caplog.set_level(logging.WARNING)
+
+    def failing_rollback(uid, conversation_id):
+        raise RuntimeError('rollback store is down')
+
+    monkeypatch.setattr(lifecycle_service, 'rollback_processing_admission', failing_rollback)
+
+    with pytest.raises(HTTPException):
+        with lifecycle_service.processing_admission_guard('uid', 'conversation'):
+            _raise_byok_credit_exhaustion_halt()
+
+    rollback_records = [
+        record
+        for record in caplog.records
+        if record.name == lifecycle_service.logger.name
+        and 'processing admission rollback failed' in record.getMessage()
+    ]
+    (rollback_record,) = rollback_records
+    assert rollback_record.levelno == logging.WARNING
+    assert rollback_record.exc_info is None
+    assert 'rollback store is down' in rollback_record.getMessage()
+
+    records = _guard_failure_records(caplog)
+    assert all(record.levelno == logging.WARNING for record in records)
+    assert all(record.exc_info is None for record in records)
+    assert 'rolled_back=False' in caplog.text
+    assert 'credit balance' not in caplog.text
+    assert 'Traceback' not in caplog.text
+    assert 'BadRequestError' not in caplog.text
+
+
 def test_processing_admission_guard_keeps_the_traceback_for_unexpected_failures(monkeypatch, caplog):
     """Every other failure is still a processor fault and keeps its full traceback."""
     _quiet_heartbeat(monkeypatch)

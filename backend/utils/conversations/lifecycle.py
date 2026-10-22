@@ -410,8 +410,18 @@ def processing_admission_guard(uid: str, conversation_id: str, *, rollback_on_fa
         if rollback_on_failure:
             try:
                 rolled_back = rollback_processing_admission(uid, conversation_id)
-            except Exception:
-                logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
+            except Exception as rollback_error:
+                # Same bounded-class selection: while an account-state halt is
+                # being handled, an exception traceback here would format the
+                # rollback error's implicit __context__ chain back to the
+                # original HTTPException and its provider error body.
+                log_failure(
+                    'processing admission rollback failed uid=%s conversation=%s rollback_error=%s: %s',
+                    uid,
+                    conversation_id,
+                    type(rollback_error).__name__,
+                    rollback_error,
+                )
                 rolled_back = False
             log_failure(
                 'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
