@@ -42,7 +42,9 @@ LOCK="gs://${PROJECT}-staging-batch/locks/deploy"
 BUILD_SOURCE_DIR="gs://${PROJECT}-staging-batch/cloudbuild/source"
 BUILDER_SA="projects/${PROJECT}/serviceAccounts/staging-builder@${PROJECT}.iam.gserviceaccount.com"
 IMAGE_REPO="us-central1-docker.pkg.dev/${PROJECT}/staging"
-INTEGRATION_REF=origin/integration/legacy-retire
+# Trunk-only since M3 (10-21, ruling 749906): integration/legacy-retire merged into main and was deleted.
+STAGING_BASE_BRANCH="${STAGING_DEPLOY_BASE_BRANCH:-main}"
+INTEGRATION_REF="origin/${STAGING_BASE_BRANCH}"
 ALL_SERVICES=(backend backend-sync backend-sync-backfill backend-integration)
 REPO_ROOT="${STAGING_DEPLOY_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
 # bash reads a script as it runs; run from a private copy so edits to the checkout cannot mix versions.
@@ -194,10 +196,10 @@ fi
 
 [[ -n "$SHA" ]] || die "usage: deploy.sh <sha> [...]"
 cd "$REPO_ROOT"
-GIT_SSH_COMMAND="ssh -4" git fetch -q origin integration/legacy-retire || die "fetch integration failed"
+GIT_SSH_COMMAND="ssh -4" git fetch -q origin "$STAGING_BASE_BRANCH" || die "fetch $STAGING_BASE_BRANCH failed"
 SHA="$(git rev-parse --verify "${SHA}^{commit}")"
 if [[ "$ALLOW_NON_INTEGRATION" != 1 ]] && ! git merge-base --is-ancestor "$SHA" "$INTEGRATION_REF"; then
-  die "$SHA is not on $INTEGRATION_REF (staging deploys integration SHAs; --allow-non-integration for a lane rehearsal)"
+  die "$SHA is not on $INTEGRATION_REF (staging deploys $STAGING_BASE_BRANCH SHAs; --allow-non-integration for a lane rehearsal)"
 fi
 TREE="$(git rev-parse "${SHA}^{tree}")"
 SHORT="${SHA:0:12}"
