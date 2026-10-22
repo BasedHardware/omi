@@ -45,7 +45,9 @@ def summary_read_payload(row: dict) -> dict:
     learned = list(row.get('memories_learned') or [])
     actions = list(row.get('action_items') or [])
     result['status'] = row.get('status') or 'generated'
-    result['generated_at'] = row.get('generated_at') or row.get('created_at')
+    # V4 persists stubs as real rows. Their creation time is not a successful
+    # generation time; only legacy successful rows lack this field entirely.
+    result['generated_at'] = row.get('generated_at', row.get('created_at')) if result['status'] == 'generated' else None
     result['memories_learned_count'] = len(learned)
     result['memories_learned_coverage'] = row.get('memories_learned_coverage') or (
         'legacy_review_selection; coverage_unknown; not all stored memories'
