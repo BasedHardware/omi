@@ -588,7 +588,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
 
     final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final eligibleWals = missingWals.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)).toList();
+    final eligibleWals = missingWals
+        .where((wal) => !wal.holdForUser && (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)))
+        .toList();
     final hadEligibleWals = eligibleWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
 
