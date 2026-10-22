@@ -463,32 +463,20 @@ def test_get_memories_advertises_and_executes_default_limit_20():
     assert result['scanned_count'] == 0
 
 
-def test_get_memories_created_desc_scan_is_capped_for_hosted_mcp():
+def test_get_memories_created_desc_scan_never_claims_a_complete_capped_sort():
     service = MagicMock()
-
-    def _read(_uid, *, limit, offset):
-        return [
-            SimpleNamespace(
-                model_dump=lambda mode, memory_id=offset + index: {
-                    'id': f'memory-{memory_id}',
-                    'content': 'Durable fact',
-                }
-            )
-            for index in range(limit)
-        ]
-
-    service.read.side_effect = _read
+    service.read.side_effect = lambda _uid, *, limit, offset: [
+        SimpleNamespace(model_dump=lambda mode: {'id': 'synthetic', 'content': 'Fact'}) for _ in range(limit)
+    ]
     with (
         patch.object(
             sse_memories, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
         ),
         patch.object(sse_memories, 'MemoryService', return_value=service),
+        pytest.raises(sse.ToolExecutionError, match='memory_scan_incomplete'),
     ):
-        result = sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
-
-    assert result['scanned_count'] == 200
-    assert result['scan_truncated'] is True
-    assert service.read.call_count == 2
+        sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+    assert service.read.call_count == 50
 
 
 def test_get_memories_locked_null_content_does_not_crash():
@@ -1105,7 +1093,7 @@ class TestScreenActivity:
         assert result == [
             {
                 'id': 's1',
-                'timestamp': '2026-06-11 10:00:00.000',
+                'timestamp': '2026-06-11T10:00:00+00:00',
                 'app_name': 'Cursor',
                 'window_title': 'mcp.py',
                 'ocr_text': 'def foo',

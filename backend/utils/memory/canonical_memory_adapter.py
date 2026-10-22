@@ -849,6 +849,7 @@ def read_canonical_scan_page(
     budget: Optional[ListReadBudget] = None,
     as_of: Optional[datetime] = None,
     item_filter: Optional[Callable[[MemoryItem], bool]] = None,
+    candidate_snapshots: Optional[List[Any]] = None,
 ) -> Tuple[List[CanonicalScanSlot], bool]:
     """Read one bounded canonical raw scan page via Firestore keyset order.
 
@@ -917,7 +918,7 @@ def read_canonical_scan_page(
     interrupted = False
     snapshots: List[Any] = []
     incomplete_boundaries: List[Optional[Tuple[int, int, str]]] = []
-    for query in queries:
+    for query in ([] if candidate_snapshots is not None else queries):
         query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__')
         if start_after is not None:
             cursor_time, cursor_memory_id = start_after
@@ -936,7 +937,9 @@ def read_canonical_scan_page(
             interrupted = True
             incomplete_boundaries.append(snapshot_key(branch[-1]) if branch else None)
         snapshots.extend(branch)
-    if len(queries) > 1:
+    if candidate_snapshots is not None:
+        snapshots = list(candidate_snapshots)
+    if candidate_snapshots is None and len(queries) > 1:
         snapshots = list({snapshot.id: snapshot for snapshot in snapshots}.values())
         snapshots.sort(key=snapshot_key)
     # Only emit a newest-first prefix proven by *both* branch frontiers.

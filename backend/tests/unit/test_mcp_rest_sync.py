@@ -567,6 +567,7 @@ class TestRestListCursorContract:
         assert [i["id"] for i in body] == ["a1"]
 
     def test_chat_screen_and_daily_summaries_stay_arrays(self, monkeypatch, client):
+        monkeypatch.setattr(rest.mcp_other_handlers.daily_summaries_db, "get_day_recording_count", lambda *a, **k: 137)
         monkeypatch.setattr(
             rest.mcp_other_handlers.chat_db,
             "get_messages",

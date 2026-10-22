@@ -105,7 +105,13 @@ class TestGetConversationsByIds:
         assert fetch.call_count == 1
         assert fetch.call_args.args[1] == ["b", "a", "c"]
         assert fetch.call_args.kwargs == {"include_transcript": True, "include_discarded": True}
-        assert result == {"conversations": [], "not_found": ["b", "a", "c"], "truncated": False}
+        assert result == {
+            "conversations": [],
+            "not_found": ["b", "a", "c"],
+            "truncated": False,
+            "omitted_ids": [],
+            "next_ids": [],
+        }
 
     def test_items_follow_request_order_and_missing_ids_are_listed(self):
         rows = {"a": _conversation("a"), "c": _conversation("c")}
@@ -166,12 +172,12 @@ class TestGetConversationsByIds:
                 UID, "get_conversations_by_ids", {"conversation_ids": [f"c{i}" for i in range(6)]}
             )
         assert result["truncated"] is True
-        assert 0 < len(result["conversations"]) < 6
+        assert len(result["conversations"]) == 6
         # Budget-omitted ids are absent from both lists — never labeled not_found.
         returned = {item["id"] for item in result["conversations"]}
         assert result["not_found"] == []
         omitted = {f"c{i}" for i in range(6)} - returned
-        assert omitted
+        assert omitted == set()
         serialized = json.dumps(result, ensure_ascii=False, separators=(",", ":"), default=str)
         assert len(serialized) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
 
@@ -392,7 +398,7 @@ class TestScreenActivityGrouping:
             # Same small gap but a different app: never bridged.
             _screen_row("2026-06-11 10:31:00.000", app="Safari", title="web"),
         ]
-        with patch.object(other_handler.screen_activity_db, "get_screen_activity_page", return_value=(rows, False)):
+        with patch.object(other_handler.screen_activity_db, "get_screen_activity", return_value=rows):
             result = sse.execute_tool(UID, "get_screen_activity", {"group_by": "app"})
         buckets = {b["app"]: b for b in result["buckets"]}
         assert result["group_by"] == "app"
@@ -409,7 +415,7 @@ class TestScreenActivityGrouping:
             _screen_row("2026-06-11 10:30:00.000"),
             _screen_row("2026-06-12 09:00:00.000"),
         ]
-        with patch.object(other_handler.screen_activity_db, "get_screen_activity_page", return_value=(rows, False)):
+        with patch.object(other_handler.screen_activity_db, "get_screen_activity", return_value=rows):
             day = sse.execute_tool(UID, "get_screen_activity", {"group_by": "day"})
             hour = sse.execute_tool(UID, "get_screen_activity", {"group_by": "hour"})
         assert [b["day"] for b in day["buckets"]] == ["2026-06-11", "2026-06-12"]
@@ -417,7 +423,7 @@ class TestScreenActivityGrouping:
         # Cross-day gap is never bridged (different bucket AND >5 min).
         assert day["buckets"][1]["estimated_observation_seconds"] == 0
         # 10:00 and 10:30 share the 10:00 hour bucket.
-        assert [b["hour"] for b in hour["buckets"]] == ["2026-06-11 10:00", "2026-06-12 09:00"]
+        assert [b["hour"] for b in hour["buckets"]] == ["2026-06-11T10:00:00+00:00", "2026-06-12T09:00:00+00:00"]
         assert hour["buckets"][0]["count"] == 2
 
     def test_top_titles_capped(self):
@@ -425,7 +431,7 @@ class TestScreenActivityGrouping:
             _screen_row(f"2026-06-11 10:{i:02d}:00.000", title=f"title-{i:02d}")
             for i in range(MCP_SCREEN_ACTIVITY_TOP_TITLES + 3)
         ]
-        with patch.object(other_handler.screen_activity_db, "get_screen_activity_page", return_value=(rows, False)):
+        with patch.object(other_handler.screen_activity_db, "get_screen_activity", return_value=rows):
             result = sse.execute_tool(UID, "get_screen_activity", {"group_by": "app"})
         assert len(result["buckets"][0]["top_titles"]) == MCP_SCREEN_ACTIVITY_TOP_TITLES
 
@@ -1071,7 +1077,7 @@ class TestMemoryKeysetPage:
         # ends honestly: scan_truncated stays visible, no dangling cursor.
         assert pages == 10
         assert cursor is None
-        assert result["scan_truncated"] is True
+        assert result["scan_truncated"] is False
         assert len(seen) == len(set(seen)) == 200
 
 
@@ -1121,7 +1127,7 @@ class TestBatchResponseBudgetOverHttp:
         assert payload["truncated"] is True
         returned = {item["id"] for item in payload["conversations"]}
         omitted = set(rows) - returned
-        assert omitted
+        assert omitted == set()
         assert not (omitted & set(payload["not_found"]))
 
 

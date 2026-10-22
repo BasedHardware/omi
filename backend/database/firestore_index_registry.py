@@ -1026,6 +1026,38 @@ UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
     index_fields=(_desc('updated_at'), _asc('__name__')),
 )
 
+MCP_DAILY_RECORDINGS_QUERY = FirestoreQuerySpec(
+    identifier='mcp_daily_recordings_count',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('discarded', '==', 'discarded'),
+        FirestoreQueryFilter('started_at', '>=', 'start'),
+        FirestoreQueryFilter('started_at', '<=', 'end'),
+    ),
+    index_fields=(_asc('discarded'), _asc('started_at'), _asc('__name__')),
+)
+
+# MCP candidate windows use a single necessary predicate; the policy adapter
+# rechecks every filter after canonical/historical suppression and decryption.
+MCP_MEMORY_FILTER_QUERIES = {}
+for _origin in ('memory_items', 'memories'):
+    for _predicate, _path, _op in (
+        ('all', None, None),
+        ('updated_after', 'updated_at', '>='),
+        ('reviewed', 'promotion.reviewed' if _origin == 'memory_items' else 'reviewed', '=='),
+        ('manually_added', 'user_asserted' if _origin == 'memory_items' else 'manually_added', '=='),
+        ('categories', 'promotion.category' if _origin == 'memory_items' else 'category', 'in'),
+    ):
+        MCP_MEMORY_FILTER_QUERIES[(_origin, _predicate)] = FirestoreQuerySpec(
+            identifier=f'mcp_{_origin}_{_predicate}',
+            collection_group=_origin,
+            query_scope='COLLECTION',
+            filters=(FirestoreQueryFilter(_path, _op, _predicate),) if _path else (),
+            index_fields=((_asc(_path),) if _path and _path != 'updated_at' else ())
+            + (_desc('updated_at'), _asc('__name__')),
+        )
+
 # Released list candidates use existing required canonical fields. Each branch
 # is a necessary condition, never a replacement for the authority's row policy.
 # In particular processed Short-term remains readable after expiry (§1.3).
@@ -1938,6 +1970,8 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    MCP_DAILY_RECORDINGS_QUERY,
+    *MCP_MEMORY_FILTER_QUERIES.values(),
     *REVIEW_QUERY_SPECS,
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     CONVERSATION_PHOTOS_NAME_RANGE_QUERY,

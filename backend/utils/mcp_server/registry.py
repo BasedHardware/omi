@@ -64,7 +64,25 @@ _CONVERSATION_TIMESTAMPS: Dict[str, Any] = {
     "finished_at": _DATETIME_OR_NULL,
 }
 
+_TIMEZONE_INPUT = {
+    'type': 'string',
+    'description': 'IANA timezone (e.g. Asia/Ho_Chi_Minh), or profile to use the user profile. Omitted preserves the released UTC-day contract.',
+}
+_FIELDS_INPUT = {
+    'oneOf': [{'type': 'array', 'items': {'type': 'string'}}, {'type': 'string'}],
+    'description': 'Return only selected card fields; id is always included. Array or comma-separated names.',
+}
+_SUMMARY_ONLY_INPUT = {
+    'type': 'boolean',
+    'default': False,
+    'description': 'Return the conversation card without transcript segments.',
+}
+
 _CONVERSATION_CARD_FIELDS: Dict[str, Any] = {
+    'source': {'type': ['string', 'null']},
+    'is_call': {'type': ['boolean', 'null']},
+    'call_platform': {'type': ['string', 'null']},
+    'calendar_event_id': {'type': ['string', 'null']},
     **_CONVERSATION_TIMESTAMPS,
     "participants_included": {
         "type": "boolean",
@@ -482,13 +500,15 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
+                "fields": _FIELDS_INPUT,
+                "timezone": _TIMEZONE_INPUT,
                 "start_date": {
                     "type": "string",
-                    "description": "created_at on/after UTC midnight (YYYY-MM-DD), inclusive",
+                    "description": "created_at on/after midnight in timezone (YYYY-MM-DD), inclusive",
                 },
                 "end_date": {
                     "type": "string",
-                    "description": "created_at through the entire UTC day (YYYY-MM-DD), inclusive",
+                    "description": "created_at through the entire day in timezone (YYYY-MM-DD), inclusive",
                 },
                 "categories": {
                     "type": "array",
@@ -539,6 +559,8 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
+                "summary_only": _SUMMARY_ONLY_INPUT,
+                "fields": _FIELDS_INPUT,
                 "conversation_id": {"type": "string", "description": "The ID of the conversation to retrieve"},
                 "max_segments": {
                     "type": "integer",
@@ -578,12 +600,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "get_conversations or search_conversations returns several relevant ids. Each item returns the "
             "same bounded card and transcript as get_conversation_by_id with its own truncated flag; ids "
             "that resolve to nothing are listed in not_found. When the response budget is hit, later items "
-            "are omitted and truncated=true — retry them with smaller max_segments/max_chars."
+            "are listed in omitted_ids/next_ids with next_cursor. Budgets shrink evenly before omissions. "
+            "Items also expose the flat list card alongside the released nested conversation."
         ),
         annotations=_read_annotations("Get conversations by IDs"),
         input_schema={
             "type": "object",
             "properties": {
+                "summary_only": _SUMMARY_ONLY_INPUT,
+                "fields": _FIELDS_INPUT,
+                "cursor": _CURSOR_INPUT,
                 "conversation_ids": {
                     "type": "array",
                     "description": "Conversation IDs to retrieve (1-20; duplicates are fetched once)",
@@ -621,6 +647,9 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     },
                 },
                 not_found={"type": "array", "items": {"type": "string"}},
+                omitted_ids={"type": "array", "items": {"type": "string"}},
+                next_ids={"type": "array", "items": {"type": "string"}},
+                next_cursor=_NEXT_CURSOR_OUTPUT,
                 truncated={"type": "boolean"},
             )
         ),
@@ -679,14 +708,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
+                "fields": _FIELDS_INPUT,
+                "timezone": _TIMEZONE_INPUT,
                 "query": {"type": "string", "description": "Natural language search query"},
                 "start_date": {
                     "type": "string",
-                    "description": "created_at on/after UTC midnight (YYYY-MM-DD), inclusive",
+                    "description": "created_at on/after midnight in timezone (YYYY-MM-DD), inclusive",
                 },
                 "end_date": {
                     "type": "string",
-                    "description": "created_at through the entire UTC day (YYYY-MM-DD), inclusive",
+                    "description": "created_at through the entire day in timezone (YYYY-MM-DD), inclusive",
                 },
                 "limit": {
                     "type": "integer",
@@ -1148,6 +1179,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
+                "timezone": _TIMEZONE_INPUT,
                 "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
                 "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
                 "app": {"type": "string", "description": "Filter to a single app name"},
@@ -1164,7 +1196,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Max rows scanned per page (ignored when summary=true)",
+                    "description": "Raw rows per page (ignored for summary and groups; groups scan up to 5000 observations with explicit coverage)",
                     "default": 200,
                     "minimum": 1,
                     "maximum": 1000,
@@ -1213,6 +1245,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         input_schema={
             "type": "object",
             "properties": {
+                "timezone": _TIMEZONE_INPUT,
                 "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
                 "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
                 "limit": {

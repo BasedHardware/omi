@@ -123,11 +123,14 @@ def _read_memories_keyset_page(
         rounds += 1
         if page.next_cursor is None:
             break
+    if uml_cursor is not None and len(filtered) < limit:
+        scan_truncated = True
     result = {
         'memories': filtered,
         'returned_count': len(filtered),
         'has_more': uml_cursor is not None,
         'more_in_window': False,
+        'more_in_window_known': uml_cursor is None,
         'offset': 0,
         'limit': limit,
         'sort': sort,
@@ -202,6 +205,14 @@ def get_memories(
     )
 
 
+def read_filtered_mcp_memories(
+    uid: str, *, filters: dict, db_client: Any, budget: Optional[ListReadBudget] = None
+) -> List[Dict[str, Any]]:
+    return MemoryService(db_client=db_client).read_mcp_filtered(
+        uid, filters=filters, **({"budget": budget} if budget is not None else {})
+    )
+
+
 def memories_page_core(
     uid: str,
     *,
@@ -252,7 +263,42 @@ def memories_page_core(
         else:
             offset = offset_position(position)
 
-    if uml_cursor is not None or (cursor_token is None and offset == 0 and sort in _MEMORY_KEYSET_SORTS):
+    if updated_after is not None or reviewed is not None or manually_added is not None or valid_categories:
+        rows = read_filtered_mcp_memories(
+            uid,
+            db_client=db,
+            budget=budget,
+            filters={
+                'reviewed': reviewed,
+                'manually_added': manually_added,
+                'include_activity': include_activity,
+                'include_sensitive': include_sensitive,
+                'updated_after': updated_after,
+                'sort': sort,
+                'categories': valid_categories or None,
+            },
+        )
+        page = rows[offset : offset + limit]
+        has_more = len(rows) > offset + limit
+        result = {
+            'memories': page,
+            'returned_count': len(page),
+            'has_more': has_more,
+            'more_in_window': has_more,
+            'scan_truncated': False,
+            'scanned_count': len(rows),
+            'offset': offset,
+            'limit': limit,
+            'sort': sort,
+            'include_activity': include_activity,
+            'include_sensitive': include_sensitive,
+        }
+        if has_more:
+            result['next_cursor'] = encode_cursor(
+                kind=cursor_kind, uid=uid, position={'offset': offset + len(page)}, filters=filters
+            )
+        resume_uml = None
+    elif uml_cursor is not None or (cursor_token is None and offset == 0 and sort in _MEMORY_KEYSET_SORTS):
         result, resume_uml = _read_memories_keyset_page(
             uid,
             limit=limit,
@@ -316,6 +362,14 @@ def memories_page_core(
                 position={"offset": offset + len(result["memories"])},
                 filters=filters,
             )
+    if result.get('scan_truncated') and (not result.get('memories') or sort in {'created_desc', 'manual_first'}):
+        raise ToolExecutionError(
+            'memory_scan_incomplete: no complete empty page can be established; narrow updated_after or use updated_desc and a cursor.',
+            code=-32009,
+            http_status=503,
+        )
+    if result.get('scan_truncated'):
+        result['coverage'] = 'bounded_scan; older candidates may be omitted; use updated_desc with cursor'
     # Apply locked content truncation
     for memory in result["memories"]:
         if memory.get('is_locked', False):

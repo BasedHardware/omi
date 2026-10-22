@@ -34,6 +34,7 @@ from pydantic import ValidationError
 import database.memories as memories_db
 from database import memory_source_index
 import database.vector_db as vector_db
+from utils.mcp_memory_reads import collect_filtered_mcp_memories
 from utils.memory.index_window import (
     MemoryIndexWindowLimit,
     position_cursor,
@@ -3078,6 +3079,13 @@ class MemoryService:
         }:
             return "canonical_state"
         return None
+
+    @resilient_memory_read
+    def read_mcp_filtered(
+        self, uid: str, *, filters: Dict[str, Any], budget: Optional[ListReadBudget] = None
+    ) -> List[Dict[str, Any]]:
+        """Complete bounded MCP candidate read under the universal row policies."""
+        return collect_filtered_mcp_memories(self, uid, filters=filters, budget=budget)
 
     @resilient_memory_read
     def read_page(

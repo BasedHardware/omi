@@ -1,7 +1,7 @@
 """Remaining read-side tool handlers: X posts, goals, chat, people, screen, daily summaries."""
 
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, TypedDict
 
 from google.api_core.exceptions import FailedPrecondition
@@ -17,6 +17,8 @@ import database.x_posts as x_posts_db
 from utils.memory.product_authorization import ProductAuthorizationContext
 from utils.mcp_data import clean_chat_message, clean_person, clean_screen_activity_row, end_of_day_utc
 from utils.mcp_memories import parse_mcp_bool, parse_mcp_int
+from utils.daily_summary_read_contract import summary_read_payload
+from utils.mcp_dates import local_date_window, localize_timestamps, resolve_timezone, offset_timestamp
 from utils.mcp_server.constants import (
     MCP_SCREEN_ACTIVITY_OBSERVATION_GAP_SECONDS,
     MCP_SCREEN_ACTIVITY_TOP_TITLES,
@@ -196,7 +198,12 @@ def _screen_activity_bucket_key(row: Dict[str, Any], group_by: str) -> str:
     timestamp = str(row.get("timestamp") or "")
     if group_by == "day":
         return timestamp[:10]
-    return timestamp[:13] + ":00"  # hour
+    parsed = _screen_activity_timestamp(timestamp)
+    return (
+        parsed.replace(minute=0, second=0, microsecond=0).isoformat()
+        if parsed and parsed.tzinfo
+        else timestamp[:13] + ":00"
+    )
 
 
 def _screen_activity_bucket_label(key: str, group_by: str) -> Dict[str, Any]:
@@ -292,14 +299,9 @@ def get_screen_activity(
     arguments: Dict[str, Any],
     auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> Dict[str, Any]:
-    start = parse_mcp_date(arguments.get("start_date"), "start_date")
-    end = parse_mcp_date(arguments.get("end_date"), "end_date")
-    if end is not None:
-        # Include the entire end day, matching the integration-router
-        # convention. The DB layer formats the bound via strftime, so the
-        # end-of-day increment must be applied here (the parsed midnight
-        # would otherwise match only up to 00:00:00.999 of the end day).
-        end = end_of_day_utc(end)
+    start, end, zone = local_date_window(
+        uid, arguments.get('start_date'), arguments.get('end_date'), arguments.get('timezone')
+    )
     app = arguments.get("app")
     if app is not None and not isinstance(app, str):
         raise ToolExecutionError("app must be a string", code=-32602)
@@ -321,6 +323,7 @@ def get_screen_activity(
         limit=limit,
         cursor_token=arguments.get("cursor"),
         cursor_kind="get_screen_activity",
+        timezone_name=str(zone),
     )
 
 
@@ -335,6 +338,7 @@ def screen_activity_core(
     limit: int,
     cursor_token: Optional[str] = None,
     cursor_kind: str,
+    timezone_name: str = "UTC",
 ) -> Dict[str, Any]:
     """Shared screen-activity read for the MCP tool and the REST endpoint.
 
@@ -342,6 +346,9 @@ def screen_activity_core(
     validate/parse their own inputs (dates arrive as datetimes; REST always
     passes ``group_by="none"``).
     """
+    zone = resolve_timezone(uid, timezone_name)
+    if start and end and start > end:
+        raise ToolExecutionError("start_date must be on or before end_date", code=-32602)
     if summary and group_by != "none":
         raise ToolExecutionError("summary=true cannot be combined with group_by other than 'none'.", code=-32602)
     if summary and group_by == "none":
@@ -354,11 +361,43 @@ def screen_activity_core(
         except FailedPrecondition as e:
             raise_screen_activity_index_error(e)
 
+    if group_by != 'none':
+        if cursor_token is not None:
+            raise ToolExecutionError(
+                'cursor is only supported for raw screen rows; groups cover the whole window.', code=-32602
+            )
+        cap = screen_activity_db.SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT
+        try:
+            rows = screen_activity_db.get_screen_activity(
+                uid, start_date=start, end_date=end, app_filter=app, limit=cap + 1
+            )
+        except FailedPrecondition as exc:
+            raise_screen_activity_index_error(exc)
+        truncated = len(rows) > cap
+        rows = rows[:cap]
+        localized = [{**row, 'timestamp': offset_timestamp(row.get('timestamp'), zone)} for row in rows]
+        buckets = _screen_activity_buckets(localized, group_by)
+        return {
+            'group_by': group_by,
+            'buckets': buckets,
+            'timezone': str(zone),
+            'coverage': {
+                'row_limit': cap,
+                'scanned_count': len(rows),
+                'truncated': truncated,
+                'complete_window': not truncated,
+                'first_observed_at': localized[0].get('timestamp') if localized else None,
+                'last_observed_at': localized[-1].get('timestamp') if localized else None,
+            },
+            'aggregation_scope': 'bounded_window' if truncated else 'whole_window',
+        }
+
     filters = {
         "start": start.isoformat() if start else None,
         "end": end.isoformat() if end else None,
         "app": app,
         "group_by": group_by,
+        **({"timezone": timezone_name} if timezone_name != "UTC" else {}),
     }
     after = None
     seed_row: Optional[Dict[str, Any]] = None
@@ -402,7 +441,7 @@ def screen_activity_core(
         }
     if next_cursor is not None:
         result["next_cursor"] = next_cursor
-    return result
+    return localize_timestamps(result, zone)
 
 
 def get_daily_summaries(
@@ -415,26 +454,67 @@ def get_daily_summaries(
         offset = parse_mcp_int(arguments.get("offset"), "offset", default=0, minimum=0, maximum=100000)
     except ValueError as e:
         raise ToolExecutionError(str(e), code=-32602)
-    filters = {
-        "start": arguments.get("start_date"),
-        "end": arguments.get("end_date"),
-    }
-    offset = resolve_offset_cursor(arguments, kind="get_daily_summaries", uid=uid, filters=filters, offset=offset)
-    fetched = daily_summaries_db.get_daily_summaries(
-        uid,
-        limit=limit + 1,
-        offset=offset,
-        start_date=arguments.get("start_date"),
-        end_date=arguments.get("end_date"),
-    )
-    page, consumed, has_more = offset_page(fetched, limit)
-    result: Dict[str, Any] = {"daily_summaries": page}
+    start_date = arguments.get('start_date')
+    end_date = arguments.get('end_date')
+    start, end, zone = local_date_window(uid, start_date, end_date, arguments.get('timezone'))
+    filters = {'start': start_date, 'end': end_date, **({'timezone': str(zone)} if arguments.get('timezone') else {})}
+    offset = resolve_offset_cursor(arguments, kind='get_daily_summaries', uid=uid, filters=filters, offset=offset)
+    if start_date and end_date:
+        # Offsets count calendar days when a bounded window is requested, so a
+        # missing record cannot disappear between two generated summaries.
+        dates = []
+        current = datetime.strptime(end_date, '%Y-%m-%d').date() - timedelta(days=offset)
+        first = datetime.strptime(start_date, '%Y-%m-%d').date()
+        while current >= first and len(dates) < limit:
+            dates.append(current.isoformat())
+            current -= timedelta(days=1)
+        page = []
+        for date in dates:
+            row = daily_summaries_db.get_daily_summary_by_date(uid, date)
+            day_start, day_end, _ = local_date_window(uid, date, date, str(zone))
+            if row:
+                payload = summary_read_payload(row)
+                # Historical producers capped their input at 100 conversations.
+                # A read-time aggregation corrects the count without rewriting history.
+                payload.setdefault('stats', {})['total_conversations'] = daily_summaries_db.get_day_recording_count(
+                    uid, day_start, day_end
+                )
+                payload['stats']['conversation_count_basis'] = 'non_discarded_started_in_local_day'
+                payload['timezone'] = str(zone)
+                page.append(payload)
+                continue
+            stored_status = daily_summaries_db.get_daily_summary_generation_status(uid, date)
+            stored_status = stored_status if isinstance(stored_status, dict) else {}
+            status = stored_status.get('status')
+            if status not in {'pending', 'failed', 'no_recordings'}:
+                if date >= datetime.now(zone).date().isoformat():
+                    status = 'pending'
+                else:
+                    count = daily_summaries_db.get_day_recording_count(uid, day_start, day_end)
+                    status = 'no_recordings' if count == 0 else 'not_generated'
+            page.append({'date': date, 'status': status, 'generated_at': None, 'timezone': str(zone)})
+        has_more = current >= first
+        consumed = len(dates)
+    else:
+        fetched = daily_summaries_db.get_daily_summaries(
+            uid, limit=limit + 1, offset=offset, start_date=start_date, end_date=end_date
+        )
+        raw_page, consumed, has_more = offset_page(fetched, limit)
+        page = []
+        for row in raw_page:
+            payload = summary_read_payload(row)
+            if row.get('date'):
+                day_start, day_end, _ = local_date_window(uid, row['date'], row['date'], str(zone))
+                payload.setdefault('stats', {})['total_conversations'] = daily_summaries_db.get_day_recording_count(
+                    uid, day_start, day_end
+                )
+                payload['stats']['conversation_count_basis'] = 'non_discarded_started_in_local_day'
+            payload['timezone'] = str(zone)
+            page.append(payload)
+    result = {'daily_summaries': localize_timestamps(page, zone)}
     if has_more:
-        result["next_cursor"] = encode_cursor(
-            kind="get_daily_summaries",
-            uid=uid,
-            position={"offset": offset + consumed},
-            filters=filters,
+        result['next_cursor'] = encode_cursor(
+            kind='get_daily_summaries', uid=uid, position={'offset': offset + consumed}, filters=filters
         )
     return result
 
