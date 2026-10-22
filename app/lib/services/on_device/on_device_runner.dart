@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -13,6 +12,8 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/on_device/on_device_overflow_intake.dart';
+import 'on_device_segment_upload.dart';
+import 'package:omi/services/refactor/client_refactor_flags.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/services/on_device/on_device_projection.dart';
@@ -241,7 +242,9 @@ class OnDeviceRunner with WidgetsBindingObserver {
       whisper?.dispose();
     }
     if (segments.isEmpty) throw StateError('No speech recognized; audio retained');
-    if (segments.length > 500) throw StateError('Transcript exceeds ingestion limit; audio retained');
+    final chunked = await ClientRefactorFlags.chunkUploads();
+    // refactor: superseded by on_device_segment_upload when clients_from_segments_chunks=serve
+    if (!chunked && segments.length > 500) throw StateError('Transcript exceeds ingestion limit; audio retained');
     if (_cancelled || generation != sync.sessionGeneration) return;
     final started = DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000, isUtc: true);
     final finished = started.add(Duration(milliseconds: (offset * 1000).round()));
@@ -278,28 +281,20 @@ class OnDeviceRunner with WidgetsBindingObserver {
     if (!controller.settings.keepEverythingOnDevice) {
       final baseUrl = cloudBaseUrl ?? Env.apiBaseUrl;
       if (baseUrl == null || baseUrl.isEmpty) throw StateError('Cloud endpoint unavailable');
-      final response = await executeApi<String>(
+      id = await uploadOnDeviceSegments(
+          baseUrl: baseUrl,
+          sessionId: id,
+          segments: segments,
+          metadata: {
+            'source': source.name,
+            'language': language.isEmpty ? 'en' : language,
+            'started_at': started.toIso8601String(),
+            'finished_at': finished.toIso8601String()
+          },
+          chunked: chunked,
           send: send,
-          canSend: () => !_cancelled && generation == sync.sessionGeneration,
-          request: ApiRequest(
-              url: '${baseUrl}v1/conversations/from-segments',
-              method: 'POST',
-              body: jsonEncode({
-                'client_session_id': id,
-                'source': source.name,
-                'language': language.isEmpty ? 'en' : language,
-                'started_at': started.toIso8601String(),
-                'finished_at': finished.toIso8601String(),
-                'transcript_segments': segments.map((s) => s.toJson()).toList(),
-                if (projection != null) 'client_processing': projection
-              })),
-          decode: (body) => (jsonDecode(body) as Map<String, dynamic>)['id'] as String);
-      switch (response) {
-        case ApiSuccess<String>():
-          id = response.data;
-        case ApiFailure<String>():
-          throw StateError('Transcript ingestion ${response.problem.kind.name}');
-      }
+          projection: projection,
+          canSend: () => !_cancelled && generation == sync.sessionGeneration);
       if (_cancelled || generation != sync.sessionGeneration) return;
       final detail = await ConversationApi(baseUrl: baseUrl, send: send).byId(id);
       switch (detail) {
