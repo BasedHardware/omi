@@ -6152,6 +6152,31 @@ futures and any known generation; recovery never deletes an uncertain source.
 The 8-second bound covers uploading one fragment, not an entire flush: summary
 initialization, capacity, receipt transactions, recovery, sealing, queue draining
 and lock waits retain their existing budgets.
+Transition/resume force-flushes give PCM tails below 250 ms a one-second grace
+from buffer opening. Compatible capture can join before encoding; channel,
+conversation owner, rate, UTC year/month and the existing 100 ms continuity
+check still partition buffers. Real boundary changes publish the old tail;
+close and custody pressure bypass grace. The one-second updater publishes an
+expired deferred tail even without more audio. Normal 15-second custody and
+four-fragment/minute limits are unchanged. `omi_held_content_transition_tail_total`
+has only `outcome=coalesced|sealed`: a deferred tail either receives compatible
+capture or is queued without a neighbour. Short final audio remains valid.
+
+V4 purge retains `terminal_receipts` on the existing
+`users/{uid}/stt_cap_holds/{hold_id}` tombstone. Schema version 1 contains `pieces`
+(an array of opaque SHA-256 piece IDs, `outcome`, source `seconds`, `attempt`,
+`provider`, and `conversation_ids`) plus the union `conversation_ids`.
+Outcomes are `transcribed`, `settled_empty`, `empty_plan` or `failed`; an empty
+VAD plan gets one source entry with attempt 0 and provider null. Ingest proofs
+are re-read before purge because they may be newer than the coordinator's row.
+Only allowlisted fields survive: no audio paths, text, provider results, plans
+or encrypted metadata. The same tombstone retains publication fragment IDs and
+its existing lifetime (no TTL; owner account erasure removes it). A sibling
+collection would split that barrier/retention authority without adding value.
+Legacy non-v4 erasure is unchanged. Failed reconciliation still retains audio.
+A final summary checkpoint writes `seconds=0.0` whenever count becomes zero,
+in the same fenced transaction; positive-count summaries keep fractional seconds.
+
 Pusher receives admitted audio/transcripts and has no duplicate cap-held PCM sink.
 Both lifespans await the lightweight sink registry before background drain/HTTP
 teardown; socket close flushes tails. GKE grace is 120 seconds with a 15-second

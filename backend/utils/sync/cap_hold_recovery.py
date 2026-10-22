@@ -10,7 +10,6 @@ import threading
 import time
 
 from typing import Any, Awaitable, Callable
-from google.api_core.exceptions import NotFound
 
 from config.rate_card import recording_units_per_hour
 from config.stt_cap_dispatch import recovery_admission_enabled as enabled, any_recovery_admission_enabled, hold_lane
@@ -23,7 +22,8 @@ from utils.fair_use import get_hard_restriction_status, is_daily_audio_ceiling_e
 from utils.stt.pre_recorded import get_prerecorded_service
 from utils import funded_processing
 from utils.sync import cap_hold, cap_hold_reservations, cap_recovery_plan, cap_work_budget
-from utils.observability.held_content import record_erasure, record_recovery, record_pacing
+from utils.sync.cap_hold_erasure import erase as _erase
+from utils.observability.held_content import record_recovery, record_pacing
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
 from models.geolocation import Geolocation
@@ -42,48 +42,6 @@ _backlog_runner: Callable[[str], Awaitable[bool | None]] | None = None
 def register_backlog_runner(runner: Callable[[str], Awaitable[bool | None]]) -> None:
     global _backlog_runner
     _backlog_runner = runner
-
-
-def _erase(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
-    try:
-        _erase_objects(uid, snapshot, row)
-    except Exception:
-        record_erasure('failure')
-        raise
-
-
-def _erase_objects(uid: str, snapshot: Any, row: dict[str, Any]) -> None:
-    # Account deletion already purges this existing owner-scoped chunk prefix.
-    objects = [
-        row,
-        *({'audio_path': part} for part in row.get('audio_parts') or []),
-        *(row.get('stage_parts') or []),
-        *(row.get('piece_plan') or {}).values(),
-    ]
-    for path in {item[key] for item in objects for key in ('audio_path', 'metadata_path') if item.get(key)}:
-        if not path.startswith(f'chunks/{uid}/cap-held/'):
-            raise ValueError('hold audio owner mismatch')
-        try:
-            cap_hold.get_private_cloud_sync_bucket().blob(path).delete()
-        except NotFound:
-            pass
-    if row.get('live_custody_version') == 4:
-        # Keep the publication idempotency barrier after source deletion. A lost
-        # writer reply must not recreate/retranscribe a capture already recovered.
-        snapshot.reference.set(
-            {
-                'state': 'purged',
-                'live_custody_version': 4,
-                **(
-                    {'stage_fragment_ids': [part['id'] for part in row['stage_parts']]}
-                    if row.get('stage_parts')
-                    else {}
-                ),
-                'next_attempt_at': cap_hold.RETAINED_NEXT_ATTEMPT_AT,
-            }
-        )
-    else:
-        snapshot.reference.delete()
 
 
 def _stored(value: Any) -> Any:
