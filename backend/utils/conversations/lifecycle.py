@@ -307,9 +307,10 @@ def close_oversized_in_progress_conversation(
     uid: str,
     conversation_id: str,
     *,
-    quiet_for: timedelta,
+    quiet_for: timedelta | None = None,
     firestore_client: Any = None,
     recovery_fences: bool = False,
+    recovery_cutoff: datetime | None = None,
 ) -> str:
     """Close a live-capture row that can never be finalized because it is at Firestore's 1 MiB ceiling.
 
@@ -321,7 +322,12 @@ def close_oversized_in_progress_conversation(
     summary. Returns a bounded outcome token (``OversizedInProgressOutcome``).
     """
     return oversized_terminal_db.complete_oversized_in_progress_conversation(
-        uid, conversation_id, quiet_for=quiet_for, firestore_client=firestore_client, recovery_fences=recovery_fences
+        uid,
+        conversation_id,
+        quiet_for=quiet_for,
+        firestore_client=firestore_client,
+        recovery_fences=recovery_fences,
+        recovery_cutoff=recovery_cutoff,
     )
 
 

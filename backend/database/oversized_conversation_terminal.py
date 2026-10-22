@@ -18,6 +18,7 @@ from typing import Any, Callable, Literal
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database import conversation_finalization_jobs as jobs_db
 from database import recording_sessions as recording_sessions_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.conversation_terminal_title import (
@@ -82,10 +83,6 @@ def _complete_oversized_in_progress_conversation_txn(
     if data.get('discarded') or data.get('deleted') or data.get('deferred') or data.get('finalization_job_id'):
         return 'owned'
     if recording_sessions_collection is not None and conversation_id is not None:
-        # Imported here to keep this terminal a leaf module, mirroring the
-        # lazy ``jobs_db`` import in ``database.recording_sessions``.
-        from database import conversation_finalization_jobs as jobs_db
-
         effective_now = now or datetime.now(timezone.utc)
         lease_expiry = jobs_db.recording_session_lease_expiry(
             transaction,
@@ -121,25 +118,37 @@ def complete_oversized_in_progress_conversation(
     uid: str,
     conversation_id: str,
     *,
-    quiet_for: timedelta,
+    quiet_for: timedelta | None = None,
     firestore_client: Any = None,
     recovery_fences: bool = False,
+    recovery_cutoff: datetime | None = None,
 ) -> OversizedInProgressOutcome:
     """Terminalize an in_progress conversation too large to accept its finalization binding.
 
     ``recovery_fences`` re-asserts the SERVER_RECOVERY admission fences (expired
     recording lease, no blocking account-deletion marker) inside the close
     transaction; the live-listen sweep keeps relying on its quiet window alone.
+    ``recovery_cutoff`` pins that quiet window to the check's own absolute
+    cutoff rather than reconstructing it from ``quiet_for`` at a later ``now``:
+    admission latency must not shift the fence forward. Exactly one of
+    ``quiet_for`` / ``recovery_cutoff`` is required.
     """
+    if (quiet_for is None) == (recovery_cutoff is None):
+        raise ValueError('exactly one of quiet_for or recovery_cutoff is required')
     client = firestore_client if firestore_client is not None else get_firestore_client()
     conversation_ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
     user_ref = client.collection('users').document(uid)
     now = datetime.now(timezone.utc)
+    quiet_before = (
+        recovery_cutoff if recovery_cutoff is not None else now - (quiet_for if quiet_for is not None else timedelta(0))
+    )
+    if quiet_before.tzinfo is None:
+        quiet_before = quiet_before.replace(tzinfo=timezone.utc)
     transactional = firestore.transactional(_complete_oversized_in_progress_conversation_txn)
     return transactional(
         client.transaction(),
         conversation_ref,
-        now - quiet_for,
+        quiet_before,
         uid,
         lambda zone_uid: user_time_zone(client, zone_uid),
         conversation_id=conversation_id if recovery_fences else None,

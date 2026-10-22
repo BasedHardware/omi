@@ -143,8 +143,10 @@ def test_a_row_that_is_not_near_the_ceiling_keeps_normal_finalization():
 def test_lifecycle_owner_delegates_with_the_quiet_window(monkeypatch):
     calls = []
 
-    def fake(uid, conversation_id, *, quiet_for, firestore_client=None, recovery_fences=False):
-        calls.append((uid, conversation_id, quiet_for))
+    def fake(
+        uid, conversation_id, *, quiet_for=None, firestore_client=None, recovery_fences=False, recovery_cutoff=None
+    ):
+        calls.append((uid, conversation_id, quiet_for, recovery_cutoff))
         return 'closed'
 
     monkeypatch.setattr(oversized_terminal_db, 'complete_oversized_in_progress_conversation', fake)
@@ -154,7 +156,7 @@ def test_lifecycle_owner_delegates_with_the_quiet_window(monkeypatch):
     )
 
     assert outcome == 'closed'
-    assert calls == [('uid-1', 'conv-1', timedelta(hours=1))]
+    assert calls == [('uid-1', 'conv-1', timedelta(hours=1), None)]
 
 
 def test_failure_reason_tokens_are_bounded_and_carry_no_message():
@@ -336,9 +338,13 @@ def test_recovery_fences_are_opt_in_for_the_live_listen_sweep(monkeypatch):
     path keeps its existing quiet-window-only contract (its own tests pin it)."""
     calls = {}
 
-    def fake(uid, conversation_id, *, quiet_for, firestore_client=None, recovery_fences=False):
+    def fake(
+        uid, conversation_id, *, quiet_for=None, firestore_client=None, recovery_fences=False, recovery_cutoff=None
+    ):
         calls['recovery_fences'] = recovery_fences
         calls['firestore_client'] = firestore_client
+        calls['recovery_cutoff'] = recovery_cutoff
+        calls['quiet_for'] = quiet_for
         return 'closed'
 
     monkeypatch.setattr(oversized_terminal_db, 'complete_oversized_in_progress_conversation', fake)
@@ -348,11 +354,15 @@ def test_recovery_fences_are_opt_in_for_the_live_listen_sweep(monkeypatch):
         == 'closed'
     )
     assert calls['recovery_fences'] is False
+    cutoff = datetime(2026, 10, 22, 12, 0, tzinfo=timezone.utc)
     assert (
         lifecycle_service.close_oversized_in_progress_conversation(
-            'uid-1', 'conv-1', quiet_for=timedelta(hours=1), firestore_client='client', recovery_fences=True
+            'uid-1', 'conv-1', firestore_client='client', recovery_fences=True, recovery_cutoff=cutoff
         )
         == 'closed'
     )
     assert calls['recovery_fences'] is True
     assert calls['firestore_client'] == 'client'
+    # The absolute cutoff is pinned through, not reconstructed from a duration.
+    assert calls['recovery_cutoff'] == cutoff
+    assert calls['quiet_for'] is None

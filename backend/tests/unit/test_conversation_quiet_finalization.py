@@ -511,10 +511,13 @@ def test_oversized_row_is_closed_and_the_check_stops_instead_of_redelivering_for
     monkeypatch.setattr(lifecycle, 'request_finalization', refuse)
     closed = {}
 
-    def record_close(uid, conversation_id, *, quiet_for, firestore_client=None, recovery_fences=None):
+    def record_close(
+        uid, conversation_id, *, quiet_for=None, firestore_client=None, recovery_fences=None, recovery_cutoff=None
+    ):
         closed['args'] = (uid, conversation_id, quiet_for)
         closed['client'] = firestore_client
         closed['recovery_fences'] = recovery_fences
+        closed['recovery_cutoff'] = recovery_cutoff
         return 'closed'
 
     monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', record_close)
@@ -525,12 +528,15 @@ def test_oversized_row_is_closed_and_the_check_stops_instead_of_redelivering_for
     # and re-assert the recovery fences the failed admission passed.
     assert closed['client'] is store
     assert closed['recovery_fences'] is True
-    # The terminal fence is the check's own recovery cutoff: an instant the
-    # failed admission already proved the row stale against, so the close
-    # demands exactly the quiet the check itself measured.
+    assert quiet_for is None
+    # The terminal fence is the check's own recovery cutoff passed through as
+    # an absolute instant: reconstructing it as a duration at close time would
+    # shift the fence forward by the failed admission's latency.
     from models.conversation_continuity import continuation_timeout
 
-    assert quiet_for == timedelta(seconds=continuation_timeout(store.rows[ROW], 120))
+    evaluated_at = NOW + timedelta(seconds=361)
+    expected_cutoff = evaluated_at - timedelta(seconds=continuation_timeout(store.rows[ROW], 120))
+    assert closed['recovery_cutoff'] == expected_cutoff
     assert _job(store)['status'] == 'quiet_done'
     assert 'finalization_job_id' not in store.rows[ROW]
 

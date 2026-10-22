@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import timezone
 from typing import Any
 
 from config.listen_quiet_finalization import enabled
@@ -110,17 +109,13 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
         # binding grows the document, so every redelivery of this check fails
         # identically (the grpc_helpers InvalidArgument 400 group). Close it
         # through the lifecycle owner's in_progress terminal — the one write
-        # the document still accepts — fenced by the same recovery cutoff this
-        # admission already passed, like the live listen path's _close_oversized.
-        cutoff = check['recovery_cutoff']
-        evaluated_at = check['updated_at']
-        quiet_for = (evaluated_at if evaluated_at.tzinfo else evaluated_at.replace(tzinfo=timezone.utc)) - (
-            cutoff if cutoff.tzinfo else cutoff.replace(tzinfo=timezone.utc)
-        )
+        # the document still accepts — fenced by the check's own absolute
+        # recovery cutoff, the instant the failed admission already proved the
+        # row stale against, like the live listen path's _close_oversized.
         close = lifecycle.close_oversized_in_progress_conversation(
             check['uid'],
             check['conversation_id'],
-            quiet_for=quiet_for,
+            recovery_cutoff=check['recovery_cutoff'],
             firestore_client=firestore_client,
             recovery_fences=True,
         )
