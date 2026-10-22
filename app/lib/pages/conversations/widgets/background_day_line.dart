@@ -50,7 +50,7 @@ class BackgroundDayLine extends StatelessWidget {
         expanded: expanded,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.circular(OmiRadius.sm),
           child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 44),
             child: Row(
@@ -60,7 +60,7 @@ class BackgroundDayLine extends StatelessWidget {
                     text,
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(color: OmiColors.textTertiary, fontSize: 14),
+                    style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                   ),
                 ),
                 Icon(expanded ? Icons.expand_less : Icons.chevron_right, size: 18, color: OmiColors.textTertiary),
