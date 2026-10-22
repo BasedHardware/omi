@@ -104,17 +104,19 @@ def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
 
 
 def validate_safe_path(path: Path | str) -> Path:
-    """Validate that path does not contain path traversal sequences ('..').
+    """Validate that path does not climb out of its own directory.
+
+    Only a whole ``..`` component is a traversal. A name that merely contains
+    two dots (``data..goals.md``) is an ordinary file, and rejecting it made the
+    guard refuse legitimate output names.
 
     Raises:
-        ValueError: If '..' is detected in path components or normalized string.
+        ValueError: If a '..' component is present after normalizing separators.
     """
-    p_str = str(path)
-    norm_str = p_str.replace("\\", "/")
-    p = Path(path)
-    if ".." in p.parts or ".." in norm_str.split("/") or any(part == ".." for part in norm_str.split("/")):
+    normalized = str(path).replace("\\", "/")
+    if ".." in [part for part in normalized.split("/") if part not in ("", ".")]:
         raise ValueError(f"Path traversal sequence '..' is forbidden: {path}")
-    return p
+    return Path(path)
 
 
 def atomic_write_file(dest_path: Path | str, content: str, force: bool = True) -> None:
@@ -354,6 +356,14 @@ def load_and_deduplicate(sources: Sequence[str]) -> List[Dict[str, Any]]:
     return [item[1] for item in id_map.values()]
 
 
+_MARKDOWN_INLINE_SPECIALS = re.compile(r"([\\`*_{}\[\]<>#|])")
+
+
+def escape_markdown_inline(text: str) -> str:
+    """Escape characters a goal title could use to break the checklist line."""
+    return _MARKDOWN_INLINE_SPECIALS.sub(r"\\\1", text)
+
+
 def format_goal_tree(goal: Dict[str, Any]) -> str:
     """Format a single goal into a hierarchical Markdown checklist tree.
 
@@ -390,18 +400,18 @@ def format_goal_tree(goal: Dict[str, Any]) -> str:
     meta_tag = f"`#{gid}`" if gid else ""
     details = f" *({metric_str} · {meta_tag})*" if meta_tag else f" *({metric_str})*"
 
-    lines = [f"- {box} **{title}** {progress_bar}{details}"]
+    lines = [f"- {box} **{escape_markdown_inline(title)}** {progress_bar}{details}"]
 
     # Desired outcome blockquote if present
     desired_outcome = goal.get("desired_outcome")
     if desired_outcome and str(desired_outcome).strip():
         clean_outcome = re.sub(r"\s+", " ", str(desired_outcome)).strip()
-        lines.append(f"  > **Outcome:** {clean_outcome}")
+        lines.append(f"  > **Outcome:** {escape_markdown_inline(clean_outcome)}")
 
     why = goal.get("why_it_matters")
     if why and str(why).strip():
         clean_why = re.sub(r"\s+", " ", str(why)).strip()
-        lines.append(f"  > **Why:** {clean_why}")
+        lines.append(f"  > **Why:** {escape_markdown_inline(clean_why)}")
 
     # Subtasks
     subtasks = goal.get("subtasks") or goal.get("tasks")
@@ -412,12 +422,12 @@ def format_goal_tree(goal: Dict[str, Any]) -> str:
                 sub_title = re.sub(r"\s+", " ", raw_st).strip()
                 raw_done = sub.get("completed") if "completed" in sub else sub.get("done")
                 sub_box = "[x]" if is_truthy(raw_done) else "[ ]"
-                lines.append(f"  - {sub_box} {sub_title}")
+                lines.append(f"  - {sub_box} {escape_markdown_inline(sub_title)}")
 
             elif isinstance(sub, str) and sub.strip():
                 clean_sub = re.sub(r"\s+", " ", str(sub)).strip()
                 sub_box = "[x]" if completed else "[ ]"
-                lines.append(f"  - {sub_box} {clean_sub}")
+                lines.append(f"  - {sub_box} {escape_markdown_inline(clean_sub)}")
 
     # Success criteria
     criteria = goal.get("success_criteria")
@@ -426,7 +436,7 @@ def format_goal_tree(goal: Dict[str, Any]) -> str:
             if isinstance(crit, str) and crit.strip():
                 clean_crit = re.sub(r"\s+", " ", str(crit)).strip()
                 crit_box = "[x]" if completed else "[ ]"
-                lines.append(f"  - {crit_box} {clean_crit}")
+                lines.append(f"  - {crit_box} {escape_markdown_inline(clean_crit)}")
 
     return "\n".join(lines)
 
