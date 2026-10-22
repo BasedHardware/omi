@@ -113,8 +113,6 @@ def bounded_transcript_segments(
             if len(orig_str) > remaining_orig:
                 item["original_text"] = orig_str[:remaining_orig]
                 truncated = True
-            else:
-                item["original_text"] = orig_str
             used_segment_chars += len(item["original_text"])
         bounded.append(item)
         used_chars += used_segment_chars
