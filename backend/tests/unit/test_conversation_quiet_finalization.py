@@ -521,7 +521,8 @@ def test_oversized_row_is_closed_and_the_check_stops_instead_of_redelivering_for
         return 'closed'
 
     monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', record_close)
-    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'oversized_closed'
+    job_id = checks.quiet_check_id('synthetic', 'old')
+    assert quiet.run(job_id, 1, firestore_client=store) == 'oversized_closed'
     uid, conversation_id, quiet_for = closed['args']
     assert (uid, conversation_id) == ('synthetic', 'old')
     # The terminal close must use the same client the check and admission used,
@@ -537,8 +538,12 @@ def test_oversized_row_is_closed_and_the_check_stops_instead_of_redelivering_for
     evaluated_at = NOW + timedelta(seconds=361)
     expected_cutoff = evaluated_at - timedelta(seconds=continuation_timeout(store.rows[ROW], 120))
     assert closed['recovery_cutoff'] == expected_cutoff
-    assert _job(store)['status'] == 'quiet_done'
+    job = _job(store)
+    assert job['status'] == 'quiet_done'
+    assert job['last_failure_code'] == 'document_size_limit'
     assert 'finalization_job_id' not in store.rows[ROW]
+    # The successor wake this run dispatched before admission is now inert.
+    assert quiet.run(job_id, job['dispatch_generation'], firestore_client=store) == 'stale'
 
 
 def test_oversized_close_refusal_leaves_the_check_armed_for_the_next_replay(store, monkeypatch):
@@ -560,17 +565,72 @@ def test_oversized_close_refusal_leaves_the_check_armed_for_the_next_replay(stor
     assert _job(store)['dispatch_generation'] == 2
 
 
+def test_size_rejection_naming_another_document_holds_the_check_without_touching_the_row(store, monkeypatch):
+    """#23341 containment: any permanent size rejection must stop the 5xx storm.
+
+    A 400 naming another document cannot be fixed by closing this conversation,
+    so the check retires as held and the row keeps its in_progress status.
+    """
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+    monkeypatch.setattr(
+        lifecycle,
+        'request_finalization',
+        lambda *a, **k: (_ for _ in ()).throw(_size_limit_error('other-conversation')),
+    )
+    close = MagicMock(side_effect=AssertionError("another document's rejection must not close this row"))
+    monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', close)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'document_size_limit'
+    close.assert_not_called()
+    job = _job(store)
+    assert job['status'] == 'quiet_done'
+    assert job['last_failure_code'] == 'document_size_limit'
+    assert (
+        job['reconcile_after_at'] is firestore.DELETE_FIELD
+    )  # the fixture keeps the sentinel; Firestore drops the field
+    assert store.rows[ROW]['status'] == 'in_progress'
+    assert store.rows[ROW]['transcript_segments'] == [{'text': 'synthetic fixture'}]
+
+
 @pytest.mark.parametrize(
     'error',
     [
-        _size_limit_error('other-conversation'),
         FirestoreInvalidArgument('400 some other 400'),
         ValueError('unrelated'),
     ],
 )
-def test_only_this_rows_permanent_size_rejection_is_contained(store, monkeypatch, error):
+def test_non_size_rejections_still_raise(store, monkeypatch, error):
     quiet.arm('synthetic', 'old', 120, firestore_client=store)
     _advance(monkeypatch, 361)
     monkeypatch.setattr(lifecycle, 'request_finalization', lambda *a, **k: (_ for _ in ()).throw(error))
     with pytest.raises(type(error)):
         quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert _job(store)['status'] == checks.QUIET_CHECK_STATUS
+
+
+def test_worker_endpoint_acks_an_oversized_conversation_with_200(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+
+    def refuse(*args, **kwargs):
+        raise _size_limit_error('old')
+
+    monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
+    monkeypatch.setattr(quiet.lifecycle, 'close_oversized_in_progress_conversation', lambda *a, **k: 'closed')
+    actual = quiet.run
+    monkeypatch.setattr(quiet, 'run', lambda jid, gen: actual(jid, gen, firestore_client=store))
+    app = FastAPI()
+    app.include_router(worker.router)
+    app.dependency_overrides[worker.verify_listen_finalization_cloud_tasks_oidc] = lambda: 0
+    payload = {'job_id': checks.quiet_check_id('synthetic', 'old'), 'dispatch_generation': 1}
+    with TestClient(app) as client:
+        first = client.post('/v1/conversation-finalization-jobs/run', json=payload)
+        # Cloud Tasks redelivery of the same generation and the dispatched successor both ack.
+        second = client.post('/v1/conversation-finalization-jobs/run', json=payload)
+        successor = client.post(
+            '/v1/conversation-finalization-jobs/run',
+            json={'job_id': payload['job_id'], 'dispatch_generation': _job(store)['dispatch_generation']},
+        )
+    assert (first.status_code, first.json()['status']) == (200, 'oversized_closed')
+    assert (second.status_code, second.json()['status']) == (200, 'stale')
+    assert (successor.status_code, successor.json()['status']) == (200, 'stale')

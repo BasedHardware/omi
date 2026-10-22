@@ -6388,7 +6388,10 @@ durable owner each change what the next replay must do. The refusals resolve
 without operator action: a live lease expires, and a deletion finishes and
 removes the marker. The closed row is the same kept-content terminal as the
 live-listen path: a visible conversation with its transcript and no generated
-summary, memories or action items.
+summary, memories or action items. A size rejection naming a different
+document cannot be fixed by closing this row, so that check retires as held
+(`last_failure_code=document_size_limit`, the row untouched) rather than
+answering 5xx into an endless redelivery.
 
 Only opaque job ID and dispatch generation enter Cloud Tasks. Session setup
 stamps only a boolean BYOK requirement; credential-free recovery creates a

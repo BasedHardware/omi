@@ -182,7 +182,10 @@ def evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any 
     return evaluate(client.transaction())
 
 
-def stop_quiet_check(job_id: str, generation: int, *, firestore_client: Any = None) -> None:
+def stop_quiet_check(
+    job_id: str, generation: int, *, failure_code: str | None = None, firestore_client: Any = None
+) -> None:
+    """Retire the check; ``failure_code`` records why a still-owed row was given up on."""
     client = _client(firestore_client)
     ref = client.collection(jobs_db.FINALIZATION_JOBS_COLLECTION).document(job_id)
 
@@ -190,6 +193,9 @@ def stop_quiet_check(job_id: str, generation: int, *, firestore_client: Any = No
     def stop(transaction: Any) -> None:
         job = ref.get(transaction=transaction).to_dict() or {}
         if job.get('kind') == QUIET_CHECK_KIND and job.get('dispatch_generation') == generation:
-            transaction.update(ref, {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD})
+            updates: dict[str, Any] = {'status': 'quiet_done', 'reconcile_after_at': firestore.DELETE_FIELD}
+            if failure_code is not None:
+                updates['last_failure_code'] = failure_code
+            transaction.update(ref, updates)
 
     stop(client.transaction())

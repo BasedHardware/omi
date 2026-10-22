@@ -252,3 +252,64 @@ def test_maintenance_isolates_a_provider_stt_sweep_failure(rows, monkeypatch):
     counts = route.maintain(1000.0)
     assert counts['rewoken'] == 1 and counts['provider_stt_sweep_errors'] == 1
     assert counts['summary_debt_admitted'] == 1
+
+
+def _oversized_write_rejection():
+    from google.api_core.exceptions import InvalidArgument
+
+    return InvalidArgument(
+        "400 Document 'projects/p/databases/(default)/documents/users/u/conversations/c' cannot be written "
+        "because its size (1,048,631 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
+    )
+
+
+def test_oversized_conversation_holds_the_outbox_row_instead_of_rewaking(rows, monkeypatch):
+    """#23341: the 1 MiB refusal is permanent; the row parks dormant with its reason and no task retries."""
+    state_rows, tasks = rows
+    token = state_rows[KEY]['task_token']
+    process = Mock(side_effect=_oversized_write_rejection())
+    assert reprocess.run(KEY, token, process, now=10_000.0) == 'held'
+    process.assert_called_once_with('u', 'c', 'en')
+    row = state_rows[KEY]
+    assert row['dormant'] and row['due_at'] is None and row['lease_until'] == 0 and row['owner'] is None
+    assert row['held_reason'] == 'document_size_limit'
+    assert row['uid'] == 'u' and row['conversation_id'] == 'c'  # kept findable for a later rollover
+    assert len(tasks) == 1  # no successor wake
+    # A Cloud Tasks redelivery claims a dormant row as stale (the sweep skips dormant rows the same way).
+    assert reprocess.run(KEY, token, process, now=10_001.0) == 'stale'
+    assert len(tasks) == 1
+    process.assert_called_once()
+
+
+def test_other_invalid_argument_rejections_still_surface_from_the_outbox(rows):
+    from google.api_core.exceptions import InvalidArgument
+
+    state_rows, _tasks = rows
+    token = state_rows[KEY]['task_token']
+    with pytest.raises(InvalidArgument):
+        reprocess.run(KEY, token, Mock(side_effect=InvalidArgument('400 synthetic unrelated rejection')), now=10_000.0)
+    assert not state_rows[KEY].get('dormant')
+
+
+@pytest.mark.asyncio
+async def test_legacy_sync_handler_acks_an_oversized_conversation_with_200(rows, monkeypatch):
+    from routers import batch_pipeline
+    from utils.batch_pipeline import enrichment
+
+    state_rows, _tasks = rows
+    # run_enrichment binds discard_blocked by name; the fixture's custody patch does not reach it.
+    monkeypatch.setattr(enrichment, 'discard_blocked', lambda _document_id: False)
+    monkeypatch.setattr(callback, 'enrich_conversation', Mock(side_effect=_oversized_write_rejection()))
+
+    async def run(_executor, func, *args):
+        return func(*args)
+
+    monkeypatch.setattr(batch_pipeline, 'run_blocking', run)
+    payload = {'kind': 'sync_reprocess', 'key': KEY, 'task_token': state_rows[KEY]['task_token']}
+    response = await batch_pipeline.enrichment_response(payload)
+    assert response.status_code == 200
+    assert json.loads(response.body) == {'status': 'held'}
+    assert state_rows[KEY]['held_reason'] == 'document_size_limit'
+    redelivery = await batch_pipeline.enrichment_response(payload)
+    assert redelivery.status_code == 200
+    assert json.loads(redelivery.body) == {'status': 'stale'}

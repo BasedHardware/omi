@@ -21,6 +21,8 @@ from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
+DOCUMENT_SIZE_LIMIT = 'document_size_limit'
+
 
 def _dispatch(check: dict[str, Any]) -> None:
     # Listen/GKE intentionally retains inline pusher finalization. Its check
@@ -103,8 +105,34 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
         )
     except Exception as error:
         failure = classify_finalization_failure(error, check['conversation_id'])
-        if not failure.conversation_at_size_limit:
+        if failure.reason != DOCUMENT_SIZE_LIMIT:
             raise
+        if not failure.conversation_at_size_limit:
+            # The 400 names a different document: this admission can never
+            # commit and closing this conversation would not shrink that
+            # document. Retire the check as held (#23353) instead of answering
+            # 5xx into an endless redelivery; the conversation is untouched.
+            checks_db.stop_quiet_check(
+                job_id,
+                check['dispatch_generation'],
+                failure_code=DOCUMENT_SIZE_LIMIT,
+                firestore_client=firestore_client,
+            )
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='quiet_check',
+                to_mode='held',
+                reason=DOCUMENT_SIZE_LIMIT,
+                outcome='exhausted',
+                log=logger,
+            )
+            logger.warning(
+                'event=quiet_finalization outcome=held reason=%s generation=%s document=%s',
+                DOCUMENT_SIZE_LIMIT,
+                generation,
+                failure.document,
+            )
+            return DOCUMENT_SIZE_LIMIT
         # The row sits at Firestore's 1 MiB document ceiling: the finalization
         # binding grows the document, so every redelivery of this check fails
         # identically (the grpc_helpers InvalidArgument 400 group). Close it
@@ -136,12 +164,18 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
                 component='pusher',
                 from_mode='quiet_finalization_admission',
                 to_mode='unstampable_terminal',
-                reason='other',
+                reason=DOCUMENT_SIZE_LIMIT,
                 outcome='degraded',
                 log=logger,
             )
-        # Terminal or gone. Stop the due index so the reconciler cannot
-        # re-arm an admission that can never commit.
-        checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
+        # Terminal or gone. Retire the check — recording the size-limit code,
+        # like the held path — so the reconciler cannot re-arm an admission
+        # that can never commit.
+        checks_db.stop_quiet_check(
+            job_id,
+            check['dispatch_generation'],
+            failure_code=DOCUMENT_SIZE_LIMIT,
+            firestore_client=firestore_client,
+        )
         return f'oversized_{close}'
     return result['status']
