@@ -199,6 +199,32 @@ describe("the classic dashboard without finance:read", () => {
     // The analytics the viewer does have still render.
     expect(screen.getByText("Analytics Dashboard")).toBeTruthy();
     expect(screen.getByText("macOS Growth Metrics")).toBeTruthy();
+    // content:read holders keep the chat ratings section ("By Week" is its
+    // grouping toggle; the section header and the analytics message-ratings
+    // widget share other names).
+    expect(
+      state.urls.some((u) => u.startsWith("/api/omi/chat-lab/ratings"))
+    ).toBe(true);
+    expect(screen.getAllByText("By Week").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Chat Ratings").length).toBeGreaterThan(0);
+  });
+});
+
+describe("the classic dashboard without content:read", () => {
+  it("fetches no chat ratings endpoint and renders no ratings section", async () => {
+    // Finance holds analytics:read + finance:read but not content:read; on
+    // this fallback dashboard their chat-ratings widget must hide rather
+    // than render 403s as zero totals. The analytics message-ratings
+    // widget (analytics:read) stays.
+    state.scopes = ["analytics:read", "finance:read"];
+    mountPage();
+
+    await screen.findByText("Conversations");
+    expect(
+      state.urls.some((u) => u.startsWith("/api/omi/chat-lab/ratings"))
+    ).toBe(false);
+    expect(screen.queryAllByText("By Week")).toHaveLength(0);
+    expect(screen.queryAllByText("Chat Ratings")).toHaveLength(0);
   });
 });
 

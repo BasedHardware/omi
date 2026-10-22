@@ -17,7 +17,7 @@ import {
   type MemberAccess,
   type Scope,
 } from "@/lib/admin-access";
-import { redactFinancialFields } from "@/lib/financial-fields";
+import { redactSensitiveFields } from "@/lib/sensitive-fields";
 
 export interface AdminIdentity {
   uid: string;
@@ -26,11 +26,12 @@ export interface AdminIdentity {
   email: string | null;
   access: MemberAccess;
   /**
-   * The one JSON response path for scoped data. Strips every financial
-   * field (lib/financial-fields.ts) unless this identity holds
-   * finance:read — including inside nested documents — so a route cannot
-   * leak money data field by field. A route that must show a financial
-   * field to a non-finance caller passes `keep` with a comment and a test.
+   * The one JSON response path for scoped data. Strips every classified
+   * sensitive field (lib/sensitive-fields.ts) unless this identity holds
+   * the scope that unlocks the field's class — including inside nested
+   * documents, and with credentials never returned at all — so a route
+   * cannot leak sensitive data field by field. A route that must show a
+   * locked field passes `keep` with a comment and a test.
    */
   json: (
     body: unknown,
@@ -51,9 +52,7 @@ const STATS_READER_ACCESS: MemberAccess = {
 function respondAs(access: MemberAccess) {
   return (body: unknown, init?: ResponseInit, keep?: readonly string[]) =>
     NextResponse.json(
-      hasScope(access, "finance:read")
-        ? body
-        : redactFinancialFields(body, { keep }),
+      redactSensitiveFields(body, { scopes: access.scopes, keep }),
       init
     );
 }

@@ -145,7 +145,7 @@ describe("route inventory", () => {
   });
 
   it("never serializes scoped JSON outside the guard's json()", () => {
-    // The financial field wall (lib/financial-fields.ts) lives in
+    // The sensitive field wall (lib/sensitive-fields.ts) lives in
     // AdminIdentity.json; a scoped route that calls NextResponse.json
     // directly would bypass it. Guard responses (401/403 from requireScope)
     // are returned, not constructed, so they need no wall.
