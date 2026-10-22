@@ -26,7 +26,6 @@ struct ResolvedSpeakerLabel: Equatable, Sendable {
   }
 
   var liveMapValue: String? { retracted ? nil : isUser ? "user" : personID }
-  var ownerDisplayName: String? { isUser ? "You" : nil }
   func apply(to segment: SpeakerSegment) -> SpeakerSegment {
     var result = segment
     result.isUser = isUser
@@ -58,18 +57,4 @@ func addingSpeakerLabelSourceMigration(_ original: DatabaseMigrator) -> Database
     try db.alter(table: "transcription_segments") { t in t.add(column: "speakerLabelSource", .text) }
   }
   return migrator
-}
-
-enum RefactorSpeakerPresentation {
-  static func names(_ map: [Int: String], serving: Bool, resolve: (String) -> String?) -> [Int: String] {
-    var names: [Int: String] = [:]
-    for (speaker, person) in map {
-      if serving && person == "user" {
-        names[speaker] = "You"
-      } else if let name = resolve(person) {
-        names[speaker] = name
-      }
-    }
-    return names
-  }
 }

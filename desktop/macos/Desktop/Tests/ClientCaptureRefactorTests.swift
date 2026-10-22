@@ -7,7 +7,6 @@ import XCTest
 final class ClientCaptureRefactorTests: XCTestCase {
   func testExplicitOwnerAndRetractionWithLegacyFallback() {
     XCTAssertEqual(ResolvedSpeakerLabel(personID: nil, isUser: true, retracted: false).liveMapValue, "user")
-    XCTAssertEqual(ResolvedSpeakerLabel(personID: "user", isUser: nil, retracted: false).ownerDisplayName, "You")
     XCTAssertFalse(ResolvedSpeakerLabel(personID: "user", isUser: false, retracted: false).isUser)
     let retracted = ResolvedSpeakerLabel(personID: "", isUser: true, retracted: true)
     XCTAssertNil(retracted.liveMapValue)
@@ -16,6 +15,11 @@ final class ClientCaptureRefactorTests: XCTestCase {
     let owner = ResolvedSpeakerLabel(personID: "user", isUser: nil, retracted: false).apply(to: segment)
     XCTAssertEqual(
       SpeakerLabelFormatter(names: [:]).label(isUser: owner.isUser, personId: owner.personId, speakerId: 1), "You")
+    let explicitOther = ResolvedSpeakerLabel(personID: "user", isUser: false, retracted: false).apply(to: owner)
+    XCTAssertEqual(
+      SpeakerLabelFormatter(names: [:]).label(
+        isUser: explicitOther.isUser,
+        personId: explicitOther.personId, speakerId: 1), "Speaker 2")
     let cleared = retracted.apply(to: owner)
     XCTAssertFalse(cleared.isUser)
     XCTAssertNil(cleared.personId)
