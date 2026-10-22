@@ -145,6 +145,7 @@ async def available_model(*, mode='reserved', owner_allowlisted=False):
     local = _local()
     if local.cooldowns.get(DREAM_MODEL, 0) > time.monotonic():
         return _decision(DREAM_MODEL, 'saturated', waiting=True, source='local_cooldown')
+    stage = 'client'
     try:
         if reservation_state.client() is None:
             return _decision(DREAM_MODEL, 'no_client', waiting=True)
@@ -152,6 +153,7 @@ async def available_model(*, mode='reserved', owner_allowlisted=False):
         utilization_limit = float(os.getenv('DREAM_DEDICATED_UTILIZATION_LIMIT', '0.7'))
         if not 0 < fresh_seconds <= 900 or not 0 < utilization_limit <= 1:
             return _decision(DREAM_MODEL, 'invalid_headroom_policy', waiting=True)
+        stage = 'refresh'
         states = await reservation_state.refresh(
             _probe if gateway_probe_enabled() else None,
             apply_overrides=False,
@@ -160,11 +162,17 @@ async def available_model(*, mode='reserved', owner_allowlisted=False):
         )
         if states.get(DREAM_MODEL) != State.ACTIVE:
             return _decision(DREAM_MODEL, 'no_states' if not states else 'no_active_model', waiting=True)
+        stage = 'headroom'
         reason = await reservation_state.dream_headroom(
             DREAM_MODEL, fresh_seconds=fresh_seconds, utilization_limit=utilization_limit
         )
-    except Exception:
-        reason = 'probe_failed'
+    except Exception as exc:
+        # The probe callable cannot raise into this frame: _probe converts its
+        # own failures to 'inconclusive' and refresh runs it as a background
+        # task, so every exception here is a shared-state read/transaction
+        # error. Payload-free class/stage only; messages can embed private bodies.
+        reason = 'state_error'
+        logger.warning('dream_capacity_state_error model=%s stage=%s exc=%s', DREAM_MODEL, stage, type(exc).__name__)
     return _decision(DREAM_MODEL, reason or 'fresh_reservation_saturation_clear', waiting=reason is not None)
 
 
