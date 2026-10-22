@@ -362,50 +362,10 @@
     },
     {
       "path": "utils/episodes/metrics.py",
-      "function": "record_boundary",
-      "label": "outcome",
-      "shape": "call:_label",
-      "count": 1,
-      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
-    },
-    {
-      "path": "utils/episodes/metrics.py",
-      "function": "record_client_request",
-      "label": "outcome",
-      "shape": "call:_label",
-      "count": 1,
-      "why": "main episodes client gate (M3 final main merge); label normalized by _label, owner lane 14 to enum"
-    },
-    {
-      "path": "utils/episodes/metrics.py",
-      "function": "record_episode_closed",
-      "label": "reason",
-      "shape": "call:_label",
-      "count": 1,
-      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
-    },
-    {
-      "path": "utils/episodes/metrics.py",
       "function": "record_moment_update",
       "label": "outcome",
       "shape": "name",
       "count": 2,
-      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
-    },
-    {
-      "path": "utils/episodes/metrics.py",
-      "function": "record_provisional_outcomes",
-      "label": "outcome",
-      "shape": "call:_label",
-      "count": 1,
-      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
-    },
-    {
-      "path": "utils/episodes/metrics.py",
-      "function": "record_wrapup_latency",
-      "label": "reason",
-      "shape": "call:_label",
-      "count": 1,
       "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
     },
     {

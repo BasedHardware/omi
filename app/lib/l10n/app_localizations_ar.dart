@@ -14402,4 +14402,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceControls => 'عناصر التحكم';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'أيضًا: $items';
+  }
 }

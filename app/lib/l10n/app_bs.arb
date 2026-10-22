@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done} od {total} min",
     "deviceRecently": "Nedavno",
     "deviceDisconnectedFor": "Bez veze {duration}",
-    "deviceControls": "Kontrole"
+    "deviceControls": "Kontrole",
+    "homeBackgroundLine": "Također: {items}"
 }

@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} von {total} Min.",
     "deviceRecently": "Kürzlich",
     "deviceDisconnectedFor": "{duration} getrennt",
-    "deviceControls": "Steuerung"
+    "deviceControls": "Steuerung",
+    "homeBackgroundLine": "Außerdem: {items}"
 }

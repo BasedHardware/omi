@@ -554,3 +554,18 @@ def test_actual_receiver_active_admission_requires_identity_without_fallback(mon
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', str(ladder).lower())
     with pytest.raises(error):
         receiver.ListenReceiver(_identity_trap_host(shape, False), [], {})
+
+
+def test_actual_receiver_idle_cohort_armed_still_never_touches_identity(monkeypatch):
+    """The Soniox idle cohort resolves its uid lazily; even with the cohort
+    armed, receiver construction must not consult the listen request's identity
+    on a cap-bypass path (identity traps raise on touch)."""
+    from routers.listen import receiver
+
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '30')
+    monkeypatch.setattr(receiver, 'session_recovery_enabled', lambda host: False)
+    value = receiver.ListenReceiver(_identity_trap_host('request_raises', False), [], {})
+    assert value.soniox_idle_budget is not None

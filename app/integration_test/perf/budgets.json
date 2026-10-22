@@ -2,5 +2,9 @@
   "home_scroll": 100.0,
   "detail_scroll": 19.0,
   "memory_scroll": 100.0,
-  "chat_tap": 35.0
+  "chat_tap": 35.0,
+  "home_live_scroll": 100.0,
+  "episode_page": 100.0,
+  "device_page": 100.0,
+  "tab_switch": 100.0
 }

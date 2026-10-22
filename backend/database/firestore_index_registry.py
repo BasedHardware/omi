@@ -1382,6 +1382,18 @@ REVIEW_QUEUE_BY_STATUS_ID_QUERY = FirestoreQuerySpec(
     ),
 )
 
+DUE_IN_PROGRESS_CONTENT_QUERY = FirestoreQuerySpec(
+    identifier='conversations_in_progress_content_due',
+    collection_group='conversations',
+    query_scope='COLLECTION_GROUP',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('has_content', '==', 'has_content'),
+        FirestoreQueryFilter('finished_at', '<=', 'content_due_before'),
+    ),
+    index_fields=(_asc('status'), _asc('has_content'), _asc('finished_at'), _asc('__name__')),
+)
+
 STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     identifier='conversations_in_progress_by_finished_at',
     collection_group='conversations',
@@ -1971,6 +1983,7 @@ QUERY_SPECS = (
     EXPIRY_URGENT_SHORT_TERM_BY_STORED_EXPIRY_QUERY,
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
+    DUE_IN_PROGRESS_CONTENT_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
     STALE_RECOVERY_PAGE_QUERY,
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,

@@ -312,8 +312,15 @@
       "path": "utils/episodes/live.py",
       "function": "on_realtime_segments",
       "kind": "start_background_task",
+      "count": 2,
+      "why": "reviewed safe (Episodes v1/v1.1): best-effort moment update and the structural attach on the episode overlay; neither holds conversation, task or memory authority. A moment lost at SIGKILL is re-applied by the conversation's finalization tail (record_moment over segments past the episode's applied offset), and a lost attach is redone by the next batch on any replica (the attach is idempotent) or by that moment/finalization, which opens or joins the episode itself"
+    },
+    {
+      "path": "utils/episodes/live.py",
+      "function": "on_session_end",
+      "kind": "start_background_task",
       "count": 1,
-      "why": "reviewed safe (Episodes v1): best-effort moment update on the episode overlay; it holds no conversation, task or memory authority, and a moment lost at SIGKILL is re-applied by the conversation's finalization tail (record_moment over segments past the episode's applied offset)"
+      "why": "reviewed safe (Episodes v1.1): the session-end flush is itself the recovery for an in-process buffer; if it is lost at SIGKILL the conversation's finalization tail applies the same segments past the episode's applied offset"
     }
   ]
 }

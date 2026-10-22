@@ -14534,4 +14534,9 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get deviceControls => 'Управление';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Също: $items';
+  }
 }

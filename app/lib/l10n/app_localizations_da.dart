@@ -14472,4 +14472,9 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deviceControls => 'Betjening';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Også: $items';
+  }
 }

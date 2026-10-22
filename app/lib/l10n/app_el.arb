@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} από {total} λεπ.",
     "deviceRecently": "Πρόσφατα",
     "deviceDisconnectedFor": "Αποσυνδεδεμένο για {duration}",
-    "deviceControls": "Χειριστήρια"
+    "deviceControls": "Χειριστήρια",
+    "homeBackgroundLine": "Επίσης: {items}"
 }

@@ -22,6 +22,7 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.fragment_visibility import is_user_curated
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.silent_redrive import is_silent_redrive
 from utils.conversations.relevance import sync_intake_decision
 from utils.conversations.summary_delivery import (
     PROCESS_CONTEXT,
@@ -141,6 +142,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     if language == _LINEAGE_RETRY_LANGUAGE:
         language = conversation.language or 'en'
 
+    silent_redrive = is_silent_redrive(conversation_data)
     was_discarded = conversation.discarded
     prior_decision = conversation_data.get('relevance_decision')
     # process_conversation persists relevance_decision.trigger == 'sync_update'.
@@ -158,6 +160,7 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
         language_code=language or 'en',
         conversation=conversation,
         trigger=ProcessingTrigger.SYNC_UPDATE,
+        defer_derived_effects=silent_redrive,
         user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
         persistence_observer=_require_current_conversation_persistence,
         # Deserialize drops relevance_decision. The raw row still has it:
@@ -181,7 +184,12 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     # reprocess path deliberately suppresses webhooks. Emit exactly at the
     # discarded -> visible transition so pendant conversations reach developer
     # integrations without duplicating events on ordinary later reprocessing.
-    if conversation.source == ConversationSource.limitless and was_discarded and not processed_conversation.discarded:
+    if (
+        not silent_redrive
+        and conversation.source == ConversationSource.limitless
+        and was_discarded
+        and not processed_conversation.discarded
+    ):
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     logger.info('event=sync_reprocess_callback outcome=processed')

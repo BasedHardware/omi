@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done}/{total} मिनट",
     "deviceRecently": "हाल ही में",
     "deviceDisconnectedFor": "{duration} तक डिस्कनेक्ट रहा",
-    "deviceControls": "नियंत्रण"
+    "deviceControls": "नियंत्रण",
+    "homeBackgroundLine": "साथ ही: {items}"
 }

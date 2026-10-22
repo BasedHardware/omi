@@ -14540,4 +14540,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceControls => 'Vezérlők';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Továbbá: $items';
+  }
 }

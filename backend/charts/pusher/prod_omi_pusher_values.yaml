@@ -114,6 +114,8 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
   - name: STT_CAP_DISPATCH_ENFORCEMENT
     value: "false"
   - name: STT_CAP_DISPATCH_COHORT

@@ -1151,6 +1151,33 @@ UI grouping, transcript merging, multi-capture chain consolidation, and link
 reconciliation after later user edits/discards remain follow-ups.
 
 
+## Occasion conversations (episodes cohort)
+
+For the episodes beta cohort, the live conversation is the occasion instead of
+being split on silence and stitched back together by smart merge afterwards
+(`backend/config/occasion_conversations.py`, ruling David 2026-10-22).
+
+- **Admission** happens once per session in `runtime._bootstrap`:
+  `client_gate.occasion_mode(uid, source)` requires `OCCASION_CONVERSATIONS_ENABLED`
+  (on unless set off), the episodes cohort, and the per-user client-seen marker,
+  and fails closed on any read error. Desktop sources and multi-channel
+  (phone-call) sessions are never admitted, so their boundaries are unchanged.
+- **Silence window.** An admitted session's `conversation_creation_timeout` is at
+  least `OCCASION_GAP_SECONDS` (15 min, a constant); a longer user setting wins.
+- **Reconnects.** When a new recording id opens a session, `_occasion_attach_target`
+  proposes the user's open conversation instead of a fresh id when it is
+  `in_progress`, not deleted, discarded or locked, from the same device and an
+  attachable source, under the span cap, and resumable under the extended
+  timeout (`event=occasion_attach`). The recording-session transaction then
+  binds the new recording id to it and restamps
+  `external_data.recording_session_id`, which sync lineage accepts.
+- **Span cap.** `lifecycle_loop` turns `continue_current` into
+  `process_and_create_new` once a conversation has spanned
+  `OCCASION_MAX_SPAN_SECONDS` (3 h, smart merge's cap)
+  (`event=occasion_span_rollover`).
+- **Off** restores the 2-minute split and per-recording conversations at the
+  next session; open sessions keep the timeout they started with.
+
 ## Same-occasion folding across a silence split (smart merge)
 
 The two-minute silence split can turn one occasion into several pendant
@@ -3920,7 +3947,7 @@ message names a conversation (or no document), `assign_sync_conversation` retrie
 with it marked full (`outcome=size_limit_retry`, then `trigger=commit_limit`); a
 second rejection, or one naming an index document, fails as before and earns a strike.
 
-`utils/conversation_continuity.py` owns the shared predicate. The remaining policy
+`models/conversation_continuity.py` owns the shared predicate. The remaining policy
 input difference is that realtime can configure its timeout per session, while WALs
 do not carry this setting and sync uses the default. Job leases, persistence fences,
 encryption codecs and revision fencing remain in force. Bridge effects use existing
@@ -4127,6 +4154,20 @@ their existing paths.
 Every reopen starts a new provider speaker scope (see below), so the VAD policy
 keeps the prod values. Lower VAD thresholds wait for speaker scope to survive a
 reopen: keep the conversation scope and remap the new socket's `SPEAKER_N`.
+
+A uid-hash treatment cohort can run tighter values on a static percent of users
+without touching the global knobs: `SONIOX_IDLE_COHORT_PERCENT` (default `0`,
+the cohort kill switch) selects sessions by
+`cohort_bucket(uid, 'soniox-idle-close', bits=64)`, and in-cohort sessions read
+`SONIOX_IDLE_COHORT_CLOSE_SECONDS`, `SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR`
+and `SONIOX_IDLE_COHORT_REARM_SECONDS` when set, each falling back to the
+global knob when unset. Out-of-cohort sessions always keep the global values,
+and `SONIOX_IDLE_CLOSE_SECONDS=0` disables the idle wrapper for everyone
+either way. The receiver-owned budget resolves the arm once per logical session,
+consulting the listen request's uid only while the cohort is armed (percent > 0
+plus at least one override), so identity-bypass and unauthenticated paths never
+touch `request.uid`; the `omi_soniox_idle_cohort_*` companions carry the same
+closes/reopens/latency/avoided series labelled `arm=control|treatment`.
 
 The first raw VAD silence decision starts a monotonic timer. After the threshold
 and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
@@ -6245,6 +6286,19 @@ Runtime STT-cap and ladder execution scope shares the 60-second, environment-fen
 Firestore token cache; session admission does not wait for it. Existing live sessions
 retain admitted state until reconnect. See [runtime ramp and rollback](stt-cap-dispatch.md#runtime-cohort-no-restart).
 
+### Silent operator held-unit redrive
+
+The paid epoch-2 operator can freeze an owner/time/ID-scoped held-only cohort and
+use `--silent`. The intent and assignment receipt retain that choice; assignment
+stamps `sync_silent_redrive_revision` transactionally with the transcript.
+Enrichment for that exact revision regenerates notes while deferring derived
+reminders/notifications and creation webhooks. Silent projection retains donor
+cleanup debt rather than cancelling client reminders. Later ordinary revisions
+resume ordinary processing. Serving and enrichment code must be deployed before
+paid silent apply; CLI-only rollout cannot guarantee silence. See
+[the scoped redrive runbook](runbooks/scoped-batch-redrive.md) for digest approval,
+canary/remainder prefix semantics and stop conditions.
+
 ### Stale reconnect recovery
 
 Reconnect recovery claims at most ten `in_progress` rows older than one hour,
@@ -6252,9 +6306,12 @@ newest eligible first. A per-user `conversation_recovery_state/stale_in_progress
 CAS cursor advances before attempts, including refusals/errors; value cursors
 survive row deletion. Subsequent reconnects page toward older rows, wrap after
 the tail, and wait at least one minute between page claims. Each call reads at
-most two ten-row pages plus cursor state; concurrent reconnects cannot claim the
-same cursor generation. A process crash can postpone its claimed page until the
-next pass, but cannot pin later pages. Recovery remains reconnect-driven.
+most two ten-row pages plus cursor/deletion-marker state. Concurrent reconnects
+cannot claim the same cursor generation. The claim transaction checks the durable
+account-deletion marker before writing, so an erasure cannot be followed by
+recreated cursor data. Query, cursor and marker share the customer data plane.
+A process crash can postpone its claimed page until the next pass, but cannot pin
+later pages. Recovery remains reconnect-driven.
 
 Discarded, deleted, locked and deferred rows remain protected. The outcome log
 has only the conversation ID and a bounded disposition; it has no UID/content.
@@ -6264,3 +6321,67 @@ Unexpected metric inputs fold to the shared reason enum’s `unknown` bucket.
 Acceptance is not worker completion. `STALE_IN_PROGRESS_RECOVERY_ENABLED=false`
 is the default-on feature's kill switch; it disables this reconnect sweep only.
 The new descending status/activity composite must be READY before shipment.
+
+## Durable mono pendant/phone quiet checks
+
+`LISTEN_QUIET_FINALIZATION_ENABLED=true` is the default. Mono `omi` and `phone`
+recordings arm one opaque `quiet-*` check in `conversation_finalization_jobs`
+on session setup and every socket exit (including drain/network failure).
+Arming on setup covers process death before teardown, including rows that gain
+content later. Checks leave the conversation `in_progress`; they do not bind
+`finalization_job_id`, increment the processing revision, or emit side effects.
+The first due time is the persisted last-content time plus the configured quiet
+timeout, including the stored calendar continuation window. The ordinary
+120-second gap is the fallback for legacy rows lacking the timeout stamp.
+
+At each wake, the check transaction re-reads the conversation and its recording
+session lease. A continuing owner or later content reserves a new wake at the
+later of the quiet deadline and lease expiry. An expired owner admits content
+through the normal transactional `SERVER_RECOVERY` lifecycle path with
+`require_cloud_tasks=True`. That admission rechecks status, content, protected
+output, locks, discard/deletion, quiet time and the live lease. A reconnect
+between evaluation and admission therefore wins; a reconnect with a new
+conversation identity does not suppress the old row's obligation. Desktop
+clean-close and multichannel processing keep their existing paths. Their
+existing job bindings also fence any quiet check of the same row.
+
+Only opaque job ID and dispatch generation enter Cloud Tasks. Session setup
+stamps only a boolean BYOK requirement; credential-free recovery creates a
+blocked BYOK job, never substitutes platform credentials. Each check
+reserves its next generation before processing admission, so worker death,
+duplicate delivery, task exhaustion and enqueue failure retain indexed replay
+debt. Normal processing jobs retain their existing revision/lease/fanout fences.
+The periodic outbox reconciler uses a 60-second default while this switch is
+on (300 seconds when off). It owns due wakes for GKE listen, which keeps its
+existing inline pusher route and needs no finalization queue binding to persist
+checks; queue-capable producers can additionally schedule opaque Cloud Tasks. The independent fast in-progress sweep is eligible after five minutes
+while this switch is enabled, using a due-content collection-group index (status, has_content, finished_at)
+instead of rotating through historical empty stubs, with its bounded 2,000-row scan and
+ten-admission tick cap; historical backlog drain time remains bounded by those
+caps, not guaranteed for the whole fleet in a single tick. The original two-hour full scan remains always on, with its own cursor and
+five-minute scan cadence, for markerless content and unknown legacy leases.
+New recordings have
+a per-conversation due item and do not depend on that legacy scan or a reconnect.
+
+`omi_conversation_orphaned_unfinalized_total` is an unlabeled counter of observed
+quiet, content-bearing rows without a processing job and without a live lease
+(including legacy-sweep admissions; the conservative two-hour fallback also
+counts rows whose old recording lease is unknown). Alert on a positive increase over a short
+window such as ten minutes; retries can observe the same row more than once.
+This measures missing finalization handoff, not missing capture or STT ingress.
+
+Deploy the queue-capable Cloud Run API/reconciler/worker consumer code before
+the GKE listen producer for minute-scale recovery and metric acceptance. A
+producer-only rollout retains durable indexed custody, but recovery wakes and
+the orphan metric wait for the consumer revision to serve; treat that interval
+as a partial rollout. Keep the existing Cloud Run durable-finalization
+queue/handler bindings; GKE listen retains inline finalization. Verify check creation, deferral for
+same-conversation continuation, a single processing revision after lease expiry,
+and the alert signal before declaring runtime acceptance. The declared due-content index must be READY before rollout; the existing
+Firestore readiness release gate enforces that prerequisite. Historical redrive
+is not part of this change. Kill switch:
+`LISTEN_QUIET_FINALIZATION_ENABLED=false` on **all** those hosts; this suppresses
+arming, retires queued checks without processing, and restores the prior
+2-hour fallback threshold. Already-admitted processing jobs finish under their
+normal fences. Re-enable with `true`; resumed sockets and the legacy sweep pick
+up remaining debt. This PR does not deploy or change any production row.

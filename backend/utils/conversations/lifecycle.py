@@ -912,6 +912,7 @@ def request_finalization(
     client_kind: object = 'unknown',
     app_build: object = 'unknown',
     recovery_cutoff: datetime | None = None,
+    require_expired_recording_lease: bool = False,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
@@ -933,6 +934,7 @@ def request_finalization(
             extra_updates=extra_updates,
             recovery_cutoff=recovery_cutoff if trigger is ProcessingTrigger.SERVER_RECOVERY else None,
             firestore_client=firestore_client,
+            require_expired_recording_lease=require_expired_recording_lease,
         )
     except FirestoreContentionExhausted as error:
         # An exhausted contention budget is a clean retry boundary: no outbox

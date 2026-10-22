@@ -4448,5 +4448,6 @@
     "deviceCatchingUpProgress": "{done} af {total} min",
     "deviceRecently": "For nylig",
     "deviceDisconnectedFor": "Afbrudt i {duration}",
-    "deviceControls": "Betjening"
+    "deviceControls": "Betjening",
+    "homeBackgroundLine": "Også: {items}"
 }

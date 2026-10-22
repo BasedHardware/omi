@@ -14487,4 +14487,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get deviceControls => 'Säätimet';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Lisäksi: $items';
+  }
 }

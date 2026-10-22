@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done}/{total} min",
     "deviceRecently": "Äskettäin",
     "deviceDisconnectedFor": "Yhteys katkesi {duration} ajaksi",
-    "deviceControls": "Säätimet"
+    "deviceControls": "Säätimet",
+    "homeBackgroundLine": "Lisäksi: {items}"
 }

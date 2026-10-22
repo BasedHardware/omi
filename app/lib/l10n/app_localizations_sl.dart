@@ -14511,4 +14511,9 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kontrolniki';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Tudi: $items';
+  }
 }

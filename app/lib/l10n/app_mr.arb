@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done}/{total} मिनिटे",
     "deviceRecently": "अलीकडे",
     "deviceDisconnectedFor": "{duration} डिस्कनेक्ट",
-    "deviceControls": "नियंत्रणे"
+    "deviceControls": "नियंत्रणे",
+    "homeBackgroundLine": "तसेच: {items}"
 }

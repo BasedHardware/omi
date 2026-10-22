@@ -14513,4 +14513,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get deviceControls => 'Керування';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Також: $items';
+  }
 }
