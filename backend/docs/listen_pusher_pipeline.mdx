@@ -2047,6 +2047,12 @@ the customer data plane: dev hosts serve production Firestore and use
 `screen_frames_foreign_bucket_dropped_total{reason}`; older dev-bucket docs move with
 `scripts/migrate_screen_frames_to_data_plane_bucket.py`.
 
+Notes evidence normalizes stored frame and conversation times to UTC before
+sorting or calculating offsets and duration. Naive datetimes mean UTC; ISO
+strings and numeric epoch seconds are accepted. Invalid frame times are skipped,
+and malformed or non-finite banner suitability values use zero, so one bad
+optional field cannot abort the notes pass.
+
 The Mac closes the listen socket before that evidence pass lands, and teardown
 admits finalization at once. So the shared finalizer (pusher, Cloud Tasks, and
 therefore `POST /finalize`) waits, bounded by `MEETING_NOTES_EVIDENCE_WAIT_SECONDS`

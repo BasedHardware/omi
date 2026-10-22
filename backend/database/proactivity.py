@@ -18,6 +18,7 @@ from config.proactivity_v2 import ProactivityDenied, Producer, active_plan, dail
 from database._client import get_customer_firestore_client
 from database import proactivity_redis
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from utils.conversations.datetime_utils import coerce_utc_datetime
 
 logger = logging.getLogger(__name__)
 
@@ -386,7 +387,14 @@ def record_outcome(
                     if action == 'replied'
                     else item.get('push_accepted_at', now)
                 )
-            if anchor > item['created_at'] + timedelta(hours=24) or now > anchor + timedelta(hours=24):
+            anchor = coerce_utc_datetime(anchor)
+            created_at = coerce_utc_datetime(item.get('created_at'))
+            if (
+                anchor is None
+                or created_at is None
+                or anchor - created_at > timedelta(hours=24)
+                or now - anchor > timedelta(hours=24)
+            ):
                 raise ProactivityDenied('expired')
             item.update(
                 delivered=True,
@@ -405,7 +413,12 @@ def record_outcome(
         if action in POSITIVE:
             item.setdefault('first_action', action)
             item.setdefault('first_action_at', now)
-            if item['delivered'] and item['delivered_at'] <= now <= item['delivered_at'] + timedelta(hours=24):
+            delivered_at = coerce_utc_datetime(item.get('delivered_at'))
+            if (
+                item['delivered']
+                and delivered_at is not None
+                and timedelta(0) <= now - delivered_at <= timedelta(hours=24)
+            ):
                 item.update(acted_24h=True, acted_count=1)
         if action in {'thumbs_down', 'producer_disabled'}:
             item.update(negative=True, negative_count=1)

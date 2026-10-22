@@ -20,6 +20,7 @@ from __future__ import annotations
 import base64
 import io
 import logging
+import math
 import re
 import time
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ from PIL import Image
 from database.screen_frames import get_conversation_screen_frames, own_frames
 from database.users import get_meeting_note_screenshots_enabled
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
+from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations.meeting_context import is_ai_agent_tile_name
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
@@ -61,9 +63,17 @@ class ScreenFrameEvidence:
 
 
 def _as_utc(value: Any) -> Optional[datetime]:
-    if not isinstance(value, datetime):
-        return None
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    return coerce_utc_datetime(value)
+
+
+def _safe_banner_suitability(value: Any) -> float:
+    if isinstance(value, bool):
+        return 0.0
+    try:
+        score = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return 0.0
+    return score if math.isfinite(score) else 0.0
 
 
 def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tuple[ScreenFrameEvidence, ...]:
@@ -96,7 +106,7 @@ def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tupl
                 frame_id=frame_id,
                 captured_at=captured_at,
                 role=str(doc.get('role') or 'strip'),
-                banner_suitability=float(doc.get('banner_suitability') or 0.0),
+                banner_suitability=_safe_banner_suitability(doc.get('banner_suitability')),
                 names=names,
                 summary=summary.strip() if isinstance(summary, str) else '',
             )
@@ -209,6 +219,7 @@ def with_screen_frame_participants(
         return context
     if context is not None:
         return context.model_copy(update={'participants': participants})
+    started_at = _as_utc(started_at)
     if started_at is None:
         return None
     return CalendarMeetingContext(
@@ -222,10 +233,13 @@ def with_screen_frame_participants(
 
 
 def _offset_label(captured_at: datetime, started_at: Optional[datetime]) -> str:
+    captured = _as_utc(captured_at)
+    if captured is None:
+        return 'unknown time'
     start = _as_utc(started_at)
     if start is None:
-        return captured_at.strftime('%H:%M')
-    seconds = max(0, int((captured_at - start).total_seconds()))
+        return captured.strftime('%H:%M')
+    seconds = max(0, int((captured - start).total_seconds()))
     return f'+{seconds // 60:02d}:{seconds % 60:02d}'
 
 
@@ -254,7 +268,7 @@ def _select_for_images(evidence: Sequence[ScreenFrameEvidence]) -> list[ScreenFr
     chosen = [rest[int(index * step)] for index in range(slots)]
     if banner:
         chosen.append(banner)
-    return sorted(chosen, key=lambda item: item.captured_at)
+    return sorted(chosen, key=lambda item: _as_utc(item.captured_at) or datetime.min.replace(tzinfo=timezone.utc))
 
 
 def _downscale_jpeg(raw: bytes) -> bytes:

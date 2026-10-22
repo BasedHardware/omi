@@ -476,6 +476,62 @@ def test_dedupe_history_last_five_delivered_excludes_human_and_unexposed(lane):
     assert lane.history_fn('u') == ['v2 delivered', '0', '1', '2', '3']
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('bad_due', ['', 'bad', '2026-13-99T25:00:00'])
+@pytest.mark.parametrize('changed_after_claim', [False, True])
+async def test_malformed_followup_due_is_skipped_or_closed(lane, bad_due, changed_after_claim):
+    due = datetime.now(timezone.utc) - timedelta(minutes=1)
+    task = dict(conversation_id='c', due_at=due, completed=False)
+    bad_task = dict(task, due_at=bad_due)
+    reads = [task, bad_task] if changed_after_claim else [bad_task]
+    lane.monkeypatch.setattr(producers.tasks, 'get_action_item', MagicMock(side_effect=reads))
+
+    await producers.produce_followup('u', 't', due.isoformat())
+
+    lane.publish.assert_not_awaited()
+    if changed_after_claim:
+        lane.close.assert_awaited_once_with(item=lane.item, state='suppressed', reason='source_changed')
+    else:
+        lane.claim.assert_not_awaited()
+        lane.model.assert_not_awaited()
+
+
+def test_history_sorts_mixed_timestamp_shapes_and_ignores_missing_text(lane):
+    from database import proactivity_producers as storage
+    import database.chat as chat
+
+    lane.monkeypatch.setattr(
+        storage,
+        'delivered_mentor_items',
+        lambda uid: [
+            dict(delivered_at=datetime(2026, 10, 1, 12), body='noon'),
+            dict(delivered_at='2026-10-01T14:30:00+01:00', body='afternoon'),
+            dict(body='unknown time'),
+            dict(delivered_at=None, body=''),
+            dict(delivered_at='bad', body=None),
+            {},
+        ],
+    )
+    lane.monkeypatch.setattr(producers.spine, 'decode_feed_item', lambda uid, item: SimpleNamespace(body=item['body']))
+    lane.monkeypatch.setattr(
+        chat,
+        'get_app_messages',
+        lambda *args, **kwargs: [
+            dict(sender='ai', created_at=datetime(2026, 10, 1, 13, tzinfo=timezone.utc), text='one'),
+            dict(sender='ai', created_at='2026-10-01T14:00:00Z', text='two'),
+            dict(sender='ai', created_at=datetime(2026, 10, 1, 15, tzinfo=timezone.utc).timestamp(), text='three'),
+            dict(sender='ai', created_at=None, text='unknown legacy'),
+            dict(sender='ai', created_at='bad', text=''),
+            dict(sender='ai', text=None),
+            dict(sender='ai'),
+            dict(sender='human', created_at='2026-10-01T20:00:00Z', text='human'),
+            dict(sender='ai', proactivity_item_id='unexposed', text='unexposed'),
+        ],
+    )
+
+    assert lane.history_fn('u') == ['three', 'two', 'afternoon', 'one', 'noon']
+
+
 def test_due_scheduler_named_dedup_and_opaque_payload(monkeypatch):
     enqueue = MagicMock()
     monkeypatch.setattr(scheduler.cloud_tasks, 'enqueue_named_task', enqueue)

@@ -193,3 +193,35 @@ def test_mixed_naive_and_aware_event_starts_do_not_crash_the_sort(calendar_tools
     assert "Floating" in result
     assert "Standup" in result
     assert result.index("Floating") < result.index("Standup")
+
+
+@pytest.mark.parametrize(
+    'start,end',
+    [
+        (None, None),
+        ({'dateTime': None}, None),
+        ({'dateTime': '2026-10-01T12:00:00Z'}, None),
+        ({'dateTime': '2026-10-01T12:00:00Z'}, {'dateTime': None}),
+        ({'dateTime': 123}, {'dateTime': {}}),
+        ({'dateTime': 'bad'}, {}),
+    ],
+)
+def test_malformed_event_times_do_not_hide_healthy_events(calendar_tools, start, end):
+    healthy = _event('Healthy meeting', datetime(2026, 10, 2, 12, tzinfo=timezone.utc))
+    malformed = dict(id='malformed', summary='Malformed meeting', start=start, end=end)
+
+    async def request(*args, **kwargs):
+        return {'items': [malformed, healthy]}
+
+    calendar_tools.google_api_request = request
+    result = asyncio.run(
+        calendar_tools.get_calendar_events_tool(
+            start_date='2026-07-01T00:00:00Z', end_date='2026-10-03T00:00:00Z', max_results=2
+        )
+    )
+
+    assert 'Healthy meeting' in result
+    assert 'Malformed meeting' in result
+    assert result.index('Healthy meeting') < result.index('Malformed meeting')
+    if start and 'dateTime' in start:
+        assert 'unknown time' in result
