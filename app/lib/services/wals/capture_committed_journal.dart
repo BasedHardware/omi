@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:crypto/crypto.dart';
 import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/sync_upload_batch.dart';
 
 /// Owner-scoped, durable receipts. Corrupt/missing proof never releases audio.
 /// Each event is retained; union coverage cannot count overlaps twice.
@@ -42,12 +43,8 @@ class CaptureCommittedJournal {
 
   Future<bool> covers(String owner, Wal wal) async {
     final start = wal.sourceFrameStart;
-    if (owner.isEmpty ||
-        wal.ownerUid != owner ||
-        wal.captureRoot == null ||
-        start == null ||
-        wal.sourceClockEpoch == null ||
-        wal.totalFrames <= 0) {
+    // Upload and release share one S1 eligibility rule (including mono channel).
+    if (owner.isEmpty || wal.ownerUid != owner || start == null || !captureEvidenceWalClaimable(wal)) {
       return false;
     }
     try {

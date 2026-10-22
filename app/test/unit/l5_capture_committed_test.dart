@@ -114,7 +114,8 @@ void main() {
       wal()..onDeviceOnly = true,
       wal()..sourceFrameStart = null,
       wal()..isSyncing = true,
-      wal()..ownerUid = 'other'
+      wal()..ownerUid = 'other',
+      wal()..channel = 2
     ];
     ledger.testWals = copies;
     await ledger.recordCaptureCommitted(receipt(0, 100));
