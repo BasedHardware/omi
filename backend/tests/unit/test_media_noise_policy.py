@@ -307,6 +307,9 @@ def test_client_cannot_author_content_classification(kind):
     )
     external = ExternalIntegrationCreateConversation(text='Synthetic import.', content_kind=kind)
     assert create.content_kind is None and external.content_kind is None
+    assert 'content_kind' not in CreateConversation.model_json_schema()['properties']
+    assert 'content_kind' not in ExternalIntegrationCreateConversation.model_json_schema()['properties']
+    assert 'content_kind' in Conversation.model_json_schema()['properties']
     # The server may assign its evidence decision after request validation.
     create.content_kind = kind
     stored = Conversation(id='synthetic-capture', created_at=START, structured=Structured(), **create.model_dump())

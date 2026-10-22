@@ -770,7 +770,7 @@ class ConversationSyncConflictResponse(BaseModel):
 
 
 class CreateConversation(BaseModel):
-    content_kind: Optional[Literal['conversation', 'media', 'noise']] = None
+    content_kind: SkipJsonSchema[Optional[Literal['conversation', 'media', 'noise']]] = None
 
     @field_validator('content_kind', mode='before')
     @classmethod
@@ -814,7 +814,7 @@ class CreateConversation(BaseModel):
 
 
 class ExternalIntegrationCreateConversation(BaseModel):
-    content_kind: Optional[Literal['conversation', 'media', 'noise']] = None
+    content_kind: SkipJsonSchema[Optional[Literal['conversation', 'media', 'noise']]] = None
 
     @field_validator('content_kind', mode='before')
     @classmethod
