@@ -618,9 +618,28 @@ def expected_cloud_run_env(
         service_expected: ExpectedEnv = {}
         service_canonical: dict[str, str] = {}
         bindings: dict[str, Any] = {**env_map, **secrets_map}
-        for key, entry in env_map.items():
-            # Unresolved deploy-time bindings stay name-only (None): the renderer may omit them.
-            service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=False, environ=environ)
+        if rendered_state_path is None:
+            # Manifest-only mode mirrors the renderer's provisional contract:
+            # a `provisional: true` env_var the deploy environment does not set
+            # is legitimately omitted at deploy time (the renderer allows the
+            # miss), so requiring its presence would report false drift and a
+            # strict exit 1 for a valid deployment. Bindings the environment
+            # does resolve keep their hash and stay required. With a rendered
+            # state the omission logic below already handles this exactly.
+            for key, entry in env_map.items():
+                config = render_backend_runtime_env._as_config_dict(entry) or {}
+                env_var = config.get('env_var')
+                if (
+                    'value' not in config
+                    and bool(config.get('provisional'))
+                    and isinstance(env_var, str)
+                    and not environ.get(env_var)
+                ):
+                    continue
+                service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=False, environ=environ)
+        else:
+            for key, entry in env_map.items():
+                service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=False, environ=environ)
         for key, entry in secrets_map.items():
             service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=True, environ=environ)
             service_canonical[str(key)] = _canonical_manifest_secret_form(str(key), entry, environ=environ)
@@ -1301,8 +1320,22 @@ def read_gke_workload(
         live.template_name = deployment_name
         template_env = _env_list_to_live(container.get('env', []), scope=deployment_name)
         # envFrom keys join the template fingerprint too, so template vs serving
-        # stays comparable when both bulk-load the same ConfigMap.
-        live.template_env = {**envfrom_entries(container), **template_env}
+        # stays comparable when both bulk-load the same ConfigMap. The template
+        # is context, not the serving source: a failed rollout can leave a
+        # template referencing a ConfigMap that no longer exists while the
+        # previous ReplicaSet still serves, so lookups here are best-effort —
+        # a failure must not prevent comparing the ready ReplicaSets. A None
+        # fingerprint keeps template_matches_serving unproven (None) instead of
+        # erroring the whole workload.
+        template_envfrom: LiveEnv | None = None
+        try:
+            template_envfrom = envfrom_entries(container)
+        except (ValueError, subprocess.CalledProcessError):
+            template_envfrom = None
+        if template_envfrom is None:
+            live.template_env = None
+        else:
+            live.template_env = {**template_envfrom, **template_env}
         # ... and so do the envFrom identities: expanding only their data would
         # give template-A and template-B identical fingerprints whenever the two
         # ConfigMaps currently hold the same entries. Secret sources contribute

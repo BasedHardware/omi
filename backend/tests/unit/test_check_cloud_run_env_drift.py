@@ -569,9 +569,12 @@ def test_rendered_state_drops_omitted_provisional_bindings(checker, tmp_path: Pa
     )
     _, _, expected = checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=rendered)
     assert expected['backend'] == {'ALWAYS_THERE': checker.value_hash('value', 'a')}
-    # Without rendered state the provisional binding stays a name-only expectation.
     _, _, expected = checker.expected_cloud_run_env(env='prod', manifest_path=path)
-    assert expected['backend']['PROVISIONAL_THING'] is None
+    # Without rendered state, a provisional env_var unset in this environment is
+    # legitimately omitted at deploy time (the renderer allows the miss), so the
+    # manifest-only expectation must not require it — a name-only requirement
+    # reported false missing drift and a strict exit 1 for a valid deployment.
+    assert 'PROVISIONAL_THING' not in expected['backend']
     # And a serving env that never received it reports clean against exact state.
     state = {'services': {'backend': {'env': [{'name': 'ALWAYS_THERE', 'value': 'a'}]}}}
     _, _, (result,) = checker.inspect_services_drift(
@@ -2481,6 +2484,133 @@ def test_rendered_state_rejects_duplicate_env_names(checker, tmp_path: Path) -> 
     )
     with pytest.raises(ValueError, match="declares 'REQUIRED_THING' more than once"):
         checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=rendered)
+
+
+def test_manifest_only_provisional_unset_env_var_is_optional(checker, tmp_path: Path) -> None:
+    # Thread: without --rendered-state, a `provisional: true` env_var the deploy
+    # environment does not set is legitimately omitted at deploy time (the
+    # renderer allows the miss), but the binding still entered the declared set
+    # with a None hash, so the manifest-only invocation reported it as missing
+    # drift and --strict exited 1 for a valid deployment. Manifest-only mode now
+    # mirrors the renderer's provisional contract; a binding the environment
+    # does resolve (or a non-provisional one) stays required.
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend': {
+                            'env': {
+                                'ALWAYS_THERE': {'value': 'a'},
+                                'MAYBE_THERE': {
+                                    'env_var': 'MAYBE_THERE_FOR_TEST',
+                                    'provisional': True,
+                                },
+                                'STILL_REQUIRED': {
+                                    'env_var': 'STILL_REQUIRED_FOR_TEST',
+                                    'provisional': True,
+                                },
+                            }
+                        }
+                    }
+                },
+            }
+        },
+    }
+    path = tmp_path / 'm.yaml'
+    path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    _project, _region, expected = checker.expected_cloud_run_env(
+        env='prod', manifest_path=path, environ={'STILL_REQUIRED_FOR_TEST': 'resolved'}
+    )
+    service = expected['backend']
+    assert 'ALWAYS_THERE' in service
+    # Provisional and unset in this environment: the renderer omits it, so the
+    # manifest-only expectation must not require its presence.
+    assert 'MAYBE_THERE' not in service
+    # Provisional but resolved: stays declared (name-only; the live value check
+    # happens against serving, not the manifest).
+    assert 'STILL_REQUIRED' in service
+    assert service['STILL_REQUIRED'] == checker.value_hash('value', 'resolved')
+
+
+def test_gke_live_template_envfrom_lookup_failure_does_not_mask_serving(checker) -> None:
+    # Thread: a failed rollout can leave the Deployment template referencing a
+    # required ConfigMap that no longer exists while the previous ReplicaSet
+    # still serves. Template envFrom expansion ran before any serving
+    # ReplicaSet was inspected, so the kubectl NotFound propagated and the
+    # whole workload reported ERROR — defeating the serving-workload focus
+    # exactly when it matters. Template fingerprinting is best-effort now: the
+    # serving comparison proceeds and template_matches_serving stays unproven.
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+
+    def runner(argv, **_kwargs):
+        if 'replicasets' in argv:
+            return subprocess.CompletedProcess(
+                argv,
+                0,
+                stdout=json.dumps(
+                    {
+                        'items': [
+                            _replicaset(
+                                f'{deployment}-old',
+                                deployment,
+                                3,
+                                serving_env,
+                                'pusher',
+                                envfrom=[{'configMapRef': {'name': 'prod-omi-backend-config'}}],
+                            )
+                        ]
+                    }
+                ),
+                stderr='',
+            )
+        if 'configmap' in argv:
+            # The template references a ConfigMap that no longer exists; the
+            # serving ReplicaSet's lookup below must still succeed.
+            if 'prod-omi-gone-config' in argv:
+                return subprocess.CompletedProcess(argv, 1, stdout='', stderr='Error from server (NotFound)')
+            return subprocess.CompletedProcess(
+                argv, 0, stdout=json.dumps({'data': {'GOOGLE_CLIENT_ID': 'id'}}), stderr=''
+            )
+        # Deployment get: the failed-rollout template bulk-loads the gone map.
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            stdout=json.dumps(
+                {
+                    'spec': {
+                        'template': {
+                            'spec': {
+                                'containers': [
+                                    {
+                                        'name': 'pusher',
+                                        'env': serving_env,
+                                        'envFrom': [{'configMapRef': {'name': 'prod-omi-gone-config'}}],
+                                    }
+                                ]
+                            }
+                        }
+                    }
+                }
+            ),
+            stderr='',
+        )
+
+    overrides = {'pusher': {'X': checker.value_hash('value', 'x')}}
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), kube_context='gke_ctx', runner=runner, expected_overrides=overrides
+    )
+    assert result.error is None, result.error
+    # The serving ReplicaSet was still compared: no missing keys, no drift.
+    assert result.missing_from_live == ()
+    assert result.value_mismatches == ()
+    # Template context degraded to unproven rather than erroring the workload.
+    assert result.template_matches_serving is None
+    assert result.status == 'INVENTORY'
 
 
 def test_sensitive_key_detection_is_case_insensitive(checker) -> None:
