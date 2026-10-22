@@ -15,6 +15,7 @@ os.environ.setdefault("PARAKEET_TORCH_COMPILE", "false")
 os.environ.setdefault("PARAKEET_CUDA_GRAPHS", "false")
 os.environ.setdefault("PARAKEET_GC_INTERVAL", "3")
 os.environ.setdefault("PARAKEET_GPU_POLL_TIMEOUT", "0.01")
+os.environ.setdefault("PARAKEET_LID_MODEL", "off")
 
 _PARAKEET_DIR = os.path.join(os.path.dirname(__file__), "../../parakeet")
 if _PARAKEET_DIR not in sys.path:

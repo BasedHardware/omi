@@ -107,8 +107,8 @@ CC-BY-NC, so it cannot serve a commercial product. Parakeet needs
 below 1 s. The backend re-derives that rule
 (`config/prerecorded_language.self_lid_confidence_floor`) instead of trusting the
 service's `route`, and also requires the top language to be supported. The model
-never sees recognizer text. `PARAKEET_LID_MODEL=off` (the code default; the
-charts select `whisper-base`) makes the endpoint return 503.
+never sees recognizer text. `PARAKEET_LID_MODEL` defaults to `whisper-base`;
+`off` (the kill switch) makes the endpoint return 503.
 
 Offline, through this serving code (FLEURS 15 languages x 60 clips as full,
 6 s, 3 s and 8 kHz copies, plus the owned synthetic corpus; not prod audio), the

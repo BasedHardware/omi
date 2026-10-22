@@ -52,8 +52,10 @@ def test_language_set_matches_backend_policy(gate):
         assert not parakeet_supports_language(STTServingSurface.PRERECORDED, code), code
 
 
-def test_model_is_off_unless_named(gate, monkeypatch):
+def test_model_defaults_on_and_unknown_values_are_off(gate, monkeypatch):
     monkeypatch.delenv("PARAKEET_LID_MODEL", raising=False)
+    assert gate.configured_model() == "whisper-base"
+    monkeypatch.setenv("PARAKEET_LID_MODEL", "off")
     assert gate.configured_model() == "off"
     monkeypatch.setenv("PARAKEET_LID_MODEL", " Whisper-Base ")
     assert gate.configured_model() == "whisper-base"

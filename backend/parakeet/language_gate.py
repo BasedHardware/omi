@@ -39,8 +39,8 @@ MODEL_IDS = {'whisper-base': 'openai/whisper-base'}
 
 
 def configured_model() -> str:
-    """The chart selects the model; `off` (and any unknown value) disables the gate rather than guess."""
-    value = os.getenv('PARAKEET_LID_MODEL', 'off').strip().lower()
+    """Default whisper-base; `off` (and any unknown value) disables the gate rather than guess."""
+    value = os.getenv('PARAKEET_LID_MODEL', 'whisper-base').strip().lower()
     return value if value in MODEL_IDS else 'off'
 
 

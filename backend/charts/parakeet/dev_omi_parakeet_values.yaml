@@ -99,10 +99,6 @@ env:
         key: ENCRYPTION_SECRET
   - name: PARAKEET_MODEL
     value: "nvidia/parakeet-tdt-0.6b-v3"
-  # Spoken-language gate (/v2/language) for prerecorded routing. "off" is the
-  # kill switch: the endpoint returns 503 and backend callers keep their vendor path.
-  - name: PARAKEET_LID_MODEL
-    value: "whisper-base"
   - name: PARAKEET_STREAM_MODEL
     value: "nvidia/parakeet-rnnt-1.1b"
   - name: PARAKEET_INFERENCE_MODE

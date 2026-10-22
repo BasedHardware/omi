@@ -98,10 +98,6 @@ env:
         key: ENCRYPTION_SECRET
   - name: PARAKEET_MODEL
     value: "nvidia/parakeet-tdt-0.6b-v3"
-  # Spoken-language gate (/v2/language) for prerecorded routing. "off" is the
-  # kill switch: the endpoint returns 503 and backend callers keep their vendor path.
-  - name: PARAKEET_LID_MODEL
-    value: "whisper-base"
   # No PARAKEET_STREAM_MODEL in prod: /v3/stream (PTT) serves VAD utterances with
   # the TDT model above. Prod has run this way since the 2026-07-23 fatal-CUDA
   # mitigation removed RNNT by hand; loading RNNT here is a separate rollout.

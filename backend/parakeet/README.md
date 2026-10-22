@@ -54,7 +54,7 @@ Returns `{"total_requests", "total_batches", "total_files", "rejected_requests",
 | `PARAKEET_GC_INTERVAL` | `50` | Full gc.collect() every N batches (gc.collect(0) per batch) |
 | `PARAKEET_GPU_POLL_TIMEOUT` | `0.05` | GPU worker queue poll interval in seconds |
 | `PARAKEET_BF16` | `1` | BF16 model loading (halves GPU memory) |
-| `PARAKEET_LID_MODEL` | `off` | Language gate model (`whisper-base`); `off` is the kill switch. Loaded before the VRAM baseline; a load failure leaves transcription serving |
+| `PARAKEET_LID_MODEL` | `whisper-base` | Language gate model; `off` (or any unknown value) is the kill switch. Loaded before the VRAM baseline; a load failure leaves transcription serving |
 
 ### Dynamic Batching
 
