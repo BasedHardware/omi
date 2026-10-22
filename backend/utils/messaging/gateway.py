@@ -484,6 +484,7 @@ class Gateway:
                 await stop_typing()
                 TURNS.labels(self.adapter.channel, 'superseded').inc()
                 logging.getLogger(__name__).info('Messaging turn superseded provider=%s', self.adapter.provider)
+                assert session is not None  # a turn only runs after its session and lease exist
                 try:
                     await run_blocking(db_executor, self.store.complete, path)
                 finally:
