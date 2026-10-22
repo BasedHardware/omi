@@ -44,11 +44,11 @@ def encode(path: str, pcm: bytes, rate: int, *, max_bytes: int = MAX_OBJECT_BYTE
     # FFmpeg resampling has an undefined clock for sub-millisecond input.
     # Pad to one packet; source_frames trims only that explicit tail on decode.
     pcm += b'\0' * max(0, (rate // 50) * 2 - len(pcm))
-    _ffmpeg([*args, '-vbr', 'constrained', '-f', 'opus', path], pcm=pcm, timeout=8)
+    _ffmpeg([*args, '-vbr', 'constrained', '-f', 'opus', path], pcm=pcm)
     # Constrained VBR saves silence without assuming a speech detector's recall.
     # A hard CBR fallback bounds unusual/noisy input, including container framing.
     if Path(path).stat().st_size > max_bytes:
-        _ffmpeg([*args, '-vbr', 'off', '-f', 'opus', path], pcm=pcm, timeout=8)
+        _ffmpeg([*args, '-vbr', 'off', '-f', 'opus', path], pcm=pcm)
     if Path(path).stat().st_size > max_bytes:
         raise ValueError('held Opus object exceeds minute bound')
 

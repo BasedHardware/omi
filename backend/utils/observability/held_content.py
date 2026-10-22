@@ -25,8 +25,12 @@ RECOVERY_RESULTS = ('attempt', 'completed')
 ERASURE_OUTCOMES = ('failure', 'post_delete_publication')
 PUBLICATION_RETRY_OUTCOMES = ('retried_ok', 'exhausted', 'staged_unverified', 'source_orphaned')
 PUBLICATION_RETRY_CAUSES = ('throttle', 'timeout', 'connection', 'other')
-STAGING_RETRY_OUTCOMES = ('retried_ok', 'deferred', 'exhausted', 'permanent')
-STAGING_RETRY = Counter('omi_held_content_staging_retry', 'Held upload retry and durable handoff outcomes', ['outcome'])
+STAGING_RETRY_OUTCOMES = ('retried_ok', 'deferred', 'exhausted', 'permanent', 'retained')
+STAGING_RETRY = Counter(
+    'omi_held_content_staging_retry',
+    'Held upload outcomes: deferred has a durable journal; retained still owns volatile PCM after both stores failed',
+    ['outcome'],
+)
 DEFERRED_SECONDS = Counter('omi_held_content_deferred_seconds', 'Held seconds handed to encrypted staging journals')
 PCM_CUSTODY_SECONDS = Gauge('omi_held_content_pcm_custody_seconds', 'Process-local pending held PCM seconds')
 for _outcome in STAGING_RETRY_OUTCOMES:

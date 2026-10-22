@@ -15,14 +15,14 @@ import hashlib
 import json
 from typing import Any
 import os
-from utils.sync.cap_hold_lifecycle import ACTIVE as _ACTIVE, observe_publication, SHUTDOWN_DELIVERY_SECONDS
+from utils.sync.cap_hold_lifecycle import ACTIVE as _ACTIVE, SHUTDOWN_DELIVERY_SECONDS
 
 from google.cloud import firestore
 
 from database._client import get_firestore_client, run_transactional, is_retryable_firestore_transaction_error
 from database.legal_holds import external_write_fence
 from utils.executors import db_executor, storage_executor, run_blocking
-from utils.observability.held_content import record_capture, PCM_CUSTODY_SECONDS
+from utils.observability.held_content import record_capture, record_staging_retry, PCM_CUSTODY_SECONDS
 from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec
 from utils.sync import live_cap_staging, live_cap_upload, live_cap_journal
 from utils.sync.live_cap_publication import Publication
@@ -38,6 +38,7 @@ MAX_MONTHLY_CHUNKS = 3_000_000
 CHUNK_SECONDS = 60
 MAX_PENDING_SECONDS = 15
 MAX_POD_PENDING_SECONDS = 600
+WARNING_INTERVAL_SECONDS = 60.0
 
 
 class StagingDeferred(RuntimeError):
@@ -204,6 +205,30 @@ class LiveHeldAudio:
         self._tails = TailGrace()
         self._capture = OrderedCapture()
         self._lock = asyncio.Lock()
+        self._warning_times: dict[str, float] = {}
+
+    def _warn_deferred(self, outcome: str, error: BaseException) -> None:
+        if outcome not in {'staging_retained', 'update_deferred', 'publication_failed'}:
+            raise ValueError('unknown live custody warning')
+        now = time.monotonic()
+        previous = self._warning_times.get(outcome)
+        if previous is not None and now - previous < WARNING_INTERVAL_SECONDS:
+            return
+        self._warning_times[outcome] = now
+        logger.warning(
+            'event=stt_cap_live_held outcome=%s exception_type=%s pcm_seconds=%.3f',
+            outcome,
+            type(error).__name__,
+            self.buffered_seconds(),
+        )
+
+    def _observe_flush(self, task: asyncio.Task) -> None:
+        if not task.cancelled() and (error := task.exception()) is not None:
+            # Observe failures even when the socket waiter was cancelled,
+            # without duplicating an ERROR every updater tick. The non-final
+            # flush boundary separately counts each volatile retention attempt.
+            outcome = 'staging_retained' if isinstance(error, StagingDeferred) else 'publication_failed'
+            self._warn_deferred(outcome, error)
 
     def append(self, data: bytes, rate: int, timestamp: float, conversation_id: str | None, channel: int = 0) -> None:
         # Reserve against the capture month, including packets straddling reset.
@@ -316,12 +341,14 @@ class LiveHeldAudio:
         # must not release the lock or delete a source beneath an executor upload.
         custody = asyncio.create_task(self._flush(force=force, seal=seal, final=final), name='stt_cap_live_publish')
         self._custody = custody
-        custody.add_done_callback(observe_publication)
+        custody.add_done_callback(self._observe_flush)
         try:
             await asyncio.shield(custody)
-        except StagingDeferred:
+        except StagingDeferred as error:
             if final:
                 raise  # At close/bound, no more volatile custody is safe.
+            record_staging_retry('retained')
+            self._warn_deferred('staging_retained', error)
         except asyncio.CancelledError:
             # Keep ownership until the executor has stopped using the scratch
             # file. Shutdown also awaits active sinks before closing clients.
@@ -612,6 +639,7 @@ class LiveHeldAudio:
             if receiver._cap_hold_stop.is_set():
                 return
             try:
+                pod_pending_seconds()
                 await receiver._emit_stt_cap_live_held()
                 if self.paused and not receiver.cap_admission.funded_paused and not receiver.cap_paused:
                     await self.flush(force=True)
@@ -619,7 +647,7 @@ class LiveHeldAudio:
             except Exception as error:
                 # Updater errors cannot escape to the WS lifetime supervisor.
                 # PCM stays in this sink; receive/close retry the same identity.
-                logger.error('event=stt_cap_live_held outcome=update_deferred exception_type=%s', type(error).__name__)
+                self._warn_deferred('update_deferred', error)
 
     async def finish_updates(self, updates: asyncio.Task | None, stop: asyncio.Event) -> None:
         try:

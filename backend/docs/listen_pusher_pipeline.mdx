@@ -6401,11 +6401,15 @@ up remaining debt. This PR does not deploy or change any production row.
 
 A live held fragment keeps the same immutable GCS identity across at most two
 upload attempts. Each socket timeout is 1.5 seconds, each async wait is at most
-4 seconds, and the whole upload window is 8 seconds including equal-jitter
-exponential backoff (base 200 ms, cap 1 second, jitter 0.5–1.5). Retryable errors
+4 seconds, and the whole upload window is 8 seconds including exponential
+backoff with scaled uniform jitter: `min(0.2 * 2**(n-1), 1.0) * U(0.5, 1.5)`
+seconds. With two attempts the one backoff is 100–300 ms. Retryable errors
 are transport timeouts/resets, HTTP 408/429 and 5xx. Other HTTP 4xx are permanent
 and do not retry. Encoder workers finish before upload workers start; late
 upload workers retain encoded bytes only and cannot commit a held receipt.
+Both encoder passes retain their original 20-second subprocess timeout; the
+8-second budget applies to upload waiting, not encoding. The outer shutdown
+delivery deadline still bounds the close waiter.
 
 After an exhausted or permanent upload, the receiver keeps its PCM until an
 owner-fenced, encrypted emergency journal is created in the existing
@@ -6437,8 +6441,18 @@ bytes remain process-owned until publication completes; a simultaneous failure
 of both durable stores cannot be converted into a success acknowledgement.
 
 Ramp signals: `omi_held_content_staging_retry_total{outcome}` has the closed
-outcomes `retried_ok`, `deferred`, `exhausted`, `permanent`.
+outcomes `retried_ok`, `deferred`, `exhausted`, `permanent`, `retained`.
+`retained` increments on each non-final flush that cannot reach either durable
+store and keeps PCM volatile; it is distinct from a confirmed `deferred` journal.
+Treat any new `retained` increment as custody at risk even below the memory
+limit. Its WARNING is emitted at most once per hold per 60 seconds; updater
+and publication-failure warnings use the same per-hold interval independently.
 `omi_held_content_deferred_seconds_total` counts seconds handed to journals;
 `omi_held_content_pcm_custody_seconds` measures current process-local held PCM.
+It refreshes on capture/retirement and each one-second updater tick. It is an
+occupancy signal, not a heartbeat or durable backlog: idle held PCM does not
+expire, so an unchanged value is valid. The cap guard should use `retained`
+counter increases for new volatile-custody failures, rather than infer health
+from whether this gauge changes.
 The existing publication counters and fleet staging/redrive snapshot remain
 available. No user/session/object identities are metric labels.

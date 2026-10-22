@@ -1,6 +1,7 @@
 """A GCS outage cannot revoke custody or end a live listen session."""
 
 import asyncio
+import logging
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -58,6 +59,10 @@ async def test_failed_gcs_hands_off_then_redrive_publishes_once(custody, store, 
     assert journal.decrypt_audio_chunk(row['stage_pending'], UID)[0] == pcm
     assert row['writer_until'] == 0 and row['state'] == 'staging'
     assert 'summary' not in store.docs
+    with pytest.raises(type(error)):
+        live_cap_staging.seal(UID, identity)
+    assert store.docs[identity]['stage_pending'] == row['stage_pending']
+    assert store.docs[identity]['state'] == 'staging' and 'summary' not in store.docs
 
     captured = []
 
@@ -78,16 +83,52 @@ async def test_failed_gcs_hands_off_then_redrive_publishes_once(custody, store, 
     await custody.close()
 
 
-async def test_both_stores_unavailable_retains_pcm_until_retry(custody, monkeypatch):
+async def test_both_stores_unavailable_retains_pcm_until_retry(custody, monkeypatch, caplog):
     monkeypatch.setattr(cap_hold, 'upload_held_audio', Mock(side_effect=requests.exceptions.ReadTimeout('gcs')))
     handoff = Mock(side_effect=ServiceUnavailable('journal'))
     monkeypatch.setattr(journal, 'defer', handoff)
     custody.append(b'\1\0' * 16000, 16000, 100, 'conversation')
+    before = metrics.STAGING_RETRY.labels(outcome='retained')._value.get()
+    await custody.flush(force=True)
     await custody.flush(force=True)
     assert custody.pending_bytes == 32000 and custody.host.state.close_code == 1000
+    assert metrics.STAGING_RETRY.labels(outcome='retained')._value.get() == before + 2
+    warnings = [r for r in caplog.records if 'outcome=staging_retained' in r.getMessage()]
+    assert len(warnings) == 1 and warnings[0].levelno == logging.WARNING
+    # Every retained attempt is counted, even while warning repeats are limited.
+    custody._warning_times['staging_retained'] -= live.WARNING_INTERVAL_SECONDS
+    await custody.flush(force=True)
+    assert metrics.STAGING_RETRY.labels(outcome='retained')._value.get() == before + 3
+    assert sum('outcome=staging_retained' in r.getMessage() for r in caplog.records) == 2
     handoff.side_effect = None
     await custody.close()
-    assert not custody.pending and handoff.call_count == 2
+    assert not custody.pending and handoff.call_count == 4
+
+
+async def test_permanent_updater_and_observer_warnings_are_limited_and_idle_gauge_refreshes(
+    custody, monkeypatch, caplog
+):
+    custody.append(b'\1\0' * 8000, 16000, 100, 'conversation')
+    metrics.PCM_CUSTODY_SECONDS.set(0)
+    monkeypatch.setattr(custody, '_flush', AsyncMock(side_effect=ValueError('permanent failure')))
+    stop = asyncio.Event()
+    calls = 0
+
+    async def emit():
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            stop.set()
+        await custody.flush(force=True)
+
+    receiver = SimpleNamespace(_cap_hold_stop=stop, _emit_stt_cap_live_held=emit)
+    await asyncio.wait_for(custody.run_updates(receiver), 4)
+    assert calls == 2 and custody.buffered_seconds() == 0.5
+    assert metrics.PCM_CUSTODY_SECONDS._value.get() == 0.5
+    messages = [r for r in caplog.records if r.name == live.__name__]
+    assert all(r.levelno == logging.WARNING for r in messages)
+    assert sum('outcome=update_deferred' in r.getMessage() for r in messages) == 1
+    assert sum('outcome=publication_failed' in r.getMessage() for r in messages) == 1
 
 
 async def test_updater_contains_unexpected_exception_and_keeps_running(custody):
