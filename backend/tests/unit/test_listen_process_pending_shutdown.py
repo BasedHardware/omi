@@ -45,7 +45,7 @@ class _Host:
         self._woken_by_shutdown = woken_by_shutdown
         self._results_by_function = {
             'get_processing_conversations': processing,
-            'get_stale_in_progress_conversations': stale_in_progress or [],
+            'get_stale_recovery_page': stale_in_progress or [],
         }
         self.waited: list[float] = []
         self.persistence = SimpleNamespace(call=self._call)

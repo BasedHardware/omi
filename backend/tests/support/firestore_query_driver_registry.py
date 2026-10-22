@@ -1024,6 +1024,13 @@ _add(
         neutrals={'limit': _LIMIT},
     )
 )
+_add(
+    DriverEntry(
+        'database.stale_conversation_recovery.get_stale_recovery_page',
+        base={'uid': UID, 'cutoff': T0},
+        neutrals={'now': (T1, 'claim clock; does not change serving query')},
+    )
+)
 _add(DriverEntry('database.conversations.iter_all_conversation_photos', base={'uid': UID}))
 _add(
     DriverEntry(

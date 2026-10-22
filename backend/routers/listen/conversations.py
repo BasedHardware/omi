@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Optional
@@ -10,6 +12,8 @@ from typing import Any, Awaitable, Callable, Optional
 from config.batch_live_preview import capture_snapshot
 from config.sync_lineage import sync_lineage_resolve_enabled
 from database.firestore_read_metrics import FirestoreReadSite
+from database.stale_conversation_recovery import get_stale_recovery_page
+from utils.observability.stale_recovery import record_stale_recovery_outcome
 from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
@@ -315,7 +319,23 @@ class LiveConversationController:
         if route in {'cloud_tasks', 'queued', 'blocked_byok'}:
             self.on_conversation_processing_started(conversation_id)
             return True
-        return route == 'noop'
+        status = finalization.get('status')
+        if status not in {
+            'missing',
+            'no_content',
+            'deferred',
+            'completed',
+            'dead_letter',
+            'terminal',
+            'duplicate_finalization',
+            'already_finalizing',
+            'restart_replays_state',
+            'reprocess_requires_new_generation',
+            'invalid_transition',
+        }:
+            status = 'other'
+        logger.info('Listen finalization not admitted conversation=%s outcome=%s', conversation_id, status)
+        return False
 
     def _should_report_no_audio_teardown(self) -> bool:
         """Multi-channel session (phone calls today) that never sent a first audio byte."""
@@ -333,7 +353,14 @@ class LiveConversationController:
             read_site=FirestoreReadSite.LISTEN_PROCESS_CONVERSATION,
         )
         if not data:
+            logger.info('Listen finalization skipped conversation=%s outcome=missing', conversation_id)
             return False
+        # Discarded empty generations are intentionally protected by the delete
+        # transaction. Detect that refusal before its write/reread round trip.
+        for guard in ('deleted', 'discarded', 'is_locked', 'deferred'):
+            if data.get(guard):
+                logger.info('Listen finalization skipped conversation=%s outcome=%s', conversation_id, guard)
+                return False
         if data.get('transcript_segments') or data.get('photos'):
             return await self.schedule_finalization(conversation_id)
         recording_session_id = recording_session_id_for_lifecycle_event(
@@ -370,9 +397,10 @@ class LiveConversationController:
             conversation_id,
             read_site=FirestoreReadSite.LISTEN_POST_DELETE_REREAD,
         )
-        return bool(
-            latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos'))
-        ) and await self.schedule_finalization(conversation_id)
+        if latest and (latest.get('transcript_segments') or latest.get('has_content') or latest.get('photos')):
+            return await self.schedule_finalization(conversation_id)
+        logger.info('Listen finalization skipped conversation=%s outcome=empty_delete_refused', conversation_id)
+        return False
 
     def _active_speaker_scope(self) -> Optional[str]:
         epoch = getattr(getattr(self.host, 'receiver', None), 'speaker_provider_epoch', None)
@@ -774,11 +802,18 @@ class LiveConversationController:
         in the same sweep still run. A rejection at the 1 MiB ceiling is permanent, so that row
         goes to ``_close_oversized`` instead of being retried by every reconnect.
         """
+        outcome = 'not_admitted'
         try:
-            await finalize(conversation_id)
+            if await finalize(conversation_id):
+                outcome = 'accepted'
+        except asyncio.CancelledError:
+            outcome = 'cancelled'
+            raise
         except Exception as error:
+            outcome = 'error'
             failure = classify_finalization_failure(error, conversation_id)
             if failure.conversation_at_size_limit:
+                outcome = 'oversized_close_attempted'
                 await self._close_oversized(conversation_id, stage=stage)
                 return
             # Bounded tokens, never the message: Firestore names the rejected
@@ -791,6 +826,10 @@ class LiveConversationController:
                 failure.reason,
                 failure.document,
             )
+        finally:
+            if stage == 'stale_in_progress':
+                record_stale_recovery_outcome(outcome)
+                logger.info('Listen stale recovery outcome=%s conversation=%s', outcome, conversation_id)
 
     async def _close_oversized(self, conversation_id: str, *, stage: str) -> None:
         """Terminalize a row whose finalization can never commit because it is at the 1 MiB ceiling.
@@ -836,30 +875,24 @@ class LiveConversationController:
         self.on_conversation_processed(conversation_id)
 
     async def recover_stale_in_progress(self) -> None:
-        """Route orphaned `in_progress` conversations through normal finalization (#9809).
-
-        Conversations from sessions that died without processing sit invisible in
-        `in_progress` forever; the manual /finalize workaround proves their content
-        is intact. `process_conversation` already makes the right call per row —
-        content goes through the durable finalization seam, empty rows are
-        deleted — so recovery is exactly the path a live timeout takes. Bounded
-        and oldest-first so one session never stampedes the pipeline.
-        """
-        stale = await self.host.persistence.call(
-            conversations_db.get_stale_in_progress_conversations,
-            self.host.request.uid,
-            older_than_seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS,
-            limit=STALE_IN_PROGRESS_RECOVERY_BATCH,
-        )
+        """Recover one durable page; refusals never pin the reconnect queue."""
+        if os.getenv('STALE_IN_PROGRESS_RECOVERY_ENABLED', 'true').strip().lower() in {'0', 'false', 'off'}:
+            return
+        try:
+            stale = await self.host.persistence.call(
+                get_stale_recovery_page,
+                self.host.request.uid,
+                cutoff=self.clock() - timedelta(seconds=STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS),
+            )
+        except Exception as error:
+            # Recovery failure must not become a supervised-task socket crash.
+            logger.warning('Listen stale recovery scan failed type=%s', type(error).__name__)
+            return
         for conversation in stale or []:
             if conversation['id'] == self.host.state.current_conversation_id:
+                record_stale_recovery_outcome('current_session')
+                logger.info('Listen stale recovery outcome=current_session conversation=%s', conversation['id'])
                 continue
-            logger.info(
-                'recovering stale in_progress conversation uid=%s conversation=%s finished_at=%s',
-                self.host.request.uid,
-                conversation['id'],
-                conversation.get('finished_at'),
-            )
             await self._finalize_isolated(self.process_conversation, conversation['id'], stage='stale_in_progress')
 
     async def lifecycle_loop(self) -> None:

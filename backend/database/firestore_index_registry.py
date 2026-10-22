@@ -1394,6 +1394,18 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
+STALE_RECOVERY_PAGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_stale_recovery_newest_page',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'), FirestoreQueryFilter('finished_at', '<', 'cutoff')),
+    index_fields=(
+        _asc('status'),
+        _desc('finished_at'),
+        _desc('__name__'),
+    ),
+)
+
 # Duplicate-capture detection (#3244): the other capture clients' conversations
 # whose activity clock runs past this recording's start. Shares the composite
 # above with the stale sweep; the range and order both sit on `finished_at`.
@@ -1960,6 +1972,7 @@ QUERY_SPECS = (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    STALE_RECOVERY_PAGE_QUERY,
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
     SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
