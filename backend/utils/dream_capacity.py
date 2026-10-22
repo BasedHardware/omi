@@ -70,9 +70,17 @@ def _vertex_tokens():
     return VertexAccessTokenSupplier()
 
 
+def gateway_probe_enabled():
+    """Kill switch for the gateway reservation probe; on unless 0/false/off/no."""
+    return os.getenv('DREAM_GATEWAY_PROBE_ENABLED', 'true').strip().lower() not in {'0', 'false', 'off', 'no'}
+
+
 async def _probe(model, location):
     try:
-        if model == DREAM_MODEL:
+        if model == DREAM_MODEL and not gateway_probe_enabled():
+            # Off: no probe call; admission relies on fresh evidence from real turns.
+            outcome = 'inconclusive'
+        elif model == DREAM_MODEL:
             # Use the real Dream route/identity. The gateway publishes strict PT
             # evidence itself; a gateway HTTP 200 alone must never teach success.
             headers = llm_gateway_headers(feature='dream_reservation_probe')

@@ -157,3 +157,14 @@ async def test_gateway_200_does_not_manufacture_reservation_evidence(gateway_pro
     await asyncio.gather(*state._probe_tasks)
     assert await dream_capacity.available_model() is None
     assert len(requests) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('value', ['false', '0', 'off'])
+async def test_gateway_probe_kill_switch_makes_no_call_and_keeps_fresh_evidence(gateway_probe, monkeypatch, value):
+    state, redis, requests, _ = gateway_probe
+    monkeypatch.setenv('DREAM_GATEWAY_PROBE_ENABLED', value)
+    await seed(state, redis, 0)
+    assert await dream_capacity._probe(MODEL, 'us') == 'inconclusive'
+    assert await dream_capacity.available_model() == MODEL
+    assert requests == []
