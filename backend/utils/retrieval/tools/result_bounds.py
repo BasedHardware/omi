@@ -8,7 +8,7 @@ helpers cap the row count and the raw character size, and append a note telling 
 summarize what it has and offer to narrow.
 """
 
-from typing import List, Tuple, TypeVar
+from typing import List, Optional, Tuple, TypeVar
 
 from utils.model_text import truncation_note
 
@@ -17,26 +17,32 @@ T = TypeVar("T")
 MAX_RESULT_CHARS = 60000
 
 
-def cap_items_for_llm(items: List[T], max_items: int) -> Tuple[List[T], int, bool]:
+def cap_items_for_llm(items: Optional[List[T]], max_items: int) -> Tuple[List[T], int, bool]:
     """Keep at most ``max_items`` rows for the chat model.
 
     Callers pass rows in their chosen order, so this keeps a prefix without inferring relevance.
     Returns ``(capped_list, total_found, truncated)`` where ``truncated`` is True when some rows
     were dropped.
     """
-    total_found = len(items)
-    if total_found > max_items:
-        return items[:max_items], total_found, True
-    return list(items), total_found, False
+    safe_items: List[T] = list(items) if items is not None else []
+    total_found = len(safe_items)
+    try:
+        limit = max(0, int(max_items))
+    except (TypeError, ValueError):
+        limit = 0
+
+    if total_found > limit:
+        return safe_items[:limit], total_found, True
+    return safe_items, total_found, False
 
 
 def bounded_result(
-    result: str,
+    result: Optional[str],
     truncated: bool,
     noun: str = "results",
     *,
-    order: str | None = None,
-    shown: int | None = None,
+    order: Optional[str] = None,
+    shown: Optional[int] = None,
 ) -> str:
     """Apply a hard character budget and, when the set was truncated, append a note telling the
     model to summarize what it has and to offer to narrow, so it answers instead of freezing.
@@ -44,14 +50,17 @@ def bounded_result(
     The note deliberately does not state a total count: callers may pass an already-paginated
     page whose length is not the true total, so claiming a total would mislead (cubic on #8527).
     """
-    if len(result) > MAX_RESULT_CHARS:
-        result = result[:MAX_RESULT_CHARS]
+    safe_result: str = "" if result is None else str(result)
+    safe_noun: str = str(noun) if noun is not None else "results"
+
+    if len(safe_result) > MAX_RESULT_CHARS:
+        safe_result = safe_result[:MAX_RESULT_CHARS]
         truncated = True
     if truncated:
         # Generic callers may not know the row count, so report the number of rendered lines.
         # Callers that do know how many records survived the cap should pass that count.
-        shown_count = shown if shown is not None else len(result.splitlines())
-        unit = noun if shown is not None else "result lines"
+        shown_count = shown if shown is not None else len(safe_result.splitlines())
+        unit = safe_noun if shown is not None else "result lines"
         next_step = "Ask for a narrower topic or date range, or page with the offset, for the rest."
         if order:
             next_step = f"Rows are ordered {order}. {next_step}"
@@ -66,5 +75,5 @@ def bounded_result(
             note = note.replace(
                 "more were omitted, not absent.", "more may exist; omitted data is not evidence of absence."
             )
-        result += "\n\n" + note
-    return result
+        safe_result += "\n\n" + note
+    return safe_result
