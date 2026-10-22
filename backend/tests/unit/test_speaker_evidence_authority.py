@@ -166,3 +166,43 @@ def test_cluster_similarities_retained_above_floor():
     record = evidence.build_evidence(segments, resolution)
     assert record.similarities[0].similarity == pytest.approx(0.5)
     assert SpeakerEvidence.model_validate_json(record.model_dump_json()) == record
+
+
+@pytest.mark.parametrize('reprocess', [False, True])
+def test_carried_manual_receipt_survives_resolution_and_storage_roundtrip(reprocess):
+    from models.transcript_segment import TranscriptSegment
+    from utils.stt.conversation_speakers import Identity
+
+    item = TranscriptSegment(
+        id='s',
+        text='',
+        is_user=False,
+        start=0,
+        end=10,
+        speaker='SPEAKER_5',
+        speaker_id=5,
+        speaker_id_scope='sync:original',
+    )
+    receipt = {
+        'speakers': {'5': {'generation': 1, 'is_user': True, 'source': 'carried', 'speaker_id_scope': 'sync:original'}}
+    }
+    resolved = resolve_conversation_speakers(
+        [item], {'s': [1.0, 0.0]}, manual_speakers={5: Identity(is_user=True, person_id=None)}
+    )
+    item.assign_resolved_speaker(5, 'conversation:c')
+    if reprocess:
+        item = TranscriptSegment(**item.model_dump(mode='python'))
+        item.assign_resolved_speaker(5, 'conversation:c')
+    record = evidence.build_evidence([item], resolved, receipt=receipt)
+    assert evidence.project_labels(record, receipt)['s'] == (True, None)
+    assert any(c.source == 'manual' and c.probability == 1 for c in record.clusters[0].candidates)
+    # A later selected-segment correction still wins against the carried scope.
+    receipt['segments'] = {'s': {'generation': 2, 'is_user': False, 'person_id': 'p2'}}
+    assert evidence.project_labels(record, receipt)['s'] == (False, 'p2')
+
+
+def test_ambiguous_provider_scope_cannot_revive_stale_carried_receipt():
+    item = {**segment('s', 5, 'conversation:c'), 'provider_speaker': {'id': -1, 'scope': 'sync:old'}}
+    receipt = {'speakers': {'5': {'is_user': True, 'source': 'carried', 'speaker_id_scope': 'sync:old'}}}
+    record = evidence.build_evidence([item], receipt=receipt)
+    assert evidence.project_labels(record, receipt)['s'] == (False, None)

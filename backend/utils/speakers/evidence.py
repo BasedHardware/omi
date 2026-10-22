@@ -21,7 +21,11 @@ from models.speaker_evidence import (
     SpeakerEvidence,
     VoiceCluster,
 )
-from utils.manual_speaker_assignments import apply_manual_assignments, manual_assignment_decision
+from utils.manual_speaker_assignments import (
+    apply_manual_assignments,
+    manual_assignment_decision,
+    manual_rejected_speakers,
+)
 from utils.speakers import policy
 
 # Explicit declaration of the shared parser's derived env contract, so registry
@@ -57,6 +61,31 @@ def roster_candidates(context: Any) -> list[dict]:
     return [{'name': _get(p, 'name') or _get(p, 'display_name')} for p in attendees]
 
 
+def _receipt_scope(segment: Any, scope: str | None) -> str | None:
+    """A retained provider scope keeps carried receipts valid after resolution."""
+    provider = _get(segment, 'provider_speaker') or {}
+    original = _get(provider, 'scope')
+    if (
+        (scope or '').startswith(('conversation:', 'legacy-conversation:'))
+        and isinstance(original, str)
+        and original
+        and str(_get(provider, 'id', -1)).isdigit()
+    ):
+        return original
+    return scope
+
+
+def _manual_decision(current: Mapping, origin: Mapping, receipt: Mapping, rejected: dict) -> dict | None:
+    # Current and preserved provider scopes are both proven keys for this stable
+    # segment ID. Generation ordering still comes from the shared receipt policy.
+    decisions = [
+        decision
+        for row in (current, origin)
+        if (decision := manual_assignment_decision(row, receipt, rejected)) is not None
+    ]
+    return max(decisions, key=lambda d: d.get('generation', 0), default=None)
+
+
 def build_evidence(
     segments: Sequence[Any],
     resolution: Any = None,
@@ -77,11 +106,16 @@ def build_evidence(
         resolved = resolution.speaker_ids.get(sid) if resolution else None
         key = ('resolved', resolved) if resolved is not None else (scope, speaker)
         groups[key].append(segment)
-        refs.append(EvidenceSegment(id=sid, speaker_id=speaker, speaker_id_scope=scope))
+        refs.append(EvidenceSegment(id=sid, speaker_id=speaker, speaker_id_scope=_receipt_scope(segment, scope)))
+    references = {ref.id: ref.model_dump() for ref in refs}
+    rejected = manual_rejected_speakers(receipt)
     clusters, centroids = [], {}
     reasons = set(abstentions)
     for key, members in groups.items():
         voice = key[1] if key[0] == 'resolved' else None
+        speaker_id = voice if voice is not None else _get(members[0], 'speaker_id')
+        scopes = {_get(s, 'speaker_id_scope') for s in members}
+        scope = next(iter(scopes)) if len(scopes) == 1 else None
         distances = resolution.voice_distances.get(voice, {}) if resolution else {}
         identity = resolution.voice_identities.get(voice) if resolution else None
         accepted = OWNER if identity and identity.is_user else identity.person_id if identity else None
@@ -118,10 +152,10 @@ def build_evidence(
         for segment in members:
             metadata = {
                 'id': _get(segment, 'id'),
-                'speaker_id': _get(segment, 'speaker_id'),
-                'speaker_id_scope': _get(segment, 'speaker_id_scope'),
+                'speaker_id': speaker_id,
+                'speaker_id_scope': scope,
             }
-            decision = manual_assignment_decision(metadata, receipt)
+            decision = _manual_decision(metadata, references[metadata['id']], receipt, rejected)
             if decision and (decision.get('is_user') or decision.get('person_id')):
                 pid = OWNER if decision.get('is_user') else decision['person_id']
                 if not any(c.source == 'manual' and c.person_id == pid for c in candidates):
@@ -130,8 +164,8 @@ def build_evidence(
         cluster = VoiceCluster(
             id=f'v{len(clusters)}',
             segment_ids=[_get(s, 'id') for s in members],
-            speaker_id=_get(members[0], 'speaker_id'),
-            speaker_id_scope=_get(members[0], 'speaker_id_scope'),
+            speaker_id=speaker_id,
+            speaker_id_scope=scope,
             speech_seconds=sum(max(0, _get(s, 'end', 0) - _get(s, 'start', 0)) for s in members),
             candidates=candidates,
         )
@@ -173,20 +207,19 @@ def build_evidence(
 def project_labels(evidence: SpeakerEvidence, receipt: Mapping) -> dict[str, tuple[bool, str | None]]:
     """Joint acoustic decisions, then the same generation/scoping rules as storage."""
     metadata = {s.id: s.model_dump() for s in evidence.segments}
-    projected = []
+    rejected = manual_rejected_speakers(receipt)
+    projected = {}
     for cluster in evidence.clusters:
         accepted = next((c for c in cluster.candidates if c.label_eligible and c.source == 'voice'), None)
         for sid in cluster.segment_ids:
-            projected.append(
-                {
-                    **metadata.get(
-                        sid, {'id': sid, 'speaker_id': cluster.speaker_id, 'speaker_id_scope': cluster.speaker_id_scope}
-                    ),
-                    'is_user': bool(accepted and accepted.person_id == OWNER),
-                    'person_id': accepted.person_id if accepted and accepted.person_id != OWNER else None,
-                }
-            )
-    return {
-        s['id']: (bool(s.get('is_user')), s.get('person_id'))
-        for s in apply_manual_assignments(projected, dict(receipt))
-    }
+            current = {'id': sid, 'speaker_id': cluster.speaker_id, 'speaker_id_scope': cluster.speaker_id_scope}
+            decision = _manual_decision(current, metadata.get(sid, current), receipt, rejected)
+            automatic = {
+                **current,
+                'is_user': bool(accepted and accepted.person_id == OWNER),
+                'person_id': accepted.person_id if accepted and accepted.person_id != OWNER else None,
+            }
+            overlay = {'segments': {sid: decision}} if decision is not None else {}
+            labeled = apply_manual_assignments([automatic], overlay)[0]
+            projected[sid] = (bool(labeled.get('is_user')), labeled.get('person_id'))
+    return projected
