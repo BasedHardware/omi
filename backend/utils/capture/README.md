@@ -17,6 +17,10 @@ remain the interval and source-position implementations.
 segment receipts after assignment. `batch_coverage.py` carries compact source
 runs across packing in authenticated encrypted audio context and rechecks at
 projection. Unsupported resampling or insufficient provenance retains audio.
+Serve bypasses the legacy clock/energy trim. Stored held pieces recheck before
+each new paid intent; partial proof delegates to deterministic hash-verified
+source slices in one lease-fenced checkpoint. Cached provider results keep
+their reconciliation path, and child slices inherit the paid attempt limit.
 `dedupe.py` shares the bridge/incoming fallback: committed frame proof first,
 then unambiguous conversation-wide text clock estimation and narrow matching.
 Known uncovered positions never fall through to text deletion. Speaker and

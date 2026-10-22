@@ -32,6 +32,13 @@ async def test_same_audio_live_then_backup_serve_once_shadow_matches_legacy(
     pipeline = real_pipeline
     _coverage_env(monkeypatch, coverage_flag='false')
     monkeypatch.setenv(coverage.FLAG, mode)
+    if mode == 'serve':
+        monkeypatch.setattr(pipeline, 'sync_safety_wal_enabled', lambda: True)
+
+        async def no_clock_coverage(*args, **kwargs):
+            pytest.fail('serving coverage must not fall through to clock/energy trimming')
+
+        monkeypatch.setattr(pipeline, 'apply_safety_wal_coverage', no_clock_coverage)
     monkeypatch.setattr(ledger_store, '_client', lambda: ledger)
     ledger = StrictFirestore()
     key = CaptureKey(

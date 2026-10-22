@@ -190,6 +190,7 @@ from utils.capture.sync_coverage import (
     record_sync,
     annotate_identity,
     covering_target,
+    legacy_audio_trim,
 )
 from utils.sync.word_timing import _first_word_offset, _shift_to_vad_file_clock
 from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
@@ -2616,7 +2617,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         audio_start_seconds,
                         audio_end_seconds,
                     )
-            if sync_safety_wal_enabled():
+            # refactor: superseded by utils.capture.coverage when CAPTURE_COVERAGE_MODE=serve
+            if sync_safety_wal_enabled() and legacy_audio_trim(uid):
                 coverage_inputs = list(wav_paths)
                 safety_coverage_paths.update(coverage_inputs)
                 wav_paths, safety_generated = await apply_safety_wal_coverage(

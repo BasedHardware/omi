@@ -9,7 +9,11 @@ from utils.sync import recording_lineage
 from utils.sync.files import get_timestamp_from_path, get_wav_duration
 from utils.sync.pipeline import retrieve_vad_segments, cleanup_recovered_sync_files
 from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
-from utils.capture.sync_coverage import apply_sync_coverage as apply_sync_wal_audio_coverage, held_segment
+from utils.capture.sync_coverage import (
+    apply_sync_coverage as apply_sync_wal_audio_coverage,
+    held_segment,
+    legacy_audio_trim,
+)
 
 
 async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dict]:
@@ -48,7 +52,8 @@ async def prepare(uid: str, path: str, meta: dict) -> tuple[set, dict, dict, dic
         storage_executor=storage_executor,
         cleanup_files=cleanup_recovered_sync_files,
     )
-    if sync_safety_wal_enabled():
+    # refactor: superseded by utils.capture.coverage when CAPTURE_COVERAGE_MODE=serve
+    if sync_safety_wal_enabled() and legacy_audio_trim(uid):
         inputs = list(paths)
         paths, _ = await apply_safety_wal_coverage(
             uid,

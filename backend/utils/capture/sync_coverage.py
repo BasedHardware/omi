@@ -14,6 +14,11 @@ from utils.observability.fallback import record_fallback
 logger = logging.getLogger(__name__)
 
 
+def legacy_audio_trim(uid):
+    """Energy/clock heuristics are retained only for the legacy serving path."""
+    return not refactor_modes.serving_for(coverage.FLAG, uid)
+
+
 def key_for_claim(claim: dict, device_id=None, recording_session_id=None) -> CaptureKey:
     return CaptureKey(
         capture_root=claim['capture_root'],
