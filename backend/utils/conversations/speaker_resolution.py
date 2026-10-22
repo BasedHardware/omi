@@ -659,11 +659,12 @@ def _verified_read_session(
             if overlap > COVERAGE_TOLERANCE_SECONDS and (
                 not serving_for('SPEAKER_EVIDENCE_MODE', uid)
                 or any(
-                    placements[s.id].window is not None
-                    and placements[s.id].window[0] < min(extents[first][1], extents[second][1])
-                    and placements[s.id].window[1] > max(extents[first][0], extents[second][0])
+                    window[0] < min(extents[first][1], extents[second][1])
+                    and window[1] > max(extents[first][0], extents[second][0])
                     for s in pending
-                    if s.id in placements
+                    if s.id is not None
+                    if (placement := placements.get(s.id)) is not None
+                    if (window := placement.window) is not None
                 )
             ):
                 resolver_reason('decoded_overlap')

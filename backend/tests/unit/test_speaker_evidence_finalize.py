@@ -126,3 +126,41 @@ def test_all_batch_with_compatible_windows_can_resolve_even_with_authoritative_f
     stage.resolve_speakers_for_processing(str(uuid.uuid4()), conversation)
     assert evidence_store[-1].status == 'resolved'
     assert len(evidence_store[-1].clusters) == 2
+
+
+@pytest.mark.parametrize(
+    'mode,window_start,allowed', [('shadow', 0.0, False), ('serve', 0.0, True), ('serve', 11.0, False)]
+)
+def test_decoded_overlap_refuses_only_affected_windows_in_serve(monkeypatch, mode, window_start, allowed):
+    from types import SimpleNamespace
+    from utils.conversations.audio_placement import AudioPlacement
+
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', mode)
+    origin = STARTED.timestamp()
+    chunks = [
+        dict(
+            path=str(i),
+            timestamp=origin + start,
+            generation=1,
+            span={'start': origin + start, 'samples': 4 * 16000, 'sample_rate': 16000},
+        )
+        for i, start in enumerate((0, 10, 12))
+    ]
+    session = SimpleNamespace(
+        deadline=float('inf'),
+        in_budget=lambda: True,
+        chunks=chunks,
+        limit_hit=False,
+        fetch=lambda path: b'\0\0' * (4 * 16000),
+    )
+    monkeypatch.setattr(stage, 'AudioChunkReadSession', lambda *args: session)
+    files = [
+        dict(chunk_timestamps=[c['timestamp']], chunk_spans=[dict(start=c['timestamp'], end=c['timestamp'] + 4.0)])
+        for c in chunks
+    ]
+    segment = _conversation([0]).transcript_segments[0]
+    placements = {segment.id: AudioPlacement((origin + window_start, origin + window_start + 3.0), 'v2')}
+    result = stage._verified_read_session(
+        str(uuid.uuid4()), _conversation([0]), files, [segment], placements, float('inf')
+    )
+    assert (result is session) is allowed
