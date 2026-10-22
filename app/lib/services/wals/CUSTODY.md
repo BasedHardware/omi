@@ -99,6 +99,12 @@ Native batch directory and WAL documents directory must match. A mismatch (for e
 absolute path after an iOS update moves the app container) emits `Native Custody Observed /
 directory_mismatch`, repoints `batchAudioDir` at the documents directory, and scans there.
 
+Chunked on-device transcript exports freeze their prepared segments, language, duration and optional
+projection in the same owner-scoped WAL index before sending the first chunk. A restart reuses
+that immutable input instead of running speech recognition again and changing an accepted chunk.
+The outbox remains on failure and clears only with the durable conversation result. Flag:
+`clients_from_segments_chunks`; guard: `unit/on_device_runner_test.dart` restart test.
+
 ## Server contract used
 
 `POST /v2/sync-local-files` with the existing parameters (`conversation_id`,

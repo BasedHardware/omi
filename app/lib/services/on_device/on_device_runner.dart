@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/on_device/on_device_overflow_intake.dart';
 import 'on_device_segment_upload.dart';
+import 'on_device_segment_snapshot.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/on_device/on_device_engine.dart';
@@ -150,13 +151,17 @@ class OnDeviceRunner with WidgetsBindingObserver {
           .toList();
       pendingSeconds = pending.fold(0, (sum, w) => sum + w.seconds);
       controller.setPendingSeconds(pendingSeconds);
-      if (!controller.settings.enabled || !controller.model.status.isInstalled) return;
+      if (!controller.settings.enabled) return;
+      final hasModel = controller.model.status.isInstalled;
+      final resumePrepared = !hasModel && await ClientRefactorFlags.chunkUploads();
+      if (!hasModel && !(resumePrepared && pending.any((w) => w.onDevicePreparedUpload != null))) return;
       final decision =
           await controller.evaluate(pendingAudio: Duration(seconds: pendingSeconds), transcribeNow: transcribeNow);
       if (!decision.shouldRun) return;
       controller.markRunFailure(false);
       controller.markRun(running: true);
       for (final wal in pending) {
+        if (!hasModel && (!resumePrepared || wal.onDevicePreparedUpload == null)) continue;
         if (_cancelled || generation != sync.sessionGeneration) return;
         await _process(wal, generation);
       }
@@ -181,15 +186,20 @@ class OnDeviceRunner with WidgetsBindingObserver {
   Future<void> _process(Wal wal, int generation) async {
     final path = await Wal.getFilePath(wal.filePath);
     if (path == null) throw StateError('Missing WAL path');
+    final chunked = await ClientRefactorFlags.chunkUploads();
+    if (_cancelled || generation != sync.sessionGeneration) return;
+    final prepared = chunked && wal.onDevicePreparedUpload != null
+        ? OnDeviceSegmentSnapshot.fromJson(wal.onDevicePreparedUpload!)
+        : null;
     final source = wal.device.contains('phone')
         ? ConversationSource.phone
         : wal.device.contains('limitless')
             ? ConversationSource.limitless
             : ConversationSource.omi;
-    final language = SharedPreferencesUtil().userPrimaryLanguage;
+    final language = prepared?.language ?? SharedPreferencesUtil().userPrimaryLanguage;
     final apple = AppleBatchEngine();
     OnDeviceWhisperProvider? whisper;
-    if (!Platform.isIOS && transcribeChunk == null) {
+    if (prepared == null && !Platform.isIOS && transcribeChunk == null) {
       final service = FreemiumTranscriptionService();
       await service.checkReadiness();
       final model = service.cachedModelPath;
@@ -199,50 +209,51 @@ class OnDeviceRunner with WidgetsBindingObserver {
     final transcoder = wal.codec.isOpusSupported()
         ? OpusToWavTranscoder(sampleRate: wal.sampleRate, channels: wal.channel)
         : PcmToWavTranscoder(sampleRate: wal.sampleRate, channels: wal.channel);
-    final segments = <TranscriptSegment>[];
-    var offset = 0.0;
-    var engine = 'whisper_tiny';
-    try {
-      await for (final frames in readOnDeviceChunks(File(path), wal.codec.getFramesPerSecond())) {
-        if (_cancelled || generation != sync.sessionGeneration) return;
-        final wav = transcoder.transcodeFrames(frames);
-        final duration = frames.length / wal.codec.getFramesPerSecond();
-        List<OnDeviceWord> words;
-        if (Platform.isIOS || transcribeChunk != null) {
-          final result = transcribeChunk != null
-              ? await transcribeChunk!(wav, language)
-              : await apple.transcribe(wav, language: language.isEmpty ? 'en' : language);
-          engine = result.engine;
-          words = result.words.isNotEmpty ? result.words : [OnDeviceWord(result.text, 0, duration)];
-        } else {
-          final result = await whisper!.transcribe(wav);
-          if (result == null) throw StateError('Whisper returned no transcript');
-          words = result.segments.map((s) => OnDeviceWord(s.text, s.start, s.end)).toList();
+    final segments = prepared?.segments ?? <TranscriptSegment>[];
+    var offset = prepared?.duration ?? 0.0;
+    var engine = prepared?.engine ?? 'whisper_tiny';
+    if (prepared == null) {
+      try {
+        await for (final frames in readOnDeviceChunks(File(path), wal.codec.getFramesPerSecond())) {
+          if (_cancelled || generation != sync.sessionGeneration) return;
+          final wav = transcoder.transcodeFrames(frames);
+          final duration = frames.length / wal.codec.getFramesPerSecond();
+          List<OnDeviceWord> words;
+          if (Platform.isIOS || transcribeChunk != null) {
+            final result = transcribeChunk != null
+                ? await transcribeChunk!(wav, language)
+                : await apple.transcribe(wav, language: language.isEmpty ? 'en' : language);
+            engine = result.engine;
+            words = result.words.isNotEmpty ? result.words : [OnDeviceWord(result.text, 0, duration)];
+          } else {
+            final result = await whisper!.transcribe(wav);
+            if (result == null) throw StateError('Whisper returned no transcript');
+            words = result.segments.map((s) => OnDeviceWord(s.text, s.start, s.end)).toList();
+          }
+          // Phrase groups bound endpoint segment count. Every native word's times are retained
+          // within the chunk and group ends always come from recognized audio, not invented speakers.
+          for (var i = 0; i < words.length; i += 30) {
+            final group = words.skip(i).take(30).where((w) => w.text.trim().isNotEmpty).toList();
+            if (group.isEmpty) continue;
+            segments.add(TranscriptSegment(
+                id: '${segments.length}',
+                text: group.map((w) => w.text.trim()).join(' '),
+                speaker: 'SPEAKER_00',
+                isUser: false,
+                personId: null,
+                start: offset + group.first.start,
+                end: offset + group.last.end,
+                translations: const [],
+                sttProvider: 'on_device:$engine'));
+          }
+          offset += duration;
+          controller.setProgress(wal.seconds > 0 ? (offset / wal.seconds).clamp(0, 1) : 0);
         }
-        // Phrase groups bound endpoint segment count. Every native word's times are retained
-        // within the chunk and group ends always come from recognized audio, not invented speakers.
-        for (var i = 0; i < words.length; i += 30) {
-          final group = words.skip(i).take(30).where((w) => w.text.trim().isNotEmpty).toList();
-          if (group.isEmpty) continue;
-          segments.add(TranscriptSegment(
-              id: '${segments.length}',
-              text: group.map((w) => w.text.trim()).join(' '),
-              speaker: 'SPEAKER_00',
-              isUser: false,
-              personId: null,
-              start: offset + group.first.start,
-              end: offset + group.last.end,
-              translations: const [],
-              sttProvider: 'on_device:$engine'));
-        }
-        offset += duration;
-        controller.setProgress(wal.seconds > 0 ? (offset / wal.seconds).clamp(0, 1) : 0);
+      } finally {
+        whisper?.dispose();
       }
-    } finally {
-      whisper?.dispose();
     }
     if (segments.isEmpty) throw StateError('No speech recognized; audio retained');
-    final chunked = await ClientRefactorFlags.chunkUploads();
     // refactor: superseded by on_device_segment_upload when clients_from_segments_chunks=serve
     if (!chunked && segments.length > 500) throw StateError('Transcript exceeds ingestion limit; audio retained');
     if (_cancelled || generation != sync.sessionGeneration) return;
@@ -250,11 +261,15 @@ class OnDeviceRunner with WidgetsBindingObserver {
     final finished = started.add(Duration(milliseconds: (offset * 1000).round()));
     final text = segments.map((s) => s.text).join(' ');
     var summary = OnDeviceSummaryOrigin.none;
-    Map<String, dynamic>? projection;
+    Map<String, dynamic>? projection = controller.settings.keepEverythingOnDevice ? null : prepared?.projection;
     final title = String.fromCharCodes(text.split(' ').take(8).join(' ').runes.take(100));
-    var structure = Structured(title, '');
+    var structure = projection == null ? Structured(title, '') : Structured.fromJson(projection['structure']);
+    if (projection != null) summary = OnDeviceSummaryOrigin.phone;
     // "Keep everything" explicitly means transcripts only, even on AFM devices.
-    if (!controller.settings.keepEverythingOnDevice && Platform.isIOS && await apple.canSummarize()) {
+    if (prepared == null &&
+        !controller.settings.keepEverythingOnDevice &&
+        Platform.isIOS &&
+        await apple.canSummarize()) {
       try {
         final generated = await apple.summarize(text);
         generated['title'] = structure.title;
@@ -276,6 +291,12 @@ class OnDeviceRunner with WidgetsBindingObserver {
         recordFallback(const ApiFallbackEvent(reason: ApiFallbackReason.error, outcome: ApiFallbackOutcome.degraded));
       }
     }
+    if (chunked && prepared == null && !controller.settings.keepEverythingOnDevice) {
+      final frozen = OnDeviceSegmentSnapshot(
+          segments: segments, duration: offset, language: language, engine: engine, projection: projection);
+      if (!await sync.persistPreparedSegmentUpload(wal, frozen.toJson(), generation)) return;
+    }
+    if (_cancelled || generation != sync.sessionGeneration) return;
     var id = 'ondevice-${wal.id}';
     ServerConversation? server;
     if (!controller.settings.keepEverythingOnDevice) {

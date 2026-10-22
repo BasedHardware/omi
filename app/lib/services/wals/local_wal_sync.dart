@@ -46,6 +46,7 @@ import 'package:omi/backend/schema/capture_committed_event.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
 
 part 'capture_committed_custody.dart';
+part 'on_device_prepared_upload.dart';
 part 'wal_policy.dart';
 part 'wal_job_reconciliation.dart';
 part 'device_chunk_persistence.dart';
@@ -1699,6 +1700,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<bool> persistOnDeviceConversation(Wal wal, Map<String, dynamic> conversation, int generation) async {
     if (!_isCurrent(generation) || !_wals.contains(wal) || !wal.onDeviceOnly) return false;
     wal.onDeviceConversation = conversation;
+    wal.onDevicePreparedUpload = null;
     wal.conversationId = conversation['id'] as String?;
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);
