@@ -1819,7 +1819,7 @@ def get_conversation_endpoint(
             check_conversation_transcript_read_limit(auth, request=request)
 
         conversation = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation:
+        if not conversation or conversation.get('deleted', False):
             status = 404
             returned_count = 0
             raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
@@ -2550,7 +2550,7 @@ def delete_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to delete
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
@@ -2595,7 +2595,7 @@ def update_conversation_endpoint(
     - **discarded**: Whether the conversation is discarded (optional)
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
