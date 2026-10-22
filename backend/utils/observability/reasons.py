@@ -118,6 +118,17 @@ class TransitionTailOutcome(StrEnum):
     SEALED = 'sealed'
 
 
+class StagingRetryOutcome(StrEnum):
+    """Disposition of a held-audio staging attempt, including volatile custody."""
+
+    UNKNOWN = 'unknown'
+    RETRIED_OK = 'retried_ok'
+    DEFERRED = 'deferred'
+    EXHAUSTED = 'exhausted'
+    PERMANENT = 'permanent'
+    RETAINED = 'retained'
+
+
 class WorkOutcome(StrEnum):
     """`WorkResult.outcome` tokens (`utils/batch_pipeline/contracts.py`)."""
 

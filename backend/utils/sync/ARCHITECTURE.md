@@ -198,3 +198,7 @@ Observe `sync_safety_wal_seconds_skipped_total`,
 suppressed decoded PCM bytes. No historical rewrite. Client 30-second edge
 suppression remains separate. #20688 touches different VAD/cleanup hunks in
 `pipeline.py`; #21362 touches client WAL recovery.
+
+`live_cap_journal.py` owns encrypted emergency staging when GCS is unavailable.
+The existing sealer materializes those journals before its fragment-claim commit;
+no local filesystem or new scheduler owns durable recovery.

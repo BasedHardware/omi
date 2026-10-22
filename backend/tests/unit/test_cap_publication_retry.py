@@ -196,7 +196,7 @@ class _Doc:
     def collection(self, name: str) -> '_Collection':
         return _Collection(self.client, f'{self.key}/{name}')
 
-    def get(self, transaction=None, timeout=None):
+    def get(self, transaction=None, timeout=None, retry=None):
         # The real client raises this before a read reaches the server once the
         # transaction has queued writes (get_transaction_id), so a transactional
         # body must finish its reads first.
@@ -227,7 +227,7 @@ class _Doc:
     def set(self, payload, merge: bool = False, timeout=None) -> None:
         self.client.write(self.key, copy.deepcopy(payload), merge=merge, create=False, plain=True)
 
-    def create(self, payload) -> None:
+    def create(self, payload, timeout=None, retry=None) -> None:
         if self.client.conflict_create == self.key:
             self.client.conflict_create = None
             if self.client.conflict_row is not None:
@@ -1401,8 +1401,6 @@ async def test_second_upload_timeout_fails_without_a_third_attempt():
     [
         ValueError('permanent'),
         TimeoutError('caller signal'),
-        ResourceExhausted('throttle'),
-        DeadlineExceeded('Firestore'),
         RetryError('permanent', InvalidArgument('bad')),
         TransportError('no inner fault'),
     ],
@@ -1463,7 +1461,7 @@ async def test_live_upload_timeout_then_success_commits_once(delays, store, monk
     assert upload.call_args.kwargs['rpc_timeout'] == 1.5
 
 
-async def test_live_second_upload_timeout_never_enters_commit(store, monkeypatch):
+async def test_live_second_upload_timeout_hands_off_before_commit(store, monkeypatch):
 
     monkeypatch.setattr(
         live_cap_hold.live_cap_codec, 'encode', lambda path, *args, **kw: Path(path).write_bytes(b'opus')
@@ -1471,9 +1469,11 @@ async def test_live_second_upload_timeout_never_enters_commit(store, monkeypatch
     upload = Mock(side_effect=requests.exceptions.ReadTimeout('read'))
     monkeypatch.setattr(cap_hold, 'upload_held_audio', upload)
     group, source = Publication(UID), Publication(UID)
-    with pytest.raises(requests.exceptions.ReadTimeout):
-        await live_cap_hold._publish_audio(UID, b'pcm', 16000, 100, group, source, _METADATA, 1)
+    handoff = Mock()
+    monkeypatch.setattr(live_cap_hold.live_cap_journal, 'defer', handoff)
+    assert not await live_cap_hold._publish_audio(UID, b'pcm', 16000, 100, group, source, _METADATA, 1)
     assert upload.call_count == 2 and not store.transactions and not store.deletes
+    assert handoff.call_count == 1
 
 
 @pytest.mark.parametrize('mismatch', [None, 'capture', 'size', 'missing_metadata', 'generation'])
