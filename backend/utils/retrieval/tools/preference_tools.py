@@ -87,22 +87,22 @@ def _get_uid(config: RunnableConfig) -> str:
     """Extract user ID from config or context variable."""
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if isinstance(cfg, dict):
-        if 'user_id' in cfg and cfg['user_id']:
-            return str(cfg['user_id'])
         raw_configurable = cfg.get('configurable')
         if isinstance(raw_configurable, dict):
             uid = raw_configurable.get('user_id')
             if uid:
                 return str(uid)
+        if 'user_id' in cfg and cfg['user_id']:
+            return str(cfg['user_id'])
     ctx = _agent_config()
     if isinstance(ctx, dict):
-        if 'user_id' in ctx and ctx['user_id']:
-            return str(ctx['user_id'])
         raw_configurable = ctx.get('configurable')
         if isinstance(raw_configurable, dict):
             uid = raw_configurable.get('user_id')
             if uid:
                 return str(uid)
+        if 'user_id' in ctx and ctx['user_id']:
+            return str(ctx['user_id'])
     return ''
 
 
