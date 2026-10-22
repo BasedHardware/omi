@@ -416,7 +416,9 @@ async def test_held_discovery_lease_cannot_starve_quiet_drain(gateway_probe, mon
         with caplog.at_level('INFO'):
             assert await dream_agent.drain() == [{'status': 'complete'}]
         assert len(pages) == 1
-        run_owner.assert_awaited_once_with('synthetic-owner')
+        run_owner.assert_awaited_once()
+        assert run_owner.await_args.args == ('synthetic-owner',)
+        assert 0 < run_owner.await_args.kwargs['timeout_seconds'] <= dream_agent.PASS_TIMEOUT_SECONDS
         assert len(requests) == 1
         assert sum(call.args[0] == MODEL for call in failed_probe.await_args_list) == 1
         assert now[0] - start >= PROBE_SECONDS

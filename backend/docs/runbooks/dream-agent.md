@@ -224,6 +224,14 @@ dream_capacity_probe outcome=inconclusive model=gemini-3.8-flash
 vertex_reservation_probe_complete model=gemini-3.8-flash scope=<key> outcome=inconclusive
 ```
 
+With `DREAM_GATEWAY_PROBE_ENABLED=false` none of the probe lines appear (admission
+does not claim), and the only signal is `dream_capacity_decision reason=no_states`;
+check that switch before suspecting a missing writer.
+
+A pass that starts late in a sweep receives only the drain's remaining budget
+(minus `FINISH_MARGIN_SECONDS`), so it ends through its own deadline rather than
+being cancelled; below `MIN_PASS_SECONDS` the owner stays due for the next sweep.
+
 The evidence line is on the gateway; the caller intentionally remains
 `inconclusive` because it does not infer PT from HTTP success. The next check
 must emit `dream_capacity_decision` with `decision=admit`,

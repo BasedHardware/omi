@@ -197,10 +197,13 @@ async def test_drain_cancels_and_joins_workers_before_summary(monkeypatch):
     monkeypatch.setattr(dream_agent, 'enabled', lambda: True)
     monkeypatch.setattr(dream_agent, 'concurrency', lambda: 1)
     monkeypatch.setattr(dream_agent, 'DRAIN_TIMEOUT_SECONDS', 0.5)
+    # Exercise the hung-pass cancel path, not the late-start floor.
+    monkeypatch.setattr(dream_agent, 'MIN_PASS_SECONDS', 0)
+    monkeypatch.setattr(dream_agent, 'FINISH_MARGIN_SECONDS', 0)
     monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=transport.DREAM_MODEL))
     monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: ['synthetic'])
 
-    async def run_pass(_uid):
+    async def run_pass(_uid, **_kwargs):
         try:
             await asyncio.Event().wait()
         finally:
