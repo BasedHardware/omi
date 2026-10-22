@@ -2708,13 +2708,14 @@ def test_rendered_state_rejects_source_type_swaps(checker, tmp_path: Path) -> No
     assert set(expected['backend']) == {'DEPLOY_RESOLVED', 'A_SECRET'}
 
 
-def test_backfill_overlay_bindings_are_name_only(checker, tmp_path: Path) -> None:
+def test_backfill_overlay_bindings_expect_canonical_worker_url(checker, tmp_path: Path) -> None:
     # Thread: sync-backfill-lifecycle rewrites SYNC_TASKS_HANDLER_URL and
     # SYNC_TASKS_OIDC_AUDIENCE to the backfill service's own URL after the
     # shared render, so the rendered state's values for them are never what
-    # reaches Cloud Run on backend-sync-backfill — comparing them reported
-    # value drift for a correct deployment. Those keys are name-only for
-    # -sync-backfill services (presence still required).
+    # reaches Cloud Run on backend-sync-backfill. The overlay value is
+    # deterministic (the worker service's URL plus /v2/sync-jobs/run), so the
+    # expectation is that canonical URL with the project-number segment
+    # normalized — a value check, not a presence-only degradation.
     manifest = {
         'schema_version': 2,
         'environments': {
@@ -2756,9 +2757,9 @@ def test_backfill_overlay_bindings_are_name_only(checker, tmp_path: Path) -> Non
     )
     _p, _r, expected = checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=rendered)
     service = expected['backend-sync-backfill']
-    # Presence still required; the values are unprovable through the overlay.
-    assert service['SYNC_TASKS_HANDLER_URL'] is None
-    assert service['SYNC_TASKS_OIDC_AUDIENCE'] is None
+    canonical = 'https://backend-sync-backfill-PROJECT-NUMBER.us-central1.run.app/v2/sync-jobs/run'
+    assert service['SYNC_TASKS_HANDLER_URL'] == checker.value_hash('value', canonical)
+    assert service['SYNC_TASKS_OIDC_AUDIENCE'] == checker.value_hash('value', canonical)
     assert service['PLAIN'] == checker.value_hash('value', 'p')
 
 
@@ -3687,10 +3688,10 @@ def test_cloud_run_secret_alias_project_form_mismatch_degrades_to_inventory(chec
     state['revisions'][SERVING_REVISION]['spec']['containers'][0]['env'] = serving_env
     for revision_doc in state['revisions'].values():
         revision_doc['metadata'] = {
-            'annotations': {checker.SECRET_ALIAS_ANNOTATION: 'TYPESENSE_HOST:projects/123456789/secrets/SHARED_TOKEN'}
+            'annotations': {checker.SECRET_ALIAS_ANNOTATION: 'SHARED_TOKEN:projects/123456789/secrets/SHARED_TOKEN'}
         }
     state['services']['backend-sync']['spec']['template']['metadata']['annotations'] = {
-        checker.SECRET_ALIAS_ANNOTATION: 'TYPESENSE_HOST:projects/123456789/secrets/SHARED_TOKEN'
+        checker.SECRET_ALIAS_ANNOTATION: 'SHARED_TOKEN:projects/123456789/secrets/SHARED_TOKEN'
     }
 
     _, _, (sync,) = checker.inspect_services_drift(
@@ -3972,3 +3973,186 @@ def test_gke_prefixed_unresolved_configmap_shadows_only_matching_keys(checker) -
     assert shared in {m.key for m in result.value_mismatches}, result.value_mismatches
     assert result.status == 'DRIFT', result
     assert checker.exit_code((result,), strict=True) == 1
+
+
+def _expected_hash_of(result, key: str) -> str:
+    for mismatch in result.value_mismatches:
+        if mismatch.key == key:
+            return mismatch.expected_hash
+    raise AssertionError(f'{key} not in mismatches')
+
+
+def test_backfill_overlay_live_url_normalizes_and_mismatches_flag_drift(checker, tmp_path: Path) -> None:
+    # Thread r4348673531: the overlay workaround erased both expected hashes,
+    # so a post-train backend-sync-backfill revision pointing SYNC_TASKS_*
+    # at backend-sync, an old service, or the wrong path compared OK. The
+    # live side normalizes only the project-number segment of a URL that
+    # otherwise matches the worker's deterministic overlay shape; every other
+    # value keeps its raw hash and mismatches the canonical expectation.
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend-sync-backfill': {
+                            'env': {
+                                'SYNC_TASKS_HANDLER_URL': {'env_var': 'SYNC_TASKS_HANDLER_URL'},
+                                'SYNC_TASKS_OIDC_AUDIENCE': {'env_var': 'SYNC_TASKS_HANDLER_URL'},
+                            }
+                        }
+                    }
+                },
+            }
+        },
+    }
+    manifest_path = tmp_path / 'm.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    canonical = 'https://backend-sync-backfill-PROJECT-NUMBER.us-central1.run.app/v2/sync-jobs/run'
+
+    def _state(url: str) -> dict:
+        env = [
+            {'name': 'SYNC_TASKS_HANDLER_URL', 'value': url},
+            {'name': 'SYNC_TASKS_OIDC_AUDIENCE', 'value': url},
+        ]
+        # Serving revision and template agree so template drift stays out of
+        # the assertion surface.
+        template = _container(env)
+        service_doc = {
+            'spec': {
+                'template': {
+                    'metadata': {'name': 'tpl'},
+                    'spec': {'containers': [template, {'name': 'collector', 'env': []}]},
+                },
+                'traffic': [{'revisionName': 'serving', 'percent': 100}],
+            },
+            'status': {
+                'latestCreatedRevisionName': 'tpl',
+                'latestReadyRevisionName': 'tpl',
+                'traffic': [{'revisionName': 'serving', 'percent': 100}],
+            },
+            'env': env,
+        }
+        # Env-only snapshot: read_cloud_run_service compares the snapshot as given.
+        return {'services': {'backend-sync-backfill': service_doc}, 'revisions': {}}
+
+    # A correct overlay URL (any project number) compares OK: the live hash
+    # equals the canonical expectation's hash after both normalize the number.
+    _, _, (ok,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync-backfill',),
+        manifest_path=manifest_path,
+        cloud_run_state=_state('https://backend-sync-backfill-208440318997.us-central1.run.app/v2/sync-jobs/run'),
+    )
+    assert ok.error is None, ok.error
+    assert ok.value_mismatches == (), ok.value_mismatches
+    assert ok.status == 'OK', ok
+
+    # A URL pointing at the old backend-sync service (or any other value) is
+    # real drift: the live hash keeps the raw value.
+    _, _, (drift,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync-backfill',),
+        manifest_path=manifest_path,
+        cloud_run_state=_state('https://backend-sync-208440318997.us-central1.run.app/v2/sync-jobs/run'),
+    )
+    assert drift.error is None, drift.error
+    mismatches = {m.key for m in drift.value_mismatches}
+    assert mismatches == {'SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE'}, drift.value_mismatches
+    assert _expected_hash_of(drift, 'SYNC_TASKS_HANDLER_URL') == checker.value_hash(
+        'value', canonical
+    ), drift.value_mismatches
+    assert drift.status == 'DRIFT', drift
+    assert checker.exit_code((drift,), strict=True) == 1
+
+
+def test_cloud_run_secret_alias_optionality_difference_is_real_drift(checker, tmp_path: Path) -> None:
+    # Thread r4348673557: the alias comparison form omitted
+    # secretKeyRef.optional, so a live binding flipped from required to
+    # optional degraded to INVENTORY (strict exit 0) even though the full
+    # hash — which includes optionality — differed. Optionality is part of
+    # the binding contract; only project-identifier representation may
+    # degrade, so this must stay proven drift.
+    state, manifest = _alias_mismatch_state(
+        checker, alias_name='SHARED_TOKEN', annotation_resource='projects/123456789/secrets/SHARED_TOKEN'
+    )
+    # Same alias rewrite as _alias_mismatch_state, but the live binding is
+    # optional while the manifest expects required (the default).
+    state['revisions'][SERVING_REVISION]['spec']['containers'][0]['env'] = [
+        {
+            'name': 'TYPESENSE_HOST',
+            'valueFrom': {'secretKeyRef': {'name': 'SHARED_TOKEN', 'key': 'latest', 'optional': True}},
+        }
+    ]
+    manifest['environments']['prod']['cloud_run']['services']['backend-sync']['secrets']['TYPESENSE_HOST'] = {
+        'secret': 'projects/123456789/secrets/SHARED_TOKEN',
+        'version': 'latest',
+    }
+    manifest_path = tmp_path / 'runtime_env_optional_flip.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.error is None, sync.error
+    assert 'TYPESENSE_HOST' in {m.key for m in sync.value_mismatches}, sync.value_mismatches
+    assert 'TYPESENSE_HOST' not in sync.alias_unproven_keys
+    assert sync.status == 'DRIFT', sync
+    assert checker.exit_code((sync,), strict=True) == 1
+
+
+def test_cloud_run_secret_alias_env_name_fallback_no_longer_resolves(checker, tmp_path: Path) -> None:
+    # Thread r4348673546: when an annotation contains an unrelated or stale
+    # lookup whose name happens to equal the env-entry name, the fallback
+    # rewrote the live reference even though secretKeyRef.name pointed at a
+    # different secret. Resolution is by secretKeyRef.name only; a live FOO
+    # bound to OTHER_SECRET must hash as OTHER_SECRET (and mismatch the
+    # expected annotated resource), never silently rewrite to match.
+    state, manifest = _alias_mismatch_state(
+        checker, alias_name='SHARED_TOKEN', annotation_resource='projects/123456789/secrets/SHARED_TOKEN'
+    )
+    # The live binding's secretKeyRef.name is OTHER_SECRET; the annotation
+    # maps SHARED_TOKEN -> the expected resource. Under the removed fallback
+    # the entry name (TYPESENSE_HOST) was not the alias either, so simulate
+    # the dangerous shape directly: an annotation entry named after the env
+    # variable pointing at the expected resource.
+    for revision_doc in state['revisions'].values():
+        revision_doc['metadata'] = {
+            'annotations': {
+                checker.SECRET_ALIAS_ANNOTATION: (
+                    'SHARED_TOKEN:projects/123456789/secrets/SHARED_TOKEN,'
+                    'TYPESENSE_HOST:projects/123456789/secrets/SHARED_TOKEN'
+                )
+            }
+        }
+    state['services']['backend-sync']['spec']['template']['metadata']['annotations'] = state['revisions'][
+        SERVING_REVISION
+    ]['metadata']['annotations']
+    state['revisions'][SERVING_REVISION]['spec']['containers'][0]['env'] = [
+        {'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': 'OTHER_SECRET', 'key': 'latest'}}}
+    ]
+    manifest['environments']['prod']['cloud_run']['services']['backend-sync']['secrets']['TYPESENSE_HOST'] = {
+        'secret': 'projects/123456789/secrets/SHARED_TOKEN',
+        'version': 'latest',
+    }
+    manifest_path = tmp_path / 'runtime_env_no_env_fallback.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.error is None, sync.error
+    # The live binding hashes as OTHER_SECRET (unrewritten) and mismatches the
+    # expected project-qualified reference: real drift, strict exit 1.
+    assert 'TYPESENSE_HOST' in {m.key for m in sync.value_mismatches}, sync.value_mismatches
+    assert 'TYPESENSE_HOST' not in sync.alias_unproven_keys
+    assert sync.status == 'DRIFT', sync
+    assert checker.exit_code((sync,), strict=True) == 1

@@ -318,18 +318,78 @@ def _secret_ref_hash(resource: str, version: str, *, optional: bool = False) -> 
 
 _PROJECT_SECRET_RE = re.compile(r'^projects/(?P<project>[^/]+)/secrets/(?P<name>[^/]+)$')
 
+# The sync-backfill worker deploys through an overlay the renderer cannot
+# see: ``sync-backfill-lifecycle`` rewrites both keys to the worker service's
+# own URL (``https://<service>-<project number>.<region>.run.app/v2/sync-jobs/run``,
+# ``.github/actions/sync-backfill-lifecycle/action.yml``) after the shared
+# render, so the rendered state's values for them are never what reaches
+# Cloud Run. The overlay value is deterministic up to the project *number*
+# (an identity of the GCP project, not of this deployment), so both sides
+# normalize exactly that segment to a placeholder and the comparison stays a
+# value check: a URL pointing at ``backend-sync``, an old service, another
+# region, or the wrong path is real drift instead of a silent presence check.
+_BACKFILL_OVERLAY_KEYS = ('SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE')
+_BACKFILL_OVERLAY_PATH = '/v2/sync-jobs/run'
+_BACKFILL_URL_NUMBER_SEGMENT = 'PROJECT-NUMBER'
 
-def _secret_ref_form(resource: str, version: str) -> str:
-    """Canonical comparison form ``project\\0name\\0version`` for a secret reference.
+
+def _backfill_overlay_url_canonical(service: str, region: str) -> str:
+    """The deterministic overlay URL with the project-number segment placeholdered."""
+    return f'https://{service}-{_BACKFILL_URL_NUMBER_SEGMENT}.{region}.run.app{_BACKFILL_OVERLAY_PATH}'
+
+
+def _normalize_backfill_overlay_entries(entries: object, service: str) -> list[Any]:
+    """Rewrite overlay URL values to the placeholder form before hashing.
+
+    Only values that match the deterministic overlay shape are rewritten:
+    this service's own name, a numeric project segment, and the fixed path.
+    Any other value (an old service, a wrong path) keeps its raw hash and
+    reports drift against the canonical expectation.
+    """
+    if not isinstance(entries, list) or not service.endswith('-sync-backfill'):
+        return entries if isinstance(entries, list) else []
+    pattern = re.compile(
+        r'^(?P<prefix>https://'
+        + re.escape(service)
+        + r')-\d+\.(?P<rest>[^/]+\.run\.app)'
+        + re.escape(_BACKFILL_OVERLAY_PATH)
+        + r'$'
+    )
+    normalized: list[Any] = []
+    for entry in entries:
+        if (
+            isinstance(entry, dict)
+            and entry.get('name') in _BACKFILL_OVERLAY_KEYS
+            and isinstance(entry.get('value'), str)
+        ):
+            match = pattern.match(str(entry['value']))
+            if match:
+                entry = {
+                    **entry,
+                    'value': (
+                        f"{match.group('prefix')}-{_BACKFILL_URL_NUMBER_SEGMENT}.{match.group('rest')}"
+                        f'{_BACKFILL_OVERLAY_PATH}'
+                    ),
+                }
+        normalized.append(entry)
+    return normalized
+
+
+def _secret_ref_form(resource: str, version: str, *, optional: bool = False) -> str:
+    """Canonical comparison form ``project\\0name\\0version\\0optionality`` for a secret reference.
 
     The form keeps every segment: the alias comparison decides per segment
     which differences are provable (see ``_alias_mismatch_is_form_ambiguous``).
-    A non-matching resource (a bare name) keeps the whole string as the name.
+    ``optional`` is part of the binding contract (whether the secret or key
+    must exist), so a required/optional change stays a provable difference —
+    only the project-identifier *representation* may degrade. A non-matching
+    resource (a bare name) keeps the whole string as the name.
     """
+    optionality = 'optional' if optional else 'required'
     match = _PROJECT_SECRET_RE.match(resource)
     if match:
-        return f'{match.group("project")}\x00{match.group("name")}\x00{version or "latest"}'
-    return f'\x00{resource}\x00{version or "latest"}'
+        return f'{match.group("project")}\x00{match.group("name")}\x00{version or "latest"}\x00{optionality}'
+    return f'\x00{resource}\x00{version or "latest"}\x00{optionality}'
 
 
 def _alias_mismatch_is_form_ambiguous(expected_form: str, live_form: str) -> bool:
@@ -341,8 +401,8 @@ def _alias_mismatch_is_form_ambiguous(expected_form: str, live_form: str) -> boo
     service's own project is implicit). Only that ambiguity is unprovable:
     a project *number* versus a project *ID* (in either direction), or an
     implicit bare name versus a qualified reference. Two different project
-    *numbers*, two different project IDs, or any name/version difference are
-    provably different references (real drift).
+    *numbers*, two different project IDs, or any name/version/optionality
+    difference is provably different (real drift).
     """
     expected_project, _, expected_rest = expected_form.partition('\x00')
     live_project, _, live_rest = live_form.partition('\x00')
@@ -807,18 +867,25 @@ def expected_cloud_run_env(
             secret_ref = (entry.get('valueFrom') or {}).get('secretKeyRef')
             if isinstance(secret_ref, Mapping):
                 service_canonical[key] = _secret_ref_form(
-                    str(secret_ref.get('name', '')), str(secret_ref.get('key', ''))
+                    str(secret_ref.get('name', '')),
+                    str(secret_ref.get('key', '')),
+                    optional=bool(secret_ref.get('optional')),
                 )
         # The sync-backfill worker deploys through an overlay the renderer
         # cannot see (sync-backfill-lifecycle rewrites these to the worker
         # service's own URL after the shared render): the rendered state's
-        # values for them are never what reaches Cloud Run, so comparing them
-        # would report value drift for a correct deployment. Degrade to
-        # name-only (presence still required) for that service.
+        # values for them are never what reaches Cloud Run, but the overlay
+        # value itself is deterministic (this service's URL plus the fixed
+        # path, per the action). Expect exactly that canonical value — with
+        # the project-number segment normalized on both sides (see
+        # ``_normalize_backfill_overlay_entries``) — so a URL pointing at
+        # ``backend-sync``, an old service, or the wrong path is value drift
+        # instead of a presence-only check.
         if service_name.endswith('-sync-backfill'):
-            for overlay_key in ('SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE'):
+            overlay_canonical = _backfill_overlay_url_canonical(str(service_name), region)
+            for overlay_key in _BACKFILL_OVERLAY_KEYS:
                 if overlay_key in service_expected:
-                    service_expected[overlay_key] = None
+                    service_expected[overlay_key] = value_hash('value', overlay_canonical)
         expected[str(service_name)] = service_expected
         if canonical_secret_hashes is not None:
             canonical_secret_hashes[str(service_name)] = service_canonical
@@ -1077,10 +1144,10 @@ def _template_env(service_doc: Mapping[str, Any], *, service: str) -> tuple[str 
     container = _application_container(containers, scope=f'Cloud Run service {service} template')
     name = (template.get('metadata') or {}).get('name')
     # Alias resolution matches _revision_env so template and serving
-    # fingerprints stay comparable when cross-project secrets are declared.
-    env, _alias_resolved = _resolve_secret_aliases(
-        container.get('env', []), _secret_alias_map(template.get('metadata'))
-    )
+    # fingerprints stay comparable when cross-project secrets are declared;
+    # backfill overlay normalization matches for the same reason.
+    env_entries = _normalize_backfill_overlay_entries(container.get('env', []), service)
+    env, _alias_resolved = _resolve_secret_aliases(env_entries, _secret_alias_map(template.get('metadata')))
     return (name if isinstance(name, str) else None), _env_list_to_live(env, scope=service)
 
 
@@ -1135,7 +1202,12 @@ def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> tupl
             value_from = entry.get('valueFrom')
             secret = value_from.get('secretKeyRef') if isinstance(value_from, dict) else None
             if isinstance(secret, dict):
-                resource = aliases.get(str(secret.get('name', ''))) or aliases.get(str(entry.get('name', '')))
+                # The annotation's lookup name pairs with ``secretKeyRef.name``
+                # (the platform's documented v1 contract): resolving through the
+                # env-entry name as well would let an unrelated or stale
+                # annotation entry rewrite a live binding to a different secret
+                # and report OK. Only the declared lookup name resolves.
+                resource = aliases.get(str(secret.get('name', '')))
                 if resource:
                     entry_name = entry.get('name')
                     entry = {
@@ -1143,17 +1215,18 @@ def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> tupl
                         'valueFrom': {'secretKeyRef': {**secret, 'name': resource}},
                     }
                     if isinstance(entry_name, str) and entry_name:
-                        canonical[entry_name] = _secret_ref_form(resource, str(secret.get('key', '')))
+                        canonical[entry_name] = _secret_ref_form(
+                            resource, str(secret.get('key', '')), optional=bool(secret.get('optional'))
+                        )
         resolved.append(entry)
     return resolved, canonical
 
 
-def _revision_env(revision_doc: Mapping[str, Any], *, revision: str) -> tuple[LiveEnv, dict[str, str]]:
+def _revision_env(revision_doc: Mapping[str, Any], *, revision: str, service: str) -> tuple[LiveEnv, dict[str, str]]:
     containers = (revision_doc.get('spec') or {}).get('containers')
     container = _application_container(containers, scope=f'Cloud Run revision {revision}')
-    env, alias_resolved = _resolve_secret_aliases(
-        container.get('env', []), _secret_alias_map(revision_doc.get('metadata'))
-    )
+    env_entries = _normalize_backfill_overlay_entries(container.get('env', []), service)
+    env, alias_resolved = _resolve_secret_aliases(env_entries, _secret_alias_map(revision_doc.get('metadata')))
     return _env_list_to_live(env, scope=f'revision {revision}'), alias_resolved
 
 
@@ -1174,7 +1247,8 @@ def read_cloud_run_service(
             # Env-only snapshot fixture (no traffic information): compare it as given.
             # Anything else — including a spec.template without status.traffic — is
             # refused below by serving_revisions() instead of being misread as serving.
-            env = _env_list_to_live(service_doc['env'], scope=service)
+            env_entries = _normalize_backfill_overlay_entries(service_doc['env'], service)
+            env = _env_list_to_live(env_entries, scope=service)
             target = ServingTarget(
                 name='snapshot',
                 weight=100,
@@ -1221,7 +1295,7 @@ def read_cloud_run_service(
                     '--format=json',
                 ],
             )
-        env, alias_canonical = _revision_env(revision_doc, revision=revision)
+        env, alias_canonical = _revision_env(revision_doc, revision=revision, service=service)
         live.targets.append(
             (
                 ServingTarget(
@@ -1670,7 +1744,7 @@ def compare_service(
             # to INVENTORY; unequal projects, a different secret name or a
             # different version is real drift.
             if key in target.alias_ref_forms and _alias_mismatch_is_form_ambiguous(
-                (expected_canonical_secret_hashes or {}).get(key, '\x00\x00'), target.alias_ref_forms[key]
+                (expected_canonical_secret_hashes or {}).get(key, '\x00\x00\x00'), target.alias_ref_forms[key]
             ):
                 alias_unproven.add(key)
                 continue
