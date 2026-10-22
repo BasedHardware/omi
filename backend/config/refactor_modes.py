@@ -41,6 +41,8 @@ CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256
 _COHORT_ENVS = {
     CAPTURE_COVERAGE_MODE_ENV: (CAPTURE_COVERAGE_SERVE_PERCENT_ENV, CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV),
 }
+CAPTURE_COVERAGE_SHADOW_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SHADOW_PERCENT'
+_SHADOW_PERCENT_ENVS = {CAPTURE_COVERAGE_MODE_ENV: CAPTURE_COVERAGE_SHADOW_PERCENT_ENV}
 
 
 def _warn_once(name: str, raw: str) -> None:
@@ -125,10 +127,11 @@ def shadow_sampled(name: str, uid: str | None, default_percent: float, default: 
         return True
     if mode(name, default) != 'shadow' or not uid:
         return False
-    raw = os.getenv(f'{name}_SHADOW_PERCENT', '').strip()
+    env = _SHADOW_PERCENT_ENVS.get(name, f'{name}_SHADOW_PERCENT')
+    raw = os.getenv(env, '').strip()
     try:
         percent = float(raw) if raw else default_percent
     except ValueError:
-        _warn_once(f'{name}_SHADOW_PERCENT', raw)
+        _warn_once(env, raw)
         percent = default_percent
     return percent > 0 and cohort_bucket(uid, f'{name.lower()}:shadow') < percent
