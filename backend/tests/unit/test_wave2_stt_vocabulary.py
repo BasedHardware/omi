@@ -122,3 +122,17 @@ def test_sources_use_the_memory_authority_and_bounded_reads(monkeypatch):
     assert received[0] == {'limit': 200}
     assert received[1]['limit'] == 80
     assert received[1]['budget'].remaining_documents == 240
+
+
+def test_shadow_source_work_cannot_delay_the_soniox_dial(monkeypatch):
+    monkeypatch.setenv(vocab.STT_VOCAB_SHADOW_PERCENT_ENV, '100')
+    pending = []
+    from utils import executors
+
+    monkeypatch.setattr(executors, 'start_background_task', lambda coroutine, **kw: pending.append(coroutine))
+    config = {'language_hints': ['en']}
+    asyncio.run(vocab.apply_context(config, 'synthetic-owner'))
+    assert config == {'language_hints': ['en']}
+    assert len(pending) == 1
+    for coroutine in pending:
+        coroutine.close()

@@ -90,7 +90,7 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
     if not n.generated_compute_allowed(uid, 'daily_summary'):
         return None, False, 'usage_budget_exhausted'
     if not n.try_acquire_daily_summary_lock(uid, date_str):
-        return None, False, n._DECLINE_LOCKED
+        return None, False, n.DAILY_SUMMARY_DECLINE_LOCKED
     existing = None
     looked_up = False
     try:
@@ -99,7 +99,7 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
         now = datetime.now(timezone.utc)
         if now < end_date_utc + GRACE:
             _state(n, uid, date_str, existing, 'pending')
-            return None, False, n._DECLINE_NOTHING_TO_SUMMARIZE
+            return None, False, n.DAILY_SUMMARY_DECLINE_NOTHING_TO_SUMMARIZE
         rows = (
             conversations_db.get_conversations(
                 uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
@@ -115,23 +115,23 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
             return (existing if existing['status'] == 'generated' else None), False, None
         if not rows:
             _state(n, uid, date_str, existing, 'no_recordings', fingerprint)
-            return None, False, n._DECLINE_NO_CONVERSATIONS
+            return None, False, n.DAILY_SUMMARY_DECLINE_NO_CONVERSATIONS
         # V2 is the only content classifier. Read its serving projection; never reclassify.
         from utils.conversations.media_consumers import eligible_conversations
 
         rows = eligible_conversations(uid, rows)
         if not rows:
             _state(n, uid, date_str, existing, 'no_recordings', fingerprint)
-            return None, False, n._DECLINE_NOTHING_TO_SUMMARIZE
+            return None, False, n.DAILY_SUMMARY_DECLINE_NOTHING_TO_SUMMARIZE
         conversations = n.deserialize_conversations([row for row in rows if not row.get('is_locked')])
         conversations = [c for c in conversations if not c.discarded]
         if not conversations or not any(c.transcript_segments for c in conversations):
             _state(n, uid, date_str, existing, 'pending', fingerprint)
-            return None, False, n._DECLINE_NOTHING_TO_SUMMARIZE
+            return None, False, n.DAILY_SUMMARY_DECLINE_NOTHING_TO_SUMMARIZE
         conversations = n.bound_daily_summary_conversations(uid, date_str, conversations)
-        if not any(n._conversation_has_summary_content(c) for c in conversations):
+        if not any(n.conversation_has_summary_content(c) for c in conversations):
             _state(n, uid, date_str, existing, 'pending', fingerprint)
-            return None, False, n._DECLINE_NOTHING_TO_SUMMARIZE
+            return None, False, n.DAILY_SUMMARY_DECLINE_NOTHING_TO_SUMMARIZE
         pending = _state(n, uid, date_str, existing, 'pending', fingerprint)
         existing = pending
         if prepare_delivery:

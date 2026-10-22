@@ -2,6 +2,7 @@
 
 import logging
 from enum import StrEnum
+from typing import cast
 from prometheus_client import Counter, REGISTRY
 from utils.observability.reasons import ReasonFamily, reason_label
 
@@ -15,11 +16,14 @@ class CallsRefactorOutcome(StrEnum):
     ERROR = 'error'
 
 
-def _counter():
+def _counter() -> Counter:
     try:
         return Counter('omi_calls_refactor_shadow_total', 'V4 deterministic comparisons', ['check', 'outcome'])
     except ValueError:
-        return REGISTRY._names_to_collectors['omi_calls_refactor_shadow_total']
+        # Prometheus has no public collector lookup; mirror the notes metrics reload seam.
+        return cast(
+            Counter, REGISTRY._names_to_collectors['omi_calls_refactor_shadow_total']
+        )  # pyright: ignore[reportPrivateUsage]
 
 
 COMPARISONS = _counter()

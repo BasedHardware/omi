@@ -125,23 +125,14 @@ def cached_terms(uid):
     return list(terms)
 
 
-async def apply_context(config, uid=None):
-    if not shadow_or_serve(FLAG):
-        return
-    if uid is None:
-        from utils.byok import get_byok_uid
-
-        uid = get_byok_uid()
-    if not uid or not shadow_sampled(FLAG, uid, default_percent=1.0):
-        return
+async def _load_terms(uid):
     try:
         from utils.executors import db_executor, run_blocking
 
         terms = await asyncio.wait_for(run_blocking(db_executor, cached_terms, uid), timeout=2)
         # Even in serve mode only the term count may enter telemetry.
         observe('stt_vocab', 'disagree' if terms else 'agree', size=len(terms))
-        if terms and serving_for(FLAG, uid):
-            config['context'] = {**config.get('context', {}), 'terms': terms}
+        return terms
     except Exception:
         observe('stt_vocab', 'error')
         if serving_for(FLAG, uid):
@@ -154,3 +145,23 @@ async def apply_context(config, uid=None):
                 reason='dependency_unavailable',
                 outcome='degraded',
             )
+        return []
+
+
+async def apply_context(config, uid=None):
+    if not shadow_or_serve(FLAG):
+        return
+    if uid is None:
+        from utils.byok import get_byok_uid
+
+        uid = get_byok_uid()
+    if not uid or not shadow_sampled(FLAG, uid, default_percent=1.0):
+        return
+    if not serving_for(FLAG, uid):
+        from utils.executors import start_background_task
+
+        start_background_task(_load_terms(uid), name='soniox_vocabulary_shadow')
+        return
+    terms = await _load_terms(uid)
+    if terms:
+        config['context'] = {**config.get('context', {}), 'terms': terms}

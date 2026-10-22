@@ -92,6 +92,8 @@ _DECLINE_NO_CONVERSATIONS = 'no_conversations'
 _DECLINE_NOTHING_TO_SUMMARIZE = 'nothing_to_summarize'
 # Public name for the one decline a caller outside this module has to act on differently.
 DAILY_SUMMARY_DECLINE_LOCKED = _DECLINE_LOCKED
+DAILY_SUMMARY_DECLINE_NO_CONVERSATIONS = _DECLINE_NO_CONVERSATIONS
+DAILY_SUMMARY_DECLINE_NOTHING_TO_SUMMARIZE = _DECLINE_NOTHING_TO_SUMMARIZE
 
 
 def _conversation_has_summary_content(conversation: Any) -> bool:
@@ -113,6 +115,9 @@ def _conversation_has_summary_content(conversation: Any) -> bool:
     if getattr(structured, 'action_items', None):
         return True
     return bool(getattr(structured, 'events', None))
+
+
+conversation_has_summary_content = _conversation_has_summary_content
 
 
 def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc) -> Optional[dict]:
