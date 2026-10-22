@@ -206,7 +206,7 @@ def build_evidence(
             )
         elif not accepted and not any(c.source == 'manual' for c in candidates):
             reasons.add(resolution.voice_identity_statuses.get(voice, 'insufficient_evidence'))
-    clusters, centroids, count_abstained = merge_surplus(clusters, centroids, hint)
+    clusters, centroids, count_abstained = merge_surplus(clusters, centroids, hint, channel_ids=channel_ids)
     if count_abstained:
         reasons.add('participant_count_unresolved')
     owner_anchor = anchor_owner(

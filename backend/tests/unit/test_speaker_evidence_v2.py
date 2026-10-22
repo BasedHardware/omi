@@ -270,3 +270,14 @@ def test_near_field_does_not_override_distinct_person():
     )
     assert result.owner_anchor == 'none'
     assert not any(owner for owner, _ in evidence.project_labels(result, {}).values())
+
+
+def test_surplus_merge_never_blends_desktop_mic_with_remote_channel():
+    rows = segments(6)
+    result = evidence.build_evidence(
+        rows, resolution(rows, [[1, 0]] * 6), roster=ROSTER, channel_ids=['s0', 's1', 's2']
+    )
+    assert len(result.clusters) == 2
+    assert result.owner_anchor == 'channel'
+    labels = evidence.project_labels(result, {})
+    assert [labels[s['id']][0] for s in rows] == [True, True, True, False, False, False]

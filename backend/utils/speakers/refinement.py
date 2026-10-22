@@ -25,7 +25,7 @@ def identities(cluster):
     return {c.person_id for c in cluster.candidates if c.source == 'manual' or c.label_eligible}
 
 
-def merge_surplus(clusters, centroids, hint):
+def merge_surplus(clusters, centroids, hint, *, channel_ids=()):
     """Closest-first centroid linkage, never exceeding the policy distance.
 
     Confident identities are transitive cannot-links. Missing or incompatible
@@ -39,6 +39,8 @@ def merge_surplus(clusters, centroids, hint):
     vectors = {i: unit(centroids.get(c.id)) for i, c in active.items()}
     # Keep original identity constraints even if a merged candidate abstains.
     constraints = {i: identities(c) for i, c in active.items()}
+    channel_ids = set(channel_ids)
+    channels = {i: {sid in channel_ids for sid in c.segment_ids} for i, c in active.items()}
     heap = []
 
     def offer(a, b):
@@ -46,6 +48,8 @@ def merge_surplus(clusters, centroids, hint):
         if va is None or vb is None or va.shape != vb.shape:
             return
         if len(constraints[a] | constraints[b]) > 1:
+            return
+        if channel_ids and len(channels[a] | channels[b]) > 1:
             return
         distance = float(1 - np.dot(va, vb))
         if policy.SURPLUS_MERGE.accepts(distance):
@@ -64,6 +68,7 @@ def merge_surplus(clusters, centroids, hint):
         other = max(right.speech_seconds, 0.001)
         vectors[fresh] = unit(vectors[a] * weight + vectors[b] * other)
         constraints[fresh] = constraints[a] | constraints[b]
+        channels[fresh] = channels[a] | channels[b]
         by_key = {(c.person_id, c.source): c for c in left.candidates}
         right_keys = {(c.person_id, c.source): c for c in right.candidates}
         for key, candidate in by_key.items():
