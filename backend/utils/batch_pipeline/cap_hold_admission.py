@@ -24,7 +24,7 @@ from utils.sync.legacy_dark import LegacySyncMode
 
 logger = logging.getLogger(__name__)
 
-HeldOutcome = Literal['admitted', 'already_admitted', 'privacy_blocked', 'retry']
+HeldOutcome = Literal['admitted', 'already_admitted', 'covered', 'privacy_blocked', 'retry']
 # Sealing/staging live sources are not immutable yet; the recovery worker returns early for them too.
 _UNSEALED = frozenset({'staging', 'sealing'})
 # Terminal or legacy-owned states: never (re-)admitted.
@@ -80,6 +80,7 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
     from utils.executors import run_blocking, storage_executor
     from utils.sync import cap_hold
     from utils import funded_processing
+    from utils.batch_pipeline.held_coverage import HeldDecoder
 
     if not eligible(row):
         raise ValueError('hold already has legacy spend or an unsealed source')
@@ -91,6 +92,7 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
         path = str(Path(directory.name) / 'held.wav')
         await run_blocking(storage_executor, cap_hold.read_audio, uid, dict(row), path)
         capture_at = float(meta['timestamp'])
+        decoder = HeldDecoder(uid, path, capture_at, meta, legacy=wav_units)
         response = await intake.accept_upload(
             uid=uid,
             job_id=content_id[:32],
@@ -105,11 +107,13 @@ async def admit_held(uid: str, snapshot: Any, row: Mapping[str, Any]) -> HeldAdm
             client_device_id=meta.get('client_device_id'),
             client_platform=meta.get('client_platform'),
             intake_context={'origin': 'cap_hold', 'recording_session_id': meta.get('recording_session_id')},
-            decode=lambda max_seconds: wav_units(path, capture_at, max_seconds),
+            decode=decoder,
             usage_period=funded_processing.period_id(),
         )
     finally:
         await run_blocking(storage_executor, directory.cleanup)
+    if decoder.all_covered and response is not None and response.status_code == 200:
+        return HeldAdmission('covered')
     job_id = intake.JOB_PREFIX + content_id[:32]
     code = _code(response)
     if response is not None and response.status_code == 202:

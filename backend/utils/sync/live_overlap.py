@@ -2,6 +2,10 @@
 
 import os
 
+from config import refactor_modes
+from utils.capture.identity import compatible_keys, same_explicit_key
+from utils.capture.shadow import compare
+
 from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
 
 
@@ -18,10 +22,10 @@ def compatible_capture(left: dict, right: dict) -> bool:
     ) and bool(left.get('is_locked')) == bool(right.get('is_locked'))
 
 
-def _strict_overlap_seconds(row: dict, incoming: dict) -> float:
+def _strict_overlap_seconds(row: dict, incoming: dict, *, require_device: bool = True) -> float:
     """Strict same-partition interval overlap; ignores content and provenance."""
     if (
-        not incoming.get('client_device_id')
+        (require_device and not incoming.get('client_device_id'))
         or not compatible_capture(row, incoming)
         or row.get('deleted')
         or row.get('sync_merged_into')
@@ -56,10 +60,14 @@ def discoverable_live_overlap(row: dict, incoming: dict) -> bool:
     contention retry the assignment once the listen writer adds content, instead
     of publishing a twin the transaction never saw conflict on.
     """
-    return _strict_overlap_seconds(row, incoming) > 0
+    return _strict_overlap_seconds(row, incoming) > 0 or (
+        refactor_modes.shadow_or_serve('CAPTURE_COVERAGE_MODE')
+        and same_explicit_key(row, incoming)
+        and _strict_overlap_seconds(row, incoming, require_device=False) > 0
+    )
 
 
-def choose_live_overlap(rows: list[dict], incoming: dict) -> str | None:
+def _legacy_choose_live_overlap(rows: list[dict], incoming: dict) -> str | None:
     eligible = [(live_overlap_seconds(row, incoming), row) for row in rows]
     eligible = [(seconds, row) for seconds, row in eligible if seconds > 0]
     if not eligible:
@@ -67,3 +75,27 @@ def choose_live_overlap(rows: list[dict], incoming: dict) -> str | None:
     # Stable choice, with the greatest shared audio first. Other live identities
     # remain independent: an active listen connection may still write to them.
     return min(eligible, key=lambda pair: (-pair[0], pair[1]['started_at'], pair[1]['id']))[1]['id']
+
+
+def _new_live_overlap_seconds(row: dict, incoming: dict) -> float:
+    if not compatible_keys(row, incoming):
+        return 0
+    keyed_open = same_explicit_key(row, incoming) and row.get('status') == 'in_progress'
+    if keyed_open:
+        # An OPEN occasion can bind before its first transcript. This chooses
+        # an identity only; wall time never claims covered source frames.
+        return _strict_overlap_seconds(row, incoming, require_device=False)
+    return live_overlap_seconds(row, incoming)
+
+
+def choose_live_overlap(rows: list[dict], incoming: dict, *, uid: str | None = None) -> str | None:
+    # refactor: superseded by this module's keyed path when CAPTURE_COVERAGE_MODE=serve
+    legacy = _legacy_choose_live_overlap(rows, incoming)
+    if not refactor_modes.shadow_or_serve('CAPTURE_COVERAGE_MODE'):
+        return legacy
+    eligible = [(seconds, row) for row in rows if (seconds := _new_live_overlap_seconds(row, incoming)) > 0]
+    proposed = (
+        min(eligible, key=lambda pair: (-pair[0], pair[1]['started_at'], pair[1]['id']))[1]['id'] if eligible else None
+    )
+    compare('live_bind', 'agree' if proposed == legacy else 'disagree')
+    return proposed if refactor_modes.serving_for('CAPTURE_COVERAGE_MODE', uid) else legacy

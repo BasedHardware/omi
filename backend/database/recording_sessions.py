@@ -252,6 +252,8 @@ def tombstone_and_delete_empty_conversation(
     *,
     firestore_client: Any = None,
     deleted_conversation: dict[str, Any] | None = None,
+    recovery_cutoff: datetime | None = None,
+    require_expired_recording_lease: bool = False,
 ) -> bool:
     """Atomically delete an empty live row and terminalize its bound session.
 
@@ -288,6 +290,30 @@ def tombstone_and_delete_empty_conversation(
             or conversations_db.raw_conversation_has_content(uid, conversation)
         ):
             return False
+
+        if require_expired_recording_lease:
+            from database import conversation_finalization_jobs as jobs_db
+            from utils.conversations.lifecycle_clocks import speech_clock
+
+            now = _now()
+            speech = speech_clock(uid, conversation)
+            expiry = jobs_db.recording_session_lease_expiry(
+                transaction,
+                conversation_ref.parent.parent.collection(RECORDING_SESSIONS_COLLECTION),
+                uid,
+                conversation_id,
+                conversation,
+                now,
+            )
+            if (
+                recovery_cutoff is None
+                or speech is None
+                or speech > recovery_cutoff
+                or expiry is None
+                or expiry > now
+                or (conversation.get('external_data') or {}).get('recording_session_id') != recording_session_id
+            ):
+                return False
 
         if session_ref is not None:
             session_snapshot = session_ref.get(transaction=transaction)

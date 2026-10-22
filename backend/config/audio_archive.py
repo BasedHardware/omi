@@ -5,8 +5,11 @@ on by default, flag-only, no percent cohort. The remaining phases stay staged
 dark rollouts behind their flag plus a percent cohort.
 """
 
-import hashlib
+from config.refactor_switches import default_off as rollout_default_off
+
 import os
+
+from config.policy.batch import cohort_bucket
 
 from config.rollout_cohorts import in_rollout_cohort
 import logging
@@ -24,15 +27,27 @@ def _phase_enabled(phase: str) -> bool:
     if phase == 'READ':
         return os.getenv('AUDIO_ARCHIVE_READ_ENABLED', 'true').lower() == 'true'
     if phase == 'STOP_PCM':
-        return os.getenv('AUDIO_ARCHIVE_STOP_PCM_ENABLED', 'false').lower() == 'true'
+        return rollout_default_off(
+            'AUDIO_ARCHIVE_STOP_PCM_ENABLED', os.getenv('AUDIO_ARCHIVE_STOP_PCM_ENABLED', 'false').lower() == 'true'
+        )
     if phase == 'SYNC':
-        return os.getenv('AUDIO_ARCHIVE_SYNC_ENABLED', 'false').lower() == 'true'
+        return rollout_default_off(
+            'AUDIO_ARCHIVE_SYNC_ENABLED', os.getenv('AUDIO_ARCHIVE_SYNC_ENABLED', 'false').lower() == 'true'
+        )
     if phase == 'REGIONAL_CACHE':
-        return os.getenv('AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED', 'false').lower() == 'true'
+        return rollout_default_off(
+            'AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED',
+            os.getenv('AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED', 'false').lower() == 'true',
+        )
     if phase == 'COALESCE':
-        return os.getenv('AUDIO_ARCHIVE_COALESCE_ENABLED', 'false').lower() == 'true'
+        return rollout_default_off(
+            'AUDIO_ARCHIVE_COALESCE_ENABLED', os.getenv('AUDIO_ARCHIVE_COALESCE_ENABLED', 'false').lower() == 'true'
+        )
     if phase == 'SEPARATE_MERGE':
-        return os.getenv('AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED', 'false').lower() == 'true'
+        return rollout_default_off(
+            'AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED',
+            os.getenv('AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED', 'false').lower() == 'true',
+        )
     return False
 
 
@@ -61,8 +76,8 @@ def admitted(uid: str, phase: str) -> bool:
     percent = _cohort_percent(phase)
     if percent is None:
         return False
-    bucket = int.from_bytes(hashlib.sha256(('audio-archive:' + uid).encode()).digest()[:8], 'big') / 2**64
-    return in_rollout_cohort(uid, 'audio-archive') or bucket * 100 < percent
+    bucket = cohort_bucket(uid, 'audio-archive', bits=64)
+    return in_rollout_cohort(uid, 'audio-archive') or bucket < percent
 
 
 def regional_bucket(uid: str, legacy: str | None) -> str | None:

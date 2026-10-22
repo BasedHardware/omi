@@ -7,6 +7,7 @@ from __future__ import annotations
 from enum import Enum
 import os
 from typing import Any, Final
+from config.refactor_switches import default_off
 
 
 class PlanType(str, Enum):
@@ -19,7 +20,7 @@ class PlanType(str, Enum):
 
     @classmethod
     def _missing_(cls, value: object):
-        if value == 'pro' and os.getenv('LADDER_V1_RETIRE_PRO_ALIAS_ENABLED', 'false') == 'true':
+        if value == 'pro' and default_off('LADDER_V1_RETIRE_PRO_ALIAS_ENABLED', os.getenv('LADDER_V1_RETIRE_PRO_ALIAS_ENABLED', 'false') == 'true'):
             return None
         return WIRE_PLAN_ALIASES.get(value) if isinstance(value, str) else None
 

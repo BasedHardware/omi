@@ -17,7 +17,8 @@ from config.translation import resolve_ondemand_config
 from routers.listen.capture_merges import snapshot_proofs, acknowledge_proofs
 from models.capture_window_proof import CaptureWindowProof
 from config.live_capture import capture_window_reason
-from utils.capture_evidence import unknown_envelope
+from routers.listen.coverage import publish_committed, committed_snapshot
+from config.refactor_modes import serving_for
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 
 
@@ -466,16 +467,7 @@ class TranscriptProcessor:
             fresh = [segment.model_dump() for segment in segments]
             self._capture_merge_tails = getattr(self, "_capture_merge_tails", {})
             source_map = self.host.state.source_position_map
-            capture_evidence = None
-            if source_map is not None:
-                capture_evidence = source_map.committed_snapshot(conversation.id, segments) or unknown_envelope(
-                    'missing_source_position', origin='live'
-                )
-            else:
-                capture_evidence = unknown_envelope(
-                    'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
-                    origin='live',
-                )
+            capture_evidence = committed_snapshot(self.host, conversation.id, segments)
             written = await self.host.persistence.call(
                 conversations_db.update_conversation_segments,
                 self.host.request.uid,
@@ -487,6 +479,7 @@ class TranscriptProcessor:
                 started_at=started_at,
                 audio_timeline=audio_timeline,
                 capture_evidence=capture_evidence,
+                finished_at=finished_at if update_finished_at else None,
                 data_protection_level=self.cache.protection_level,
                 invalidate_client_processing=False,
             )
@@ -522,6 +515,7 @@ class TranscriptProcessor:
                     OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='version', reason=attribution).inc()
                     if sid in written.created_ids:
                         OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='segment', reason=attribution).inc()
+            await publish_committed(self.host, conversation.id, capture_evidence)
             if source_map is not None:
                 source_map.acknowledge(conversation.id, capture_evidence)
             conversation.transcript_segments = list(by_id.values())
@@ -554,7 +548,8 @@ class TranscriptProcessor:
                         conversation.id,
                         {'source': conversation.source},
                     )
-        if update_finished_at:
+        # refactor: superseded by the segment transaction when LIFECYCLE_V2_MODE=serve
+        if update_finished_at and not (segments and serving_for('LIFECYCLE_V2_MODE', self.host.request.uid)):
             await self.host.persistence.call(
                 conversations_db.update_conversation_finished_at, self.host.request.uid, conversation.id, finished_at
             )

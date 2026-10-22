@@ -36,5 +36,8 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         enabled = value not in {'false', '0', 'off'}
     else:
         enabled = value != 'false' if name in DISABLE_ONLY_SWITCHES else value == 'true'
+    from config.refactor_switches import default_on
+
+    enabled = default_on(name, enabled, environ=env)
     logger.info('event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled)
     return enabled

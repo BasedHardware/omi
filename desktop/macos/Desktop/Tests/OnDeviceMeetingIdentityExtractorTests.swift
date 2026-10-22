@@ -189,6 +189,32 @@ final class OnDeviceMeetingIdentityExtractorTests: XCTestCase {
     XCTAssertEqual(payload.participants.compactMap(\.name), ["Alice Chen"])
   }
 
+  func testOpenMessagingChatThroughoutInPersonConversationIsNotAMeeting() {
+    for app in ["Telegram", "Slack", "Discord", "WhatsApp"] {
+      let snapshots = (0..<8).map { index in
+        MeetingScreenActivitySnapshot(
+          timestamp: start.addingTimeInterval(TimeInterval(index * 30)),
+          appName: app,
+          windowTitle: "Jordan Rivera",
+          ocrText: "Yesterday\nPhoto\nMessage")
+      }
+      XCTAssertNil(
+        OnDeviceMeetingIdentityExtractor.payload(
+          from: snapshots, overlapping: DateInterval(start: start, end: end)), app)
+    }
+  }
+
+  func testMessagingCallChromeStillIdentifiesCallsAcrossPlatforms() throws {
+    for app in ["Telegram", "Slack", "Discord", "WhatsApp"] {
+      let snapshot = MeetingScreenActivitySnapshot(
+        timestamp: start, appName: app, windowTitle: "Jordan Rivera", ocrText: "Mute\nEnd Call")
+      let payload = try XCTUnwrap(
+        OnDeviceMeetingIdentityExtractor.payload(
+          from: [snapshot], overlapping: DateInterval(start: start, end: end)), app)
+      XCTAssertEqual(payload.participants.compactMap(\.name), ["Jordan Rivera"], app)
+    }
+  }
+
   private func rows(_ texts: String...) -> [MeetingScreenActivitySnapshot] {
     texts.enumerated().map { index, text in
       MeetingScreenActivitySnapshot(

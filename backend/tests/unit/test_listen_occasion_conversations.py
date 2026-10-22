@@ -174,3 +174,18 @@ def test_occasion_mode_needs_admission_and_a_capable_client(monkeypatch):
     monkeypatch.delenv(config.OCCASION_CONVERSATIONS_ENABLED_ENV, raising=False)
     monkeypatch.setattr(client_gate, 'client_seen_cached', broken)
     assert client_gate.occasion_mode('beta') is False
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('encoding', ['numeric', 'iso', 'naive'])
+async def test_span_cap_accepts_all_persisted_timestamp_formats(monkeypatch, encoding):
+    harness = CaptureHarness(monkeypatch)
+    controller = await _open(harness, 'rec-a')
+    start = harness.now - timedelta(seconds=config.OCCASION_MAX_SPAN_SECONDS)
+    value = (
+        start.timestamp()
+        if encoding == 'numeric'
+        else (start.isoformat() if encoding == 'iso' else start.replace(tzinfo=None))
+    )
+    assert controller._occasion_span_exceeded({'started_at': value})
+    assert not controller._occasion_span_exceeded({'started_at': 'invalid'})
