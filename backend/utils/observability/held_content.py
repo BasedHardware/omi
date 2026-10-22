@@ -15,7 +15,7 @@ import time
 
 from prometheus_client import Counter, Gauge, Histogram
 
-from utils.observability.reasons import ReasonFamily, TransitionTailOutcome, reason_label
+from utils.observability.reasons import ReasonFamily, StagingRetryOutcome, TransitionTailOutcome, reason_label
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +25,22 @@ RECOVERY_RESULTS = ('attempt', 'completed')
 ERASURE_OUTCOMES = ('failure', 'post_delete_publication')
 PUBLICATION_RETRY_OUTCOMES = ('retried_ok', 'exhausted', 'staged_unverified', 'source_orphaned')
 PUBLICATION_RETRY_CAUSES = ('throttle', 'timeout', 'connection', 'other')
+STAGING_RETRY_OUTCOMES = (
+    StagingRetryOutcome.RETRIED_OK,
+    StagingRetryOutcome.DEFERRED,
+    StagingRetryOutcome.EXHAUSTED,
+    StagingRetryOutcome.PERMANENT,
+    StagingRetryOutcome.RETAINED,
+)
+STAGING_RETRY = Counter(
+    'omi_held_content_staging_retry',
+    'Held upload outcomes: deferred has a durable journal; retained still owns volatile PCM after both stores failed',
+    ['outcome'],
+)
+DEFERRED_SECONDS = Counter('omi_held_content_deferred_seconds', 'Held seconds handed to encrypted staging journals')
+PCM_CUSTODY_SECONDS = Gauge('omi_held_content_pcm_custody_seconds', 'Process-local pending held PCM seconds')
+for _outcome in STAGING_RETRY_OUTCOMES:
+    STAGING_RETRY.labels(outcome=reason_label(ReasonFamily.HELD_CONTENT, _outcome, StagingRetryOutcome))
 CHOICE_METHODS = ('get', 'put')
 TRANSITION_TAIL_OUTCOMES = (TransitionTailOutcome.COALESCED, TransitionTailOutcome.SEALED)
 TRANSITION_TAIL = Counter(
@@ -196,6 +212,18 @@ def record_erasure(outcome: str) -> None:
 def record_publication_retry(outcome: str, cause: str = 'other') -> None:
     if outcome in PUBLICATION_RETRY_OUTCOMES and cause in PUBLICATION_RETRY_CAUSES:
         _inc(PUBLICATION_RETRY, outcome=outcome, cause=cause)
+
+
+def record_staging_retry(outcome: str) -> None:
+    if outcome in STAGING_RETRY_OUTCOMES:
+        _inc(STAGING_RETRY, outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, StagingRetryOutcome))
+
+
+def record_deferred_seconds(seconds: float) -> None:
+    try:
+        DEFERRED_SECONDS.inc(seconds)
+    except Exception:
+        logger.warning('event=held_content_metric outcome=dropped')
 
 
 def _gauge_number(value, *, whole: bool) -> float:
