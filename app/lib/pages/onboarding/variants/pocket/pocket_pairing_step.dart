@@ -149,7 +149,10 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
               children: [
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: OmiBackButton(onPressed: () => _finish(provider.isConnected)),
+                  child: OmiBackButton(
+                    // Mid-attempt (incl. the settle), leaving never claims a connection or opens the walkthrough.
+                    onPressed: () => _finish(provider.isConnected && !_attemptInFlight),
+                  ),
                 ),
                 const SizedBox(height: OmiSpacing.lg),
                 Padding(
