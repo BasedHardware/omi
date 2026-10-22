@@ -169,4 +169,11 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
 
 def delivery_allowed(uid, payload):
     """A durable pending/failed stub is never proof that the model finished."""
-    return not serving_for(FLAG, uid) or payload.get('status') == 'generated'
+    return payload.get('status') in (None, 'generated')
+
+
+def finish_legacy_stub(existing, payload):
+    """A mode rollback still completes already-admitted status rows in place."""
+    if existing and existing.get('status') is not None:
+        return {**payload, 'status': 'generated', 'generated_at': datetime.now(timezone.utc)}
+    return payload

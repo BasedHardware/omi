@@ -228,3 +228,17 @@ def test_media_dependency_delegates_to_v2_and_preserves_rollback(monkeypatch):
     monkeypatch.setenv('MEDIA_NOISE_MODE', 'serve')
     assert media_consumers.eligible_conversations('synthetic-owner', rows) == rows[1:]
     assert calls == ['daily_summary', 'daily_summary']
+
+
+def test_mode_rollback_resumes_pending_stub_in_place(producer, monkeypatch):
+    producer.store['day'] = {'id': 'recap-2026-01-01', 'date': '2026-01-01', 'status': 'pending', 'generated_at': None}
+    monkeypatch.setenv(recap.FLAG, 'off')
+    result, created, _ = generate()
+    assert created and result['id'] == 'recap-2026-01-01'
+    assert result['status'] == 'generated' and result['generated_at'] is not None
+    producer.model.assert_called_once()
+
+
+def test_mode_rollback_cannot_deliver_a_locked_pending_stub(producer, monkeypatch):
+    monkeypatch.setenv(recap.FLAG, 'off')
+    test_pending_stub_during_locked_delivery_retry_never_pushes(producer, monkeypatch)

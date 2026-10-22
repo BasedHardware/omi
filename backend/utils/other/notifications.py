@@ -162,6 +162,8 @@ def _legacy_generate_and_store_daily_summary(
     Lose the lock, do no reads. Decline before the model call, release the lock:
     holding the 2h TTL after a quiet on-demand attempt would bar the scheduled recap.
     """
+    from utils.other.daily_recap import delivery_allowed, finish_legacy_stub
+
     if not generated_compute_allowed(uid, 'daily_summary'):
         return None, False, 'usage_budget_exhausted'
     if not try_acquire_daily_summary_lock(uid, date_str):
@@ -170,7 +172,8 @@ def _legacy_generate_and_store_daily_summary(
     try:
         # #4608: Redis is best-effort; the durable by-date guard prevents duplicate paid recaps.
         existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-        if existing_summary and not serving_for('NOTES_PACKET_V2_MODE', uid):
+        existing_complete = bool(existing_summary and delivery_allowed(uid, existing_summary))
+        if existing_summary and existing_complete and not serving_for('NOTES_PACKET_V2_MODE', uid):
             logger.info(
                 f"Daily summary already exists for uid={uid} date={date_str} "
                 f"id={existing_summary.get('id')}; skipping duplicate generation"
@@ -183,7 +186,7 @@ def _legacy_generate_and_store_daily_summary(
         fingerprint = None
         if serving_for('NOTES_PACKET_V2_MODE', uid):
             fingerprint = input_fingerprint(conversations_data or [])
-            if existing_summary and existing_summary.get(FINGERPRINT_FIELD) == fingerprint:
+            if existing_summary and existing_complete and existing_summary.get(FINGERPRINT_FIELD) == fingerprint:
                 release_daily_summary_lock(uid, date_str)
                 record_notes_shadow('daily_recap_inputs', 'agree')
                 return existing_summary, False, None
@@ -228,6 +231,7 @@ def _legacy_generate_and_store_daily_summary(
             end_date_utc,
             memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
         )
+        summary_data = finish_legacy_stub(existing_summary, summary_data)
         if fingerprint is not None:
             summary_data[FINGERPRINT_FIELD] = fingerprint
         if existing_summary:
@@ -919,6 +923,8 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         if not summary_data or not delivery_allowed(uid, summary_data):
             raise RuntimeError('daily summary retry still locked')
         declined = None
+    if summary_data and not delivery_allowed(uid, summary_data):
+        raise RuntimeError('daily summary not generated')
     if summary_data and summary_data.get('notification_delivery_completed'):
         # An abandoned worker may have delivered after wait_for timed out and
         # after its coordinator saved an uncertain outcome. The receipt wins.
