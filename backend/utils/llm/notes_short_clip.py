@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from collections.abc import Mapping
 from typing import Any
 
 from config.refactor_modes import serving_for, shadow_or_serve
@@ -24,10 +25,15 @@ def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None) -> Any:
         if getattr(source, 'value', source) != 'audio':
             return None
         segments = [SimpleNamespace(text=conversation.text)]
-    selected = in_profile_segments(segments)
+    has_text = any(
+        str(row.get('text') if isinstance(row, Mapping) else getattr(row, 'text', '') or '').strip() for row in segments
+    )
+    selected = [
+        SimpleNamespace(**dict(row)) if isinstance(row, Mapping) else row for row in in_profile_segments(segments)
+    ]
     view = SimpleNamespace(transcript_segments=selected, started_at=getattr(conversation, 'started_at', None))
     words = recovery_transcript_word_count(view)
-    eligible = bool(segments) and words < NOTES_MIN_WORDS
+    eligible = has_text and words < NOTES_MIN_WORDS
     shadow('short_clip', 'disagree' if eligible else 'agree', words=words)
     if not eligible or not serving_for('NOTES_PACKET_V2_MODE', uid):
         return None

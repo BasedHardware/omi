@@ -495,3 +495,9 @@ def test_app_result_receives_the_resolved_output_language_only_in_cohort(monkeyp
         'synthetic-account', conversation, is_reprocess=True, app_id=app.id, explicit_app=app, language_code='zh'
     )
     assert seen == [expected]
+
+
+def test_empty_segments_do_not_create_a_visible_minimum(monkeypatch):
+    monkeypatch.setenv(packet.FLAG, 'serve')
+    capture = SimpleNamespace(transcript_segments=[{'text': ''}], photos=[])
+    assert notes_short_clip.quiet_minimum('synthetic-account', capture) is None

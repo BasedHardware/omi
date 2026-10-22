@@ -539,7 +539,9 @@ def _finish_shaped_notes(
     words: int = 0,
     inputs: Optional[dict] = None,
 ) -> Structured:
-    finish_notes_contract(structured, prefix=prefix, uid=uid, words=words, rich_mode=rich_mode, inputs=inputs or {})
+    structured = finish_notes_contract(
+        structured, prefix=prefix, uid=uid, words=words, rich_mode=rich_mode, inputs=inputs or {}
+    )
     now = datetime.now(timezone.utc)
     try:
         user_tz = ZoneInfo(tz) if tz else timezone.utc
