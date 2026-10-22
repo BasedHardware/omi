@@ -53,10 +53,6 @@
       "reason": "Refactor contract (backend/docs/capture_speaker_notes_refactor.md) on the shared base branch; the five refactor lanes wire it in their PRs. Remove this entry once imported."
     },
     {
-      "path": "backend/models/speaker_evidence.py",
-      "reason": "Refactor contract (backend/docs/capture_speaker_notes_refactor.md) on the shared base branch; the five refactor lanes wire it in their PRs. Remove this entry once imported."
-    },
-    {
       "path": "backend/models/boundary_evidence.py",
       "reason": "Refactor contract (backend/docs/capture_speaker_notes_refactor.md) on the shared base branch; the five refactor lanes wire it in their PRs. Remove this entry once imported."
     },

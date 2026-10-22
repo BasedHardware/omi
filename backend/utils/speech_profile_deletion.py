@@ -9,6 +9,14 @@ def teaching_segment_ids_for_deleted_sample(person: Optional[dict], conversation
     """
     if not person or not conversation_id:
         return []
+    if person.get('person_voice_confirmations') is not None:
+        return [
+            str(sid)
+            for entry in person['person_voice_confirmations']
+            if entry.get('source', {}).get('conversation_id') == conversation_id
+            for sid in entry['source'].get('segment_ids') or []
+            if sid
+        ]
     source = person.get('speech_sample_source') or {}
     if source.get('conversation_id') != conversation_id:
         return []

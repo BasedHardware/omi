@@ -7,6 +7,7 @@ held-out calibration data; callers must not turn a roster prior into a voice lab
 
 from dataclasses import dataclass
 from math import isfinite
+from typing import Literal
 import os
 
 POLICY_VERSION = 'wespeaker-operating-points-v1'
@@ -24,6 +25,7 @@ class OperatingPoint:
 LIVE = OperatingPoint(0.65)
 FINALIZE = OperatingPoint(float(os.getenv('CONVERSATION_SPEAKER_VOICE_MATCH_THRESHOLD', '0.50')))
 CONTINUITY = OperatingPoint(0.35)
+CROSS_SCOPE_CLUSTER = OperatingPoint(0.60)
 CROSS_EPOCH = FINALIZE  # historically shares the finalize env override
 ONLINE_CLUSTER = OperatingPoint(float(os.getenv('SPEAKER_CLUSTERING_THRESHOLD', '0.60')))
 PARAKEET_CLUSTER = OperatingPoint(float(os.getenv('PARAKEET_SPEAKER_CLUSTERING_THRESHOLD', '0.60')))
@@ -62,7 +64,7 @@ def probability(distance: float) -> float:
     return 0.0
 
 
-def band(value: float) -> str:
+def band(value: float) -> Literal['confident', 'likely', 'unknown']:
     # Strictness agrees with the old finalize/live accept boundaries.
     return (
         'confident'

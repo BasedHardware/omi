@@ -28,7 +28,7 @@ from utils.stt.speaker_match import (
     select_speaker_match,
 )
 
-from utils.speakers.policy import ABSORB, CONVERSATION_CLUSTER, FINALIZE
+from utils.speakers.policy import ABSORB, CONVERSATION_CLUSTER, CROSS_SCOPE_CLUSTER, FINALIZE
 
 RESOLUTION_VERSION = 2
 
@@ -177,7 +177,7 @@ def resolve_conversation_speakers(
     embedding_seconds: Optional[Mapping[str, float]] = None,
     grouping: str = 'incumbent',
     provider_keys: Optional[Mapping[str, Tuple[str, int]]] = None,
-    cross_scope_threshold: float = 0.60,
+    cross_scope_threshold: float = CROSS_SCOPE_CLUSTER.distance,
     grouping_deadline: float = float('inf'),
 ) -> Optional[SpeakerResolution]:
     """Resolve one speaker_id per voice across the whole conversation.

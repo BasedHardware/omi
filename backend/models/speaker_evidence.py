@@ -26,6 +26,7 @@ class SpeakerCandidate(BaseModel):
     probability: float = Field(ge=0.0, le=1.0)  # calibrated by the one policy module
     band: Band
     source: CandidateSource
+    label_eligible: bool = False  # joint policy decision; probability alone never authorizes a label
 
 
 class VoiceCluster(BaseModel):
@@ -34,6 +35,8 @@ class VoiceCluster(BaseModel):
     id: str  # stable within the conversation: 'v0', 'v1', ...
     segment_ids: List[str]
     speech_seconds: float = 0.0
+    speaker_id: Optional[int] = None
+    speaker_id_scope: Optional[str] = None
     candidates: List[SpeakerCandidate] = []  # ranked, most probable first
 
     @property
@@ -47,10 +50,19 @@ class ClusterSimilarity(BaseModel):
     similarity: float = Field(ge=-1.0, le=1.0)
 
 
+class EvidenceSegment(BaseModel):
+    """Receipt keys only; no transcript or audio is duplicated into evidence."""
+
+    id: str
+    speaker_id: Optional[int] = None
+    speaker_id_scope: Optional[str] = None
+
+
 class SpeakerEvidence(BaseModel):
     version: Literal[1] = 1
     status: EvidenceStatus
     policy_version: str
     clusters: List[VoiceCluster] = []
     similarities: List[ClusterSimilarity] = []  # only pairs worth showing (above a policy floor)
+    segments: List[EvidenceSegment] = []
     abstentions: List[str] = []  # truthful reasons, e.g. 'batch_boundary', 'unaligned_audio'
