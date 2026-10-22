@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from config.refactor_modes import serving_for, shadow_or_serve
+from config.refactor_modes import serving_for, shadow_or_serve, shadow_sampled
 from utils.capture.media import MAX_SCREEN_ROWS, screen_time
 from utils.conversations.relevance_content import FLAG, ContentDecision, classify_content, owner_speech_seconds, value
 from utils.conversations.relevance_media_metrics import observe
+
+# Shadow reads evidence, screen rows and boundary state per finalize; a uid sample is enough to measure.
+SHADOW_SAMPLE_PERCENT = 5.0
 
 
 def _speaker_evidence(uid: str, conversation_id: str):
@@ -41,7 +44,7 @@ def classify_for_processing(uid: str, conversation: Any, *, user_kept: bool = Fa
     Call after speaker resolution, before any relevance/notes model. No screen or
     speaker text, account identifiers or exception payloads enter diagnostics.
     """
-    if not shadow_or_serve(FLAG):
+    if not shadow_or_serve(FLAG) or not shadow_sampled(FLAG, uid, SHADOW_SAMPLE_PERCENT):
         return None
     if serving_for(FLAG, uid):
         # A previous classification is not proof about a later transcript revision.

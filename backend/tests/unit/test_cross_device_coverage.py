@@ -129,6 +129,7 @@ def test_non_serving_preserves_output_and_withholds_receipts(harness, monkeypatc
     before = deepcopy(store.rows)
     transactions = len(store.transactions)
     monkeypatch.setenv(coverage.FLAG, mode)
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE_SHADOW_PERCENT', '100')
     with caplog.at_level('INFO'):
         assert cross.reconcile(owner, first['id'], [second['id']]) is False
     assert store.rows == before
@@ -139,6 +140,16 @@ def test_non_serving_preserves_output_and_withholds_receipts(harness, monkeypatc
         assert all(tokens(1, i) not in caplog.text for i in range(3))
     else:
         assert len(store.transactions) == transactions
+
+
+def test_unsampled_shadow_reads_no_snapshots(harness, monkeypatch):
+    owner, _ = harness
+    first, second = row(10), row(11)
+    add(harness, first, second)
+    monkeypatch.setenv(coverage.FLAG, 'shadow')
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE_SHADOW_PERCENT', '0')
+    monkeypatch.setattr(cross, 'get_shared_speech_snapshot', lambda *a: pytest.fail('unsampled shadow read'))
+    assert cross.reconcile(owner, first['id'], [second['id']]) is False
 
 
 def test_digest_cohort_serves_while_host_is_shadow(harness, monkeypatch):

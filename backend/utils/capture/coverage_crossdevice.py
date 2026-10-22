@@ -24,6 +24,7 @@ from utils.conversations.overlap_shared_speech import shared_speech_group_guard
 
 FLAG = 'CAPTURE_COVERAGE_MODE'
 MAX_SNAPSHOTS = 7
+SHADOW_SAMPLE_PERCENT = 5.0
 MAX_PAIRS = 12
 MAX_KEYS = 8
 logger = logging.getLogger(__name__)
@@ -75,7 +76,8 @@ def reconcile(uid: str, candidate_id: str, other_ids: list[str]) -> bool:
     Default shadow only observes and leaves incumbent behavior intact. Serve
     replaces the legacy automatic group decision, including on failed evidence.
     """
-    if not refactor_modes.shadow_or_serve(FLAG):
+    if not refactor_modes.shadow_sampled(FLAG, uid, SHADOW_SAMPLE_PERCENT):
+        # Shadow snapshot reads are sampled like the rest of the coverage shadow.
         return False
     serving = refactor_modes.serving_for(FLAG, uid)
     reads = checks = 0

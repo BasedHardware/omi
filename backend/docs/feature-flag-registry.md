@@ -242,6 +242,7 @@ and an explicit empty literal renders as `''`.
 | `MEDIA_NOISE_MODE` | Media/noise classification and transcript admission: off/shadow/serve; default shadow | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
 | `MEDIA_NOISE_MODE_SERVE_PERCENT` | Media/noise serve percentage; default zero | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
 | `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` | Media/noise digest cohort; default empty | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
+| `MEDIA_NOISE_MODE_SHADOW_PERCENT` | Media/noise shadow uid sample percentage; default 5 | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
 | `MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS` | Requested C6 writer budget, default 180s; existing gateway limit clamps to 115s; C7 fallback | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_TIERED_ENABLED` | Universal evidence-volume cost routing: high-value C6, otherwise C7; default enabled inside episode cohort | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS` | C6 admitted source-kind threshold, default 2 | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-05 | dazheng |
@@ -646,6 +647,7 @@ and an explicit empty literal renders as `''`.
 | `MEDIA_NOISE_MODE` | reviewed synthetic and digest pilot → 1% → 10% → 100% | omi_media_noise_shadow_total errors stay zero; reviewed false media/noise exclusions and false hallucination drops stay zero; no owner call or reminder loss | dazheng | 2026-10-26 |
 | `MEDIA_NOISE_MODE_SERVE_PERCENT` | reviewed synthetic and digest pilot → 1% → 10% → 100% | omi_media_noise_shadow_total errors stay zero; reviewed false media/noise exclusions and false hallucination drops stay zero; no owner call or reminder loss | dazheng | 2026-10-26 |
 | `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` | reviewed synthetic and digest pilot → 1% → 10% → 100% | omi_media_noise_shadow_total errors stay zero; reviewed false media/noise exclusions and false hallucination drops stay zero; no owner call or reminder loss | dazheng | 2026-10-26 |
+| `MEDIA_NOISE_MODE_SHADOW_PERCENT` | reviewed synthetic and digest pilot → 1% → 10% → 100% | omi_media_noise_shadow_total errors stay zero; reviewed false media/noise exclusions and false hallucination drops stay zero; no owner call or reminder loss | dazheng | 2026-10-26 |
 | `NOTES_PACKET_V2_MODE` | synthetic acceptance → 1% → 10% → 100% | omi_notes_refactor_shadow_total outcome=error stays zero; no unsupported named attribution or citation violations; notes p95 latency and vendor spend do not regress across a full 24h lookback per step | dazheng | 2026-10-26 |
 | `NOTES_PACKET_V2_MODE_SERVE_PERCENT` | synthetic acceptance → 1% → 10% → 100% | omi_notes_refactor_shadow_total outcome=error stays zero; no unsupported named attribution or citation violations; notes p95 latency and vendor spend do not regress across a full 24h lookback per step | dazheng | 2026-10-26 |
 | `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` | synthetic acceptance → 1% → 10% → 100% | omi_notes_refactor_shadow_total outcome=error stays zero; no unsupported named attribution or citation violations; notes p95 latency and vendor spend do not regress across a full 24h lookback per step | dazheng | 2026-10-26 |
@@ -801,6 +803,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEDIA_NOISE_MODE` — Media/noise classification and transcript admission: off/shadow/serve; default shadow (fail: closed)
 - `MEDIA_NOISE_MODE_SERVE_PERCENT` — Media/noise serve percentage; default zero (fail: closed)
 - `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` — Media/noise digest cohort; default empty (fail: closed)
+- `MEDIA_NOISE_MODE_SHADOW_PERCENT` — Media/noise shadow uid sample percentage; default 5 (fail: closed)
 - `MEETING_NOTES_EPISODE_C6_TIMEOUT_SECONDS` — Requested C6 writer budget, default 180s; existing gateway limit clamps to 115s; C7 fallback (fail: closed)
 - `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` — Generate optional episode claim bindings, default off; visible provenance rules remain (fail: closed)
 - `MEETING_NOTES_EPISODE_EFFORT` — Episode writer thinking effort: default, high or xhigh; baseline unchanged (fail: closed)

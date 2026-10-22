@@ -239,6 +239,20 @@ def test_off_reads_nothing(monkeypatch):
     assert adapter.minimum_for_processing('', conversation) is None
 
 
+def test_shadow_reads_only_for_the_uid_sample(monkeypatch):
+    conversation = mock_inputs(monkeypatch)
+    monkeypatch.setenv(FLAG, 'shadow')
+    monkeypatch.setenv(FLAG + '_SHADOW_PERCENT', '0')
+    monkeypatch.setattr(adapter, '_speaker_evidence', lambda *_: pytest.fail('unsampled shadow read evidence'))
+    assert adapter.minimum_for_processing('synthetic-owner', conversation) is None
+    reads = []
+    monkeypatch.setenv(FLAG + '_SHADOW_PERCENT', '100')
+    monkeypatch.setattr(adapter, '_speaker_evidence', lambda *a: reads.append(a) or None)
+    monkeypatch.setattr(adapter, '_record_boundaries', lambda *_: pytest.fail('shadow wrote boundaries'))
+    assert adapter.minimum_for_processing('synthetic-owner', conversation) is None
+    assert reads and conversation.content_kind is None
+
+
 def test_serving_minimum_has_no_paid_notes_or_action_items(monkeypatch):
     conversation = mock_inputs(monkeypatch)
     monkeypatch.setenv(FLAG, 'serve')
