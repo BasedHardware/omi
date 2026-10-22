@@ -22,6 +22,7 @@ from typing import Any, Mapping, Optional
 from models.conversation_enums import CategoryEnum
 from models.structured_extraction import SALIENCE_DESCRIPTION
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
+from utils.llm.notes_lengths import length_guide, length_floor, length_ceiling
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 from utils.llm.shaped_agent import model_json
 
@@ -248,36 +249,6 @@ READ_TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (
 
 TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (*READ_TOOL_SCHEMAS, SUBMIT_SCHEMA)
 READ_TOOL_NAMES = frozenset(schema['function']['name'] for schema in READ_TOOL_SCHEMAS)
-
-
-def length_guide(words: int) -> str:
-    """Body-length target scaled to the transcript: about 1.3-1.4x the one-shot notes on long meetings."""
-    if words < 500:
-        return 'Use 1-2 sections and about 80-150 words in total.'
-    if words < 1500:
-        return 'Use 3-4 sections and about 250-400 words in total; never more than 450.'
-    if words < 5000:
-        return 'Use 4-6 sections and about 550-800 words in total; never more than 900.'
-    return 'Use 5-7 sections and about 750-1000 words in total; never more than 1100.'
-
-
-def length_floor(words: int) -> int:
-    """Below this a long meeting's note is missing threads the owner wanted."""
-    if words < 1500:
-        return 0
-    if words < 5000:
-        return 480
-    return 650
-
-
-def length_ceiling(words: int) -> int:
-    if words < 500:
-        return 170
-    if words < 1500:
-        return 450
-    if words < 5000:
-        return 900
-    return 1100
 
 
 def _with_breakpoint(text: str) -> list[dict[str, Any]]:

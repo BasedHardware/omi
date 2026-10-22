@@ -18,6 +18,8 @@ from utils.byok import has_byok_keys
 from utils.conversations.notes_agent_tools import NotesToolbox, build_packet, owner_profile
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_agent import langchain_complete, record_decision, record_run, run_notes_agent
+from config.refactor_modes import serving_for
+from utils.llm.notes_packet import select_notes_packet
 from utils.llm.notes_agent_policy import plan_notes_agent
 from utils.llm.notes_agent_prompt import (
     PROMPT_VERSION,
@@ -126,6 +128,9 @@ def agentic_notes_payload(
             frames=frames,
             capture_sources=tuple(kwargs.get('capture_sources') or ()),
         )
+        packet = select_notes_packet(
+            packet, prefix=prefix, uid=uid, capture_evidence=capture_evidence, words=words, inputs=kwargs
+        )
         seed = conversation_seed(packet, capture_evidence, explicit_cache=explicit_cache)
         toolbox = NotesToolbox(
             uid=uid,
@@ -156,7 +161,9 @@ def agentic_notes_payload(
                     transcript_words=words,
                     open_tasks=open_tasks,
                     owner_names=owner_names,
-                    naming_leads=naming_leads(packet),
+                    naming_leads=() if serving_for('NOTES_PACKET_V2_MODE', uid) else naming_leads(packet),
+                    contract_v2=serving_for('NOTES_PACKET_V2_MODE', uid),
+                    transcript_segment_ids=prefix.transcript_segment_ids,
                 )
 
         result = asyncio.run(invoke())

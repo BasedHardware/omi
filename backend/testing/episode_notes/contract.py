@@ -1,13 +1,27 @@
 """Pure episode prompt contract shared by production and synthetic evaluation."""
 
 from utils.llm.episode_policy import EPISODE_RELEVANCE_RULE, EPISODE_PROVENANCE_RULE
-from utils.llm.meeting_notes_rich_prompts import RICH_PERSON_RULES
+from utils.llm.meeting_notes_rich_prompts import (
+    PERSON_NAME_RULE,
+    PERSON_REFERENCE_RULE,
+    PERSON_ORGANIZATION_RULE,
+    COUNTERPART_TASK_RULE,
+    TASK_OWNER_RULE,
+)
 
 # The shared rich rules tell the model to fill participants from the roster. Episode notes
 # keep the other person rules and replace that sentence: a listing is expected context.
-_EPISODE_PERSON_RULES = RICH_PERSON_RULES.replace(
-    'Fill participants from the roster and transcript evidence.',
-    'List a person in participants only when observed participation shows they took part.',
+_EPISODE_PERSON_RULES = '\n'.join(
+    (
+        PERSON_NAME_RULE,
+        PERSON_REFERENCE_RULE,
+        PERSON_ORGANIZATION_RULE,
+        '- List a person in participants only when observed participation shows they took part. '
+        'Exclude the account owner. Keep a roster-only human nameless when only an email is known; '
+        'never guess their name. Set role to at most eight words grounded in this conversation.',
+        COUNTERPART_TASK_RULE,
+        TASK_OWNER_RULE,
+    )
 )
 _ROSTER_PARTICIPANT_DESCRIPTION = (
     'People and AI agents evidenced by the meeting roster or the transcript; never the account owner'

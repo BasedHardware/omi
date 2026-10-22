@@ -223,6 +223,9 @@ and an explicit empty literal renders as `''`.
 | `MOBILE_STANDARD_BATCH_ENABLED` | Authorize hidden mobile Standard pendant capture to batch via existing WAL sync | backend, mobile | env | closed | — | — | true (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-11-14 | dazheng |
 | `MOBILE_STANDARD_BATCH_PERCENT` | Stable UID percentage for mobile Standard batch, default zero | backend | env | closed | — | — | 0 (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-11-14 | dazheng |
 | `MOBILE_STANDARD_BATCH_UIDS` | Comma-separated UID allowlist for mobile Standard batch, default empty | backend | env | closed | — | — | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-11-14 | dazheng |
+| `NOTES_PACKET_V2_MODE` | One notes packet, output contract, safe speaker rendering, output language, word floor and recap revisions; default shadow | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
+| `NOTES_PACKET_V2_MODE_SERVE_PERCENT` | Serve cohort percentage; default 0 | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
+| `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` | Serve cohort SHA256 digests; default empty, never raw identifiers | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
 | `NOTES_TIER_ESCALATION_ENABLED` | Escalate shaped notes to xhigh effort for long meetings with at least five screen frames; enabled on the 1 percent episode cohort (2026-10-09) | backend | env | closed | — | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | undecided | 2026-11-08 | dazheng |
 | `OMI_IMESSAGE_CONTACT_CARD` | Default-off sharing of a preconfigured Linq contact card. | backend | env | closed | — | — | — | — | keep | keep | 2026-11-09 | dazheng |
 | `OMI_IMESSAGE_ENABLED` | Default-off registration of the iMessage provider adapter. | backend | env | closed | — | — | on | — | keep | keep | 2026-11-09 | dazheng |
@@ -256,6 +259,9 @@ and an explicit empty literal renders as `''`.
 | `STT_CAP_DISPATCH_LANES` | Comma-separated live,sync,batch; unset/blank defaults live only; unknown/empty list tokens deny all; batch code-fenced until lane8 writes provider_reason=byok into binding.policy at batch admission; recovery retains original encrypted custody origin | backend | env | closed | {value: 'live', category: rollout} | live (backend-listen (chart), pusher (chart)); {value: 'live', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | live (backend-listen (chart), pusher (chart)); {value: 'live', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher) | — | keep | keep | 2026-10-27 | dazheng |
 | `STT_CAP_RECOVERY_COHORT` | Optional recovery-only cohort intersection; unset preserves dispatch scope, malformed denies all recovery | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-23 | dazheng |
 | `STT_FAILOVER_RECOVERY_ENABLED` | Enable live-STT failover recovery on prod listen | backend | env | closed | declared | false (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | graduate | on | 2026-11-04 | backend |
+| `STT_LANGUAGE_HINTS_MODE` | Single-language Soniox hint overlay; preserves existing learned/multi-language policy and all prerecorded gates; default shadow | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
+| `STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT` | Serve cohort percentage; default 0 | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
+| `STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S` | Serve cohort SHA256 digests; default empty, never raw identifiers | backend | env | closed | — | — | — | — | pending | undecided | 2026-10-26 | dazheng |
 | `STT_LEARNED_LANGUAGE_PROFILE` | Use a bounded per-user spoken-language history for live STT routing and Soniox hints | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | graduate | on | 2026-11-04 | backend |
 | `STT_LIVE_DEMAND_ENABLED` | Default off; qualified English hidden capture uses window STT; visible or active consumers require vendors | backend | env | closed | declared | false (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | 2026-11-13 | dazheng |
 | `STT_LIVE_DEMAND_MIN_DWELL_SECONDS` | Stable hidden interval before cheap re-admission, default fifteen seconds; visible demand returns immediately | backend | env | closed | 15 | 15 (backend-listen (chart), gke/backend-listen) | 15 (backend-listen (chart), gke/backend-listen) | — | keep | keep | 2026-11-13 | dazheng |
@@ -697,6 +703,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
+- `NOTES_PACKET_V2_MODE` — One notes packet, output contract, safe speaker rendering, output language, word floor and recap revisions; default shadow (fail: closed)
+- `NOTES_PACKET_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default 0 (fail: closed)
+- `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` — Serve cohort SHA256 digests; default empty, never raw identifiers (fail: closed)
 - `OCCASION_CONVERSATIONS_ENABLED` — Default on unless set off (0/false/off/no); for the episodes cohort with a capable client, a mobile live conversation stays open across lulls and reconnects for 15 min (3 h span cap), one occasion per conversation (fail: closed)
 - `OMI_CHAT_PROMPT_CACHE_TTL` — Shaped GPT-5.6 explicit cache TTL; default and currently only supported value 30m. (fail: closed)
 - `OMI_DEV_ACTION_ITEMS_CACHE_NORMALIZE_ENABLED` — Default on unless false; canonicalize equivalent Developer action-item date query instants in cache keys only (fail: open)
@@ -745,6 +754,9 @@ their code default (`fail` tells you which way a missing value resolves).
 - `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
 - `STT_CAP_FINALIZE_FORWARD_ENABLED` — Default on; preserve provider-specific finalize arguments through the funded STT cap proxy (fail: open)
 - `STT_CAP_RECOVERY_COHORT` — Optional recovery-only cohort intersection; unset preserves dispatch scope, malformed denies all recovery (fail: closed)
+- `STT_LANGUAGE_HINTS_MODE` — Single-language Soniox hint overlay; preserves existing learned/multi-language policy and all prerecorded gates; default shadow (fail: closed)
+- `STT_LANGUAGE_HINTS_MODE_SERVE_PERCENT` — Serve cohort percentage; default 0 (fail: closed)
+- `STT_LANGUAGE_HINTS_MODE_SERVE_UID_SHA256S` — Serve cohort SHA256 digests; default empty, never raw identifiers (fail: closed)
 - `STT_NO_TEXT_RESCUE_SECONDS` — Maximum paid wall and admitted audio seconds per no-text rescue; default 60 bounded 5-120 (fail: closed)
 - `STT_PAID_SPILLOVER_BUDGET_ENABLED` — Default-off fleet budget for paid router promotions after Parakeet capacity refusal; denial restores static order (fail: closed)
 - `STT_PAID_SPILLOVER_DEEPGRAM_PER_MINUTE` — Inert since Deepgram retired 2026-08-27 (no surface admits the provider); cap kept so the policy schema stays stable (fail: closed)
