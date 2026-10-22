@@ -873,8 +873,7 @@ async def process_audio_soniox(
         'enable_language_identification': True,
     }
     # Identification works without hints. Soniox validates ``language_hints`` against
-    # its documented vocabulary and answers ``400 invalid_request Invalid
-    # language hint`` — after the WebSocket upgrade already succeeded — for any
+    # its vocabulary after the WebSocket upgrade (400 invalid_request Invalid language hint) for any
     # entry outside it, killing the session at the config frame (prod
     # backend-listen 2026-09-02/03). 'multi' is our auto-detect sentinel, not an
     # ISO code, so it must send no hint; compare on the normalized base code so

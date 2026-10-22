@@ -2,7 +2,7 @@
 
 import logging
 from enum import StrEnum
-from prometheus_client import Counter
+from prometheus_client import Counter, REGISTRY
 from utils.observability.reasons import ReasonFamily, reason_label
 
 logger = logging.getLogger(__name__)
@@ -15,7 +15,14 @@ class CallsRefactorOutcome(StrEnum):
     ERROR = 'error'
 
 
-COMPARISONS = Counter('omi_calls_refactor_shadow_total', 'V4 deterministic comparisons', ['check', 'outcome'])
+def _counter():
+    try:
+        return Counter('omi_calls_refactor_shadow_total', 'V4 deterministic comparisons', ['check', 'outcome'])
+    except ValueError:
+        return REGISTRY._names_to_collectors['omi_calls_refactor_shadow_total']
+
+
+COMPARISONS = _counter()
 _CHECKS = frozenset(
     (
         'call_metadata',

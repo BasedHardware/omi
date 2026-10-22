@@ -144,6 +144,17 @@ def _run_internal_forward(monkeypatch: pytest.MonkeyPatch, capture: HelperCaptur
     )
 
 
+def _run_stt_vocabulary_memory_read(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    from database import _client, person_aliases, redis_db, dream_store
+    from utils.stt import vocabulary
+
+    monkeypatch.setattr(_client, 'get_firestore_client', lambda: object())
+    monkeypatch.setattr(person_aliases, 'list_people', lambda *_a, **_k: [])
+    monkeypatch.setattr(redis_db, 'get_enabled_apps', lambda *_: [])
+    monkeypatch.setattr(dream_store, 'vocabulary', lambda *_: [])
+    trial(capture, vocabulary._sources, 'u1')
+
+
 def _profiles(target: str):
     return DRIVERS[target].profiles
 
@@ -186,6 +197,14 @@ WITNESSES: dict[str, CallerWitness] = {
             ('candidate-list', 'candidate-suggested'),
             2,
             _run_candidates_route,
+        ),
+        CallerWitness(
+            'utils/stt/vocabulary.py:_sources:database.memories.get_memories',
+            'database.memories.get_memories',
+            'database.memories.get_memories',
+            ('legacy-scoring',),
+            1,
+            _run_stt_vocabulary_memory_read,
         ),
         CallerWitness(
             'utils/memory/memory_service.py:_legacy_read_memories:database.memories.get_memories',

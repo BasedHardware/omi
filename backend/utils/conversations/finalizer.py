@@ -212,9 +212,7 @@ async def finalize_persisted_conversation(
     if not silent_backfill and conversation.status != ConversationStatus.completed:
         outcome = await await_meeting_evidence(uid, conversation_id, conversation_data, trigger=trigger)
         if outcome != 'not_applicable':
-            # Transcript tail segments can land during the wait. Process the durable row as it
-            # is now, never the pre-wait snapshot: stale segments would be summarized and could
-            # overwrite the newer live transcript on persist.
+            # Reload after waiting: late tail segments must not be overwritten by a stale snapshot.
             fenced, conversation_data, conversation = await _load_admitted_conversation(
                 uid, conversation_id, finalization_job_id, dispatch_generation, lease_epoch, trigger
             )
@@ -297,8 +295,7 @@ async def finalize_persisted_conversation(
         # The bulkhead preserves BYOK context and isolates sync work from socket/task loops.
         conversation = await run_blocking(db_executor, apply_call_metadata, uid, conversation)
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
-        # Admission only schedules a bounded shadow job. It never awaits audio,
-        # STT or metric persistence and cannot alter this processing input.
+        # Admission schedules bounded shadow work without awaiting providers or changing input.
         stage = 'processing'
         if conversation.status != ConversationStatus.completed:
             await warm_rollout_cohorts(uid)

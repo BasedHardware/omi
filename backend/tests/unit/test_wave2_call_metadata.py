@@ -88,3 +88,11 @@ def test_non_overlapping_and_stale_ongoing_signals_abstain(monkeypatch):
     calls.apply_call_metadata('synthetic-owner', c)
     assert loaded.call_args.args[1] == []
     assert c.is_call is False
+
+
+def test_metric_registration_survives_isolated_reimports():
+    import importlib
+    from utils.conversations import calls_metrics
+
+    previous = calls_metrics.COMPARISONS
+    assert importlib.reload(calls_metrics).COMPARISONS is previous

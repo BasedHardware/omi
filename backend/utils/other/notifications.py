@@ -116,21 +116,9 @@ def _conversation_has_summary_content(conversation: Any) -> bool:
 
 
 def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc) -> Optional[dict]:
-    """Generate one day's summary, or return the one already stored.
+    """Generate a recap without requiring push tokens; decline empty or title-only input.
 
-    Guard order is the existing contract and must not be reordered:
-
-    1. best-effort Redis lock
-    2. durable by-date idempotency (existing record → return it, no LLM)
-    3. conversations exist in the window and are not ``is_locked``
-    4. at least one non-discarded conversation has ``transcript_segments``
-    5. the bounded day carries more than titles for the prompt: some
-       conversation has a non-empty ``structured.overview``, a first app
-       result, action items, or events — the body fields the recap renderer
-       shows
-    6. LLM generate → persist
-
-    Returns the stored record (or the pre-existing one), or ``None`` when a guard declined.
+    On-demand callers receive the decline reason through generate_daily_summary_on_demand.
     """
     record, _created, _declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
     return record
@@ -179,10 +167,7 @@ def _legacy_generate_and_store_daily_summary(
         return None, False, _DECLINE_LOCKED
 
     try:
-        # Durable idempotency guard (#4608): the Redis lock above is best-effort (2h TTL, evictable, lost on
-        # failover), and create_daily_summary writes a fresh-uuid doc with no by-date check, so a later cron
-        # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
-        # any LLM tokens. The regenerate flow stays in-place via update_daily_summary.
+        # #4608: Redis is best-effort; the durable by-date guard prevents duplicate paid recaps.
         existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
         if existing_summary and not serving_for('NOTES_PACKET_V2_MODE', uid):
             logger.info(
@@ -224,15 +209,8 @@ def _legacy_generate_and_store_daily_summary(
         # still attempted.
         conversations = bound_daily_summary_conversations(uid, date_str, conversations)
 
-        # The prompt is built by ``conversations_to_string(use_transcript=False)``,
-        # which renders the title plus the first app result or the structured
-        # overview, plus action items and events. A bounded day where no
-        # conversation carries any of these leaves the model titles alone: the
-        # output is thin or hallucinated
-        # and then pushed (flip-review F-12 / decision 4). Decline before the LLM
-        # call — no call, no record, no push. Paid, pre-flip and mobile days are
-        # unchanged by construction: their overviews are non-empty, so this guard
-        # never fires for them.
+        # F-12 / decision 4: decline title-only input before the model call.
+        # The renderer uses primary summaries, action items and events as body content.
         if not any(_conversation_has_summary_content(c) for c in conversations if not c.discarded):
             logger.info(f'Skipping daily summary for uid={uid} on {date_str}: no conversations with summary content')
             release_daily_summary_lock(uid, date_str)
@@ -932,12 +910,8 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         daily_summary_metrics.RECIPIENTS.labels(outcome='suppressed_existing').inc()
     pending_webhook: Optional[dict] = None
     if retry_attempt and declined == _DECLINE_LOCKED:
-        # A timed-out worker may still own the day. Keep its recipient pending
-        # until that worker finishes, rather than treating contention as delivery.
-        # A worker that finished *after* its timeout keeps the lock for the full
-        # TTL by design, so the durable record is the only proof it is done; without
-        # this read the recipient stayed "locked" for 2h and pinned the whole saved
-        # cohort, starving every current cohort behind it (2026-10-12).
+        # 2026-10-12: a timed-out worker may finish while retaining its lock.
+        # Check its durable result so contention cannot pin the cohort for the 2h TTL.
         summary_data = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
         if not summary_data:
             raise RuntimeError('daily summary retry still locked')
@@ -964,28 +938,14 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
 
     try:
 
-        # Backfill only for owners who are actually still recording. Dropping the FCM-token filter in
-        # get_users_for_daily_summary_indexed widened this fan-out to every user in the timezone, and an
-        # unconditional 7-day walk would spend 7 lock writes + 7 by-date reads + 7 conversation queries
-        # per dormant account per day chasing holes it can never fill.
-        #
-        # The reason comes from the attempt above rather than from a second query: re-reading
-        # conversations here would undo the "lose the lock, do no work" guarantee that keeps a
-        # contended user from being read twice.
-        #
-        # Only an *empty* window means dormant. A day whose conversations were all `is_locked`, or
-        # carried no transcript, still proves the owner was recording — those are the accounts whose
-        # earlier days most need walking back — so `_DECLINE_NOTHING_TO_SUMMARIZE` is deliberately
-        # absent from this set.
+        # Backfill only active owners. Reuse the decline reason to avoid another query.
+        # Locked/thin conversations still prove activity; an empty window does not.
         if declined in (_DECLINE_LOCKED, _DECLINE_NO_CONVERSATIONS):
             return
 
         _backfill_recent_daily_summaries(uid, display_date, user_tz_name)
     finally:
-        # finally, not a trailing call: the dormant-owner branch above returns early
-        # and backfill can raise. Either would drop the webhook for a user whose
-        # summary was already stored and pushed, which is the exact loss this fix
-        # exists to stop -- just moved to a different exit.
+        # An early dormant return or backfill failure must not drop an owed webhook.
         if pending_webhook is not None:
             _deliver_day_summary_webhook(uid, pending_webhook)
 
