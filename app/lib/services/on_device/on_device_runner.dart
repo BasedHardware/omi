@@ -53,6 +53,8 @@ Stream<List<Uint8List>> readOnDeviceChunks(File file, int framesPerSecond) async
   }
 }
 
+class PreparedContinuationDisabled implements Exception {}
+
 /// Owns only finalized phone-only WALs. The WAL generation fences every asynchronous publish.
 class OnDeviceRunner with WidgetsBindingObserver {
   OnDeviceRunner(
@@ -152,6 +154,12 @@ class OnDeviceRunner with WidgetsBindingObserver {
       pendingSeconds = pending.fold(0, (sum, w) => sum + w.seconds);
       controller.setPendingSeconds(pendingSeconds);
       if (!controller.settings.enabled) return;
+      if (pending.any((w) => w.onDevicePreparedUpload != null) && !await ClientRefactorFlags.chunkUploads()) {
+        for (final wal in pending.where((w) => w.onDevicePreparedUpload != null)) {
+          await sync.rejectDisabledPreparedUpload(wal, generation);
+        }
+        throw PreparedContinuationDisabled();
+      }
       final hasModel = controller.model.status.isInstalled;
       final resumePrepared = !hasModel && await ClientRefactorFlags.chunkUploads();
       if (!hasModel && !(resumePrepared && pending.any((w) => w.onDevicePreparedUpload != null))) return;
@@ -172,7 +180,7 @@ class OnDeviceRunner with WidgetsBindingObserver {
         lastError = null;
         controller.markRunFailure(false);
       } else {
-        lastError = error.runtimeType.toString();
+        lastError = error is PreparedContinuationDisabled ? 'continuation_disabled' : error.runtimeType.toString();
         controller.markRunFailure(true);
       }
     } finally {
@@ -188,6 +196,10 @@ class OnDeviceRunner with WidgetsBindingObserver {
     if (path == null) throw StateError('Missing WAL path');
     final chunked = await ClientRefactorFlags.chunkUploads();
     if (_cancelled || generation != sync.sessionGeneration) return;
+    if (!chunked && wal.onDevicePreparedUpload != null) {
+      await sync.rejectDisabledPreparedUpload(wal, generation);
+      throw PreparedContinuationDisabled();
+    }
     final prepared = chunked && wal.onDevicePreparedUpload != null
         ? OnDeviceSegmentSnapshot.fromJson(wal.onDevicePreparedUpload!)
         : null;

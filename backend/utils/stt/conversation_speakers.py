@@ -1,9 +1,26 @@
-"""Pure conversation-wide diarization from per-segment wespeaker embeddings.
+"""Conversation-wide speaker resolution: one diarization over the whole conversation.
 
-Capture numbering restarts on reconnects and uploaded VAD chunks. This stage
-pools those scopes into voices, constrained by manual receipts. The existing
-0.70 AHC / 0.60 absorb points were measured on noisy pendant audio; enrolled
-voiceprint verification remains a separate operating point.
+Capture diarizes piecewise. Live labels restart on every reconnect or provider
+failover, and sync labels restart on every uploaded VAD chunk (<=300s), so the
+allocator in speaker_identity.py hands one person a new ``speaker_id`` per piece.
+A 3.6h pendant dinner measured 1874 speaker_ids for about five voices.
+
+This module re-diarizes the finished conversation from per-segment voice
+embeddings, so ``speaker_id`` means one voice for the whole conversation. It is
+pure: no network, storage, or Firestore. The caller supplies the segments, the
+embeddings it could compute, the manual receipt keys, and enrolled voiceprints.
+
+Operating points were measured on real pendant audio (far-field, noisy
+restaurants) embedded with the production wespeaker-resnet34 model, clips cut
+from the stored chunks exactly as speaker_resolution.py cuts them (transcription
+of the clips confirmed the alignment). Owner purity was scored with the owner's
+enrolled voiceprint: across AHC 0.65-0.75 and absorb 0.50-0.65, no confident
+owner clip left the owner's voice and at most 5 of about 1000 confident
+non-owner clips joined it; at 0.80 the owner absorbed 106. At 0.70/0.60 the
+1874-id dinner resolved to six participants and a two-person call with desktop
+mic/system ground truth to exactly two. The Parakeet server's per-chunk 0.55 cut
+(tuned on VoxConverse broadcast audio) is not what fragments these transcripts;
+chunk-local numbering is.
 """
 
 from __future__ import annotations

@@ -7,7 +7,7 @@ extension AppState {
     let label = ResolvedSpeakerLabel(
       personID: personID, isUser: raw["is_user"] as? Bool,
       retracted: raw["retracted"] as? Bool == true)
-    log("event=refactor_shadow lane=L5 check=speaker_owner outcome=\(!label.isUser ? "agree" : "disagree")")
+    if label.isUser { log("event=refactor_shadow lane=L5 check=speaker_owner outcome=disagree") }
     guard ClientRefactorFlags.serving else {
       // refactor: superseded by ResolvedSpeakerLabel when clients_refactor=serve
       if let personID { liveSpeakerPersonMap[speakerID] = personID }

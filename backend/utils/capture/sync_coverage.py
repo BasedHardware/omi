@@ -97,6 +97,7 @@ async def apply_sync_coverage(
     capture_evidence_claims,
     wav_paths,
     decoded_frames,
+    cleanup_paths: set[str] | None = None,
     **dependencies,
 ):
     from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage, build_sync_source_frame_maps
@@ -104,7 +105,7 @@ async def apply_sync_coverage(
     if refactor_modes.shadow_or_serve(coverage.FLAG):
         original = list(wav_paths)
         maps = build_sync_source_frame_maps(capture_evidence_claims, wav_paths, decoded_frames)
-        wav_paths, maps, _ = await dependencies['run_blocking'](
+        wav_paths, maps, generated = await dependencies['run_blocking'](
             dependencies['db_executor'],
             trim_maps,
             uid,
@@ -114,6 +115,10 @@ async def apply_sync_coverage(
             recording_session_id=recording_session_id,
         )
         if refactor_modes.serving_for(coverage.FLAG, uid):
+            # Retired originals and generated WAVs remain owned by the job cleanup.
+            if cleanup_paths is not None:
+                cleanup_paths.update(original)
+                cleanup_paths.update(generated)
             # Keep the S1-trimmed derivative maps intact; old lookup must not rebuild them.
             return wav_paths, maps, bool(original and not wav_paths)
     # refactor: superseded by utils.capture.coverage when CAPTURE_COVERAGE_MODE=serve

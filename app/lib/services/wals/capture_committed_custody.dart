@@ -9,14 +9,34 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
       if (owner.isEmpty || owner == 'legacy' || !_isCurrent(generation)) return;
       await captureCommits.record(owner, event);
       if (!_isCurrent(generation)) return;
-      await _applyCaptureCommits(generation);
+      await _persistCaptureCommits(generation);
       if (!_isCurrent(generation)) return;
-      await _saveWalsToFile(generation);
       _notifyUpdated(generation);
     });
   }
 
-  Future<void> _applyCaptureCommits(int generation) async {
+  Future<bool> _persistCaptureCommits(int generation, {bool onlyIfReleased = false}) async {
+    final released = <Wal>[];
+    try {
+      await _applyCaptureCommits(generation, released);
+      if (onlyIfReleased && released.isEmpty) return _isCurrent(generation);
+      final saved = await _saveWalsToFile(generation);
+      if (!saved) _revertCaptureCommits(released, generation);
+      return saved;
+    } catch (_) {
+      _revertCaptureCommits(released, generation);
+      rethrow;
+    }
+  }
+
+  void _revertCaptureCommits(List<Wal> released, int generation) {
+    if (!_isCurrent(generation)) return;
+    for (final wal in released) {
+      if (_wals.any((tracked) => identical(tracked, wal))) _keepForTranscriptRepair(wal);
+    }
+  }
+
+  Future<void> _applyCaptureCommits(int generation, List<Wal> released) async {
     final owner = _currentWalOwnerUid();
     if (owner.isEmpty || owner == 'legacy') return;
     final release = await ClientRefactorFlags.custodyRelease();
@@ -30,8 +50,10 @@ extension CaptureCommittedCustody on LocalWalSyncImpl {
         wal.status = WalStatus.synced;
         wal.syncedAt = _now().millisecondsSinceEpoch ~/ 1000;
         wal.keptForTranscriptRecovery = false;
+        released.add(wal);
       }
     }
+    return;
   }
 
   bool _captureCommitEligible(Wal wal) =>

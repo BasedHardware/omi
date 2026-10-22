@@ -78,13 +78,13 @@ def test_manual_excerpt_is_evidence_but_never_spreads_to_whole_voice():
     record = evidence.build_evidence(segments, receipt=receipt)
     manual = next(c for c in record.clusters[0].candidates if c.source == 'manual')
     assert manual.probability == 1 and manual.band == 'confident'
-    assert evidence.project_labels(record, receipt) == {'a': (True, None), 'b': (False, None)}
+    assert evidence.project_labels(record, receipt) == {'a': (True, None)}
 
 
 def test_carried_scope_and_newer_negative_receipt_win():
     record = evidence.build_evidence([segment('a', 5, 'sync:new')])
     carried = {'speakers': {'5': {'is_user': True, 'source': 'carried', 'speaker_id_scope': 'sync:old'}}}
-    assert evidence.project_labels(record, carried)['a'] == (False, None)
+    assert evidence.project_labels(record, carried) == {}
     record = evidence.build_evidence([segment('a', 5)])
     receipt = {
         'speakers': {'5': {'is_user': True, 'generation': 1}},
@@ -101,7 +101,7 @@ def test_no_centroid_batch_abstains_without_poisoning_other_scope():
     record = evidence.build_evidence(segments, resolution)
     assert record.status == 'partial'
     assert 'no_compatible_centroid' in record.abstentions
-    assert evidence.project_labels(record, {}) == {'a': (True, None), 'b': (False, None)}
+    assert evidence.project_labels(record, {}) == {'a': (True, None)}
 
 
 @pytest.mark.parametrize(
@@ -205,7 +205,7 @@ def test_ambiguous_provider_scope_cannot_revive_stale_carried_receipt():
     item = {**segment('s', 5, 'conversation:c'), 'provider_speaker': {'id': -1, 'scope': 'sync:old'}}
     receipt = {'speakers': {'5': {'is_user': True, 'source': 'carried', 'speaker_id_scope': 'sync:old'}}}
     record = evidence.build_evidence([item], receipt=receipt)
-    assert evidence.project_labels(record, receipt)['s'] == (False, None)
+    assert evidence.project_labels(record, receipt) == {}
 
 
 def test_boundary_roster_reaches_evidence_as_prior_and_never_a_voice_label(monkeypatch):
@@ -220,4 +220,84 @@ def test_boundary_roster_reaches_evidence_as_prior_and_never_a_voice_label(monke
     roster = [candidate for voice in record.clusters for candidate in voice.candidates if candidate.source == 'roster']
     assert [candidate.name for candidate in roster] == ['Fixture Attendee']
     assert all(candidate.probability == policy.ROSTER_PRIOR and not candidate.label_eligible for candidate in roster)
-    assert evidence.project_labels(record, {}) == {'a': (False, None)}
+    assert evidence.project_labels(record, {}) == {}
+
+
+@pytest.mark.parametrize('identity', [(True, None, 'user'), (False, 'known', 'not_user')])
+@pytest.mark.parametrize('reason', ['audio_expired', 'budget_hit', 'owner_print_deleted'])
+def test_reprocessing_without_audio_preserves_established_labels_and_status(monkeypatch, identity, reason):
+    monkeypatch.setenv(evidence.FLAG, 'serve')
+    monkeypatch.setattr(processing.storage, 'store_evidence', lambda *a, **kw: None)
+    monkeypatch.setattr(processing, '_roster', lambda *a: [])
+    item = SimpleNamespace(
+        **{**segment('established'), 'is_user': identity[0], 'person_id': identity[1]},
+        speaker_identity_status=identity[2]
+    )
+    conversation = SimpleNamespace(id='synthetic', transcript_segments=[item])
+    token = processing.begin()
+    processing.reason(reason)
+    processing.finish(token, str(uuid.uuid4()), conversation, {})
+    assert (item.is_user, item.person_id, item.speaker_identity_status) == identity
+
+
+def test_policy_operating_points_pin_legacy_literals_and_env_wiring(monkeypatch):
+    import importlib.util
+    from pathlib import Path
+
+    names = {
+        'FINALIZE': ('CONVERSATION_SPEAKER_VOICE_MATCH_THRESHOLD', 0.50),
+        'ONLINE_CLUSTER': ('SPEAKER_CLUSTERING_THRESHOLD', 0.60),
+        'PARAKEET_CLUSTER': ('PARAKEET_SPEAKER_CLUSTERING_THRESHOLD', 0.60),
+        'BATCH_CLUSTER': ('PARAKEET_SPEAKER_AHC_THRESHOLD', 0.55),
+        'CONVERSATION_CLUSTER': ('CONVERSATION_SPEAKER_AHC_THRESHOLD', 0.70),
+        'ABSORB': ('CONVERSATION_SPEAKER_ABSORB_DISTANCE', 0.60),
+    }
+
+    def isolated():
+        # A fresh module leaves the production singleton and other tests untouched.
+        import sys
+
+        name = 'speaker_policy_fixture_' + uuid.uuid4().hex
+        spec = importlib.util.spec_from_file_location(name, Path(policy.__file__))
+        module = importlib.util.module_from_spec(spec)
+        with monkeypatch.context() as patch:
+            patch.setitem(sys.modules, name, module)
+            spec.loader.exec_module(module)
+        return module
+
+    for env, _ in names.values():
+        monkeypatch.delenv(env, raising=False)
+    default = isolated()
+    assert (default.LIVE.distance, default.CONTINUITY.distance, default.CROSS_SCOPE_CLUSTER.distance) == (
+        0.65,
+        0.35,
+        0.60,
+    )
+    assert default.CROSS_EPOCH.distance == 0.50
+    assert not default.LIVE.inclusive and not default.CONTINUITY.inclusive and not default.CROSS_SCOPE_CLUSTER.inclusive
+    for name, (env, literal) in names.items():
+        assert getattr(default, name).distance == literal
+        assert getattr(default, name).inclusive == (name in {'BATCH_CLUSTER', 'CONVERSATION_CLUSTER'})
+        with monkeypatch.context() as patch:
+            patch.setenv(env, '.4321')
+            changed = isolated()
+            assert getattr(changed, name).distance == 0.4321
+            if name == 'FINALIZE':
+                assert changed.CROSS_EPOCH.distance == 0.4321
+            for other, (_, original) in names.items():
+                if other != name:
+                    assert getattr(changed, other).distance == original
+
+
+def test_malformed_stored_evidence_fails_open_without_content_or_identity_logs(monkeypatch, caplog):
+    from database.read_boundary import MalformedDocError
+
+    monkeypatch.setenv(evidence.FLAG, 'serve')
+
+    def corrupt(*args):
+        raise MalformedDocError(document_path='synthetic-private-payload', error_types=('bad',), error_fields=('bad',))
+
+    monkeypatch.setattr(evidence.storage, 'get_evidence', corrupt)
+    assert evidence.get_evidence('synthetic-private-owner', 'synthetic') is None
+    assert 'speaker_evidence_read outcome=error' in caplog.text
+    assert 'synthetic-private' not in caplog.text

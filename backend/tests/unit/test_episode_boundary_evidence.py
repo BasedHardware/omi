@@ -35,10 +35,11 @@ def test_evidence_is_idempotent_and_late_retry_cannot_reopen(store):
     assert boundary_store.load(ACCOUNT, list(windows), firestore_client=store) == [closed]
     payloads = [row for path, row in store.rows.items() if path[-2] == 'capture_boundary_signals']
     assert 'external_id' not in payloads[0]
-    with pytest.raises(ValueError, match='immutable'):
-        boundary_store.record(
-            ACCOUNT, [signal().model_copy(update={'started_at': NOW + timedelta(seconds=1)})], firestore_client=store
-        )
+    moved = signal().model_copy(
+        update={'started_at': NOW + timedelta(minutes=1), 'ended_at': NOW + timedelta(minutes=40)}
+    )
+    assert boundary_store.record(ACCOUNT, [moved], firestore_client=store) == 1
+    assert boundary_store.load(ACCOUNT, [boundary_store.signal_id(moved)], firestore_client=store) == [moved]
 
 
 @pytest.mark.parametrize(
@@ -170,3 +171,76 @@ def test_full_index_evicts_old_terminal_edges_but_preserves_active_signals(store
     assert len(known) == boundary_store.MAX_SIGNALS
     assert boundary_store.signal_id(fresh) in known
     assert 'old-000' not in known
+
+
+def test_shadow_tick_reads_and_context_ingest_are_bounded_to_sixty_seconds(store, monkeypatch):
+    from cachetools import TTLCache
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreDocument
+
+    clock = [0.0]
+    monkeypatch.setattr(boundary_store, '_shadow_windows', TTLCache(maxsize=8, ttl=60, timer=lambda: clock[0]))
+    monkeypatch.setattr(boundary_store, '_seen_contexts', TTLCache(maxsize=8, ttl=60, timer=lambda: clock[0]))
+    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'shadow')
+    original = StrictFirestoreDocument.get
+    reads = []
+
+    def counted(ref, *args, **kwargs):
+        reads.append(ref.path)
+        return original(ref, *args, **kwargs)
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', counted)
+    row = {
+        'started_at': NOW,
+        'finished_at': NOW,
+        'external_data': {
+            'calendar_meeting_context': {
+                'calendar_event_id': 'context',
+                'start_time': NOW.isoformat(),
+                'duration_minutes': 30,
+            }
+        },
+    }
+    for tick in range(12):
+        assert (
+            boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(seconds=tick * 5), firestore_client=store)
+            == 'legacy'
+        )
+    assert len(store.transactions) == 1
+    assert len(reads) == 4  # deletion, state, payload, then one cached window read
+    clock[0] = 61
+    boundaries.conversation_decision(ACCOUNT, row, NOW + timedelta(seconds=61), firestore_client=store)
+    assert len(store.transactions) == 2
+    assert len(reads) == 8
+
+
+def test_shadow_cache_is_owner_scoped_invalidated_by_writes_and_bypassed_in_serve(store, monkeypatch):
+    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'shadow')
+    assert boundary_store.windows(ACCOUNT, firestore_client=store) == {}
+    boundary_store.record(ACCOUNT, [signal()], firestore_client=store)
+    assert len(boundary_store.windows(ACCOUNT, firestore_client=store)) == 1
+    assert boundary_store.windows('another-synthetic-owner', firestore_client=store) == {}
+    other = StrictFirestore()
+    assert boundary_store.windows(ACCOUNT, firestore_client=other) == {}
+    store.rows[('users', ACCOUNT, 'capture_boundary_state', 'v1')] = {'entries': {}}
+    assert len(boundary_store.windows(ACCOUNT, firestore_client=store)) == 1
+    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
+    assert boundary_store.windows(ACCOUNT, firestore_client=store) == {}
+
+
+def test_noncalendar_start_is_still_immutable(store):
+    original = signal().model_copy(update={'kind': 'desktop_meeting'})
+    boundary_store.record(ACCOUNT, [original], firestore_client=store)
+    with pytest.raises(ValueError, match='immutable'):
+        boundary_store.record(
+            ACCOUNT, [original.model_copy(update={'started_at': NOW + timedelta(seconds=1)})], firestore_client=store
+        )
+
+
+def test_saved_context_cannot_rewind_an_authoritative_calendar_reschedule(store):
+    original = {'calendar_event_id': 'scheduled', 'start_time': NOW.isoformat(), 'duration_minutes': 30}
+    moved = {**original, 'start_time': (NOW + timedelta(minutes=10)).isoformat()}
+    boundaries.ingest_context(ACCOUNT, original, firestore_client=store)
+    boundaries.ingest_context(ACCOUNT, moved, firestore_client=store, allow_reschedule=True)
+    boundaries.ingest_context(ACCOUNT, original, firestore_client=store)
+    key = boundary_store.signal_id(boundaries.context_signal(original))
+    assert boundary_store.load(ACCOUNT, [key], firestore_client=store)[0].started_at == NOW + timedelta(minutes=10)

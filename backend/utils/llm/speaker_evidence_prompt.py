@@ -14,7 +14,9 @@ SPEAKER_RULES = '''SPEAKER ATTRIBUTION
 - Never infer the owner from a speaker number, a first-person story, the calendar, or an account profile.
 - With unavailable speaker resolution, retain only supported existing labels; unresolved voices stay "a speaker".
 - Contact spellings correct close sound-alikes, not identities: "Nick" may be spelled "Nik Shevchenko" when that
-  contact corroborates the spoken name, but a contact entry alone does not establish that they spoke.'''
+  contact corroborates the spoken name, but a contact entry alone does not establish that they spoke.
+- If more than one contact could match a spoken name, keep the transcript spelling and do not pick one.
+  Never merge two people because they share a first name; list competing contacts without choosing an identity.'''
 
 
 def candidate_name(candidate: Any, people: list[dict[str, Any]]) -> str | None:

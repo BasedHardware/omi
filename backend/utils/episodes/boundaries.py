@@ -51,11 +51,15 @@ def context_signal(context: Mapping[str, Any]) -> BoundarySignal | None:
 
 
 @_safe(None)
-def ingest_context(uid: str, context: Mapping[str, Any] | None, *, firestore_client: Any = None) -> None:
+def ingest_context(
+    uid: str, context: Mapping[str, Any] | None, *, firestore_client: Any = None, allow_reschedule: bool = False
+) -> None:
     if context and shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
         signal = context_signal(context)
         if signal is not None:
-            boundary_store.record(uid, [signal], firestore_client=firestore_client)
+            boundary_store.record_context(
+                uid, signal, firestore_client=firestore_client, allow_reschedule=allow_reschedule
+            )
 
 
 def active(windows: Mapping[str, Mapping], at: datetime) -> list[str]:

@@ -9,7 +9,7 @@ abstract final class ClientRefactorFlags {
   static Future<bool> custodyRelease() => AnalyticsManager().isBooleanFeatureEnabled(_CustodyRelease.enabledFlag);
 
   static void compare(String check, bool agrees) {
-    Logger.debug('event=refactor_shadow lane=L5 check=$check outcome=${agrees ? 'agree' : 'disagree'}');
+    if (!agrees) Logger.debug('event=refactor_shadow lane=L5 check=$check outcome=disagree');
   }
 }
 
