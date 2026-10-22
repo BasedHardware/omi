@@ -280,7 +280,7 @@ def memories_page_core(
         )
         page = rows[offset : offset + limit]
         has_more = len(rows) > offset + limit
-        result = {
+        result: Dict[str, Any] = {
             'memories': page,
             'returned_count': len(page),
             'has_more': has_more,

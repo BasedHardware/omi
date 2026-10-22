@@ -22,7 +22,6 @@ from utils.observability.fallback import record_fallback
 from utils.conversations.render import redact_conversation_for_list
 from utils.external_read_contract import utc_window
 from utils.memory.product_authorization import ProductAuthorizationContext
-from utils.mcp_data import end_of_day_utc
 from utils.mcp_dates import local_date_window, localize_timestamps
 from utils.mcp_memories import parse_mcp_int, parse_mcp_bool
 from utils.mcp_server.constants import (
@@ -47,7 +46,6 @@ from utils.mcp_server.errors import ToolExecutionError, raise_conversation_index
 from utils.mcp_server.helpers import (
     bounded_transcript_segments,
     conversation_card,
-    parse_mcp_date,
     select_card_fields,
 )
 from utils.mcp_server.payloads import tool_response_serialized_chars
@@ -396,7 +394,7 @@ def get_conversations_by_ids(
     def envelope(items: List[Dict[str, Any]]) -> Dict[str, Any]:
         returned = {item['id'] for item in items}
         omitted = [cid for cid in found_ids if cid not in returned]
-        result = {
+        result: Dict[str, Any] = {
             'conversations': items,
             'not_found': not_found,
             'omitted_ids': omitted,

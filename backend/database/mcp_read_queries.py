@@ -74,7 +74,7 @@ for _origin in ('memory_items', 'memories'):
             identifier=f'mcp_{_origin}_{_predicate}',
             collection_group=_origin,
             query_scope='COLLECTION',
-            filters=(FirestoreQueryFilter(_path, _op, _predicate),) if _path else (),
+            filters=(FirestoreQueryFilter(_path, _op, _predicate),) if _path is not None and _op is not None else (),
             index_fields=((_asc(_path),) if _path and _path != 'updated_at' else ())
             + (_desc('updated_at'), _asc('__name__')),
         )

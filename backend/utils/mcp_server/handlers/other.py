@@ -1,7 +1,7 @@
 """Remaining read-side tool handlers: X posts, goals, chat, people, screen, daily summaries."""
 
 from collections import Counter
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional, TypedDict
 
 from google.api_core.exceptions import FailedPrecondition
@@ -15,7 +15,7 @@ from database.person_aliases import normalized_person_alias
 import database.vector_db as vector_db
 import database.x_posts as x_posts_db
 from utils.memory.product_authorization import ProductAuthorizationContext
-from utils.mcp_data import clean_chat_message, clean_person, clean_screen_activity_row, end_of_day_utc
+from utils.mcp_data import clean_chat_message, clean_person, clean_screen_activity_row
 from utils.mcp_memories import parse_mcp_bool, parse_mcp_int
 from utils.daily_summary_read_contract import summary_read_payload
 from utils.mcp_dates import local_date_window, localize_timestamps, resolve_timezone, offset_timestamp
@@ -31,7 +31,6 @@ from utils.mcp_server.cursors import (
     resolve_offset_cursor,
 )
 from utils.mcp_server.errors import ToolExecutionError, raise_screen_activity_index_error
-from utils.mcp_server.helpers import parse_mcp_date
 
 
 def search_x_posts(
@@ -483,7 +482,7 @@ def get_daily_summaries(
         raise ToolExecutionError(str(e), code=-32602)
     start_date = arguments.get('start_date')
     end_date = arguments.get('end_date')
-    start, end, zone = local_date_window(uid, start_date, end_date, arguments.get('timezone'))
+    _start, _end, zone = local_date_window(uid, start_date, end_date, arguments.get('timezone'))
     filters = {'start': start_date, 'end': end_date, **({'timezone': str(zone)} if arguments.get('timezone') else {})}
     offset = resolve_offset_cursor(arguments, kind='get_daily_summaries', uid=uid, filters=filters, offset=offset)
     if start_date and end_date:
@@ -497,6 +496,7 @@ def get_daily_summaries(
         for date in dates:
             row = daily_summaries_db.get_daily_summary_by_date(uid, date)
             day_start, day_end, _ = local_date_window(uid, date, date, str(zone))
+            assert day_start is not None and day_end is not None
             if row:
                 payload = summary_read_payload(row)
                 # Historical producers capped their input at 100 conversations.
@@ -530,6 +530,7 @@ def get_daily_summaries(
             payload = summary_read_payload(row)
             if row.get('date'):
                 day_start, day_end, _ = local_date_window(uid, row['date'], row['date'], str(zone))
+                assert day_start is not None and day_end is not None
                 payload.setdefault('stats', {})['total_conversations'] = daily_summaries_db.get_day_recording_count(
                     uid, day_start, day_end
                 )

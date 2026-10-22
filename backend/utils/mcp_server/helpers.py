@@ -1,6 +1,6 @@
 """Parsing and projection helpers shared by hosted MCP tool handlers."""
 
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from utils.conversations.render import redact_conversation_for_list

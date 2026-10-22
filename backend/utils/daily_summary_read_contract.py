@@ -1,7 +1,6 @@
 """Deterministic daily-summary metrics and explicit legacy coverage."""
 
-from datetime import datetime, timedelta, timezone
-from typing import Any
+from datetime import datetime, timezone
 
 from utils.mcp_data import action_item_source
 
