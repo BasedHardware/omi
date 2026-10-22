@@ -83,7 +83,7 @@ SCHEMAS = {
         ("snapshot_date", "DATE"),
         ("run_id", "STRING"),
         ("computed_at", "TIMESTAMP"),
-        # Added 2026-10-22 (nullable; `ensure_columns` adds them to the live table).
+        # Added 2026-10-22 (nullable; `ensure_table` reconciles the live table before the load).
         # Book-wide distinct counts repeated on every plan row of a snapshot.
         ("paying_customers", "INT64"),
         ("non_usd_paying_subs", "INT64"),
@@ -332,12 +332,14 @@ def ensure_dataset() -> None:
 
 
 def ensure_table(name: str) -> None:
+    """Create the table when absent; when present, reconcile its columns to SCHEMAS[name] first."""
     ref = "%s:%s.%s" % (PROJECT, DATASET, name)
     p = subprocess.run(
         _bq_cmd() + ["--project_id=" + PROJECT, "show", "--format=json", ref], capture_output=True, text=True
     )
     if p.returncode == 0:
         sys.stderr.write("table %s exists\n" % name)
+        ensure_columns(name)
         return
     schema = ",".join("%s:%s" % (c, t.replace("FLOAT64", "FLOAT").replace("BOOL", "BOOLEAN")) for c, t in SCHEMAS[name])
     bq(
@@ -354,19 +356,28 @@ def ensure_table(name: str) -> None:
     sys.stderr.write("created table %s\n" % name)
 
 
-# Columns appended to a table after it first shipped. A pre-existing table is
-# created by `ensure_table` only when absent, so these are added in place
-# (nullable, metadata-only DDL) before the first load that carries them; the
-# daily job therefore keeps working on the old table and old artifacts
-# (missing values load as NULL).
-ADDED_COLUMNS = {"plan_revenue_daily": ("paying_customers", "non_usd_paying_subs")}
+# The live table is reconciled to SCHEMAS[name] before every load: a column the
+# code added is appended in place (nullable, metadata-only DDL), so the daily
+# job keeps working on an older table and old artifacts (missing values load as
+# NULL). Columns are never dropped or retyped — a type disagreement is a hard
+# stop because it needs a migration, not a guess. A table that does not exist
+# is still created whole by `ensure_table`.
+_TYPE_ALIASES = {
+    "INTEGER": "INT",
+    "INT64": "INT",
+    "FLOAT": "FLOAT",
+    "FLOAT64": "FLOAT",
+    "BOOLEAN": "BOOL",
+    "BOOL": "BOOL",
+}
+
+
+def _canonical_type(t: str) -> str:
+    return _TYPE_ALIASES.get(t.strip().upper(), t.strip().upper())
 
 
 def ensure_columns(name: str, show=None, run=None) -> list[str]:
-    """Add any `ADDED_COLUMNS[name]` missing from the live table; returns what was added."""
-    added_names = ADDED_COLUMNS.get(name, ())
-    if not added_names:
-        return []
+    """Add SCHEMAS[name] columns missing from the live table (nullable); returns what was added."""
     ref = "%s:%s.%s" % (PROJECT, DATASET, name)
     show = show or (
         lambda: subprocess.run(
@@ -376,16 +387,26 @@ def ensure_columns(name: str, show=None, run=None) -> list[str]:
     p = show()
     if p.returncode != 0:
         raise SystemExit("bq show %s failed:\n%s" % (name, p.stderr[-2000:]))
-    present = {f["name"] for f in json.loads(p.stdout).get("schema", {}).get("fields", [])}
-    types = dict(SCHEMAS[name])
-    missing = [c for c in added_names if c not in present]
+    live = {f["name"]: f.get("type", "") for f in json.loads(p.stdout).get("schema", {}).get("fields", [])}
+    wanted = dict(SCHEMAS[name])
+    clashes = sorted(
+        "%s is %s in the table but %s in code" % (c, live[c] or "?", t)
+        for c, t in wanted.items()
+        if c in live and _canonical_type(live[c]) != _canonical_type(t)
+    )
+    if clashes:
+        raise SystemExit(
+            "table %s disagrees with the loader schema (a migration is required; the loader only adds columns): %s"
+            % (name, "; ".join(clashes))
+        )
+    missing = [c for c in wanted if c not in live]
     if not missing:
         return []
     sql = "ALTER TABLE `%s.%s.%s`\n%s;" % (
         PROJECT,
         DATASET,
         name,
-        ",\n".join("ADD COLUMN IF NOT EXISTS %s %s" % (c, types[c]) for c in missing),
+        ",\n".join("ADD COLUMN IF NOT EXISTS %s %s" % (c, wanted[c]) for c in missing),
     )
     (run or (lambda s: bq(["query", "--use_legacy_sql=false", "--format=none"], stdin=s)))(sql)
     sys.stderr.write("table %s: added columns %s\n" % (name, ", ".join(missing)))
@@ -550,7 +571,6 @@ def main() -> None:
     loaded = {}
     for name in ("unit_cost_daily", "unit_cost_reconciliation", "plan_revenue_daily", "unit_cost_user_day"):
         ensure_table(name)
-        ensure_columns(name)
         loaded[name] = load_replace(name, tables[name], dates)
     loaded.update(load_mercury.load(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq))
     loaded.update(load_stripe_fees(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace))

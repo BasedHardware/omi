@@ -8,7 +8,8 @@ counting contracts the wall depends on:
     amount reported per currency, and is never booked as dollars;
   * a customer counts once per plan and once overall, never per item;
   * the loader carries `paying_customers`/`non_usd_paying_subs` (nullable) and
-    adds them to a live table that predates the columns.
+    old artifacts load them as NULL (live-table reconcile:
+    test_finops_schema_reconcile.py).
 """
 
 import importlib.util
@@ -173,9 +174,7 @@ def test_trialing_counts_zero_mrr_and_app_subs_skipped(stripe):
     assert book["paying_customers"] == 1
 
 
-def test_loader_carries_customer_counts_and_migrates_old_tables(stripe, tmp_path, monkeypatch):
-    import types
-
+def test_loader_carries_customer_counts(stripe, tmp_path, monkeypatch):
     loader = load("load_bigquery")
 
     # build_rows reads three derived CSVs alongside the raw artifact.
@@ -213,25 +212,3 @@ def test_loader_carries_customer_counts_and_migrates_old_tables(stripe, tmp_path
     rows = loader.build_rows(tmp_path, tmp_path, "run-2", "t", None, "2026-10-22")[0]["plan_revenue_daily"]
     assert rows[0]["paying_customers"] is None
     assert rows[0]["non_usd_paying_subs"] is None
-
-    # A live table that predates the columns gets one idempotent ALTER.
-    def make_show(fields):
-        doc = {"schema": {"fields": [{"name": n} for n in fields]}}
-        return lambda: types.SimpleNamespace(returncode=0, stdout=json.dumps(doc), stderr="")
-
-    altered = []
-    old_fields = ("date", "plan", "paying_subs", "snapshot_date")
-    assert loader.ensure_columns("plan_revenue_daily", show=make_show(old_fields), run=altered.append) == [
-        "paying_customers",
-        "non_usd_paying_subs",
-    ]
-    assert len(altered) == 1
-    assert "ADD COLUMN IF NOT EXISTS paying_customers INT64" in altered[0]
-    assert "ADD COLUMN IF NOT EXISTS non_usd_paying_subs INT64" in altered[0]
-
-    # An already-migrated table produces no DDL; other tables are untouched.
-    altered.clear()
-    new_fields = ("date", "plan", "paying_customers", "non_usd_paying_subs", "snapshot_date")
-    assert loader.ensure_columns("plan_revenue_daily", show=make_show(new_fields), run=altered.append) == []
-    assert loader.ensure_columns("unit_cost_daily", show=None, run=altered.append) == []
-    assert altered == []
