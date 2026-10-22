@@ -503,6 +503,7 @@ async def accept_upload(
                 resolve_language,
                 input_language,
                 unit.wav,
+                surface='batch',
                 before_probe=lambda duration=unit.duration_seconds: not execution_admission_enabled(uid, 'batch')
                 or sync_allowed(uid, duration, 'modulate', lane='batch'),
             )

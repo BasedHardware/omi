@@ -17,9 +17,12 @@ from config.prerecorded_language import (
     MIN_AUDIO_LID_CONFIDENCE,
     audio_lid_confidence_floor,
     language_class,
+    language_gate_shadow_enabled,
     language_guard_enabled,
+    self_lid_confidence_floor,
 )
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, normalized_stt_language
+from utils.stt import language_gate
 from utils.stt.vendor_guard import (
     ENDPOINT_LID,
     breaker_allows,
@@ -52,6 +55,10 @@ class LanguageDecision:
 
     @property
     def parakeet_safe(self):
+        if self.evidence == 'self_lid':
+            # confidence is P(supported) over the Parakeet-25 set, not a top-1 score.
+            floor = self_lid_confidence_floor(self.probe_seconds)
+            return floor is not None and language_class(self.language) == 'supported' and floor <= self.confidence <= 1
         minimum = audio_lid_confidence_floor(self.probe_seconds) if self.evidence == 'audio_lid' else MIN_CONFIDENCE
         return language_class(self.language) == 'supported' and minimum <= self.confidence <= 1
 
@@ -159,11 +166,38 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             record_vendor_burn(ENDPOINT_LID, 'ok' if outcome == 'accepted' else 'error', seconds)
 
 
-def resolve_language(language, audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecision:
+def _self_gate(audio: bytes, surface: str, cohort_key, audio_options) -> tuple[bool, language_gate.SelfVerdict | None]:
+    """(enforced, verdict). Batch intake is shadow-only until its GPU worker accepts self_lid evidence."""
+    try:
+        probe, _ = probe_wav(audio, **audio_options)
+    except Exception:
+        return False, None
+    enforced = surface != 'batch' and language_gate.enforced_for(cohort_key, probe)
+    if not enforced and not language_gate_shadow_enabled():
+        return False, None
+    return enforced, language_gate.self_detect(probe, surface=surface)
+
+
+def _self_decision(verdict: language_gate.SelfVerdict) -> LanguageDecision:
+    return LanguageDecision(verdict.language, verdict.p_supported, 'self_lid', verdict.audio_seconds)
+
+
+def resolve_language(
+    language, audio: bytes, *, before_probe=None, surface='prerecorded', cohort_key=None, **audio_options
+) -> LanguageDecision:
     code = normalized_stt_language(language.strip() if isinstance(language, str) else None)
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return LanguageDecision(code, 1.0, 'declared')
-    decision = detect(audio, before_probe=before_probe, **audio_options)
+    enforced, verdict = _self_gate(audio, surface, cohort_key, audio_options)
+    if enforced:
+        language_gate.record_enforced(surface, verdict)
+    if enforced and verdict is not None:
+        decision = _self_decision(verdict)
+    else:
+        # Gate unavailable in an enforced cohort falls back to today's vendor path.
+        decision = detect(audio, before_probe=before_probe, **audio_options)
+        if not enforced:
+            language_gate.record_shadow(surface, verdict, decision)
     bounded = decision.language if decision.language in MODULATE_SUPPORTED_LANGUAGES else 'other'
     if decision.language == 'und':
         bounded = 'und'
@@ -189,14 +223,14 @@ def select_decision(language, decision, selector):
     return selected
 
 
-def resolve_file(language, path, *, selector, before_probe=None):
+def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None):
     """Return the final provider before a sync segment's dispatch/accounting."""
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return selector(language)
     try:
         with wave.open(str(path), 'rb') as source:
             body, _ = probe_wav_from_reader(source)
-        decision = resolve_language(language, body, before_probe=before_probe)
+        decision = resolve_language(language, body, before_probe=before_probe, cohort_key=cohort_key)
     except Exception:
         decision = LanguageDecision('und', 0.0, 'unavailable')
     return select_decision(language, decision, selector)
