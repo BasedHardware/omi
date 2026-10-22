@@ -39,15 +39,26 @@ class LocalRecordingsProvider extends ChangeNotifier {
     _readLedger();
   }
 
-  Future<void> refresh() async {
+  Future<void>? _refreshInFlight;
+  Future<void> refresh() {
+    final active = _refreshInFlight;
+    if (active != null) return active;
+    final pass = _refresh();
+    _refreshInFlight = pass;
+    return pass.whenComplete(() {
+      if (identical(_refreshInFlight, pass)) _refreshInFlight = null;
+    });
+  }
+
+  Future<void> _refresh() async {
     if (!_subscribed && _ledgerOverride == null) return;
     _isLoading = true;
     try {
       await _ledger.intakeNativeRecordings();
-      await _readLedger();
     } catch (e) {
       Logger.error('LocalRecordings: refresh deferred: $e');
     } finally {
+      await _readLedger();
       _isLoading = false;
       if (!_disposed) notifyListeners();
     }

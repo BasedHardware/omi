@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/providers/local_recordings_provider.dart';
 import '../support/custody_test_helpers.dart';
 
 void main() {
@@ -86,5 +87,16 @@ void main() {
     expect(await File('${dir.path}/omibatch_owners.json').exists(), isFalse);
     await ledger.intakeNativeRecordings();
     expect(ledger.testForeignWals.length, 1);
+  });
+  test('deferred legacy migration does not hide rows already owned by the ledger', () async {
+    await audio(name);
+    final ledger = await custodyLedger();
+    await ledger.intakeNativeRecordings();
+    await File('${dir.path}/omibatch_owners.json').writeAsString('{broken');
+    final view = LocalRecordingsProvider(ledger: ledger, initialize: false);
+    await view.refresh();
+    expect(view.recordings.single.fileName, name);
+    expect(view.isLoading, isFalse);
+    view.dispose();
   });
 }
