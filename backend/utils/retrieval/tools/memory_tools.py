@@ -47,6 +47,7 @@ def _memory_truncation_suffix(shown: int) -> str:
 
 
 def _publish_memory_refs(configurable, memories):
+    configurable = configurable if isinstance(configurable, dict) else {}
     channel_items = configurable.get('channel_items')
     for memory in memories:
         memory_id = getattr(memory, 'id', None)
@@ -81,6 +82,31 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return agent_config_context.get()
     except LookupError:
         return None
+
+
+def _extract_user_context(
+    config: Any,
+) -> Tuple[Optional[str], Dict[str, Any], Optional[Dict[str, Any]], Optional[str]]:
+    """Extract user_id, configurable mapping, and resolved config, supporting top-level or nested configurable."""
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+        if cfg:
+            logger.info("got config from context variable")
+
+    if cfg is None or not isinstance(cfg, dict):
+        logger.info("config is None or invalid")
+        return None, {}, None, "Error: Configuration not available"
+
+    configurable_raw = cfg.get('configurable')
+    configurable: Dict[str, Any] = configurable_raw if isinstance(configurable_raw, dict) else {}
+
+    uid = configurable.get('user_id') or cfg.get('user_id')
+    if not uid:
+        logger.info("no user_id in config")
+        return None, configurable, cfg, "Error: User ID not found in configuration"
+
+    return str(uid), configurable, cfg, None
 
 
 def _memory_tools_blocked_by_chat_scope(configurable: Any) -> Optional[str]:
@@ -177,28 +203,12 @@ def get_memories_tool(
     )
 
     # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 get_memories_tool - got config from context variable")
-
-    if cfg is None:
-        logger.info(f"❌ get_memories_tool - config is None")
-        return "Error: Configuration not available"
+    uid, configurable, cfg, err = _extract_user_context(config)
+    if err:
+        return err
 
     memories: List[MemoryDB] = []
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ get_memories_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        logger.info(f"❌ get_memories_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
-    clock = clock_for_config(config or _agent_config(), uid)
+    clock = clock_for_config(cfg, uid)
     logger.info(f"✅ get_memories_tool - uid: {uid}, limit: {limit}")
 
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
@@ -209,10 +219,15 @@ def get_memories_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Cap at 5000 per call to prevent overloading context
-    if limit > 5000:
-        logger.info(f"⚠️ get_memories_tool - limit capped from {limit} to 5000")
-        limit = 5000
+    try:
+        limit = max(1, min(int(limit), 5000))
+    except (ValueError, TypeError):
+        limit = 50
+
+    try:
+        offset = max(0, int(offset))
+    except (ValueError, TypeError):
+        offset = 0
 
     # Parse dates if provided (must be ISO format with timezone)
     start_dt = None
@@ -364,28 +379,16 @@ def search_memories_tool(
     Returns:
         Formatted string with semantically matching memories ranked by relevance.
     """
+    clean_query = str(query or "").strip()
+    if not clean_query:
+        return "Error: Search query cannot be empty."
+
     # Get config from parameter or context variable
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 search_memories_tool - got config from context variable")
+    uid, configurable, cfg, err = _extract_user_context(config)
+    if err:
+        return err
 
-    if cfg is None:
-        logger.info(f"❌ search_memories_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_memories_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        logger.info(f"❌ search_memories_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
-    clock = clock_for_config(config or _agent_config(), uid)
+    clock = clock_for_config(cfg, uid)
     logger.info('search_memories_tool uid=%s limit=%s', uid, limit)
 
     blocked = _memory_tools_blocked_by_chat_scope(configurable)
@@ -400,14 +403,17 @@ def search_memories_tool(
     scope_end_dt = _parse_date_from_chat_scope(scope.get("end_date"))
 
     # Cap limit at 20
-    limit = min(limit, 20)
+    try:
+        limit = max(1, min(int(limit), 20))
+    except (ValueError, TypeError):
+        limit = 5
 
     try:
         if not (scope_start_dt or scope_end_dt):
-            matches = MemoryService(db_client=firestore_db).search(uid, query, limit=limit)
+            matches = MemoryService(db_client=firestore_db).search(uid, clean_query, limit=limit)
         else:
             service = MemoryService(db_client=firestore_db)
-            matches = service.search(uid, query, limit=limit, candidate_limit=limit * 3)
+            matches = service.search(uid, clean_query, limit=limit, candidate_limit=limit * 3)
         hide_private = channel_private_filter_active(configurable)
         matches = [
             match
