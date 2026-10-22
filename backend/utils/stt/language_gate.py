@@ -154,7 +154,7 @@ def record_shadow(surface: str, verdict: SelfVerdict | None, vendor) -> None:
             vendor_conf,
             _duration_bucket(seconds),
         ).inc()
-        if self_route == 'parakeet' and vendor_bucket not in {'en', 'other_p25', 'und'}:
+        if verdict is not None and self_route == 'parakeet' and vendor_bucket not in {'en', 'other_p25', 'und'}:
             # The dangerous direction: bounded codes and scores only, for bucket review.
             logger.warning(
                 'event=language_gate_shadow_disagreement surface=%s self_language=%s p_supported=%.4f '

@@ -14,7 +14,7 @@ import logging
 import math
 import os
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, cast
 
 import numpy as np
 from scipy.signal import resample_poly  # type: ignore[reportMissingImports]  # scipy ships in the GPU image
@@ -118,11 +118,11 @@ class WhisperLanguageId:
         tokenizer: Any = WhisperTokenizer.from_pretrained(repo)
         model: Any = WhisperForConditionalGeneration.from_pretrained(repo, torch_dtype=self._dtype)
         self._model: Any = model.to(device).eval()
-        codes = sorted(LANGUAGES)
+        codes: List[str] = sorted(cast(Dict[str, str], LANGUAGES))
         self._token_ids = torch.tensor(
             tokenizer.convert_tokens_to_ids([f'<|{code}|>' for code in codes]), device=device
         )
-        self._labels = [_WHISPER_ALIASES.get(code, code) for code in codes]
+        self._labels: List[str] = [_WHISPER_ALIASES.get(code, code) for code in codes]
         self._start = torch.tensor([[tokenizer.convert_tokens_to_ids('<|startoftranscript|>')]], device=device)
 
     def probabilities(self, x16k: np.ndarray) -> Dict[str, float]:
