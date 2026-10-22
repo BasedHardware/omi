@@ -9,6 +9,7 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/live_start_anchor.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/widgets/speaker_label.dart';
 
@@ -19,19 +20,20 @@ abstract final class EpisodePresentation {
     return OmiDuration.live(elapsed.inSeconds, l10n);
   }
 
-  /// How long the live episode has run: from its first moment, else from the capture's first line.
-  static Duration elapsed(Episode? episode, CaptureProvider capture, DateTime now) {
-    if (episode != null) {
-      final span = now.difference(episode.startedAt);
-      if (!span.isNegative) return span;
-    }
-    final started = capture.liveCaptureStartedAt;
-    if (started != null) {
-      final span = now.difference(started);
-      if (!span.isNegative) return span;
-    }
-    final last = capture.segments.lastOrNull;
-    return last == null ? Duration.zero : Duration(milliseconds: (last.end * 1000).round());
+  /// How long the live episode has run, counted from one stable start: the episode's own start
+  /// (the server opens it at the first words), else the earliest capture start seen while
+  /// streaming. [anchor] keeps that start across the moments a source briefly reads null (a
+  /// pendant health lease lapsing, a socket reconnect), so the label never drops to 0s and back.
+  static Duration elapsed(Episode? episode, CaptureProvider capture, DateTime now, {LiveStartAnchor? anchor}) {
+    final start = (anchor ?? LiveStartAnchor()).resolve(
+      episode: episode,
+      captureStart: capture.liveCaptureStartedAt,
+      streaming: streamingSource(capture) != null,
+      now: now,
+    );
+    if (start == null) return Duration.zero;
+    final span = now.difference(start);
+    return span.isNegative ? Duration.zero : span;
   }
 
   /// The last two moment headings, newest last: "lunch plans, git support for agents".

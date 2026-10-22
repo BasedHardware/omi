@@ -104,9 +104,17 @@ CLIENT_SEEN_REFRESH_SECONDS = 60 * 60
 # --------------------------------------------------------------------------- moments
 
 # A moment ends when the live stream pauses for this long, or when it grows past
-# MOMENT_MAX_WORDS (a rollover), or when its conversation finalizes.
+# MOMENT_MAX_WORDS (a rollover), or after MOMENT_MAX_SECONDS of steady speech (an
+# interval), or when its conversation finalizes or its live session ends.
 MOMENT_PAUSE_SECONDS = 45
 MOMENT_MAX_WORDS = 600
+# Continuous talk never pauses for 45 s and rarely reaches 600 words quickly; without a
+# time bound the live state went many minutes without an update.
+MOMENT_MAX_SECONDS = 180
+# The first moment of a live stretch comes early, so the row gets a title within a minute
+# instead of reading "Listening now" until the first pause or interval.
+FIRST_MOMENT_MIN_WORDS = 60
+FIRST_MOMENT_MIN_SECONDS = 30
 # Below this a moment is folded into the next one instead of costing a call.
 MOMENT_MIN_WORDS = 25
 # A single moment's new text is bounded; the head and tail are kept.

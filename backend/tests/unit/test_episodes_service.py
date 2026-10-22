@@ -158,7 +158,9 @@ def test_model_failure_keeps_state_and_reports_outcome():
     store = StrictFirestore()
     model = FakeModel(RuntimeError('provider down'))
     assert service.record_moment(UID, _moment(), _collaborators(model, now=T0, store=store)) == 'llm_error'
-    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+    # The occasion still exists, without notes; the next moment fills them in.
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['title'] == '' and episode['bullets'] == [] and episode['usage']['calls'] == 0
 
     def garbage(uid, messages):
         return SimpleNamespace(content='no json at all', usage_metadata={})
@@ -351,3 +353,130 @@ def test_mentor_state_is_the_compact_render_or_none(monkeypatch):
     assert service.mentor_episode_state(UID) is None
     monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
     assert service.mentor_episode_state(UID) is None
+
+
+# --------------------------------------------------------------------------- structure before notes
+
+
+def _attach(store, conversation_id, *, minutes, source='omi', now_minutes=None):
+    c = _collaborators(
+        FakeModel(), now=T0 + timedelta(minutes=now_minutes if now_minutes is not None else minutes), store=store
+    )
+    return service.attach_conversation(
+        UID, conversation_id, source, started_at=T0 + timedelta(minutes=minutes), collaborators=c
+    )
+
+
+def test_first_words_open_the_episode_without_a_model_call():
+    store = StrictFirestore()
+    model = FakeModel()
+    c = _collaborators(model, now=T0, store=store)
+    assert service.attach_conversation(UID, 'c1', 'omi', started_at=T0, collaborators=c) == 'opened'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    # The app gets a live episode, its real start and its member conversation right away.
+    assert episode['status'] == 'live' and episode['title'] == '' and model.calls == []
+    assert episode['started_at'] == T0 and episode['conversation_ids'] == ['c1'] and episode['sources'] == ['omi']
+    assert episodes_db.get_episode_for_conversation(UID, 'c1', firestore_client=store)['id'] == episode['id']
+    # Attaching again (a reconnect, another replica) is a no-op.
+    assert service.attach_conversation(UID, 'c1', 'omi', started_at=T0, collaborators=c) == 'attached'
+
+
+def test_fragments_join_the_live_episode_so_home_can_hide_them():
+    store = StrictFirestore()
+    _attach(store, 'c1', minutes=0)
+    # A live split a minute later, and an overlapping capture from another device.
+    assert _attach(store, 'c2', minutes=1) == 'joined'
+    assert _attach(store, 'c3', minutes=0.5, source='phone', now_minutes=1) == 'joined'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['conversation_ids'] == ['c1', 'c2', 'c3'] and episode['sources'] == ['omi', 'phone']
+    # Then the first moment's notes land on that same episode.
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(
+        UID, _moment('c2', minutes=1), _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    )
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['id'] == episode['id'] and after['title'] == 'Lunch'
+
+
+def test_an_ambiguous_gap_joins_provisionally_and_jev_splits_it_off():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'title': 'Standup'})
+    service.record_moment(UID, _moment('c1'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert _attach(store, 'c2', minutes=12) == 'pending'
+    joined = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert joined['conversation_ids'] == ['c1', 'c2'] and set(joined['pending_boundary']) == {'c2'}
+
+    ask = lambda *a, **k: SimpleNamespace(noul=lambda name: 0.05)  # noqa: E731
+    later = _moment('c2', minutes=12)
+    c = _collaborators(model, now=T0 + timedelta(minutes=13), ask=ask, store=store)
+    assert service.record_moment(UID, later, c) == 'applied'
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    assert closed['close_reason'] == 'moved_on' and closed['conversation_ids'] == ['c1']
+    current = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert current['id'] != first['id'] and current['conversation_ids'] == ['c2'] and current['title'] == 'Standup'
+    assert episodes_db.get_episode_for_conversation(UID, 'c2', firestore_client=store)['id'] == current['id']
+
+
+def test_jev_same_occasion_keeps_the_provisional_join():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'bullets': ['B']})
+    service.record_moment(UID, _moment('c1'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    _attach(store, 'c2', minutes=12)
+    ask = lambda *a, **k: SimpleNamespace(noul=lambda name: 0.9)  # noqa: E731
+    c = _collaborators(model, now=T0 + timedelta(minutes=13), ask=ask, store=store)
+    assert service.record_moment(UID, _moment('c2', minutes=12), c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert episode['conversation_ids'] == ['c1', 'c2'] and episode['pending_boundary'] == {}
+    assert episode['bullets'] == ['B']
+
+
+def test_a_long_gap_attach_closes_the_old_episode_and_opens_a_new_one():
+    store = StrictFirestore()
+    _attach(store, 'c1', minutes=0)
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    # 29 minutes later sits between the continue and close gaps: a provisional join.
+    assert _attach(store, 'c2', minutes=29, now_minutes=29) == 'pending'
+    assert _attach(store, 'c9', minutes=120, now_minutes=120) == 'opened'
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    assert closed['status'] == 'closed'
+
+
+def test_an_idle_close_is_stamped_when_the_quiet_reached_the_gap():
+    store = StrictFirestore()
+    _attach(store, 'c1', minutes=0)
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    # Nobody looks for eight hours; the next read closes it, dated at the gap, not at the read.
+    reader = _collaborators(FakeModel(), now=T0 + timedelta(hours=8), store=store)
+    assert service.live_episode(UID, collaborators=reader) is None
+    closed = episodes_db.get_episode(UID, first['id'], firestore_client=store)
+    assert closed['close_reason'] == 'idle'
+    assert closed['closed_at'] == T0 + timedelta(seconds=config.CLOSE_GAP_SECONDS)
+
+
+def test_two_provisional_joins_are_each_settled_at_their_own_first_moment():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, {'bullets': ['B']}, {'bullets': ['C']})
+    service.record_moment(UID, _moment('c1'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    _attach(store, 'c2', minutes=12)
+    _attach(store, 'c3', minutes=12.5, source='phone', now_minutes=12.5)
+    assert set(episodes_db.get_current_episode(UID, firestore_client=store)['pending_boundary']) == {'c2', 'c3'}
+    keep = lambda *a, **k: SimpleNamespace(noul=lambda name: 0.9)  # noqa: E731
+    service.record_moment(
+        UID, _moment('c2', minutes=12), _collaborators(model, now=T0 + timedelta(minutes=13), ask=keep, store=store)
+    )
+    assert set(episodes_db.get_current_episode(UID, firestore_client=store)['pending_boundary']) == {'c3'}
+
+
+def test_a_failed_model_call_after_a_split_still_leaves_a_live_episode():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']}, RuntimeError('provider down'))
+    service.record_moment(UID, _moment('c1'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    first = episodes_db.get_current_episode(UID, firestore_client=store)
+    _attach(store, 'c2', minutes=12)
+    moved_on = lambda *a, **k: SimpleNamespace(noul=lambda name: 0.05)  # noqa: E731
+    c = _collaborators(model, now=T0 + timedelta(minutes=13), ask=moved_on, store=store)
+    assert service.record_moment(UID, _moment('c2', minutes=12), c) == 'llm_error'
+    current = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert current is not None and current['id'] != first['id'] and current['conversation_ids'] == ['c2']
+    assert current['title'] == ''

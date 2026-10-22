@@ -93,6 +93,15 @@ class _LiveCapture extends CaptureProvider {
 
   @override
   String? get topConversationId => 'c1';
+
+  DateTime? _startedAt;
+  set startedAt(DateTime? value) {
+    _startedAt = value;
+    notifyListeners();
+  }
+
+  @override
+  DateTime? get liveCaptureStartedAt => _startedAt;
 }
 
 final _now = DateTime(2026, 10, 20, 12, 30);
@@ -358,6 +367,23 @@ void main() {
       expect(find.textContaining('Now · 1m', findRichText: true), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
       expect(find.textContaining('Now · 1m 1s', findRichText: true), findsOneWidget);
+      await _unmount(tester);
+    });
+    testWidgets('a pendant lease lapsing mid-stream keeps the running length (no 0s)', (tester) async {
+      final clock = tester.binding.clock;
+      final capture = _LiveCapture()..startedAt = clock.now().subtract(const Duration(minutes: 3, seconds: 12));
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: null, clock: clock.now);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      expect(find.textContaining('Now · 3m 12s', findRichText: true), findsOneWidget);
+      // The verified-ingress start reads null between health updates, then re-arms later on reconnect.
+      capture.startedAt = null;
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.textContaining('Now · 3m 13s', findRichText: true), findsOneWidget);
+      capture.startedAt = clock.now();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.textContaining('Now · 3m 14s', findRichText: true), findsOneWidget);
       await _unmount(tester);
     });
     testWidgets('shows the live episode as a normal row: title, Now, length and topics', (tester) async {
