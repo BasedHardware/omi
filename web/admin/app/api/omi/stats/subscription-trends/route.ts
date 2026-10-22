@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
-import { getOptionalStripe } from "@/lib/stripe";
+import { getOptionalStripeRead } from "@/lib/stripe";
 import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import {
   AllSubscriptionSourcesFailedError,
@@ -47,7 +47,7 @@ function buildEmptySubscriptionTrendData(months: number) {
 }
 
 export async function computeSubscriptionTrends(months: number) {
-  const stripe = getOptionalStripe();
+  const stripe = getOptionalStripeRead();
 
   if (!stripe) {
     return { data: buildEmptySubscriptionTrendData(months), unavailable: true };

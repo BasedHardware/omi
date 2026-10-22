@@ -14,7 +14,10 @@ vi.mock("@/lib/posthog", () => ({
   withRowLimit: (q: string) =>
     `SELECT * FROM (\n${q}\n) AS _row_limit_guard\nLIMIT 50000`,
 }));
-vi.mock("@/lib/stripe", () => ({ getOptionalStripe: () => null }));
+vi.mock("@/lib/stripe", () => ({
+  getOptionalStripe: () => null,
+  getOptionalStripeRead: () => null,
+}));
 vi.mock("@/lib/stripe-subscriptions", () => ({
   MRR_STATUSES: ["active"],
   fetchOmiSubscriptions: vi.fn(async () => ({ subscriptions: [] })),
