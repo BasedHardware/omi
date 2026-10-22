@@ -7,15 +7,35 @@ change providers/models through ``get_llm('conv_folder')`` without duplicating
 validation in each experiment or callsite.
 """
 
+import json
 import logging
+import re
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Sequence, Tuple, cast
+from typing import Any, List, Mapping, Optional, Sequence, Tuple, cast
+
+try:
+    from langchain_core.exceptions import OutputParserException
+except ImportError:  # bare-stub langchain_core in some test environments
+
+    class OutputParserException(Exception):
+        pass
+
 
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ValidationError, Field
 
 from .clients import get_llm
+
+try:
+    from langchain_core.output_parsers.json import parse_partial_json
+except ImportError:  # bare-stub langchain_core in some test environments
+
+    def parse_partial_json(text: str, **_kwargs):
+        import json as _json
+
+        return _json.loads(text)
+
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +120,169 @@ Overview: {overview}
 def get_default_folder_id(user_folders: Sequence[FolderRecord]) -> Optional[str]:
     default_folder = next((f for f in user_folders if _bool_or_false(f.get('is_default'))), None)
     return _optional_str(default_folder.get('id')) if default_folder else None
+
+
+_JSON_SPAN_RE = re.compile(r'\{.*\}', re.DOTALL)
+
+
+def _top_level_json_spans(text: str) -> List[str]:
+    """Every top-level ``{...}`` span in the text, in order.
+
+    String- and escape-aware, so a ``}`` inside a JSON string does not close a
+    span. The last element may be unterminated (a truncated completion) — the
+    caller decides whether to attempt truncation repair on it.
+    """
+    spans: List[str] = []
+    depth = 0
+    start: Optional[int] = None
+    in_string = False
+    escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == '\\':
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char == '{':
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == '}':
+            if depth:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    spans.append(text[start : index + 1])
+                    start = None
+    if depth > 0 and start is not None:
+        spans.append(text[start:])
+    return spans
+
+
+def _salvage_raw_completion(exc: BaseException) -> str:
+    """Recover the model's completion text from a parser failure.
+
+    ``PydanticOutputParser`` reports both of its failure modes (json that did not
+    ``json.loads``, and json that failed schema validation) as an
+    ``OutputParserException`` that still carries the full completion in
+    ``llm_output``. Older chains raise bare ``json.JSONDecodeError`` without it,
+    where ``str(exc)`` is the only carrier. Either way the completion — which
+    usually contains a well-formed assignment — must reach the salvage attempt
+    instead of being discarded with the parser's verdict.
+    """
+    carried = getattr(exc, 'llm_output', None)
+    if isinstance(carried, str) and carried.strip():
+        return carried
+    return str(exc)
+
+
+def _salvage_candidate_payloads(completion: str) -> Any:
+    """Best-effort decode of a completion the strict parser refused.
+
+    Decodes each top-level ``{...}`` span in order (a prose lead-in, markdown
+    fencing, or surrounding sentences are all skipped), then the raw text. A
+    final unterminated span — a completion cut off mid-field — is repaired
+    through langchain's ``parse_partial_json``, which closes open strings and
+    braces. Raises the last decode error when nothing decodes, so the caller
+    can distinguish salvageable completions from genuinely unusable ones.
+    """
+    last_error: Exception = ValueError('no candidate payloads')
+    spans = _top_level_json_spans(completion)
+    for span in spans:
+        if not span.endswith('}'):
+            continue
+        try:
+            return json.loads(span)
+        except json.JSONDecodeError as decode_error:
+            last_error = decode_error
+    try:
+        return json.loads(completion)
+    except json.JSONDecodeError as decode_error:
+        last_error = decode_error
+    # Truncation repair: parse_partial_json closes open strings and braces.
+    if spans and not spans[-1].endswith('}'):
+        try:
+            return parse_partial_json(spans[-1])
+        except Exception as partial_error:
+            last_error = partial_error
+    raise last_error
+
+
+def _assignment_from_salvaged_payload(payload: Any) -> Optional[FolderAssignment]:
+    """Validate a salvage candidate against the same schema the parser enforces.
+
+    Applies ``FolderAssignment`` exactly as the parser would: unusable payloads
+    raise ``ValidationError``, and validated output flows through the same
+    type/coercion rules (a string confidence of "0.72" parses where the schema
+    says float). ``parse_partial_json`` candidates can omit fields the schema
+    defaults, which is the same contract an absent key already has.
+    """
+    if not isinstance(payload, Mapping):
+        return None
+    try:
+        return FolderAssignment.model_validate(dict(payload))
+    except ValidationError:
+        return None
+
+
+def _best_assignment_from_salvage(completion: str) -> Optional[FolderAssignment]:
+    """Validate salvage candidates until one matches the schema.
+
+    A decode can return a payload that is valid JSON but not an assignment — a
+    prose snippet's ``{}``, or the first of two objects — so each decode result
+    goes through the schema before it is accepted; the first schema-matching
+    payload wins. The fallback candidates after the primary decode are the
+    remaining spans, then partial-JSON repair over the raw completion.
+    """
+    candidates: List[Any] = []
+    try:
+        candidates.append(_salvage_candidate_payloads(completion))
+    except Exception:
+        pass
+    for span in _top_level_json_spans(completion):
+        if not span.endswith('}'):
+            continue
+        try:
+            candidates.append(json.loads(span))
+        except json.JSONDecodeError:
+            continue
+    brace = completion.find('{')
+    if brace != -1:
+        try:
+            candidates.append(parse_partial_json(completion[brace:]))
+        except Exception:
+            pass
+    # Prose braces: a '{' inside surrounding text can poison the span start, so
+    # also repair from each later '{' the completion contains.
+    start = completion.find('{', brace + 1) if brace != -1 else completion.find('{')
+    while start != -1:
+        try:
+            candidates.append(parse_partial_json(completion[start:]))
+        except Exception:
+            pass
+        start = completion.find('{', start + 1)
+    for payload in candidates:
+        assignment = _assignment_from_salvaged_payload(payload)
+        if assignment is not None:
+            return assignment
+    return None
+
+
+def _salvage_folder_assignment(exc: BaseException) -> Optional[FolderAssignment]:
+    """One salvage pass over a completion the strict parser rejected.
+
+    The completion was already paid for; the parser's refusal is a verdict about
+    wrapper text (a lead-in sentence, markdown fencing, truncation at the token
+    limit), not about the assignment inside it. Extract the recoverable payload
+    and validate it against the production schema; return None only when the
+    completion genuinely carries no usable assignment.
+    """
+    completion = _salvage_raw_completion(exc)
+    return _best_assignment_from_salvage(completion)
 
 
 def validate_folder_assignment(
@@ -230,6 +413,28 @@ Provide:
         )
         return result.folder_id, result.confidence, result.reasoning
 
+    except OutputParserException as e:
+        # The completion was already paid for. A strict parser refusal is most
+        # often wrapper damage — a lead-in sentence before the JSON, markdown
+        # fencing, or truncation at the token limit — not a missing assignment.
+        # Prod pusher 2026-10 logged ~60 of these per 30 minutes as
+        # ``Error assigning conversation to folder: Invalid json output:
+        # {"folder_id": ..., "confidence": 0.72, ...}`` where the logged payload
+        # was itself well-formed: every one of those was one wasted paid call
+        # plus a spurious ERROR per conversation. Salvage once, validate against
+        # the same schema the parser enforces, and only then fall back — exactly
+        # like the out-of-vocabulary literal precedent (FC evidence PR #11871).
+        salvaged = _salvage_folder_assignment(e)
+        if salvaged is not None:
+            logger.warning(
+                'Recovered folder assignment from rejected completion (schema-validated after parse failure)'
+            )
+            result = validate_folder_assignment(
+                salvaged, user_folders, default_folder_id, category_folder_id=category_folder_id
+            )
+            return result.folder_id, result.confidence, result.reasoning
+        logger.error(f'Error assigning conversation to folder: {e}')
+        return category_folder_id or default_folder_id, 0.0, f"Error: {str(e)}"
     except Exception as e:
         logger.error(f'Error assigning conversation to folder: {e}')
         return category_folder_id or default_folder_id, 0.0, f"Error: {str(e)}"
