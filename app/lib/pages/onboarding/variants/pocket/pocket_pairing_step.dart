@@ -232,7 +232,9 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (_failed)
+                        // Also after the delayed help: a scan blocked by Bluetooth off or a denied
+                        // permission ends quietly, so the reader needs a retry once they fix it.
+                        if (_failed || _showHelp)
                           OnboardingContinueButton(
                             key: const Key('pocket_pairing_scan_again'),
                             label: l10n.scanAgain,
