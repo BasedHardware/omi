@@ -11833,5 +11833,19 @@
     "deviceRecently": "अलीकडे",
     "deviceDisconnectedFor": "{duration} डिस्कनेक्ट",
     "deviceControls": "नियंत्रणे",
-    "homeBackgroundLine": "तसेच: {items}"
+    "homeBackgroundLine": "तसेच: {items}",
+    "deviceOnboardingPressButtonTitle": "तुमच्या Omi चे बटण दाबा",
+    "deviceOnboardingPressButtonSubtitle": "एक छोटा दाब. मग काहीही विचारा.",
+    "deviceOnboardingAskNowTitle": "तुमचा प्रश्न विचारा",
+    "deviceOnboardingAskNowSubtitle": "मोठ्याने बोला. Omi ऐकत आहे.",
+    "deviceOnboardingPressAgainHint": "झालं? पाठवण्यासाठी बटण पुन्हा दाबा.",
+    "trialUpsellTitle": "तुम्हाला {days} दिवस मोफत मिळाले",
+    "trialUpsellBody": "{days} दिवस Omi Pro आमच्याकडून. शुल्काआधी आठवण करून देऊ. कधीही रद्द करा.",
+    "trialUpsellClaim": "माझा {days} दिवसांचा ट्रायल घ्या",
+    "settingsUpgradeTrialSubtitle": "तुमचा {days} दिवसांचा मोफत ट्रायल सुरू करा",
+    "pairingPowerOnTitle": "तुमचा Omi चालू करा",
+    "pairingPowerOnSubtitle": "बटण एकदा दाबा आणि फोनजवळ ठेवा.",
+    "pairingLookingForOmi": "तुमचा Omi शोधत आहोत…",
+    "walkthroughBackgroundRecordingNote": "एवढंच. Omi पार्श्वभूमीत तुमची संभाषणं रेकॉर्ड करत राहील.",
+    "noThanks": "नको, धन्यवाद"
 }

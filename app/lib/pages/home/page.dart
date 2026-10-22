@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/pages/paywall/trial_paywall_page.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
@@ -107,6 +108,24 @@ class _HomePageProduct extends StatefulWidget {
 
 class _HomePageProductState extends State<_HomePageProduct> {
   String? _navigateToRoute;
+  bool _homeTrialSheetArmed = SharedPreferencesUtil().homeTrialSheetPending;
+
+  /// Pocket's placement: the trial paywall once more, on the first tap in Home, for a reader who
+  /// declined both sign-up offers. Fires at most once per device; a paid or ineligible reader
+  /// never sees it.
+  Future<void> _showHomeTrialSheetOnce() async {
+    if (!_homeTrialSheetArmed) return;
+    setState(() => _homeTrialSheetArmed = false);
+    SharedPreferencesUtil().homeTrialSheetPending = false;
+    final usage = context.read<UsageProvider>();
+    if (!usage.showSubscriptionUI) return;
+    if (usage.subscription?.subscription.plan.isPaid == true) return;
+    if (usage.subscription?.trialEligible != true) return;
+    PlatformManager.instance.analytics.track('Home Trial Sheet Shown', properties: {'source': 'home_first_tap'});
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+    await routeToPage(context, const TrialPaywallPage(source: 'home_first_tap'));
+  }
 
   @override
   void initState() {
@@ -130,7 +149,13 @@ class _HomePageProductState extends State<_HomePageProduct> {
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(navigateToRoute: _navigateToRoute);
+    final home = HomePage(navigateToRoute: _navigateToRoute);
+    if (!_homeTrialSheetArmed) return home;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _showHomeTrialSheetOnce(),
+      child: home,
+    );
   }
 }
 

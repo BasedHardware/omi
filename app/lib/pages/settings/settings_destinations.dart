@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/pages/paywall/trial_paywall_page.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 
@@ -68,6 +71,14 @@ Future<void> openSettingsDestination(BuildContext context, SettingsDestination d
       await routeToPage(context, const NotificationsSettingsPage());
     case SettingsDestination.planAndUsage:
       await routeToPage(context, const UsagePage());
+    case SettingsDestination.upgrade:
+      PlatformManager.instance.analytics.track('Settings Upgrade Row Tapped');
+      final usage = context.read<UsageProvider>();
+      if (usage.subscription?.trialEligible == true && usage.subscription?.subscription.plan.isPaid != true) {
+        await routeToPage(context, const TrialPaywallPage(source: 'settings'));
+      } else {
+        await routeToPage(context, const UsagePage());
+      }
     case SettingsDestination.offlineSync:
       final page = SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
       await routeToPage(context, page);

@@ -4407,5 +4407,19 @@
     "deviceRecently": "हाल ही में",
     "deviceDisconnectedFor": "{duration} तक डिस्कनेक्ट रहा",
     "deviceControls": "नियंत्रण",
-    "homeBackgroundLine": "साथ ही: {items}"
+    "homeBackgroundLine": "साथ ही: {items}",
+    "deviceOnboardingPressButtonTitle": "अपने Omi का बटन दबाएँ",
+    "deviceOnboardingPressButtonSubtitle": "एक छोटा सा प्रेस। फिर कुछ भी पूछें।",
+    "deviceOnboardingAskNowTitle": "अपना सवाल पूछें",
+    "deviceOnboardingAskNowSubtitle": "ज़ोर से बोलें। Omi सुन रहा है।",
+    "deviceOnboardingPressAgainHint": "हो गया? भेजने के लिए बटन फिर दबाएँ।",
+    "trialUpsellTitle": "आपको {days} दिन मुफ़्त मिल गए",
+    "trialUpsellBody": "{days} दिन Omi Pro हमारी तरफ़ से। किसी भी शुल्क से पहले याद दिलाएँगे। कभी भी रद्द करें।",
+    "trialUpsellClaim": "मेरा {days} दिन का ट्रायल लें",
+    "settingsUpgradeTrialSubtitle": "अपना {days} दिन का मुफ़्त ट्रायल शुरू करें",
+    "pairingPowerOnTitle": "अपना Omi चालू करें",
+    "pairingPowerOnSubtitle": "बटन एक बार दबाएँ और फ़ोन के पास रखें।",
+    "pairingLookingForOmi": "आपका Omi खोज रहे हैं…",
+    "walkthroughBackgroundRecordingNote": "बस इतना ही। Omi बैकग्राउंड में आपकी बातचीत रिकॉर्ड करता रहेगा।",
+    "noThanks": "नहीं, धन्यवाद"
 }

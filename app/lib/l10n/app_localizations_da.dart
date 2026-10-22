@@ -14477,4 +14477,55 @@ class AppLocalizationsDa extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Også: $items';
   }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Tryk på knappen på din Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Ét kort tryk. Spørg derefter om hvad som helst.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Stil dit spørgsmål';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Sig det højt. Omi lytter.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Færdig? Tryk på knappen igen for at sende.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Du har fået $days dage gratis';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dage Omi Pro på os. Vi minder dig om det før betaling. Opsig når som helst.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Få min prøveperiode på $days dage';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Start din gratis prøveperiode på $days dage';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Tænd din Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Tryk én gang på knappen og hold den tæt på din telefon.';
+
+  @override
+  String get pairingLookingForOmi => 'Leder efter din Omi…';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'Det var det. Omi bliver ved med at optage dine samtaler i baggrunden.';
+
+  @override
+  String get noThanks => 'Nej tak';
 }

@@ -4407,5 +4407,19 @@
     "deviceRecently": "Nesen",
     "deviceDisconnectedFor": "Atvienots {duration}",
     "deviceControls": "Vadīklas",
-    "homeBackgroundLine": "Arī: {items}"
+    "homeBackgroundLine": "Arī: {items}",
+    "deviceOnboardingPressButtonTitle": "Nospiediet Omi pogu",
+    "deviceOnboardingPressButtonSubtitle": "Viens īss spiediens. Tad jautājiet jebko.",
+    "deviceOnboardingAskNowTitle": "Uzdodiet jautājumu",
+    "deviceOnboardingAskNowSubtitle": "Sakiet skaļi. Omi klausās.",
+    "deviceOnboardingPressAgainHint": "Gatavs? Nospiediet pogu vēlreiz, lai nosūtītu.",
+    "trialUpsellTitle": "Jums {days} dienas bez maksas",
+    "trialUpsellBody": "{days} dienas Omi Pro uz mūsu rēķina. Atgādināsim pirms maksas. Atceliet jebkurā brīdī.",
+    "trialUpsellClaim": "Saņemt {days} dienu izmēģinājumu",
+    "settingsUpgradeTrialSubtitle": "Sāciet {days} dienu bezmaksas izmēģinājumu",
+    "pairingPowerOnTitle": "Ieslēdziet Omi",
+    "pairingPowerOnSubtitle": "Nospiediet pogu vienreiz un turiet tuvu tālrunim.",
+    "pairingLookingForOmi": "Meklējam jūsu Omi…",
+    "walkthroughBackgroundRecordingNote": "Tas arī viss. Omi turpinās ierakstīt jūsu sarunas fonā.",
+    "noThanks": "Nē, paldies"
 }

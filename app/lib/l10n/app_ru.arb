@@ -4442,5 +4442,19 @@
     "deviceRecently": "Недавно",
     "deviceDisconnectedFor": "Отключено на {duration}",
     "deviceControls": "Управление",
-    "homeBackgroundLine": "Также: {items}"
+    "homeBackgroundLine": "Также: {items}",
+    "deviceOnboardingPressButtonTitle": "Нажмите кнопку на Omi",
+    "deviceOnboardingPressButtonSubtitle": "Одно короткое нажатие. Потом спросите что угодно.",
+    "deviceOnboardingAskNowTitle": "Задайте вопрос",
+    "deviceOnboardingAskNowSubtitle": "Скажите вслух. Omi слушает.",
+    "deviceOnboardingPressAgainHint": "Готово? Нажмите кнопку ещё раз, чтобы отправить.",
+    "trialUpsellTitle": "Вам продлили бесплатный период до {days} дней",
+    "trialUpsellBody": "{days} дней Omi Pro за наш счёт. Напомним перед списанием. Отмена в любой момент.",
+    "trialUpsellClaim": "Получить {days} дней пробно",
+    "settingsUpgradeTrialSubtitle": "Начните бесплатный период на {days} дней",
+    "pairingPowerOnTitle": "Включите Omi",
+    "pairingPowerOnSubtitle": "Нажмите кнопку один раз и держите рядом с телефоном.",
+    "pairingLookingForOmi": "Ищем ваш Omi…",
+    "walkthroughBackgroundRecordingNote": "Готово. Omi продолжит записывать ваши разговоры в фоне.",
+    "noThanks": "Нет, спасибо"
 }

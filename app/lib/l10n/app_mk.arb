@@ -11833,5 +11833,19 @@
     "deviceRecently": "Неодамна",
     "deviceDisconnectedFor": "Исклучено {duration}",
     "deviceControls": "Контроли",
-    "homeBackgroundLine": "Исто така: {items}"
+    "homeBackgroundLine": "Исто така: {items}",
+    "deviceOnboardingPressButtonTitle": "Притиснете го копчето на Omi",
+    "deviceOnboardingPressButtonSubtitle": "Едно кратко притискање. Потоа прашајте што било.",
+    "deviceOnboardingAskNowTitle": "Постави го прашањето",
+    "deviceOnboardingAskNowSubtitle": "Кажете го гласно. Omi слуша.",
+    "deviceOnboardingPressAgainHint": "Готово? Притиснете го копчето повторно за да испратите.",
+    "trialUpsellTitle": "Добивте {days} дена бесплатно",
+    "trialUpsellBody": "{days} дена Omi Pro на наша сметка. Ќе ве потсетиме пред наплата. Откажете кога сакате.",
+    "trialUpsellClaim": "Земи проба од {days} дена",
+    "settingsUpgradeTrialSubtitle": "Започнете бесплатна проба од {days} дена",
+    "pairingPowerOnTitle": "Вклучете го Omi",
+    "pairingPowerOnSubtitle": "Притиснете го копчето еднаш и држете го блиску до телефонот.",
+    "pairingLookingForOmi": "Го бараме вашиот Omi…",
+    "walkthroughBackgroundRecordingNote": "Тоа е сè. Omi ќе продолжи да ги снима вашите разговори во заднина.",
+    "noThanks": "Не, благодарам"
 }

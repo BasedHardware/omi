@@ -20,7 +20,9 @@ import 'package:omi/pages/onboarding/permissions/permissions_checker.dart';
 import 'package:omi/pages/onboarding/permissions/permissions_widget.dart';
 import 'package:omi/pages/onboarding/primary_language/primary_language_widget.dart';
 import 'package:omi/pages/onboarding/complete_screen.dart';
+import 'package:omi/pages/onboarding/variants/pocket/pocket_onboarding_flow.dart';
 import 'package:omi/pages/onboarding/variants/yinka/yinka_onboarding_flow.dart';
+import 'package:omi/pages/paywall/trial_upsell_sheet.dart';
 import 'package:omi/pages/onboarding/web_onboarding_page.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/services/experiments/onboarding_variant_gate.dart';
@@ -286,6 +288,8 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
 
   /// The `trial` arm's placement: once, right after sign-up and consent, before the first step.
   /// Dismissing it (close button) just continues onboarding.
+  bool _signupPaywallPurchased = false;
+
   Future<void> _maybeShowSignupPaywall() async {
     if (_signupPaywallShown) return;
     final config = await PaywallExperiment.resolve();
@@ -295,7 +299,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     final usage = context.read<UsageProvider>();
     if (usage.subscription == null) await usage.fetchSubscription();
     if (!mounted) return;
-    await PaywallRouter.openVariant(context, source: 'onboarding', config: config);
+    await PaywallRouter.openVariant(
+      context,
+      source: 'onboarding',
+      config: config,
+      onResult: (result) => _signupPaywallPurchased = result == true,
+    );
   }
 
   /// Enters the steps after sign-in and consent: the arm of `onboarding-variant` for this reader
@@ -311,6 +320,14 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       '\$feature/${OnboardingVariantGate.enabledFlag}': arm.variant.wireName,
     });
     switch (arm.variant) {
+      case OnboardingVariant.pocket:
+        // Closing the sign-up trial paywall earns the 30-day downsell, once.
+        if (_signupPaywallShown && !_signupPaywallPurchased) {
+          await TrialUpsellSheet.show(context, source: 'onboarding');
+          if (!mounted) return;
+        }
+        await routeToPage(context, PocketOnboardingFlow(onComplete: _finishOnboarding));
+        return;
       case OnboardingVariant.yinka:
         await routeToPage(context, YinkaOnboardingFlow(onComplete: _finishOnboarding));
         return;

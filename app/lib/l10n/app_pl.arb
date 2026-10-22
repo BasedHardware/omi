@@ -4442,5 +4442,19 @@
     "deviceRecently": "Ostatnio",
     "deviceDisconnectedFor": "Rozłączono na {duration}",
     "deviceControls": "Sterowanie",
-    "homeBackgroundLine": "Także: {items}"
+    "homeBackgroundLine": "Także: {items}",
+    "deviceOnboardingPressButtonTitle": "Naciśnij przycisk na Omi",
+    "deviceOnboardingPressButtonSubtitle": "Jedno krótkie naciśnięcie. Potem zapytaj o cokolwiek.",
+    "deviceOnboardingAskNowTitle": "Zadaj pytanie",
+    "deviceOnboardingAskNowSubtitle": "Powiedz to na głos. Omi słucha.",
+    "deviceOnboardingPressAgainHint": "Gotowe? Naciśnij przycisk ponownie, aby wysłać.",
+    "trialUpsellTitle": "Masz {days} dni za darmo",
+    "trialUpsellBody": "{days} dni Omi Pro na nasz koszt. Przypomnimy przed obciążeniem. Anuluj w każdej chwili.",
+    "trialUpsellClaim": "Odbierz {days}-dniowy okres próbny",
+    "settingsUpgradeTrialSubtitle": "Rozpocznij {days}-dniowy bezpłatny okres próbny",
+    "pairingPowerOnTitle": "Włącz Omi",
+    "pairingPowerOnSubtitle": "Naciśnij przycisk raz i trzymaj blisko telefonu.",
+    "pairingLookingForOmi": "Szukam Omi…",
+    "walkthroughBackgroundRecordingNote": "To wszystko. Omi będzie dalej nagrywać Twoje rozmowy w tle.",
+    "noThanks": "Nie, dziękuję"
 }

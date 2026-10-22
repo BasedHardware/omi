@@ -16,6 +16,9 @@ enum SettingsDestination {
   helpGroup,
   notifications,
   planAndUsage,
+
+  /// The trial paywall, from the Upgrade row shown to free readers who can still start a trial.
+  upgrade,
   offlineSync,
   device,
   integrations,
@@ -126,6 +129,7 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Plan, referrals (on the sheet)
   SettingsSearchEntry('planAndUsage', (l) => l.planAndUsage, SettingsDestination.planAndUsage, _drawer),
+  SettingsSearchEntry('upgrade', (l) => l.upgrade, SettingsDestination.upgrade, _drawer),
   SettingsSearchEntry('referralProgram', (l) => l.referralProgram, SettingsDestination.referral, _drawer),
 
   // Device group
