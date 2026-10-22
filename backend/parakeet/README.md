@@ -15,6 +15,13 @@ Same as v1 plus server-side speaker diarization and language detection.
 - Segments include `speaker` label
 - Built-in pyannote/wespeaker embedding on GPU
 
+### `POST /v2/language` — Spoken-language gate
+Multipart audio file → `{"route": "parakeet"|"multilingual", "p_supported", "language", "language_probability", "audio_seconds", "threshold", "model"}`.
+- Model: Whisper-base language-token head (fp16, Apache-2.0), first 30 s, resampled to 16 kHz mono. No text decode.
+- `p_supported` sums the 25 TDT v3 languages; Parakeet needs ≥0.95 (≥6 s) or ≥0.985 (1–6 s).
+- 503 `lid_unavailable` / `lid_busy` / `lid_error`: callers keep their vendor path.
+- `/v2/transcribe` also counts transcript text language in `parakeet_output_language_total{bucket}` (wrong-language alarm).
+
 ### `WS /v3/stream` — Streaming ASR
 WebSocket: send raw PCM16 chunks, receive JSON segments in real-time.
 - Model: RNNT 1.1b with chunked decoder (2s chunks, 10s left context)
@@ -47,6 +54,7 @@ Returns `{"total_requests", "total_batches", "total_files", "rejected_requests",
 | `PARAKEET_GC_INTERVAL` | `50` | Full gc.collect() every N batches (gc.collect(0) per batch) |
 | `PARAKEET_GPU_POLL_TIMEOUT` | `0.05` | GPU worker queue poll interval in seconds |
 | `PARAKEET_BF16` | `1` | BF16 model loading (halves GPU memory) |
+| `PARAKEET_LID_MODEL` | `whisper-base` | Language gate model; `off` (or any unknown value) is the kill switch. Loaded before the VRAM baseline; a load failure leaves transcription serving |
 
 ### Dynamic Batching
 

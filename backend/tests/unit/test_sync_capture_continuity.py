@@ -203,7 +203,7 @@ def test_realtime_and_sync_share_exact_gap_boundary(gap):
 
 
 def test_both_paths_consult_the_policy_function(monkeypatch):
-    from utils import conversation_continuity
+    from models import conversation_continuity
 
     calls = []
 

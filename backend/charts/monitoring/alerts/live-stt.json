@@ -4502,5 +4502,153 @@
       "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-stt-local-delivery-exhausted",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - local delivery deaths exhausting live sessions",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_live_session\",reason=~\"send_queue_full|replay_send_stalled|delivery_expired\",outcome=\"exhausted\"}[15m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 100 && $B > 0.03",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-22T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "16",
+      "summary": "More than 3% of accepted /v4/listen sessions per 15m end exhausted after a local delivery death (send_queue_full, replay_send_stalled, delivery_expired)",
+      "threshold": "exhausted local-delivery fallbacks / listen-accepted > 0.03 with >= 100 accepted sockets in 15m, for 30m",
+      "user_impact": "Sessions lose live transcription because our own send path to the vendor backed up (pacing/catch-up), not because a vendor refused; clients fall back to offline sync.",
+      "scope": "backend-listen omi_fallback_total{component=stt_live_session,reason=~send_queue_full|replay_send_stalled|delivery_expired,outcome=exhausted} over omi_listen_accepted_total. Sibling of omi-stt-capacity-full-exhausted: since P34 (#23074, train P 2026-10-21 22:24Z) these local deaths no longer report capacity_full, so that rule no longer sees them.",
+      "verification": "Backtest on prod Prometheus, 15m steps. Post-P34 pre-#23147 (2026-10-21 22:40Z..10-22 03:10Z, the replay-pacing bug live): ratio p50 0.039, max 0.060, up to 32 exhausted per 15m; at > 0.03 for 30m it fires through that window. Post-#23147 live-tail catch-up (10-22 03:40Z..08:00Z): p50 0.000, max 0.012; does not fire. Thresholds set off-peak; revisit after the 10-22 14-16Z peak read.",
+      "evaluated_bad": "0.060 (2026-10-22 pre-#23147, replay pacing at 1.0x into an equal wall)",
+      "evaluated_good": "0.012 max (2026-10-22 03:40Z..08:00Z, after #23147)",
+      "safe_next_action": "Split by reason and from_mode: sum by (reason, from_mode) (increase(omi_fallback_total{component=\"stt_live_session\",reason=~\"send_queue_full|replay_send_stalled|delivery_expired\"}[15m])). Read the per-death WARNING 'Soniox local delivery death subtype=... queue_age_seconds since_last_send_seconds' lines: large since_last_send with a full queue means the writer was starved (pod pressure); small means the vendor socket stopped accepting. Check LISTEN_LIVE_TAIL_CATCHUP_RATE and replay wall (omi_stt_replay_wall_seconds) before touching capacity.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-local-delivery-exhausted",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

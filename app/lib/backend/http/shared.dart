@@ -1045,12 +1045,18 @@ Stream<String> makeStreamingApiCall({
   String body = '',
   String method = 'POST',
   ApiStreamingSeams? seams,
+  Future<void>? cancelSignal,
 }) async* {
   // Setup-deadline abort (same rationale as the multipart variant): the POST
   // must die with the wait, or a retry can submit the chat turn twice. Armed
   // before the try so the error handlers can cancel it.
   final setupAbort = Completer<void>();
   final setupAbortTimer = Timer(ApiClient.streamSetupTimeout, () {
+    if (!setupAbort.isCompleted) setupAbort.complete();
+  });
+  // The caller's stop aborts the request at any point, including mid-body, so
+  // the server sees the disconnect and stops generating.
+  cancelSignal?.then((_) {
     if (!setupAbort.isCompleted) setupAbort.complete();
   });
   try {

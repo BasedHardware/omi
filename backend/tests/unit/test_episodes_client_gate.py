@@ -211,37 +211,63 @@ def test_channel_config_parsing(monkeypatch):
 
 def test_no_marker_means_no_moment_work(fake_redis, monkeypatch):
     skipped = _sample('omi_episode_moments_skipped_no_client_total', trigger='pause')
-    sessions = _sample('omi_episode_live_sessions_total', client_seen='false')
     ran, outcome = _run_moment(monkeypatch, 'old-client')
     assert ran == [] and outcome == 'skipped_no_client'
     assert _sample('omi_episode_moments_skipped_no_client_total', trigger='pause') == skipped + 1
-    assert _sample('omi_episode_live_sessions_total', client_seen='false') == sessions + 1
 
 
 def test_marker_and_admission_mean_moment_work(fake_redis, monkeypatch):
     client_gate.note_client_seen('new-client', now=0)
-    sessions = _sample('omi_episode_live_sessions_total', client_seen='true')
     ran, outcome = _run_moment(monkeypatch, 'new-client')
     assert ran == ['new-client'] and outcome == 'applied'
-    # The same conversation's next moment is the same session.
-    _run_moment(monkeypatch, 'new-client')
-    assert _sample('omi_episode_live_sessions_total', client_seen='true') == sessions + 1
+
+
+def _run_attach(monkeypatch, uid):
+    attached = []
+    monkeypatch.setattr(live.executors, 'run_blocking', _inline)
+    monkeypatch.setattr(service, 'attach_conversation', lambda u, cid, source, **k: attached.append(cid) or 'opened')
+    return attached, asyncio.run(live._attach_if_client_seen(uid, 'c1', 'omi', T0))
+
+
+def test_attach_counts_the_session_and_needs_the_marker(fake_redis, monkeypatch):
+    unseen = _sample('omi_episode_live_sessions_total', client_seen='false')
+    skipped = _sample('omi_episode_moments_skipped_no_client_total', trigger='attach')
+    assert _run_attach(monkeypatch, 'old-client') == ([], 'skipped_no_client')
+    assert _sample('omi_episode_live_sessions_total', client_seen='false') == unseen + 1
+    assert _sample('omi_episode_moments_skipped_no_client_total', trigger='attach') == skipped + 1
+    client_gate.note_client_seen('new-client', now=0)
+    seen = _sample('omi_episode_live_sessions_total', client_seen='true')
+    assert _run_attach(monkeypatch, 'new-client') == (['c1'], 'opened')
+    assert _sample('omi_episode_live_sessions_total', client_seen='true') == seen + 1
+
+
+def test_the_capability_read_is_cached_briefly(fake_redis, monkeypatch):
+    reads = []
+    real = client_gate.client_seen
+    monkeypatch.setattr(client_gate, 'client_seen', lambda uid: reads.append(uid) or real(uid))
+    assert client_gate.client_seen_cached('u', now=0) is False
+    assert client_gate.client_seen_cached('u', now=client_gate.SEEN_CACHE_SECONDS - 1) is False
+    assert reads == ['u']
+    assert client_gate.client_seen_cached('u', now=client_gate.SEEN_CACHE_SECONDS) is False
+    assert reads == ['u', 'u']
 
 
 def test_realtime_batches_reach_the_gate_only_when_admitted(fake_redis, monkeypatch):
     client_gate.note_client_seen('u', now=0)
     tracker = MomentTracker()
     monkeypatch.setattr(live, 'tracker', tracker)
-    scheduled = []
-    monkeypatch.setattr(live.executors, 'start_background_task', lambda coro, *, name: scheduled.append(coro))
+    scheduled = {}
+    monkeypatch.setattr(live.executors, 'start_background_task', lambda coro, *, name: scheduled.setdefault(name, coro))
+    live.sessions.clear()
     tracker.observe('u', [{'text': 'word ' * 30}], 'c1', 'omi', now=0)
     monkeypatch.setattr(live.time, 'time', lambda: 1000.0)
     asyncio.run(live.on_realtime_segments('u', [{'text': 'more'}], 'c2', 'omi'))
-    assert len(scheduled) == 1
+    assert sorted(scheduled) == ['episode_attach', 'episode_moment']
+    scheduled.pop('episode_attach').close()
     ran = []
     monkeypatch.setattr(live.executors, 'run_blocking', _inline)
     monkeypatch.setattr(service, 'record_moment', lambda u, m: ran.append(u) or 'applied')
-    asyncio.run(scheduled[0])
+    asyncio.run(scheduled['episode_moment'])
     assert ran == ['u']
 
 

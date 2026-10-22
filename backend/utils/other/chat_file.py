@@ -1,5 +1,6 @@
 from utils.generated_compute import require_generated_compute, generated_compute_configured
 import base64
+from io import BytesIO
 import logging
 import mimetypes
 import re
@@ -305,6 +306,21 @@ class FileChatTool:
         return result
 
     @staticmethod
+    def _write_poster(strip: Any, thumbnail_path: Path, size: Tuple[int, int] = (256, 256)) -> None:
+        """Make a video's chat thumbnail its opening frame, not a shrunken overview grid.
+
+        The filmstrip's first cell is the earliest sampled frame. On any failure the
+        overview-grid thumbnail already on disk stays.
+        """
+        try:
+            with Image.open(BytesIO(strip.jpeg)) as grid:
+                frame = grid.crop((0, 0, strip.cell_width, strip.cell_height))
+                frame.thumbnail(size)
+                frame.convert('RGB').save(thumbnail_path, format='JPEG', quality=80)
+        except Exception:
+            logger.warning('video poster thumbnail failed; keeping the overview thumbnail')
+
+    @staticmethod
     def upload_video(
         directory: Union[str, Path], file_name: str, digest: Any, transcript: str, uid: str
     ) -> Dict[str, Any]:
@@ -321,6 +337,8 @@ class FileChatTool:
         sheet_path.write_bytes(digest.sheet)
         result = FileChatTool.upload(sheet_path, file_name=sheet_name)
         strip = digest.strip
+        if result.get('thumbnail'):
+            FileChatTool._write_poster(strip, Path(result['thumbnail']))
         try:
             response = openai.files.create(file=('filmstrip.jpg', strip.jpeg), purpose=cast(Any, 'vision'))
         except Exception:

@@ -146,6 +146,8 @@ class ReservationState:
         outcome: str,
         claim: bool,
         pending: dict[str, float],
+        probe_model: str = '',
+        fresh_seconds: float | None = None,
     ) -> tuple[dict[str, Any], dict[str, tuple[State, str]], str | None]:
         evidence = {m: Evidence(**doc.get('evidence', {}).get(m, {})) for m in RESERVATIONS}
         for m, at in pending.items():
@@ -161,7 +163,16 @@ class ReservationState:
         selected = None
         if claim:
             for m in RESERVATIONS:
-                if m in discovery_models(os.environ) and now >= leases.get(m, 0):
+                if probe_model and (
+                    m != probe_model
+                    or (
+                        fresh_seconds is not None
+                        and evidence[m].success_at
+                        and 0 <= now - evidence[m].success_at <= fresh_seconds
+                    )
+                ):
+                    continue
+                if (probe_model or m in discovery_models(os.environ)) and now >= leases.get(m, 0):
                     selected = m
                     leases[m] = now + PROBE_SECONDS
                     break
@@ -232,7 +243,13 @@ class ReservationState:
                 )
 
     async def transact(
-        self, model: str = '', outcome: str = '', *, claim: bool = False
+        self,
+        model: str = '',
+        outcome: str = '',
+        *,
+        claim: bool = False,
+        probe_model: str = '',
+        fresh_seconds: float | None = None,
     ) -> tuple[dict[str, State], str | None]:
         self._check_scope()
         if model in RESERVATIONS and outcome == 'dedicated_success':
@@ -245,7 +262,9 @@ class ReservationState:
             if client is None:
                 now = time.time()
                 before = self._local_doc
-                new, states, selected = self._advance(before, now, model, outcome, claim, pending)
+                new, states, selected = self._advance(
+                    before, now, model, outcome, claim, pending, probe_model, fresh_seconds
+                )
                 self._local_doc = new
                 self._committed(before, new, states, now, pending, 'process_local')
                 return {m: s for m, (s, _) in states.items()}, selected
@@ -258,7 +277,9 @@ class ReservationState:
                             doc = json.loads(raw) if raw else {}
                             seconds, micros = await pipe.time()
                             now = seconds + micros / 1_000_000
-                            new, states, selected = self._advance(doc, now, model, outcome, claim, pending)
+                            new, states, selected = self._advance(
+                                doc, now, model, outcome, claim, pending, probe_model, fresh_seconds
+                            )
                             if new == doc:
                                 await pipe.unwatch()
                             else:
@@ -286,20 +307,42 @@ class ReservationState:
         return {}, None
 
     async def refresh(
-        self, probe: Probe | None = None, *, timeout_seconds: float = 1.6, apply_overrides: bool = True
+        self,
+        probe: Probe | None = None,
+        *,
+        timeout_seconds: float = 1.6,
+        apply_overrides: bool = True,
+        probe_model: str = '',
+        fresh_seconds: float | None = None,
     ) -> dict[str, State]:
+        """Refresh routing state, optionally probing one model at admission freshness.
+
+        Targeted claims bypass the routing snapshot: ACTIVE lasts 24 hours and
+        cannot answer whether Dream's much shorter evidence window has elapsed.
+        They use raw evidence, independent of desktop routing overrides; the
+        caller owns their kill switch. Freshness and the existing per-model
+        lease are checked atomically.
+        """
         self._check_scope()
         key = self.key()
-        if self._snapshot and self._snapshot_key == key and 0 <= time.monotonic() - self._snapshot_at < 1:
+        if (
+            not (probe and probe_model)
+            and self._snapshot
+            and self._snapshot_key == key
+            and 0 <= time.monotonic() - self._snapshot_at < 1
+        ):
             states = self._snapshot
         else:
             states = {}
             try:
                 async with asyncio.timeout(max(0, timeout_seconds)):
-                    states, selected = await self.transact(claim=probe is not None)
+                    states, selected = await self.transact(
+                        claim=probe is not None, probe_model=probe_model, fresh_seconds=fresh_seconds
+                    )
                     if selected and probe:
                         task = start_background_task(
-                            self._run_probe(selected, probe, key), name='vertex-reservation-probe'
+                            self._run_probe(selected, probe, key, respect_overrides=not bool(probe_model)),
+                            name='vertex-reservation-probe',
                         )
                         self._probe_tasks.add(task)
                         task.add_done_callback(self._probe_tasks.discard)
@@ -365,8 +408,8 @@ class ReservationState:
                     return 'interactive_headroom'
         return None
 
-    async def _run_probe(self, model: str, probe: Probe, key: str) -> None:
-        if model not in discovery_models(os.environ) or key != self.key():
+    async def _run_probe(self, model: str, probe: Probe, key: str, *, respect_overrides: bool = True) -> None:
+        if (respect_overrides and model not in discovery_models(os.environ)) or key != self.key():
             return
         spec = RESERVATIONS[model]
         location = os.getenv(spec.location_env, spec.location) if spec.location_env else spec.location
@@ -377,7 +420,7 @@ class ReservationState:
             outcome = 'inconclusive'
         if (
             outcome in {'dedicated_success', 'capacity_error'}
-            and model in discovery_models(os.environ)
+            and (not respect_overrides or model in discovery_models(os.environ))
             and key == self.key()
         ):
             await self.transact(model, outcome)
