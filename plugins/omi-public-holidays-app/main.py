@@ -251,7 +251,7 @@ async def health() -> dict[str, str]:
 @app.get("/.well-known/omi-tools.json")
 async def omi_tools() -> dict[str, Any]:
     country_schema = {"type": "string", "description": "ISO 3166-1 alpha-2 country code, such as US or DE."}
-    year_schema = {"type": "integer", "minimum": 1970, "maximum": 2100}
+    year_schema = {"type": "integer", "minimum": 1970, "maximum": 2100, "description": "Year to query; defaults to the current UTC year when omitted."}
     limit_schema = {"type": "integer", "minimum": 1, "maximum": MAX_ITEMS, "default": MAX_ITEMS}
     return {
         "schema_version": "1.0",
