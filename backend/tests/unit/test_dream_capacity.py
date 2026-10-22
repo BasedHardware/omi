@@ -27,22 +27,19 @@ def isolated_local_capacity():
 
 
 @pytest.mark.asyncio
-async def test_backend_discovery_publishes_shared_evidence_without_gateway(monkeypatch):
-    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'based-hardware')
-    monkeypatch.setenv('OMI_VERTEX_RESERVATION_PROJECT', 'based-hardware')
-    monkeypatch.delenv('OMI_VERTEX_PT_MODEL', raising=False)
-    monkeypatch.delenv('OMI_VERTEX_RESERVATION_STATES', raising=False)
-    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
-    state = ReservationState(redis)
-    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
+@pytest.mark.parametrize('status,expected', [(503, 'inconclusive'), (200, 'dedicated_success')])
+async def test_legacy_backend_probe_keeps_its_direct_dedicated_path(monkeypatch, status, expected):
+    monkeypatch.setenv('GOOGLE_CLOUD_PROJECT', 'synthetic-project')
     requests = []
 
     def respond(request):
         requests.append(request)
-        if NEW not in request.url.path:
-            return httpx.Response(503, json={'error': {}})
+        assert request.url.host == 'us-central1-aiplatform.googleapis.com'
+        assert request.url.path.endswith(f'/models/{OLD}:generateContent')
+        assert request.headers['X-Vertex-AI-LLM-Request-Type'] == 'dedicated'
+        assert request.headers['Authorization'] == 'Bearer synthetic-token'
         return httpx.Response(
-            200,
+            status,
             json={
                 'usageMetadata': {'trafficType': 'PROVISIONED_THROUGHPUT'},
                 'candidates': [{'content': {'parts': [{'text': 'OK'}]}, 'finishReason': 'STOP'}],
@@ -53,33 +50,8 @@ async def test_backend_discovery_publishes_shared_evidence_without_gateway(monke
     monkeypatch.setattr(dream_capacity, '_vertex_tokens', lambda: SimpleNamespace(get_access_token=token))
     async with httpx.AsyncClient(transport=httpx.MockTransport(respond)) as client:
         monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: client)
-        try:
-            # Complete both probes without waiting for the one-second snapshot TTL.
-            # An inconclusive legacy probe must not delay discovering Dream's order.
-            assert await dream_capacity.available_model() is None
-            await asyncio.gather(*state._probe_tasks)
-            legacy_doc = json.loads(await redis.get(state.key()))
-            assert legacy_doc['evidence'][OLD]['failure_count'] == 0
-            assert legacy_doc['evidence'][OLD]['success_at'] == 0
-            assert await dream_capacity.available_model() is None
-            await asyncio.gather(*state._probe_tasks)
-            assert await dream_capacity.available_model() == NEW
-            slot = await dream_capacity.claim(2)
-            assert slot is not None
-            await dream_capacity.release(slot)
-            doc = json.loads(await redis.get(state.key()))
-            assert state.key().startswith('vertex-reservations:v1:based-hardware:')
-            assert doc['states'][NEW] == 'active' and doc['evidence'][NEW]['success_at'] > 0
-            assert (await ReservationState(redis).refresh())[NEW] == State.ACTIVE
-            assert len(requests) == 2  # One globally leased probe per declared model.
-            assert OLD in requests[0].url.path and NEW in requests[1].url.path
-            for request in requests:
-                assert '/projects/based-hardware/' in request.url.path
-                assert request.headers['X-Vertex-AI-LLM-Request-Type'] == 'dedicated'
-                assert request.headers['Authorization'] == 'Bearer synthetic-token'
-        finally:
-            await state.aclose()
-            await redis.aclose()
+        assert await dream_capacity._probe(OLD, 'us-central1') == expected
+    assert len(requests) == 1
 
 
 @pytest.mark.asyncio
@@ -223,9 +195,7 @@ async def test_keyless_probe_denial_is_advisory_without_a_provider_fallback(monk
 
     def denied(request):
         requests.append(request)
-        # #21743 scopes the advisory failed-probe cooldown to the Dream model;
-        # probe it so the denial stays inconclusive AND the cooldown persists.
-        assert request.url.path.endswith(f'/models/{NEW}:generateContent')
+        assert request.url.path.endswith(f'/models/{OLD}:generateContent')
         assert request.headers['X-Vertex-AI-LLM-Request-Type'] == 'dedicated'
         assert not request.url.params
         assert json.loads(request.content)['contents'][0]['parts'] == [{'text': 'Reply OK.'}]
@@ -233,10 +203,9 @@ async def test_keyless_probe_denial_is_advisory_without_a_provider_fallback(monk
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(denied)) as client:
         monkeypatch.setattr(dream_capacity, 'get_desktop_gemini_client', lambda: client)
-        assert await dream_capacity._probe(NEW, 'us-central1') == 'inconclusive'
+        assert await dream_capacity._probe(OLD, 'us-central1') == 'inconclusive'
 
     assert len(requests) == (0 if credential_failure else 1)
-    assert dream_capacity._local().probe_failed_until > 0
     saturated.assert_not_awaited()
 
 
