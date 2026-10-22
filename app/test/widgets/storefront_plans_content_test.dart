@@ -100,6 +100,7 @@ Future<void> pumpSheet(
       'CupertinoSystemDisplay',
       '.SF UI Text',
       '.SF UI Display',
+      'SF Pro Display',
       'FlutterTest',
       'Ahem'
     ]) {
