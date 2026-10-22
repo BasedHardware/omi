@@ -590,6 +590,7 @@ def apply_field_requirement(
 def provision_field_requirements(
     *,
     requirements: tuple[FieldIndexRequirement, ...],
+    wait_for_ready: bool = True,
     project: str,
     database: str,
     request: Callable[..., Mapping[str, Any]],
@@ -659,6 +660,11 @@ def provision_field_requirements(
             )
             patched.add(key)
             survivors.append(requirement)
+        if not wait_for_ready:
+            # PR prebuilds release the schema lock once all async writes have
+            # started. A later writer sees CREATING and preserves that config;
+            # deployment readiness remains the authority for serving safety.
+            return patched
         for operation_name, _requirement in operations:
             wait_field_operation(
                 operation_name,
