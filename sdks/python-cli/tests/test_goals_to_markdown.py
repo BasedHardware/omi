@@ -508,7 +508,7 @@ class TestGoalsToMarkdown(unittest.TestCase):
     def test_safe_path_allows_names_that_merely_contain_double_dots(self) -> None:
         """A file name with two dots is not a traversal; only a '..' component is."""
         for ok_path in ("data..goals.md", "my..export/output.md"):
-            self.assertEqual(str(g2m.validate_safe_path(ok_path)), ok_path)
+            self.assertEqual(str(g2m.validate_safe_path(ok_path)), str(Path(ok_path)))
 
     def test_goal_text_is_markdown_escaped(self) -> None:
         """Titles and free text must not be able to inject checklist structure."""
