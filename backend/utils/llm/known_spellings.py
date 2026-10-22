@@ -195,3 +195,8 @@ def _trusted_people_spellings(people) -> list[dict[str, Any]]:
             if len(spellings) == MAX_TERMS:
                 break
     return spellings
+
+
+def conversation_people_names(uid: str) -> list[dict[str, Any]]:
+    """Share the bounded trusted contact read with the v2 notes spelling packet."""
+    return _people_spellings(uid)
