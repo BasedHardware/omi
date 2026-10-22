@@ -150,8 +150,7 @@ def search_files_tool(
         return "Error: Configuration not available"
 
     try:
-        raw_configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
-        configurable = raw_configurable if isinstance(raw_configurable, dict) else {}
+        configurable: Any = cfg.get('configurable')
         uid = configurable.get('user_id') or (cfg.get('user_id') if isinstance(cfg, dict) else None)
         chat_session_id = configurable.get('chat_session_id') or (cfg.get('chat_session_id') if isinstance(cfg, dict) else None)
     except (KeyError, TypeError, AttributeError) as e:
