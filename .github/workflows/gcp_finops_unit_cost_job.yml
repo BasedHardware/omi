@@ -148,12 +148,24 @@ jobs:
         run: |
           # Required mounts: a missing resource here must fail the deploy.
           secrets=/run/secrets/finops/OMI_PROMETHEUS_TOKEN/OMI_PROMETHEUS_TOKEN=OMI_PROMETHEUS_TOKEN:latest
-          secrets+=,/run/secrets/finops/STRIPE_READ_API_KEY/STRIPE_READ_API_KEY=STRIPE_READ_API_KEY:latest
           secrets+=,/run/secrets/finops/OPENAI_ADMIN_KEY/OPENAI_ADMIN_KEY=WEB_ADMIN_OPENAI_COST_API_KEY:latest
           secrets+=,/run/secrets/finops/ANTHROPIC_ADMIN_API_KEY/ANTHROPIC_ADMIN_API_KEY=WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest
           secrets+=,/run/secrets/finops/MCP_POSTHOG_API_KEY/MCP_POSTHOG_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest
           secrets+=,/run/secrets/finops/SONIOX_API_KEY/SONIOX_API_KEY=SONIOX_API_KEY:latest
           secrets+=,/run/secrets/finops/finops-mercury-readonly/finops-mercury-readonly=finops-mercury-readonly:latest
+          # STRIPE_READ_API_KEY: required in prod (the book/fee pull is a core
+          # input and the prod secret exists, accessor finops-writer@). A
+          # development deploy mounts it only when the secret resource exists
+          # in the target project — based-hardware-dev has no dev-scoped read
+          # key, and a required mount would fail `gcloud run jobs deploy`
+          # during secret resolution before the job could start. The Stripe
+          # legs then skip as unavailable. Existence only: no payload is read.
+          if [[ "${{ github.event.inputs.environment }}" == "prod" ]] || \
+             gcloud secrets describe STRIPE_READ_API_KEY --project="${{ vars.GCP_PROJECT_ID }}" --format='value(name)' >/dev/null 2>&1; then
+            secrets+=,/run/secrets/finops/STRIPE_READ_API_KEY/STRIPE_READ_API_KEY=STRIPE_READ_API_KEY:latest
+          else
+            echo "STRIPE_READ_API_KEY: not provisioned in ${{ vars.GCP_PROJECT_ID }}; deploying without the Stripe legs"
+          fi
           # Optional vendor organization keys (Soniox balance snapshots, Modulate).
           # The producer skips an unmounted key as an unavailable line, but a Secret
           # Manager resource that does not exist in the target project would fail

@@ -867,9 +867,9 @@ export async function computeWall(
             bal && vendorBalance
               ? covered
                 ? last.sttFlag === "baseline_reset"
-                  ? `Soniox balance reset on ${last.date}: day unmeasured, new baseline taken`
+                  ? `Soniox balance reset on ${last.date}: day unmeasured, new baseline taken; the dated estimate covers the day, never $0`
                   : last.sttFlag === SONIOX_GAP_FLAG
-                  ? `Soniox ${last.date}: no published spend row (snapshot gap) — unmeasured, never booked as $0 or a reset`
+                  ? `Soniox ${last.date}: no published spend row (snapshot gap) — unmeasured, the dated estimate covers the day, never $0 or a reset`
                   : `Soniox measured $${last.sttSonioxUsd.toFixed(
                       2
                     )}/day (prepaid-balance Δ, as-of ${

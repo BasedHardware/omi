@@ -70,6 +70,24 @@ def test_three_decimal_currency_uses_thousandths(stripe):
     assert stripe.monthly_amount(price(currency="kwd", unit_amount=1500), 1) == 1.5
 
 
+def test_backward_compat_currencies_stay_two_decimal(stripe):
+    # Stripe's "Special cases" table (docs.stripe.com/currencies#special-cases):
+    # "UGX transitioned to a zero-decimal currency, but backwards compatibility
+    # requires you to represent it as a two-decimal value, where the decimal
+    # amount is always `00`. For example, to charge 5 UGX, provide an `amount`
+    # value of `500`." — same rule for ISK. Dividing by 1 would report a UGX
+    # 500 price as native UGX 500 instead of UGX 5 (100x, Luna r2 P2).
+    assert stripe.currency_divisor("ugx") == 100
+    assert stripe.monthly_amount(price(currency="ugx", unit_amount=500), 1) == 5.0
+    assert stripe.currency_divisor("isk") == 100
+    assert stripe.monthly_amount(price(currency="isk", unit_amount=500), 1) == 5.0
+    # HUF's and TWD's special cases are PAYOUT divisibility only — charges
+    # remain two-decimal ("you can charge two-decimal amounts"), so the
+    # default divisor is already correct for Price unit_amount.
+    assert stripe.currency_divisor("huf") == 100
+    assert stripe.currency_divisor("twd") == 100
+
+
 def test_annual_price_normalises_to_monthly_in_native_currency(stripe):
     assert stripe.monthly_amount(price(currency="jpy", unit_amount=14400, interval="year"), 1) == 1200.0
 

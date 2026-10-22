@@ -142,6 +142,27 @@ def test_deploy_workflow_mounts_the_read_only_stripe_key(cloudrun):
         )
 
 
+def test_deploy_workflow_stripe_mount_cannot_fail_a_dev_deploy(cloudrun):
+    """The read-key mount is required only in prod; a development deploy adds it
+    just when the secret resource exists in the target project, so an
+    unprovisioned dev project cannot fail the job deploy during secret
+    resolution (Luna r2 P2)."""
+    lines = _WORKFLOW.read_text().splitlines()
+    gate = next((i for i, l in enumerate(lines) if '"${{ github.event.inputs.environment }}" == "prod"' in l), None)
+    assert gate is not None, "expected an environment == prod gate around the Stripe mount"
+    mount = next(
+        (i for i, l in enumerate(lines) if "secrets+=" in l and "STRIPE_READ_API_KEY=STRIPE_READ_API_KEY" in l), None
+    )
+    assert mount is not None and gate < mount, "the Stripe mount line must sit inside the prod gate"
+    branch = next((i for i, l in enumerate(lines[gate:], start=gate) if l.strip() == "else"), None)
+    assert branch is not None and mount < branch, "the prod gate must have an else branch after the mount"
+    existence = next(
+        (i for i, l in enumerate(lines[gate:mount], start=gate) if "gcloud secrets describe STRIPE_READ_API_KEY" in l),
+        None,
+    )
+    assert existence is not None, "the dev path must check the secret resource exists before mounting"
+
+
 # ---------------------------------------------------------------- auth-mode switch
 
 

@@ -361,14 +361,19 @@ def test_annual_leap_day_expiry(mercury):
 def test_committed_cadence_map_is_ledger_evidence_based(mercury):
     """The cadence flags are a committed, evidence-backed map, not name inference.
 
-    Ledger evidence (omi_finops.mercury_vendor_spend_daily, 2026-07-04..2026-10-19,
-    read 2026-10-22): shopify bills monthly on the 3rd (2969/3011/4013), posthog
-    monthly on the ~7th (496/972/1800/2842), nevercode monthly on the 1st-2nd
+    Ledger evidence (omi_finops.mercury_vendor_spend_daily, 2026-07-04..2026-10-20,
+    re-checked read-only 2026-10-23): shopify bills monthly on the 3rd (2969/3011/4013),
+    posthog monthly on the ~7th (496/972/1800/2842), nevercode monthly on the 1st-2nd
     (1136/731/1419), pinecone monthly on the 2nd (1112/1024/925). The 2026-10-22
     wall audit suspected those four of being single annual payments; they are
-    monthly bills that each land once per 30-day window. No vendor in the ledger
-    window shows an annual cadence, so no `annual: true` may be committed without
-    new ledger evidence (a ~12-month repeat) or a vendor billing confirmation.
+    monthly bills that each land once per 30-day window. The 2026-10-23 re-check
+    covered every SaaS posting in the window: the remaining low-posting vendors
+    are usage-based within one month (replicate 7 postings 10-06..10-14, klaviyo
+    5 postings 10-01..10-20) or $10-scale one-offs (vercel $11.25+$9.99,
+    perplexity $10, not SaaS) — an annual bill would be a single large posting
+    per year. No vendor in the ledger window shows an annual cadence, so no
+    `annual: true` may be committed without new ledger evidence (a ~12-month
+    repeat) or a vendor billing confirmation.
     Anthropic is SaaS: its Mercury cash is Claude team seats (David 2026-10-22),
     not per-customer API spend.
     """

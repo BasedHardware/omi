@@ -409,9 +409,11 @@ it("flags a baseline-reset day and keeps the constant only below two snapshots",
   });
   const wall = await computeWall(s, now);
   const reset = wall.metrics.find((m) => m.id === "cost.net_day")!;
-  expect(reset.value).toBeCloseTo(100);
+  // The reset day keeps Soniox spend in the total via the dated estimate —
+  // never a $0 leg that silently drops all-in cost (Luna r2 P1).
+  expect(reset.value).toBeCloseTo(100 + 5_300 / (365.25 / 12));
   expect(reset.reason).toContain(
-    "Soniox balance reset on 2026-10-13: day unmeasured, new baseline taken"
+    "Soniox balance reset on 2026-10-13: day unmeasured, new baseline taken; the dated estimate covers the day, never $0"
   );
 
   s.vendorBalance = async () => ({

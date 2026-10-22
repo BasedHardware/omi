@@ -268,14 +268,17 @@ export interface VendorInputs {
 export const SONIOX_GAP_FLAG = "snapshot_gap";
 
 /** One day's STT line. Soniox: the measured balance-delta day-rate, but only
- * on days the snapshot series actually covers (`firstDay`..`lastDay`); beyond
- * the last covered day the dated console constant returns, unmeasured and
- * flagged, so a broken snapshot pull can never read as $0 spend or a reset.
- * A baseline-reset day inside the series is unmeasured and flagged. Modulate:
- * the modelled volume line when present, otherwise Mercury cash (labelled).
- * Soniox Mercury cash is never added (prepaid recharge, not a rate). Deepgram
- * combines independently: measured usage when the FinOps line has it, its
- * Mercury cash otherwise — never suppressed by a Soniox measurement. */
+ * on days the snapshot series actually covers (`firstDay`..`lastDay`) AND the
+ * day has a published row; a covered day with no row (snapshot gap) or a reset
+ * row falls back to the labelled estimate — the FinOps usage line, else the
+ * dated console constant — unmeasured and flagged, and beyond the last covered
+ * day the same dated fallback returns. An unknown day is NEVER booked as $0:
+ * that would silently drop Soniox spend from the all-in total (Luna r2 P1).
+ * Modulate: the modelled volume line when present, otherwise Mercury cash
+ * (labelled). Soniox Mercury cash is never added (prepaid recharge, not a
+ * rate). Deepgram combines independently: measured usage when the FinOps line
+ * has it, its Mercury cash otherwise — never suppressed by a Soniox
+ * measurement. */
 export function sttLineFor(
   date: string,
   { sttMeasured, sonioxBalance, modulateModelled, sttCash }: VendorInputs
@@ -286,9 +289,12 @@ export function sttLineFor(
   const inSeries = !!bal?.ready && date >= bal.firstDay && date <= bal.lastDay;
   const spend = inSeries ? bal!.spend[date] : undefined;
   const flag = inSeries ? bal!.flags[date] : undefined;
+  // Labelled fallback for any day without a published Soniox row: the FinOps
+  // usage line when it has one, else the dated console constant.
+  const fallbackUsd = vendors.soniox ?? STT_MONTHLY_USD / DAYS_PER_MONTH;
   const soniox = inSeries
     ? {
-        usd: spend ?? 0,
+        usd: spend ?? fallbackUsd,
         measured: spend != null,
         flag:
           spend == null
@@ -298,7 +304,7 @@ export function sttLineFor(
             : null,
       }
     : {
-        usd: vendors.soniox ?? STT_MONTHLY_USD / DAYS_PER_MONTH,
+        usd: fallbackUsd,
         measured: vendors.soniox != null,
         flag: null,
       };

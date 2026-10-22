@@ -476,7 +476,7 @@ describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => 
     expect(line.flag).toBe("gap_spread");
   });
 
-  it("treats a baseline-reset day as unmeasured and flagged, never the constant", () => {
+  it("treats a baseline-reset day as unmeasured and flagged, on the labelled fallback — never $0 (Luna r2 P1)", () => {
     const line = sttLineFor("2026-10-13", {
       sonioxBalance: bal({
         spend: { "2026-10-13": null },
@@ -484,8 +484,21 @@ describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => 
       }),
     });
     expect(line.measured).toBe(false);
-    expect(line.sonioxUsd).toBe(0);
+    // The reset day keeps Soniox spend in the total via the dated constant —
+    // booking $0 here silently dropped it from all-in cost (Luna r2 P1).
+    expect(line.sonioxUsd).toBeCloseTo(STT_MONTHLY_USD / (365.25 / 12));
     expect(line.flag).toBe("baseline_reset");
+    // A FinOps usage-summary row for the same day is a better labelled
+    // fallback than the console constant.
+    const usage = sttLineFor("2026-10-13", {
+      sonioxBalance: bal({
+        spend: { "2026-10-13": null },
+        flags: { "2026-10-13": "baseline_reset" },
+      }),
+      sttMeasured: { "2026-10-13": { soniox: 160 } },
+    });
+    expect(usage.sonioxUsd).toBeCloseTo(160);
+    expect(usage.flag).toBe("baseline_reset");
   });
 
   it("never turns a stale snapshot series into $0 spend or a false reset (Luna P1)", () => {
@@ -506,6 +519,43 @@ describe("STT vendor lines: Soniox balance deltas and Modulate modelled", () => 
     });
     expect(line.flag).toBe(SONIOX_GAP_FLAG);
     expect(line.measured).toBe(false);
+    // The gap day carries the dated fallback, never a $0 Soniox leg.
+    expect(line.sonioxUsd).toBeCloseTo(STT_MONTHLY_USD / (365.25 / 12));
+  });
+
+  it("keeps the all-in total up on a snapshot-gap or reset day: fallback, never $0 (Luna r2 P1)", () => {
+    // The series covers Sep 11–19; Sep 13 has no published row (snapshot gap)
+    // and Sep 14 is a reset row. Neither may drop Soniox spend from the total.
+    const vendor = {
+      sonioxBalance: {
+        ready: true,
+        firstDay: day(11),
+        lastDay: day(19),
+        asOf: day(19),
+        spend: { [day(12)]: 175.5, [day(14)]: null },
+        flags: { [day(14)]: "baseline_reset" },
+      },
+    };
+    const { daily } = allInCost(
+      days,
+      { openai: true, anthropic: true },
+      vendor
+    );
+    const noSeries = allInCost(days, { openai: true, anthropic: true });
+    const base = noSeries.daily.find((d) => d.date === day(13))!;
+    const gap = daily.find((d) => d.date === day(13))!;
+    const reset = daily.find((d) => d.date === day(14))!;
+    expect(gap.sttFlag).toBe(SONIOX_GAP_FLAG);
+    expect(gap.sttSonioxUsd).toBeCloseTo(sttDay);
+    expect(gap.total).toBeCloseTo(base.total);
+    expect(reset.sttFlag).toBe("baseline_reset");
+    expect(reset.sttSonioxUsd).toBeCloseTo(sttDay);
+    expect(reset.total).toBeCloseTo(base.total);
+    // A published row is still the measured day-rate on its own day.
+    const measured = daily.find((d) => d.date === day(12))!;
+    expect(measured.sttSonioxMeasured).toBe(true);
+    expect(measured.sttSonioxUsd).toBeCloseTo(175.5);
+    expect(measured.total).toBeCloseTo(base.total - sttDay + 175.5);
   });
 
   it("keeps the labelled dated constant until 2 snapshots exist and before the series starts", () => {

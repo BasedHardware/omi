@@ -76,12 +76,22 @@ class FeeUnavailable(RuntimeError):
 # (https://docs.stripe.com/currencies#zero-decimal). Three-decimal currencies
 # use thousandths (https://docs.stripe.com/currencies#three-decimal). Every
 # other supported currency is in hundredths.
-ZERO_DECIMAL_CURRENCIES = frozenset("bif clp djf gnf jpy kmf krw mga pyg rwf ugx vnd vuv xaf xof xpf".split())
+ZERO_DECIMAL_CURRENCIES = frozenset("bif clp djf gnf jpy kmf krw mga pyg rwf vnd vuv xaf xof xpf".split())
 THREE_DECIMAL_CURRENCIES = frozenset("bhd jod kwd omr".split())
+# Real-world zero-decimal currencies Stripe still represents with two decimals
+# for backward compatibility — the decimal part is always `00` ("Special
+# cases", https://docs.stripe.com/currencies#special-cases): "UGX transitioned
+# to a zero-decimal currency, but backwards compatibility requires you to
+# represent it as a two-decimal value ... to charge 5 UGX, provide an `amount`
+# value of `500`", and identically for ISK. HUF and TWD's special cases are
+# payout divisibility only — charges stay two-decimal, the default below.
+TWO_DECIMAL_COMPAT_CURRENCIES = frozenset("isk ugx".split())
 
 
 def currency_divisor(currency: str | None) -> int:
     code = (currency or "usd").lower()
+    if code in TWO_DECIMAL_COMPAT_CURRENCIES:
+        return 100
     if code in ZERO_DECIMAL_CURRENCIES:
         return 1
     if code in THREE_DECIMAL_CURRENCIES:
@@ -178,23 +188,26 @@ def pull_fees(get, raw: pathlib.Path, end: str) -> None:
 
 
 def fee_minor(txn: dict) -> int:
-    """Signed fee minor units for one balance transaction, per the documented contract
+    """Fee minor units for one balance transaction, per the documented contract
     (https://docs.stripe.com/api/balance_transactions/object):
 
-      fee          "Fees (in the smallest currency unit) paid for this transaction.
-                    Represented as a positive integer when assessed."
-      fee_details  "Detailed breakdown of fees (in the smallest currency unit) paid
-                    for this transaction."
-      amount       "A positive value represents funds charged to another party, and
-                    a negative value represents funds sent to another party."
+      fee          "Fees (in the smallest currency unit) paid for this
+                    transaction. Represented as a positive integer when
+                    assessed."
+      fee_details  "Detailed breakdown of fees (in the smallest currency unit)
+                    paid for this transaction."
+      amount       "A positive value represents funds charged to another party,
+                    and a negative value represents funds sent to another
+                    party."
 
-    So a charge carries a positive `fee`; the funds direction is in `amount`, not
-    the fee sign. A refund (type `refund`) that hands fees back carries that
-    reversal as `fee_details` entries (type `stripe_fee`) whose amounts sum to its
-    `fee`, which is then negative, so summing the API's own signed `fee` is fees
-    net of refunds on the refund's own day without pairing rows. When
-    `fee_details` is present it is the authority: a row whose breakdown does not
-    sum to `fee` is a shape failure, never a guessed number.
+    The funds direction lives in `amount`, not the fee sign, so a refund is
+    NOT assumed to carry a negative fee: the API's own documented example of a
+    funds-out transaction (a transfer) carries `fee: 0` with empty
+    `fee_details`. A refunded or returned fee is counted only when Stripe
+    represents it explicitly — a row with a non-zero `fee` is taken with its
+    own sign, whatever the transaction type. When `fee_details` is present it
+    is the authority: a row whose breakdown does not sum to `fee` is a shape
+    failure, never a guessed number.
     """
     fee = int(txn.get("fee") or 0)
     details = txn.get("fee_details")
@@ -208,13 +221,14 @@ def fee_minor(txn: dict) -> int:
 def aggregate_fees(get, window: list[str]) -> list[dict]:
     """Sum fee/amount/count per UTC created day over every balance-transaction type.
 
-    `fee` is the API's signed value (see `fee_minor`): refunds hand fees back on
-    their own day, so the per-day sum is fees net of refunds without pairing.
-    Non-USD rows are counted, never summed (no implicit FX). A charge converted
-    into the account's USD balance already arrives as a `usd` row with
-    `exchange_rate` set (docs: the EUR charge example lands as a USD balance
-    transaction), so the foreign count covers only balances held in other
-    currencies, which carry no conversion data of their own.
+    Each row's `fee` is summed exactly as the API represents it (see
+    `fee_minor`): positive when assessed, and a non-zero fee on any row type —
+    an explicitly represented fee return — keeps its sign. No refund-specific
+    sign is invented. Non-USD rows are counted, never summed (no implicit FX).
+    A charge converted into the account's USD balance already arrives as a
+    `usd` row with `exchange_rate` set (docs: the EUR charge example lands as a
+    USD balance transaction), so the foreign count covers only balances held in
+    other currencies, which carry no conversion data of their own.
     """
     start = dt.datetime.fromisoformat(window[0] + "T00:00:00+00:00")
     end_excl = dt.datetime.fromisoformat(window[-1] + "T00:00:00+00:00") + dt.timedelta(days=1)

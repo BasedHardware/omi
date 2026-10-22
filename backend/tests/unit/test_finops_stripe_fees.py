@@ -66,51 +66,55 @@ def epoch(day):
     return int(dt.datetime.fromisoformat(day + "T12:00:00+00:00").timestamp())
 
 
-def test_fees_sum_per_utc_day_net_of_refunds_and_foreign_counted(stripe):
+def test_fees_sum_per_utc_day_refund_documented_shape_and_foreign_counted(stripe):
     # Refund representation follows the documented contract
     # (docs.stripe.com/api/balance_transactions/object): `fee` is "Represented
-    # as a positive integer when assessed"; the funds direction lives in
+    # as a positive integer when assessed" and the funds direction lives in
     # `amount` ("A positive value represents funds charged to another party,
-    # and a negative value represents funds sent to another party"). A refund
-    # hands the previously assessed fee back as a negative `fee_details` entry
-    # (type stripe_fee) with a matching negative `fee`, so summing the API's
-    # signed `fee` field nets the refund on the refund's own day.
+    # and a negative value represents funds sent to another party"). The API's
+    # own documented example of a funds-out transaction carries fee 0 with
+    # empty fee_details, so a refund is booked at its represented fee — 0 —
+    # and never assumed to carry a negative fee (Luna r2 P2).
     page = {
         "object": "list",
         "has_more": False,
         "data": [
             txn(epoch("2026-10-01"), 441, 19900),  # charge fee $4.41
             txn(epoch("2026-10-01"), 320, 12000, type_="payment"),
-            # documented refund shape: funds returned (amount negative), fee
-            # returned (fee_details negative, fee negative)
-            txn(
-                epoch("2026-10-01"),
-                -205,
-                -9500,
-                type_="refund",
-                fee_details=[
-                    {
-                        "amount": -205,
-                        "application": None,
-                        "currency": "usd",
-                        "description": "Refund of previous Stripe fee",
-                        "type": "stripe_fee",
-                    }
-                ],
-            ),
+            # documented funds-out shape: negative amount, fee 0, no breakdown
+            # (the doc's example transaction: amount -400, fee 0, fee_details [])
+            txn(epoch("2026-10-01"), 0, -9500, type_="refund", fee_details=[]),
             txn(epoch("2026-10-02"), 105, 5000, type_="payout"),
             txn(epoch("2026-10-02"), 99, 4800, currency="eur"),  # counted, never summed
         ],
     }
     rows = stripe.aggregate_fees(lambda path, **params: page, ["2026-10-01", "2026-10-02"])
     by_day = {row["date"]: row for row in rows}
-    assert by_day["2026-10-01"]["fee_usd"] == 5.56  # 4.41 + 3.20 - 2.05
-    assert by_day["2026-10-01"]["volume_usd"] == 319.0  # charge + payment gross
+    assert by_day["2026-10-01"]["fee_usd"] == 7.61  # 4.41 + 3.20 + the refund's represented fee 0
+    assert by_day["2026-10-01"]["volume_usd"] == 319.0  # charge + payment gross; refunds are not volume
     assert by_day["2026-10-01"]["transaction_count"] == 3
     assert by_day["2026-10-02"]["fee_usd"] == 1.05  # EUR row excluded from sums
     assert by_day["2026-10-02"]["volume_usd"] == 0
     assert by_day["2026-10-02"]["foreign_transaction_count"] == 1
     assert "txn_" not in json.dumps(rows)  # no identifiers persist
+
+
+def test_refund_fee_taken_with_its_sign_only_when_represented(stripe):
+    # No refund-specific sign is invented: a non-zero fee on a refund row is
+    # counted only because Stripe explicitly represents it, and it keeps the
+    # sign the API gives — a returned fee arrives as whatever Stripe sends,
+    # and a fee assessed on the refund arrives positive ("positive when
+    # assessed", docs.stripe.com/api/balance_transactions/object).
+    returned = txn(epoch("2026-10-01"), -205, -9500, type_="refund")
+    assessed = txn(epoch("2026-10-02"), 150, -4000, type_="refund")
+    rows = stripe.aggregate_fees(
+        lambda path, **params: {"object": "list", "has_more": False, "data": [returned, assessed]},
+        ["2026-10-01", "2026-10-02"],
+    )
+    by_day = {row["date"]: row for row in rows}
+    assert by_day["2026-10-01"]["fee_usd"] == -2.05  # explicitly represented return: sign kept
+    assert by_day["2026-10-02"]["fee_usd"] == 1.50  # fee assessed on a refund: positive kept
+    assert by_day["2026-10-01"]["volume_usd"] == 0 and by_day["2026-10-02"]["volume_usd"] == 0
 
 
 def test_fee_details_breakdown_disagreement_is_a_shape_error(stripe):
@@ -246,7 +250,7 @@ def test_loader_dark_when_skipped_and_strict_when_ready(stripe, tmp_path):
     result = loader.load_stripe_fees(tmp_path, "run-2", "t", ensured.append, replace)
     assert ensured == ["stripe_fee_daily"]
     assert replaced[0][0] == "stripe_fee_daily"
-    assert replaced[0][1][0]["fee_usd"] == -1.25  # a net-refund day stays negative
+    assert replaced[0][1][0]["fee_usd"] == -1.25  # a day net of an explicitly represented fee return stays negative
     assert replaced[0][1][0]["run_id"] == "run-2"
     assert replaced[0][2] == ["2026-10-01", "2026-10-02"]
 
