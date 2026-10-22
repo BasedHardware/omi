@@ -1119,6 +1119,35 @@ class TestLanguageGate:
         finally:
             w.stop()
 
+    def test_language_id_jumps_ahead_of_queued_transcription(self):
+        import gpu_worker as gw
+
+        w = GPUWorker()
+        order = []
+        gate = MagicMock()
+        gate.model_key = "whisper-base"
+        gate.probabilities.side_effect = lambda samples: order.append("lid") or {"en": 1.0}
+        w._language_id = gate
+        w._model = MagicMock()
+        w._batch_transcribe = lambda payload: order.append("asr") or []
+        w._ready.set()
+        w._running = True
+        asr = threading.Event()
+        w._queue.put(gw.WorkItem(gw.WorkType.BATCH_TRANSCRIBE, {}, sync_event=asr))
+        result = {}
+        t = threading.Thread(target=lambda: result.update(w.submit_language_sync([0.0])))
+        t.start()
+        while w._priority.empty():
+            time.sleep(0.001)
+        w._thread = threading.Thread(target=w._run_loop, daemon=True, name="gpu-worker")
+        with patch.object(w, "_load_model"):
+            w._thread.start()
+            t.join(timeout=5)
+            asr.wait(timeout=5)
+        w.stop()
+        assert order[:2] == ["lid", "asr"]
+        assert result == {"en": 1.0}
+
     def test_gate_load_failure_keeps_transcription_serving(self):
         import gpu_worker as gw_mod
 

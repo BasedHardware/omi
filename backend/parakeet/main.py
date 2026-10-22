@@ -28,6 +28,7 @@ from batch_engine import BatchEngine, QueueFullError, QueueTimeoutError
 # Importing utils.logging_config in the NeMo process hits NeMo's utils package.
 from omi_logging_config import configure_split_stream_logging, quiet_repetitive_nemo_logs
 from transcribe import (
+    detect_language_from_text,
     transcribe_file,
     transcribe_file_v2,
     set_gpu_worker,
@@ -125,6 +126,8 @@ OUTPUT_LANGUAGE = Counter(
     ['bucket'],
 )
 _LID_MAX_INFLIGHT = 16
+# Callers send at most 30 s; anything far larger is a misuse and must not be decoded into RAM.
+_LID_MAX_UPLOAD_BYTES = 16 * 1024 * 1024
 _lid_inflight = 0
 _OUTPUT_ALARM_MIN_LETTERS = 24
 _LANGUAGE_BUCKETS = frozenset({'en', 'ja', 'zh', 'ko', 'vi', 'hi', 'ar', 'th'})
@@ -142,7 +145,18 @@ def _record_output_language(result: Dict[str, Any]) -> None:
     text = result.get('text') or ''
     if sum(ch.isalpha() for ch in text) < _OUTPUT_ALARM_MIN_LETTERS:
         return
-    OUTPUT_LANGUAGE.labels(bucket=language_bucket(str(result.get('detected_language') or ''))).inc()
+    detected = result.get('detected_language')
+    if detected is None:
+        # /v1 (voice messages, undiarized prerecorded) carries no language field.
+        detected = detect_language_from_text(text)
+    OUTPUT_LANGUAGE.labels(bucket=language_bucket(str(detected or ''))).inc()
+
+
+def _record_output_language_quietly(result: Dict[str, Any]) -> None:
+    try:
+        _record_output_language(result)
+    except Exception:
+        pass
 
 
 gpu_worker: Optional[GPUWorker] = None
@@ -348,7 +362,11 @@ async def transcribe(request: Request, file: UploadFile = File(...)) -> JSONResp
                 lane=lane,
                 queue_deadline=queue_deadline,
             )
-            return JSONResponse(content=_transcribe_from_gpu_result(result))
+            body = _transcribe_from_gpu_result(result)
+            if prerecorded:
+                # langdetect is CPU work; keep it off the event loop and off the response path.
+                _io_pool.submit(_record_output_language_quietly, body)
+            return JSONResponse(content=body)
         else:
             result = await loop.run_in_executor(_diarize_pool, transcribe_file, file_path)
             return result
@@ -467,10 +485,7 @@ async def transcribe_v2(
                     cast(Any, functools.partial(transcribe_file_v2, file_path, diarize=diarize, **speaker_bounds)),
                 ),
             )
-        try:
-            _record_output_language(result)
-        except Exception:
-            pass
+        _record_output_language_quietly(result)
         return result
     except QueueFullError:
         status = "error"
@@ -516,6 +531,9 @@ async def language_v2(file: UploadFile = File(...)) -> JSONResponse | Dict[str, 
     loop = asyncio.get_running_loop()
     try:
         data = await file.read()
+        if len(data) > _LID_MAX_UPLOAD_BYTES:
+            status = 'too_large'
+            return JSONResponse(status_code=413, content={"detail": "Probe too large", "error": "too_large"})
         try:
             samples = await loop.run_in_executor(_io_pool, _decode_for_language, data)
         except Exception:

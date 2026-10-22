@@ -102,6 +102,8 @@ class WorkItem:
 class GPUWorker:
     def __init__(self, on_fatal_cuda_error: Optional[Callable[[str], None]] = None) -> None:
         self._queue: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
+        # Language ID is milliseconds of GPU; it must not wait behind a queued transcription batch.
+        self._priority: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
         self._thread: Optional[threading.Thread] = None
         self._model: Any = None
         self._embedding_model: Any = None
@@ -274,7 +276,7 @@ class GPUWorker:
             evt = threading.Event()
             item = WorkItem(WorkType.LANGUAGE_ID, samples, sync_event=evt)
             try:
-                self._queue.put(item, timeout=5)
+                self._priority.put_nowait(item)
             except queue.Full:
                 raise RuntimeError("GPU queue full")
         if not evt.wait(timeout=timeout):
@@ -306,9 +308,12 @@ class GPUWorker:
 
         while self._running:
             try:
-                item = self._queue.get(timeout=self._poll_timeout)
+                item = self._priority.get_nowait()
             except queue.Empty:
-                continue
+                try:
+                    item = self._queue.get(timeout=self._poll_timeout)
+                except queue.Empty:
+                    continue
 
             if item.work_type == WorkType.SHUTDOWN:
                 break
@@ -596,14 +601,15 @@ class GPUWorker:
         return out
 
     def _drain_queue(self, error: Optional[Exception] = None) -> None:
-        while not self._queue.empty():
-            try:
-                item = self._queue.get_nowait()
-                if item.work_type != WorkType.SHUTDOWN:
-                    err = error or RuntimeError("GPU worker shutting down")
-                    self._deliver_error(item, err)
-            except queue.Empty:
-                break
+        for pending in (self._priority, self._queue):
+            while not pending.empty():
+                try:
+                    item = pending.get_nowait()
+                    if item.work_type != WorkType.SHUTDOWN:
+                        err = error or RuntimeError("GPU worker shutting down")
+                        self._deliver_error(item, err)
+                except queue.Empty:
+                    break
 
 
 def _safe_set_result(future: asyncio.Future[Any], result: Any) -> None:

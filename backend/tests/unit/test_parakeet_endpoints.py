@@ -1041,3 +1041,39 @@ class TestOutputLanguageAlarm:
         assert mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get() == before_p25 + 1
         assert mod.language_bucket("zh-cn") == "zh"
         assert mod.language_bucket("sw") == "other"
+
+
+def test_v1_alarm_counts_prerecorded_but_not_live_window():
+    app, mod, _, engine = _make_app_with_mocks(gpu_ready=True)
+    text = "Das ist ein ziemlich langer deutscher Satz über das Wetter heute."
+
+    async def fake_submit(path, timestamps=True, owns_file=False, lane="backfill", queue_deadline=None):
+        return {"text": text, "timestamp": {"segment": [{"segment": text, "start": 0.0, "end": 1.0}]}}
+
+    engine.submit = AsyncMock(side_effect=fake_submit)
+    recorded = []
+    done = threading.Event()
+    with patch.object(mod, "_record_output_language_quietly", side_effect=lambda r: (recorded.append(r), done.set())):
+        client = TestClient(app, raise_server_exceptions=False)
+        client.post(
+            "/v1/transcribe",
+            files={"file": ("t.wav", b"x", "audio/wav")},
+            headers={"X-Omi-STT-Surface": "live-window"},
+        )
+        assert client.post("/v1/transcribe", files={"file": ("t.wav", b"x", "audio/wav")}).status_code == 200
+        assert done.wait(timeout=5)
+    assert [r["text"] for r in recorded] == [text]
+    before = mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get()
+    mod._record_output_language({"text": text})  # /v1 body has no detected_language
+    assert mod.OUTPUT_LANGUAGE.labels(bucket="other_p25")._value.get() == before + 1
+
+
+def test_language_probe_upload_is_capped():
+    app, mod, gpu, _ = _make_app_with_mocks()
+    gpu.language_id_model = "whisper-base"
+    gpu.submit_language_sync = MagicMock(return_value={"en": 1.0})
+    client = TestClient(app, raise_server_exceptions=False)
+    big = b"\0" * (mod._LID_MAX_UPLOAD_BYTES + 1)
+    resp = client.post("/v2/language", files={"file": ("a.wav", big, "audio/wav")})
+    assert resp.status_code == 413
+    gpu.submit_language_sync.assert_not_called()
