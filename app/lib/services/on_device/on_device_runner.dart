@@ -13,7 +13,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/on_device/on_device_overflow_intake.dart';
 import 'on_device_segment_upload.dart';
-import 'package:omi/services/refactor/client_refactor_flags.dart';
+import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/services/on_device/on_device_projection.dart';

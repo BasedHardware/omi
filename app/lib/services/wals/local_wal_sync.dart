@@ -43,7 +43,7 @@ import 'package:omi/utils/wal_file_manager.dart';
 
 import 'capture_committed_journal.dart';
 import 'package:omi/backend/schema/capture_committed_event.dart';
-import 'package:omi/services/refactor/client_refactor_flags.dart';
+import 'package:omi/services/experiments/client_refactor_flags.dart';
 
 part 'capture_committed_custody.dart';
 part 'wal_policy.dart';

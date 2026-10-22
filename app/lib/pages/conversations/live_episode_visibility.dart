@@ -1,6 +1,6 @@
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
-import 'package:omi/services/refactor/client_refactor_flags.dart';
+import 'package:omi/services/experiments/client_refactor_flags.dart';
 
 /// A live episode replaces only an in-progress conversation. Finished rows,
 /// including highlights, become available without waiting for the episode to close.

@@ -56,7 +56,7 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
 import 'package:omi/backend/schema/capture_committed_event.dart';
-import 'package:omi/services/refactor/client_refactor_flags.dart';
+import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/services/capture/manual_live_labels.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';

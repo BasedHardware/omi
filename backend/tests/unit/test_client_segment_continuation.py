@@ -79,7 +79,7 @@ def test_metadata_cannot_change_between_continuations(store):
 
 def test_assembly_exceeds_wire_cap_without_merging_speakers(store, monkeypatch):
     owner = uuid4().hex
-    monkeypatch.setenv(intake.FLAG, 'serve')
+    monkeypatch.setenv(intake.CONTINUATION_FLAG_KEY, 'serve')
     calls = []
     for index in range(3):
         body = chunk(index, count=3).model_dump()
@@ -95,11 +95,11 @@ def test_assembly_exceeds_wire_cap_without_merging_speakers(store, monkeypatch):
 
 @pytest.mark.parametrize('value', ['off', 'shadow', 'typo'])
 def test_nonserving_server_explicitly_rejects_chunks(monkeypatch, value):
-    monkeypatch.setenv(intake.FLAG, value)
+    monkeypatch.setenv(intake.CONTINUATION_FLAG_KEY, value)
     with pytest.raises(HTTPException) as error:
         intake.continuation(uuid4().hex, chunk(), 'c', lambda r: None, dict)
     assert error.value.status_code == 409
-    assert mode(intake.FLAG) == ('shadow' if value == 'typo' else value)
+    assert mode(intake.CONTINUATION_FLAG_KEY) == ('shadow' if value == 'typo' else value)
 
 
 @pytest.mark.parametrize(

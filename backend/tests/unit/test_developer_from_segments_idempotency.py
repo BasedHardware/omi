@@ -1156,7 +1156,7 @@ def test_http_continuation_assembles_one_recording_and_retry_never_creates_anoth
     from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
     store = StrictFirestore()
-    monkeypatch.setenv(intake.FLAG, 'serve')
+    monkeypatch.setenv(intake.CONTINUATION_FLAG_KEY, 'serve')
     monkeypatch.setattr(intake.firestore, 'transactional', lambda fn: fn)
     monkeypatch.setattr(intake, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(intake.encryption, 'encrypt', lambda value, owner: value)

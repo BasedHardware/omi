@@ -119,7 +119,7 @@ the legacy coverage trim is deleted (plan C, C11).
 | Invariant | Behavioral guard under `app/test/` |
 |---|---|
 | 1 | `unit/local_recordings_auto_upload_test.dart` (lib source scan) |
-| 2 | `unit/wal_upload_resilience_test.dart`, WAL reconcile/retention tests, `unit/watch_custody_dedupe_test.dart`, `unit/native_completion_surface_test.dart` |
+| 2 | `unit/l5_capture_committed_test.dart`, `unit/wal_upload_resilience_test.dart`, WAL reconcile/retention tests, `unit/watch_custody_dedupe_test.dart`, `unit/native_completion_surface_test.dart` |
 | 3 | `unit/local_recordings_owner_test.dart` |
 | 4 | `unit/local_recordings_auto_upload_test.dart`, `unit/sync_poll_storm_test.dart` |
 | 5 | `unit/watch_custody_dedupe_test.dart` |

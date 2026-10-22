@@ -27,7 +27,7 @@ if TYPE_CHECKING:
     from routers.developer_segments_models import CreateConversationFromTranscriptRequest
 
 logger = logging.getLogger(__name__)
-FLAG = 'CLIENTS_FROM_SEGMENTS_CHUNKS_MODE'
+CONTINUATION_FLAG_KEY = 'CLIENTS_FROM_SEGMENTS_CHUNKS_MODE'
 SHADOW = Counter('omi_clients_refactor_shadow_total', 'L5 bounded shadow comparisons', ['check', 'outcome'])
 
 
@@ -139,8 +139,8 @@ def continuation(
     ingest: Callable[[CreateConversationFromTranscriptRequest], Any],
     response: Callable[..., Any],
 ) -> Any:
-    if not serving_for(FLAG, uid):
-        if shadow_or_serve(FLAG):
+    if not serving_for(CONTINUATION_FLAG_KEY, uid):
+        if shadow_or_serve(CONTINUATION_FLAG_KEY):
             observe('chunk_admission', 'disagree')
         # Explicitly fail so a client never treats a legacy "first chunk wins" reply as success.
         raise HTTPException(status_code=409, detail='Continuation uploads are not enabled')

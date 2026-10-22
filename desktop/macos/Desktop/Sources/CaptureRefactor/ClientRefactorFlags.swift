@@ -3,9 +3,12 @@ import Foundation
 
 /// PostHog selects the serving cohort; absent/non-boolean values keep the old path.
 enum ClientRefactorFlags {
-  @MainActor static var serving: Bool { enabled("clients_refactor") }
-  @MainActor static var chunks: Bool { enabled("clients_from_segments_chunks") }
-  @MainActor static var boundaryEvidence: Bool { enabled("clients_boundary_evidence") }
+  static let clientsFlag = "clients_refactor"
+  static let chunksFlag = "clients_from_segments_chunks"
+  static let boundaryFlag = "clients_boundary_evidence"
+  @MainActor static var serving: Bool { enabled(clientsFlag) }
+  @MainActor static var chunks: Bool { enabled(chunksFlag) }
+  @MainActor static var boundaryEvidence: Bool { enabled(boundaryFlag) }
   @MainActor static func enabled(_ key: String) -> Bool {
     PostHogManager.shared.getFeatureFlag(key) as? Bool == true
   }
