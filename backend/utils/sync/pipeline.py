@@ -7,6 +7,7 @@ Extracted from routers/sync.py so the router stays thin and utils never imports 
 
 from __future__ import annotations
 
+from utils.conversations.silent_redrive import is_silent_redrive
 from utils.observability.sync_phases import sync_phase, sync_attempt
 from utils.sync.vad_segments import MAX_VAD_SEGMENT_SECONDS
 
@@ -1088,6 +1089,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     if language == _LINEAGE_RETRY_LANGUAGE:
         language = conversation.language or 'en'
 
+    silent_redrive = is_silent_redrive(conversation_data)
     was_discarded = conversation.discarded
     prior_decision = conversation_data.get('relevance_decision')
     # process_conversation persists relevance_decision.trigger == 'sync_update'.
@@ -1105,6 +1107,7 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         language_code=language or 'en',
         conversation=conversation,
         trigger=ProcessingTrigger.SYNC_UPDATE,
+        defer_derived_effects=silent_redrive,
         user_kept=is_user_curated(conversation_data) or REPAIR_CONTEXT.get() is not None,
         persistence_observer=_require_current_conversation_persistence,
         # Deserialize drops relevance_decision. The raw row still has it:
@@ -1128,7 +1131,12 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     # reprocess path deliberately suppresses webhooks. Emit exactly at the
     # discarded -> visible transition so pendant conversations reach developer
     # integrations without duplicating events on ordinary later reprocessing.
-    if conversation.source == ConversationSource.limitless and was_discarded and not processed_conversation.discarded:
+    if (
+        not silent_redrive
+        and conversation.source == ConversationSource.limitless
+        and was_discarded
+        and not processed_conversation.discarded
+    ):
         submit_with_context(postprocess_executor, _run_conversation_created_webhook, uid, processed_conversation)
 
     logger.info(f'Successfully reprocessed conversation {conversation_id}')

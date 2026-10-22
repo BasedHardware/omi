@@ -178,12 +178,23 @@ class ProjectionSession:
     def persist(self, transaction, planned=None, *, superseded=False):
         assigned, created, survivors = planned if planned is not None else ({}, False, [])
         repeat_only = assigned.get('_sync_lineage_repeat_only', False)
+        silent = (self.job.get('speech_redrive') or {}).get('silent') is True
+        if silent and assigned.get('id') and not superseded:
+            # Same assignment transaction: even a previously queued enrichment
+            # must observe the silent revision. A later normal append gets a new
+            # revision and resumes its ordinary derived effects.
+            revision = assigned.get('sync_content_revision')
+            if type(revision) is not int or revision <= 0:
+                raise ProjectionBlocked('silent redrive requires a content revision')
+            conversation = self.client.collection('users').document(self.binding.owner_id).collection('conversations')
+            transaction.update(conversation.document(assigned['id']), {'sync_silent_redrive_revision': revision})
         receipt: dict[str, Any] = {
             'state': 'ready' if superseded else 'persisted',
             'conversation_id': assigned.get('id'),
             'created': created,
             'language': assigned.get('language') or self.binding.language or 'en',
             'persisted_at': self.now,
+            **({'silent_redrive': True} if silent else {}),
             'audio_required': bool(survivors and self.binding.private_cloud_sync_enabled),
             'incoming_segment_count': self.incoming_segment_count,
             'speech_seconds': 0.0 if superseded else self.speech_seconds,
