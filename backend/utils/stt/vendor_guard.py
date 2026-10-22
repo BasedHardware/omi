@@ -70,8 +70,8 @@ class _EndpointBreaker:
 
     def __init__(self):
         self.lock = threading.Lock()
-        self.failures = deque()
-        self.opened_at = None
+        self.failures: deque[float] = deque()
+        self.opened_at: float | None = None
         self.trial_in_flight = False
         self.trial_started_at = 0.0
 
@@ -141,7 +141,8 @@ def record_breaker_quota_error(endpoint: str) -> None:
             # A failed half-open trial re-opens the breaker for another full window.
             state.opened_at = now
             state.trial_in_flight = False
-    if state.opened_at is not None:
+        is_open = state.opened_at is not None
+    if is_open:
         _set_gauge(endpoint, 1)
 
 
