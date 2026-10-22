@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-stopped-transcriber-accepts-late-audio",
+  "violated_contract": "Once a streaming transcriber's Stop has returned, audio appended afterwards must be refused, not buffered into a session nobody owns. The Go device SDK's Whisper engine kept no stopped state: AppendPCM after Stop kept buffering, ran the injected local model on every full five-second batch and delivered the text to onTranscript after Stop had returned, and a repeated Stop flushed whatever was left. The Dart, TypeScript and React Native Whisper engines already ignore audio appended after stop.",
+  "canonical_prevention": "Stop records a terminal stopped state before its final flush, and the input path checks that state before touching the buffer. AppendPCM after Stop returns an error without buffering or calling the runner, so a repeated Stop has nothing to flush. A regression test stops the transcriber, appends a full batch, stops again and asserts that the runner and the handler saw only the audio accepted before the first Stop.",
+  "canonical_prevention_artifact": [
+    "sdks/device/go/omidevice/stt/stt_stop_test.go"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/device/go/omidevice/stt/",
+    "sdks/device/dart/lib/stt/",
+    "sdks/device/typescript/src/stt/",
+    "sdks/react-native/src/stt/"
+  ],
+  "status": "open"
+}
