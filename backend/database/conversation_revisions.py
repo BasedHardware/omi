@@ -4,11 +4,17 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 
-def ensure_timezone_aware(value: datetime) -> datetime:
-    """Return an aware datetime, treating legacy naive values as UTC."""
-    if value.tzinfo is None:
-        return value.replace(tzinfo=timezone.utc)
-    return value
+def ensure_timezone_aware(value: Any) -> datetime:
+    """Return an aware datetime, treating legacy naive values, ISO strings, and invalid inputs gracefully."""
+    if isinstance(value, datetime):
+        return value.astimezone(timezone.utc) if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def firestore_revision_datetime(value: Any) -> Optional[datetime]:

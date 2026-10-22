@@ -1,6 +1,4 @@
-from database.chat_history_window import (
-    cache_aligned_history_limit as cache_aligned_history_limit,
-)
+from database.chat_history_window import cache_aligned_history_limit as cache_aligned_history_limit
 from database.channel_visibility import visible_sessions
 import copy
 import hashlib
@@ -14,10 +12,7 @@ from google.api_core.exceptions import AlreadyExists, Conflict, FailedPreconditi
 from google.cloud import firestore, firestore_v1
 from google.cloud.firestore_v1 import FieldFilter
 
-from database.firestore_index_registry import (
-    CURRENT_CHAT_SESSION_ORDERED_QUERY,
-    CURRENT_CHAT_SESSION_QUERY,
-)
+from database.firestore_index_registry import CURRENT_CHAT_SESSION_ORDERED_QUERY, CURRENT_CHAT_SESSION_QUERY
 
 # Sessions are per-user and per-app, so this is a ceiling on a small collection
 # rather than a page size; it exists so a pathological account cannot turn one
@@ -36,6 +31,7 @@ from .helpers import prepare_for_read, prepare_for_write, set_data_protection_le
 from database.read_boundary import parse_snapshot_or_none
 from database.chat_context_mutations import invalidate_sessions, invalidation_fields
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.conversation_revisions import ensure_timezone_aware
 
 logger = logging.getLogger(__name__)
 
@@ -1105,7 +1101,10 @@ def get_chat_sessions(
             items.append(normalized)
     if extra:
         items.extend(row for row in extra if starred is None or row.get('starred', False) == starred)
-        items.sort(key=lambda row: row['updated_at'], reverse=True)
+        items.sort(
+            key=lambda row: ensure_timezone_aware(row.get('updated_at')),
+            reverse=True,
+        )
         return items[offset : offset + limit]
     return items
 

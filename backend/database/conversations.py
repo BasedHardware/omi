@@ -2953,7 +2953,7 @@ def get_action_items(
     for conversation in conversations:
         conversation_id = conversation['id']
         conversation_title = conversation.get('structured', {}).get('title', 'Untitled')
-        conversation_created_at = ensure_timezone_aware(conversation['created_at'])
+        conversation_created_at = ensure_timezone_aware(conversation.get('created_at'))
 
         raw_items = conversation.get('structured', {}).get('action_items', [])
 
@@ -3007,7 +3007,7 @@ def get_action_items(
             action_items.append(action_item_data)
 
     # Sort by newest first
-    action_items.sort(key=lambda x: -x['conversation_created_at'].timestamp())
+    action_items.sort(key=lambda x: -ensure_timezone_aware(x.get('conversation_created_at')).timestamp())
 
     # Apply pagination
     start_idx = offset
