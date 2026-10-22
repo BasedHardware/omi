@@ -228,7 +228,7 @@ export async function GET(request: NextRequest) {
       Awaited<ReturnType<typeof computeMacosVersions>>
     >(key);
     if (cached) {
-      return NextResponse.json(
+      return authResult.json(
         withFreshness(
           { ...cached.data, date: formatDateLabel(cached.freshAt) },
           cached.freshAt
@@ -239,12 +239,12 @@ export async function GET(request: NextRequest) {
     const payload = await computeMacosVersions(platform);
     await setPayload(key, payload);
     const freshAt = Date.now();
-    return NextResponse.json(
+    return authResult.json(
       withFreshness({ ...payload, date: formatDateLabel(freshAt) }, freshAt)
     );
   } catch (error: any) {
     console.error("macOS version stats error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to fetch macOS version stats" },
       { status: 500 }
     );

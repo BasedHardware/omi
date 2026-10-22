@@ -601,7 +601,7 @@ describe("proposals", () => {
       let reads = 0;
       FakeDocRef.prototype.get = async function (this: FakeDocRef) {
         const result = await realGet.call(this);
-        if (this.collection === "adminData" && this.id === OWNER) {
+        if (this.collectionName === "adminData" && this.id === OWNER) {
           reads += 1;
           // 1: authenticate() before the handler; 2: the transaction's read.
           if (reads === 2) {

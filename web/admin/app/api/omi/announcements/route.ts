@@ -33,10 +33,10 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    return authResult.json(data);
   } catch (err: any) {
     console.error("[announcements GET] Error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Internal Server Error" },
       { status: 500 }
     );
@@ -66,10 +66,10 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    return authResult.json(data);
   } catch (err: any) {
     console.error("[announcements POST] Error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Internal Server Error" },
       { status: 500 }
     );

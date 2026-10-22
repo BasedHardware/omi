@@ -16,7 +16,7 @@ export async function DELETE(
   const params = await props.params;
   const id = params?.id;
   if (!id || !isSafeDocumentId(id)) {
-    return NextResponse.json({ error: "Missing id" }, { status: 400 });
+    return auth.json({ error: "Missing id" }, { status: 400 });
   }
 
   try {
@@ -26,14 +26,11 @@ export async function DELETE(
       revealToken: hasScope(auth.access, "finance:read"),
     });
     if (!link) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return auth.json({ error: "Not found" }, { status: 404 });
     }
-    return NextResponse.json({ link });
+    return auth.json({ link });
   } catch (error) {
     console.error("revoke TV link:", error);
-    return NextResponse.json(
-      { error: "Failed to revoke TV link" },
-      { status: 500 }
-    );
+    return auth.json({ error: "Failed to revoke TV link" }, { status: 500 });
   }
 }

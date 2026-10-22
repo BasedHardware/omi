@@ -22,10 +22,10 @@ export async function GET(request: NextRequest) {
       lastLoginAt: doc.data().lastLoginAt?.toDate?.()?.toISOString() || null,
     }));
 
-    return NextResponse.json({ distributors });
+    return authResult.json({ distributors });
   } catch (error) {
     console.error("Error fetching distributors:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch distributors" },
       { status: 500 }
     );
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!email || !name) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "Missing required fields: email, name" },
         { status: 400 }
       );
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
       .where("email", "==", email)
       .get();
     if (!existing.empty) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "A distributor with this email already exists" },
         { status: 409 }
       );
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest) {
 
     const docRef = await db.collection("distributors").add(distributorData);
 
-    return NextResponse.json({
+    return authResult.json({
       success: true,
       id: docRef.id,
       distributor: {
@@ -96,7 +96,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error creating distributor:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to create distributor" },
       { status: 500 }
     );
@@ -113,21 +113,21 @@ export async function PUT(request: NextRequest) {
     const { id, ...updates } = body;
 
     if (!id) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "Missing required field: id" },
         { status: 400 }
       );
     }
 
     if (!isSafeDocumentId(id)) {
-      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+      return authResult.json({ error: "Invalid id" }, { status: 400 });
     }
 
     const docRef = db.collection("distributors").doc(id);
     const doc = await docRef.get();
 
     if (!doc.exists) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "Distributor not found" },
         { status: 404 }
       );
@@ -153,7 +153,7 @@ export async function PUT(request: NextRequest) {
 
     const updated = await docRef.get();
 
-    return NextResponse.json({
+    return authResult.json({
       success: true,
       distributor: {
         id: updated.id,
@@ -165,7 +165,7 @@ export async function PUT(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error updating distributor:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to update distributor" },
       { status: 500 }
     );

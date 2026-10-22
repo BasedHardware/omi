@@ -14,16 +14,15 @@ export async function GET(request: NextRequest) {
     "Cache-Control": "no-store",
     "Referrer-Policy": "no-referrer",
   };
-  if (!embedEnabled())
-    return NextResponse.json({ enabled: false }, { headers });
+  if (!embedEnabled()) return admin.json({ enabled: false }, { headers });
   try {
-    return NextResponse.json(
+    return admin.json(
       { enabled: true, ...(await mintEmbed(admin.uid)) },
       { headers }
     );
   } catch {
     console.error("Grafana embed enrollment unavailable");
-    return NextResponse.json(
+    return admin.json(
       { error: "Dashboard login unavailable" },
       { status: 503, headers }
     );

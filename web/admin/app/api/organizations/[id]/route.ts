@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/firebase/admin";
 import { requireScope } from "@/lib/auth";
 import { hasScope } from "@/lib/admin-access";
-import { redactBilling } from "@/lib/organizations";
 import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
 import { getStripe } from "@/lib/stripe";
 import { updateUserSubscriptionDetails } from "@/lib/utils/user-subscription";
@@ -54,12 +53,12 @@ export async function PATCH(
     } = body;
     const organizationId = params.id;
     if (!isSafeDocumentId(organizationId)) {
-      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+      return authResult.json({ error: "Invalid id" }, { status: 400 });
     }
 
     // Exclude employees from updates - employees should not be editable through this endpoint
     if (employees !== undefined) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "Employees cannot be updated through this endpoint" },
         { status: 400 }
       );
@@ -67,7 +66,7 @@ export async function PATCH(
 
     // Validate the fields being updated
     if (is_active !== undefined && typeof is_active !== "boolean") {
-      return NextResponse.json(
+      return authResult.json(
         { error: "is_active must be a boolean value" },
         { status: 400 }
       );
@@ -77,7 +76,7 @@ export async function PATCH(
       max_seats !== undefined &&
       (typeof max_seats !== "number" || max_seats < 0)
     ) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "max_seats must be a non-negative number" },
         { status: 400 }
       );
@@ -88,14 +87,14 @@ export async function PATCH(
       (typeof organisation_name !== "string" ||
         organisation_name.trim().length === 0)
     ) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "organisation_name must be a non-empty string" },
         { status: 400 }
       );
     }
 
     if (website !== undefined && typeof website !== "string") {
-      return NextResponse.json(
+      return authResult.json(
         { error: "website must be a string" },
         { status: 400 }
       );
@@ -106,7 +105,7 @@ export async function PATCH(
       stripe_payment_id &&
       !stripe_payment_id.startsWith("pi_")
     ) {
-      return NextResponse.json(
+      return authResult.json(
         { error: 'Invalid Stripe payment ID format. Must start with "pi_"' },
         { status: 400 }
       );
@@ -118,7 +117,7 @@ export async function PATCH(
       stripe_payment_id !== undefined &&
       !hasScope(authResult.access, "finance:write")
     ) {
-      return NextResponse.json(
+      return authResult.json(
         {
           error:
             "Changing an organization's Stripe payment requires finance:write.",
@@ -132,7 +131,7 @@ export async function PATCH(
     const orgDoc = await orgRef.get();
 
     if (!orgDoc.exists) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "Organization not found" },
         { status: 404 }
       );
@@ -145,7 +144,7 @@ export async function PATCH(
         try {
           paymentData = await fetchStripePaymentDetails(stripe_payment_id);
         } catch (error) {
-          return NextResponse.json(
+          return authResult.json(
             {
               error:
                 error instanceof Error
@@ -191,28 +190,25 @@ export async function PATCH(
     const updatedDoc = await orgRef.get();
     const updatedData = updatedDoc.data();
 
-    return NextResponse.json({
+    return authResult.json({
       success: true,
-      organization: redactBilling(
-        {
-          id: updatedDoc.id,
-          ...updatedData,
-          added_on: updatedData?.added_on?.toDate?.()?.toISOString() || null,
-          max_seats: updatedData?.max_seats || null,
-          subscription: updatedData?.subscription || null, // Database field name
-          employees:
-            updatedData?.employees?.map((emp: any) => ({
-              ...emp,
-              added_at: emp.added_at?.toDate?.()?.toISOString() || null,
-              removed_at: emp.removed_at?.toDate?.()?.toISOString() || null,
-            })) || [],
-        },
-        authResult.access
-      ),
+      organization: {
+        id: updatedDoc.id,
+        ...updatedData,
+        added_on: updatedData?.added_on?.toDate?.()?.toISOString() || null,
+        max_seats: updatedData?.max_seats || null,
+        subscription: updatedData?.subscription || null, // Database field name
+        employees:
+          updatedData?.employees?.map((emp: any) => ({
+            ...emp,
+            added_at: emp.added_at?.toDate?.()?.toISOString() || null,
+            removed_at: emp.removed_at?.toDate?.()?.toISOString() || null,
+          })) || [],
+      },
     });
   } catch (error) {
     console.error("Error updating organization:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to update organization" },
       { status: 500 }
     );

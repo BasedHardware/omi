@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const { question, prompt_text, floating_prefix, version_id } = body;
 
     if (!question || !prompt_text) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "question and prompt_text are required" },
         { status: 400 }
       );
@@ -86,7 +86,7 @@ Respond ONLY with valid JSON in this exact format:
       if (scoreMatch) aiScore = parseFloat(scoreMatch[1]);
     }
 
-    return NextResponse.json({
+    return authResult.json({
       response: responseText,
       ai_score: aiScore,
       ai_comment: aiComment,
@@ -96,6 +96,6 @@ Respond ONLY with valid JSON in this exact format:
     console.error("[Chat Lab] Error evaluating prompt:", error);
     const message =
       error instanceof Error ? error.message : "Internal Server Error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return authResult.json({ error: message }, { status: 500 });
   }
 }

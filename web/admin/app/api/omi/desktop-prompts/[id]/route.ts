@@ -15,7 +15,7 @@ export async function PATCH(
   if (authResult instanceof NextResponse) return authResult;
   const id = (await params).id;
   if (!isSafeDocumentId(id)) {
-    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    return authResult.json({ error: "Invalid id" }, { status: 400 });
   }
   const body = await request.json();
   const updates: Record<string, unknown> = { updated_at: Date.now() / 1000 };
@@ -30,7 +30,7 @@ export async function PATCH(
     );
   }
   await getDb().collection("desktop_prompts").doc(id).update(updates);
-  return NextResponse.json({ id, updated: true });
+  return authResult.json({ id, updated: true });
 }
 
 export async function DELETE(
@@ -41,8 +41,8 @@ export async function DELETE(
   if (authResult instanceof NextResponse) return authResult;
   const id = (await params).id;
   if (!isSafeDocumentId(id)) {
-    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    return authResult.json({ error: "Invalid id" }, { status: 400 });
   }
   await getDb().collection("desktop_prompts").doc(id).delete();
-  return NextResponse.json({ id, deleted: true });
+  return authResult.json({ id, deleted: true });
 }

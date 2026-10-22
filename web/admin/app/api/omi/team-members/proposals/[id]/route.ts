@@ -21,7 +21,7 @@ export async function POST(
 
   const parsed = decisionSchema.safeParse(await readJson(request));
   if (!parsed.success) {
-    return NextResponse.json(
+    return authResult.json(
       { error: 'decision must be "approve" or "reject"' },
       { status: 400 }
     );
@@ -33,7 +33,7 @@ export async function POST(
       id,
       parsed.data.decision
     );
-    return NextResponse.json({ proposal });
+    return authResult.json({ proposal });
   } catch (error) {
     return teamErrorResponse(error, "Failed to decide proposal");
   }

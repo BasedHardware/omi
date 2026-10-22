@@ -17,13 +17,13 @@ export async function POST(
 
   const uid = (await params).uid;
   if (!isSafeDocumentId(uid)) {
-    return NextResponse.json({ error: "Invalid uid" }, { status: 400 });
+    return authResult.json({ error: "Invalid uid" }, { status: 400 });
   }
   const { searchParams } = new URL(request.url);
   const stage = searchParams.get("stage");
 
   if (!stage || !(VALID_STAGES as readonly string[]).includes(stage)) {
-    return NextResponse.json(
+    return authResult.json(
       { error: `Invalid stage. Must be one of: ${VALID_STAGES.join(", ")}` },
       { status: 400 }
     );
@@ -50,9 +50,9 @@ export async function POST(
     await ref.set(updates, { merge: true });
     await invalidateEnforcementCache(uid);
 
-    return NextResponse.json({ status: "updated", stage });
+    return authResult.json({ status: "updated", stage });
   } catch (error) {
     console.error("Error setting fair use stage:", error);
-    return NextResponse.json({ error: "Failed to set stage" }, { status: 500 });
+    return authResult.json({ error: "Failed to set stage" }, { status: 500 });
   }
 }

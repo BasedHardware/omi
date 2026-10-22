@@ -163,33 +163,26 @@ export async function GET(request: NextRequest) {
             context_type: q.context_type || "conversations",
           }))
         : [
-            ...yourQuestions
-              .slice(0, 5)
-              .map((q, i) => ({
-                id: `your-${i}`,
-                text: q.text,
-                context_type: q.context_type,
-              })),
-            ...allUsersQuestions
-              .slice(0, 5)
-              .map((q, i) => ({
-                id: `all-${i}`,
-                text: q.text,
-                context_type: q.context_type,
-              })),
+            ...yourQuestions.slice(0, 5).map((q, i) => ({
+              id: `your-${i}`,
+              text: q.text,
+              context_type: q.context_type,
+            })),
+            ...allUsersQuestions.slice(0, 5).map((q, i) => ({
+              id: `all-${i}`,
+              text: q.text,
+              context_type: q.context_type,
+            })),
           ];
 
-    return NextResponse.json({
+    return authResult.json({
       questions,
       your_questions: yourQuestions,
       all_users_questions: allUsersQuestions,
     });
   } catch (error) {
     console.error("[Chat Lab] Error fetching questions:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return authResult.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -202,7 +195,7 @@ export async function POST(request: NextRequest) {
     const { questions } = body;
 
     if (!Array.isArray(questions)) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "questions must be an array" },
         { status: 400 }
       );
@@ -233,12 +226,9 @@ export async function POST(request: NextRequest) {
 
     await batch.commit();
 
-    return NextResponse.json({ saved: questions.length });
+    return authResult.json({ saved: questions.length });
   } catch (error) {
     console.error("[Chat Lab] Error saving curated questions:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return authResult.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

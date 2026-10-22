@@ -20,12 +20,12 @@ export async function GET(
 
   const { reportDate } = await params;
   try {
-    return NextResponse.json(await getReport(authResult.uid, reportDate));
+    return authResult.json(await getReport(authResult.uid, reportDate));
   } catch (error) {
     const status = error instanceof FeedbackApiError ? error.status : 502;
     // A 404 here is normal: a day whose cron has not run yet has no report.
     if (status !== 404) console.error("Feedback report fetch error:", error);
-    return NextResponse.json(
+    return authResult.json(
       {
         error:
           error instanceof Error ? error.message : "Failed to fetch report",
@@ -45,11 +45,11 @@ export async function POST(
 
   const { reportDate } = await params;
   try {
-    return NextResponse.json(await generateReport(authResult.uid, reportDate));
+    return authResult.json(await generateReport(authResult.uid, reportDate));
   } catch (error) {
     const status = error instanceof FeedbackApiError ? error.status : 502;
     console.error("Feedback report generate error:", error);
-    return NextResponse.json(
+    return authResult.json(
       {
         error:
           error instanceof Error ? error.message : "Failed to generate report",

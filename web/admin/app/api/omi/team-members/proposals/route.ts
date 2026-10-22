@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
 
   try {
-    return NextResponse.json({ proposals: await listProposals() });
+    return authResult.json({ proposals: await listProposals() });
   } catch (error) {
     return teamErrorResponse(error, "Failed to fetch proposals");
   }

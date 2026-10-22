@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
     const token = process.env.SHOPIFY_ACCESS_TOKEN;
 
     if (!domain || !token) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "Shopify credentials not configured" },
         { status: 500 }
       );
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     if (!res.ok) {
       const text = await res.text();
       console.error("Shopify locations error:", text);
-      return NextResponse.json(
+      return authResult.json(
         { error: "Failed to fetch Shopify locations" },
         { status: 502 }
       );
@@ -47,10 +47,10 @@ export async function GET(request: NextRequest) {
         isActive: loc.active,
       }));
 
-    return NextResponse.json({ locations });
+    return authResult.json({ locations });
   } catch (error) {
     console.error("Error fetching locations:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch locations" },
       { status: 500 }
     );

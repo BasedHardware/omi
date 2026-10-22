@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const posthogResults = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/posthog", () => ({ posthogResults }));
-vi.mock("@/lib/auth", () => ({ requireScope: vi.fn() }));
+vi.mock("@/lib/auth", async () => {
+  const { testIdentity } = await import("./support/test-identity");
+  return { requireScope: vi.fn().mockResolvedValue(testIdentity()) };
+});
 vi.mock("@/lib/payload-cache", () => ({
   getPayload: vi.fn(),
   setPayload: vi.fn(),

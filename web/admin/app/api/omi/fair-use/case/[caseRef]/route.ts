@@ -22,7 +22,7 @@ export async function GET(
     const snapshot = await query.get();
 
     if (snapshot.empty) {
-      return NextResponse.json(
+      return authResult.json(
         { error: `Case ${caseRef} not found` },
         { status: 404 }
       );
@@ -33,7 +33,7 @@ export async function GET(
     const pathParts = doc.ref.path.split("/");
     const uid = pathParts.length >= 2 ? pathParts[1] : "";
 
-    return NextResponse.json({
+    return authResult.json({
       ...data,
       uid,
       event_id: doc.id,
@@ -43,7 +43,7 @@ export async function GET(
     });
   } catch (error) {
     console.error("Error looking up case:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to look up case" },
       { status: 500 }
     );

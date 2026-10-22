@@ -400,7 +400,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!prompt_template || !items || items.length === 0) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "prompt_template and items are required" },
         { status: 400 }
       );
@@ -435,10 +435,10 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ results });
+    return authResult.json({ results });
   } catch (error: any) {
     console.error("Error regenerating notifications:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: `Failed to regenerate: ${error.message}` },
       { status: 500 }
     );

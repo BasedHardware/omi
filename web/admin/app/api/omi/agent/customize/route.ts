@@ -64,15 +64,15 @@ export async function POST(request: NextRequest) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return auth.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
   const prompt = (body.prompt ?? "").trim();
   if (!prompt) {
-    return NextResponse.json({ error: "prompt is required" }, { status: 400 });
+    return auth.json({ error: "prompt is required" }, { status: 400 });
   }
   if (prompt.length > MAX_PROMPT_LEN) {
-    return NextResponse.json(
+    return auth.json(
       { error: `prompt exceeds ${MAX_PROMPT_LEN} chars` },
       { status: 400 }
     );
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
   const modelInput = (body.model ?? "claude") as Model;
   const cmd = COMMANDS[modelInput];
   if (!cmd) {
-    return NextResponse.json(
+    return auth.json(
       { error: `unknown model "${modelInput}". Use "claude" or "codex".` },
       { status: 400 }
     );

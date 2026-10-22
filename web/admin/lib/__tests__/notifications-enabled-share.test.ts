@@ -10,7 +10,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 let db: any;
 vi.mock("@/lib/firebase/admin", () => ({ getDb: () => db }));
 vi.mock("@/lib/auth", () => ({
-  requireScope: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => testIdentity(undefined, "t")),
 }));
 vi.mock("@/lib/payload-cache", () => ({
   getPayload: vi.fn(async () => null),
@@ -25,6 +25,7 @@ vi.mock("@/lib/posthog", () => ({
 }));
 
 import { computeNotifications } from "@/app/api/omi/stats/notifications/route";
+import { testIdentity } from "./support/test-identity";
 
 type Opts = {
   enabled: number;

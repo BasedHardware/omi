@@ -121,14 +121,14 @@ export async function GET(request: NextRequest) {
     const db = getDb();
     const uid = request.nextUrl.searchParams.get("uid");
     if (!uid || uid.length < 10) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "Valid uid parameter required" },
         { status: 400 }
       );
     }
 
     if (!isSafeDocumentId(uid)) {
-      return NextResponse.json({ error: "Invalid uid" }, { status: 400 });
+      return authResult.json({ error: "Invalid uid" }, { status: 400 });
     }
 
     const userRef = db.collection("users").doc(uid);
@@ -316,7 +316,7 @@ export async function GET(request: NextRequest) {
             .join("\n")
         : "No active goals set.";
 
-    return NextResponse.json({
+    return authResult.json({
       notifications,
       user_context: {
         user_name: userName,
@@ -327,7 +327,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error: any) {
     console.error("Error fetching user notifications:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: `Failed to fetch user notifications: ${error.message}` },
       { status: 500 }
     );

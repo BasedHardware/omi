@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
       cache.days === days &&
       Date.now() - cache.timestamp < CACHE_TTL
     ) {
-      return NextResponse.json(cache.data);
+      return authResult.json(cache.data);
     }
 
     const [macos, iosLatest, mobile] = await Promise.all([
@@ -231,10 +231,10 @@ export async function GET(request: NextRequest) {
       })),
     };
     cache = { data, days, timestamp: Date.now() };
-    return NextResponse.json(data);
+    return authResult.json(data);
   } catch (error: any) {
     console.error("Releases stats error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to fetch release stats" },
       { status: 500 }
     );

@@ -4,6 +4,7 @@ import { GET as firstRun } from "@/app/api/omi/stats/onboarding/mobile/route";
 import { GET as tutorial } from "@/app/api/omi/stats/onboarding/mobile/tutorial/route";
 import { GET as attach } from "@/app/api/omi/stats/onboarding/mobile/attach/route";
 import { PostHogError } from "@/lib/mobile-onboarding-funnel";
+import { testIdentity } from "./support/test-identity";
 
 const mocks = vi.hoisted(() => ({
   requireScope: vi.fn(),
@@ -26,7 +27,7 @@ const request = (query = "") =>
   new NextRequest(`https://admin.test/api/omi/stats/onboarding/mobile${query}`);
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.requireScope.mockResolvedValue({ uid: "admin" });
+  mocks.requireScope.mockResolvedValue(testIdentity(undefined, "admin"));
   mocks.getPayload.mockResolvedValue(null);
   mocks.setPayload.mockResolvedValue(undefined);
   mocks.compute.mockResolvedValue({

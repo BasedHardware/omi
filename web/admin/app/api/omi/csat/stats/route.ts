@@ -78,14 +78,14 @@ export async function GET(request: NextRequest) {
       .limit(limit)
       .get();
     const rows = snapshot.docs.map((d) => row(d.data()));
-    return NextResponse.json({
+    return authResult.json({
       available: true,
       ...summarizeCsatRatings(rows),
     });
   } catch (error) {
     console.error("CSAT stats error:", error);
     // Never invent zeros while claiming success.
-    return NextResponse.json({
+    return authResult.json({
       available: false,
       total: 0,
       histogram: {},

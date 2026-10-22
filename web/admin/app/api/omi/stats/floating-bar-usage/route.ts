@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
 
     if (!apiKey || !projectId) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "PostHog credentials not configured" },
         { status: 500 }
       );
@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       cache.days === days &&
       Date.now() - cache.timestamp < CACHE_TTL
     ) {
-      return NextResponse.json(cache.data);
+      return authResult.json(cache.data);
     }
 
     // Query 1: Daily total queries and unique users
@@ -105,7 +105,7 @@ export async function GET(request: NextRequest) {
         : sessionsRes;
       const text = await failedRes.text();
       console.error("PostHog query error:", text);
-      return NextResponse.json({ error: "PostHog API error" }, { status: 502 });
+      return authResult.json({ error: "PostHog API error" }, { status: 502 });
     }
 
     const totalResult = await totalRes.json();
@@ -182,10 +182,10 @@ export async function GET(request: NextRequest) {
 
     cache = { data: result, days, timestamp: Date.now() };
 
-    return NextResponse.json(result);
+    return authResult.json(result);
   } catch (error) {
     console.error("Floating bar usage error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch floating bar usage" },
       { status: 500 }
     );

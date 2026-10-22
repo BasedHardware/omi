@@ -10,18 +10,18 @@ export async function GET(request: NextRequest) {
   // No request-level platform attribution exists for these cost pools.
   const platform = request.nextUrl.searchParams.get("platform");
   if (platform && platform !== "all") {
-    return NextResponse.json(
+    return auth.json(
       { error: "Plan economics is available for all platforms only" },
       { status: 400 }
     );
   }
   try {
-    return NextResponse.json(await fetchPlanEconomics(), {
+    return auth.json(await fetchPlanEconomics(), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch {
     console.error("Plan economics aggregate query failed");
-    return NextResponse.json(
+    return auth.json(
       { error: "Plan economics unavailable", rows: [], partial: true },
       { status: 502 }
     );

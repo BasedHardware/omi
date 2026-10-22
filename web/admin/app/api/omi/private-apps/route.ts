@@ -21,10 +21,10 @@ export async function GET(request: NextRequest) {
       ...doc.data(),
     }));
 
-    return NextResponse.json({ apps });
+    return authResult.json({ apps });
   } catch (error) {
     console.error("Error fetching private apps:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch private apps" },
       { status: 500 }
     );

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
 
     if (!apiKey || !projectId) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "PostHog credentials not configured" },
         { status: 500 }
       );
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
       cache.days === days &&
       Date.now() - cache.timestamp < CACHE_TTL
     ) {
-      return NextResponse.json({ data: cache.data, days });
+      return authResult.json({ data: cache.data, days });
     }
 
     // Query crashes and active users per day in a single HogQL query
@@ -88,10 +88,10 @@ export async function GET(request: NextRequest) {
         Math.round((1 - Number(rollCrashes) / Number(rollUsers)) * 1000) / 10;
     }
     cache = { data, days, timestamp: Date.now() };
-    return NextResponse.json({ data, days });
+    return authResult.json({ data, days });
   } catch (error: any) {
     console.error("Crash rate error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to fetch crash rate" },
       { status: 500 }
     );

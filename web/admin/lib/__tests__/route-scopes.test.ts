@@ -1,6 +1,6 @@
 // @vitest-environment node
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeAuth, FakeFirestore } from "./support/fake-firestore";
 import {
@@ -8,6 +8,13 @@ import {
   decodeTestFirebaseToken,
   firebaseToken,
 } from "./support/admin-request";
+import {
+  concrete,
+  handlers,
+  paramsFor,
+  ROOT,
+  type Handler,
+} from "./support/route-inventory";
 
 const state = vi.hoisted(() => ({ db: null as any, auth: null as any }));
 vi.mock("@/lib/firebase/admin", () => ({
@@ -28,46 +35,8 @@ import {
 import { FINANCIAL_ROUTES, ROUTE_POLICIES } from "@/lib/route-scopes";
 import { hashTvToken } from "@/lib/tv-links";
 
-const ROOT = resolve(__dirname, "../..");
-const METHOD =
-  /^export (?:async function|const) (GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\b/gm;
-
-type Handler = { key: string; file: string; method: string; path: string };
-
-function handlers(): Handler[] {
-  const found: Handler[] = [];
-  const visit = (dir: string) => {
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const full = resolve(dir, entry.name);
-      if (entry.isDirectory()) visit(full);
-      else if (entry.name === "route.ts") {
-        const path =
-          "/" + relative(resolve(ROOT, "app"), dir).split("\\").join("/");
-        for (const [, method] of Array.from(
-          readFileSync(full, "utf8").matchAll(METHOD)
-        )) {
-          found.push({ key: `${method} ${path}`, file: full, method, path });
-        }
-      }
-    }
-  };
-  visit(resolve(ROOT, "app/api"));
-  return found;
-}
-
 const ALL = handlers();
 const scoped = ALL.filter((h) => isScope(ROUTE_POLICIES[h.key]));
-
-function paramsFor(path: string) {
-  const params: Record<string, string> = {};
-  for (const [, name] of Array.from(path.matchAll(/\[(\w+)\]/g)))
-    params[name] = "x1";
-  return { params: Promise.resolve(params) };
-}
-
-function concrete(path: string) {
-  return path.replace(/\[(\w+)\]/g, "x1");
-}
 
 async function call(h: Handler, token: string | null, body?: unknown) {
   const mod = await import(/* @vite-ignore */ h.file);
@@ -116,6 +85,26 @@ describe("route inventory", () => {
 
   it("has no Pages Router API routes, which this inventory cannot see", () => {
     expect(existsSync(resolve(ROOT, "pages/api"))).toBe(false);
+  });
+
+  it("never serializes scoped JSON outside the guard's json()", () => {
+    // The financial field wall (lib/financial-fields.ts) lives in
+    // AdminIdentity.json; a scoped route that calls NextResponse.json
+    // directly would bypass it. Guard responses (401/403 from requireScope)
+    // are returned, not constructed, so they need no wall.
+    const files = new Set(
+      ALL.filter((h) => {
+        const policy = ROUTE_POLICIES[h.key];
+        return isScope(policy) || policy === "member";
+      }).map((h) => h.file)
+    );
+    const offenders = Array.from(files).filter((file) =>
+      readFileSync(file, "utf8").includes("NextResponse.json(")
+    );
+    expect(
+      offenders,
+      "respond via <identity>.json so financial fields are redacted"
+    ).toEqual([]);
   });
 
   it("keeps the stats reader's capability unchanged: every stats GET is in its scopes", () => {
@@ -355,10 +344,10 @@ describe("the financial wall on organization billing", () => {
     );
     expect(response.status).toBe(200);
     const org = (await response.json()).organizations[0];
-    expect(org).toMatchObject({
-      organisation_name: "Acme",
-      subscription: null,
-    });
+    expect(org).toMatchObject({ organisation_name: "Acme" });
+    // The financial field wall removes the key entirely, it does not
+    // null it: nothing billing-shaped survives for a non-finance caller.
+    expect("subscription" in org).toBe(false);
   });
 
   it("shows subscription to finance:read", async () => {
@@ -422,10 +411,8 @@ describe("the financial wall on organization billing", () => {
     );
     expect(response.status).toBe(200);
     const org = (await response.json()).organization;
-    expect(org).toMatchObject({
-      organisation_name: "Gamma",
-      subscription: null,
-    });
+    expect(org).toMatchObject({ organisation_name: "Gamma" });
+    expect("subscription" in org).toBe(false);
     expect(state.db.table("organisations").get("x1")!.organisation_name).toBe(
       "Gamma"
     );

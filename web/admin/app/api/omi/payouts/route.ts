@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const startingAfter = searchParams.get("starting_after");
 
     if (!connectedAccountId) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "connected_account_id is required" },
         { status: 400 }
       );
@@ -35,14 +35,14 @@ export async function GET(request: NextRequest) {
       stripeAccount: connectedAccountId,
     });
 
-    return NextResponse.json({
+    return authResult.json({
       payouts: payouts.data,
       hasMore: payouts.has_more,
       totalCount: payouts.data.length,
     });
   } catch (error) {
     console.error("Error fetching payouts:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch payouts" },
       { status: 500 }
     );

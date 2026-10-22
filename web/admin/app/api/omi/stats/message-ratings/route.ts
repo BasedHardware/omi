@@ -166,10 +166,10 @@ export async function GET(request: NextRequest) {
       parseInt(request.nextUrl.searchParams.get("days") || "30", 10) || 30,
       180
     );
-    return NextResponse.json(await computeMessageRatings(days));
+    return authResult.json(await computeMessageRatings(days));
   } catch (error: any) {
     console.error("Message ratings error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to fetch message ratings" },
       { status: 502 }
     );

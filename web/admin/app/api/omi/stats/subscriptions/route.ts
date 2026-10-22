@@ -80,18 +80,18 @@ export async function GET(request: NextRequest) {
       Awaited<ReturnType<typeof computeSubscriptions>>
     >(key);
     if (cached) {
-      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+      return authResult.json(withFreshness(cached.data, cached.freshAt));
     }
 
     const payload = await computeSubscriptions();
     await setPayload(key, payload);
-    return NextResponse.json(withFreshness(payload, Date.now()));
+    return authResult.json(withFreshness(payload, Date.now()));
   } catch (error) {
     if (error instanceof AllSubscriptionSourcesFailedError) {
-      return NextResponse.json({ error: error.message }, { status: 502 });
+      return authResult.json({ error: error.message }, { status: 502 });
     }
     console.error("Error fetching subscription stats:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch subscription data" },
       { status: 500 }
     );

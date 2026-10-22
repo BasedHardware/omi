@@ -9,7 +9,7 @@ export async function GET(request: NextRequest) {
   if (authResult instanceof NextResponse) return authResult;
 
   const { access } = authResult;
-  return NextResponse.json({
+  return authResult.json({
     uid: authResult.uid,
     kind: access.kind,
     role: access.role,

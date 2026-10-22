@@ -32,10 +32,10 @@ export async function GET(
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    return authResult.json(data);
   } catch (err: any) {
     console.error("[announcements GET id] Error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Internal Server Error" },
       { status: 500 }
     );
@@ -72,10 +72,10 @@ export async function PUT(
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    return authResult.json(data);
   } catch (err: any) {
     console.error("[announcements PUT] Error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Internal Server Error" },
       { status: 500 }
     );
@@ -113,10 +113,10 @@ export async function DELETE(
     }
 
     const data = await res.json();
-    return NextResponse.json(data);
+    return authResult.json(data);
   } catch (err: any) {
     console.error("[announcements DELETE] Error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Internal Server Error" },
       { status: 500 }
     );

@@ -998,7 +998,7 @@ export async function GET(request: NextRequest) {
       maxAgeMs: MAX_PRECOMPUTED_AGE_MS,
     });
     if (cached) {
-      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+      return authResult.json(withFreshness(cached.data, cached.freshAt));
     }
 
     // Cold start before the first precompute: compute inline (slow), cache, return.
@@ -1008,10 +1008,10 @@ export async function GET(request: NextRequest) {
       mobileCost,
     });
     await setPayload(key, payload);
-    return NextResponse.json(withFreshness(payload, Date.now()));
+    return authResult.json(withFreshness(payload, Date.now()));
   } catch (err: any) {
     console.error("Profitability stats error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Failed to compute profitability metrics" },
       { status: 500 }
     );

@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     ""
   );
   if (!apiKey || !projectId) {
-    return NextResponse.json({ available: false, results: [] });
+    return authResult.json({ available: false, results: [] });
   }
 
   const days = parseInt(request.nextUrl.searchParams.get("days") || "90", 10);
@@ -63,9 +63,9 @@ export async function GET(request: NextRequest) {
         if (value) entry.answers[value] = (entry.answers[value] ?? 0) + count;
       }
     }
-    return NextResponse.json({ available: true, results: byPrompt });
+    return authResult.json({ available: true, results: byPrompt });
   } catch (error) {
     console.error("Prompt results error:", error);
-    return NextResponse.json({ available: false, results: {} });
+    return authResult.json({ available: false, results: {} });
   }
 }

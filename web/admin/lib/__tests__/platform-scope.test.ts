@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { testIdentity } from "./support/test-identity";
 import {
   MOBILE_OS_NAMES,
   parsePlatformScope,
@@ -62,7 +63,7 @@ describe("viral-metrics platform scoping (query capture)", () => {
       ),
     }));
     vi.doMock("@/lib/auth", () => ({
-      requireScope: vi.fn(async () => ({ uid: "test" })),
+      requireScope: vi.fn(async () => testIdentity(undefined, "test")),
     }));
     vi.doMock("@/lib/payload-cache", () => ({
       getPayload: vi.fn(async () => null),

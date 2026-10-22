@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const response = NextResponse.json({
+    const response = authResult.json({
       payouts: transformedPayouts,
       hasMore: allPayoutsWithAppInfo.length > limit,
       totalCount: allPayoutsWithAppInfo.length,
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     console.error("Error fetching all payouts:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch payouts" },
       { status: 500 }
     );

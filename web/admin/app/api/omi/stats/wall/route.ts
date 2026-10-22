@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
           }),
         wallSnapshotStore()
       ));
-    return NextResponse.json(wallPresentation(payload), {
+    return auth.json(wallPresentation(payload), {
       status:
         !payload.refreshing && payload.metrics.every((m) => m.value == null)
           ? 502
@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch {
-    return NextResponse.json(
+    return auth.json(
       { error: "Wall aggregate sources unavailable" },
       { status: 502 }
     );

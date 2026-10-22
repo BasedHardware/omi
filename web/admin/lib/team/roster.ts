@@ -208,6 +208,28 @@ export async function addMember(
   assertNoBroaderThanActor(actor, input.accessRole, overrides);
   const email = input.email.trim().toLowerCase();
 
+  // Re-authorize from a current read before creating anything: an actor
+  // demoted or removed since authenticate() must not get as far as
+  // provisioning a Firebase Auth account. The transaction below re-checks
+  // and stays the authority; this only narrows the window.
+  {
+    const snap = await getDb()
+      .collection(ADMIN_COLLECTION)
+      .doc(actor.uid)
+      .get();
+    if (!snap.exists) {
+      throw new TeamError(403, "Your admin access was removed.");
+    }
+    const acting = { ...actor, access: accessFor(snap.data() as Data) };
+    if (!hasScope(acting.access, "team:invite")) {
+      throw new TeamError(
+        403,
+        "Only an owner, a deputy or an admin can invite."
+      );
+    }
+    assertNoBroaderThanActor(acting, input.accessRole, overrides);
+  }
+
   let firebaseUser: UserRecord;
   let provisioned = false;
   try {
@@ -251,33 +273,52 @@ export async function addMember(
     addedBy: actor.uid,
   };
 
-  await db.runTransaction(async (tx) => {
-    // Re-authorize from the actor's current doc, not the request snapshot.
-    const acting = await currentActor(tx, actor);
-    if (!hasScope(acting.access, "team:invite")) {
-      throw new TeamError(
-        403,
-        "Only an owner, a deputy or an admin can invite."
-      );
-    }
-    assertNoBroaderThanActor(acting, input.accessRole, overrides);
-    if ((await tx.get(memberRef)).exists) {
-      throw new TeamError(409, `${email} already has admin access.`);
-    }
-    await approval?.check(tx);
-    approval?.commit(tx);
-    tx.set(memberRef, memberDoc);
-    audit(tx, {
-      action: "member.added",
-      actor: humanAuditActor(actor),
-      target: { uid: firebaseUser.uid, email },
-      before: null,
-      after: snapshot(memberDoc),
-      proposalId: approval?.proposalId,
-      proposedBy: approval?.proposedBy,
-      reason: approval?.reason,
+  try {
+    await db.runTransaction(async (tx) => {
+      // Re-authorize from the actor's current doc, not the request snapshot.
+      const acting = await currentActor(tx, actor);
+      if (!hasScope(acting.access, "team:invite")) {
+        throw new TeamError(
+          403,
+          "Only an owner, a deputy or an admin can invite."
+        );
+      }
+      assertNoBroaderThanActor(acting, input.accessRole, overrides);
+      if ((await tx.get(memberRef)).exists) {
+        throw new TeamError(409, `${email} already has admin access.`);
+      }
+      await approval?.check(tx);
+      approval?.commit(tx);
+      tx.set(memberRef, memberDoc);
+      audit(tx, {
+        action: "member.added",
+        actor: humanAuditActor(actor),
+        target: { uid: firebaseUser.uid, email },
+        before: null,
+        after: snapshot(memberDoc),
+        proposalId: approval?.proposalId,
+        proposedBy: approval?.proposedBy,
+        reason: approval?.reason,
+      });
     });
-  });
+  } catch (error) {
+    // The grant did not land — the actor may have been demoted or removed
+    // after the pre-check, or the person already had access. Undo the Auth
+    // account this request created (never one that already existed) so a
+    // rejected invite leaves no orphan behind. Best effort: a delete
+    // failure is logged, not swapped for the original error.
+    if (provisioned) {
+      try {
+        await getAdminAuth().deleteUser(firebaseUser.uid);
+      } catch (cleanupError) {
+        console.error(
+          `Could not remove the Auth account provisioned for ${email} after a rejected invite; remove uid ${firebaseUser.uid} manually.`,
+          cleanupError
+        );
+      }
+    }
+    throw error;
+  }
 
   // The grant has landed. Telling them about it is best effort: a mail
   // failure is reported in the response, never rolled back into an error.

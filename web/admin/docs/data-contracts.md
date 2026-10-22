@@ -8,6 +8,7 @@ All fetches use `hooks/useAuthToken.ts`; never call `getIdToken()`, create auth 
 
 - Reads: `useAuthToken()` + `authenticatedFetcher`; mutations: `useAuthFetch()` → `fetchWithAuth(url, init)`.
 - Server routes call `requireScope(request, scope)` from `lib/auth.ts`, with the scope listed in `lib/route-scopes.ts` (see `docs/team-access.md`).
+- Scoped routes serialize JSON only through `AdminIdentity.json` (`lib/auth.ts`). It strips every field in `lib/financial-fields.ts` — money, price, payment, subscription, Stripe, revenue/MRR/cost, payout names, at any depth — unless the caller holds `finance:read`. `lib/__tests__/financial-wall.test.ts` calls every scoped GET handler with fixture data seeded with the whole list and fails if any name survives, so a new route is covered by responding through `identity.json` and nothing else. A route that must show one field to a non-finance caller passes `keep` with a comment and a wall test; no route does today.
 - Parallel fetches use `Promise.allSettled`, returning `partial: true` on partial failure and 502 on total failure.
 - SWR configuration belongs in `components/swr-provider.tsx`; keys are `token ? [url, token] : null`.
 - Partial data shows an amber warning. On error, clear stale data and show N/A; never show stale data with an error flag.

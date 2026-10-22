@@ -351,12 +351,12 @@ export async function GET(request: NextRequest) {
 
   try {
     const payload = await computeKFactor(days, platform);
-    return NextResponse.json(payload);
+    return authResult.json(payload);
   } catch (error) {
     // PostHog still failing (e.g. 429 with no cached fallback) — degrade
     // gracefully so the panel never hard-errors with a 502/500.
     console.error("Error fetching PostHog k-factor proxy:", error);
-    return NextResponse.json({
+    return authResult.json({
       days,
       platform,
       available: false as const,

@@ -15,7 +15,7 @@ export async function GET(
 
   const app_id = params.app_id;
   if (!app_id || !isSafeDocumentId(app_id)) {
-    return NextResponse.json({ error: "App ID is required" }, { status: 400 });
+    return authResult.json({ error: "App ID is required" }, { status: 400 });
   }
 
   // Fetch App Details from Firestore
@@ -25,7 +25,7 @@ export async function GET(
     const appDoc = await appDocRef.get();
 
     if (!appDoc.exists) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "App details not found" },
         { status: 404 }
       );
@@ -33,10 +33,10 @@ export async function GET(
 
     const appDetails = appDoc.data();
     // Potentially transform or select specific fields if needed
-    return NextResponse.json(appDetails, { status: 200 });
+    return authResult.json(appDetails, { status: 200 });
   } catch (error: any) {
     console.error(`Error fetching app details for ${app_id}:`, error);
-    return NextResponse.json(
+    return authResult.json(
       {
         error:
           error.message ||

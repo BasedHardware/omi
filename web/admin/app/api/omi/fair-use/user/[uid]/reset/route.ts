@@ -15,7 +15,7 @@ export async function POST(
 
   const uid = (await params).uid;
   if (!isSafeDocumentId(uid)) {
-    return NextResponse.json({ error: "Invalid uid" }, { status: 400 });
+    return authResult.json({ error: "Invalid uid" }, { status: 400 });
   }
   const adminUid = authResult.uid;
 
@@ -46,12 +46,9 @@ export async function POST(
 
     await invalidateEnforcementCache(uid);
 
-    return NextResponse.json({ status: "reset" });
+    return authResult.json({ status: "reset" });
   } catch (error) {
     console.error("Error resetting fair use state:", error);
-    return NextResponse.json(
-      { error: "Failed to reset state" },
-      { status: 500 }
-    );
+    return authResult.json({ error: "Failed to reset state" }, { status: 500 });
   }
 }

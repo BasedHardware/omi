@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     console.error(
       "TYPESENSE_HOST or TYPESENSE_API_KEY environment variables are not set."
     );
-    return NextResponse.json({ totalConversations: 0, unavailable: true });
+    return authResult.json({ totalConversations: 0, unavailable: true });
   }
 
   const typesenseUrl =
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
       const errorMsg = `Typesense API request failed: ${response.status} ${response.statusText}. ${errorBody}`;
       console.error(errorMsg);
       // Use NextResponse for App Router
-      return NextResponse.json(
+      return authResult.json(
         { message: "Failed to communicate with Typesense." },
         { status: response.status || 500 }
       );
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
         data
       );
       // Use NextResponse for App Router
-      return NextResponse.json(
+      return authResult.json(
         { message: "Invalid response format from Typesense." },
         { status: 500 }
       );
@@ -79,17 +79,17 @@ export async function GET(request: NextRequest) {
     const totalConversations = data.num_documents;
 
     // Optional: Add cache headers if the count doesn't change frequently
-    // Example: return NextResponse.json({ totalConversations }, { headers: { 'Cache-Control': 's-maxage=3600' } });
+    // Example: return authResult.json({ totalConversations }, { headers: { 'Cache-Control': 's-maxage=3600' } });
 
     // Use NextResponse for App Router
-    return NextResponse.json({ totalConversations });
+    return authResult.json({ totalConversations });
   } catch (error: unknown) {
     // Catch network errors or other unexpected issues
     console.error("Error fetching conversation count from Typesense:", error);
     const message =
       error instanceof Error ? error.message : "An unknown error occurred";
     // Use NextResponse for App Router
-    return NextResponse.json(
+    return authResult.json(
       { message: `Failed to fetch conversation count: ${message}` },
       { status: 500 }
     );

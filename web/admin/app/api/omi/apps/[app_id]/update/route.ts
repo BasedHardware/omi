@@ -14,13 +14,13 @@ export async function POST(
   if (authResult instanceof NextResponse) return authResult;
 
   if (!OMI_API_BASE_URL) {
-    return NextResponse.json(
+    return authResult.json(
       { error: "OMI API base URL not configured" },
       { status: 500 }
     );
   }
   if (!OMI_API_SECRET_KEY_BASE) {
-    return NextResponse.json(
+    return authResult.json(
       { error: "OMI API secret key not configured" },
       { status: 500 }
     );
@@ -34,18 +34,15 @@ export async function POST(
       ((incomingForm.get("app_id") as string) || params.app_id) ?? "";
     const uid = (incomingForm.get("uid") as string) || "";
     if (!appId) {
-      return NextResponse.json(
-        { error: "app_id is required" },
-        { status: 400 }
-      );
+      return authResult.json({ error: "app_id is required" }, { status: 400 });
     }
     if (!uid) {
-      return NextResponse.json({ error: "uid is required" }, { status: 400 });
+      return authResult.json({ error: "uid is required" }, { status: 400 });
     }
 
     // Ensure app_id in body matches path param if present
     if (params.app_id && appId !== params.app_id) {
-      return NextResponse.json({ error: "app_id mismatch" }, { status: 400 });
+      return authResult.json({ error: "app_id mismatch" }, { status: 400 });
     }
 
     // Transform incoming fields into FastAPI expected shape: app_data (json string) + optional file
@@ -139,15 +136,15 @@ export async function POST(
     }
 
     if (!res.ok) {
-      return NextResponse.json(
+      return authResult.json(
         { error: json?.detail || json?.error || "Update failed" },
         { status: res.status }
       );
     }
 
-    return NextResponse.json(json || { ok: true });
+    return authResult.json(json || { ok: true });
   } catch (err: any) {
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Unexpected error" },
       { status: 500 }
     );

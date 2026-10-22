@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
   const limit = Number(request.nextUrl.searchParams.get("limit") ?? 100) || 100;
   try {
-    return NextResponse.json({ entries: await listAudit(limit) });
+    return authResult.json({ entries: await listAudit(limit) });
   } catch (error) {
     return teamErrorResponse(error, "Failed to fetch the audit log");
   }

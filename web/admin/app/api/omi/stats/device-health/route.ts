@@ -354,12 +354,12 @@ export async function GET(request: NextRequest) {
 
   const days = parseDeviceHealthDays(request.nextUrl.searchParams.get("days"));
   try {
-    return NextResponse.json(await computeDeviceHealth(days));
+    return authResult.json(await computeDeviceHealth(days));
   } catch (error) {
     console.error("Device health error:", error);
     const message =
       error instanceof Error ? error.message : "Failed to fetch device health";
-    return NextResponse.json(
+    return authResult.json(
       { error: message || "Failed to fetch device health" },
       { status: 500 }
     );

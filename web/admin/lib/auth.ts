@@ -17,6 +17,7 @@ import {
   type MemberAccess,
   type Scope,
 } from "@/lib/admin-access";
+import { redactFinancialFields } from "@/lib/financial-fields";
 
 export interface AdminIdentity {
   uid: string;
@@ -24,6 +25,18 @@ export interface AdminIdentity {
   /** Email on the caller's `adminData` doc, when it has one. */
   email: string | null;
   access: MemberAccess;
+  /**
+   * The one JSON response path for scoped data. Strips every financial
+   * field (lib/financial-fields.ts) unless this identity holds
+   * finance:read — including inside nested documents — so a route cannot
+   * leak money data field by field. A route that must show a financial
+   * field to a non-finance caller passes `keep` with a comment and a test.
+   */
+  json: (
+    body: unknown,
+    init?: ResponseInit,
+    keep?: readonly string[]
+  ) => NextResponse;
 }
 
 const STATS_READER_ACCESS: MemberAccess = {
@@ -33,6 +46,17 @@ const STATS_READER_ACCESS: MemberAccess = {
   scopes: [...STATS_READER_SCOPES],
   overrides: {},
 };
+
+/** The single response choke point every scoped route responds through. */
+function respondAs(access: MemberAccess) {
+  return (body: unknown, init?: ResponseInit, keep?: readonly string[]) =>
+    NextResponse.json(
+      hasScope(access, "finance:read")
+        ? body
+        : redactFinancialFields(body, { keep }),
+      init
+    );
+}
 
 /**
  * Who is calling. Human callers need a Firebase ID token and adminData
@@ -45,11 +69,13 @@ async function authenticate(
   const authorization = request.headers.get("Authorization");
 
   if (DEV_BYPASS_ENABLED && authorization === `Bearer ${DEV_BYPASS_TOKEN}`) {
+    const access = accessFor({ owner: true });
     return {
       uid: DEV_BYPASS_UID,
       kind: "human",
       email: null,
-      access: accessFor({ owner: true }),
+      access,
+      json: respondAs(access),
     };
   }
 
@@ -71,6 +97,7 @@ async function authenticate(
       kind: "stats-reader",
       email: null,
       access: STATS_READER_ACCESS,
+      json: respondAs(STATS_READER_ACCESS),
     };
   }
   try {
@@ -95,11 +122,13 @@ async function authenticate(
     }
 
     const data = adminDoc.data?.() ?? {};
+    const access = accessFor(data);
     return {
       uid: decodedToken.uid,
       kind: "human",
       email: typeof data.email === "string" ? data.email : null,
-      access: accessFor(data),
+      access,
+      json: respondAs(access),
     };
   } catch (error) {
     if (isFirebaseTokenError(error)) {

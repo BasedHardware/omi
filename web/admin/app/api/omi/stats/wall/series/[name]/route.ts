@@ -19,7 +19,7 @@ export async function GET(
   if (auth instanceof NextResponse) return auth;
   const { name } = await props.params;
   if (!SERIES_NAMES.includes(name as SeriesName))
-    return NextResponse.json({ error: "Unknown wall series" }, { status: 404 });
+    return auth.json({ error: "Unknown wall series" }, { status: 404 });
   const retain = (work: Promise<unknown>) =>
     after(async () => {
       await work;
@@ -37,11 +37,11 @@ export async function GET(
       undefined,
       retain
     );
-    return NextResponse.json(payload, {
+    return auth.json(payload, {
       headers: { "Cache-Control": "private, no-store" },
     });
   } catch {
-    return NextResponse.json(
+    return auth.json(
       { error: "Wall series sources unavailable" },
       { status: 502 }
     );

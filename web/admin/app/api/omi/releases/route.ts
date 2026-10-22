@@ -295,7 +295,7 @@ export async function GET(request: NextRequest) {
     githubReleases = githubResult.value;
   } else {
     github_error = githubResult.reason?.message || String(githubResult.reason);
-    return NextResponse.json(
+    return authResult.json(
       { releases: [], github_error, posthog_error: null, partial: true },
       { status: 502 }
     );
@@ -375,7 +375,7 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return NextResponse.json({
+  return authResult.json({
     releases: rows,
     github_error: null,
     posthog_error,

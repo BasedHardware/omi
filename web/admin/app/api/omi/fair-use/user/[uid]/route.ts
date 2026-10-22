@@ -14,7 +14,7 @@ export async function GET(
 
   const uid = (await params).uid;
   if (!isSafeDocumentId(uid)) {
-    return NextResponse.json({ error: "Invalid uid" }, { status: 400 });
+    return authResult.json({ error: "Invalid uid" }, { status: 400 });
   }
 
   try {
@@ -73,10 +73,10 @@ export async function GET(
       }
     }
 
-    return NextResponse.json({ uid, state: serializedState, events, profile });
+    return authResult.json({ uid, state: serializedState, events, profile });
   } catch (error) {
     console.error("Error fetching user fair use detail:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch user detail" },
       { status: 500 }
     );

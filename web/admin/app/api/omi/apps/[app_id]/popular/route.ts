@@ -14,7 +14,7 @@ export async function PATCH(
 
   const { app_id } = params;
   if (!app_id) {
-    return NextResponse.json({ error: "App ID is required" }, { status: 400 });
+    return authResult.json({ error: "App ID is required" }, { status: 400 });
   }
 
   // Parse request body to get the value
@@ -22,15 +22,12 @@ export async function PATCH(
   try {
     requestBody = await request.json();
   } catch (error) {
-    return NextResponse.json(
-      { error: "Invalid request body" },
-      { status: 400 }
-    );
+    return authResult.json({ error: "Invalid request body" }, { status: 400 });
   }
 
   const { value } = requestBody;
   if (typeof value !== "boolean") {
-    return NextResponse.json(
+    return authResult.json(
       { error: "Value must be a boolean" },
       { status: 400 }
     );
@@ -43,13 +40,13 @@ export async function PATCH(
       method: "PATCH",
     });
 
-    return NextResponse.json({ success: true, data: result });
+    return authResult.json({ success: true, data: result });
   } catch (error: any) {
     console.error(`API Error marking app ${app_id} as popular:`, error);
 
     // Handle specific API errors
     if (error.status) {
-      return NextResponse.json(
+      return authResult.json(
         {
           error: error.message || "Failed to mark app as popular",
           details: error.details,
@@ -58,7 +55,7 @@ export async function PATCH(
       );
     }
 
-    return NextResponse.json(
+    return authResult.json(
       {
         error: "Internal Server Error",
       },

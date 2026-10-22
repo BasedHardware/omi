@@ -14,7 +14,7 @@ export async function POST(
 
   const { uid, eventId } = await params;
   if (!isSafeDocumentId(uid) || !isSafeDocumentId(eventId)) {
-    return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    return authResult.json({ error: "Invalid id" }, { status: 400 });
   }
   const adminUid = authResult.uid;
 
@@ -31,7 +31,7 @@ export async function POST(
 
     const doc = await ref.get();
     if (!doc.exists) {
-      return NextResponse.json({ error: "Event not found" }, { status: 404 });
+      return authResult.json({ error: "Event not found" }, { status: 404 });
     }
 
     await ref.update({
@@ -41,10 +41,10 @@ export async function POST(
       admin_notes: notes,
     });
 
-    return NextResponse.json({ status: "resolved" });
+    return authResult.json({ status: "resolved" });
   } catch (error) {
     console.error("Error resolving fair use event:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to resolve event" },
       { status: 500 }
     );

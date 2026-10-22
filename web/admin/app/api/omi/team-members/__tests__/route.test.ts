@@ -528,23 +528,25 @@ describe("GET /api/omi/team-members/audit", () => {
 
 describe("in-flight authority: mutations re-read the actor's doc", () => {
   /**
-   * Changes the actor's adminData doc the moment their mutation's
-   * transaction first re-reads it — after the read, before the commit. The
-   * fake's conflict detection retries the transaction, so the retry must
-   * re-authorize from the changed doc and abort.
+   * Changes the actor's adminData doc the moment their mutation's Nth read
+   * of it happens — after the read, before the commit. The fake's conflict
+   * detection retries the transaction, so the retry must re-authorize from
+   * the changed doc and abort. Read 1 is authenticate(); later reads depend
+   * on the mutation (addMember re-checks before provisioning, then again
+   * inside its transaction).
    */
   function changeActorInsideTransaction(
     uid: string,
-    doc: Record<string, any> | null
+    doc: Record<string, any> | null,
+    atRead = 2
   ) {
     const realGet = FakeDocRef.prototype.get;
     let reads = 0;
     FakeDocRef.prototype.get = async function (this: FakeDocRef) {
       const result = await realGet.call(this);
-      if (this.collection === "adminData" && this.id === uid) {
+      if (this.collectionName === "adminData" && this.id === uid) {
         reads += 1;
-        // 1: authenticate() before the handler; 2: the transaction's read.
-        if (reads === 2) {
+        if (reads === atRead) {
           if (doc) members().set(uid, doc);
           else members().delete(uid);
           state.db.bump("adminData", uid);
@@ -607,6 +609,84 @@ describe("in-flight authority: mutations re-read the actor's doc", () => {
     expect(members().has("x")).toBe(false);
     expect(state.sendAdminInviteEmail).not.toHaveBeenCalled();
     expect(auditRows()).toEqual([]);
+  });
+
+  it("provisions no Auth account when the inviter was demoted before the pre-check", async () => {
+    // fresh@example.com has never signed in: no Firebase Auth user exists.
+    // The demotion lands right after authenticate()'s read (read 1), so
+    // addMember's pre-provisioning re-authorization (read 2) sees a viewer.
+    const restore = changeActorInsideTransaction(
+      ARCHIT,
+      { email: "architdraftid@gmail.com", accessRole: "viewer" },
+      1
+    );
+    try {
+      const response = await POST(
+        as(ARCHIT, "POST", { email: "fresh@example.com" })
+      );
+      expect(response.status).toBe(403);
+    } finally {
+      restore();
+    }
+    expect(
+      Array.from(state.auth.users.values()).filter(
+        (u: any) => u.email === "fresh@example.com"
+      )
+    ).toEqual([]);
+    expect(state.auth.deleted).toEqual([]);
+    expect(auditRows()).toEqual([]);
+  });
+
+  it("deletes the Auth account it provisioned when the transaction rejects", async () => {
+    // The demotion lands right after the pre-check's read (read 2), so the
+    // pre-check passed with stale authority and a uid was provisioned; the
+    // transaction's re-read (read 3) then sees a viewer and aborts.
+    const restore = changeActorInsideTransaction(
+      ARCHIT,
+      { email: "architdraftid@gmail.com", accessRole: "viewer" },
+      2
+    );
+    let createdUid: string | null = null;
+    const realCreate = state.auth.createUser.bind(state.auth);
+    state.auth.createUser = async (input: { email: string }) => {
+      const user = await realCreate(input);
+      createdUid = user.uid;
+      return user;
+    };
+    try {
+      const response = await POST(
+        as(ARCHIT, "POST", { email: "fresh@example.com" })
+      );
+      expect(response.status).toBe(403);
+    } finally {
+      restore();
+    }
+    expect(createdUid).not.toBeNull();
+    expect(state.auth.users.has(createdUid!)).toBe(false);
+    expect(state.auth.deleted).toEqual([createdUid!]);
+    expect(members().has(createdUid!)).toBe(false);
+    expect(auditRows()).toEqual([]);
+  });
+
+  it("keeps a pre-existing Auth account when the transaction rejects", async () => {
+    state.auth.add({ uid: "x", email: "x@example.com" });
+    const restore = changeActorInsideTransaction(
+      ARCHIT,
+      { email: "architdraftid@gmail.com", accessRole: "viewer" },
+      2
+    );
+    try {
+      const response = await POST(
+        as(ARCHIT, "POST", { email: "x@example.com" })
+      );
+      expect(response.status).toBe(403);
+    } finally {
+      restore();
+    }
+    expect(state.auth.users.get("x")).toMatchObject({
+      email: "x@example.com",
+    });
+    expect(state.auth.deleted).toEqual([]);
   });
 
   it("aborts a deputy appointment when the owner is demoted mid-flight", async () => {

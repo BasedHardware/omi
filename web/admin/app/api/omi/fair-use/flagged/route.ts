@@ -48,10 +48,10 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ users });
+    return authResult.json({ users });
   } catch (error) {
     console.error("Error fetching flagged users:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch flagged users" },
       { status: 500 }
     );

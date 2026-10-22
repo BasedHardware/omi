@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       const total_up = versions.reduce((s, v) => s + v.thumbs_up, 0);
       const total_down = versions.reduce((s, v) => s + v.thumbs_down, 0);
 
-      return NextResponse.json({
+      return authResult.json({
         versions,
         total_up,
         total_down,
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
     const total_up = result.reduce((sum, w) => sum + w.thumbs_up, 0);
     const total_down = result.reduce((sum, w) => sum + w.thumbs_down, 0);
 
-    return NextResponse.json({
+    return authResult.json({
       weeks: result,
       total_up,
       total_down,
@@ -129,9 +129,6 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("[Chat Lab] Error fetching ratings:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return authResult.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

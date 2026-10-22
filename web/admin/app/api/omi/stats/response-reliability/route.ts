@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     ""
   );
   if (!apiKey || !projectId) {
-    return NextResponse.json(
+    return authResult.json(
       { error: "PostHog credentials not configured" },
       { status: 500 }
     );
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
       chat: chatResult.status === "rejected" ? chatResult.reason : null,
       voice: voiceResult.status === "rejected" ? voiceResult.reason : null,
     });
-    return NextResponse.json(
+    return authResult.json(
       { error: "Response reliability data is temporarily unavailable" },
       { status: 502 }
     );
@@ -161,11 +161,11 @@ export async function GET(request: NextRequest) {
     aggregate: aggregateResult,
   });
   if (!payload.availability.chat && !payload.availability.voice) {
-    return NextResponse.json(
+    return authResult.json(
       { error: "Response reliability data is temporarily unavailable" },
       { status: 502 }
     );
   }
 
-  return NextResponse.json(payload);
+  return authResult.json(payload);
 }

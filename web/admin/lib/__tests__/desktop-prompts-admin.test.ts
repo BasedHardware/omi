@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/auth", () => ({
-  requireScope: vi.fn(async () => ({ uid: "t" })),
+  requireScope: vi.fn(async () => testIdentity(undefined, "t")),
 }));
 vi.mock("@/lib/firebase/admin", () => ({ getDb: () => ({}) }));
 
 import { normalizePrompt } from "@/app/api/omi/desktop-prompts/route";
+import { testIdentity } from "./support/test-identity";
 
 describe("normalizePrompt", () => {
   it("builds the document the desktop delivery route expects", () => {

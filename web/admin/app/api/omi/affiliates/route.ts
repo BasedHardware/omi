@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
         const res = await goaffproGet(
           `/admin/affiliates/search?${params.toString()}`
         );
-        return NextResponse.json({
+        return authResult.json({
           affiliates: res.result?.affiliates || [],
           has_more: false, // search endpoint doesn't paginate
           offset: 0,
@@ -102,7 +102,7 @@ export async function GET(request: NextRequest) {
 
       const res = await goaffproGet(`/admin/affiliates?${params.toString()}`);
       const affiliates = res.affiliates || [];
-      return NextResponse.json({
+      return authResult.json({
         affiliates,
         has_more: affiliates.length === limit,
         offset,
@@ -113,7 +113,7 @@ export async function GET(request: NextRequest) {
     if (action === "detail") {
       const id = searchParams.get("id");
       if (!id || !/^\d+$/.test(id)) {
-        return NextResponse.json({ error: "id is required" }, { status: 400 });
+        return authResult.json({ error: "id is required" }, { status: 400 });
       }
 
       // GoAffPro doesn't have a singular GET /admin/affiliates/{id}, so use the
@@ -124,7 +124,7 @@ export async function GET(request: NextRequest) {
       );
       const affiliate = (res.affiliates || [])[0];
       if (!affiliate) {
-        return NextResponse.json(
+        return authResult.json(
           { error: "Affiliate not found" },
           { status: 404 }
         );
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
           ? (pendingRes.value.pending || [])[0]
           : null;
 
-      return NextResponse.json({
+      return authResult.json({
         affiliate,
         stats: {
           total_orders,
@@ -157,10 +157,10 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    return authResult.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
     console.error("Affiliates API error:", error);
-    return NextResponse.json(
+    return authResult.json(
       {
         error: error instanceof Error ? error.message : "Failed to fetch data",
       },

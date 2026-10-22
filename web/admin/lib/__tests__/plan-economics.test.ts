@@ -5,6 +5,7 @@ import {
   buildPlanEconomics,
   type EconomicsSnapshot,
 } from "@/lib/services/plan-economics";
+import { testIdentity } from "./support/test-identity";
 
 const query = vi.hoisted(() => vi.fn());
 const requireScope = vi.hoisted(() => vi.fn());
@@ -237,7 +238,7 @@ describe("plan economics route", () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();
-    requireScope.mockResolvedValue({ uid: "admin" });
+    requireScope.mockResolvedValue(testIdentity(undefined, "admin"));
   });
   it("authenticates before reading billing data and rejects platform mislabelling", async () => {
     const { GET } = await import("@/app/api/omi/stats/plan-economics/route");

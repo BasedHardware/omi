@@ -153,19 +153,19 @@ export async function GET(request: NextRequest) {
       Awaited<ReturnType<typeof computeActivation>>
     >(key);
     if (cached) {
-      return NextResponse.json(
+      return authResult.json(
         withFreshness(toGrafanaActivationPayload(cached.data), cached.freshAt)
       );
     }
 
     const payload = await computeActivation(days);
     await setPayload(key, payload);
-    return NextResponse.json(
+    return authResult.json(
       withFreshness(toGrafanaActivationPayload(payload), Date.now())
     );
   } catch (error: any) {
     console.error("Activation error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error.message || "Failed to compute activation" },
       { status: 500 }
     );

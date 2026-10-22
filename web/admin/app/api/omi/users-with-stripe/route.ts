@@ -13,24 +13,21 @@ export async function GET(request: NextRequest) {
     const appId = searchParams.get("app_id");
 
     if (!appId) {
-      return NextResponse.json(
-        { error: "app_id is required" },
-        { status: 400 }
-      );
+      return authResult.json({ error: "app_id is required" }, { status: 400 });
     }
 
     // First, get the app to find the user ID
     const appDoc = await db.collection("plugins_data").doc(appId).get();
 
     if (!appDoc.exists) {
-      return NextResponse.json({ error: "App not found" }, { status: 404 });
+      return authResult.json({ error: "App not found" }, { status: 404 });
     }
 
     const appData = appDoc.data();
     const userId = appData?.uid;
 
     if (!userId) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "App has no associated user" },
         { status: 400 }
       );
@@ -40,14 +37,14 @@ export async function GET(request: NextRequest) {
     const userDoc = await db.collection("users").doc(userId).get();
 
     if (!userDoc.exists) {
-      return NextResponse.json({ error: "User not found" }, { status: 404 });
+      return authResult.json({ error: "User not found" }, { status: 404 });
     }
 
     const userData = userDoc.data();
     const stripeAccountId = userData?.stripe_account_id;
 
     if (!stripeAccountId) {
-      return NextResponse.json(
+      return authResult.json(
         {
           error: "User has no connected Stripe account",
           code: "NO_STRIPE_ACCOUNT",
@@ -58,7 +55,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
+    return authResult.json({
       userId,
       stripeAccountId,
       appName: appData?.name,
@@ -66,7 +63,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching user with Stripe account:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch user data" },
       { status: 500 }
     );

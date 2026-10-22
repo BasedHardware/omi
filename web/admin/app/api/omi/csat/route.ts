@@ -74,14 +74,14 @@ export async function GET(request: NextRequest) {
   const config = snapshot.exists
     ? { ...CSAT_DEFAULT_CONFIG, ...snapshot.data() }
     : { ...CSAT_DEFAULT_CONFIG };
-  return NextResponse.json({ config });
+  return authResult.json({ config });
 }
 
 export async function PUT(request: NextRequest) {
   const authResult = await requireScope(request, "content:write");
   if (authResult instanceof NextResponse) return authResult;
   const { error, doc } = normalizeCsatConfig(await request.json());
-  if (error) return NextResponse.json({ error }, { status: 400 });
+  if (error) return authResult.json({ error }, { status: 400 });
   const ref = getDb().collection(CONFIG_COLLECTION).doc(CONFIG_DOC);
   const current = await ref.get();
   const revision = (Number(current.data()?.revision) || 0) + 1;
@@ -92,5 +92,5 @@ export async function PUT(request: NextRequest) {
     updated_by: authResult.uid,
   };
   await ref.set(config);
-  return NextResponse.json({ config });
+  return authResult.json({ config });
 }

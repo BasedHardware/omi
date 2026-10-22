@@ -5,12 +5,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const { posthogResults, requireScope } = vi.hoisted(() => ({
   posthogResults: vi.fn(),
-  requireScope: vi.fn(async () => ({ uid: "admin" })),
+  requireScope: vi.fn(),
 }));
 vi.mock("@/lib/posthog", () => ({ posthogResults }));
 vi.mock("@/lib/auth", () => ({ requireScope }));
 
+import { testIdentity } from "./support/test-identity";
 import { GET } from "@/app/api/omi/stats/device-health/route";
+
+requireScope.mockImplementation(async () => testIdentity(undefined, "admin"));
 
 const ENV_KEYS = [
   "POSTHOG_PERSONAL_API_KEY",
@@ -90,7 +93,9 @@ function sampleFixture(
 afterEach(() => {
   vi.useRealTimers();
   posthogResults.mockReset();
-  vi.mocked(requireScope).mockResolvedValue({ uid: "admin" } as never);
+  vi.mocked(requireScope).mockImplementation(async () =>
+    testIdentity(undefined, "admin")
+  );
   for (const key of ENV_KEYS) {
     if (originalEnv[key] == null) delete process.env[key];
     else process.env[key] = originalEnv[key];

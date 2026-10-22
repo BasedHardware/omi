@@ -63,10 +63,10 @@ export async function GET(request: NextRequest) {
 
   const days = parseInt(request.nextUrl.searchParams.get("days") || "60", 10);
   try {
-    return NextResponse.json(await computeDesktopRatings(days));
+    return authResult.json(await computeDesktopRatings(days));
   } catch (error) {
     console.error("Desktop ratings stats error:", error);
-    return NextResponse.json({
+    return authResult.json({
       days,
       available: false,
       daily: [],

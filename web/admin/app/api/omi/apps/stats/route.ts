@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
 
     if (results.every((r) => r.status === "rejected")) {
       return withCors(
-        NextResponse.json(
+        authResult.json(
           { error: "All app data sources failed" },
           { status: 502 }
         )
@@ -91,19 +91,19 @@ export async function GET(request: NextRequest) {
       partial,
     };
 
-    return withCors(NextResponse.json(stats));
+    return withCors(authResult.json(stats));
   } catch (error) {
     console.error("[API Route] Error fetching app stats:", error);
     if (error instanceof OmiApiError) {
       return withCors(
-        NextResponse.json(
+        authResult.json(
           { error: error.message, details: error.details },
           { status: error.status }
         )
       );
     }
     return withCors(
-      NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+      authResult.json({ error: "Internal Server Error" }, { status: 500 })
     );
   }
 }

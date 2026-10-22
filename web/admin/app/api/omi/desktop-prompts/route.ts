@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
     .orderBy("created_at", "desc")
     .limit(100)
     .get();
-  return NextResponse.json({
+  return authResult.json({
     prompts: snapshot.docs.map((d) => ({ id: d.id, ...d.data() })),
   });
 }
@@ -80,8 +80,8 @@ export async function POST(request: NextRequest) {
   const authResult = await requireScope(request, "content:write");
   if (authResult instanceof NextResponse) return authResult;
   const { error, doc } = normalizePrompt(await request.json());
-  if (error) return NextResponse.json({ error }, { status: 400 });
+  if (error) return authResult.json({ error }, { status: 400 });
   doc.created_at = Date.now() / 1000;
   const ref = await getDb().collection("desktop_prompts").add(doc);
-  return NextResponse.json({ id: ref.id, ...doc }, { status: 201 });
+  return authResult.json({ id: ref.id, ...doc }, { status: 201 });
 }

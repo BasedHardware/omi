@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
       !Array.isArray(evaluations) ||
       evaluations.length === 0
     ) {
-      return NextResponse.json(
+      return authResult.json(
         {
           error: "current_prompt and non-empty evaluations array are required",
         },
@@ -90,14 +90,14 @@ Respond ONLY with valid JSON in this exact format:
         throw new Error("No JSON found in response");
       }
       const parsed = JSON.parse(jsonMatch[0]);
-      return NextResponse.json({
+      return authResult.json({
         prompt_text: parsed.prompt_text || "",
         floating_prefix: parsed.floating_prefix || "",
         notes: parsed.notes || "",
       });
     } catch {
       // Return raw text if JSON parsing fails
-      return NextResponse.json({
+      return authResult.json({
         prompt_text: resultText,
         floating_prefix: "",
         notes:
@@ -108,6 +108,6 @@ Respond ONLY with valid JSON in this exact format:
     console.error("[Chat Lab] Error generating prompt:", error);
     const message =
       error instanceof Error ? error.message : "Internal Server Error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return authResult.json({ error: message }, { status: 500 });
   }
 }

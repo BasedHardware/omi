@@ -515,15 +515,15 @@ export async function GET(request: NextRequest) {
       Awaited<ReturnType<typeof computeNotifications>>
     >(key);
     if (cached) {
-      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+      return authResult.json(withFreshness(cached.data, cached.freshAt));
     }
 
     const payload = await computeNotifications(days);
     await setPayload(key, payload);
-    return NextResponse.json(withFreshness(payload, Date.now()));
+    return authResult.json(withFreshness(payload, Date.now()));
   } catch (error) {
     console.error("Error fetching notification stats:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch notification stats" },
       { status: 500 }
     );

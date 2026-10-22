@@ -12,21 +12,18 @@ export async function GET(request: NextRequest) {
 
   try {
     const apps = await getApps(authResult.uid);
-    return NextResponse.json(apps);
+    return authResult.json(apps);
   } catch (error) {
     console.error("[API Route] Error fetching Omi apps:", error);
     if (error instanceof OmiApiError) {
       // Forward the status and details from the Omi API error
-      return NextResponse.json(
+      return authResult.json(
         { error: error.message, details: error.details },
         { status: error.status }
       );
     }
     // Generic server error
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return authResult.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 

@@ -53,13 +53,13 @@ export async function GET(request: NextRequest) {
   try {
     const ids = await fetchSummaryAppIds();
     if (ids.length === 0) {
-      return NextResponse.json([]);
+      return authResult.json([]);
     }
     const apps = await fetchAppsByIds(ids);
-    return NextResponse.json(apps);
+    return authResult.json(apps);
   } catch (err: any) {
     console.error("[summary-apps] Error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Internal Server Error" },
       { status: 500 }
     );
@@ -75,10 +75,7 @@ export async function PATCH(request: NextRequest) {
     const { appId, name, description, memory_prompt } = body;
 
     if (!appId) {
-      return NextResponse.json(
-        { error: "App ID is required" },
-        { status: 400 }
-      );
+      return authResult.json({ error: "App ID is required" }, { status: 400 });
     }
 
     const firestore = getDb();
@@ -91,10 +88,10 @@ export async function PATCH(request: NextRequest) {
 
     await appRef.update(updateData);
 
-    return NextResponse.json({ success: true });
+    return authResult.json({ success: true });
   } catch (err: any) {
     console.error("[summary-apps PATCH] Error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Internal Server Error" },
       { status: 500 }
     );
@@ -110,10 +107,7 @@ export async function POST(request: NextRequest) {
     const { appId } = body;
 
     if (!appId) {
-      return NextResponse.json(
-        { error: "App ID is required" },
-        { status: 400 }
-      );
+      return authResult.json({ error: "App ID is required" }, { status: 400 });
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_OMI_API_URL;
@@ -134,10 +128,10 @@ export async function POST(request: NextRequest) {
       throw new Error(`Failed to add summary app: ${res.status} ${text}`);
     }
 
-    return NextResponse.json({ success: true });
+    return authResult.json({ success: true });
   } catch (err: any) {
     console.error("[summary-apps POST] Error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Internal Server Error" },
       { status: 500 }
     );
@@ -153,10 +147,7 @@ export async function DELETE(request: NextRequest) {
     const { appId } = body;
 
     if (!appId) {
-      return NextResponse.json(
-        { error: "App ID is required" },
-        { status: 400 }
-      );
+      return authResult.json({ error: "App ID is required" }, { status: 400 });
     }
 
     const baseUrl = process.env.NEXT_PUBLIC_OMI_API_URL;
@@ -177,10 +168,10 @@ export async function DELETE(request: NextRequest) {
       throw new Error(`Failed to remove summary app: ${res.status} ${text}`);
     }
 
-    return NextResponse.json({ success: true });
+    return authResult.json({ success: true });
   } catch (err: any) {
     console.error("[summary-apps DELETE] Error:", err);
-    return NextResponse.json(
+    return authResult.json(
       { error: err?.message || "Internal Server Error" },
       { status: 500 }
     );

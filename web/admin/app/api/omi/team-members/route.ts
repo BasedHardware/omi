@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
   try {
     const teamMembers = await listRoster();
     const canManage = hasScope(authResult.access, "team:manage");
-    return NextResponse.json({
+    return authResult.json({
       teamMembers,
       viewer: {
         uid: authResult.uid,
@@ -76,7 +76,7 @@ export async function POST(request: NextRequest) {
 
   const parsedBody = addTeamMemberSchema.safeParse(await readJson(request));
   if (!parsedBody.success) {
-    return NextResponse.json(
+    return authResult.json(
       { error: "A valid email is required" },
       { status: 400 }
     );
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const result = await addMember(actorFrom(authResult), parsedBody.data);
-    return NextResponse.json(result, { status: 201 });
+    return authResult.json(result, { status: 201 });
   } catch (error) {
     return teamErrorResponse(error, "Failed to add team member");
   }
@@ -96,7 +96,7 @@ export async function PATCH(request: NextRequest) {
 
   const parsedBody = changeRoleSchema.safeParse(await readJson(request));
   if (!parsedBody.success) {
-    return NextResponse.json(
+    return authResult.json(
       { error: "A member uid and a known role are required" },
       { status: 400 }
     );
@@ -110,7 +110,7 @@ export async function PATCH(request: NextRequest) {
       accessRole,
       scopeOverrides ?? {}
     );
-    return NextResponse.json({ member });
+    return authResult.json({ member });
   } catch (error) {
     return teamErrorResponse(error, "Failed to change role");
   }
@@ -122,7 +122,7 @@ export async function DELETE(request: NextRequest) {
 
   const parsedBody = removeTeamMemberSchema.safeParse(await readJson(request));
   if (!parsedBody.success) {
-    return NextResponse.json(
+    return authResult.json(
       { error: "A member uid is required" },
       { status: 400 }
     );
@@ -133,7 +133,7 @@ export async function DELETE(request: NextRequest) {
       actorFrom(authResult),
       parsedBody.data.uid
     );
-    return NextResponse.json({ removed });
+    return authResult.json({ removed });
   } catch (error) {
     return teamErrorResponse(error, "Failed to remove team member");
   }

@@ -22,13 +22,10 @@ export async function GET(request: NextRequest) {
       ...doc.data(),
     }));
 
-    return NextResponse.json({ versions });
+    return authResult.json({ versions });
   } catch (error) {
     console.error("[Chat Lab] Error fetching prompt versions:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return authResult.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
 
@@ -41,7 +38,7 @@ export async function POST(request: NextRequest) {
     const { name, prompt_text, floating_prefix, notes } = body;
 
     if (!name || !prompt_text) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "name and prompt_text are required" },
         { status: 400 }
       );
@@ -61,12 +58,9 @@ export async function POST(request: NextRequest) {
         created_by: authResult.uid,
       });
 
-    return NextResponse.json({ id: docRef.id }, { status: 201 });
+    return authResult.json({ id: docRef.id }, { status: 201 });
   } catch (error) {
     console.error("[Chat Lab] Error creating prompt version:", error);
-    return NextResponse.json(
-      { error: "Internal Server Error" },
-      { status: 500 }
-    );
+    return authResult.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }

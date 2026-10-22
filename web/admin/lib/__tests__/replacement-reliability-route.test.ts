@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { testIdentity } from "./support/test-identity";
 
 const posthogResults = vi.hoisted(() => vi.fn());
 const fetchTelemetryAggregates = vi.hoisted(() => vi.fn());
@@ -28,7 +29,7 @@ describe("response reliability route", () => {
     vi.resetModules();
     posthogResults.mockReset();
     fetchTelemetryAggregates.mockReset();
-    requireScope.mockResolvedValue({ uid: "admin-1" });
+    requireScope.mockResolvedValue(testIdentity(undefined, "admin-1"));
     process.env.POSTHOG_PERSONAL_API_KEY = "ph";
     process.env.POSTHOG_PROJECT_ID = "1";
     delete process.env.RELIABILITY_REPLACEMENT_READER;
