@@ -40,7 +40,14 @@ class LiveAudioArchive:
         decoded: bytes | None = None,
     ) -> None:
         request = self.host.request
-        if self.failed or not self._admitted(request.uid, 'LIVE') or not self.host.private_cloud_sync_enabled:
+        # Consent is read before admission: with LIVE default-on, a host that
+        # does not carry the consent attribute (older hosts, test doubles)
+        # must never crash the receive loop on its way to a no-op archive.
+        if (
+            self.failed
+            or not getattr(self.host, 'private_cloud_sync_enabled', False)
+            or not self._admitted(request.uid, 'LIVE')
+        ):
             return
         pack = self.packs.get(channel)
         if pack is not None and pack.boundary(conversation_id, timestamp, len(raw)):
