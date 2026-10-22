@@ -294,14 +294,31 @@ def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Option
 BYOK_HEARTBEAT_TTL_SECONDS = 7 * 24 * 60 * 60  # 7 days
 
 
+def _coerce_utc_datetime(value: Any) -> datetime | None:
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            value = datetime.fromisoformat(text.replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    if not isinstance(value, datetime):
+        return None
+    if value.tzinfo is None or value.utcoffset() is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
 def get_byok_state(uid: str, *, firestore_client: Any | None = None) -> dict:
     client = firestore_client or get_data_plane_firestore_client()
 
     def fetch():
         data = user_snapshot(uid, client).to_dict() or {}
-        return data.get('byok', {})
+        byok = data.get('byok')
+        return byok if isinstance(byok, dict) else {}
 
-    return memo(
+    state = memo(
         uid,
         ('byok', plane_id(client)),
         lambda: cached_read(
@@ -313,20 +330,18 @@ def get_byok_state(uid: str, *, firestore_client: Any | None = None) -> dict:
             validate=lambda state: isinstance(state, dict),
         ),
     )
+    return state if isinstance(state, dict) else {}
 
 
 def is_byok_active(uid: str, *, firestore_client: Any | None = None) -> bool:
     """True if user has a live BYOK activation (heartbeat within TTL)."""
     state = get_byok_state(uid, firestore_client=firestore_client)
-    if not state.get('active'):
+    if not isinstance(state, dict) or not state.get('active'):
         return False
-    last_seen = state.get('last_seen_at')
-    if not last_seen:
+    last_seen = _coerce_utc_datetime(state.get('last_seen_at'))
+    if last_seen is None:
         return False
-    if isinstance(last_seen, datetime):
-        age = (datetime.now(timezone.utc) - last_seen).total_seconds()
-    else:
-        return False
+    age = (datetime.now(timezone.utc) - last_seen).total_seconds()
     return age <= BYOK_HEARTBEAT_TTL_SECONDS
 
 
