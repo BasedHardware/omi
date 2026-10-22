@@ -741,6 +741,13 @@ class _LeasedReplySink:
     def __init__(self, delegate, store, uid, token):
         self.delegate, self.store, self.uid, self.token = delegate, store, uid, token
 
+    def _release_after_stop(self):
+        try:
+            self.store.release(self.uid, 'app', self.token)
+        except PermissionError:
+            # A newer turn already took the lease over: nothing of ours to free.
+            logger.info('App turn lease already taken over at stop')
+
     def response(self, stream, *, media_type):
         async def leased():
             source = stream if hasattr(stream, '__aiter__') else iterate_in_threadpool(stream)
@@ -756,7 +763,7 @@ class _LeasedReplySink:
                     # A stopped or failed reply (client Stop, or a new message replacing it) must
                     # free the turn now, not when the lease goes stale. Submitted rather than
                     # awaited: this runs while the stream is being cancelled.
-                    submit_with_context(db_executor, self.store.release, self.uid, 'app', self.token)
+                    submit_with_context(db_executor, self._release_after_stop)
 
         return self.delegate.response(leased(), media_type=media_type)
 

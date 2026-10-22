@@ -261,6 +261,8 @@ class MemoryStore:
     def superseding_pending(self, path):
         with self.lock:
             identity, chat = self.jobs[path].get('identity'), self.jobs[path].get('chat')
+            if not chat:
+                return False  # a row from before the field is never replaced
             return any(
                 other != path
                 and row['status'] == 'pending'

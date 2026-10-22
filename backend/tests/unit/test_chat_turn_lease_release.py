@@ -111,3 +111,12 @@ def test_resend_right_after_stop_waits_briefly_for_the_released_lease(monkeypatc
         assert error.status_code == 409
     else:
         raise AssertionError('a turn still running must answer 409')
+
+
+def test_release_after_stop_tolerates_a_lease_already_taken_over():
+    class _TakenOver(_Store):
+        def release(self, uid, surface, token):
+            raise PermissionError('Lost surface lease')
+
+    sink = _LeasedReplySink(_Delegate(), _TakenOver(), 'uid-1', 'tok-old')
+    sink._release_after_stop()  # must not raise into the executor's error log

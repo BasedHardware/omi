@@ -206,3 +206,12 @@ def test_a_message_in_another_chat_does_not_replace_this_reply():
     store.jobs[running]['status'] = 'running'
     store.enqueue(replace(first, external_chat_id='group-chat', provider_message_id='g1', text='in another chat'))
     assert not store.superseding_pending(running)
+
+
+def test_a_row_from_before_the_chat_field_is_never_replaced():
+    _, store, first = _setup()
+    running = store.enqueue(first)
+    store.jobs[running]['status'] = 'running'
+    store.jobs[running].pop('chat')
+    store.enqueue(replace(first, provider_message_id='fix', text='correction'))
+    assert not store.superseding_pending(running)
