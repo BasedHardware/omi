@@ -4,12 +4,13 @@ from contextlib import nullcontext
 from datetime import datetime, timezone
 import hashlib
 import json
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from tests.unit.test_cap_hold_durability import fragment_sink  # noqa: F401
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from utils.observability import held_content
 from utils.sync import cap_hold, live_cap_hold as live, live_cap_tail
 from utils.sync.cap_hold_erasure import terminal_receipts
 
@@ -64,11 +65,17 @@ async def test_idle_tail_seals_after_grace_without_more_audio(fragment_sink, mon
     assert len(sealed) == 1
 
 
-@pytest.mark.parametrize('boundary', ['owner', 'rate', 'month', 'gap', 'channel'])
+@pytest.mark.parametrize('boundary', ['owner', 'rate', 'month', 'year', 'gap', 'channel'])
 async def test_grace_never_joins_incompatible_capture(fragment_sink, boundary):
     sink, staged, sealed = fragment_sink
-    month_end = datetime(2026, 11, 1, tzinfo=timezone.utc).timestamp()
-    start = month_end - 0.01 if boundary == 'month' else 1000.0
+    month_end = (
+        datetime(2027, 1, 1, tzinfo=timezone.utc).timestamp()
+        if boundary == 'year'
+        else (datetime(2026, 11, 1, tzinfo=timezone.utc).timestamp())
+    )
+    start = month_end - 0.01 if boundary in {'month', 'year'} else 1000.0
+    sealed_count = held_content.TRANSITION_TAIL.labels(outcome='sealed')._value.get()
+    coalesced_count = held_content.TRANSITION_TAIL.labels(outcome='coalesced')._value.get()
     sink.append(b'\1\0' * 160, 16000, start, 'a')
     await sink.flush(force=True)
     sink.append(
@@ -81,6 +88,36 @@ async def test_grace_never_joins_incompatible_capture(fragment_sink, boundary):
     await sink.close()
     assert len(sealed) == 2
     assert sum(meta['source_frames'] for _, parts in sealed for meta, _ in parts) == 320
+    assert held_content.TRANSITION_TAIL.labels(outcome='sealed')._value.get() == sealed_count + 1
+    assert held_content.TRANSITION_TAIL.labels(outcome='coalesced')._value.get() == coalesced_count
+    if boundary == 'year':
+        assert [meta['live_storage_month'] for _, parts in sealed for meta, _ in parts] == ['2026-12', '2027-01']
+
+
+async def test_custody_pressure_drains_deferred_tail_before_accepting_more_pcm(fragment_sink, monkeypatch):
+    sink, staged, sealed = fragment_sink
+    clock = [100.0]
+    monkeypatch.setattr(live_cap_tail.time, 'monotonic', lambda: clock[0])
+    sink.append(b'\1\0', 100, 1000, 'a', 0)
+    await sink.flush(force=True)
+    assert sink._tails.deferred == {(0, 100, 'a')}
+    sink.append(b'\2\0' * 1499, 100, 1000, 'a', 1)
+    assert sink.buffered_seconds() == sink.bound
+    flush = AsyncMock(wraps=sink.flush)
+    monkeypatch.setattr(sink, 'flush', flush)
+
+    # Aggregate custody is full while one channel still has a deferred 10 ms
+    # tail. _packet_parts must bypass grace before accepting this next sample.
+    await sink.append_async(b'\3\0', 100, 1014.99, 'a', 1)
+    flush.assert_awaited_once_with(force=True, seal=False, final=True)
+    assert not sink._tails.deferred
+    assert sink.buffered_seconds() == 0.01
+    assert any(
+        meta['channel'] == 0 and meta['source_frames'] == 1 for parts in staged.values() for meta, _ in parts.values()
+    )
+    await sink.close()
+    assert sum(meta['source_frames'] for _, parts in sealed for meta, _ in parts) == 1501
+    assert sink.seconds == pytest.approx(15.01)
 
 
 def test_final_checkpoint_zeroes_roundoff_in_the_same_transaction(monkeypatch):
