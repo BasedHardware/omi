@@ -28,6 +28,7 @@ import 'package:omi/services/telemetry/client_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/services/wals/pendant_ring_custody.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/services/wals/deleted_account_uids.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_job_poller.dart';
@@ -44,6 +45,7 @@ import 'package:omi/utils/wal_file_manager.dart';
 part 'wal_policy.dart';
 part 'wal_job_reconciliation.dart';
 part 'device_chunk_persistence.dart';
+part 'wal_account_purge.dart';
 
 class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// A cheap view invalidation signal: unrelated live/device sync changes do
@@ -511,6 +513,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       Logger.debug("wal service after migration: ${_wals.length}");
       DebugLogManager.logInfo('WAL migration completed', {'migratedCount': migratedCount, 'totalAfter': _wals.length});
     }
+    if (!await _purgeDeletedAccountWalsAtLoad(generation)) return;
 
     // Fix any inconsistent WAL states from old implementations
     await WalFileManager.migrateInconsistentWals(_wals);
@@ -1102,9 +1105,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
   }
 
+  // Foreign-owner audio is another account's: it never counts as this account's pressure.
   int get _pendingDiskWalCount => [
         ..._retiredWals,
-        ..._foreignWals,
         ..._wals,
       ].where((wal) => wal.storage == WalStorage.disk && (wal.status != WalStatus.synced || wal.syncedAt == 0)).length;
 
@@ -1291,6 +1294,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @override
   Future<int> applySyncedCopyRetention() => _removeExpiredSyncedCopies();
 
+  @override
+  Future<int> purgeAccountWals(String uid) => _purgeAccountWals(uid);
+
   Future<int> _removeExpiredSyncedCopies() async {
     final prefs = SharedPreferencesUtil();
     if (!prefs.autoRemoveSyncedCopies) return 0;
@@ -1387,21 +1393,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
     DebugLogManager.logEvent('wal_transcript_coverage', fields);
   }
-
-  bool _fileReferencedByOtherWal(Wal wal, String fileName) {
-    for (final other in [..._retiredWals, ..._foreignWals, ..._wals]) {
-      if (identical(other, wal)) continue;
-      final otherPath = other.filePath;
-      final otherName = (otherPath != null && otherPath.isNotEmpty) ? otherPath.split('/').last : other.getFileName();
-      if (otherName == fileName) return true;
-    }
-    return false;
-  }
-
-  bool _isTrackedWal(Wal wal) =>
-      _wals.any((w) => identical(w, wal)) ||
-      _retiredWals.any((w) => identical(w, wal)) ||
-      _foreignWals.any((w) => identical(w, wal));
 
   Future<bool> _deleteWal(Wal wal, {required int generation}) async {
     if (!_isCurrent(generation) || !_isTrackedWal(wal)) return false;
