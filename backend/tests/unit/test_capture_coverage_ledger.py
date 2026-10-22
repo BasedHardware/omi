@@ -307,3 +307,46 @@ def test_cap_held_segment_rechecks_before_paid_recovery(ledger, identity, tmp_pa
     monkeypatch.setenv(coverage.FLAG, mode)
     paths, _, _, _ = sync_coverage.held_segment(uid, path, {'source_position_map': [mapping(key), 0]})
     assert len(paths) == expected
+
+
+def test_provider_manifest_does_not_change_shadow_targeting(identity, monkeypatch):
+    from datetime import datetime, timezone
+    from unittest.mock import Mock
+    from utils.batch_pipeline import projection, context, audio
+    from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding, Priority
+    from config.policy import ProjectionPolicy
+
+    uid, _ = identity
+    monkeypatch.setenv(coverage.FLAG, 'shadow')
+    item = WorkItem('piece', uid, 1760000000, 'gs://synthetic/audio', 1, Priority.DEEP)
+    binding = ProjectionBinding(uid, 'job', 'content', ('piece',))
+    payload = {
+        'words': [{'word': str(UUID(int=90)), 'timestamp': [0, 1]}],
+        'audio_seconds': 1,
+        'speech_seconds': 1,
+        'diarization': {'turns': []},
+    }
+    frozen = audio.with_context(audio.audio_unit(item.capture_at, bytes(32000)).wav, {'capture_coverage_runs': []})
+    projector = projection.Projector(Mock(), Mock(return_value=payload), fetch_audio=lambda _: frozen)
+    projector.store = Mock()
+    incoming = {
+        'started_at': datetime.fromtimestamp(item.capture_at, timezone.utc),
+        'finished_at': datetime.fromtimestamp(item.capture_at + 1, timezone.utc),
+        'transcript_segments': [{'id': 'segment', 'speaker_id_scope': 'scope', 'start': 0, 'end': 1}],
+    }
+    monkeypatch.setattr(projection, 'build_incoming', lambda *a, **k: incoming)
+    monkeypatch.setattr(
+        context, 'resolve_context', lambda *a, **k: pytest.fail('provider shadow must keep legacy targeting')
+    )
+    monkeypatch.setattr(projection.conversations_db, 'get_closest_conversation_to_timestamps', lambda *a: None)
+
+    def commit(*args, after_assign, **kwargs):
+        result = ({'id': 'committed'}, False, [])
+        after_assign(None, result)
+        return result
+
+    monkeypatch.setattr(projection.conversations_db, 'assign_sync_conversation', commit)
+    projector.assign_parts(
+        item, {'result': {'result_uri': 'fixture'}}, binding, finish=False, policy=ProjectionPolicy()
+    )
+    projector.store.session.return_value.persist.assert_called_once()

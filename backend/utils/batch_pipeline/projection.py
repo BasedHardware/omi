@@ -731,7 +731,7 @@ class Projector:
                 if hint is not None and hint.parallel_candidate and not binding.target_conversation_id:
                     pending_candidate = self._start_candidate(binding, part, part_payload)
                 context = ResolvedContext(binding.target_conversation_id)
-                if manifest is not None:
+                if manifest is not None and item.requires_compute_admission:
                     with projection_phase('context', policy):
                         context = resolve_context(item, binding, manifest, self.store.client, projection_item=part)
                 if not part_payload['words']:

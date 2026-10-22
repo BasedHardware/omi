@@ -11,11 +11,19 @@ import json
 from typing import Any
 
 from models.capture_coverage import CaptureKey, CoverageRecord, FrameRange
+from database.read_boundary import parse_payload_strict
 from utils.capture_evidence import Span, coverage_union
 
 MAX_RECORDS = 256
 MAX_INTERVALS = 2048
 MAX_DOCUMENT_BYTES = 600_000
+
+
+def _records(document: dict) -> list[CoverageRecord]:
+    return [
+        parse_payload_strict(CoverageRecord, row, document_path='<capture_coverage>')
+        for row in document.get('records', [])
+    ]
 
 
 def key_payload(key: CaptureKey) -> dict:
@@ -38,7 +46,7 @@ def merge_record(document: dict, key: CaptureKey, rec: CoverageRecord) -> dict:
         raise ValueError('capture coverage key mismatch')
     if not rec.conversation_id or len(rec.conversation_id) > 256 or not rec.ranges:
         raise ValueError('invalid coverage record')
-    records = [CoverageRecord.model_validate(row) for row in document.get('records', [])]
+    records = _records(document)
     previous = next(
         (row for row in records if (row.conversation_id, row.origin) == (rec.conversation_id, rec.origin)), None
     )
@@ -66,7 +74,7 @@ def read(uid: str, key: CaptureKey) -> list[CoverageRecord]:
     row = reference(_client(), uid, key).get().to_dict() or {}
     if row and row.get('key') != key_payload(key):
         raise ValueError('capture coverage key mismatch')
-    return [CoverageRecord.model_validate(rec) for rec in row.get('records', [])]
+    return _records(row)
 
 
 def record(uid: str, key: CaptureKey, rec: CoverageRecord) -> None:

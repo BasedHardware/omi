@@ -62,12 +62,14 @@ def trim_maps(uid, paths, maps, *, device_id=None, recording_session_id=None, or
             dropped = (
                 sum(offsets[r.end - start] - offsets[r.start - start] for r in decision.covered) / claim['rate_hz']
             )
-            if dropped:
+            materialized = apply_wal_audio_coverage(path, claim, samples, keep, frame_map=mapping) if serving else None
+            if serving and materialized is None:
+                failed('audio_materialize', ValueError('coverage materialization abstained'))
+            if dropped and (not serving or materialized is not None):
                 SECONDS.labels(origin=origin, outcome='skipped' if serving else 'would_skip').inc(dropped)
                 logger.info(
                     'event=refactor_shadow lane=L1 check=audio_admit outcome=disagree covered_seconds=%.3f', dropped
                 )
-            materialized = apply_wal_audio_coverage(path, claim, samples, keep, frame_map=mapping) if serving else None
         except Exception as error:
             failed('audio_admit', error)
             materialized = None
