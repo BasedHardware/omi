@@ -31,6 +31,8 @@ from database.firestore_index_registry import (
 )
 from database.people_stats_cache import invalidate_people_stats_cache
 from models.client_processing import PROJECTION_FAMILY_FIELDS
+from utils.conversations.backfill_stats import same_timestamp_revision
+from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,
@@ -377,7 +379,7 @@ def recovery_admission_refusal(
     return None
 
 
-def _has_active_recording_session_lease(
+def has_active_recording_session_lease(
     transaction: Any,
     recording_sessions_collection: Any | None,
     uid: str,
@@ -409,6 +411,31 @@ def _has_active_recording_session_lease(
     if lease_expires_at.tzinfo is None and now.tzinfo is not None:
         lease_expires_at = lease_expires_at.replace(tzinfo=timezone.utc)
     return lease_expires_at > now
+
+
+class BackfillAdmissionFence(TypedDict, total=False):
+    expected_update_time: datetime | None
+    backfill_run_id: str | None
+    expected_session_revision: str | None
+
+
+def has_finalization_job_for_revision(
+    transaction: Any, jobs_collection: Any, uid: str, conversation_id: str, revision: int
+) -> bool:
+    """Read the deterministic generation even when its row bind is absent."""
+    return bool(jobs_collection.document(_job_id(uid, conversation_id, revision)).get(transaction=transaction).exists)
+
+
+def backfill_owner_available(transaction: Any, user_ref: Any, jobs_collection: Any) -> bool:
+    """One outstanding historical generation per owner, across operator restarts."""
+    snapshot = user_ref.collection('backfill_state').document('inflight').get(transaction=transaction)
+    state = snapshot.to_dict() or {}
+    previous = state.get('job_id')
+    if not previous:
+        return True
+    job_snapshot = jobs_collection.document(previous).get(transaction=transaction)
+    # Missing ownership is uncertain, never a reason to create more work.
+    return bool(job_snapshot.exists and (job_snapshot.to_dict() or {}).get('status') == 'completed')
 
 
 def _snapshot_bound_projection_updates(
@@ -500,6 +527,9 @@ def _create_or_get_finalization_intent_txn(
     extra_updates: Mapping[str, Any] | None = None,
     recovery_cutoff: datetime | None = None,
     recording_sessions_collection: Any | None = None,
+    expected_update_time: datetime | None = None,
+    backfill_run_id: str | None = None,
+    expected_session_revision: str | None = None,
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff.
 
@@ -518,12 +548,42 @@ def _create_or_get_finalization_intent_txn(
 
         loaded: dict[str, Any] = conversation_snapshot.to_dict() or {}
         conversation = loaded
-        if trigger is ProcessingTrigger.SERVER_RECOVERY:
+        if trigger is ProcessingTrigger.SILENT_BACKFILL:
+            if extra_updates:
+                raise ValueError('historical admission cannot update projections')
+            if loaded.get('record_lane_owner'):
+                return _no_finalization_intent('refused_record_owner')
+            if expected_update_time is None or not backfill_run_id:
+                return _no_finalization_intent('refused_unbound_backfill')
+            if not same_timestamp_revision(conversation_snapshot.update_time, expected_update_time):
+                return _no_finalization_intent('refused_revision_changed')
+            # A changed/renewed lease refuses even if it expired by execution.
+            external = loaded.get('external_data') or {}
+            sid = external.get('recording_session_id') if isinstance(external, Mapping) else None
+            observed_session_revision = None
+            if sid is not None and (not isinstance(sid, str) or not sid or '/' in sid):
+                return _no_finalization_intent('refused_invalid_session')
+            if sid and recording_sessions_collection is not None:
+                session_snapshot = recording_sessions_collection.document(sid).get(transaction=transaction)
+                stamp = getattr(session_snapshot, 'update_time', None)
+                if stamp is not None:
+                    observed_session_revision = stamp.rfc3339() if hasattr(stamp, 'rfc3339') else stamp.isoformat()
+            if observed_session_revision != expected_session_revision:
+                return _no_finalization_intent('refused_session_changed')
+            user_ref = conversation_ref.parent.parent
+            if not backfill_owner_available(transaction, user_ref, jobs_collection):
+                return _no_finalization_intent('refused_owner_inflight')
+            privacy = user_ref.get(transaction=transaction).to_dict() or {}
+            if privacy.get('data_protection_level', 'enhanced') not in {'standard', 'enhanced'}:
+                return _no_finalization_intent('refused_privacy')
+            if (privacy.get('byok') or {}).get('active'):
+                return _no_finalization_intent('refused_byok')
+        if is_recovery_trigger(trigger):
             refusal = recovery_admission_refusal(uid, loaded, recovery_cutoff)
             if refusal is not None:
                 intent = _no_finalization_intent(f'refused_{refusal}')
                 return intent
-            if _has_active_recording_session_lease(
+            if has_active_recording_session_lease(
                 transaction,
                 recording_sessions_collection,
                 uid,
@@ -536,7 +596,7 @@ def _create_or_get_finalization_intent_txn(
         if loaded.get('deferred'):
             intent = _no_finalization_intent('deferred')
             return intent
-        if trigger is not ProcessingTrigger.SERVER_RECOVERY and not _conversation_has_finalization_content(
+        if not is_recovery_trigger(trigger) and not _conversation_has_finalization_content(
             uid, loaded, conversation_ref, transaction
         ):
             intent = _no_finalization_intent('no_content')
@@ -608,13 +668,22 @@ def _create_or_get_finalization_intent_txn(
             'updated_at': now,
             'dispatch_requested_at': now,
         }
-        if trigger is ProcessingTrigger.SERVER_RECOVERY:
+        if trigger is ProcessingTrigger.SILENT_BACKFILL:
+            job['delivery_policy'] = 'silent_backfill_v1'
+            job['backfill_run_id'] = backfill_run_id
+            lifecycle_updates['silent_backfill'] = {'version': 1, 'run_id': backfill_run_id}
+        if is_recovery_trigger(trigger):
             job['selfheal_attempt'] = 1
             job['selfheal_enqueued_at'] = now
             job['selfheal_transcript_bytes'] = raw_transcript_bytes(loaded)
             job['selfheal_audio_file_ids'] = recovery_audio_file_ids(loaded) or []
         if not requires_byok:
             job['reconcile_after_at'] = now + get_finalization_reconcile_stale_after()
+        if trigger is ProcessingTrigger.SILENT_BACKFILL:
+            transaction.set(
+                conversation_ref.parent.parent.collection('backfill_state').document('inflight'),
+                {'job_id': job_id, 'run_id': backfill_run_id, 'created_at': now},
+            )
         transaction.set(job_ref, job)
         _record_projection_delta(
             transaction,
@@ -677,6 +746,9 @@ def create_or_get_finalization_intent(
     extra_updates: Mapping[str, Any] | None = None,
     recovery_cutoff: datetime | None = None,
     firestore_client: Any = None,
+    expected_update_time: datetime | None = None,
+    backfill_run_id: str | None = None,
+    expected_session_revision: str | None = None,
 ) -> FinalizationIntent:
     client = _client(firestore_client)
     conversation_ref = _conversation_ref(client, uid, conversation_id)
@@ -704,6 +776,9 @@ def create_or_get_finalization_intent(
             extra_updates=extra_updates,
             recovery_cutoff=recovery_cutoff,
             recording_sessions_collection=recording_sessions_collection,
+            expected_update_time=expected_update_time,
+            backfill_run_id=backfill_run_id,
+            expected_session_revision=expected_session_revision,
         )
 
     intent = run_with_transaction_contention_retry(

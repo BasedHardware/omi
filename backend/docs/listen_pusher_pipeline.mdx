@@ -6258,3 +6258,14 @@ Unexpected metric inputs fold to the shared reason enum’s `unknown` bucket.
 Acceptance is not worker completion. `STALE_IN_PROGRESS_RECOVERY_ENABLED=false`
 is the default-on feature's kill switch; it disables this reconnect sweep only.
 The new descending status/activity composite must be READY before shipment.
+
+### Approved historical stuck-row backfill
+
+Historical recovery uses the immutable `silent_backfill_v1` job policy and the
+`SILENT_BACKFILL` processing trigger. It shares normal recovery admission and
+lease fences but persists summary/title only, with no derived-work or delivery
+queues. Retries and completed replays remain silent. Noise closes are fenced,
+metadata-only, retain transcript/audio and have a commit-revision-bound restore.
+Operator plan, kill switch, owner/global pacing, receipts and approval sequence:
+[stuck backfill runbook](runbooks/stuck-backfill.md). Shipping these seams starts
+no scan or redrive; applying any private plan requires separate authorization.

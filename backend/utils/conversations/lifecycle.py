@@ -26,6 +26,7 @@ from database import conversations as conversations_db
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database import sync_cap_recovery
+from database import stuck_backfill as stuck_backfill_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
@@ -40,6 +41,7 @@ from utils.conversations.finalization_decision import (
     LifecyclePhase,
     decide_finalization,
 )
+from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
@@ -913,8 +915,13 @@ def request_finalization(
     app_build: object = 'unknown',
     recovery_cutoff: datetime | None = None,
     firestore_client: Any = None,
+    expected_update_time: datetime | None = None,
+    backfill_run_id: str | None = None,
+    expected_session_revision: str | None = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
+    if trigger is ProcessingTrigger.SILENT_BACKFILL and not require_cloud_tasks:
+        raise FinalizationDispatchUnavailable('silent backfill requires durable Cloud Tasks')
     if require_cloud_tasks and not (
         is_listen_finalization_dispatch_configured() and is_listen_finalization_dispatch_enabled()
     ):
@@ -923,6 +930,13 @@ def request_finalization(
         # that this deployment cannot recover or dispatch.
         raise FinalizationDispatchUnavailable('durable conversation finalization worker is not configured')
 
+    backfill_fence: jobs_db.BackfillAdmissionFence = {}
+    if trigger is ProcessingTrigger.SILENT_BACKFILL:
+        backfill_fence = {
+            'expected_update_time': expected_update_time,
+            'backfill_run_id': backfill_run_id,
+            'expected_session_revision': expected_session_revision,
+        }
     try:
         intent = jobs_db.create_or_get_finalization_intent(
             uid,
@@ -931,8 +945,9 @@ def request_finalization(
             finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
             trigger=trigger,
             extra_updates=extra_updates,
-            recovery_cutoff=recovery_cutoff if trigger is ProcessingTrigger.SERVER_RECOVERY else None,
+            recovery_cutoff=recovery_cutoff if is_recovery_trigger(trigger) else None,
             firestore_client=firestore_client,
+            **backfill_fence,
         )
     except FirestoreContentionExhausted as error:
         # An exhausted contention budget is a clean retry boundary: no outbox
@@ -1033,3 +1048,43 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         'terminal_outcome': terminal_outcome,
         'fanout_status': fanout_status,
     }
+
+
+def close_stuck_backfill_noise(
+    uid: str,
+    conversation_id: str,
+    *,
+    expected_revision: str,
+    cutoff: datetime,
+    expected_session_revision: str | None,
+    run_id: str,
+    firestore_client: Any = None,
+) -> str:
+    """Lifecycle owner for the operator's approved metadata-only close."""
+    return stuck_backfill_db.close_noise(
+        uid,
+        conversation_id,
+        expected_revision=expected_revision,
+        cutoff=cutoff,
+        expected_session_revision=expected_session_revision,
+        run_id=run_id,
+        firestore_client=firestore_client,
+    )
+
+
+def restore_stuck_backfill_noise(
+    uid: str,
+    conversation_id: str,
+    *,
+    expected_closed_revision: str,
+    run_id: str,
+    firestore_client: Any = None,
+) -> None:
+    """Restore only the unchanged metadata generation closed by this run."""
+    stuck_backfill_db.restore_noise(
+        uid,
+        conversation_id,
+        expected_closed_revision=expected_closed_revision,
+        run_id=run_id,
+        firestore_client=firestore_client,
+    )

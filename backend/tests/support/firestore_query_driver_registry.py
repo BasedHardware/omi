@@ -168,7 +168,7 @@ BODY_DIGEST = {
     'database.action_items._apply_action_item_date_filters': 'b69dc9810414753e0b0715560b872121566b965f36bdefc5b91869587037336f',
     'database.action_items._harvest_legacy_docs': 'f4b8069a91feae96d257470687bc383bb0652b002a009e79979815be58814f9a',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'c7310ad7eaab2e1085c5493e4e2b6c7f618ea88f0aae670e4b4f84dd3e828b59',
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': '386ecf5d745afbf65f993e710e41ce32963b24d930c961c15fca11153373e6f5',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
@@ -762,8 +762,8 @@ _add(
     CoveredByEntry(
         'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn',
         covered_by=('database.conversation_finalization_jobs._conversation_has_finalization_content',),
-        reason='orchestrator whose only querying dependency is the content probe, now driven '
-        'directly; its transaction body runs inside the caller-supplied transaction only',
+        reason='orchestrator whose only collection query is the directly driven content probe; '
+        'silent-backfill row/session/owner/privacy/job fences add transaction-bound direct document reads only',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversation_finalization_jobs._create_or_get_finalization_intent_txn'],
     )
