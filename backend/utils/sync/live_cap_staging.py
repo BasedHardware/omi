@@ -22,7 +22,7 @@ from database.legal_holds import external_write_fence
 from utils.encryption import encrypt
 from utils.observability.held_content import record_publication_retry
 from utils.other.storage import owner_storage_write_gate
-from utils.sync import cap_hold
+from utils.sync import cap_hold, live_cap_journal
 from utils.sync.live_cap_publication import UNRECOVERED, Publication, commit_publication
 
 logger = logging.getLogger(__name__)
@@ -50,11 +50,23 @@ class SourceSealed(RuntimeError):
     """An expired writer must start a new source for a never-committed fragment."""
 
 
-def append(uid: str, path: str, group: Publication, fragment: Publication, metadata: dict, seconds: float) -> dict:
+def append(
+    uid: str,
+    path: str,
+    group: Publication,
+    fragment: Publication,
+    metadata: dict,
+    seconds: float,
+    *,
+    emergency: bool = False,
+) -> dict:
     if group.uid != uid or fragment.uid != uid:
         raise ValueError('live staging owner changed')
     size = fragment.fields.get('audio_size', 0) - 32 if fragment.fields.get('audio_size') else Path(path).stat().st_size
-    if size > MAX_FRAGMENT_BYTES or not 0 < seconds <= FRAGMENT_SECONDS:
+    journal = emergency or group.identity == late_hold_identity(fragment.identity)
+    if size > (128 * 1024 if journal else MAX_FRAGMENT_BYTES) or not 0 < seconds <= (
+        60 if journal else FRAGMENT_SECONDS
+    ):
         raise ValueError('live fragment exceeds custody bound')
     client = get_firestore_client()
     ref = cap_hold.holds(uid).document(group.identity)
@@ -110,7 +122,7 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
             updates = {
                 'state': 'staging',
                 'stage_parts': [*parts, part],
-                'writer_until': time.time() + WRITER_SECONDS,
+                'writer_until': 0 if journal else time.time() + WRITER_SECONDS,
                 'seconds': row.get('seconds', 0) + seconds,
                 'metadata': row.get('metadata') or fields['metadata'],
                 'sample_rate': metadata['sample_rate'],
@@ -436,6 +448,8 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
     def freeze(tx: Any):
         with external_write_fence(uid, firestore_client=client, transaction=tx):
             row = ref.get(transaction=tx).to_dict() or {}
+            if row.get('stage_pending'):
+                raise live_cap_journal.PendingFragment(row)
             if row.get('state') == 'sealing':
                 return True
             if row.get('state') != 'staging' or (expired_only and row.get('writer_until', 0) > time.time()):
@@ -447,6 +461,9 @@ def seal(uid: str, identity: str, *, expired_only: bool = False) -> bool:
         if not commit_publication(client, freeze):
             cleanup(uid, ref)
             return False
+    except live_cap_journal.PendingFragment as pending:
+        live_cap_journal.restore(uid, identity, pending.row, append)
+        return seal(uid, identity, expired_only=expired_only)
     except Exception as error:
         # A staging row with parts is already in redrive custody. Raising here
         # would close the live socket with 1011 even though the audio is durable.

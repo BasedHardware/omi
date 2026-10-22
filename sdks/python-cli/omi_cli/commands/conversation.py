@@ -15,7 +15,7 @@ from omi_cli.client import path_segment
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.json_input import load_json_input
-from omi_cli.models import ConversationTextSource
+from omi_cli.models import CONVERSATION_TEXT_MAX_LENGTH, CONVERSATION_TITLE_MAX_LENGTH, ConversationTextSource
 from omi_cli.output import shorten
 
 if TYPE_CHECKING:
@@ -162,6 +162,16 @@ def create_conversation(
             message="Empty text",
             detail="Conversation text cannot be empty or whitespace.",
         )
+    if len(cleaned_text) > CONVERSATION_TEXT_MAX_LENGTH:
+        # Sending it anyway spends one of the 25 hourly conversation writes on
+        # a request the server can only reject.
+        raise UsageError(
+            message="Text too long",
+            detail=(
+                f"Conversation text is limited to {CONVERSATION_TEXT_MAX_LENGTH:,} characters; "
+                f"got {len(cleaned_text):,}."
+            ),
+        )
 
     cleaned_lang = language.strip()
     if not cleaned_lang:
@@ -276,6 +286,14 @@ def update_conversation(
         cleaned_title = title.strip()
         if not cleaned_title:
             raise UsageError(message="Invalid title", detail="Title cannot be empty or whitespace.")
+        if len(cleaned_title) > CONVERSATION_TITLE_MAX_LENGTH:
+            raise UsageError(
+                message="Title too long",
+                detail=(
+                    f"Conversation titles are limited to {CONVERSATION_TITLE_MAX_LENGTH} characters; "
+                    f"got {len(cleaned_title)}."
+                ),
+            )
         body["title"] = cleaned_title
     if discarded is not None:
         body["discarded"] = discarded
