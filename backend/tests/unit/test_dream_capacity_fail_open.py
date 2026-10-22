@@ -101,6 +101,67 @@ async def test_unavailable_evidence_waits_without_secret_logging(monkeypatch, ca
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'failure,stage,exc',
+    [
+        ('client', 'client', 'RuntimeError'),
+        ('refresh', 'refresh', 'RuntimeError'),
+        ('lookup', 'headroom', 'ConnectionError'),
+    ],
+)
+async def test_state_errors_are_labeled_state_error_with_payload_free_warning(
+    monkeypatch, caplog, capacity, failure, stage, exc
+):
+    state, redis = capacity
+    secret = 'invented private content'
+    await evidence(state, redis, {DREAM_MODEL: 0})
+    if failure == 'client':
+
+        def broken():
+            raise RuntimeError(secret)
+
+        monkeypatch.setattr(state, 'client', broken)
+    elif failure == 'refresh':
+        state.refresh.side_effect = RuntimeError(secret)
+    else:
+        monkeypatch.setattr(redis, 'get', AsyncMock(side_effect=ConnectionError(secret)))
+    assert await dream_capacity.available_model() is None
+    assert secret not in caplog.text
+    rows = [json.loads(record.message) for record in caplog.records if record.message.startswith('{')]
+    assert [row['reason'] for row in rows] == ['state_error']
+    assert rows[0]['decision'] == 'waiting' and rows[0]['source'] == 'evidence'
+    warnings = [record.message for record in caplog.records if 'dream_capacity_state_error' in record.message]
+    assert warnings == [f'dream_capacity_state_error model={DREAM_MODEL} stage={stage} exc={exc}']
+
+
+@pytest.mark.asyncio
+async def test_raising_probe_callable_stays_advisory_and_never_labels_the_decision(monkeypatch, caplog):
+    # The probe callable runs as a background task inside refresh and its own
+    # containment converts failures to 'inconclusive', so a raising probe can
+    # never surface as a state_error/probe_failed admission decision.
+    redis = fakeredis.aioredis.FakeRedis(decode_responses=True)
+    state = ReservationState(redis)
+    monkeypatch.setattr(dream_capacity, 'reservation_state', state)
+    await evidence(state, redis, {DREAM_MODEL: 901})
+
+    async def raising_probe(model, location):
+        raise RuntimeError('invented probe secret')
+
+    monkeypatch.setattr(dream_capacity, '_probe', raising_probe)
+    try:
+        assert await dream_capacity.available_model() is None
+        await asyncio.gather(*state._probe_tasks)
+        rows = [json.loads(record.message) for record in caplog.records if record.message.startswith('{')]
+        assert [row['reason'] for row in rows] == ['no_states']
+        assert 'dream_capacity_state_error' not in caplog.text
+        assert 'probe_failed' not in caplog.text
+        assert 'invented probe secret' not in caplog.text
+    finally:
+        await state.aclose()
+        await redis.aclose()
+
+
+@pytest.mark.asyncio
 async def test_fresh_38_evidence_admits_but_overrides_cannot_fabricate_it(monkeypatch, capacity):
     state, redis = capacity
     monkeypatch.setenv('OMI_VERTEX_PT_MODEL', DREAM_MODEL)
