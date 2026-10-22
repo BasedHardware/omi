@@ -10,8 +10,12 @@ import hashlib
 import json
 from typing import Any
 
+from google.cloud import firestore
+from database._client import run_transactional
+
 from models.capture_coverage import CaptureKey, CoverageRecord, FrameRange
 from database.read_boundary import parse_payload_strict
+from database.capture_groups import transcript_fingerprint
 from utils.capture_evidence import Span, coverage_union
 
 MAX_RECORDS = 256
@@ -56,10 +60,10 @@ def merge_record(document: dict, key: CaptureKey, rec: CoverageRecord) -> dict:
         [row.model_dump() for row in records if row is not previous] + [merged.model_dump()],
         key=lambda row: (row['conversation_id'], row['origin']),
     )
-    result = {'version': 1, 'key': payload, 'records': rows}
+    result = {**document, 'version': 1, 'key': payload, 'records': rows}
     if len(rows) > MAX_RECORDS or sum(len(row['ranges']) for row in rows) > MAX_INTERVALS:
         raise ValueError('capture coverage capacity exceeded')
-    if len(json.dumps(result, separators=(',', ':')).encode()) > MAX_DOCUMENT_BYTES:
+    if len(json.dumps(result, default=str, separators=(',', ':')).encode()) > MAX_DOCUMENT_BYTES:
         raise ValueError('capture coverage byte capacity exceeded')
     return result
 
@@ -78,9 +82,6 @@ def read(uid: str, key: CaptureKey) -> list[CoverageRecord]:
 
 
 def record(uid: str, key: CaptureKey, rec: CoverageRecord) -> None:
-    from google.cloud import firestore
-    from database._client import run_transactional
-
     client = _client()
     ref = reference(client, uid, key)
 
@@ -92,3 +93,119 @@ def record(uid: str, key: CaptureKey, rec: CoverageRecord) -> None:
             transaction.set(ref, new)
 
     run_transactional(client, write, transient=True)
+
+
+MAX_SHARED_RECORDS = 16
+
+
+def _shared_current(rows: dict, evidence: dict) -> bool:
+    """A separated, edited, deleted or re-elected group cannot release custody."""
+    primary, secondary = (rows.get(evidence[k]) or {} for k in ('primary_id', 'secondary_id'))
+    if not primary or not secondary:
+        return False
+    for row in (primary, secondary):
+        group = row.get('capture_group') or {}
+        if (
+            row.get('status') != 'completed'
+            or any(row.get(k) for k in ('deleted', 'discarded', 'capture_group_closed', 'has_transcript_corrections'))
+            or row.get('transcript_correction_overlay') is not None
+            or group.get('id') != evidence['group_id']
+            or group.get('primary_id') != evidence['primary_id']
+            or not {evidence['primary_id'], evidence['secondary_id']}.issubset(
+                {m.get('id') for m in group.get('members') or []}
+            )
+        ):
+            return False
+    if bool(primary.get('is_locked')) != bool(secondary.get('is_locked')):
+        return False
+    return all(
+        transcript_fingerprint(rows.get(cid)) == fingerprint for cid, fingerprint in evidence['fingerprints'].items()
+    )
+
+
+def record_shared(
+    uid: str,
+    key: CaptureKey,
+    *,
+    primary_id: str,
+    secondary_id: str,
+    group_id: str,
+    fingerprints: dict[str, str],
+    window: dict,
+    firestore_client=None,
+) -> bool:
+    """Alias only already-committed secondary frames to confirmed primary speech.
+
+    The owner window, exact secondary capture key and both immutable transcript
+    fingerprints form the proof. No wall-to-frame extrapolation or reservation.
+    Read every fence and ledger document before writing, including on retries.
+    """
+    client = firestore_client or _client()
+    ref = reference(client, uid, key)
+    evidence = {
+        'primary_id': primary_id,
+        'secondary_id': secondary_id,
+        'group_id': group_id,
+        'fingerprints': fingerprints,
+        'window': window,
+    }
+    if primary_id == secondary_id or set(fingerprints) != {primary_id, secondary_id}:
+        raise ValueError('invalid cross-device coverage proof')
+    conversations = client.collection('users').document(uid).collection('conversations')
+
+    @firestore.transactional
+    def write(transaction):
+        rows = {cid: conversations.document(cid).get(transaction=transaction).to_dict() for cid in fingerprints}
+        document = ref.get(transaction=transaction).to_dict() or {}
+        if not _shared_current(rows, evidence):
+            return False
+        if document.get('key') != key_payload(key):
+            return False
+        # The ledger, not the capture envelope or wall clock, is the authority
+        # for which complete source frames actually became durable speech.
+        spans = coverage_union(
+            Span(r.start, r.end)
+            for rec in _records(document)
+            if rec.conversation_id == secondary_id
+            for r in rec.ranges
+        )
+        if not spans:
+            return False
+        entry = {**evidence, 'ranges': [{'start': s.start, 'end': s.end} for s in spans]}
+        shared = [r for r in document.get('shared_records', []) if r['secondary_id'] != secondary_id]
+        shared.append(entry)
+        if len(shared) > MAX_SHARED_RECORDS:
+            raise ValueError('cross-device coverage capacity exceeded')
+        result = {**document, 'shared_records': sorted(shared, key=lambda r: r['secondary_id'])}
+        if len(json.dumps(result, default=str, separators=(',', ':')).encode()) > MAX_DOCUMENT_BYTES:
+            raise ValueError('capture coverage byte capacity exceeded')
+        if result != document:
+            transaction.set(ref, result)
+        return True
+
+    return run_transactional(client, write, transient=True)
+
+
+def read_shared(uid: str, key: CaptureKey, *, firestore_client=None) -> list[CoverageRecord]:
+    """Bounded point reads revalidate a shared window before returning receipts."""
+    client = firestore_client or _client()
+    ref = reference(client, uid, key)
+    conversations = client.collection('users').document(uid).collection('conversations')
+
+    @firestore.transactional
+    def read_current(transaction):
+        document = ref.get(transaction=transaction).to_dict() or {}
+        if document and document.get('key') != key_payload(key):
+            raise ValueError('capture coverage key mismatch')
+        shared = document.get('shared_records', [])
+        if len(shared) > MAX_SHARED_RECORDS:
+            raise ValueError('cross-device coverage capacity exceeded')
+        ids = {cid for entry in shared for cid in entry['fingerprints']}
+        rows = {cid: conversations.document(cid).get(transaction=transaction).to_dict() for cid in ids}
+        return [
+            CoverageRecord(conversation_id=entry['primary_id'], origin='live', ranges=entry['ranges'])
+            for entry in shared
+            if _shared_current(rows, entry)
+        ]
+
+    return run_transactional(client, read_current, transient=True)
