@@ -82,7 +82,7 @@ def call_fields(signals, context=None):
             )
     if not calls:
         return {
-            'is_call': False,
+            'is_call': None,
             'call_platform': None,
             'calendar_event_id': None,
             'geolocation_scope': None,
@@ -135,7 +135,8 @@ def apply_call_metadata(uid, conversation):
             'call_metadata',
             'agree' if all(getattr(conversation, k, None) == v for k, v in fields.items()) else 'disagree',
         )
-        if serving_for(FLAG, uid):
+        # Evidence expiry is absence, not a contradiction of a previously finalized call.
+        if serving_for(FLAG, uid) and fields['is_call'] is True:
             for key, value in fields.items():
                 setattr(conversation, key, value)
     except Exception:

@@ -16,7 +16,7 @@ def signal(kind, **kwargs):
 
 @pytest.mark.parametrize('kind', ['screen_meeting', 'desktop_meeting', 'media_playback'])
 def test_unconfirmed_window_and_media_never_call(kind):
-    assert calls.call_fields([signal(kind)])['is_call'] is False
+    assert calls.call_fields([signal(kind)])['is_call'] is None
 
 
 def test_phone_and_calendar_from_positive_evidence_only():
@@ -32,7 +32,7 @@ def test_phone_and_calendar_from_positive_evidence_only():
         'other_participants_location': 'remote',
     }
     context['calendar_event_id'] = 'different-event'
-    assert calls.call_fields([calendar], context)['is_call'] is False
+    assert calls.call_fields([calendar], context)['is_call'] is None
 
 
 @pytest.mark.parametrize(
@@ -91,7 +91,7 @@ def test_non_overlapping_and_stale_ongoing_signals_abstain(monkeypatch):
     )
     calls.apply_call_metadata('synthetic-owner', c)
     assert loaded.call_args.args[1] == []
-    assert c.is_call is False
+    assert getattr(c, 'is_call', None) is None
 
 
 def test_metric_registration_survives_isolated_reimports():
@@ -138,3 +138,20 @@ def test_existing_phone_transport_enters_the_boundary_authority(monkeypatch):
     calls.apply_call_metadata('synthetic-owner', c)
     assert c.is_call and c.call_platform == 'phone'
     assert stored[0].kind == 'phone_call'
+
+
+def test_expired_boundary_index_cannot_erase_durable_call_metadata(monkeypatch):
+    monkeypatch.setenv(calls.FLAG, 'serve')
+    monkeypatch.setattr(boundaries, 'ingest_context', lambda *_: None)
+    monkeypatch.setattr(boundary_store, 'windows', lambda *_: {})
+    monkeypatch.setattr(boundary_store, 'load', lambda *_: [])
+    c = SimpleNamespace(
+        started_at=NOW,
+        finished_at=NOW + timedelta(minutes=30),
+        external_data={},
+        is_call=True,
+        call_platform='google_meet',
+        calendar_event_id='event-1',
+    )
+    calls.apply_call_metadata('synthetic-owner', c)
+    assert c.is_call and c.calendar_event_id == 'event-1' and c.call_platform == 'google_meet'
