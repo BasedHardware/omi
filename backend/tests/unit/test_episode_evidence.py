@@ -1,4 +1,7 @@
 import json
+from testing.episode_notes.legacy_prompts import (
+    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
+)
 import importlib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,9 +21,8 @@ from utils.conversations.episode_evidence import (
 )
 from utils.llm.conversation_notes_prompts import (
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
-    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
 )
-from utils.llm.episode_notes_prompts import EPISODE_CONTRACT, episode_static_instructions
+from testing.episode_notes.contract import EPISODE_CONTRACT, episode_static_instructions
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
 
 START = datetime(2026, 1, 12, 10, tzinfo=timezone.utc)
@@ -58,7 +60,7 @@ def processing():
 
 
 def test_flag_off_prompt_bytes_pinned_to_base(processing):
-    from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
+    from testing.episode_notes.legacy_prompts import rich_volatile_instructions
 
     fixture = json.loads((Path(__file__).parent / 'fixtures/episode_notes/flag_off_prompts.json').read_text())
     static, volatile = (
