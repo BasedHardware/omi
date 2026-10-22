@@ -784,6 +784,8 @@ export function healthFrames(
     sttCash: legs.planCost?.sttCash,
     saasMeasured: legs.planCost?.saasMeasured,
     infraMeasured: legs.infra?.infraMeasured,
+    infraAnnualPartial: legs.infra?.infraAnnualPartial,
+    infraStripeFeesCash: legs.infra?.infraStripeFeesCash,
     stripeFees: legs.fees?.fees,
   };
   const allIn = allInCost(
@@ -794,13 +796,14 @@ export function healthFrames(
   );
   const latestCostDay = allIn.daily.find((d) => d.date === cutoff);
   // A Soniox series that stopped covering the cutoff day puts the dated
-  // constant back in use: stale now, not once the constant ages out.
+  // constant back in use: stale now, not once the constant ages out. An infra
+  // day the dated constant floors is likewise priced by that constant.
   const estimates = estimateStatus(
     now,
     {
       STT: latestCostDay?.sttMeasured,
       SaaS: latestCostDay?.saasMeasured,
-      Infra: latestCostDay?.infraMeasured,
+      Infra: latestCostDay?.infraMeasured && !latestCostDay.infraFloored,
     },
     {
       STT:
@@ -848,10 +851,17 @@ export function healthFrames(
       saasSource: d.saasMeasured ? "measured" : "estimate",
       saasEstimateUsd: d.saasMeasured ? null : d.saas,
       saasMeasuredUsd: d.saasMeasured ? d.saas : null,
+      // The infra base is measured only when the producer's run rate stands
+      // on its own; a partial run rate the dated constant floors is priced by
+      // that constant. Mercury stripe_fees cash counted here (fee line dark
+      // for the day) rides in its own field so neither series absorbs it.
       infra: d.infra,
-      infraSource: d.infraMeasured ? "measured" : "estimate",
-      infraEstimateUsd: d.infraMeasured ? null : d.infra,
-      infraMeasuredUsd: d.infraMeasured ? d.infra : null,
+      infraSource: d.infraMeasured && !d.infraFloored ? "measured" : "estimate",
+      infraEstimateUsd:
+        d.infraMeasured && !d.infraFloored ? null : d.infra - d.infraFeesCash,
+      infraMeasuredUsd:
+        d.infraMeasured && !d.infraFloored ? d.infra - d.infraFeesCash : null,
+      infraFeesCashUsd: d.infraFeesCash || null,
       estimateStale,
       fees: d.fees,
       feesUnavailable: d.fees == null ? 1 : 0,
@@ -995,15 +1005,18 @@ const shortDay = (day: string) =>
 function marginStatus(rows: Row[], days: CostDay[], now: Date) {
   const through = rows.length ? String(rows.at(-1)!.date).slice(0, 10) : null;
   const day = through ? days.find((d) => d.date === through) : undefined;
+  // A floored infra day is priced by the dated constant, so that line shows
+  // its estimate (and the constant's age) rather than a measured label.
+  const infraOwnsItsPrice = day?.infraMeasured && !day.infraFloored;
   const measuredByLine: Record<EstimateStatus["line"], boolean | undefined> = {
     STT: day?.sttMeasured,
     SaaS: day?.saasMeasured,
-    Infra: day?.infraMeasured,
+    Infra: infraOwnsItsPrice,
   };
   const estimates = estimateStatus(now, {
     STT: day?.sttMeasured,
     SaaS: day?.saasMeasured,
-    Infra: day?.infraMeasured,
+    Infra: infraOwnsItsPrice,
   });
   const shown = estimates.filter((e) => !measuredByLine[e.line]);
   const asOf = shown.map((e) => e.asOf).sort()[0];
@@ -1011,8 +1024,10 @@ function marginStatus(rows: Row[], days: CostDay[], now: Date) {
   const labels = [
     day?.sttMeasured ? "STT measured" : "STT estimate",
     day?.saasMeasured ? "measured SaaS (Mercury)" : "SaaS estimate",
-    day?.infraMeasured
+    infraOwnsItsPrice
       ? "measured Infra non-GCP (Mercury)"
+      : day?.infraMeasured
+      ? "Infra non-GCP estimate (floors partial Mercury run rate)"
       : "Infra non-GCP estimate",
   ];
   const dated = asOf ? ` as of ${shortDay(asOf)}` : "";

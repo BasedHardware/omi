@@ -33,6 +33,10 @@ RUN_RATE_COLUMNS = [
     ('annual_history_reason', 'STRING'),
     ('inputs_complete', 'BOOL'),
 ]
+# The infra run rate also carries the excluded fee-vendor cash
+# (mercury_costs.INFRA_EXCLUDED_VENDORS) as its own run rate: the wall counts
+# it on the infra line only on days the measured Stripe fee line is unavailable.
+INFRA_RUN_RATE_COLUMNS = RUN_RATE_COLUMNS + [('stripe_fees_usd', 'NUMERIC')]
 SCHEMAS = {
     'mercury_vendor_spend_daily': [
         ('date', 'DATE'),
@@ -46,7 +50,9 @@ SCHEMAS = {
     # Non-GCP infra run rate (Modal, AWS, Runpod, …): same cadence treatment as
     # SaaS, over the infra_non_gcp category; dark until the first load after
     # this table ships, so the wall treats it as an unavailable line, never a guess.
-    'mercury_infra_non_gcp_daily': RUN_RATE_COLUMNS + META,
+    # Every field `infra_rows` emits has a column here (pinned by test), so
+    # `ensure_table` creates the table whole and `load_replace` drops nothing.
+    'mercury_infra_non_gcp_daily': INFRA_RUN_RATE_COLUMNS + META,
 }
 CLUSTER = {name: ['category', 'vendor'] for name in SCHEMAS}
 

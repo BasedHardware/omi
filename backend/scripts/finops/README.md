@@ -454,7 +454,7 @@ completeness gate below, not the cadence of any named vendor.
 | --- | --- |
 | `saas` | Non-GCP software subscriptions; drives the TV SaaS line |
 | `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs. Anthropic maps to `saas` since 2026-10-22: its Mercury cash is Claude team seats, not per-customer API spend |
-| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend (Modal, AWS, Runpod, …), including outgoing Stripe fees; drives the TV "Infra (non-GCP)" line. The run-rate table excludes the `stripe_fees` vendor: that cash is already measured on the `stripe_fee_daily` line, and the two must never stack |
+| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend (Modal, AWS, Runpod, …), including outgoing Stripe fees; drives the TV "Infra (non-GCP)" line. The run-rate table's `amount_usd` excludes the `stripe_fees` vendor (that cash is measured on the `stripe_fee_daily` line; the two must never stack) but carries its own run rate in `stripe_fees_usd`, so the TV can count it on the infra line only on a day the measured fee line is unavailable — never on both lines, never on neither |
 | `gcp` | Excluded from TV addition; already covered by GCP billing |
 | `marketing`, `fulfillment`, `hardware_cogs`, `travel_meals`, `professional_services`, `facilities`, `other_opex` | Reconciliation categories only; never included in the SaaS line |
 | `excluded` | Payroll, internal/treasury transfers, card repayments, expense reimbursements, taxes, refunds/credits and explicitly excluded hardware categories; collapsed to vendor `excluded` |
@@ -497,12 +497,17 @@ The existing `load_bigquery.py` path loads three date-partitioned aggregate tabl
   (the ÷12 portion from ambiguous one-off vendors), `unmapped_usd`, `unmapped_count`,
   `coverage_days`, `annual_history_complete`, `annual_history_reason`,
   `inputs_complete`, `run_id`, `computed_at`.
-- `based-hardware.omi_finops.mercury_infra_non_gcp_daily`: identical schema at
-  `category='infra_non_gcp'` — the same run-rate treatment as SaaS over non-GCP
-  infrastructure cash (Modal, AWS, Runpod, …), feeding the TV "Infra (non-GCP)"
-  cost line. The `stripe_fees` vendor is excluded from it (measured on
-  `stripe_fee_daily` instead), and the table stays dark until the first load
-  after it ships, so the wall shows an unavailable line, never a guess.
+- `based-hardware.omi_finops.mercury_infra_non_gcp_daily`: the SaaS run-rate
+  schema plus a `stripe_fees_usd` column, at `category='infra_non_gcp'` — the
+  same run-rate treatment as SaaS over non-GCP infrastructure cash (Modal, AWS,
+  Runpod, …), feeding the TV "Infra (non-GCP)" cost line. The `stripe_fees`
+  vendor is kept out of `amount_usd` (measured on `stripe_fee_daily` instead)
+  and reported separately in `stripe_fees_usd`, which the TV counts on the
+  infra line only on a day the measured fee line is unavailable. The table is
+  created whole from `SCHEMAS` on its first load (every produced field has a
+  column, pinned by test) and stays dark until then, so the wall shows an
+  unavailable line, never a guess. Reconciling an OLDER live table against the
+  current schema is #23354's job, not this loader's.
 
 Every successful refresh replaces **all 90 dates**, including zero-spend dates,
 through the existing per-table delete/insert transaction. The daily unmapped row
@@ -548,6 +553,18 @@ reason, not as an unavailable line: the wall shows the amortized value and
 appends the partial note.
 Preserve an explicit measured zero. The admin wall reads this table through
 `wall-finops.ts` (`saasMeasured` + `saasAnnualPartial`), which is in place.
+
+The infra run rate keeps the SaaS read gates but not the SaaS display rule:
+while `annual_history_complete=false` the run rate is a **floor**, not a
+measurement — the cadence treatment amortizes only charges the ledger holds,
+so an annual bill posted before the ledger starts (the 2026-01-08 Modal wire)
+contributes nothing, and a first-seen charge is an ambiguous one-off ÷12. The
+wall shows max(measured, dated `INFRA_MONTHLY_USD` fallback), still labelled
+partial with the producer's reason, so a fresh-but-short row never drops the
+known Modal bill from the all-in total; once the history is complete the
+measured value stands alone. `stripe_fees_usd` is counted on the infra line
+only on a day the measured fee line is unavailable, so those fees are never on
+both lines and never on neither.
 
 Bank posting dates and prepayments differ from provider usage days. Reconcile
 `mercury_vendor_spend_daily` by vendor/month against every non-GCP invoice and the

@@ -26,7 +26,7 @@ import {
   SeriesStore,
 } from "../wall-series-store";
 import { isoDay, shiftDay, utcDay } from "../qualified-activity";
-import { INFRA_AS_OF } from "../wall-cost";
+import { INFRA_AS_OF, INFRA_MONTHLY_USD } from "../wall-cost";
 
 const now = new Date("2026-10-15T12:00Z");
 const end = utcDay(now);
@@ -656,7 +656,11 @@ describe("margin by plan (allocated estimate)", () => {
       "health",
       {
         ...base,
-        infra: { infraMeasured: { [day(3)]: 32.87 }, infraAnnualPartial: {} },
+        infra: {
+          infraMeasured: { [day(3)]: 32.87 },
+          infraAnnualPartial: {},
+          infraStripeFeesCash: {},
+        },
       },
       null,
       now
@@ -668,6 +672,7 @@ describe("margin by plan (allocated estimate)", () => {
       infraSource: "measured",
       infraMeasuredUsd: 32.87,
       infraEstimateUsd: null,
+      infraFeesCashUsd: null,
     });
     expect(at(estimate.cost)).toMatchObject({
       infraSource: "estimate",
@@ -679,6 +684,46 @@ describe("margin by plan (allocated estimate)", () => {
     expect(f.marginStatus[0].text).toMatch(
       /· STT estimate · SaaS estimate · measured Infra non-GCP \(Mercury\) as of Oct 16 · Stripe fees unavailable \(finops key scope\)$/
     );
+  });
+
+  it("prices a floored partial infra day by the dated constant, fee cash on its own field (Luna r2 P1/P2)", async () => {
+    const base = await legs();
+    const f = assembleSeries(
+      "health",
+      {
+        ...base,
+        // A partial row below the constant, with excluded fee cash while the
+        // fee leg is unavailable (legs() carries no fee table).
+        infra: {
+          infraMeasured: { [day(3)]: 3.75 },
+          infraAnnualPartial: { [day(3)]: "history_under_12_months" },
+          infraStripeFeesCash: { [day(3)]: 4 },
+        },
+      },
+      null,
+      now
+    );
+    const row = f.cost.find((r) => String(r.date).startsWith(day(3)))!;
+    const constant = INFRA_MONTHLY_USD / (365.25 / 12);
+    // The constant floors the base; the series says "estimate", carries the
+    // constant in the estimate field and the fee cash apart — neither series
+    // absorbs the other, and they sum to the line.
+    expect(row).toMatchObject({
+      infraSource: "estimate",
+      infraMeasuredUsd: null,
+      infraFeesCashUsd: 4,
+    });
+    expect(row.infraEstimateUsd).toBeCloseTo(constant, 6);
+    expect(row.infra).toBeCloseTo(constant + 4, 6);
+    // The margin line prices Infra by the constant and states the floor; the
+    // constant's own as-of (Oct 23) is later than STT/SaaS's, so Oct 16 stays.
+    expect(f.marginStatus[0].text).toMatch(
+      /· STT estimate · SaaS estimate · Infra non-GCP estimate \(floors partial Mercury run rate\) as of Oct 16 · Stripe fees unavailable \(finops key scope\)$/
+    );
+    expect(f.estimates.find((e) => e.line === "Infra")).toMatchObject({
+      asOf: INFRA_AS_OF,
+      stale: 0,
+    });
   });
 
   it("flags the cost frames once a manual estimate is older than 35 days", async () => {

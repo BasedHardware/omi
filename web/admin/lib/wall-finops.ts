@@ -346,10 +346,17 @@ export async function fetchStripeFeeHistory(
  * plan-cost query so a dark table — it stays dark until the first load after
  * the table ships — can never fail the plan/STT/SaaS read; it is an
  * unavailable line like the fee table, never a guess.
+ * `stripe_fees_usd` is the run rate of the Mercury `stripe_fees` vendor the
+ * producer keeps OUT of `amount_usd` (that money is the measured fee line's);
+ * the cost stack adds it back to infra only on a day the measured fee line is
+ * unavailable, so the cash is never counted twice and never dropped from both.
+ * The table is created whole with this column (#23356); a live table that
+ * predates it fails this read, which degrades to the labelled dated fallback.
  */
 export const FINOPS_INFRA_QUERY = `
 WITH infra AS (
   SELECT date, amount_usd,
+    IFNULL(stripe_fees_usd, 0) AS stripe_fees_usd,
     annual_history_complete AS annual_complete,
     annual_history_reason AS annual_reason,
     ROW_NUMBER() OVER (PARTITION BY date ORDER BY computed_at DESC, run_id DESC) AS rk
@@ -359,7 +366,7 @@ WITH infra AS (
     AND computed_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)
 )
 SELECT TO_JSON_STRING(STRUCT(
-  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, amount_usd AS usd,
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, amount_usd AS usd, stripe_fees_usd,
           IFNULL(annual_complete, FALSE) AS annual_complete, IFNULL(annual_reason, '') AS annual_reason
         FROM infra WHERE rk = 1 ORDER BY day) AS infra
 )) AS history`;
@@ -368,11 +375,16 @@ export interface InfraHistory {
   /** date → complete, fresh Mercury non-GCP infra run-rate USD; explicit
    * zeroes are retained. A day whose annual history is incomplete keeps its
    * amortized value and lands in `infraAnnualPartial` with the producer's
-   * reason — measured run rate, labelled partial, like the SaaS line. */
+   * reason — the cost stack then floors it at the dated fallback (a partial
+   * run rate cannot see annual bills posted before the ledger starts). */
   infraMeasured: Record<string, number>;
   /** infra run-rate days labelled partial: day → producer reason
    * (`history_under_12_months` or `uncategorized_above_threshold`). */
   infraAnnualPartial: Record<string, string>;
+  /** date → run rate of the Mercury `stripe_fees` cash the producer excluded
+   * from `infraMeasured`; counted on the infra line only when the measured
+   * Stripe fee line is unavailable for that day. */
+  infraStripeFeesCash: Record<string, number>;
 }
 
 export async function fetchInfraHistory(
@@ -402,13 +414,20 @@ export function parseInfra(json: string): InfraHistory {
     infra?: {
       day: string;
       usd: number;
+      stripe_fees_usd?: number | string | null;
       annual_complete?: boolean | null;
       annual_reason?: string | null;
     }[];
   };
-  const history: InfraHistory = { infraMeasured: {}, infraAnnualPartial: {} };
+  const history: InfraHistory = {
+    infraMeasured: {},
+    infraAnnualPartial: {},
+    infraStripeFeesCash: {},
+  };
   for (const r of parsed.infra || []) {
     history.infraMeasured[r.day] = Number(r.usd);
+    // NUMERIC arrives as a string; an absent column (older row) is no cash.
+    history.infraStripeFeesCash[r.day] = Number(r.stripe_fees_usd ?? 0);
     if (r.annual_complete === false) {
       history.infraAnnualPartial[r.day] =
         r.annual_reason || "history_under_12_months";

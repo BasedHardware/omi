@@ -640,7 +640,8 @@ def test_infra_line_never_double_counts_other_wall_lines(mercury):
     """STT compute vendors (Deepgram, Soniox, Modulate), GCP and SaaS cash map
     to their own categories and can never enter the infra run rate; the one
     in-category overlap — Mercury stripe-fee cash, measured on the fee line —
-    is excluded by name so the fees line is never counted twice."""
+    is kept out of `amount_usd` by name yet rides along in `stripe_fees_usd`,
+    so the fees are never counted on both lines and never dropped from both."""
     costs = load('mercury_costs')
     config = costs.load_map()
     for vendor in ('soniox', 'deepgram', 'modulate'):
@@ -651,6 +652,7 @@ def test_infra_line_never_double_counts_other_wall_lines(mercury):
     assert config['vendors']['stripe_fees']['category'] == 'infra_non_gcp'
     assert 'stripe_fees' in costs.INFRA_EXCLUDED_VENDORS
     rows = coverage(costs, '2026-09-18', '2026-10-17') + [
+        cash('2026-09-18', 'stripe_fees', 500, 'infra_non_gcp'),
         cash('2026-10-17', 'stripe_fees', 500, 'infra_non_gcp'),
         cash('2026-09-18', 'aws', 300, 'infra_non_gcp'),
         cash('2026-10-16', 'aws', 300, 'infra_non_gcp'),
@@ -666,6 +668,45 @@ def test_infra_line_never_double_counts_other_wall_lines(mercury):
     assert Decimal(result['amount_usd']) == (Decimal('600') / costs.DAYS_PER_MONTH).quantize(Decimal('0.000000001'))
     assert Decimal(result['annual_monthly_usd']) == 0
     assert Decimal(result['annual_estimated_usd']) == 0
+    # The monthly fee pair keeps its own run rate in the fee column (P2 round 2:
+    # the wall counts it there on days the measured Stripe fee line is dark).
+    assert Decimal(result['stripe_fees_usd']) == (Decimal('1000') / costs.DAYS_PER_MONTH).quantize(
+        Decimal('0.000000001')
+    )
+    # Counting both columns is exactly the combined run rate (to the two
+    # columns' own 1e-9 rounding): no dollar twice, no dollar lost between lines.
+    combined = costs.run_rate_rows(
+        [row for row in rows if row['category'] == 'infra_non_gcp' or row['vendor'] == 'unmapped'],
+        ['2026-10-17'],
+        config,
+        'infra_non_gcp',
+    )[0]
+    assert abs(
+        Decimal(result['amount_usd']) + Decimal(result['stripe_fees_usd']) - Decimal(combined['amount_usd'])
+    ) <= Decimal('0.000000002')
+
+
+def test_run_rate_tables_are_created_with_every_produced_field(mercury):
+    """P1 round 2 (schema): `ensure_table` creates each Mercury run-rate table
+    whole from the registered SCHEMAS and `load_replace` projects rows through
+    the same list, so every field a producer emits must have a column — an
+    insert that names a column a live table lacks fails the whole load (the
+    #23289 `mercury_saas_daily` incident; live-table reconciliation for older
+    tables is #23354 and stays out of this lane)."""
+    loader = load('load_mercury')
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    window = costs.days('2026-09-18', '2026-10-17')
+    covered = coverage(costs, '2026-09-18', '2026-10-17')
+    for table, produced in (
+        ('mercury_saas_daily', costs.saas_rows(covered, window, config)),
+        ('mercury_infra_non_gcp_daily', costs.infra_rows(covered, window, config)),
+    ):
+        assert set(produced[0]) | {'run_id', 'computed_at'} == {name for name, _ in loader.SCHEMAS[table]}
+    # The same schemas are what load_bigquery registers for ensure_table.
+    registered = load('load_bigquery').SCHEMAS
+    assert registered['mercury_saas_daily'] == loader.SCHEMAS['mercury_saas_daily']
+    assert registered['mercury_infra_non_gcp_daily'] == loader.SCHEMAS['mercury_infra_non_gcp_daily']
 
 
 def test_infra_seeding_gap_labels_partial_but_keeps_the_measured_run_rate(mercury):
@@ -713,6 +754,9 @@ def test_loader_keeps_old_annuals_and_replaces_the_whole_refresh_window(mercury,
         'mercury_saas_daily',
         'mercury_infra_non_gcp_daily',
     }
+    # Every table is ensured (created whole from SCHEMAS when absent) before
+    # its load; the infra table included.
+    assert ensured == ['mercury_vendor_spend_daily', 'mercury_saas_daily', 'mercury_infra_non_gcp_daily']
     assert all(len(c[2]) == 90 for c in calls)
     assert calls[0][1][0]['run_id'] == 'run-2'
     saas_tail = calls[1][1][-1]
@@ -720,6 +764,7 @@ def test_loader_keeps_old_annuals_and_replaces_the_whole_refresh_window(mercury,
     infra_tail = calls[2][1][-1]
     assert infra_tail['category'] == 'infra_non_gcp'
     assert Decimal(infra_tail['amount_usd']) == 0  # no infra cash in this fixture
+    assert Decimal(infra_tail['stripe_fees_usd']) == 0  # and no excluded fee cash either
     # github's year-old bill amortizes by override; vercel is seen exactly once,
     # so its $30 is an ambiguous one-off: /12, labelled estimated (2026-10-23).
     assert Decimal(saas_tail['amount_usd']) == Decimal('10.082135524')

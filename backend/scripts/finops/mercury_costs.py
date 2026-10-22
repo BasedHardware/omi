@@ -20,10 +20,13 @@ CADENCE_CATEGORIES = ('saas', 'stt_vendor', 'llm_vendor')
 SAAS_RUN_RATE_CATEGORIES = ('saas',)
 INFRA_RUN_RATE_CATEGORY = 'infra_non_gcp'
 # Infra vendors whose Mercury cash is already counted on another wall line are
-# excluded from the infra run-rate: `stripe_fees` cash is the same money as the
-# measured `stripe_fee_daily` line (Stripe balance transactions), so counting it
-# here would double the fees line. STT compute vendors never overlap this
-# category (they map to `stt_vendor`; pinned by test).
+# kept out of the infra run-rate `amount_usd`: `stripe_fees` cash is the same
+# money as the measured `stripe_fee_daily` line (Stripe balance transactions),
+# so counting it there would double the fees line. Their own run rate rides
+# along in `stripe_fees_usd` so the wall can count that cash on the infra line
+# on a day the measured fee line is unavailable — never on both lines, never
+# on neither. STT compute vendors never overlap this category (they map to
+# `stt_vendor`; pinned by test).
 INFRA_EXCLUDED_VENDORS = frozenset({'stripe_fees'})
 CATEGORIES = {
     'saas',
@@ -332,7 +335,16 @@ def infra_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
     software cost stack counts it here exactly once. Same cadence treatment as
     SaaS (yearly repeats and one-off charges amortize ÷12; a one-off stays an
     ambiguity reported as estimated). Vendors measured on their own wall line
-    (the Stripe fee table) are excluded so no dollar is counted twice; STT
-    compute vendors live in `stt_vendor` and never enter this line."""
-    rows = [row for row in rows if row['vendor'] not in INFRA_EXCLUDED_VENDORS]
-    return run_rate_rows(rows, dates, config, INFRA_RUN_RATE_CATEGORY)
+    (the Stripe fee table) are kept out of `amount_usd` so no dollar is counted
+    twice; their cash gets the same run-rate treatment on its own and is
+    reported in `stripe_fees_usd`, so the wall can still count it on a day the
+    measured fee line is dark. STT compute vendors live in `stt_vendor` and
+    never enter this line."""
+    kept = [row for row in rows if row['vendor'] not in INFRA_EXCLUDED_VENDORS]
+    excluded = [row for row in rows if row['vendor'] in INFRA_EXCLUDED_VENDORS]
+    output = run_rate_rows(kept, dates, config, INFRA_RUN_RATE_CATEGORY)
+    # Cadence detection is per vendor, so splitting the series by vendor keeps
+    # every charge's annual/monthly basis identical to the combined run.
+    for row, fees in zip(output, run_rate_rows(excluded, dates, config, INFRA_RUN_RATE_CATEGORY)):
+        row['stripe_fees_usd'] = fees['amount_usd']
+    return output
