@@ -2030,6 +2030,136 @@ def test_json_report_keys_results_by_platform_and_name(checker) -> None:
     assert report['services']['gke:pusher']['manifest_key_count'] == 2
 
 
+def test_json_report_serializes_alias_unproven_keys(checker, tmp_path: Path) -> None:
+    # An INVENTORY driven by alias_unproven_keys must be explainable from the
+    # JSON payload alone: the field is serialized alongside the other
+    # unchecked-key lists, so a machine consumer can distinguish the
+    # project-form ambiguity from malformed output.
+    state, manifest = _alias_mismatch_state(
+        checker, alias_name='SHARED_TOKEN', annotation_resource='projects/123456789/secrets/SHARED_TOKEN'
+    )
+    manifest['environments']['prod']['cloud_run']['services']['backend-sync']['secrets']['TYPESENSE_HOST'] = {
+        'secret': 'projects/based-hardware/secrets/SHARED_TOKEN',
+        'version': 'latest',
+    }
+    manifest_path = tmp_path / 'runtime_env_id_form.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    project, region, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.status == 'INVENTORY', sync
+    report = json.loads(checker.render_json_report(env='prod', project=project, region=region, results=(sync,)))
+    assert report['services']['cloud_run:backend-sync']['alias_unproven_keys'] == ['TYPESENSE_HOST']
+
+
+def test_rendered_state_rejects_contradicting_manifest_literal(checker, tmp_path: Path) -> None:
+    # A stale rendered state (older commit, other environment) that still uses
+    # the manifest's binding names must not replace a manifest-owned literal
+    # unchecked: the renderer emits literals unchanged, so a different value is
+    # not renderer output for this manifest and replacing it would hide the
+    # repository drift behind an equally stale serving revision. Deploy-time
+    # env_var bindings stay rendered-authoritative.
+    manifest_path = _two_service_manifest(tmp_path)
+    rendered = tmp_path / 'stale-literal.json'
+    rendered.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {'env': []},
+                    'backend-sync': {
+                        'env': [
+                            # Manifest literal is 'sync-jobs'; a state carrying a
+                            # different value for it is stale, not exact.
+                            {'name': 'SYNC_TASKS_QUEUE', 'value': 'sync-jobs-old'},
+                            {'name': 'SUMMARY_DEBT_REPAIR_ENABLED', 'value': 'true'},
+                            {'name': 'DEMAND_PROCESSING_UID_ALLOWLIST', 'value': ''},
+                            {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://handler.example/run'},
+                            {
+                                'name': 'TYPESENSE_HOST',
+                                'valueFrom': {'secretKeyRef': {'name': 'TYPESENSE_HOST', 'key': 'latest'}},
+                            },
+                        ]
+                    },
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    with pytest.raises(ValueError, match='contradicts the manifest binding'):
+        checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=rendered)
+
+
+def test_gke_prefixed_secret_source_may_supply_missing_expected_keys(checker) -> None:
+    # [ConfigMap A(prefix SECRET_), Secret S(prefix SECRET_)] on both the
+    # serving spec and the chart render. A drops an expected key from its
+    # snapshot data: S's keys are unknown, so the key's absence from env_map is
+    # unproven — it may come from S — and must be excused from the missing
+    # check instead of false-DRIFTing. The workload stays INVENTORY through the
+    # Secret identity the repository cannot enumerate.
+    cm_name, shared, _literal_value, cm_data = _literal_configmap_key(checker)
+    del cm_data[shared]  # the snapshot's ConfigMap lost the expected key
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [
+        {'prefix': 'SECRET_', 'configMapRef': {'name': cm_name}},
+        {'prefix': 'SECRET_', 'secretRef': {'name': 'fixture-shadowing-secret'}},
+    ]
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        render='helm',
+        gke_state=gke_state,
+        runner=_helm_render_runner(deployment, 'pusher', serving_env, envfrom),
+    )
+    assert result.error is None, result.error
+    assert 'secret:fixture-shadowing-secret#SECRET_' in result.envfrom_unresolved
+    assert f'SECRET_{shared}' not in result.missing_from_live, result.missing_from_live
+    assert result.status == 'INVENTORY', result
+    assert checker.exit_code((result,), strict=True) == 0
+
+
+def test_gke_opaque_source_prefix_limits_the_missing_key_excuse(checker) -> None:
+    # Same layout but the Secret's prefix cannot reach the missing expected
+    # key's name: only names the opaque source can produce are excused, so the
+    # absent key stays proven missing drift.
+    cm_name, shared, _literal_value, cm_data = _literal_configmap_key(checker)
+    del cm_data[shared]
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [
+        {'prefix': 'SECRET_', 'configMapRef': {'name': cm_name}},
+        {'prefix': 'OTHER_', 'secretRef': {'name': 'fixture-shadowing-secret'}},
+    ]
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        render='helm',
+        gke_state=gke_state,
+        runner=_helm_render_runner(deployment, 'pusher', serving_env, envfrom),
+    )
+    assert result.error is None, result.error
+    assert f'SECRET_{shared}' in result.missing_from_live, result.missing_from_live
+    assert result.status == 'DRIFT', result
+    assert checker.exit_code((result,), strict=True) == 1
+
+
 def test_gke_live_explicit_configmap_keyref_values_stay_unproven(checker) -> None:
     # Thread: an explicit env entry bound through valueFrom.configMapKeyRef
     # proves only the reference in the immutable pod spec. The value the

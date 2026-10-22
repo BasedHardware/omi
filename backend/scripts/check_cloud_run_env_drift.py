@@ -590,6 +590,7 @@ def expected_cloud_run_env(
         secrets_map = render_backend_runtime_env._as_config_dict(service_config.get('secrets')) or {}
         service_expected: ExpectedEnv = {}
         service_canonical: dict[str, str] = {}
+        bindings: dict[str, Any] = {**env_map, **secrets_map}
         for key, entry in env_map.items():
             # Unresolved deploy-time bindings stay name-only (None): the renderer may omit them.
             service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=False, environ=environ)
@@ -672,7 +673,7 @@ def expected_cloud_run_env(
                     f'{service_name!r}, which the manifest does not bind; the renderer emits '
                     'only manifest env and secrets bindings'
                 )
-            bindings: dict[str, Any] = {**env_map, **secrets_map}
+            bindings = {**env_map, **secrets_map}
             provisional_omitted: set[str] = set()
             for key in service_expected:
                 if key in rendered_names or not isinstance(bindings.get(key), Mapping):
@@ -689,14 +690,36 @@ def expected_cloud_run_env(
             service_expected = {
                 key: digest for key, digest in service_expected.items() if key not in provisional_omitted
             }
-        for entry in rendered_service.get('env', []) or []:
-            if isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']:
-                service_expected[entry['name']] = env_entry_hash(entry)
-                secret_ref = (entry.get('valueFrom') or {}).get('secretKeyRef')
-                if isinstance(secret_ref, Mapping):
-                    service_canonical[entry['name']] = _secret_ref_hash(
-                        _strip_secret_project(str(secret_ref.get('name', ''))), str(secret_ref.get('key', ''))
-                    )
+        for entry in rendered_env:
+            if not (isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']):
+                continue
+            key = entry['name']
+            # The renderer resolves deploy-time bindings but cannot legitimately
+            # alter a manifest-owned literal or fixed ``secret`` reference: a
+            # state generated from an older commit or another environment would
+            # then replace the manifest's hash unchecked, and a still-stale
+            # serving revision would compare OK — hiding repository drift the
+            # command exists to catch. Validate those entries against the
+            # current manifest; replacement stays reserved for deploy-time
+            # ``env_var`` bindings the manifest cannot resolve.
+            if key in service_expected and service_expected[key] is not None:
+                rendered_hash = env_entry_hash(entry)
+                if rendered_hash != service_expected[key]:
+                    binding = bindings.get(key) if rendered_state_path is not None else None
+                    is_deploy_time = isinstance(binding, Mapping) and bool(binding.get('env_var'))
+                    if not is_deploy_time:
+                        raise ValueError(
+                            f'Rendered state {rendered_state_path} entry for {key!r} on service '
+                            f'{service_name!r} contradicts the manifest binding '
+                            f'(manifest hash {service_expected[key]}, rendered hash {rendered_hash}); '
+                            'the renderer emits literals and fixed secret references unchanged'
+                        )
+            service_expected[key] = env_entry_hash(entry)
+            secret_ref = (entry.get('valueFrom') or {}).get('secretKeyRef')
+            if isinstance(secret_ref, Mapping):
+                service_canonical[key] = _secret_ref_hash(
+                    _strip_secret_project(str(secret_ref.get('name', ''))), str(secret_ref.get('key', ''))
+                )
         expected[str(service_name)] = service_expected
         if canonical_secret_hashes is not None:
             canonical_secret_hashes[str(service_name)] = service_canonical
@@ -1458,6 +1481,22 @@ def compare_service(
             skip_missing = frozenset().union(
                 *(envfrom_keys_by_ref.get(ref, frozenset()) for ref in degraded_expected_refs)
             )
+            # An opaque Secret source may also *supply* an expected key the
+            # earlier known sources did not contribute: Secret contents are
+            # never readable in any run mode, so the key's absence from
+            # env_map proves nothing. Excuse only expected names the Secret's
+            # prefix can reach — a ``prefix: SECRET_`` Secret can never supply
+            # an unprefixed expected key, whose absence stays proven missing
+            # drift. Unresolvable ConfigMap siblings stay excluded: they are
+            # run-scoped degradations, not inherently unreadable sources, and
+            # expected keys stay attributed to the source the repo declares.
+            secret_prefixes = [
+                _parse_envfrom_ref_identity(ref)[1] for ref in target.envfrom_degraded_refs if ref.startswith('secret:')
+            ]
+            if secret_prefixes:
+                skip_missing |= {
+                    key for key in expected_envfrom_keys for prefix in secret_prefixes if key.startswith(prefix)
+                }
         missing |= declared - set(env_map) - skip_missing
         # Unproven live ConfigMap data only degrades keys whose effective value
         # comes from envFrom. A key this target sets through an explicit env
@@ -1870,6 +1909,12 @@ def render_markdown_report(
                 f'- Explicit env keys not value-compared (configMapKeyRef binding; live ConfigMap data '
                 f'cannot prove the value running pods resolved): {keys_str}'
             )
+        if item.alias_unproven_keys:
+            keys_str = ', '.join(f'`{name}`' for name in item.alias_unproven_keys)
+            lines.append(
+                f'- Alias-resolved secret keys not value-compared (project-ID/number form ambiguity; '
+                f'name and version matched): {keys_str}'
+            )
         if item.envfrom_mismatched_refs:
             refs_str = ', '.join(f'`{name}`' for name in item.envfrom_mismatched_refs)
             lines.append(f'- envFrom ConfigMap reference drift (live vs expected): {refs_str}')
@@ -1936,6 +1981,7 @@ def render_json_report(
                 'envfrom_unresolved': list(item.envfrom_unresolved),
                 'envfrom_unproven': list(item.envfrom_unproven),
                 'explicit_unproven_keys': list(item.explicit_unproven_keys),
+                'alias_unproven_keys': list(item.alias_unproven_keys),
                 'value_mismatches': [
                     {
                         'key': m.key,
