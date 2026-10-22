@@ -72,11 +72,10 @@ def capture_record(record: Any) -> CaptureRecord | None:
 
     if field('discarded') or field('status') != 'completed':
         return None
-    start, finish = field('started_at'), field('finished_at')
-    if not isinstance(start, datetime) or not isinstance(finish, datetime):
+    start = capture_groups_db._aware(field('started_at'))
+    finish = capture_groups_db._aware(field('finished_at'))
+    if start is None or finish is None:
         return None
-    start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
-    finish = finish if finish.tzinfo else finish.replace(tzinfo=timezone.utc)
     source = getattr(field('source'), 'value', field('source'))
     if finish <= start or not source or not field('id'):
         return None
@@ -239,7 +238,7 @@ def _group_with_overlap_speech(
                     would_join, reason = False, 'different_groups'
                 else:
                     entrant = row if own_group.get('id') else own
-                    for member in existing.get('members') or []:
+                    for member in capture_groups_db._members_list(existing):
                         cid = member['id']
                         if cid in fingerprints:
                             continue
