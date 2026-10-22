@@ -2016,6 +2016,17 @@ async def test_soniox_429_surge_rejected_sessions_walk_once_without_shared_bench
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram retired 2026-08-27; these storm regressions pin the pre-retirement
+    # seams so the post-soniox hop still exists under a listed dg deployment.
+    _policy_enabled = st.provider_is_enabled
+
+    def _admit_dg(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _policy_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_dg)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: False)
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
     monkeypatch.setattr(live_router, '_capacity_until', {})
@@ -2142,6 +2153,17 @@ async def test_sustained_soniox_429_storm_skips_then_probe_recovers(monkeypatch,
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '8')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram retired 2026-08-27; these storm regressions pin the pre-retirement
+    # seams so the post-soniox hop still exists under a listed dg deployment.
+    _policy_enabled = st.provider_is_enabled
+
+    def _admit_dg(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _policy_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_dg)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setattr(live_chain.health, 'has_fresh_fleet_snapshot', lambda: False)
     monkeypatch.setattr(live_chain.health, 'cached_snapshot', lambda *args: {})
     monkeypatch.setattr(live_router, '_capacity_until', {})

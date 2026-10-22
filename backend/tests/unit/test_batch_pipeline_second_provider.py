@@ -28,6 +28,10 @@ def second_setup(setup, monkeypatch, legacy_dependencies, *, deepgram=None, spee
     monkeypatch.setattr(vad, 'offline_pcm_speech_segments', lambda _: [{'start': speech[0], 'end': speech[1]}])
     second = deepgram or Mock(return_value=([], 'en'))
     monkeypatch.setattr(pre_recorded, 'deepgram_prerecorded_from_bytes', second, raising=False)
+    # Production answers None (Deepgram retired 2026-08-27); the machinery below
+    # stays covered by naming a hypothetical second provider, exactly what
+    # restoring HELD_RECOVERY_SECOND_PROVIDER would do.
+    monkeypatch.setattr(module, 'SECOND_PROVIDER', 'deepgram')
     job = row(client)
     job.pop('recovery')
     job['recovery_state'] = 'held'
@@ -35,6 +39,20 @@ def second_setup(setup, monkeypatch, legacy_dependencies, *, deepgram=None, spee
     recovery = setup[-1]
     recovery.stt = transcribe
     return client, binding, artifacts, alternate, second, recovery
+
+
+def test_retired_second_provider_never_dispatches(setup, monkeypatch, legacy_dependencies, caplog):
+    """With HELD_RECOVERY_SECOND_PROVIDER None (Deepgram retired), no second call happens."""
+    client, binding, artifacts, alternate, second, recovery = second_setup(setup, monkeypatch, legacy_dependencies)
+    monkeypatch.setattr(module, 'SECOND_PROVIDER', None)
+    assert (
+        module.second_provider_eligible(
+            {'worker_failure': {'reason': 'unsupported_language'}}, SimpleNamespace(spans=[{'start': 0, 'end': 9}])
+        )
+        is False
+    )
+    assert recovery.recover('bad', binding.owner_id) == 'failed_held'
+    second.assert_not_called()
 
 
 def test_both_providers_empty_settles_terminal_empty_with_evidence(setup, monkeypatch, legacy_dependencies, caplog):
