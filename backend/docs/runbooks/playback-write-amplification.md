@@ -154,7 +154,9 @@ metadata alone. Compare the new metric and next inventory after a separately
 approved deployment. The supplied 1,255.70 GiB/day is net stock growth, not gross
 bytes written; it should not be conflated with this forward-write estimate.
 
-Focused tests exercise stable identities with the rollout disabled, changed
+Local focused verification: **204 tests passed across 10 files**, through
+`cd backend && BACKEND_PYTEST_WORKERS=4 BACKEND_UNIT_TEST_FILE_LIST=<file-list> nice -n 10 ./test.sh`
+wrapped in the workspace `omi-heavy` runner. Focused tests exercise stable identities with the rollout disabled, changed
 sources, legacy aliases, create-only races, large spans, stamp-failure retry via
 the actual FastAPI HTTP route, deleted conversations, and destructive-operation
 fences. Local and CI receipts belong to the PR; no live user-audio canary ran.

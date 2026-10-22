@@ -3837,8 +3837,13 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             PLAYBACK_WRITES.labels('skipped').inc()
             return JSONResponse(status_code=200, content={'status': 'superseded'})
 
+        artifact_fingerprint = compute_audio_files_fingerprint(
+            audio_files, origin=conversation.get('started_at') or conversation.get('created_at'), source_identity=True
+        )
         stamp = conversation.get('conversation_audio') or {}
-        if stamp.get('audio_files_fingerprint') == fingerprint:
+        if stamp.get('audio_files_fingerprint') == fingerprint and (
+            not stamp.get('artifact_fingerprint') or stamp['artifact_fingerprint'] == artifact_fingerprint
+        ):
             existing = await run_blocking(
                 storage_executor,
                 get_conversation_playback_signed_url,
@@ -3861,7 +3866,6 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             ]
             started_at_ts = min(chunk_starts) if chunk_starts else 0.0
 
-        artifact_fingerprint = compute_audio_files_fingerprint(audio_files, origin=started_at_ts, source_identity=True)
         try:
             with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if demand else nullcontext():
                 mp3_size, spans = await run_blocking(

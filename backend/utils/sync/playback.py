@@ -198,7 +198,17 @@ def _conversation_audio_urls_entry(
         )
         if stamped == source_fingerprint:
             cached_fingerprint, immutable = source_fingerprint, True
-    if stamped == cached_fingerprint:
+    artifact_fingerprint = stamp.get('artifact_fingerprint')
+    current_artifact = (
+        compute_audio_files_fingerprint(
+            audio_files,
+            origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at'),
+            source_identity=True,
+        )
+        if artifact_fingerprint
+        else None
+    )
+    if stamped == cached_fingerprint and artifact_fingerprint == current_artifact:
         signed_url = get_conversation_playback_signed_url(
             uid,
             conversation_id,

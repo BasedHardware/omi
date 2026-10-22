@@ -135,3 +135,26 @@ async def test_http_retry_after_stamp_failure_reuses_published_audio(monkeypatch
     assert len(published) == 1 and len(commits) == 2
     encoder.assert_called_once()
     assert row['conversation_audio']['artifact_fingerprint'] in published
+
+
+def test_timeline_origin_change_invalidates_immutable_playback(monkeypatch):
+    from utils.other import storage
+    from utils.sync import playback
+
+    monkeypatch.setenv('PLAYBACK_ON_DEMAND_ENABLED', 'false')
+    files = [dict(id='part', chunk_timestamps=[1000.0])]
+    row = dict(
+        started_at=1000.0,
+        conversation_audio=dict(
+            audio_files_fingerprint=storage.compute_audio_files_fingerprint(files),
+            artifact_fingerprint=storage.compute_audio_files_fingerprint(files, origin=1000.0, source_identity=True),
+        ),
+    )
+    row['started_at'] = 990.0
+    lookup, enqueue = Mock(return_value='stale-url'), Mock()
+    monkeypatch.setattr(playback, 'get_conversation_playback_signed_url', lookup)
+    monkeypatch.setattr(playback, 'get_conversation_playback_unavailable_fingerprint', lambda *_: None)
+    monkeypatch.setattr(playback, 'enqueue_conversation_artifact_build', enqueue)
+    assert playback._conversation_audio_urls_entry('synthetic', 'conversation', files, row)['status'] == 'pending'
+    lookup.assert_not_called()
+    enqueue.assert_called_once()
