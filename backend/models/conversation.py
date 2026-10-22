@@ -620,24 +620,24 @@ class Conversation(BaseModel):
 
     status: Optional[ConversationStatus] = ConversationStatus.completed
     is_locked: bool = False
-    # Lazy processing (freemium cost cut): True when this desktop conversation was stored as a
-    # raw transcript with no LLM enrichment yet — enrichment runs on first open
-    # (get_conversation_by_id → process_conversation). Cleared once enriched.
+    # Deferred desktop transcripts are enriched on first open, then cleared.
     deferred: bool = False
     # Stored transcripts waiting for an explicit, budgeted backlog choice.
     processing_deferred: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
+    is_call: Optional[bool] = None
+    call_platform: Optional[str] = None
+    calendar_event_id: Optional[str] = None
+    geolocation_scope: Optional[Literal['owner']] = None
+    other_participants_location: Optional[Literal['remote']] = None
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
 
-    # Calendar event link - set when conversation overlaps with a Google Calendar event
     calendar_event: Optional[CalendarEventLink] = None
 
-    # Capture-device provenance (optional; absent on legacy conversations).
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
 
-    # Read projection of the authoritative finalization-job meeting receipt.
     meeting_treatment_eligible: bool = False
     meeting_treatment_reason: Optional[str] = None
     meeting_duration_s: Optional[float] = None

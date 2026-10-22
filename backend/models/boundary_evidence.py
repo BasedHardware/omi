@@ -24,6 +24,9 @@ class BoundarySignal(BaseModel):
     started_at: datetime
     ended_at: Optional[datetime] = None  # None while ongoing
     title: Optional[str] = None
+    meeting_link: Optional[str] = None
+    call_controls_detected: Optional[bool] = None
+    call_platform: Optional[str] = None
     participants: List[BoundaryParticipant] = []
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     source_device: Optional[str] = None

@@ -45,6 +45,9 @@ def context_signal(context: Mapping[str, Any]) -> BoundarySignal | None:
         started_at=start,
         ended_at=end,
         title=context.get('title'),
+        meeting_link=context.get('meeting_link'),
+        call_controls_detected=context.get('call_controls_detected'),
+        call_platform=context.get('platform'),
         participants=[BoundaryParticipant.model_validate(p) for p in participants if isinstance(p, dict)],
         external_id=context.get('calendar_event_id') or context.get('id'),
     )

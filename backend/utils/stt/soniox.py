@@ -857,6 +857,7 @@ async def process_audio_soniox(
     *,
     profile: LiveLanguageProfile | None = None,
     idle_budget: SonioxIdleBudget | None = None,
+    uid: str | None = None,
 ) -> STTSocket:
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -871,10 +872,8 @@ async def process_audio_soniox(
         'enable_speaker_diarization': True,
         'enable_language_identification': True,
     }
-    # Hints bias recognition; identification still detects every supported
-    # language without one. The provider validates ``language_hints`` against
-    # its documented vocabulary and answers ``400 invalid_request Invalid
-    # language hint`` — after the WebSocket upgrade already succeeded — for any
+    # Identification works without hints. Soniox validates ``language_hints`` against
+    # its vocabulary after the WebSocket upgrade (400 invalid_request Invalid language hint) for any
     # entry outside it, killing the session at the config frame (prod
     # backend-listen 2026-09-02/03). 'multi' is our auto-detect sentinel, not an
     # ISO code, so it must send no hint; compare on the normalized base code so
@@ -907,15 +906,16 @@ async def process_audio_soniox(
             rejected,
         )
 
+    from utils.stt.vocabulary import apply_context
+
+    await apply_context(config, uid)
     url = SONIOX_WS_URL
 
     async def connect(callback: Any) -> SafeSonioxSocket:
         return await _open_soniox(config, url, callback, preseconds)
 
     sock = await connect(stream_transcript)
-    # The receiver-owned budget already resolved the uid-hash cohort against the
-    # global knobs; a bare call (no budget) keeps the global read. The global
-    # kill switch is re-read per leg so SONIOX_IDLE_CLOSE_SECONDS=0 stays hot.
+    # Reuse receiver cohort admission; reread the global idle kill switch per leg.
     seconds = idle_close_seconds()
     if seconds and idle_budget is not None:
         seconds = idle_budget.close_seconds

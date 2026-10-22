@@ -6529,3 +6529,20 @@ Database-writing shadow paths use `refactor_modes.shadow_sampled`: capture
 coverage, speaker evidence and boundary evidence each declare
 `<FLAG>_SHADOW_PERCENT`, default 5. Serve cohorts always write; zero disables
 shadow writes. No serve percentage or digest cohort is configured in source.
+
+
+Wave 2 call projection preserves optional `meeting_link`,
+`call_controls_detected` and `call_platform` through the boundary payload.
+Phone transports, matching calendar meeting links and explicit joined controls
+can establish call metadata; media playback and an open chat window cannot.
+Conversation locations remain owner locations, with remote participants explicit.
+
+V4's completed-local-day recap producer shares `status` and `generated_at` with
+M's read adapter. Pending, failed, empty and not-generated rows keep a null
+`generated_at`; only a legacy successful row without that field uses creation
+time as a compatibility fallback. Stored media/noise-only days are not-generated,
+not empty capture days. Rollback resumes unfinished stubs under the same ID.
+Both one-shot and agentic notes mounts receive cohort-gated owner-involved task
+rules, authenticated identity and matching cache identity. Exact-reference stale
+capture policy still lacks its producer binding/CAS lifecycle adapter; no fuzzy
+or historical task cancellation is performed.
