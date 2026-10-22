@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Episodes is beta-channel only (TestFlight); the live row's steadier clock and faster first appearance do not change store builds"
+}

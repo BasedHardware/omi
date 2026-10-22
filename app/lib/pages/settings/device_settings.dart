@@ -729,8 +729,8 @@ extension _DeviceLiveSections on _DeviceSettingsState {
     final capture = context.read<CaptureProvider?>();
     // Only the visible source and running length depend on capture, not its
     // transcript text, socket state, or BLE/network rate samples.
-    final (source, _) = context.select<CaptureProvider?, (String?, double)>(
-      (c) => (c?.liveCaptureSource, c?.segments.lastOrNull?.end ?? 0),
+    final (source, _) = context.select<CaptureProvider?, (String?, DateTime?)>(
+      (c) => (c?.liveCaptureSource, c?.liveCaptureStartedAt),
     );
     final deviceStreaming = source != null && source != 'phone';
     final episodes = _maybeProvider<EpisodeProvider>(context);
@@ -740,7 +740,8 @@ extension _DeviceLiveSections on _DeviceSettingsState {
       liveTitle: live == null ? null : (live.title.isEmpty ? l10n.episodeListeningNow : live.title),
       liveLength: live == null || capture == null
           ? null
-          : EpisodePresentation.runningLength(EpisodePresentation.elapsed(live, capture, episodes!.now()), l10n),
+          : EpisodePresentation.runningLength(
+              EpisodePresentation.elapsed(live, capture, episodes!.now(), anchor: episodes.liveAnchor), l10n),
       onOpenLive: capture == null
           ? null
           : () => routeToPage(context, LiveEpisodePage(topConversationId: capture.topConversationId)),

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/episodes.dart' as api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/utils/live_start_anchor.dart';
 
 typedef EpisodeLiveFetcher = Future<ApiResult<EpisodeRead>> Function();
 typedef EpisodeLookupFetcher = Future<ApiResult<EpisodeRead>> Function(String conversationId);
@@ -38,6 +39,13 @@ class EpisodeProvider extends ChangeNotifier {
   /// How often a watcher (Home's live row, the live page) re-reads the live episode.
   static const pollInterval = Duration(seconds: 30);
 
+  /// Until a live episode shows up, a watcher re-reads sooner: the server opens one at the first
+  /// words, and the row should switch to it (and hide its fragments) within seconds, not half a minute.
+  static const pendingPollInterval = Duration(seconds: 10);
+
+  /// One stable start for every surface's running length (Home row, live page, device page).
+  final LiveStartAnchor liveAnchor = LiveStartAnchor();
+
   bool _enabled = false;
   bool get enabled => _enabled;
 
@@ -69,7 +77,18 @@ class EpisodeProvider extends ChangeNotifier {
       case ApiFailure():
         return;
     }
+    _reschedule();
     notifyListeners();
+  }
+
+  Duration get _interval => _enabled && _live == null ? pendingPollInterval : pollInterval;
+  Duration? _scheduled;
+
+  void _reschedule() {
+    if (_watchers == 0 || _scheduled == _interval) return;
+    _poll?.cancel();
+    _scheduled = _interval;
+    _poll = Timer.periodic(_interval, (_) => unawaited(refreshLive()));
   }
 
   /// The conversations a live episode stands for on Home; they reappear as rows once it closes.
@@ -99,7 +118,8 @@ class EpisodeProvider extends ChangeNotifier {
     _watchers++;
     if (_watchers == 1) {
       unawaited(refreshLive());
-      _poll = Timer.periodic(pollInterval, (_) => unawaited(refreshLive()));
+      _scheduled = _interval;
+      _poll = Timer.periodic(_interval, (_) => unawaited(refreshLive()));
     }
   }
 
@@ -109,6 +129,7 @@ class EpisodeProvider extends ChangeNotifier {
     if (_watchers == 0) {
       _poll?.cancel();
       _poll = null;
+      _scheduled = null;
     }
   }
 
