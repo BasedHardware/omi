@@ -27845,6 +27845,8 @@
       "SaveFcmTokenRequest": {
         "properties": {
           "fcm_token": {
+            "maxLength": 1000,
+            "minLength": 1,
             "title": "Fcm Token",
             "type": "string"
           },

@@ -1,3 +1,4 @@
+import hmac
 import os
 from typing import Any, Dict, Optional, cast
 
@@ -12,7 +13,7 @@ from utils.apps import (
 )
 import database.notifications as notification_db
 from utils.integration_telemetry import emit_posthog_event
-from models.other import FcmTokenResponse, SaveFcmTokenRequest, SyncUserTimeZoneRequest
+from models.other import FcmTokenResponse, SaveFcmTokenRequest, SendNotificationRequest, SyncUserTimeZoneRequest
 from models.integrations import IntegrationNotificationResponse
 from utils.notifications import (
     send_notification,
@@ -77,16 +78,11 @@ def sync_user_time_zone(
 
 
 @router.post('/v1/notification')
-def send_notification_to_user(data: Dict[str, Any], secret_key: str = Header(...)) -> Dict[str, str]:
-    if not secret_key or secret_key != os.getenv('ADMIN_KEY'):
+def send_notification_to_user(data: SendNotificationRequest, secret_key: str = Header(...)) -> Dict[str, str]:
+    admin_key = (os.getenv('ADMIN_KEY') or '').strip()
+    if not admin_key or not hmac.compare_digest(secret_key.encode('utf-8'), admin_key.encode('utf-8')):
         raise HTTPException(status_code=403, detail='You are not authorized to perform this action')
-    if not data.get('uid'):
-        raise HTTPException(status_code=400, detail='uid is required')
-    uid = cast(str, data['uid'])
-    title = cast(str, data['title'])
-    body = cast(str, data['body'])
-    notification_data = cast(Dict[str, Any], data.get('data', {}))
-    send_notification(uid, title, body, notification_data)
+    send_notification(data.uid, data.title, data.body, data.data)
     return {'status': 'Ok'}
 
 
