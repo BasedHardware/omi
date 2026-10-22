@@ -853,9 +853,7 @@ def test_expired_short_term_remains_visible_until_ttl_disposition_is_applied(mon
     )
     db.docs[f"users/{uid}/memory_items/{item.memory_id}"] = item.model_dump(mode="json")
     db.docs[f"users/{uid}/memory_evidence/{evidence.evidence_id}"] = evidence.model_dump(mode="json")
-    assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == (
-        [item.memory_id] if enabled else []
-    )
+    assert [memory.id for memory in read_canonical_memories(uid, db_client=db, now=NOW)] == [item.memory_id]
     caplog.set_level("INFO", logger="utils.memory.short_term_promotion")
 
     with pytest.MonkeyPatch.context() as local_patch:

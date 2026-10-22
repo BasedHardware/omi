@@ -327,7 +327,9 @@ worker rotates through pending observations to retry failures, including rows
 past their former TTL. Explicit submissions retain their required-processing
 receipt path. Ledger-mode accounts retain the daily sweep as their formation
 owner. Intake uses the existing memory L2 gateway lane (Flex on maintenance),
-not the Dream reasoning/capacity/paid-cohort budget. Dream still owns verified
+not the Dream reasoning/capacity/paid-cohort budget.
+`MEMORY_OBSERVATION_INTAKE_ENABLED` defaults on; false stops both observation
+entrypoints before DB/model work, leaving capture and required intake intact. Dream still owns verified
 retrospective cleanup. A promotion admission receipt binds the canonical
 content, evidence and graph plan; it is not a Dream session receipt.
 
@@ -336,6 +338,7 @@ Short-term and TTL maintenance cannot reject them for age alone. Historical
 active Review archives project as Short-term in default lists without rewriting
 their audit records. Explicit owner rejection, source/privacy tombstones,
 processing blocks, sensitivity policy and third-party grants still apply. Set
-it to `false` to restore TTL handling and archive routing for new Review outcomes.
+it to `false` to restore TTL handling and archive routing for new Review outcomes;
+expired active Short-term reads remain visible pending TTL adjudication.
 See [memory decision recovery](memory-decision-recovery.md) for incident evidence,
 backfill bounds and post-deployment verification.

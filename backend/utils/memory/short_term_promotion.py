@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from database import knowledge_graph as kg_db
 from database._client import db as default_db_client
@@ -39,12 +39,13 @@ from models.memory_apply import MemoryControlState, WriterMode
 from utils.memory.canonical_consolidation import (
     ConsolidationAgentDecision,
     RequiredIntakeCompletion,
+    ObservationIntakeCompletion,
+    complete_pending_observation_intake,
+    complete_pending_observation_intake_sync,
     apply_consolidation_decision,
     complete_required_intake,
 )
 
-if TYPE_CHECKING:
-    from utils.memory.canonical_consolidation import ObservationIntakeCompletion
 from utils.memory.canonical_required_processing import (
     REQUIRED_PROCESSING_ATTEMPT_LEASE_SECONDS,
     RequiredMemoryProcessingReport,
@@ -466,8 +467,6 @@ def run_canonical_short_term_maintenance(
     if compatibility_intake:
         if job_budget_guard is not None:
             job_budget_guard()
-        from utils.memory.canonical_consolidation import complete_pending_observation_intake_sync
-
         observations = complete_pending_observation_intake_sync(
             uid,
             db_client=client,
@@ -570,8 +569,6 @@ async def run_canonical_short_term_maintenance_async(
         required_intake = RequiredIntakeCompletion(uid=uid)
     observations = None
     if compatibility_intake:
-        from utils.memory.canonical_consolidation import complete_pending_observation_intake
-
         observations = await complete_pending_observation_intake(
             uid,
             db_client=client,

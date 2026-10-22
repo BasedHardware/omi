@@ -723,3 +723,82 @@ async def test_observation_recovery_separates_db_and_model_steps(monkeypatch):
     )
     assert report.promoted_memory_ids == [source.memory_id]
     assert pools == [executors.db_executor, executors.db_executor, executors.llm_executor, executors.db_executor]
+
+
+@pytest.mark.parametrize('setting', ['0', 'false', 'off', 'no'])
+@pytest.mark.asyncio
+async def test_observation_kill_switch_stops_all_entrypoints_before_any_work(monkeypatch, setting):
+    monkeypatch.setenv('MEMORY_OBSERVATION_INTAKE_ENABLED', setting)
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'true')
+
+    def unexpected(*args, **kwargs):
+        pytest.fail('disabled intake attempted a read, cursor write or planner call')
+
+    monkeypatch.setattr(observation_intake, '_load_observation_intake', unexpected)
+    monkeypatch.setattr(observation_intake, '_pending_observation_ids', unexpected)
+    monkeypatch.setattr(observation_intake, 'plan_observation_intake', unexpected)
+    common = dict(db_client=object(), now=NOW, run_id='disabled')
+    reports = [
+        observation_intake.complete_observation_intake(UID, memory_ids=['already_committed'], **common),
+        observation_intake.complete_pending_observation_intake_sync(UID, **common),
+        await observation_intake.complete_pending_observation_intake(UID, **common),
+    ]
+    assert all(not r.decided_memory_ids and not r.failed_memory_ids and r.error_code is None for r in reports)
+
+
+@pytest.mark.parametrize('sizes,expected_calls', [([20_000] * 4, 2), ([100_000], 0), ([2_000, 100_000, 2_000], 2)])
+def test_context_budget_splits_to_items_and_reviews_oversized_singleton(sizes, expected_calls, monkeypatch):
+    import json
+    from types import SimpleNamespace
+
+    from langchain_core import output_parsers
+
+    # This file's isolation fixture replaces LangChain; preserve real Pydantic
+    # validation at the seam instead of the fixture's unrestricted MagicMock.
+    class Parser:
+        def __init__(self, *, pydantic_object):
+            self.schema = pydantic_object
+
+        def get_format_instructions(self):
+            return json.dumps(self.schema.model_json_schema())
+
+        def parse(self, content):
+            return self.schema.model_validate_json(content)
+
+    monkeypatch.setattr(output_parsers, 'PydanticOutputParser', Parser)
+    monkeypatch.delenv('MEMORY_OBSERVATION_INTAKE_ENABLED', raising=False)
+    items = [_item(f'mem_budget_{i}', 'x' * size) for i, size in enumerate(sizes)]
+    db = _db_for_items(*items)
+    requests = []
+
+    class Model:
+        def invoke(self, messages):
+            payload = messages[-1]['content']
+            assert len(payload.encode()) <= 64_000
+            rows = json.loads(payload)
+            requests.append([row['memory_id'] for row in rows])
+            return SimpleNamespace(
+                content=json.dumps(
+                    {'decisions': [{'source_memory_id': row['memory_id'], 'route': 'review'} for row in rows]}
+                )
+            )
+
+    report = observation_intake.complete_observation_intake(
+        UID,
+        memory_ids=[item.memory_id for item in items],
+        db_client=db,
+        now=NOW,
+        run_id='budget',
+        planner=lambda selected: observation_intake.plan_observation_intake(selected, llm=Model()),
+    )
+    assert report.error_code is None
+    assert report.decided_memory_ids == [item.memory_id for item in items]
+    assert len(requests) == expected_calls
+    sent = [memory_id for batch in requests for memory_id in batch]
+    assert len(sent) == len(set(sent))
+    assert set(sent) == {item.memory_id for item, size in zip(items, sizes) if size < 64_000}
+    for source in items:
+        stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+        assert stored.promotion['route'] == 'review'
+        assert stored.content == source.content
+        assert stored.status == MemoryItemStatus.active

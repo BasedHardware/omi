@@ -1,6 +1,10 @@
 """Canonical intake dispositions and atomic, receipted Long-term admission."""
 
 from __future__ import annotations
+
+import json
+import logging
+import os
 from datetime import datetime
 from dataclasses import dataclass, field
 from google.cloud.firestore_v1 import FieldFilter, transactional
@@ -11,14 +15,23 @@ from database.firestore_transaction_retry import run_with_transaction_contention
 from models.memory_admission import valid_required_processing_receipt
 from typing import Any, Dict, List, Literal, Optional
 from pydantic import BaseModel, Field, model_validator
-from database.memory_apply_store import apply_long_term_patch_firestore
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.legal_holds import assert_no_destructive_operation_transaction
+from database.memory_apply_store import apply_long_term_patch_firestore, require_canonical_intake_enabled
 from models.memory_evidence import SourceState
-from models.memory_apply import ApplyStatus, MemoryControlState, build_patch_mutation_identity, memory_content_hash
+from models.memory_apply import (
+    ApplyStatus,
+    MemoryControlState,
+    WriterMode,
+    build_patch_mutation_identity,
+    memory_content_hash,
+)
 from models.memory_contracts import DurablePatchDecision, LifecycleState, deterministic_contract_id
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.memory_promotion import PromotionGraphPlan, build_promotion_admission_receipt
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
-from models.product_memory import undecided_visible
+from models.product_memory import RESTRICTED_SENSITIVITY_LABELS, undecided_visible
+from utils.observability.fallback import record_fallback
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.canonical_required_processing import (
@@ -526,10 +539,9 @@ class ObservationIntakeCompletion(RequiredIntakeCompletion):
 
 
 def plan_observation_intake(items: List[MemoryItem], *, llm=None) -> List[ConsolidationAgentDecision]:
-    """One bounded model call; intake never edits or supersedes an existing fact."""
-    import json
+    """Bound each provider request; split large partitions without dropping items."""
+    # Lazy: provider stack stays out of capture/read-only imports.
     from langchain_core.output_parsers import PydanticOutputParser
-    from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
 
     protected = [item for item in items if set(item.sensitivity_labels) & RESTRICTED_SENSITIVITY_LABELS]
     decisions = [
@@ -543,6 +555,7 @@ def plan_observation_intake(items: List[MemoryItem], *, llm=None) -> List[Consol
     items = [item for item in items if item not in protected]
     if not items:
         return decisions
+    # Lazy: construct the provider only for a nonempty, bounded request.
     from utils.llm.clients import get_llm
 
     parser = PydanticOutputParser(pydantic_object=ObservationIntakeBatch)
@@ -573,7 +586,35 @@ def plan_observation_intake(items: List[MemoryItem], *, llm=None) -> List[Consol
         default=str,
     )
     if len(payload.encode()) > 64_000:
-        raise ValueError('observation_intake_context_budget')
+        log = logging.getLogger(__name__)
+        oversized = len(items) == 1
+        record_fallback(
+            component='memory_analytics',
+            from_mode='observation_intake',
+            to_mode='owner_review' if oversized else 'bounded_partitions',
+            reason='capacity_full',
+            outcome='degraded',
+            log=log,
+        )
+        log.warning(
+            'event=memory_observation_intake outcome=%s reason=context_budget item_count=%d',
+            'review' if oversized else 'split',
+            len(items),
+        )
+        if oversized:
+            return decisions + [
+                ConsolidationAgentDecision(
+                    source_memory_id=items[0].memory_id,
+                    route='review',
+                    rationale='Observation exceeds the bounded intake context; owner review required.',
+                )
+            ]
+        middle = len(items) // 2
+        return (
+            decisions
+            + plan_observation_intake(items[:middle], llm=llm)
+            + plan_observation_intake(items[middle:], llm=llm)
+        )
     response = (llm if llm is not None else get_llm('memory_l2', request_timeout=60, max_retries=0)).invoke(
         [
             {'role': 'system', 'content': prompt},
@@ -585,8 +626,6 @@ def plan_observation_intake(items: List[MemoryItem], *, llm=None) -> List[Consol
 
 def _validate_observation_decision(item: MemoryItem, decision: ConsolidationAgentDecision) -> None:
     """Intake has no authority over other rows or attribution from captured speech."""
-    from models.product_memory import RESTRICTED_SENSITIVITY_LABELS
-
     if decision.reconciliation != 'create' or decision.target_memory_id or decision.supersedes:
         raise ValueError('observation_intake_reference_not_allowed')
     if not set(decision.evidence_ids).issubset({e.evidence_id for e in item.evidence}):
@@ -614,9 +653,6 @@ def _validate_observation_decision(item: MemoryItem, decision: ConsolidationAgen
 
 
 def _load_observation_intake(uid, memory_ids, *, db_client):
-    from database.memory_apply_store import require_canonical_intake_enabled
-    from models.memory_apply import WriterMode
-
     require_canonical_intake_enabled()
     control = _read_control_state(uid, db_client=db_client)
     if control.writer_mode != WriterMode.compatibility:
@@ -645,8 +681,6 @@ def _load_observation_intake(uid, memory_ids, *, db_client):
 
 
 def _settle_observation_intake(uid, context, decisions, report, *, db_client, now, run_id):
-    import logging
-
     control, items = context
     by_id = {item.memory_id: item for item in items}
     if len(decisions) != len(items) or {d.source_memory_id for d in decisions} != set(by_id):
@@ -681,9 +715,6 @@ def _settle_observation_intake(uid, context, decisions, report, *, db_client, no
 
 
 def _observation_intake_failed(report, ids, exc):
-    import logging
-    from utils.observability.fallback import record_fallback
-
     log = logging.getLogger(__name__)
     report.error_code = type(exc).__name__
     report.failed_memory_ids = [value for value in ids if value not in report.decided_memory_ids]
@@ -698,6 +729,11 @@ def _observation_intake_failed(report, ids, exc):
     log.warning('event=memory_observation_intake outcome=failed error_type=%s', type(exc).__name__)
 
 
+def observation_intake_enabled() -> bool:
+    """Independent rollback; capture, required intake and reads remain available."""
+    return os.getenv('MEMORY_OBSERVATION_INTAKE_ENABLED', 'true').strip().lower() not in {'0', 'false', 'off', 'no'}
+
+
 def complete_observation_intake(uid, *, memory_ids, db_client, now, run_id, planner=None):
     """Route committed observations independently of Dream cleanup eligibility.
 
@@ -706,6 +742,8 @@ def complete_observation_intake(uid, *, memory_ids, db_client, now, run_id, plan
     maintenance-registry enrollment; bounded maintenance replays pending IDs.
     """
     report = ObservationIntakeCompletion(uid=uid)
+    if not observation_intake_enabled():
+        return report
     ids = list(dict.fromkeys(memory_ids))[:25]
     if not ids:
         return report
@@ -737,8 +775,6 @@ def _pending_observation_ids(uid, *, db_client):
     if items:
         # Resume after the last selected item, not after unread rows in the page.
         last = next(item for item in items if item.memory_id == ids[-1]) if ids else items[-1]
-        from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
-        from database.legal_holds import assert_no_destructive_operation_transaction
 
         @transactional
         def save_cursor(tx):
@@ -765,6 +801,8 @@ def _pending_observation_ids(uid, *, db_client):
 
 
 def complete_pending_observation_intake_sync(uid, *, db_client, now, run_id):
+    if not observation_intake_enabled():
+        return ObservationIntakeCompletion(uid=uid)
     try:
         ids = _pending_observation_ids(uid, db_client=db_client)
     except Exception as exc:
@@ -776,10 +814,13 @@ def complete_pending_observation_intake_sync(uid, *, db_client, now, run_id):
 
 async def complete_pending_observation_intake(uid, *, db_client, now, run_id, job_budget_guard=None, planner=None):
     """Maintenance recovery separates DB, provider and settlement executor steps."""
+    report = ObservationIntakeCompletion(uid=uid)
+    if not observation_intake_enabled():
+        return report
+    # Lazy: maintenance executors and provider routing are not capture imports.
     from utils.executors import db_executor, llm_executor, run_blocking
     from utils.memory.promotion_flex import PromotionFlexDeferred
 
-    report = ObservationIntakeCompletion(uid=uid)
     ids = []
     try:
         ids = await run_blocking(db_executor, _pending_observation_ids, uid, db_client=db_client)
