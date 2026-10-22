@@ -26,7 +26,8 @@ def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None) -> Any:
             return None
         segments = [SimpleNamespace(text=conversation.text)]
     has_text = any(
-        str(row.get('text') if isinstance(row, Mapping) else getattr(row, 'text', '') or '').strip() for row in segments
+        str((row.get('text') if isinstance(row, Mapping) else getattr(row, 'text', '')) or '').strip()
+        for row in segments
     )
     selected = [
         SimpleNamespace(**dict(row)) if isinstance(row, Mapping) else row for row in in_profile_segments(segments)
