@@ -6,6 +6,7 @@ in the Omi chat when the app is installed by a user.
 """
 
 import contextvars
+import re
 from typing import Any, Dict, List, Optional, cast
 import httpx
 from pydantic import BaseModel, Field, create_model
@@ -117,6 +118,18 @@ _MAX_TOOL_STATUS_MESSAGES = 2048
 _tool_status_messages: Dict[str, str] = {}
 
 
+
+def _clean_identifier(name: Any, fallback: str = "item") -> str:
+    """Sanitize arbitrary strings into valid Python identifiers and tool name components."""
+    if not isinstance(name, str) or not name.strip():
+        return fallback
+    cleaned = re.sub(r'[^a-zA-Z0-9_]', '_', name.strip()).strip('_')
+    if not cleaned:
+        return fallback
+    if cleaned[0].isdigit():
+        cleaned = f"n_{cleaned}"
+    return cleaned
+
 def _remember_tool_status(tool_name: str, status_message: str) -> None:
     # Re-inserting refreshes recency; evict the oldest entry once the cap is reached.
     _tool_status_messages.pop(tool_name, None)
@@ -136,12 +149,20 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
     Returns:
         A Pydantic model class
     """
-    properties = parameters.get('properties', {})
-    required = set(parameters.get('required', []))
+    params = parameters if isinstance(parameters, dict) else {}
+    raw_props = params.get('properties')
+    properties = raw_props if isinstance(raw_props, dict) else {}
+    raw_req = params.get('required')
+    required = set(raw_req) if isinstance(raw_req, (list, tuple, set)) else set()
 
     field_definitions: Dict[str, Any] = {}
 
     for param_name, param_schema in properties.items():
+        if not isinstance(param_name, str):
+            continue
+        if not isinstance(param_schema, dict):
+            param_schema = {}
+
         param_type = param_schema.get('type', 'string')
         param_desc = param_schema.get('description', '')
         is_required = param_name in required
@@ -160,15 +181,17 @@ def _create_pydantic_model_from_schema(tool_name: str, parameters: Dict[str, Any
         else:
             py_type = str
 
+        clean_field_name = _clean_identifier(param_name, "field")
         # Create field with or without default
         if is_required:
-            field_definitions[param_name] = (py_type, Field(..., description=param_desc))
+            field_definitions[clean_field_name] = (py_type, Field(..., description=param_desc))
         else:
             # For optional fields, wrap in Optional and provide None default
-            field_definitions[param_name] = (Optional[py_type], Field(default=None, description=param_desc))
+            field_definitions[clean_field_name] = (Optional[py_type], Field(default=None, description=param_desc))
 
-    # Create a unique model name
-    model_name = f"{tool_name.replace('-', '_').replace('.', '_')}Input"
+    # Create a unique, valid model name
+    clean_model_base = _clean_identifier(tool_name, "AppTool")
+    model_name = f"{clean_model_base}Input"
 
     # Create and return the dynamic Pydantic model
     return create_model(model_name, **field_definitions)
@@ -208,25 +231,29 @@ def create_app_tool(
     Returns:
         A LangChain StructuredTool
     """
-    tool_name = f"{app_id}_{app_tool.name}"
+    clean_app_id = _clean_identifier(app_id, "app")
+    clean_tool_name = _clean_identifier(app_tool.name, "tool")
+    tool_name = f"{clean_app_id}_{clean_tool_name}"
 
     # Store status message in global mapping for UI display (if provided)
     if app_tool.status_message:
         _remember_tool_status(tool_name, app_tool.status_message)
 
     # Create a Pydantic model from the schema (or empty model if no parameters)
-    if app_tool.parameters and app_tool.parameters.get('properties'):
-        args_schema = _create_pydantic_model_from_schema(app_tool.name, app_tool.parameters)
+    raw_params = app_tool.parameters
+    if isinstance(raw_params, dict) and isinstance(raw_params.get('properties'), dict) and raw_params['properties']:
+        args_schema = _create_pydantic_model_from_schema(app_tool.name, raw_params)
     else:
         # Create an empty schema for tools with no parameters
-        model_name = f"{app_tool.name.replace('-', '_').replace('.', '_')}Input"
+        clean_model_base = _clean_identifier(app_tool.name, "AppTool")
+        model_name = f"{clean_model_base}Input"
         args_schema = create_model(model_name)
 
     if app_tool.is_mcp and mcp_server_url:
         _mcp_url: str = mcp_server_url
         _mcp_tokens: Optional[Dict[str, Any]] = mcp_oauth_tokens
         _access_token: Optional[str] = mcp_oauth_tokens.get('access_token') if mcp_oauth_tokens else None
-        _transport: str = app_tool.transport
+        _transport: str = getattr(app_tool, 'transport', None) or 'sse'
 
         async def mcp_tool_function(**kwargs: Any) -> str:
             """MCP tool dynamically created from MCP server."""
@@ -271,9 +298,10 @@ def create_app_tool(
                 logger.error(f"Error calling MCP tool {app_tool.name}: {e}", exc_info=True)
                 return f"Error calling MCP tool {app_tool.name}. Please try again later."
 
+        desc = app_tool.description or app_tool.name or "App MCP tool"
         return StructuredTool(
             name=tool_name,
-            description=f"{app_tool.description} (from {app_name} app)",
+            description=f"{desc} (from {app_name} app)",
             func=_sync_noop,
             coroutine=mcp_tool_function,
             args_schema=args_schema,
@@ -286,9 +314,10 @@ def create_app_tool(
         return await _call_tool_endpoint(_supplied_arguments(kwargs), config_param, app_tool, app_id)
 
     # Create StructuredTool with the schema
+    desc = app_tool.description or app_tool.name or "App HTTP tool"
     return StructuredTool(
         name=tool_name,
-        description=f"{app_tool.description} (from {app_name} app)",
+        description=f"{desc} (from {app_name} app)",
         func=_sync_noop,  # Sync placeholder (async coroutine is used instead)
         coroutine=tool_function,
         args_schema=args_schema,
@@ -319,10 +348,14 @@ async def _call_tool_endpoint(
             return f"Error: Configuration not available for {app_tool.name}"
         config = cast(RunnableConfig, ctx)
 
-    configurable: Dict[str, Any] = config.get('configurable') or {}
-    uid = configurable.get('user_id')
+    raw_configurable = config.get('configurable') if isinstance(config, dict) else None
+    configurable: Dict[str, Any] = raw_configurable if isinstance(raw_configurable, dict) else {}
+    uid = configurable.get('user_id') or (config.get('user_id') if isinstance(config, dict) else None)
     if not uid:
         return f"Error: User ID not found for {app_tool.name}"
+
+    if not app_tool.endpoint:
+        return f"Error: Endpoint not configured for {app_tool.name}"
 
     # Get geolocation from cache (offloaded: the Redis read is sync and blocks the event loop)
     geolocation = None
@@ -362,7 +395,8 @@ async def _call_tool_endpoint(
 
     try:
         async with httpx.AsyncClient(timeout=120.0) as client:
-            method = app_tool.method.upper()
+            raw_method = getattr(app_tool, 'method', None) or 'POST'
+            method = str(raw_method).upper().strip() or 'POST'
             request_kwargs: Dict[str, Any] = {
                 'headers': headers,
             }
@@ -473,10 +507,12 @@ def load_app_tools(uid: str) -> List[BaseTool]:
     Returns:
         List of LangChain tool functions
     """
-    enabled_app_ids = get_enabled_apps(uid)
+    enabled_app_ids = get_enabled_apps(uid) or []
     tools: List[BaseTool] = []
 
     for app_id in enabled_app_ids:
+        if not app_id:
+            continue
         app_data = get_app_by_id_db(app_id)
         if not app_data:
             continue
@@ -491,7 +527,8 @@ def load_app_tools(uid: str) -> List[BaseTool]:
             continue
 
         # Only load tools if app has chat_tools defined
-        if app.chat_tools and len(app.chat_tools) > 0:
+        chat_tools = app.chat_tools
+        if chat_tools and isinstance(chat_tools, list) and len(chat_tools) > 0:
             # Extract MCP config from external_integration if present
             mcp_server_url: Optional[str] = None
             mcp_oauth_tokens: Optional[Dict[str, Any]] = None
@@ -499,7 +536,9 @@ def load_app_tools(uid: str) -> List[BaseTool]:
                 mcp_server_url = app.external_integration.mcp_server_url
                 mcp_oauth_tokens = app.external_integration.mcp_oauth_tokens
 
-            for app_tool in app.chat_tools:
+            for app_tool in chat_tools:
+                if not app_tool:
+                    continue
                 try:
                     tool_func = create_app_tool(
                         app_tool,
