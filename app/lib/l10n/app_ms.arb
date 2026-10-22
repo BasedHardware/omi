@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} daripada {total} min",
     "deviceRecently": "Baru-baru ini",
     "deviceDisconnectedFor": "Terputus selama {duration}",
-    "deviceControls": "Kawalan"
+    "deviceControls": "Kawalan",
+    "homeBackgroundLine": "Juga: {items}"
 }

@@ -4441,5 +4441,6 @@
     "deviceCatchingUpProgress": "{done}/{total} dk",
     "deviceRecently": "Son zamanlarda",
     "deviceDisconnectedFor": "{duration} bağlantı kesildi",
-    "deviceControls": "Kontroller"
+    "deviceControls": "Kontroller",
+    "homeBackgroundLine": "Ayrıca: {items}"
 }

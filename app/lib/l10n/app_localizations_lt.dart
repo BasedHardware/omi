@@ -14506,4 +14506,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deviceControls => 'Valdikliai';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Taip pat: $items';
+  }
 }

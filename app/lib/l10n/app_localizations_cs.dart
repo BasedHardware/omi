@@ -14482,4 +14482,9 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get deviceControls => 'Ovládání';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Také: $items';
+  }
 }

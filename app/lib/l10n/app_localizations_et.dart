@@ -14475,4 +14475,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get deviceControls => 'Juhtimine';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Lisaks: $items';
+  }
 }

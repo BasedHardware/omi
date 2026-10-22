@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} din {total} min",
     "deviceRecently": "Recent",
     "deviceDisconnectedFor": "Deconectat timp de {duration}",
-    "deviceControls": "Comenzi"
+    "deviceControls": "Comenzi",
+    "homeBackgroundLine": "De asemenea: {items}"
 }

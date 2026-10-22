@@ -17668,5 +17668,14 @@
     "deviceControls": "Controls",
     "@deviceControls": {
         "description": "Device page section: controls such as pausing recording."
+    },
+    "homeBackgroundLine": "Also: {items}",
+    "@homeBackgroundLine": {
+        "description": "Home, under a day header: one line listing that day's background conversations (TV playing, a passing remark), each as its title and length, joined by ' · '. Tapping it shows them. Episodes beta only.",
+        "placeholders": {
+            "items": {
+                "type": "String"
+            }
+        }
     }
 }

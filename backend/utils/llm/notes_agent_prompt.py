@@ -20,6 +20,7 @@ import json
 from typing import Any, Mapping, Optional
 
 from models.conversation_enums import CategoryEnum
+from models.structured_extraction import SALIENCE_DESCRIPTION
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 from utils.llm.shaped_agent import model_json
@@ -144,6 +145,7 @@ SUBMIT_SCHEMA = _fn(
         'overview': _STR,
         'emoji': _STR,
         'category': {'type': 'string', 'enum': [item.value for item in CategoryEnum]},
+        'salience': {'type': 'string', 'enum': ['highlight', 'background'], 'description': SALIENCE_DESCRIPTION},
         'participants': {
             'type': 'array',
             'items': {

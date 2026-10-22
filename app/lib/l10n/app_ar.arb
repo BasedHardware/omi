@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} من {total} د",
     "deviceRecently": "مؤخرًا",
     "deviceDisconnectedFor": "انقطع الاتصال لمدة {duration}",
-    "deviceControls": "عناصر التحكم"
+    "deviceControls": "عناصر التحكم",
+    "homeBackgroundLine": "أيضًا: {items}"
 }

@@ -14510,4 +14510,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceControls => 'Controles';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Também: $items';
+  }
 }

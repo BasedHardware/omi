@@ -14466,4 +14466,9 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deviceControls => 'नियंत्रण';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'साथ ही: $items';
+  }
 }

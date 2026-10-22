@@ -452,6 +452,7 @@ class GeneratedStructured {
   final List<GeneratedNoteClaim>? noteClaims;
   final String overview;
   final List<GeneratedParticipant>? participants;
+  final String? salience;
   final List<GeneratedSection>? sections;
   final String title;
 
@@ -465,6 +466,7 @@ class GeneratedStructured {
     this.noteClaims,
     this.overview = "",
     this.participants,
+    this.salience,
     this.sections,
     this.title = "",
   });
@@ -480,6 +482,7 @@ class GeneratedStructured {
       noteClaims: _readFieldValue<List<GeneratedNoteClaim>>(_readField(json, const ["note_claims"]), "note_claims", (value) => _readObjectList(value, GeneratedNoteClaim.fromJson), requiredField: false, nullable: true),
       overview: _required(_readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString, requiredField: false, nullable: false, defaultValue: ""), "overview"),
       participants: _readFieldValue<List<GeneratedParticipant>>(_readField(json, const ["participants"]), "participants", (value) => _readObjectList(value, GeneratedParticipant.fromJson), requiredField: false, nullable: true),
+      salience: _readFieldValue<String>(_readField(json, const ["salience"]), "salience", _readString, requiredField: false, nullable: true),
       sections: _readFieldValue<List<GeneratedSection>>(_readField(json, const ["sections"]), "sections", (value) => _readObjectList(value, GeneratedSection.fromJson), requiredField: false, nullable: true),
       title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: false, nullable: false, defaultValue: ""), "title"),
     );
@@ -496,6 +499,7 @@ class GeneratedStructured {
       'note_claims': noteClaims?.map((value) => value.toJson()).toList(),
       'overview': overview,
       'participants': participants?.map((value) => value.toJson()).toList(),
+      'salience': salience,
       'sections': sections?.map((value) => value.toJson()).toList(),
       'title': title,
     };

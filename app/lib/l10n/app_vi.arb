@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done}/{total} phút",
     "deviceRecently": "Gần đây",
     "deviceDisconnectedFor": "Mất kết nối {duration}",
-    "deviceControls": "Điều khiển"
+    "deviceControls": "Điều khiển",
+    "homeBackgroundLine": "Ngoài ra: {items}"
 }
