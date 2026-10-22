@@ -351,7 +351,8 @@ def get_conversations_by_ids(
         summary_only = parse_mcp_bool(arguments.get('summary_only'), 'summary_only', default=False)
     except ValueError as exc:
         raise ToolExecutionError(str(exc), code=-32602) from exc
-    found_ids = [cid for cid in conversation_ids[offset:] if cid in by_id]
+    found_positions = [(pos, cid) for pos, cid in enumerate(conversation_ids) if pos >= offset and cid in by_id]
+    found_ids = [cid for _pos, cid in found_positions]
 
     def build_items(char_budget: int, segment_budget: int, card_budget: int) -> List[Dict[str, Any]]:
         items = []
@@ -392,8 +393,8 @@ def get_conversations_by_ids(
         return items
 
     def envelope(items: List[Dict[str, Any]]) -> Dict[str, Any]:
-        returned = {item['id'] for item in items}
-        omitted = [cid for cid in found_ids if cid not in returned]
+        remaining = found_positions[len(items) :]
+        omitted = [cid for _pos, cid in remaining]
         result: Dict[str, Any] = {
             'conversations': items,
             'not_found': not_found,
@@ -409,7 +410,7 @@ def get_conversations_by_ids(
             result['next_cursor'] = encode_cursor(
                 kind='get_conversations_by_ids',
                 uid=uid,
-                position={'offset': conversation_ids.index(omitted[0])},
+                position={'offset': remaining[0][0]},
                 filters=filters,
             )
         return result

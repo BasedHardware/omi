@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 from utils.external_list_reads import ExternalListCacheRoute, cached_external_list, lever_enabled
 from utils.other.list_budget import finish_list_budget, list_read_budget_for_request
 from utils.executors import postprocess_executor
-from utils.mcp_data import end_of_day_utc, parse_date_only_utc
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from pydantic import BaseModel, Field, ValidationError
@@ -1069,6 +1068,7 @@ def get_screen_activity(
     limit: int = 200,
     cursor: Optional[str] = None,
     timezone: Optional[str] = None,
+    timestamp_format: Optional[str] = None,
     uid: str = Depends(get_uid_with_mcp_screen_activity_read),
 ):
     logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
@@ -1086,6 +1086,8 @@ def get_screen_activity(
             cursor_token=cursor,
             cursor_kind="rest_get_screen_activity",
             timezone_name=str(zone),
+            timestamp_format=timestamp_format,
+            use_iso_offset=timezone is not None,
         )
     except ToolExecutionError as e:
         raise _http_error_from_tool_error(e)

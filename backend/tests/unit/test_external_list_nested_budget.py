@@ -232,7 +232,13 @@ def test_mcp_created_desc_bounds_actual_dual_windows_status_and_hydration(monkey
         store.windows.clear()
         calls.clear()
         return handlers.memories_page_core(
-            'owner', limit=20, sort='created_desc', max_scan=100, cursor_kind='test', budget=allowance
+            'owner',
+            limit=20,
+            sort='created_desc',
+            reviewed=False,
+            max_scan=100,
+            cursor_kind='test',
+            budget=allowance,
         )
 
     unbounded = run(None)
@@ -254,7 +260,14 @@ def test_mcp_created_desc_bounds_actual_dual_windows_status_and_hydration(monkey
     assert exhausted.truncated
     # A cap below the complete candidate set cannot be mistaken for exhaustion.
     with pytest.raises(ToolExecutionError, match='20 candidates'):
-        handlers.memories_page_core('owner', limit=20, sort='created_desc', max_scan=20, cursor_kind='test')
+        handlers.memories_page_core(
+            'owner',
+            limit=20,
+            sort='created_desc',
+            reviewed=False,
+            max_scan=20,
+            cursor_kind='test',
+        )
 
 
 def test_mcp_created_desc_single_window_reduces_legacy_physical_reads(monkeypatch):
@@ -269,7 +282,7 @@ def test_mcp_created_desc_single_window_reduces_legacy_physical_reads(monkeypatc
             'data_protection_level': 'standard',
             'reviewed': False,
         }
-        for i in range(600)
+        for i in range(6854)
     }
     # Advance admission time between synthetic requests; offline queries run
     # faster than the process-wide eight-operation burst would allow in a loop.
@@ -284,16 +297,13 @@ def test_mcp_created_desc_single_window_reduces_legacy_physical_reads(monkeypatc
 
     def read(*args, **kwargs):
         calls.append(kwargs)
-        return service.read_mcp_filtered(*args, **kwargs)
+        return service.read(*args, **kwargs)
 
-    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read_mcp_filtered=read))
-    exhausted = budget(1500)
-    with pytest.raises(ToolExecutionError, match='budget exhausted'):
-        handlers.memories_page_core(
-            'owner', limit=25, sort='created_desc', max_scan=5000, cursor_kind='test', budget=exhausted
-        )
-    assert exhausted.truncated
-    calls.clear()
+    monkeypatch.setattr(handlers, 'MemoryService', lambda **kwargs: SimpleNamespace(read=read))
+    # Main's unbudgeted global collector reads a 100-row prefix, then 200.
+    service.read('owner', limit=100, offset=0)
+    service.read('owner', limit=100, offset=100)
+    main_reads = store.physical
     store.physical = store.streams = store.batch_gets = 0
     unbounded = handlers.memories_page_core('owner', limit=25, sort='created_desc', cursor_kind='test')
     assert [row['id'] for row in unbounded['memories']] == [f'h-{i}' for i in range(25)]
@@ -303,9 +313,11 @@ def test_mcp_created_desc_single_window_reduces_legacy_physical_reads(monkeypatc
     clean = budget(25000)
     same = handlers.memories_page_core('owner', limit=25, sort='created_desc', cursor_kind='test', budget=clean)
     assert same['memories'] == unbounded['memories']
-    assert len(calls) == 1 and not clean.truncated and not same['scan_truncated']
+    assert len(calls) == 1 and not clean.truncated and same['scan_truncated']
     assert store.physical == clean.docs_scanned == unbounded_reads
-    assert store.physical <= 4 * len(rows)
+    assert store.physical <= main_reads
+    assert calls[0]["limit"] == 100
+    assert same["source_window_limit"] == 100 and "bounded" in same["coverage"]
 
 
 @pytest.mark.parametrize('use_cursor', [False, True])

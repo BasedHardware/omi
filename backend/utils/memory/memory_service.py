@@ -1090,7 +1090,7 @@ class HistoricalMemoryAdapter:
         del uid, limit, scan_offset, device_scope_request
         raise RuntimeError("historical offset scan is retired; use read_updated_scan_page / read_created_scan_page")
 
-    def _adapt_scan_payloads(
+    def adapt_scan_payloads(
         self,
         uid: str,
         payloads: List[Dict[str, Any]],
@@ -1140,7 +1140,7 @@ class HistoricalMemoryAdapter:
             **self._firestore_kwargs(),
         )
         return (
-            self._adapt_scan_payloads(
+            self.adapt_scan_payloads(
                 uid,
                 payloads,
                 cursors,
@@ -1175,7 +1175,7 @@ class HistoricalMemoryAdapter:
             raise
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
-        slots = self._adapt_scan_payloads(
+        slots = self.adapt_scan_payloads(
             uid,
             payloads,
             cursors,
@@ -1210,7 +1210,7 @@ class HistoricalMemoryAdapter:
             raise
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
-        slots = self._adapt_scan_payloads(
+        slots = self.adapt_scan_payloads(
             uid,
             payloads,
             cursors,

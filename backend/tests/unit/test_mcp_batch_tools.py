@@ -423,7 +423,7 @@ class TestScreenActivityGrouping:
         # Cross-day gap is never bridged (different bucket AND >5 min).
         assert day["buckets"][1]["estimated_observation_seconds"] == 0
         # 10:00 and 10:30 share the 10:00 hour bucket.
-        assert [b["hour"] for b in hour["buckets"]] == ["2026-06-11T10:00:00+00:00", "2026-06-12T09:00:00+00:00"]
+        assert [b["hour"] for b in hour["buckets"]] == ["2026-06-11 10:00", "2026-06-12 09:00"]
         assert hour["buckets"][0]["count"] == 2
 
     def test_top_titles_capped(self):
@@ -664,20 +664,20 @@ class TestCursorContract:
         assert exc.value.code == -32602
 
     def test_memories_cursor_roundtrip_advances_offset(self):
-        read = MagicMock(return_value=([{'id': f'm{i}'} for i in range(21)], 42))
+        read = MagicMock(return_value=[_Mem(f'm{i}') for i in range(21)])
         with (
-            patch.object(memories_handler, 'read_filtered_mcp_memories', read),
+            patch.object(memories_handler, 'MemoryService', return_value=SimpleNamespace(read=read)),
             patch.object(memories_handler, 'authorize_memory_external_default_memory_read', return_value=ALLOWED),
         ):
             first = sse.execute_tool(UID, 'get_memories', {'limit': 20}, _memory_ctx())
             second = sse.execute_tool(UID, 'get_memories', {'cursor': first['next_cursor']}, _memory_ctx())
         assert [row['id'] for row in second['memories']] == ['m20']
-        assert not second['has_more']
+        assert not second['more_in_window'] and second['scan_truncated']
 
     def test_memories_cursor_rejects_filter_change(self):
-        read = MagicMock(return_value=([{'id': f'm{i}'} for i in range(21)], 42))
+        read = MagicMock(return_value=[_Mem(f'm{i}') for i in range(21)])
         with (
-            patch.object(memories_handler, 'read_filtered_mcp_memories', read),
+            patch.object(memories_handler, 'MemoryService', return_value=SimpleNamespace(read=read)),
             patch.object(memories_handler, 'authorize_memory_external_default_memory_read', return_value=ALLOWED),
         ):
             first = sse.execute_tool(UID, 'get_memories', {'limit': 20}, _memory_ctx())
@@ -1023,13 +1023,13 @@ class TestMemoryKeysetPage:
         service.read_page.assert_called_once()
         service.read.assert_not_called()
 
-    def test_default_created_desc_uses_complete_candidate_window(self):
+    def test_default_created_desc_uses_bounded_compatibility_window(self):
         service = MagicMock()
-        service.read_mcp_filtered.return_value = ([], 0)
+        service.read.return_value = []
         with self._read_auth(), patch.object(memories_handler, 'MemoryService', return_value=service):
             sse.execute_tool(UID, 'get_memories', {'limit': 5}, _memory_ctx())
-        service.read_mcp_filtered.assert_called_once()
-        service.read.assert_not_called()
+        service.read.assert_called_once_with(UID, limit=100, offset=0)
+        service.read_mcp_filtered.assert_not_called()
         service.read_page.assert_not_called()
 
     def test_truncated_inner_page_flags_scan_truncated_without_cursor(self):
@@ -1055,7 +1055,7 @@ class TestMemoryKeysetPage:
     def test_bounded_scan_walk_terminates_at_scan_cap(self):
         service = MagicMock()
 
-        service.read_mcp_filtered.return_value = ([{'id': f'm{i}'} for i in range(200)], 200)
+        service.read.return_value = [_Mem(f'm{i}') for i in range(200)]
         seen = []
         pages = 0
         cursor = None
@@ -1070,10 +1070,10 @@ class TestMemoryKeysetPage:
                 cursor = result.get("next_cursor")
                 if cursor is None:
                     break
-        # The complete 200-row candidate window drains without a dangling cursor.
+        # The bounded 200-row window drains without an unreachable offset cursor.
         assert pages == 10
         assert cursor is None
-        assert result["scan_truncated"] is False
+        assert result["scan_truncated"] is True
         assert len(seen) == len(set(seen)) == 200
 
 

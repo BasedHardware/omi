@@ -1189,13 +1189,18 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "type": "object",
             "properties": {
                 "timezone": _TIMEZONE_INPUT,
+                "timestamp_format": {
+                    "type": "string",
+                    "enum": ["legacy", "iso_offset"],
+                    "description": "Omitted preserves stored timestamp/hour strings; iso_offset opts into ISO offsets without a timezone.",
+                },
                 "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
                 "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
                 "app": {"type": "string", "description": "Filter to a single app name"},
                 "group_by": {
                     "type": "string",
                     "enum": ["none", "app", "hour", "day"],
-                    "description": "Aggregate rows into buckets by app, hour, or day instead of returning raw rows",
+                    "description": "Aggregate the whole window; any cursor is ignored with a note",
                     "default": "none",
                 },
                 "summary": {
@@ -1225,6 +1230,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     _object_schema(
                         ["buckets"],
                         group_by={"type": "string"},
+                        note={"type": "string"},
                         buckets=_ARRAY_OF_OBJECTS,
                         next_cursor=_NEXT_CURSOR_OUTPUT,
                     ),

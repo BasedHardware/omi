@@ -41,7 +41,7 @@ MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'structured.category',
     'structured.emoji',
 )
-_MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = MCP_CONVERSATION_CARD_FIELD_PATHS + (
+MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = MCP_CONVERSATION_CARD_FIELD_PATHS + (
     'transcript_segments',
     'transcript_segments_compressed',
     'has_transcript_corrections',

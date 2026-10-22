@@ -63071,6 +63071,22 @@
               ],
               "title": "Timezone"
             }
+          },
+          {
+            "in": "query",
+            "name": "timestamp_format",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Timestamp Format"
+            }
           }
         ],
         "responses": {

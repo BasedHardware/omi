@@ -44,7 +44,7 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
-from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
+from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
@@ -1894,7 +1894,7 @@ def get_mcp_conversations_by_id(
     conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     field_paths = list(
-        _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else MCP_CONVERSATION_CARD_FIELD_PATHS
+        MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else MCP_CONVERSATION_CARD_FIELD_PATHS
     )
     if extra_field_paths:
         field_paths.extend(extra_field_paths)

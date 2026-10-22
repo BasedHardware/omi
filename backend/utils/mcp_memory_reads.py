@@ -71,7 +71,7 @@ def collect_filtered_mcp_memories(
                         continue
                     raw = dict(snapshot.to_dict() or {})
                     raw['id'] = snapshot.id
-                    slots = service.history._adapt_scan_payloads(
+                    slots = service.history.adapt_scan_payloads(
                         uid, [raw], [(raw.get('updated_at'), snapshot.id)], device_scope_request=None
                     )
                     if slots and slots[0][0] is not None:

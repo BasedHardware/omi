@@ -219,15 +219,15 @@ def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid(monkeyp
         )
 
     authorize.assert_called_once_with(auth_context, db_client=rest.db)
-    reader = memory_service.read_mcp_filtered if sort == 'created_desc' else memory_service.read_page
+    reader = memory_service.read if sort == 'created_desc' else memory_service.read_page
     assert reader.call_args.args == ('auth-user',)
     if budget_enabled and sort == 'created_desc':
         make_budget.assert_called_once_with(None, route='mcp-memories', owner_uid='auth-user', context=auth_context)
-        assert memory_service.read_mcp_filtered.call_args.kwargs['budget'] is shared_budget
+        assert memory_service.read.call_args.kwargs['budget'] is shared_budget
     else:
         make_budget.assert_not_called()
         assert 'budget' not in reader.call_args.kwargs
-    memory_service.read.assert_not_called()
+    memory_service.read_mcp_filtered.assert_not_called()
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
@@ -470,7 +470,7 @@ def test_get_memories_advertises_and_executes_default_limit_20():
     assert result['scanned_count'] == 0
 
 
-def test_get_memories_created_desc_never_trusts_an_incomplete_service_prefix():
+def test_get_memories_filtered_created_desc_never_trusts_an_incomplete_service_prefix():
     service = MagicMock()
     service.read.return_value = []
     service.read_mcp_filtered.side_effect = sse.ToolExecutionError(
@@ -483,7 +483,9 @@ def test_get_memories_created_desc_never_trusts_an_incomplete_service_prefix():
         patch.object(sse_memories, 'MemoryService', return_value=service),
         pytest.raises(sse.ToolExecutionError, match='memory_filter_window_exceeded'),
     ):
-        sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+        sse.execute_tool(
+            UID, 'get_memories', {'updated_after': '2026-10-01T00:00:00Z'}, auth_context=_sse_auth_context()
+        )
     service.read.assert_not_called()
 
 
@@ -1084,11 +1086,7 @@ class TestScreenActivity:
         with TestClient(app) as client:
             response = client.get('/v1/mcp/screen-activity?summary=true')
         assert response.status_code == 200
-        expected = {
-            **coverage,
-            'first_observed_at': '2026-07-03T01:00:00+00:00',
-            'last_observed_at': '2026-07-03T12:00:00+00:00',
-        }
+        expected = coverage
         assert response.json()['coverage'] == expected
         assert sse.execute_tool(UID, 'get_screen_activity', {'summary': True})['coverage'] == expected
 
@@ -1108,7 +1106,7 @@ class TestScreenActivity:
         assert result == [
             {
                 'id': 's1',
-                'timestamp': '2026-06-11T10:00:00+00:00',
+                'timestamp': '2026-06-11 10:00:00.000',
                 'app_name': 'Cursor',
                 'window_title': 'mcp.py',
                 'ocr_text': 'def foo',
@@ -1454,3 +1452,32 @@ async def test_action_item_index_failure_is_json_rpc_http_200():
     assert response.status_code == 200
     assert payload['result']['isError'] is True
     assert payload['result']['structuredContent']['error']['code'] == 'unavailable'
+
+
+@pytest.mark.parametrize(
+    'query,expected',
+    [
+        ('', '2026-10-22T02:15:00'),
+        ('?timestamp_format=iso_offset', '2026-10-22T02:15:00Z'),
+        ('?timezone=UTC', '2026-10-22T02:15:00Z'),
+        ('?timezone=Asia%2FHo_Chi_Minh', '2026-10-22T09:15:00+07:00'),
+    ],
+)
+def test_rest_screen_timestamp_opt_in_survives_response_model(monkeypatch, query, expected):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    monkeypatch.setattr(
+        rest.mcp_other_handlers.screen_activity_db,
+        'get_screen_activity_page',
+        lambda *a, **k: ([{'timestamp': '2026-10-22 02:15:00.000'}], False),
+    )
+    app = FastAPI()
+    app.include_router(rest.router)
+    app.dependency_overrides[rest.get_uid_with_mcp_screen_activity_read] = lambda: UID
+    with TestClient(app) as client:
+        response = client.get('/v1/mcp/screen-activity' + query)
+    assert response.status_code == 200
+    # The released REST datetime model normalizes separators and zero fractions;
+    # the MCP tool preserves the exact stored string. Neither adds an offset by default.
+    assert response.json()[0]['timestamp'] == expected

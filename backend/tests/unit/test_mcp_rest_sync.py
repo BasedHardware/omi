@@ -853,7 +853,7 @@ class TestRestRetryAfterRouteLayer:
 class TestRestMemoryListScanContract:
     """REST keeps its released 5000-row filtered-scan window."""
 
-    def test_rest_global_sort_refuses_an_unproved_candidate_window(self, monkeypatch, client):
+    def test_rest_filtered_global_sort_refuses_an_unproved_candidate_window(self, monkeypatch, client):
         monkeypatch.setattr(
             rest.mcp_memory_handlers,
             'read_filtered_mcp_memories',
@@ -865,7 +865,9 @@ class TestRestMemoryListScanContract:
                 )
             ),
         )
-        response = client.get('/v1/mcp/memories', params={'sort': 'created_desc'})
+        response = client.get(
+            '/v1/mcp/memories', params={'sort': 'created_desc', 'updated_after': '2026-10-01T00:00:00Z'}
+        )
         assert response.status_code == 413
         assert '5000 candidates' in response.json()['detail']
 

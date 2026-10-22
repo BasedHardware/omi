@@ -191,7 +191,7 @@ def _screen_activity_timestamp(value: Any) -> Optional[datetime]:
         return None
 
 
-def _screen_activity_bucket_key(row: Dict[str, Any], group_by: str) -> str:
+def _screen_activity_bucket_key(row: Dict[str, Any], group_by: str, *, iso_offset: bool = False) -> str:
     if group_by == "app":
         return row.get("appName") or "Unknown"
     timestamp = str(row.get("timestamp") or "")
@@ -200,7 +200,7 @@ def _screen_activity_bucket_key(row: Dict[str, Any], group_by: str) -> str:
     parsed = _screen_activity_timestamp(timestamp)
     return (
         parsed.replace(minute=0, second=0, microsecond=0).isoformat()
-        if parsed and parsed.tzinfo
+        if iso_offset and parsed and parsed.tzinfo
         else timestamp[:13] + ":00"
     )
 
@@ -225,6 +225,8 @@ def _screen_activity_buckets(
     rows: List[Dict[str, Any]],
     group_by: str,
     seed_row: Optional[Dict[str, Any]] = None,
+    *,
+    iso_offset: bool = False,
 ) -> List[Dict[str, Any]]:
     """Group one page of rows into count/duration/top-title buckets.
 
@@ -240,14 +242,14 @@ def _screen_activity_buckets(
     previous_app = ""
     previous_ts: Optional[datetime] = None
     if seed_row is not None:
-        previous_key = _screen_activity_bucket_key(seed_row, group_by)
+        previous_key = _screen_activity_bucket_key(seed_row, group_by, iso_offset=iso_offset)
         previous_app = seed_row.get("appName") or "Unknown"
         previous_ts = _screen_activity_timestamp(seed_row.get("timestamp"))
     for row in rows:
         app = row.get("appName") or "Unknown"
         timestamp = row.get("timestamp")
         parsed_ts = _screen_activity_timestamp(timestamp)
-        key = _screen_activity_bucket_key(row, group_by)
+        key = _screen_activity_bucket_key(row, group_by, iso_offset=iso_offset)
         bucket = buckets.get(key)
         if bucket is None:
             bucket = _ScreenActivityBucket(
@@ -323,6 +325,8 @@ def get_screen_activity(
         cursor_token=arguments.get("cursor"),
         cursor_kind="get_screen_activity",
         timezone_name=str(zone),
+        timestamp_format=arguments.get("timestamp_format"),
+        use_iso_offset=arguments.get("timezone") is not None,
     )
 
 
@@ -338,6 +342,8 @@ def screen_activity_core(
     cursor_token: Optional[str] = None,
     cursor_kind: str,
     timezone_name: str = "UTC",
+    timestamp_format: Optional[str] = None,
+    use_iso_offset: bool = False,
 ) -> Dict[str, Any]:
     """Shared screen-activity read for the MCP tool and the REST endpoint.
 
@@ -346,6 +352,9 @@ def screen_activity_core(
     passes ``group_by="none"``).
     """
     zone = resolve_timezone(uid, timezone_name)
+    if timestamp_format not in (None, "legacy", "iso_offset"):
+        raise ToolExecutionError("timestamp_format must be legacy or iso_offset", code=-32602)
+    use_iso_offset = use_iso_offset or timestamp_format == "iso_offset" or timezone_name != "UTC"
     if start and end and start > end:
         raise ToolExecutionError("start_date must be on or before end_date", code=-32602)
     if summary and group_by != "none":
@@ -366,6 +375,7 @@ def screen_activity_core(
                 limit=limit,
                 cursor_kind=cursor_kind,
                 timezone_name=timezone_name,
+                use_iso_offset=use_iso_offset,
             )
             return {
                 'apps': {
@@ -381,17 +391,12 @@ def screen_activity_core(
                 'coverage': grouped['coverage'],
             }
         try:
-            return localize_timestamps(
-                screen_activity_db.get_screen_activity_summary(uid, start_date=start, end_date=end), zone
-            )
+            summary_result = screen_activity_db.get_screen_activity_summary(uid, start_date=start, end_date=end)
+            return localize_timestamps(summary_result, zone) if use_iso_offset else summary_result
         except FailedPrecondition as e:
             raise_screen_activity_index_error(e)
 
     if group_by != 'none':
-        if cursor_token is not None:
-            raise ToolExecutionError(
-                'cursor is only supported for raw screen rows; groups cover the whole window.', code=-32602
-            )
         cap = screen_activity_db.SCREEN_ACTIVITY_SUMMARY_ROW_LIMIT
         try:
             rows = screen_activity_db.get_screen_activity(
@@ -401,11 +406,20 @@ def screen_activity_core(
             raise_screen_activity_index_error(exc)
         truncated = len(rows) > cap
         rows = rows[:cap]
-        localized = [{**row, 'timestamp': offset_timestamp(row.get('timestamp'), zone)} for row in rows]
-        buckets = _screen_activity_buckets(localized, group_by)
+        localized = (
+            [{**row, 'timestamp': offset_timestamp(row.get('timestamp'), zone)} for row in rows]
+            if use_iso_offset
+            else rows
+        )
+        buckets = _screen_activity_buckets(localized, group_by, iso_offset=use_iso_offset)
         return {
             'group_by': group_by,
             'buckets': buckets,
+            **(
+                {'note': 'cursor ignored; aggregate covers the full requested window'}
+                if cursor_token is not None
+                else {}
+            ),
             'timezone': str(zone),
             'coverage': {
                 'row_limit': cap,
@@ -426,12 +440,9 @@ def screen_activity_core(
         **({"timezone": timezone_name} if timezone_name != "UTC" else {}),
     }
     after = None
-    seed_row: Optional[Dict[str, Any]] = None
     if cursor_token is not None:
         position = decode_cursor(cursor_token, kind=cursor_kind, uid=uid, filters=filters)
         after = keyset_position(position)
-        # Carry the boundary row's app so a gap bridging pages still counts.
-        seed_row = {"appName": position.get("app"), "timestamp": position.get("ts")}
     try:
         rows, has_more = screen_activity_db.get_screen_activity_page(
             uid,
@@ -458,16 +469,10 @@ def screen_activity_core(
             filters=filters,
         )
 
-    if group_by == "none":
-        result: Dict[str, Any] = {"screen_activity": [clean_screen_activity_row(r) for r in rows]}
-    else:
-        result = {
-            "group_by": group_by,
-            "buckets": _screen_activity_buckets(rows, group_by, seed_row=seed_row),
-        }
+    result: Dict[str, Any] = {"screen_activity": [clean_screen_activity_row(r) for r in rows]}
     if next_cursor is not None:
         result["next_cursor"] = next_cursor
-    return localize_timestamps(result, zone)
+    return localize_timestamps(result, zone) if use_iso_offset else result
 
 
 def get_daily_summaries(

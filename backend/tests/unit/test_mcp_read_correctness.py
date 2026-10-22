@@ -420,12 +420,12 @@ def test_malformed_optional_call_metadata_does_not_drop_the_card():
     assert all(result[key] is None for key in ('source', 'is_call', 'call_platform', 'calendar_event_id'))
 
 
-def test_default_global_sort_uses_complete_candidates_not_service_prefix(monkeypatch):
+def test_filtered_global_sort_uses_complete_candidates_not_service_prefix(monkeypatch):
     read = MagicMock(return_value=([{'id': 'old-created'}, {'id': 'new-created'}], 620))
     monkeypatch.setattr(memories, 'read_filtered_mcp_memories', read)
     prefix = MagicMock(side_effect=AssertionError('incomplete service prefix must not be used'))
     monkeypatch.setattr(memories, 'MemoryService', prefix)
-    result = memories.memories_page_core(OWNER, limit=20, sort='created_desc', cursor_kind='test')
+    result = memories.memories_page_core(OWNER, limit=20, sort='created_desc', updated_after=NOW, cursor_kind='test')
     assert len(result['memories']) == 2 and result['scanned_count'] == 620
     assert result['matched_count'] == 2 and not result['scan_truncated']
     prefix.assert_not_called()
@@ -446,7 +446,7 @@ def test_candidate_merge_preserves_universal_scoring_order(monkeypatch):
         db_client=object(),
         canonical_statuses=lambda *a: {},
         historical_suppression_reason=lambda *a, **k: None,
-        history=SimpleNamespace(_adapt_scan_payloads=lambda *a, **k: [(SimpleNamespace(memory=model(new)), None)]),
+        history=SimpleNamespace(adapt_scan_payloads=lambda *a, **k: [(SimpleNamespace(memory=model(new)), None)]),
     )
     rows, scanned = memory_reads.collect_filtered_mcp_memories(service, OWNER, filters={'sort': 'scoring_desc'})
     assert [row['id'] for row in rows] == ['historical-new', 'canonical-old']
@@ -470,3 +470,88 @@ def test_native_offset_resumes_after_emitted_rows_without_materializing(monkeypa
     assert [row['id'] for row in first['memories']] == ['b', 'c']
     assert [row['id'] for row in second['memories']] == ['d']
     service.read_mcp_filtered.assert_not_called()
+
+
+@pytest.mark.parametrize('sort', ['created_desc', 'manual_first'])
+@pytest.mark.parametrize('origin', ['memory_items', 'memories'])
+def test_large_account_default_is_bounded_and_never_materializes_all(monkeypatch, sort, origin):
+    stored = [
+        {'id': f'{origin}-{i}', 'content': 'Synthetic fact', 'created_at': NOW - timedelta(seconds=i)}
+        for i in range(6854)
+    ]
+    service = MagicMock()
+    service.read.side_effect = lambda uid, *, limit, offset, **kw: [
+        SimpleNamespace(model_dump=lambda row=row, **k: row) for row in stored[offset : offset + limit]
+    ]
+    service.read_mcp_filtered.side_effect = AssertionError('default must not scan entire stores')
+    monkeypatch.setattr(memories, 'MemoryService', lambda **kw: service)
+    first = memories.memories_page_core(OWNER, limit=20, sort=sort, cursor_kind='test')
+    second = memories.memories_page_core(
+        OWNER, limit=20, sort=sort, cursor_kind='test', cursor_token=first['next_cursor']
+    )
+    assert len(first['memories']) == len(second['memories']) == 20
+    assert first['memories'][0]['id'] == f'{origin}-0' and second['memories'][0]['id'] == f'{origin}-20'
+    assert first['scan_truncated'] and first['more_in_window'] and 'bounded' in first['coverage']
+    assert first['source_window_limit'] == first['scanned_count'] == 100
+    assert all(call.kwargs['limit'] == 100 for call in service.read.call_args_list)
+    service.read_mcp_filtered.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'options,expected',
+    [
+        ({}, '2026-10-22 02:15:00.000'),
+        ({'timestamp_format': 'iso_offset'}, '2026-10-22T02:15:00+00:00'),
+        ({'timezone': 'UTC'}, '2026-10-22T02:15:00+00:00'),
+        ({'timezone': 'Asia/Ho_Chi_Minh'}, '2026-10-22T09:15:00+07:00'),
+    ],
+)
+def test_screen_timestamp_formats_are_opt_in(monkeypatch, options, expected):
+    rows = [{'id': 'synthetic', 'timestamp': '2026-10-22 02:15:00.000', 'appName': 'Synthetic'}]
+    monkeypatch.setattr(other.screen_activity_db, 'get_screen_activity_page', lambda *a, **k: (rows, False))
+    monkeypatch.setattr(other.screen_activity_db, 'get_screen_activity', lambda *a, **k: rows)
+    raw = other.get_screen_activity(OWNER, options)
+    assert raw['screen_activity'][0]['timestamp'] == expected
+    grouped = other.get_screen_activity(OWNER, {**options, 'group_by': 'hour'})
+    expected_hour = '2026-10-22 02:00' if not options else expected[:13] + ':00:00' + expected[-6:]
+    assert grouped['buckets'][0]['hour'] == expected_hour
+    assert grouped['buckets'][0]['first_seen'] == expected
+
+
+@pytest.mark.parametrize('group_by', ['app', 'hour', 'day'])
+def test_screen_grouping_ignores_even_stale_cursors_with_note(monkeypatch, group_by):
+    rows = [{'timestamp': '2026-10-22 02:15:00.000', 'appName': 'Synthetic'}] * 501
+    monkeypatch.setattr(other.screen_activity_db, 'get_screen_activity', lambda *a, **k: rows)
+    first = other.get_screen_activity(OWNER, {'group_by': group_by})
+    resumed = other.get_screen_activity(OWNER, {'group_by': group_by, 'cursor': 'old-or-invalid-cursor'})
+    assert resumed['buckets'] == first['buckets']
+    assert sum(row['count'] for row in resumed['buckets']) == 501
+    assert 'cursor ignored' in resumed['note'] and resumed['coverage']['complete_window']
+    assert 'next_cursor' not in resumed
+
+
+def test_duplicate_ids_and_omissions_always_advance_cursor(monkeypatch):
+    ids = ['a', 'b', 'a', 'c', 'b', 'd']
+    monkeypatch.setattr(
+        conversations.conversations_db, 'get_mcp_conversations_by_id', lambda *a, **k: [card(cid) for cid in set(ids)]
+    )
+    # Force metadata budget omission, regardless of transcript shrink rounds.
+    monkeypatch.setattr(
+        conversations, 'tool_response_serialized_chars', lambda result: 100 * len(result['conversations'])
+    )
+    monkeypatch.setattr(conversations, 'MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS', 100)
+    cursor = None
+    seen = []
+    tokens = set()
+    for _ in range(6):
+        args = {'conversation_ids': ids}
+        if cursor:
+            args['cursor'] = cursor
+        result = conversations.get_conversations_by_ids(OWNER, args)
+        seen.extend(row['id'] for row in result['conversations'])
+        cursor = result.get('next_cursor')
+        if cursor is None:
+            break
+        assert cursor not in tokens
+        tokens.add(cursor)
+    assert seen == ['a', 'b', 'c', 'd'] and cursor is None

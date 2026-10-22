@@ -237,7 +237,7 @@ def memories_page_core(
 ) -> Dict[str, Any]:
     """Authorize upstream, then read complete candidates or a resumable keyset.
 
-    Global sorting never trusts a partial universal-service prefix. Native
+    Unfiltered global sorts retain an explicitly bounded source window. Native
     updated/scoring keysets keep their independent signed stream positions.
     max_scan bounds each materialized source window; REST may share a stricter
     request budget across candidate reads, lineage checks and suppression.
@@ -266,7 +266,45 @@ def memories_page_core(
         updated_after is not None or reviewed is not None or manually_added is not None or bool(valid_categories)
     )
     use_keyset = not sparse_filters and sort in _MEMORY_KEYSET_SORTS
-    if not use_keyset:
+    if not sparse_filters and not use_keyset:
+        # Released default reads sort a bounded newest-updated source window.
+        # One released-size first batch avoids main's growing prefix rereads;
+        # it cannot prove global exhaustion, even when policy hides some rows.
+        window_limit = min(max_scan, 200, max(100, limit * 3))
+        source = [
+            memory.model_dump(mode='json')
+            for memory in MemoryService(db_client=db).read(
+                uid, limit=window_limit, offset=0, **({'budget': budget} if budget is not None else {})
+            )
+        ]
+        rows = filter_and_sort_memories(
+            source, include_activity=include_activity, include_sensitive=include_sensitive, sort=sort
+        )
+        page = rows[offset : offset + limit]
+        more = len(rows) > offset + limit
+        result = {
+            'memories': page,
+            'returned_count': len(page),
+            'has_more': True,
+            'more_in_window': more,
+            'more_in_window_known': True,
+            'scan_truncated': True,
+            'scanned_count': len(source),
+            'matched_count': len(rows),
+            'offset': offset,
+            'limit': limit,
+            'sort': sort,
+            'include_activity': include_activity,
+            'include_sensitive': include_sensitive,
+            'coverage': 'bounded newest-updated source window; global ordering and exhaustion are unknown; use updated_desc with cursor for older candidates',
+            'source_window_limit': window_limit,
+        }
+        if more:
+            result['next_cursor'] = encode_cursor(
+                kind=cursor_kind, uid=uid, position={'offset': offset + len(page)}, filters=filters
+            )
+        resume_uml = None
+    elif not use_keyset:
         if uml_cursor is not None:
             raise ToolExecutionError(
                 'This filtered cursor predates indexed memory windows. Restart without cursor.', code=-32602
@@ -325,13 +363,13 @@ def memories_page_core(
         result['returned_count'] = len(result['memories'])
         result['offset'] = offset
         result['limit'] = limit
-    if result.get('scan_truncated') and (not result.get('memories') or sort in {'created_desc', 'manual_first'}):
+    if result.get('scan_truncated') and use_keyset and not result.get('memories'):
         raise ToolExecutionError(
             'memory_scan_incomplete: no complete empty page can be established; narrow updated_after or use updated_desc and a cursor.',
             code=-32009,
             http_status=503,
         )
-    if result.get('scan_truncated'):
+    if result.get('scan_truncated') and use_keyset:
         result['coverage'] = 'bounded_scan; older candidates may be omitted; use updated_desc with cursor'
     # Apply locked content truncation
     for memory in result["memories"]:

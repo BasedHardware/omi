@@ -106,7 +106,8 @@ this is the existing documented sync contract and is pinned by
 `test_mcp_search_date_utc.py`. New local-day callers should pass `profile`.
 Date-only bounds include the entire selected local end day, including DST
 transitions. Aware REST datetime bounds remain exact instants; explicit timezone
-interprets naive bounds locally. Returned timestamp fields use ISO 8601 offsets.
+interprets naive bounds locally. Returned timestamp fields use ISO 8601 offsets,
+except screen activity retains its released formatting unless timezone or timestamp_format=iso_offset is supplied. MCP keeps exact stored strings; REST keeps its existing datetime-model normalization without adding an offset.
 Daily-summary date labels identify stored recaps; timezone does not regenerate or
 rebucket their prose. `timezone` on the read response identifies the window used
 for recording counts and missing-day classification. Historic recap creation
@@ -123,11 +124,16 @@ New composite indexes are declared in the registry and generated manifest. While
 an index builds, the bounded single-field fallback retains the timestamp bound,
 rechecks every predicate, and emits fallback telemetry. A candidate set above
 5000 rows per store returns `memory_filter_window_exceeded`, never a successful
-partial empty page. Narrow the filter. Unfiltered `created_desc` and `manual_first` use the same complete bounded
-candidate window; they never globally sort an unproved prefix of the universal
-service view. Candidate overflow returns `memory_filter_window_exceeded`. Use `updated_desc` with a cursor for larger exports.
-`scanned_count` counts deduplicated candidate documents examined before policy
-filtering; `matched_count` counts eligible matches in the materialized filtered
+partial empty page. Narrow the filter. Unfiltered `created_desc` and `manual_first`
+retain released bounded source-window semantics: one first batch (100 rows for a
+20-item request; at most 200), sorted within that newest-updated window. They
+never scan all stores or fail solely because an account exceeds 5000 memories.
+`scan_truncated=true`, `source_window_limit` and `coverage` explicitly identify
+unknown global ordering/exhaustion; `more_in_window` and offset cursors describe
+only the materialized window. The REST array reports `X-Scan-Truncated: true`.
+Use `updated_desc` with a cursor for larger exports.
+`scanned_count` on the indexed path counts deduplicated candidates before policy
+filtering (the default bounded path counts source rows after universal policy); `matched_count` counts eligible matches in the materialized filtered
 window.
 `more_in_window` counts known matches already scanned; keyset pages additionally
 return `more_in_window_known=false` when their continuation contains unexamined
@@ -151,9 +157,9 @@ a remote call. Action items add stored provenance or `manual`, `chat`, `unknown`
 when no conversation identity exists; no provenance is guessed from task prose.
 
 Screen `group_by=app|hour|day` aggregates the window server-side, independently
-of raw-page `limit`. Groups have no raw-page cursor. `coverage` reports a 5000-row
+of raw-page `limit`. A supplied group cursor is ignored with a `note`; groups have no next cursor. `coverage` reports a 5000-row
 bound, scanned count, first/last observations and `complete_window`; truncation
-is explicit. Hour labels carry an offset. Capture/sync completeness remains
+is explicit. With no timezone, timestamp strings and `YYYY-MM-DD HH:00` hour labels retain the released format. Explicit `timezone` (including UTC) or `timestamp_format=iso_offset` opts into ISO offsets. Capture/sync completeness remains
 unknown. These are observation counts and bounded observation seconds, not
 proof of device usage duration. Raw mode remains cursor-paginated.
 
