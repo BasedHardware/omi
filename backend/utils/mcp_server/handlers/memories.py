@@ -1,7 +1,7 @@
 """Memory tool handlers for the hosted MCP server."""
 
 import logging
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from fastapi import HTTPException
 
@@ -207,7 +207,7 @@ def get_memories(
 
 def read_filtered_mcp_memories(
     uid: str, *, filters: dict, db_client: Any, budget: Optional[ListReadBudget] = None
-) -> List[Dict[str, Any]]:
+) -> Tuple[List[Dict[str, Any]], int]:
     return MemoryService(db_client=db_client).read_mcp_filtered(
         uid, filters=filters, **({"budget": budget} if budget is not None else {})
     )
@@ -264,7 +264,7 @@ def memories_page_core(
             offset = offset_position(position)
 
     if updated_after is not None or reviewed is not None or manually_added is not None or valid_categories:
-        rows = read_filtered_mcp_memories(
+        rows, scanned_count = read_filtered_mcp_memories(
             uid,
             db_client=db,
             budget=budget,
@@ -286,7 +286,8 @@ def memories_page_core(
             'has_more': has_more,
             'more_in_window': has_more,
             'scan_truncated': False,
-            'scanned_count': len(rows),
+            'scanned_count': scanned_count,
+            'matched_count': len(rows),
             'offset': offset,
             'limit': limit,
             'sort': sort,

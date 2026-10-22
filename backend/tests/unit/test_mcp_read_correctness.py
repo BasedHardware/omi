@@ -38,16 +38,19 @@ def card(cid, text='x'):
 
 def test_updated_filter_runs_before_the_old_200_row_scan(monkeypatch):
     rows = [{'id': 'new', 'content': 'Synthetic fact', 'updated_at': NOW, 'created_at': NOW}]
-    read = MagicMock(return_value=rows)
+    read = MagicMock(return_value=(rows, 237))
     monkeypatch.setattr(memories, 'read_filtered_mcp_memories', read)
     result = memories.memories_page_core(OWNER, limit=20, updated_after=NOW, cursor_kind='test')
     assert result['memories'] == rows
     assert not result['has_more'] and not result['scan_truncated']
+    assert result['scanned_count'] == 237 and result['matched_count'] == 1
     assert read.call_args.kwargs['filters']['updated_after'] == NOW
 
 
 def test_filtered_page_lookahead_and_cursor_are_truthful(monkeypatch):
-    monkeypatch.setattr(memories, 'read_filtered_mcp_memories', lambda *a, **k: [{'id': str(i)} for i in range(3)])
+    monkeypatch.setattr(
+        memories, 'read_filtered_mcp_memories', lambda *a, **k: ([{'id': str(i)} for i in range(3)], 300)
+    )
     args = dict(limit=2, updated_after=NOW, cursor_kind='test')
     first = memories.memories_page_core(OWNER, **args)
     second = memories.memories_page_core(OWNER, cursor_token=first['next_cursor'], **args)
@@ -390,10 +393,28 @@ def test_filtered_candidate_policy_checks_share_the_request_budget(monkeypatch):
     policy = MagicMock(return_value=([], True))
     monkeypatch.setattr(memory_reads, 'read_canonical_scan_page', policy)
     budget = SimpleNamespace(truncated=False)
-    assert (
-        memory_reads.collect_filtered_mcp_memories(
-            SimpleNamespace(db_client=object()), OWNER, filters={}, budget=budget
-        )
-        == []
-    )
+    assert memory_reads.collect_filtered_mcp_memories(
+        SimpleNamespace(db_client=object()), OWNER, filters={}, budget=budget
+    ) == ([], 1)
     assert policy.call_args.kwargs['budget'] is budget
+
+
+def test_legacy_summary_does_not_claim_unrecorded_review_coverage():
+    result = summary_read_payload({'date': '2026-08-01', 'stats': {'memories_created': 9, 'action_items_created': 0}})
+    assert result['memories_learned_coverage'].startswith('not_recorded_by_legacy_producer')
+    assert result['action_items_coverage'].startswith('legacy_conversation_subset')
+
+
+def test_malformed_optional_call_metadata_does_not_drop_the_card():
+    result = conversation_card(
+        {
+            **card('a'),
+            'source': {},
+            'call_platform': [],
+            'calendar_event_id': 7,
+            'is_call': 'unknown',
+            'calendar_meeting_context': {'platform': {}, 'event_id': 42},
+        }
+    )
+    assert result['id'] == 'a'
+    assert all(result[key] is None for key in ('source', 'is_call', 'call_platform', 'calendar_event_id'))

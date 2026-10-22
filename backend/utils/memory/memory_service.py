@@ -3079,7 +3079,7 @@ class MemoryService:
     @resilient_memory_read
     def read_mcp_filtered(
         self, uid: str, *, filters: Dict[str, Any], budget: Optional[ListReadBudget] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Tuple[List[Dict[str, Any]], int]:
         """Complete bounded MCP candidate read under the universal row policies."""
         return collect_filtered_mcp_memories(self, uid, filters=filters, budget=budget)
 

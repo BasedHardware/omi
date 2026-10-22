@@ -47,14 +47,16 @@ def summary_read_payload(row: dict) -> dict:
     result['status'] = row.get('status') or 'generated'
     result['generated_at'] = row.get('generated_at') or row.get('created_at')
     result['memories_learned_count'] = len(learned)
-    result['memories_learned_coverage'] = (
-        row.get('memories_learned_coverage')
-        or 'bounded_review_selection_max_3_from_600_newest_updated; not all stored memories'
+    result['memories_learned_coverage'] = row.get('memories_learned_coverage') or (
+        'legacy_review_selection; coverage_unknown; not all stored memories'
+        if 'memories_learned' in row
+        else 'not_recorded_by_legacy_producer; creations_not_reconstructed'
     )
     stats['memories_learned_count'] = len(learned)
     stats['memory_count_basis'] = 'storage_created_in_window; may include memories ineligible for review'
-    if stats.get('action_items_created') != len(actions) and row.get('read_contract_version') != 2:
-        stats['stored_action_items_created'] = stats.get('action_items_created')
+    if row.get('read_contract_version') != 2:
+        if 'action_items_created' in stats:
+            stats['stored_action_items_created'] = stats.get('action_items_created')
         result['action_items_coverage'] = 'legacy_conversation_subset; created-in-window items may be omitted'
     else:
         result['action_items_coverage'] = row.get('action_items_coverage') or 'created_in_window'

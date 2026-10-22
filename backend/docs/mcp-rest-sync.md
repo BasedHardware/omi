@@ -126,6 +126,9 @@ rechecks every predicate, and emits fallback telemetry. A candidate set above
 partial empty page. Narrow the filter. Unfiltered global sorts scan up to 5000
 rows and return `memory_scan_incomplete` when their complete order cannot be
 proved. Use `updated_desc` with a cursor for larger exports.
+`scanned_count` counts deduplicated candidate documents examined before policy
+filtering; `matched_count` counts eligible matches in the materialized filtered
+window.
 `more_in_window` counts known matches already scanned; keyset pages additionally
 return `more_in_window_known=false` when their continuation contains unexamined
 candidates. `has_more` on that path means that a resumable candidate cursor exists,
@@ -172,7 +175,10 @@ always equal the array length. Memories deliberately have two meanings:
 review card); `memories_learned` is the existing at-most-three review selection
 from at most 600 newest-updated universal memories. `memories_learned_count` and
 `memories_learned_coverage` expose the actual selection and its bound. An empty
-review card is not evidence that no memories were stored.
+review card is not evidence that no memories were stored. Legacy producers
+without a recorded review payload are labeled `not_recorded_by_legacy_producer`;
+existing legacy review selections have unknown coverage rather than a fabricated
+scan bound.
 
 `total_conversations` uses a Firestore aggregation over non-discarded recordings
 whose `started_at` falls in the local day, with no list limit; existing recaps'

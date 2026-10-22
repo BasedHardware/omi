@@ -137,14 +137,24 @@ def conversation_call_fields(conversation: Dict[str, Any]) -> Dict[str, Any]:
     contexts = [value for value in contexts if isinstance(value, dict)]
     source = conversation.get('source')
     source = getattr(source, 'value', source)
+    source = source if isinstance(source, str) else None
     platform = conversation.get('call_platform')
+    platform = platform if isinstance(platform, str) else None
     event_id = conversation.get('calendar_event_id')
+    event_id = event_id if isinstance(event_id, str) else None
     is_call = conversation.get('is_call')
+    is_call = is_call if isinstance(is_call, bool) else None
     for context in contexts:
         candidate_id = context.get('event_id') or context.get('calendar_event_id') or context.get('id')
-        if candidate_id != 'screen-activity' and context.get('calendar_source') != 'screen_activity':
+        if (
+            isinstance(candidate_id, str)
+            and candidate_id != 'screen-activity'
+            and context.get('calendar_source') != 'screen_activity'
+        ):
             event_id = event_id or candidate_id
-        platform = platform or context.get('platform') or context.get('call_platform')
+        candidate_platform = context.get('platform') or context.get('call_platform')
+        if isinstance(candidate_platform, str):
+            platform = platform or candidate_platform
         url = str(
             context.get('meeting_link')
             or context.get('meeting_url')

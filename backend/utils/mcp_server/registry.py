@@ -355,7 +355,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 next_cursor=_NEXT_CURSOR_OUTPUT,
                 has_more={"type": "boolean"},
                 more_in_window={"type": "boolean"},
-                scanned_count={"type": "integer"},
+                returned_count={"type": "integer"},
+                matched_count={
+                    "type": "integer",
+                    "description": "Eligible matches in the complete filtered candidate window",
+                },
+                more_in_window_known={"type": "boolean"},
+                scanned_count={
+                    "type": "integer",
+                    "description": "Candidate documents examined before policy filtering",
+                },
                 scan_truncated={"type": "boolean"},
             )
         ),

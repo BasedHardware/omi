@@ -11,9 +11,10 @@ from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
 
 def collect_filtered_mcp_memories(
     service: Any, uid: str, *, filters: dict, budget: Optional[ListReadBudget] = None
-) -> list[dict]:
+) -> tuple[list[dict], int]:
     db_client = service.db_client
     rows = []
+    scanned_count = 0
     for origin in ('memory_items', 'memories'):
         try:
             snapshots = read_mcp_memory_candidates(
@@ -35,6 +36,7 @@ def collect_filtered_mcp_memories(
                 code=-32009,
                 http_status=413,
             )
+        scanned_count += len(snapshots)
         if origin == 'memory_items':
             for offset in range(0, len(snapshots), 100):
                 chunk = snapshots[offset : offset + 100]
@@ -66,4 +68,4 @@ def collect_filtered_mcp_memories(
             code=-32009,
             http_status=503,
         )
-    return filter_and_sort_memories(rows, **filters)
+    return filter_and_sort_memories(rows, **filters), scanned_count
