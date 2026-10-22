@@ -107,6 +107,7 @@ def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -
         stale_after=STALE_AFTER,
         content_due_scan=False,
     )
+    CONVERSATION_ORPHANED_UNFINALIZED.inc(legacy.get('enqueued', 0))
     combined = result | {'legacy': legacy}
     for key in ('scanned', 'enqueued', 'verified', 'refused', 'errors'):
         combined[key] = int(result.get(key, 0)) + int(legacy.get(key, 0))

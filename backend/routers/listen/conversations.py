@@ -25,7 +25,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import quiet_finalization
 from utils.conversations.live_continuation import resolve_live_continuation
 from database.listen_continuations import calendar_continuity_row
-from utils.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
+from models.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.projection_payload import omit_null_processing_state

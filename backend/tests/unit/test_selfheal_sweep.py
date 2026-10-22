@@ -929,7 +929,10 @@ def test_fast_recovery_preserves_the_legacy_always_on_fallback(monkeypatch):
     monkeypatch.setattr(finalization_service.jobs_db, 'get_in_progress_content_sweep_cursor', lambda **kw: {})
     calls = []
     monkeypatch.setattr(finalization_service, 'run_selfheal_tick', lambda **kw: calls.append(kw) or {'enqueued': 1})
+    observations = []
+    monkeypatch.setattr(finalization_service.CONVERSATION_ORPHANED_UNFINALIZED, 'inc', observations.append)
     result = finalization_service.reconcile_stale_in_progress_conversations()
+    assert observations == [1, 1]
     assert len(calls) == 2
     assert calls[0]['content_due_scan'] is True
     assert calls[1]['content_due_scan'] is False

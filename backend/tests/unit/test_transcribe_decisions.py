@@ -654,7 +654,7 @@ def test_text_speaker_assignment_create_speakers_compatibility():
 
 
 def test_default_boundary_agrees_with_capture_coverage():
-    from utils.conversation_continuity import DEFAULT_GAP_SECONDS, intervals_connect
+    from models.conversation_continuity import DEFAULT_GAP_SECONDS, intervals_connect
 
     for gap in (0, 119.99, 120, 120.01):
         action = decide_existing_conversation_action(

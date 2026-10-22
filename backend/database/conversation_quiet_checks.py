@@ -15,7 +15,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs_db
-from utils.conversation_continuity import continuation_timeout
+from models.conversation_continuity import continuation_timeout
 
 QUIET_CHECK_KIND = 'listen_quiet_check'
 QUIET_CHECK_STATUS = 'waiting_quiet'

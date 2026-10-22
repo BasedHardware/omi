@@ -33,7 +33,7 @@ from database.firestore_index_registry import (
 )
 from database.people_stats_cache import invalidate_people_stats_cache
 from models.client_processing import PROJECTION_FAMILY_FIELDS
-from utils.conversation_continuity import continuation_timeout
+from models.conversation_continuity import continuation_timeout
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
 from utils.conversations.recovery import (
     TERMINAL_NO_DERIVED_EFFECTS_FIELD,

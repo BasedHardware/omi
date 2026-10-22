@@ -68,13 +68,14 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
     check = checks_db.evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
     if check['status'] not in {'ready', 'deferred'}:
         return check['status']
+    if should_skip_background_account_mutation(check['uid'], firestore_client=firestore_client):
+        checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
+        return 'account_fenced'
     # Persisting and dispatching the successor before admission makes all crash
     # points retryable, including a crash just before the lifecycle transaction.
     _dispatch(check)
     if check['status'] == 'deferred':
         return 'deferred'
-    if should_skip_background_account_mutation(check['uid'], firestore_client=firestore_client):
-        return 'account_fenced'
     CONVERSATION_ORPHANED_UNFINALIZED.inc()
     result = lifecycle.request_finalization(
         check['uid'],

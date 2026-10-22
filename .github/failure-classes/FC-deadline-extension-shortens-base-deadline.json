@@ -8,7 +8,7 @@
   ],
   "evidence_prs": [],
   "scope_hints": [
-    "backend/utils/conversation_continuity.py",
+    "backend/models/conversation_continuity.py",
     "backend/database/listen_continuations.py",
     "backend/routers/listen/conversations.py"
   ],

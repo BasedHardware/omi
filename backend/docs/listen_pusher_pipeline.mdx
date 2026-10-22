@@ -3914,7 +3914,7 @@ message names a conversation (or no document), `assign_sync_conversation` retrie
 with it marked full (`outcome=size_limit_retry`, then `trigger=commit_limit`); a
 second rejection, or one naming an index document, fails as before and earns a strike.
 
-`utils/conversation_continuity.py` owns the shared predicate. The remaining policy
+`models/conversation_continuity.py` owns the shared predicate. The remaining policy
 input difference is that realtime can configure its timeout per session, while WALs
 do not carry this setting and sync uses the default. Job leases, persistence fences,
 encryption codecs and revision fencing remain in force. Bridge effects use existing
@@ -6269,7 +6269,8 @@ a per-conversation due item and do not depend on that legacy scan or a reconnect
 
 `omi_conversation_orphaned_unfinalized_total` is an unlabeled counter of observed
 quiet, content-bearing rows without a processing job and without a live lease
-(including legacy-sweep admissions). Alert on a positive increase over a short
+(including legacy-sweep admissions; the conservative two-hour fallback also
+counts rows whose old recording lease is unknown). Alert on a positive increase over a short
 window such as ten minutes; retries can observe the same row more than once.
 This measures missing finalization handoff, not missing capture or STT ingress.
 

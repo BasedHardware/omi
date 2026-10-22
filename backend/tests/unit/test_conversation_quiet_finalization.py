@@ -436,3 +436,15 @@ def test_legacy_markerless_content_with_unknown_lease_still_has_recovery(store, 
         firestore_client=store,
     )
     assert result['status'] == 'queued'
+
+
+@pytest.mark.parametrize('elapsed', [120, 301])
+def test_cutover_fences_retire_successor_instead_of_rewaking_forever(store, monkeypatch, elapsed):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    quiet.enqueue_listen_finalization_job.reset_mock()
+    monkeypatch.setattr(quiet, 'should_skip_background_account_mutation', lambda *a, **kw: True)
+    _advance(monkeypatch, elapsed)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'account_fenced'
+    assert _job(store)['status'] == 'quiet_done'
+    quiet.enqueue_listen_finalization_job.assert_not_called()
+    assert 'finalization_job_id' not in store.rows[ROW]
