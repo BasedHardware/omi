@@ -65,6 +65,31 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _extract_user_context(
+    config: Any,
+) -> Tuple[Optional[str], Dict[str, Any], Optional[Dict[str, Any]], Optional[str]]:
+    """Extract user_id, configurable mapping, and resolved config, supporting top-level or nested configurable."""
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        cfg = _agent_config()
+        if cfg:
+            logger.info("got config from context variable")
+
+    if cfg is None or not isinstance(cfg, dict):
+        logger.info("config is None or invalid")
+        return None, {}, None, "Error: Configuration not available"
+
+    configurable_raw = cfg.get('configurable')
+    configurable: Dict[str, Any] = configurable_raw if isinstance(configurable_raw, dict) else {}
+
+    uid = configurable.get('user_id') or cfg.get('user_id')
+    if not uid:
+        logger.info("no user_id in config")
+        return None, configurable, cfg, "Error: User ID not found in configuration"
+
+    return str(uid), configurable, cfg, None
+
+
 def _scoped_conversation_fetch(
     uid: str,
     conversation_id: str,
@@ -213,7 +238,10 @@ def _render_addressable_conversations(conversations, *, configurable, admitted_i
     A conversation already collected this turn keeps its citation number instead of gaining a
     duplicate card.
     """
+    configurable = configurable if isinstance(configurable, dict) else {}
     collected = configurable.get('conversations_collected', [])
+    if not isinstance(collected, list):
+        collected = []
     blocks = []
     used = 0
     elapsed_legend_emitted = False
@@ -325,26 +353,10 @@ def get_conversations_tool(
     # print(f"   config: {config}")
 
     # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 get_conversations_tool - got config from context variable")
+    uid, configurable, cfg, err = _extract_user_context(config)
+    if err:
+        return err
 
-    if cfg is None:
-        logger.info(f"❌ get_conversations_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ get_conversations_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        logger.info(f"❌ get_conversations_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
     logger.info(f"✅ get_conversations_tool - uid: {uid}")
     display_clock = clock_for_turn(configurable, str(uid))
 
@@ -354,9 +366,15 @@ def get_conversations_tool(
         return f"Error: {scope_err}"
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
-    if max_transcript_segments != -1:
-        max_transcript_segments = min(max_transcript_segments, 1000)
-        logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
+    try:
+        seg = int(max_transcript_segments)
+        if seg == -1:
+            max_transcript_segments = -1
+        else:
+            max_transcript_segments = max(0, min(seg, 1000))
+    except (ValueError, TypeError):
+        max_transcript_segments = 0
+    logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
 
     # Parse dates if provided (always in UTC)
     start_dt = None
@@ -382,7 +400,15 @@ def get_conversations_tool(
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
-    limit = min(limit, 5000)
+    try:
+        limit = max(1, min(int(limit), 5000))
+    except (ValueError, TypeError):
+        limit = 20
+
+    try:
+        offset = max(0, int(offset))
+    except (ValueError, TypeError):
+        offset = 0
 
     # Parse statuses if provided
     status_list: List[str] = []
@@ -588,36 +614,24 @@ def search_conversations_tool(
         Formatted string with matching conversations, including transcripts, summaries, action items, events, and
         metadata.
     """
-    logger.info("🔧 search_conversations_tool query_len=%s", len(query or ''))
+    clean_query = str(query or "").strip()
+    if not clean_query:
+        return "Error: Search query cannot be empty."
+
+    logger.info("🔧 search_conversations_tool query_len=%s", len(clean_query))
 
     # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 search_conversations_tool - got config from context variable")
+    uid, configurable, cfg, err = _extract_user_context(config)
+    if err:
+        return err
 
-    if cfg is None:
-        logger.info(f"❌ search_conversations_tool - config is None")
-        return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ search_conversations_tool - error accessing config: {e}")
-        return "Error: Configuration not available"
-
-    if not uid:
-        logger.info(f"❌ search_conversations_tool - no user_id in config")
-        return "Error: User ID not found in configuration"
     display_clock = clock_for_turn(configurable, str(uid))
     logger.info(
         "✅ search_conversations_tool - uid=%s limit=%s",
         uid,
         limit,
     )
-    exact_conversation_id = _parse_exact_search_reference(query)
+    exact_conversation_id = _parse_exact_search_reference(clean_query)
 
     scope = chat_scope_from_config(configurable)
     start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
@@ -625,9 +639,15 @@ def search_conversations_tool(
         return f"Error: {scope_err}"
 
     # Cap max_transcript_segments at 1000 to prevent flooding LLM context
-    if max_transcript_segments != -1:
-        max_transcript_segments = min(max_transcript_segments, 1000)
-        logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
+    try:
+        seg = int(max_transcript_segments)
+        if seg == -1:
+            max_transcript_segments = -1
+        else:
+            max_transcript_segments = max(0, min(seg, 1000))
+    except (ValueError, TypeError):
+        max_transcript_segments = 0
+    logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
 
     # Parse dates to timestamps if provided
     starts_at = None
@@ -658,7 +678,10 @@ def search_conversations_tool(
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
 
     # Limit to reasonable max
-    limit = min(limit, 20)
+    try:
+        limit = max(1, min(int(limit), 20))
+    except (ValueError, TypeError):
+        limit = 5
 
     scoped_id = (scope or {}).get("conversation_id") if scope else None
     if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
@@ -723,20 +746,20 @@ def search_conversations_tool(
             active_path = 'keyword'
             try:
                 keyword_ids = keyword_search_conversation_ids(
-                    uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at, raise_on_error=True
+                    uid=uid, query=clean_query, limit=limit, start_date=starts_at, end_date=ends_at, raise_on_error=True
                 )
             except Exception:  # Keyword errors must not discard semantic results.
                 keyword_degraded = True
                 record_fallback(
                     component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger
                 )
-            if query.strip():
+            if clean_query:
                 record_path('keyword', len(keyword_ids), keyword_degraded)
             active_path = 'vector'
             index_available = getattr(vector_db, 'index', None) is not None
-            query_vector = vector_db.embeddings.embed_query(query) if index_available else None
+            query_vector = vector_db.embeddings.embed_query(clean_query) if index_available else None
             vector_ids = vector_db.query_vectors(
-                query=query,
+                query=clean_query,
                 uid=uid,
                 starts_at=starts_at,
                 ends_at=ends_at,
@@ -747,7 +770,7 @@ def search_conversations_tool(
             active_path = 'transcript'
             transcript_search = search_chat_transcript_chunks(
                 uid,
-                query,
+                clean_query,
                 limit=limit,
                 starts_at=starts_at,
                 ends_at=ends_at,
