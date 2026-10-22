@@ -13,7 +13,7 @@ import re
 import unicodedata
 from dataclasses import dataclass
 from difflib import SequenceMatcher
-from typing import Any, Mapping
+from typing import Any, Mapping, TypeGuard
 
 from utils.conversations.overlap_shared_speech import measure_overlap_shared_speech, SKEW_SECONDS
 
@@ -24,17 +24,20 @@ MAX_ALIGNMENT_WORK = 262144
 _WORD = re.compile(r'[^\W_]+', re.UNICODE)
 
 
-def _number(value: Any) -> bool:
-    return type(value) in (int, float) and math.isfinite(value)
+def _number(value: Any) -> TypeGuard[int | float]:
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        return False
 
 
-def device(row: Mapping) -> str | None:
+def device(row: Mapping[str, Any]) -> str | None:
     external = row.get('external_data') or {}
     evidence = row.get('capture_evidence') or {}
     return row.get('client_device_id') or external.get('device_id') or evidence.get('client_device_id')
 
 
-def distinct_streams(first: Mapping, second: Mapping) -> bool:
+def distinct_streams(first: Mapping[str, Any], second: Mapping[str, Any]) -> bool:
     if first.get('source') and second.get('source') and first['source'] != second['source']:
         return True
     a, b = device(first), device(second)
@@ -44,13 +47,13 @@ def distinct_streams(first: Mapping, second: Mapping) -> bool:
     return bool(first.get('source') and second.get('source') and first['source'] != second['source'])
 
 
-def quality_rank(row: Mapping) -> tuple:
+def quality_rank(row: Mapping[str, Any]) -> tuple:
     """Pendant first, then SNR, word confidence, duration and stable identity.
 
     Missing quality stays below measured quality; no speaker confidence is used.
     Only server-retained acoustic metadata is read, never a user identity label.
     """
-    quality = row.get('audio_quality') or {}
+    quality: dict[str, Any] = row.get('audio_quality') or {}
     snr, confidence = quality.get('snr_db'), quality.get('word_confidence')
     snr = min(100.0, max(-100.0, snr)) if _number(snr) else -101.0
     confidence = confidence if _number(confidence) and 0 <= confidence <= 1 else -1.0
@@ -58,7 +61,7 @@ def quality_rank(row: Mapping) -> tuple:
     return (0 if row.get('source') == 'omi' else 1, -snr, -confidence, -duration, str(row['id']))
 
 
-def policy_metadata(row: Mapping) -> dict:
+def policy_metadata(row: Mapping[str, Any]) -> dict:
     """Metadata that must remain stable between alignment and commit."""
     return {
         key: row.get(key)
@@ -71,7 +74,7 @@ def _words(text: str) -> tuple[str, ...]:
     return tuple(_WORD.findall(normalized))
 
 
-def _lines(row: Mapping) -> list[tuple[float, float, tuple[str, ...]]] | None:
+def _lines(row: Mapping[str, Any]) -> list[tuple[float, float, tuple[str, ...]]] | None:
     segments = row.get('transcript_segments') or []
     if not isinstance(segments, list) or len(segments) > MAX_LINES:
         return None
@@ -125,12 +128,15 @@ class Alignment:
         }
 
 
-def align(first: Mapping, second: Mapping) -> Alignment:
+def align(first: Mapping[str, Any], second: Mapping[str, Any]) -> Alignment:
     if not distinct_streams(first, second):
         return Alignment(reason='same_or_unknown_device')
     confirmation = measure_overlap_shared_speech(first, second)
     if not confirmation.would_join:
-        return Alignment(reason=confirmation.reason)
+        # Include hard negatives in the denominator, rather than reporting an
+        # artificial 100% duplicate rate over confirmed pairs alone.
+        examined = min(len(first.get('transcript_segments') or []), len(second.get('transcript_segments') or []))
+        return Alignment(reason=confirmation.reason, secondary_lines=min(examined, MAX_LINES))
     primary, secondary = sorted((first, second), key=quality_rank)
     a, b = _lines(primary), _lines(secondary)
     if not a or not b:

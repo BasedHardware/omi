@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from itertools import combinations
+from typing import Any
 
 from config import refactor_modes
 from database import capture_groups, capture_coverage
@@ -40,7 +41,7 @@ def _observe(decision) -> None:
     )
 
 
-def _alias_group(uid, rows, fingerprints, group_id):
+def _alias_group(uid: str, rows: dict[str, dict[str, Any]], fingerprints: dict[str, str], group_id: str) -> None:
     primary = min(rows.values(), key=quality_rank)
     for secondary in rows.values():
         if secondary['id'] == primary['id'] or not align(primary, secondary).would_fold:
@@ -85,18 +86,19 @@ def reconcile(uid: str, candidate_id: str, other_ids: list[str]) -> bool:
             # when a third device finalizes, even though transcripts do not.
             if reads + 2 > MAX_SNAPSHOTS or checks >= MAX_PAIRS:
                 break
-            first, afp = get_shared_speech_snapshot(uid, candidate_id)
-            second, bfp = get_shared_speech_snapshot(uid, other_id)
+            first_row, afp = get_shared_speech_snapshot(uid, candidate_id)
+            second_row, bfp = get_shared_speech_snapshot(uid, other_id)
             reads += 2
-            if not first or not second:
+            if not first_row or not second_row:
                 continue
-            first, second = {**first, 'id': candidate_id}, {**second, 'id': other_id}
+            first: dict[str, Any] = {**first_row, 'id': candidate_id}
+            second: dict[str, Any] = {**second_row, 'id': other_id}
             decision = align(first, second)
             checks += 1
             _observe(decision)
             if not serving or not decision.would_fold or not afp or not bfp:
                 continue
-            groups = [r.get('capture_group') or {} for r in (first, second)]
+            groups: list[dict[str, Any]] = [r.get('capture_group') or {} for r in (first, second)]
             group_ids = {g['id'] for g in groups if g.get('id')}
             if len(group_ids) > 1 or any(g.get('kind') for g in groups):
                 continue
@@ -105,8 +107,8 @@ def reconcile(uid: str, candidate_id: str, other_ids: list[str]) -> bool:
             # speech or a complementary remote channel.
             if existing and existing.get('primary_policy') != 'cross_device_v1':
                 continue
-            rows = {candidate_id: first, other_id: second}
-            fingerprints = {candidate_id: afp, other_id: bfp}
+            rows: dict[str, dict[str, Any]] = {candidate_id: first, other_id: second}
+            fingerprints: dict[str, str] = {candidate_id: afp, other_id: bfp}
             for member in existing.get('members') or []:
                 cid = member['id']
                 if cid in rows:

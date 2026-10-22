@@ -344,3 +344,9 @@ def test_alignment_overflow_keeps_all_speech(monkeypatch):
     monkeypatch.setattr(alignment, 'MAX_ALIGNMENT_WORK', 1)
     decision = alignment.align(row(10), row(11, 'apple_watch'))
     assert not decision.would_fold and decision.reason == 'alignment_bounds'
+
+
+def test_duplicate_line_rate_includes_unrelated_candidate_lines():
+    decision = alignment.align(row(10), row(11, 'apple_watch', scene=2))
+    assert decision.secondary_lines == 3 and decision.duplicate_lines == 0
+    assert decision.duplicate_line_rate == 0
