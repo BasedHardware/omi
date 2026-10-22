@@ -282,3 +282,26 @@ def test_surplus_merge_never_blends_desktop_mic_with_remote_channel():
     assert result.owner_anchor == 'channel'
     labels = evidence.project_labels(result, {})
     assert [labels[s['id']][0] for s in rows] == [True, True, True, False, False, False]
+
+
+def test_partial_resolution_does_not_publish_participant_list(monkeypatch):
+    from models.transcript_segment import TranscriptSegment
+
+    rows = segments(2)
+    for row in rows:
+        row['end'] = row['start'] + 20
+    conversation = SimpleNamespace(
+        id='fixture',
+        source='omi',
+        transcript_segments=[TranscriptSegment(**row, text='') for row in rows],
+        speaker_resolution=SimpleNamespace(status='unavailable', participant_speaker_ids=[]),
+    )
+    partial = resolution(rows, np.eye(2))
+    partial.coverage = 0.5
+    monkeypatch.setenv(evidence.FLAG, 'serve')
+    monkeypatch.setattr(processing, '_roster', lambda *args: ROSTER)
+    monkeypatch.setattr(processing.storage, 'store_evidence', lambda *args, **kwargs: None)
+    token = processing.begin(conversation)
+    processing.capture_resolution(partial)
+    processing.finish(token, uuid.uuid4().hex, conversation, {})
+    assert conversation.speaker_resolution.participant_speaker_ids == []

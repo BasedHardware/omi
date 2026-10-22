@@ -203,9 +203,19 @@ def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
                         and cluster.speaker_id != segment.speaker_id
                     ):
                         segment.assign_resolved_speaker(cluster.speaker_id, f'conversation:{conversation.id}')
-            if current.resolution and getattr(conversation, 'speaker_resolution', None):
+            if (
+                current.resolution
+                and current.resolution.coverage >= 0.9
+                and getattr(conversation, 'speaker_resolution', None)
+            ):
                 conversation.speaker_resolution.participant_speaker_ids = sorted(
-                    {c.speaker_id for c in evidence.clusters if c.speech_seconds >= 10 and c.speaker_id is not None}
+                    {
+                        c.speaker_id
+                        for c in evidence.clusters
+                        if c.speech_seconds >= 10
+                        and c.speaker_id is not None
+                        and any(sid in current.resolution.speaker_ids for sid in c.segment_ids)
+                    }
                 )
     except Exception as error:
         TOTAL.labels(status='unavailable', outcome='error').inc()
