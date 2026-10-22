@@ -14,7 +14,7 @@ Collection: users/{uid}/chat_sessions and users/{uid}/messages.
 """
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -60,6 +60,27 @@ class ChatSessionResponse(BaseModel):
             data['starred'] = False
 
         return data
+
+    @classmethod
+    def deserialize_many_safe(
+        cls,
+        records: list[Any],
+        on_error: Optional[Callable[[Any, Exception], None]] = None,
+    ) -> list['ChatSessionResponse']:
+        """Safely deserialize multiple chat sessions, skipping corrupt/invalid records."""
+        valid_sessions: list['ChatSessionResponse'] = []
+        if not records:
+            return valid_sessions
+        for record in records:
+            if not record or not isinstance(record, dict) or not record.get('id'):
+                continue
+            try:
+                valid_sessions.append(cls.model_validate(record))
+            except Exception as exc:
+                if on_error:
+                    on_error(record, exc)
+                continue
+        return valid_sessions
 
 
 class SaveMessageResponse(BaseModel):
