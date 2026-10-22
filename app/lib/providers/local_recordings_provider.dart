@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
@@ -14,11 +15,17 @@ enum LocalUploadOutcome { started, fairUseLimited, backendBusy, failed, busy }
 
 /// Home's view of explicit Transcribe Later custody. No queue, scanner or uploader.
 class LocalRecordingsProvider extends ChangeNotifier {
-  LocalRecordingsProvider({LocalWalSyncImpl? ledger, bool initialize = true}) : _ledgerOverride = ledger {
+  LocalRecordingsProvider(
+      {LocalWalSyncImpl? ledger,
+      bool initialize = true,
+      Future<void> Function(SyncLocalFilesResponse)? surfaceConversations})
+      : _ledgerOverride = ledger,
+        _surfaceOverride = surfaceConversations {
     _audio.addListener(_onAudioChanged);
     if (initialize) {
       _subscribed = true;
       _ledger.heldRevision.addListener(_onLedgerChanged);
+      _ledger.conversationCompletions.addListener(_onConversationsCompleted);
       refresh();
     }
   }
@@ -33,8 +40,45 @@ class LocalRecordingsProvider extends ChangeNotifier {
   List<LocalRecording> _recordings = [];
   List<LocalRecording> get recordings => _recordings;
   final Map<String, Wal> _rows = {};
+  final Future<void> Function(SyncLocalFilesResponse)? _surfaceOverride;
+  SyncLocalFilesResponse? _lastCompletion;
   ConversationProvider? _conversationProvider;
-  void setConversationProvider(ConversationProvider provider) => _conversationProvider = provider;
+  void setConversationProvider(ConversationProvider provider) {
+    if (identical(_conversationProvider, provider)) return;
+    _conversationProvider = provider;
+    _onConversationsCompleted();
+  }
+
+  void _onConversationsCompleted() {
+    if (_disposed || (_conversationProvider == null && _surfaceOverride == null)) return;
+    final result = _ledger.conversationCompletions.value;
+    if (result == null || identical(result, _lastCompletion)) return;
+    _lastCompletion = result;
+    unawaited(_surface(result));
+  }
+
+  Future<void> _surface(SyncLocalFilesResponse result) async {
+    if (result.newConversationIds.isEmpty && result.updatedConversationIds.isEmpty) return;
+    final session = _ledger.sessionGeneration;
+    final provider = _conversationProvider;
+    try {
+      final surface = _surfaceOverride;
+      if (surface != null) {
+        await surface(result);
+        return;
+      }
+      if (provider == null) return;
+      final pointers = await ConversationSyncUtils.processConversationIds(
+          newConversationIds: result.newConversationIds, updatedConversationIds: result.updatedConversationIds);
+      if (_disposed || session != _ledger.sessionGeneration || !identical(provider, _conversationProvider)) return;
+      for (final pointer in pointers) {
+        provider.upsertConversation(pointer.conversation);
+      }
+    } catch (e) {
+      Logger.error('LocalRecordings: surfacing confirmed conversations failed: $e');
+    }
+  }
+
   void _onLedgerChanged() {
     _readLedger();
   }
@@ -110,15 +154,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
       if (!wal.holdForUser) {
         unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.userRetry));
       }
-      if (result != null && _conversationProvider != null) {
-        final pointers = await ConversationSyncUtils.processConversationIds(
-            newConversationIds: result.newConversationIds, updatedConversationIds: result.updatedConversationIds);
-        if (!_disposed && session == _ledger.sessionGeneration) {
-          for (final p in pointers) {
-            _conversationProvider?.upsertConversation(p.conversation);
-          }
-        }
-      }
+      if (result != null) await _surface(result);
       return !wal.holdForUser ? LocalUploadOutcome.started : LocalUploadOutcome.failed;
     } on SyncRateLimitedException catch (e) {
       return switch (e.kind) {
@@ -212,6 +248,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
     _generation++;
     _rows.clear();
     _recordings = [];
+    _lastCompletion = null;
     if (!_disposed) notifyListeners();
   }
 
@@ -223,7 +260,10 @@ class LocalRecordingsProvider extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _generation++;
-    if (_subscribed) _ledger.heldRevision.removeListener(_onLedgerChanged);
+    if (_subscribed) {
+      _ledger.heldRevision.removeListener(_onLedgerChanged);
+      _ledger.conversationCompletions.removeListener(_onConversationsCompleted);
+    }
     _audio.removeListener(_onAudioChanged);
     super.dispose();
   }

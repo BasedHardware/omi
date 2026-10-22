@@ -129,3 +129,15 @@ String _currentWalOwnerUid() {
   final uid = SharedPreferencesUtil().uid;
   return uid.isEmpty ? 'legacy' : uid;
 }
+
+/// Only acknowledged jobs publish Home updates, after the ledger save succeeds.
+extension _WalConversationCompletion on LocalWalSyncImpl {
+  void _publishConversationCompletions(List<SyncLocalFilesResponse> completed, int generation) {
+    if (!_isCurrent(generation) || completed.isEmpty) return;
+    final newIds = {for (final result in completed) ...result.newConversationIds};
+    final updatedIds = {for (final result in completed) ...result.updatedConversationIds}..removeAll(newIds);
+    if (newIds.isEmpty && updatedIds.isEmpty) return;
+    conversationCompletions.value =
+        SyncLocalFilesResponse(newConversationIds: newIds.toList(), updatedConversationIds: updatedIds.toList());
+  }
+}

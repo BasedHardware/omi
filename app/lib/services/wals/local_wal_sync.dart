@@ -47,6 +47,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   /// A cheap view invalidation signal: unrelated live/device sync changes do
   /// not make Home walk the complete WAL index and stat its manual files.
   final ValueNotifier<int> heldRevision = ValueNotifier(0);
+  final ValueNotifier<SyncLocalFilesResponse?> conversationCompletions = ValueNotifier(null);
   DeviceType? sourceDeviceType;
   Future<void> configureDeviceAudio(BleAudioCodec codec, String deviceId, BtDevice device) async {
     sourceDeviceType = device.type;
@@ -199,6 +200,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   @override
   void clearUserData() {
     _sessionGeneration++;
+    conversationCompletions.value = null;
     _lastStaleWalReportAt = null;
     cancelSync();
     // Back-fill the owner on retiring records that predate stamping, while the
@@ -2537,6 +2539,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final generation = _sessionGeneration;
     final resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
+    final completed = <SyncLocalFilesResponse>[];
     bool changed = false;
     final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
     // A restored uploaded row with no job handle cannot ever be polled.
@@ -2657,6 +2660,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
               );
             }
             if (terminalPolicy == SyncJobTerminalPolicy.acknowledge) {
+              if (s.result != null) completed.add(s.result!);
               DebugLogManager.logEvent('reconcile_poll', {
                 'jobId': jobId,
                 'memberWalIds': memberWalIds,
@@ -2753,6 +2757,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       await _saveWalsToFile(generation);
       _notifyUpdated(generation);
     }
+    _publishConversationCompletions(completed, generation);
     return resp;
   }
 }
