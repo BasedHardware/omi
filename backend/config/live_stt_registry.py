@@ -44,7 +44,12 @@ class Target:
         return self.ramp_percent
 
     def at_capacity(self) -> bool:
-        return bool(self.capacity_env and os.getenv(self.capacity_env, 'false').lower() == 'true')
+        from config.refactor_switches import default_off
+
+        return bool(
+            self.capacity_env
+            and default_off(self.capacity_env, os.getenv(self.capacity_env, 'false').lower() == 'true')
+        )
 
 
 def assigned(uid: str | None, salt: str, share: float) -> bool:

@@ -26,6 +26,9 @@ from utils.sync.cap_hold_erasure import erase as _erase
 from utils.observability.held_content import record_recovery, record_pacing
 from utils.observability.stt_cap_dispatch import record_reconciliation
 from utils.sync.cap_recovery_audio import prepare as prepare_audio
+from utils.sync.held_coverage import piece_state, covered_receipt
+from utils.sync.held_piece_split import delegate, attempt_floor
+from utils.sync.cap_recovery_receipts import settled_empty as _settled_empty
 from models.geolocation import Geolocation
 from utils.sync.pipeline import (
     process_segment,
@@ -61,30 +64,6 @@ def _response(receipts: dict) -> dict:
             elif isinstance(value, dict):
                 response.setdefault(key, {}).update(value)
     return response
-
-
-def _settled_empty(receipt: dict[str, Any] | None) -> dict[str, Any] | None:
-    """A dispatch whose provider reply completed with no words is terminal.
-
-    The fenced result checkpoint proves the call finished, so there is nothing
-    to reconcile and nothing to charge; only a dispatch with no completion
-    checkpoint stays ambiguous.
-    """
-    if (
-        not receipt
-        or receipt.get('state') != 'dispatched'
-        or receipt.get('provider_result')
-        or not receipt.get('provider_empty')
-        or not receipt.get('provider_completed_at')
-    ):
-        return None
-    return {
-        **receipt,
-        'state': 'transcribed',
-        'has_content': False,
-        'seconds': 0,
-        'response': {'new_memories': [], 'updated_memories': []},
-    }
 
 
 async def _save(uid: str, snapshot: Any, row: dict, updates: dict) -> bool:
@@ -167,7 +146,10 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
             receipt: dict[str, Any] | None = receipts.get(name)
             if receipt and receipt.get('state') == 'failed_reconciliation':
                 continue
-            attempt = (receipt or {}).get('attempt', 1) if (receipt or {}).get('provider_result') else 1
+            attempt = max(
+                attempt_floor(plan.get(name, {})),
+                (receipt or {}).get('attempt', 1) if (receipt or {}).get('provider_result') else 1,
+            )
             settled = _settled_empty(receipt)
             if settled is not None:
                 # Crash between the result checkpoint and the receipt save.
@@ -212,6 +194,24 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     segment_path, context = await cap_recovery_plan.stage_piece(
                         uid, name, plan[name], directory, local_paths, contexts
                     )
+                    coverage_state = (
+                        await run_blocking(db_executor, piece_state, uid, segment_path, meta, context)
+                        if not cached_result
+                        else None
+                    )
+                    if coverage_state is not None and coverage_state.state == 'partial':
+                        piece = (name, segment_path, context, coverage_state, attempt)
+                        if not await delegate(uid, snapshot, row, piece, plan, receipts, processed, save=_save):
+                            return False
+                        pending = True
+                        continue
+                    if coverage_state is not None:
+                        if not await save_receipt(name, covered_receipt(previous)):
+                            return False
+                        processed.add(name)
+                        if not await _save(uid, snapshot, row, {'processed_paths': sorted(processed)}):
+                            return False
+                        continue
                     language = prefs.get('language') or ''
                     service = (
                         ((receipt or {})['provider'], None, (receipt or {})['model'])
@@ -230,8 +230,6 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                     pending = True
                     continue
                 if not cached_result:
-                    # Consume once per new intent, including ambiguous-call
-                    # retries. Never create a provider-attempt receipt on denial.
                     pacing = await run_blocking(db_executor, cap_recovery_pacing.reserve, plan[name]['seconds'])
                     now = time.time()
                     if pacing.outcome != 'granted':
@@ -249,8 +247,6 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                             return False
                         record_pacing(pacing.outcome, plan[name]['seconds'], now - since)
                         pending = True
-                        # Finish/settle completed siblings below; no more new
-                        # intents from this hold while its retry time is future.
                         break
                     record_pacing('granted', plan[name]['seconds'])
                     if row.get('pacing_deferred_since') and not await _save(
@@ -292,6 +288,11 @@ async def _recover_row(uid: str, snapshot: Any, row: dict[str, Any]) -> bool:
                         target_conversation_id=context.get('target_conversation_id'),
                         geolocation=geolocation,
                         source_position_map=context.get('source_position_map'),
+                        **(
+                            {'recording_session_id': context['recording_session_id']}
+                            if context.get('recording_session_id')
+                            else {}
+                        ),
                         lineage_binding=context.get('lineage_binding'),
                         sync_lane=meta.get('sync_lane', 'fresh'),
                         cap_recovery=True,
@@ -454,19 +455,18 @@ async def recover_selected(uid: str, snapshot: Any) -> bool:
         from utils.batch_pipeline import cap_hold_admission
 
         if await run_blocking(db_executor, cap_hold_admission.enabled_for, row):
-            # Legacy draining/dark: re-enter through batch admission (lane 8). Batch owns the
-            # conversation and usage; the hold is handed off and erased, never settled as legacy.
-            # The same new-dispatch gate as legacy recovery (funded allowance, hard restriction,
-            # daily ceiling) on the hold's original lane: a gated owner's audio stays held.
             if not await run_blocking(db_executor, _new_dispatch_allowed, uid, lane):
                 return False
-            # checkpoint() decrements the held-audio summary in this same transaction (held -> batch_admitted).
             admitted = await cap_hold_admission.admit_held(uid, snapshot, row)
+            if admitted.outcome == 'covered':
+                if not await _save(
+                    uid, snapshot, row, {'state': 'completed', 'finalized': True, 'recovery_response': {}}
+                ):
+                    return False
+                await run_blocking(storage_executor, _settle_and_erase, uid, snapshot, row)
+                return True
             if admitted.outcome not in ('admitted', 'already_admitted'):
                 return False
-            # Batch debits at projection, not here. Reserve the hold's units (the backlog worker's own
-            # candidate units) before the hand-off is durable, so the next candidate sees this spend
-            # (lane 6, Subscription ruling 10-19). Idempotent per hold; settled by the batch outcome.
             await run_blocking(
                 db_executor,
                 partial(

@@ -68,6 +68,34 @@ class RegistryFixture(unittest.TestCase):
         self.write("backend/service.py", "import os\nENABLED_NAME = 'EXAMPLE_ENABLED'\nos.getenv(ENABLED_NAME)\n")
         self.write("config/feature-flags.yaml", self.yaml([flag()]))
 
+    def test_shared_boolean_parser_fail_field_is_enforced(self) -> None:
+        with mock.patch("check_feature_flag_registry.parser_defaults", return_value={"EXAMPLE_ENABLED": "open"}):
+            errors, _ = check(self.root, check_render=False, as_of=date(2026, 10, 1))
+        self.assertTrue(any("EXAMPLE_ENABLED: fail must be open" in error for error in errors))
+
+    def test_renderer_checks_and_generates_parser_fail_field(self) -> None:
+        self.write(
+            "backend/config/refactor_modes.py",
+            "def default_on(name, *, environ=None): return True\n"
+            "def default_off(name, *, environ=None): return False\n",
+        )
+        self.write(
+            "backend/config/example.py",
+            "from config.refactor_switches import default_on\ndef enabled(): return default_on('EXAMPLE_ENABLED', False)\n",
+        )
+        renderer = Path(__file__).with_name("render_feature_flag_registry.py")
+        import sys
+
+        command = [sys.executable, str(renderer), "--root", str(self.root), "--as-of", "2026-10-01"]
+        checked = subprocess.run(command + ["--check-parsers"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 1, checked.stdout + checked.stderr)
+        self.assertIn("EXAMPLE_ENABLED", checked.stderr)
+        rendered = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(rendered.returncode, 0, rendered.stdout + rendered.stderr)
+        checked = subprocess.run(command + ["--check-parsers"], capture_output=True, text=True)
+        self.assertEqual(checked.returncode, 0, checked.stdout + checked.stderr)
+        self.assertEqual(load_registry(self.root / "config/feature-flags.yaml")["flags"][0]["fail"], "open")
+
     def tearDown(self) -> None:
         self.temp.cleanup()
 
