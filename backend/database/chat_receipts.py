@@ -1,9 +1,6 @@
 """Owner-scoped message lookup for persisted chat receipt updates."""
 
-import logging
 from typing import Any
-
-logger = logging.getLogger(__name__)
 
 
 def message_receipt_snapshot(user_ref: Any, message_id: str, transaction: Any) -> Any | None:
