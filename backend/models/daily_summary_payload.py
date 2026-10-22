@@ -13,27 +13,27 @@ class DailySummaryHighlight(BaseModel):
 
 class DailySummaryQuestion(BaseModel):
     question: str
-    conversation_number: int | None = None
+    conversation_number: Optional[int] = None
 
 
 class DailySummaryDecision(BaseModel):
     decision: str
-    conversation_number: int | None = None
+    conversation_number: Optional[int] = None
 
 
 class DailySummaryKnowledgeNugget(BaseModel):
     insight: str
-    conversation_number: int | None = None
+    conversation_number: Optional[int] = None
 
 
 class DailySummaryDayStatsPayload(BaseModel):
-    total_conversations: int = 0
-    total_duration_minutes: int = 0
-    action_items_count: int = 0
-    memories_created: int = 0
-    action_items_created: int = 0
-    watching_minutes: int = 0
-    proactive_moments: int = 0
+    total_conversations: int = Field(default=0, ge=0)
+    total_duration_minutes: int = Field(default=0, ge=0)
+    action_items_count: int = Field(default=0, ge=0)
+    memories_created: int = Field(default=0, ge=0)
+    action_items_created: int = Field(default=0, ge=0)
+    watching_minutes: int = Field(default=0, ge=0)
+    proactive_moments: int = Field(default=0, ge=0)
 
 
 class DailySummaryPayload(BaseModel):
@@ -44,7 +44,7 @@ class DailySummaryPayload(BaseModel):
     unresolved_questions: list[DailySummaryQuestion] = Field(default_factory=list)
     decisions_made: list[DailySummaryDecision] = Field(default_factory=list)
     knowledge_nuggets: list[DailySummaryKnowledgeNugget] = Field(default_factory=list)
-    stats: DailySummaryDayStatsPayload | None = None
+    stats: Optional[DailySummaryDayStatsPayload] = None
 
 
 class LearnedMemoryRef(BaseModel):
