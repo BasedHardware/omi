@@ -13,6 +13,11 @@ from fastapi import HTTPException
 import utils.other.notifications as notif
 
 
+@pytest.fixture(autouse=True)
+def isolate_generation_status_store(monkeypatch):
+    monkeypatch.setattr(notif.daily_summaries_db, 'set_daily_summary_generation_status', MagicMock())
+
+
 class _FakeConvo:
     """A conversation whose day has something to summarize (non-empty overview).
 
@@ -1017,3 +1022,21 @@ def test_retry_push_acknowledged_before_later_work_cannot_be_sent_again(monkeypa
     asyncio.run(notif._send_bulk_summary_notification([user], stats=retry_stats, target_hour=11))
     assert retry_stats.retry_recipients == {}
     assert len(sent) == 1
+
+
+def test_generation_status_is_persisted_before_model_call(monkeypatch):
+    _install_generation_fakes(monkeypatch)
+    notif.generate_and_store_daily_summary('synthetic-owner', '2026-10-20', None, None)
+    notif.daily_summaries_db.set_daily_summary_generation_status.assert_called_once_with(
+        'synthetic-owner', '2026-10-20', 'pending'
+    )
+
+
+def test_generation_failure_persists_failed_status(monkeypatch):
+    _install_generation_fakes(monkeypatch)
+    monkeypatch.setattr(
+        notif, 'generate_comprehensive_daily_summary', MagicMock(side_effect=RuntimeError('synthetic failure'))
+    )
+    with pytest.raises(RuntimeError, match='synthetic failure'):
+        notif.generate_and_store_daily_summary('synthetic-owner', '2026-10-20', None, None)
+    assert notif.daily_summaries_db.set_daily_summary_generation_status.call_args.args[-1] == 'failed'

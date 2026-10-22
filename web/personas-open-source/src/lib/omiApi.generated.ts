@@ -1943,10 +1943,16 @@ export interface DailySummaryDayStats {
   action_items_count?: number | null;
   action_items_created?: number | null;
   memories_created?: number | null;
+  memories_learned_count?: number | null;
   proactive_moments?: number | null;
+  reported_device_watching_minutes?: number | null;
+  summarized_conversations?: number | null;
   total_conversations?: number | null;
   total_duration_minutes?: number | null;
+  watching_coverage?: string | null;
   watching_minutes?: number | null;
+  watching_minutes_basis?: string | null;
+  watching_minutes_unit?: string;
 }
 
 export interface DailySummaryDecisionMade {
@@ -2811,13 +2817,17 @@ export interface FrameRequestStateUpdate {
 
 export interface FullConversation {
   apps_results?: Array<AppResult>;
+  calendar_event_id?: string | null;
+  call_platform?: string | null;
   finished_at: string | null;
   id: string;
+  is_call?: boolean | null;
   language?: string | null;
   match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
   participants?: Array<Record<string, unknown>>;
   participants_included?: boolean;
   person_ids?: Array<string>;
+  source?: string | null;
   started_at: string | null;
   structured: SimpleStructured;
   transcript_segments?: Array<SimpleTranscriptSegment>;
@@ -4940,6 +4950,7 @@ export interface SimpleActionItem {
   description: string;
   due_at?: string | null;
   id: string;
+  source?: string | null;
   updated_at?: string | null;
 }
 
@@ -4953,13 +4964,17 @@ export interface SimpleChatMessage {
 
 export interface SimpleConversation {
   apps_results?: Array<AppResult>;
+  calendar_event_id?: string | null;
+  call_platform?: string | null;
   finished_at: string | null;
   id: string;
+  is_call?: boolean | null;
   language?: string | null;
   match_snippets?: Array<routers__mcp__TranscriptMatchSnippet>;
   participants?: Array<Record<string, unknown>>;
   participants_included?: boolean;
   person_ids?: Array<string>;
+  source?: string | null;
   started_at: string | null;
   structured: SimpleStructured;
 }
@@ -17596,7 +17611,7 @@ export async function get_chat_messages_v1_mcp_chat_get(query: { limit?: number,
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversations_v1_mcp_conversations_get(query: { start_date?: string | null, end_date?: string | null, categories?: string | null, limit?: number, offset?: number, cursor?: string | null, updated_since?: string | null }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
+export async function get_conversations_v1_mcp_conversations_get(query: { start_date?: string | null, end_date?: string | null, categories?: string | null, limit?: number, offset?: number, cursor?: string | null, updated_since?: string | null, timezone?: string | null }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/conversations`;
   const _params = query ? Object.entries(query)
@@ -17614,7 +17629,7 @@ export async function get_conversations_v1_mcp_conversations_get(query: { start_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function search_conversations_v1_mcp_conversations_search_get(query: { query: string, limit?: number, start_date?: string | null, end_date?: string | null }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
+export async function search_conversations_v1_mcp_conversations_search_get(query: { query: string, limit?: number, start_date?: string | null, end_date?: string | null, timezone?: string | null }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/conversations/search`;
   const _params = query ? Object.entries(query)
@@ -17647,7 +17662,7 @@ export async function get_conversation_by_id_v1_mcp_conversations__conversation_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_daily_summaries_v1_mcp_daily_summaries_get(query: { limit?: number, offset?: number, start_date?: string | null, end_date?: string | null, cursor?: string | null }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
+export async function get_daily_summaries_v1_mcp_daily_summaries_get(query: { limit?: number, offset?: number, start_date?: string | null, end_date?: string | null, cursor?: string | null, timezone?: string | null }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/daily-summaries`;
   const _params = query ? Object.entries(query)
@@ -17908,7 +17923,7 @@ export async function get_user_profile_v1_mcp_profile_get(init?: OmiApiClientIni
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_screen_activity_v1_mcp_screen_activity_get(query: { start_date?: string | null, end_date?: string | null, app?: string | null, summary?: boolean, limit?: number, cursor?: string | null }, init?: OmiApiClientInit): Promise<Array<McpScreenActivityRow> | McpScreenActivitySummaryResponse> {
+export async function get_screen_activity_v1_mcp_screen_activity_get(query: { start_date?: string | null, end_date?: string | null, app?: string | null, summary?: boolean, limit?: number, cursor?: string | null, timezone?: string | null, timestamp_format?: string | null }, init?: OmiApiClientInit): Promise<Array<McpScreenActivityRow> | McpScreenActivitySummaryResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/screen-activity`;
   const _params = query ? Object.entries(query)

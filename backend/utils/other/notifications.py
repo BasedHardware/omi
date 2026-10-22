@@ -234,6 +234,7 @@ def _generate_and_store_daily_summary(
         if prepare_delivery is not None:
             prepare_delivery()
 
+        _record_summary_generation_status(uid, date_str, 'pending')
         summary_data = generate_comprehensive_daily_summary(
             uid,
             conversations,
@@ -265,8 +266,16 @@ def _generate_and_store_daily_summary(
     except Exception:
         # We own this day lock. Failed reads/generation/persistence must permit
         # the saved cohort to retry on the next tick, even after the due hour.
+        _record_summary_generation_status(uid, date_str, 'failed')
         release_daily_summary_lock(uid, date_str)
         raise
+
+
+def _record_summary_generation_status(uid: str, date: str, status: str) -> None:
+    try:
+        daily_summaries_db.set_daily_summary_generation_status(uid, date, status)
+    except Exception:
+        _record_daily_summary_fallback(from_mode='status_marker', to_mode='none', reason='other', outcome='degraded')
 
 
 def _env_float(name: str, default: float) -> float:

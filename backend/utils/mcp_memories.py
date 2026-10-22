@@ -209,7 +209,7 @@ def parse_mcp_bool(value: Any, field_name: str, *, default: bool) -> bool:
     return default if parsed is None else parsed
 
 
-def _datetime_timestamp(value: Any) -> Optional[float]:
+def memory_timestamp(value: Any) -> Optional[float]:
     if isinstance(value, datetime):
         if value.tzinfo is None:
             value = value.replace(tzinfo=timezone.utc)
@@ -257,7 +257,7 @@ def filter_and_sort_memories(
 ) -> List[Dict[str, Any]]:
     category_set = {c for c in categories} if categories else None
     filtered: List[Dict[str, Any]] = []
-    updated_after_ts = _datetime_timestamp(updated_after) if updated_after else None
+    updated_after_ts = memory_timestamp(updated_after) if updated_after else None
     for memory in memories:
         if category_set is not None:
             mem_category = memory.get('category')
@@ -273,113 +273,25 @@ def filter_and_sort_memories(
         if not include_sensitive and is_sensitive_memory(memory):
             continue
         if updated_after_ts is not None:
-            updated_at = _datetime_timestamp(memory.get('updated_at'))
+            updated_at = memory_timestamp(memory.get('updated_at'))
             if updated_at is None or updated_at < updated_after_ts:
                 continue
         filtered.append(memory)
 
     if sort == 'created_desc':
-        filtered.sort(key=lambda item: _datetime_timestamp(item.get('created_at')) or float('-inf'), reverse=True)
+        filtered.sort(key=lambda item: memory_timestamp(item.get('created_at')) or float('-inf'), reverse=True)
     elif sort == 'updated_desc':
-        filtered.sort(key=lambda item: _datetime_timestamp(item.get('updated_at')) or float('-inf'), reverse=True)
+        filtered.sort(key=lambda item: memory_timestamp(item.get('updated_at')) or float('-inf'), reverse=True)
     elif sort == 'manual_first':
         filtered.sort(
             key=lambda item: (
                 bool(item.get('manually_added')),
-                _datetime_timestamp(item.get('updated_at'))
-                or _datetime_timestamp(item.get('created_at'))
-                or float('-inf'),
+                memory_timestamp(item.get('updated_at')) or memory_timestamp(item.get('created_at')) or float('-inf'),
             ),
             reverse=True,
         )
 
     return filtered
-
-
-def collect_filtered_memories(
-    fetch_batch: Callable[[int, int], List[Dict[str, Any]]],
-    *,
-    limit: int,
-    offset: int,
-    reviewed: Optional[bool] = None,
-    manually_added: Optional[bool] = None,
-    include_activity: bool = False,
-    include_sensitive: bool = True,
-    updated_after: Optional[datetime] = None,
-    sort: str = 'scoring_desc',
-    categories: Optional[List[str]] = None,
-    max_scan: int = 5000,
-) -> Dict[str, Any]:
-    target_count = offset + limit + 1
-    requires_global_sort = sort in {'created_desc', 'updated_desc', 'manual_first'}
-    requires_sparse_scan = (
-        requires_global_sort
-        or reviewed is not None
-        or manually_added is not None
-        or updated_after is not None
-        or not include_sensitive
-        or categories is not None
-    )
-    batch_size = min(500, max(100, limit * 3))
-    scanned_count = 0
-    candidates: List[Dict[str, Any]] = []
-
-    while scanned_count < max_scan:
-        batch_limit = min(batch_size, max_scan - scanned_count)
-        batch = fetch_batch(scanned_count, batch_limit)
-        if not batch:
-            break
-        scanned_count += len(batch)
-
-        if requires_sparse_scan:
-            candidates.extend(batch)
-        else:
-            candidates.extend(
-                filter_and_sort_memories(
-                    batch,
-                    reviewed=reviewed,
-                    manually_added=manually_added,
-                    include_activity=include_activity,
-                    include_sensitive=include_sensitive,
-                    updated_after=updated_after,
-                    sort=sort,
-                    categories=categories,
-                )
-            )
-            if len(candidates) >= target_count:
-                break
-
-        if len(batch) < batch_limit:
-            break
-
-    if requires_sparse_scan:
-        candidates = filter_and_sort_memories(
-            candidates,
-            reviewed=reviewed,
-            manually_added=manually_added,
-            include_activity=include_activity,
-            include_sensitive=include_sensitive,
-            updated_after=updated_after,
-            sort=sort,
-            categories=categories,
-        )
-
-    paged = candidates[offset : offset + limit]
-    scan_truncated = scanned_count >= max_scan
-    more_in_window = len(candidates) > offset + limit
-    return {
-        'memories': paged,
-        'returned_count': len(paged),
-        'has_more': more_in_window or scan_truncated,
-        'more_in_window': more_in_window,
-        'offset': offset,
-        'limit': limit,
-        'sort': sort,
-        'include_activity': include_activity,
-        'include_sensitive': include_sensitive,
-        'scanned_count': scanned_count,
-        'scan_truncated': scan_truncated,
-    }
 
 
 def search_default_mcp_memories(
