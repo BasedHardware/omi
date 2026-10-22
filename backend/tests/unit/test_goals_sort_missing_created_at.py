@@ -11,6 +11,12 @@ database.goals binds ``db`` at import (``from database._client import db``), so 
 ``database._client`` must be active before the module is exec'd. This is the sanctioned
 Tier-2 "fake must precede import" case: see backend/docs/test_isolation.md and
 testing/import_isolation.load_module_fresh.
+
+Regression guard added for PR #23293: ``get_user_goals`` must not push its ``limit`` into the
+Firestore query. A query-level limit bounds the page in document-id order before the in-Python
+achieved/abandoned filter runs, so a user whose first page is entirely ended goals silently
+receives fewer than ``limit`` active goals. ``_DocIdOrderedQuery`` mimics that production
+behaviour so the regression test below fails against the old implementation and pins the new one.
 """
 
 import os
@@ -70,8 +76,34 @@ class _Doc:
 
 
 def _set_docs(goals, docs):
+    """Wire the fake Firestore chain so this module is implementation-shape agnostic.
+
+    ``get_user_goals`` streams the full active collection and bounds the result in Python since
+    PR #23293, so production now exercises the direct ``where(...).stream()`` path. The old
+    ``where(...).limit(...).stream()`` chain is wired in parallel so the tests that pin
+    sort/coercion semantics keep passing on either call shape and only exercise the behaviour
+    they are named after; the query-limit starvation case is pinned separately by
+    ``_DocIdOrderedQuery`` below, which honours ``.limit`` the way production Firestore does.
+    """
     chain = goals.db.collection.return_value.document.return_value.collection.return_value
-    chain.where.return_value.limit.return_value.stream.return_value = docs
+    query = chain.where.return_value
+    query.stream.return_value = docs  # post-#23293 shape: no query-level limit
+    query.limit.return_value.stream.return_value = docs  # pre-#23293 shape (mock ignores the bound)
+
+
+class _DocIdOrderedQuery:
+    """Fake Firestore query that honours ``.limit(n)`` the way production does: the page is cut
+    in document-id (list) order before any in-Python filtering can run. The MagicMock helper
+    above ignores ``.limit`` entirely, which cannot pin the page-starvation regression."""
+
+    def __init__(self, docs):
+        self._docs = docs
+
+    def limit(self, n):
+        return _DocIdOrderedQuery(self._docs[:n])
+
+    def stream(self):
+        return iter(self._docs)
 
 
 def test_get_user_goals_handles_goal_missing_created_at(goals):
@@ -107,3 +139,40 @@ def test_get_user_goals_handles_non_datetime_created_at(goals):
     ]
     _set_docs(goals, docs)
     assert [g['id'] for g in goals.get_user_goals('uid1')] == ['g_str', 'g_dt']
+
+
+def test_get_user_goals_query_limit_must_not_starve_active_goals_behind_ended_page(goals):
+    """The doc-id-first page being all achieved/abandoned must not reduce the active set.
+
+    Regression for PR #23293: the old implementation applied ``.limit(limit)`` at the Firestore
+    query level, bounding the page in document-id order BEFORE the in-Python achieved/abandoned
+    filter ran. A user whose first page contained only ended goals silently received fewer than
+    ``limit`` active goals from every caller (proactive suggestions, chat context, the goals API).
+    The fake query below honours ``.limit`` in doc-id order exactly like production Firestore, so
+    this test fails against the old implementation (a page of three ended goals yields zero active
+    goals) and pins the new one: stream the full active set, filter, oldest-first, then slice.
+    """
+    docs = [
+        # Doc-id-ordered first page: entirely ended goals.
+        _Doc('g1_achieved', {'id': 'g1_achieved', 'status': 'achieved', 'created_at': BASE.replace(day=1)}),
+        _Doc('g2_abandoned', {'id': 'g2_abandoned', 'status': 'abandoned', 'created_at': BASE.replace(day=2)}),
+        _Doc('g3_achieved', {'id': 'g3_achieved', 'status': 'achieved', 'created_at': BASE.replace(day=3)}),
+        # Active goals live behind the ended page in doc-id order.
+        _Doc('g4_active', {'id': 'g4_active', 'status': 'background', 'created_at': BASE.replace(day=4)}),
+        _Doc('g5_active', {'id': 'g5_active', 'status': 'background', 'created_at': BASE.replace(day=5)}),
+        _Doc('g6_active', {'id': 'g6_active', 'status': 'paused', 'created_at': BASE.replace(day=6)}),
+    ]
+    chain = goals.db.collection.return_value.document.return_value.collection.return_value
+    saved_where = chain.where.return_value
+    try:
+        chain.where.side_effect = lambda **kwargs: _DocIdOrderedQuery(docs)
+
+        result = goals.get_user_goals('uid1', limit=3)
+    finally:
+        # Restore the shared module-scoped mock so other tests in this module stay isolated.
+        chain.where.side_effect = None
+        chain.where.return_value = saved_where
+
+    # All three active goals are returned despite sitting behind an all-ended doc-id page,
+    # oldest-first. Under the old implementation this returned [] (page was all ended goals).
+    assert [g['id'] for g in result] == ['g4_active', 'g5_active', 'g6_active']
