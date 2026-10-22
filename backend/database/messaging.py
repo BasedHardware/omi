@@ -41,8 +41,27 @@ def _queue_event(reason, path, age):
     logging.getLogger(__name__).warning('Messaging queue reason=%s path=%s head_age_seconds=%.1f', reason, path, age)
 
 
+def _coerce_utc_datetime(value: Any) -> datetime | None:
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        raw = value.strip()
+        if raw.endswith('Z'):
+            raw = raw[:-1] + '+00:00'
+        try:
+            parsed = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
+
+
 def _age(row, now, field='created_at'):
-    return (now - (row.get(field) or row['created_at'])).total_seconds()
+    now_dt = _coerce_utc_datetime(now) or datetime.now(timezone.utc)
+    stamp = _coerce_utc_datetime((row or {}).get(field) or (row or {}).get('created_at'))
+    if stamp is None:
+        return float(STALE_SECONDS)
+    return (now_dt - stamp).total_seconds()
 
 
 _LINK_SETTINGS = ('visible_in_app', 'voice_notes', 'keep_private_memories_in_app', 'insights')
@@ -125,7 +144,7 @@ class MessagingStore:
         row = capacity.get().to_dict() or {}
         member = capacity.collection('members').document(link['uid']).get().to_dict() or {}
         link_id = key(message.channel, message.provider, message.external_user_id)
-        if row.get('initialized') is not True or link_id not in member.get('link_ids', []):
+        if row.get('initialized') is not True or link_id not in (member.get('link_ids') or []):
             raise AccessDenied('seat_cap', 'iMessage seat unavailable — join the waitlist in Omi')
 
     def consume(self, proof, message, *, now=None):
@@ -137,7 +156,9 @@ class MessagingStore:
         def apply(tx):
             token = proof_ref.get(transaction=tx).to_dict()
             existing = identity.get(transaction=tx).to_dict() or {}
-            if not token or token['expires_at'] <= now:
+            expires_at = _coerce_utc_datetime(token.get('expires_at')) if isinstance(token, dict) else None
+            now_dt = _coerce_utc_datetime(now) or datetime.now(timezone.utc)
+            if not token or expires_at is None or expires_at <= now_dt:
                 raise PermissionError('Invalid or expired link proof')
             if (token['channel'], token['provider']) != (message.channel, message.provider):
                 raise PermissionError('Link proof has a different audience')
@@ -160,7 +181,7 @@ class MessagingStore:
                 member_ref = capacity.collection('members').document(uid)
                 member = member_ref.get(transaction=tx).to_dict() or {}
                 seats = capacity.get(transaction=tx).to_dict() or {}
-                link_ids = member.get('link_ids', [])
+                link_ids = list(member.get('link_ids') or [])
                 if not link_ids:
                     if seats.get('initialized') is not True:
                         raise PermissionError('Seat counter needs reconciliation')
@@ -236,7 +257,7 @@ class MessagingStore:
                 member_ref = capacity.collection('members').document(uid)
                 member = member_ref.get(transaction=tx).to_dict() or {}
                 seats = capacity.get(transaction=tx).to_dict() or {}
-                link_ids = member.get('link_ids', [])
+                link_ids = list(member.get('link_ids') or [])
                 if link_id in link_ids:
                     remaining = [value for value in link_ids if value != link_id]
                     if remaining:
@@ -377,7 +398,9 @@ class MessagingStore:
                         path,
                         _age(row, now),
                     )
-                if row.get('album_ready_at', now) > now:
+                album_ready = _coerce_utc_datetime(row.get('album_ready_at'))
+                now_dt = _coerce_utc_datetime(now) or datetime.now(timezone.utc)
+                if album_ready is not None and album_ready > now_dt:
                     return None
                 if row['status'] == 'pending' and (take_head or head.reference.path == path):
                     payload = json.loads(encryption.decrypt(row['payload'], ref.parent.parent.id))
@@ -618,8 +641,8 @@ class MessagingStore:
         @firestore.transactional
         def apply(tx):
             row = ref.get(transaction=tx).to_dict() or {}
-            last = row.get(field)
-            if last and (now - last).total_seconds() < window:
+            last = _coerce_utc_datetime(row.get(field))
+            if last is not None and (now - last).total_seconds() < window:
                 return False
             tx.set(ref, {field: now}, merge=True)
             return True
