@@ -43,15 +43,15 @@ def _normalize_year(value: Any) -> int:
     return value
 
 
-def _normalize_limit(value: Any) -> int:
+def _normalize_limit(value: Any, default: int = MAX_ITEMS) -> int:
     if value is None or value == "":
-        return MAX_ITEMS
+        return default
     if isinstance(value, bool):
         raise ValueError("limit must be an integer, not a boolean")
     if isinstance(value, str):
         value = value.strip()
         if not value:
-            return MAX_ITEMS
+            return default
         if not value.isdigit():
             raise ValueError("limit must be a positive integer")
         value = int(value)
@@ -117,7 +117,7 @@ class NextHolidayRequest(BaseModel):
     @field_validator("limit", mode="before")
     @classmethod
     def normalize_limit(cls, value: Any) -> int:
-        return _normalize_limit(value)
+        return _normalize_limit(value, default=NEXT_HOLIDAY_DEFAULT_LIMIT)
 
 class LongWeekendRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
@@ -195,13 +195,22 @@ def _format_long_weekend(item: Any) -> str:
     return f"- {start_date} to {end_date}: {day_count} days{bridge_text}"
 
 
-async def _request_json(path: str) -> Any:
+async def _request_json(path: str, country_code: Optional[str] = None) -> Any:
     client = getattr(app.state, "http_client", None)
     if client is None or getattr(client, "is_closed", False):
         client = httpx.AsyncClient(timeout=REQUEST_TIMEOUT_SECONDS)
         app.state.http_client = client
-    response = await client.get(f"{NAGER_BASE_URL}{path}")
-    response.raise_for_status()
+    try:
+        response = await client.get(f"{NAGER_BASE_URL}{path}")
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 404:
+            country_info = f" {country_code}" if country_code else ""
+            raise httpx.HTTPError(f"unknown country code{country_info}; call list_supported_countries for valid codes") from exc
+        if exc.response.status_code == 400:
+            err_text = exc.response.text.strip().strip('"')
+            raise httpx.HTTPError(f"invalid request parameters: {err_text}") from exc
+        raise
     if response.status_code == 204 or not response.content:
         return []
     try:
@@ -257,7 +266,7 @@ async def omi_tools() -> dict[str, Any]:
                 "parameters": {
                     "type": "object",
                     "properties": {"country_code": country_schema, "year": year_schema, "limit": limit_schema},
-                    "required": ["country_code", "year"],
+                    "required": ["country_code"],
                 },
             },
             {
@@ -282,7 +291,7 @@ async def omi_tools() -> dict[str, Any]:
                 "parameters": {
                     "type": "object",
                     "properties": {"country_code": country_schema, "year": year_schema, "limit": limit_schema},
-                    "required": ["country_code", "year"],
+                    "required": ["country_code"],
                 },
             },
             {
@@ -299,7 +308,7 @@ async def omi_tools() -> dict[str, Any]:
 @app.post("/tools/get_public_holidays", response_model=ChatToolResponse)
 async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
     try:
-        holidays = await _request_json(f"/PublicHolidays/{request.year}/{request.country_code}")
+        holidays = await _request_json(f"/PublicHolidays/{request.year}/{request.country_code}", country_code=request.country_code)
         if not holidays:
             return ChatToolResponse(error=f"no holidays returned for {request.country_code} in {request.year}")
         if not isinstance(holidays, list):
@@ -316,7 +325,7 @@ async def get_public_holidays(request: HolidayRequest) -> ChatToolResponse:
 @app.post("/tools/get_next_public_holidays", response_model=ChatToolResponse)
 async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolResponse:
     try:
-        holidays = await _request_json(f"/NextPublicHolidays/{request.country_code}")
+        holidays = await _request_json(f"/NextPublicHolidays/{request.country_code}", country_code=request.country_code)
         if not holidays:
             return ChatToolResponse(error=f"no upcoming holidays returned for {request.country_code}")
         if not isinstance(holidays, list):
@@ -333,7 +342,7 @@ async def get_next_public_holidays(request: NextHolidayRequest) -> ChatToolRespo
 @app.post("/tools/get_long_weekends", response_model=ChatToolResponse)
 async def get_long_weekends(request: LongWeekendRequest) -> ChatToolResponse:
     try:
-        weekends = await _request_json(f"/LongWeekend/{request.year}/{request.country_code}")
+        weekends = await _request_json(f"/LongWeekend/{request.year}/{request.country_code}", country_code=request.country_code)
         if not weekends:
             return ChatToolResponse(error=f"no long weekends returned for {request.country_code} in {request.year}")
         if not isinstance(weekends, list):

@@ -324,5 +324,18 @@ class RequestJsonTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(main.app.state.http_client, _RecordingClient.instances[-1])
 
 
+
+class FixRegressionTests(unittest.IsolatedAsyncioTestCase):
+    def test_next_holiday_default_limit_is_eight(self):
+        req = main.NextHolidayRequest(country_code="US")
+        self.assertEqual(req.limit, 8)
+
+    async def test_omi_tools_manifest_year_not_required(self):
+        manifest = await main.omi_tools()
+        tools = {t["name"]: t for t in manifest["tools"]}
+        self.assertEqual(tools["get_public_holidays"]["parameters"]["required"], ["country_code"])
+        self.assertEqual(tools["get_long_weekends"]["parameters"]["required"], ["country_code"])
+
+
 if __name__ == "__main__":
     unittest.main()
