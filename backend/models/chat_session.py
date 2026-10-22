@@ -14,9 +14,12 @@ Collection: users/{uid}/chat_sessions and users/{uid}/messages.
 """
 
 from datetime import datetime
-from typing import Any, Optional
+import logging
+from typing import Any, List, Optional
 
 from pydantic import BaseModel, Field, model_validator
+
+logger = logging.getLogger(__name__)
 
 
 class ChatSessionResponse(BaseModel):
@@ -60,6 +63,21 @@ class ChatSessionResponse(BaseModel):
             data['starred'] = False
 
         return data
+
+    @classmethod
+    def deserialize_many_safe(cls, raw_items: list[Any]) -> List['ChatSessionResponse']:
+        parsed: List['ChatSessionResponse'] = []
+        for item in raw_items:
+            try:
+                if isinstance(item, cls):
+                    parsed.append(item)
+                elif isinstance(item, dict):
+                    parsed.append(cls.model_validate(item))
+                else:
+                    logger.warning("Skipping chat session with unexpected type: %s", type(item))
+            except Exception as e:
+                logger.warning("Skipping malformed chat session record: %s", e)
+        return parsed
 
 
 class SaveMessageResponse(BaseModel):
