@@ -621,7 +621,10 @@ def plan_observation_intake(items: List[MemoryItem], *, llm=None) -> List[Consol
             {'role': 'user', 'content': payload},
         ]
     )
-    return decisions + parser.parse(response.content).decisions
+    content = response.content
+    if not isinstance(content, str):
+        raise ValueError('observation_intake_non_text_response')
+    return decisions + parser.parse(content).decisions
 
 
 def _validate_observation_decision(item: MemoryItem, decision: ConsolidationAgentDecision) -> None:
