@@ -681,6 +681,7 @@ class Gateway:
         )
         context_token = surface_runtime.set(runtime)
         stream = None
+        frames = None
         terminal = False
         turn_error = False
         reply_event = None
@@ -695,7 +696,8 @@ class Gateway:
                 sink,
                 principal=principal,
             )
-            async for frame in _frames_until_superseded(stream, superseded, lambda: _replaceable(sink, runtime)):
+            frames = _frames_until_superseded(stream, superseded, lambda: _replaceable(sink, runtime))
+            async for frame in frames:
                 if frame.startswith('data: '):
                     await sink.text(frame[6:].removesuffix('\n\n').replace('__CRLF__', '\n'))
                 elif frame.startswith('done: '):
@@ -734,6 +736,18 @@ class Gateway:
             # terminal yield. Close in this task's context, before resetting it.
             # Cancellation injects CancelledError at the next await; catch it so
             # the indicator still stops and the context token is always reset.
+            if frames is not None:
+                # Stops the supersede watcher when the loop body raised mid-stream.
+                try:
+                    await frames.aclose()
+                except asyncio.CancelledError:
+                    pass
+                except Exception as error:
+                    logging.getLogger(__name__).warning(
+                        'Messaging frame wrapper close failed provider=%s error_type=%s',
+                        self.adapter.provider,
+                        type(error).__name__,
+                    )
             if stream is not None and hasattr(stream, 'aclose'):
                 try:
                     await stream.aclose()
@@ -939,7 +953,12 @@ async def _try_typing(sink, active=True):
 
 def _replaceable(sink, runtime):
     """A reply may be replaced only while the user has seen none of it and no tool changed anything."""
-    return not sink.finished and not sink.delivered_ids and not runtime.action_receipts
+    return (
+        not sink.finished
+        and not sink.delivered_ids
+        and not getattr(sink, 'drafted', False)
+        and not runtime.action_receipts
+    )
 
 
 async def _frames_until_superseded(stream, superseded, replaceable):
@@ -970,7 +989,9 @@ async def _frames_until_superseded(stream, superseded, replaceable):
     watcher = asyncio.create_task(watch())
     try:
         async for frame in stream:
-            if replaced.is_set() and replaceable():
+            # A terminal frame is delivered as before: its answer is already persisted.
+            terminal = frame.startswith('done: ') or frame.startswith('error: ')
+            if not terminal and replaced.is_set() and replaceable():
                 raise TurnSuperseded()
             yield frame
     finally:

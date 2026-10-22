@@ -105,6 +105,7 @@ class MemoryStore:
                 album_ready_at=ready,
                 identity=(message.channel, message.provider, message.external_user_id),
                 supersedes=row.get('supersedes', False) if row else can_supersede(message),
+                chat=key(message.external_chat_id),
             )
             if album_path is not None:
                 self.jobs[album_path].update(album_tail=sequence, album_part_count=total)
@@ -259,11 +260,12 @@ class MemoryStore:
 
     def superseding_pending(self, path):
         with self.lock:
-            identity = self.jobs[path].get('identity')
+            identity, chat = self.jobs[path].get('identity'), self.jobs[path].get('chat')
             return any(
                 other != path
                 and row['status'] == 'pending'
                 and row.get('identity') == identity
+                and row.get('chat') == chat
                 and row.get('supersedes')
                 for other, row in self.jobs.items()
             )

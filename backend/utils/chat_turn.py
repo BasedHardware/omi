@@ -9,12 +9,13 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, cast
 import logging
 import asyncio
+import time
 import json
 import uuid
 import base64
 from datetime import datetime, timezone
 from typing import Optional
-from utils.executors import db_executor, llm_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking, submit_with_context
 from utils.messaging.receipt_presentation import app_receipt_text
 from utils.chat_citations import resolve_conversation_citations
 from fastapi import HTTPException
@@ -755,19 +756,33 @@ class _LeasedReplySink:
                     # A stopped or failed reply (client Stop, or a new message replacing it) must
                     # free the turn now, not when the lease goes stale. Submitted rather than
                     # awaited: this runs while the stream is being cancelled.
-                    db_executor.submit(self.store.release, self.uid, 'app', self.token)
+                    submit_with_context(db_executor, self.store.release, self.uid, 'app', self.token)
 
         return self.delegate.response(leased(), media_type=media_type)
+
+
+# A message sent right after Stop races the stopped turn's lease release, which runs
+# once the server notices the disconnect. Wait briefly before answering 409.
+APP_TURN_ACQUIRE_ATTEMPTS = 4
+APP_TURN_ACQUIRE_WAIT_SECONDS = 0.25
+
+
+def _acquire_app_turn(uid, sleep=time.sleep):
+    for attempt in range(APP_TURN_ACQUIRE_ATTEMPTS):
+        try:
+            return app_awareness.acquire(uid)
+        except RuntimeError:
+            if attempt + 1 == APP_TURN_ACQUIRE_ATTEMPTS:
+                raise HTTPException(status_code=409, detail='A chat turn is already running') from None
+            sleep(APP_TURN_ACQUIRE_WAIT_SECONDS)
+    raise AssertionError('unreachable')
 
 
 def run_chat_turn(uid, surface, session, message, reply_sink, *, principal, options=None):
     principal.authorize(uid)
     options = options or TurnOptions()
     if surface == 'app' and cohort_enabled(uid):
-        try:
-            store, lease = app_awareness.acquire(uid)
-        except RuntimeError:
-            raise HTTPException(status_code=409, detail='A chat turn is already running') from None
+        store, lease = _acquire_app_turn(uid)
         if store is not None:
             options = replace(options, app_store=store, app_lease=lease)
             reply_sink = _LeasedReplySink(reply_sink, store, uid, lease)

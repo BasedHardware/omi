@@ -964,6 +964,8 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
         // Race each chunk against Stop so a reply that is still thinking stops at once.
         while (await Future.any([iterator.moveNext(), stopped])) {
           final chunk = iterator.current;
+          // A chunk that arrived alongside Stop (even an error) does not undo the stop.
+          if (cancel.isCompleted) break;
           if (chunk.type == MessageChunkType.think) {
             flushBuffer();
             message.thinkings.add(chunk.text);

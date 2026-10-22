@@ -82,3 +82,32 @@ def test_cancelled_stream_releases_the_lease():
     asyncio.run(cancel_mid_stream())
     assert store.event.wait(timeout=1.0)
     assert store.released == [('uid-1', 'app', 'tok-1')]
+
+
+def test_resend_right_after_stop_waits_briefly_for_the_released_lease(monkeypatch):
+    from fastapi import HTTPException
+
+    from utils import chat_turn
+
+    calls, sleeps = [], []
+
+    def acquire(uid):
+        calls.append(uid)
+        if len(calls) < 3:
+            raise RuntimeError('App surface already has an active turn')
+        return 'store', 'token'
+
+    monkeypatch.setattr(chat_turn.app_awareness, 'acquire', acquire)
+    assert chat_turn._acquire_app_turn('uid-1', sleep=sleeps.append) == ('store', 'token')
+    assert len(calls) == 3 and sleeps == [chat_turn.APP_TURN_ACQUIRE_WAIT_SECONDS] * 2
+
+    def busy(uid):
+        raise RuntimeError('App surface already has an active turn')
+
+    monkeypatch.setattr(chat_turn.app_awareness, 'acquire', busy)
+    try:
+        chat_turn._acquire_app_turn('uid-1', sleep=lambda _: None)
+    except HTTPException as error:
+        assert error.status_code == 409
+    else:
+        raise AssertionError('a turn still running must answer 409')

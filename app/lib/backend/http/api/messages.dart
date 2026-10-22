@@ -467,8 +467,9 @@ class VoiceTranscriptionException implements Exception {
 
   const VoiceTranscriptionException({this.statusCode, this.outcome, this.retryable, this.cause});
 
-  /// 5xx, 429 or no response: the recording is fine and a later retry may work.
-  bool get isServerSide => statusCode == null || statusCode! >= 500 || statusCode == 429;
+  /// A 5xx or 429: the fault is ours, the recording is fine and a later retry may work.
+  /// No response (offline) is not reported as our fault.
+  bool get isServerSide => statusCode != null && (statusCode! >= 500 || statusCode == 429);
 
   @override
   String toString() => 'VoiceTranscriptionException(status: $statusCode, outcome: $outcome, retryable: $retryable'

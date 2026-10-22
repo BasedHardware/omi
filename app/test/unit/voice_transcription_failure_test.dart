@@ -32,9 +32,9 @@ void main() {
       expect(error.isServerSide, isFalse);
     });
 
-    test('treats rate limiting and a lost connection as server-side', () {
+    test('treats rate limiting as server-side, but not a lost connection', () {
       expect(voiceTranscriptionFailure(429, '').isServerSide, isTrue);
-      expect(const VoiceTranscriptionException(cause: 'SocketException').isServerSide, isTrue);
+      expect(const VoiceTranscriptionException(cause: 'SocketException').isServerSide, isFalse);
     });
   });
 }

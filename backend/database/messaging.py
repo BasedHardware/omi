@@ -325,8 +325,10 @@ class MessagingStore:
                     'created_at': now,
                     'channel': message.channel,
                     'provider': message.provider,
-                    # Content-free: may this row replace a running reply nobody has seen yet?
+                    # Content-free: may this row replace a running reply nobody has seen yet,
+                    # and in which conversation (one identity can hold several chats).
                     'supersedes': can_supersede(message),
+                    'chat': key(message.external_chat_id),
                 },
             )
             if advances_inbound_head(message, prior):
@@ -681,8 +683,21 @@ class MessagingStore:
         reads only content-free fields.
         """
         ref = self.db.document(path)
-        rows = ref.parent.where('status', '==', 'pending').order_by('created_at').limit(10).stream()
-        return any(row.reference.path != path and (row.to_dict() or {}).get('supersedes') for row in rows)
+        chat = (ref.get(['chat']).to_dict() or {}).get('chat')
+        if not chat:
+            return False  # a row from before this field never gets replaced
+        rows = (
+            ref.parent.where('status', '==', 'pending')
+            .order_by('created_at')
+            .limit(10)
+            .select(['supersedes', 'chat'])
+            .stream()
+        )
+        for row in rows:
+            fields = row.to_dict() or {}
+            if row.reference.path != path and fields.get('supersedes') and fields.get('chat') == chat:
+                return True
+        return False
 
     def pending(self, message):
         """Recovery seam: Stage B's dispatcher periodically scans its owned identities."""

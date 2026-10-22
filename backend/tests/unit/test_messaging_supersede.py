@@ -156,3 +156,53 @@ def test_frame_wrapper_passes_frames_through_when_nothing_replaces(replaceable):
         return [frame async for frame in gateway_module._frames_until_superseded(frames(), never, lambda: replaceable)]
 
     assert asyncio.run(run()) == ['a', 'b']
+
+
+def test_a_reply_the_user_is_watching_as_a_draft_is_not_replaced(monkeypatch):
+    monkeypatch.setattr(gateway_module, 'SUPERSEDE_POLL_SECONDS', 0.01)
+    adapter, store, first = _setup()  # the Telegram adapter streams drafts by default
+
+    def turn(uid, surface, session, request, sink, **kwargs):
+        async def stream():
+            yield 'data: The camera follows\n\n'  # sent as a visible draft
+            for _ in range(20):
+                await asyncio.sleep(0.005)
+                yield 'think: still working\n\n'
+            yield _terminal('The camera follows the runner.')
+
+        return stream()
+
+    gateway = Gateway(adapter, store=store, turn=turn, admission=lambda uid, channel: None, rate_limit=lambda uid: None)
+
+    async def run():
+        running = asyncio.create_task(gateway.process(store.enqueue(first)))
+        await asyncio.sleep(0.03)
+        store.enqueue(replace(first, provider_message_id='second', text='another'))
+        await running
+
+    asyncio.run(run())
+    assert 'The camera follows the runner.' in _sent_texts(adapter)
+
+
+def test_terminal_frame_is_delivered_even_when_a_newer_message_waits(monkeypatch):
+    async def always():
+        return True
+
+    monkeypatch.setattr(gateway_module, 'SUPERSEDE_POLL_SECONDS', 0.0)
+
+    async def run_terminal_only():
+        async def only_terminal():
+            await asyncio.sleep(0.02)
+            yield _terminal('Answer')
+
+        return [frame async for frame in gateway_module._frames_until_superseded(only_terminal(), always, lambda: True)]
+
+    assert asyncio.run(run_terminal_only()) == [_terminal('Answer')]
+
+
+def test_a_message_in_another_chat_does_not_replace_this_reply():
+    _, store, first = _setup()
+    running = store.enqueue(first)
+    store.jobs[running]['status'] = 'running'
+    store.enqueue(replace(first, external_chat_id='group-chat', provider_message_id='g1', text='in another chat'))
+    assert not store.superseding_pending(running)

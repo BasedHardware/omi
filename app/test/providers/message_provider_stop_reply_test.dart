@@ -116,6 +116,25 @@ void main() {
     expect(provider.messages.last.text, 'Here is the progression.');
   });
 
+  test('an error chunk that arrives with Stop does not mark the reply failed', () async {
+    final release = Completer<void>();
+    final provider = MessageProvider()
+      ..replyStreamOverride = (text, {appId, filesId, context, chatSessionId}) async* {
+        yield ServerMessageChunk('r', 'Partial', MessageChunkType.data);
+        await release.future;
+        yield ServerMessageChunk('r', 'Internal error', MessageChunkType.error);
+      };
+
+    final turn = provider.sendMessageStreamToServer('hi');
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    release.complete(); // the error chunk is already on its way
+    await provider.stopReply();
+    await turn;
+
+    expect(provider.isReplyFailed(provider.messages.last), isFalse);
+    expect(provider.messages.last.text, 'Partial');
+  });
+
   test('stopReply with nothing running is a no-op', () async {
     final provider = MessageProvider();
     expect(provider.canStopReply, isFalse);
