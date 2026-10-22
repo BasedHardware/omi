@@ -1,4 +1,0 @@
-{
-  "kind": "none",
-  "note": "legacy-retire sync 15: main merge into integration (main 31756b97). Main already consolidated its own desktop fragments into releases 0.12.514-0.12.517; no new user-facing desktop change from this merge."
-}
