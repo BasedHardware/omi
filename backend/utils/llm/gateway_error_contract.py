@@ -27,6 +27,11 @@ _ANTHROPIC_CREDIT_EXHAUSTED_MARKER = 'credit balance is too low'
 # request; direct-lane BYOK raises it as a plain 402, once in the message and
 # once as the ``limit_source`` metadata value. Either identifies the account state.
 _OPENROUTER_CREDIT_EXHAUSTED_MARKERS = ('requires more credits', 'openrouter_credits')
+# Google AI Studio's stable wording for depleted prepaid credits on the Gemini
+# OpenAI-compatible endpoint (2026-10: Google moved this account state from 429
+# to a plain 402, and the wording is the only classifier — no machine-readable
+# metadata like OpenRouter's ``limit_source``).
+_GEMINI_PREPAYMENT_DEPLETED_MARKER = 'prepayment credits are depleted'
 GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL = 'Error processing conversation, please try again later'
 
 logger = logging.getLogger(__name__)
@@ -91,8 +96,10 @@ def is_byok_quota_error(error: BaseException) -> bool:
     The gateway answers that account state with its ``byok_quota`` credential
     failure class (HTTP 429, in ``_THROTTLED_FAILURE_CLASSES``), while direct
     Anthropic BYOK raises the SDK's ``BadRequestError`` for an exhausted
-    prepaid balance and direct OpenRouter BYOK answers 402 when the account's
-    credits cannot cover the request. All are account state only the user can
+    prepaid balance, direct OpenRouter BYOK answers 402 when the account's
+    credits cannot cover the request, and direct Gemini BYOK (AI Studio's
+    OpenAI-compatible endpoint) answers 402 when the account's prepayment
+    credits are depleted. All are account state only the user can
     fix; every other request shape keeps the generic response.
     """
     if (
@@ -115,7 +122,9 @@ def is_byok_quota_error(error: BaseException) -> bool:
         )
     if status_code == 402:
         text = _bounded_error_text(error)
-        return any(marker in text for marker in _OPENROUTER_CREDIT_EXHAUSTED_MARKERS)
+        return any(
+            marker in text for marker in (*_OPENROUTER_CREDIT_EXHAUSTED_MARKERS, _GEMINI_PREPAYMENT_DEPLETED_MARKER)
+        )
     if status_code != 400:
         return False
     return _ANTHROPIC_CREDIT_EXHAUSTED_MARKER in _bounded_error_text(error)
