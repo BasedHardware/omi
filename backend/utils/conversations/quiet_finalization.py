@@ -121,25 +121,32 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
             check['uid'],
             check['conversation_id'],
             quiet_for=quiet_for,
-        )
-        record_fallback(
-            component='pusher',
-            from_mode='quiet_finalization_admission',
-            to_mode='unstampable_terminal',
-            reason='other',
-            outcome='degraded',
-            log=logger,
+            firestore_client=firestore_client,
+            recovery_fences=True,
         )
         logger.warning(
             'Quiet finalization hit the document size limit conversation=%s close=%s',
             check['conversation_id'],
             close,
         )
-        if close in {'closed', 'missing'}:
-            # Terminal or gone. Stop the due index so the reconciler cannot
-            # re-arm an admission that can never commit; any refusal leaves
-            # the check armed, because an active writer, a row that shrank or
-            # a new durable owner each change the next attempt.
-            checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
+        if close not in {'closed', 'missing'}:
+            # Any bounded refusal (an active writer, a row that shrank below
+            # the ceiling, a new durable owner) leaves the check armed: each
+            # changes what the next replay must do.
+            return f'oversized_{close}'
+        if close == 'closed':
+            # Count the degraded terminal only when it was actually taken,
+            # matching the live listen path's _close_oversized.
+            record_fallback(
+                component='pusher',
+                from_mode='quiet_finalization_admission',
+                to_mode='unstampable_terminal',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+        # Terminal or gone. Stop the due index so the reconciler cannot
+        # re-arm an admission that can never commit.
+        checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
         return f'oversized_{close}'
     return result['status']

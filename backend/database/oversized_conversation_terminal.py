@@ -18,6 +18,8 @@ from typing import Any, Callable, Literal
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database import recording_sessions as recording_sessions_db
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.conversation_terminal_title import (
     TERMINAL_SIZE_HEADROOM_BYTES,
     kept_row_terminal_update,
@@ -26,7 +28,16 @@ from database.conversation_terminal_title import (
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 
 # A bounded log token.
-OversizedInProgressOutcome = Literal['closed', 'missing', 'not_in_progress', 'owned', 'recent_write', 'below_ceiling']
+OversizedInProgressOutcome = Literal[
+    'closed',
+    'missing',
+    'not_in_progress',
+    'owned',
+    'recent_write',
+    'below_ceiling',
+    'recording_active',
+    'account_deleting',
+]
 
 
 def _complete_oversized_in_progress_conversation_txn(
@@ -35,6 +46,11 @@ def _complete_oversized_in_progress_conversation_txn(
     quiet_before: datetime,
     uid: str,
     time_zone_for_uid: Callable[[str], str | None] | None = None,
+    *,
+    conversation_id: str | None = None,
+    recording_sessions_collection: Any | None = None,
+    account_deletion_ref: Any | None = None,
+    now: datetime | None = None,
 ) -> OversizedInProgressOutcome:
     """Close an ``in_progress`` row whose document is at the ceiling, keeping its content.
 
@@ -46,6 +62,16 @@ def _complete_oversized_in_progress_conversation_txn(
     headroom of the ceiling, so a row that has since shrunk keeps normal
     finalization instead. The transcript and every other field stay as stored;
     only optional growth (the deterministic title) is added, and only if it fits.
+
+    The recovery variants of this terminal (quiet finalization) additionally
+    re-assert the admission fences that guarded the failed finalization: a
+    recording session whose lease is still live, or an account-deletion marker
+    that blocks access, refuses the close, because a reconnect that renews only
+    its lease document or a deletion started after that admission read must not
+    have its row terminalized underneath it. An absent session document is not
+    evidence of an active recorder — it can never become known again — so only
+    a live lease refuses; both refusals resolve without operator action (the
+    lease expires or the deletion finishes), leaving the row exactly as it was.
     """
     snapshot = conversation_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -55,6 +81,30 @@ def _complete_oversized_in_progress_conversation_txn(
         return 'not_in_progress'
     if data.get('discarded') or data.get('deleted') or data.get('deferred') or data.get('finalization_job_id'):
         return 'owned'
+    if recording_sessions_collection is not None and conversation_id is not None:
+        # Imported here to keep this terminal a leaf module, mirroring the
+        # lazy ``jobs_db`` import in ``database.recording_sessions``.
+        from database import conversation_finalization_jobs as jobs_db
+
+        effective_now = now or datetime.now(timezone.utc)
+        lease_expiry = jobs_db.recording_session_lease_expiry(
+            transaction,
+            recording_sessions_collection,
+            uid,
+            conversation_id,
+            data,
+            effective_now,
+        )
+        if lease_expiry is not None and lease_expiry > effective_now:
+            return 'recording_active'
+    if account_deletion_ref is not None:
+        marker = account_deletion_ref.get(transaction=transaction)
+        deletion_status = normalize_account_deletion_status(
+            marker_exists=bool(marker.exists),
+            raw_status=(marker.to_dict() or {}).get('wipe_status'),
+        )
+        if account_deletion_blocks_access(deletion_status):
+            return 'account_deleting'
     last_written = getattr(snapshot, 'update_time', None)
     if not isinstance(last_written, datetime) or last_written > quiet_before:
         return 'recent_write'
@@ -68,16 +118,34 @@ def _complete_oversized_in_progress_conversation_txn(
 
 
 def complete_oversized_in_progress_conversation(
-    uid: str, conversation_id: str, *, quiet_for: timedelta, firestore_client: Any = None
+    uid: str,
+    conversation_id: str,
+    *,
+    quiet_for: timedelta,
+    firestore_client: Any = None,
+    recovery_fences: bool = False,
 ) -> OversizedInProgressOutcome:
-    """Terminalize an in_progress conversation too large to accept its finalization binding."""
+    """Terminalize an in_progress conversation too large to accept its finalization binding.
+
+    ``recovery_fences`` re-asserts the SERVER_RECOVERY admission fences (expired
+    recording lease, no blocking account-deletion marker) inside the close
+    transaction; the live-listen sweep keeps relying on its quiet window alone.
+    """
     client = firestore_client if firestore_client is not None else get_firestore_client()
     conversation_ref = client.collection('users').document(uid).collection('conversations').document(conversation_id)
+    user_ref = client.collection('users').document(uid)
+    now = datetime.now(timezone.utc)
     transactional = firestore.transactional(_complete_oversized_in_progress_conversation_txn)
     return transactional(
         client.transaction(),
         conversation_ref,
-        datetime.now(timezone.utc) - quiet_for,
+        now - quiet_for,
         uid,
         lambda zone_uid: user_time_zone(client, zone_uid),
+        conversation_id=conversation_id if recovery_fences else None,
+        recording_sessions_collection=(
+            user_ref.collection(recording_sessions_db.RECORDING_SESSIONS_COLLECTION) if recovery_fences else None
+        ),
+        account_deletion_ref=(client.collection('account_deletions').document(uid) if recovery_fences else None),
+        now=now,
     )

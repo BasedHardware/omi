@@ -488,6 +488,8 @@ def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store
     monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
     assert checks.quiet_deadline(row, 120, uid='synthetic') == NOW - timedelta(minutes=3)
     assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) is None
+
+
 from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgument
 
 
@@ -509,14 +511,20 @@ def test_oversized_row_is_closed_and_the_check_stops_instead_of_redelivering_for
     monkeypatch.setattr(lifecycle, 'request_finalization', refuse)
     closed = {}
 
-    def record_close(uid, conversation_id, *, quiet_for):
+    def record_close(uid, conversation_id, *, quiet_for, firestore_client=None, recovery_fences=None):
         closed['args'] = (uid, conversation_id, quiet_for)
+        closed['client'] = firestore_client
+        closed['recovery_fences'] = recovery_fences
         return 'closed'
 
     monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', record_close)
     assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'oversized_closed'
     uid, conversation_id, quiet_for = closed['args']
     assert (uid, conversation_id) == ('synthetic', 'old')
+    # The terminal close must use the same client the check and admission used,
+    # and re-assert the recovery fences the failed admission passed.
+    assert closed['client'] is store
+    assert closed['recovery_fences'] is True
     # The terminal fence is the check's own recovery cutoff: an instant the
     # failed admission already proved the row stale against, so the close
     # demands exactly the quiet the check itself measured.
@@ -536,7 +544,12 @@ def test_oversized_close_refusal_leaves_the_check_armed_for_the_next_replay(stor
 
     monkeypatch.setattr(lifecycle, 'request_finalization', refuse)
     monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', lambda *a, **k: 'recent_write')
+    fallback = MagicMock()
+    monkeypatch.setattr(quiet, 'record_fallback', fallback)
     assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'oversized_recent_write'
+    # A refused close is ordinary fencing, not a degraded terminal: the fallback
+    # metric must not count it.
+    fallback.assert_not_called()
     assert _job(store)['status'] == 'waiting_quiet'
     assert _job(store)['dispatch_generation'] == 2
 

@@ -143,7 +143,7 @@ def test_a_row_that_is_not_near_the_ceiling_keeps_normal_finalization():
 def test_lifecycle_owner_delegates_with_the_quiet_window(monkeypatch):
     calls = []
 
-    def fake(uid, conversation_id, *, quiet_for):
+    def fake(uid, conversation_id, *, quiet_for, firestore_client=None, recovery_fences=False):
         calls.append((uid, conversation_id, quiet_for))
         return 'closed'
 
@@ -240,3 +240,119 @@ def test_typed_firestore_exceptions_are_classified_by_contract_not_type():
     # generation the same payload can land on.
     assert not is_permanent_firestore_write_rejection(NotFound('no such document'))
     assert not is_permanent_firestore_write_rejection(AlreadyExists('already exists'))
+
+
+class _MarkerSnapshot:
+    def __init__(self, exists: bool, data: dict | None = None) -> None:
+        self.exists = exists
+        self._data = data
+
+    def to_dict(self):
+        return dict(self._data) if self._data is not None else None
+
+
+class _MarkerRef:
+    def __init__(self, snapshot: _MarkerSnapshot) -> None:
+        self.snapshot = snapshot
+
+    def get(self, transaction=None):
+        assert transaction is not None, 'the deletion fence must be read inside the transaction'
+        return self.snapshot
+
+
+class _SessionCollection:
+    def __init__(self, session_row: dict | None = None) -> None:
+        self.session_row = session_row
+
+    def document(self, session_id):
+        return _MarkerRef(_MarkerSnapshot(self.session_row is not None, dict(self.session_row or {})))
+
+
+def _recovery_close(data, *, marker: _MarkerSnapshot | None = None, session_row: dict | None = None):
+    """Drive the terminal exactly as the recovery wrapper does, with its fences."""
+    ref = _Ref(_Snapshot(data, _QUIET_BEFORE - timedelta(days=5)))
+    transaction = _Transaction()
+    outcome = oversized_terminal_db._complete_oversized_in_progress_conversation_txn(
+        transaction,
+        ref,
+        _QUIET_BEFORE,
+        'uid-1',
+        conversation_id='conv-1',
+        recording_sessions_collection=_SessionCollection(session_row),
+        account_deletion_ref=_MarkerRef(marker) if marker is not None else None,
+        now=_NOW,
+    )
+    return outcome, transaction.updates
+
+
+_SESSION_OWNER = {'external_data': {'recording_session_id': 'session-1'}}
+
+
+def test_recovery_close_refuses_a_live_recording_lease_renewed_after_the_failed_admission():
+    session = {
+        'uid': 'uid-1',
+        'conversation_id': 'conv-1',
+        'recording_session_id': 'session-1',
+        'lifecycle_phase': 'in_progress',
+        'lease_expires_at': _NOW + timedelta(minutes=5),
+    }
+    # A lease renewed after the failed admission does not touch the row, so the
+    # quiet-window fence alone would close it; the recovery fence must refuse.
+    outcome, updates = _recovery_close(_at_ceiling(**_SESSION_OWNER), session_row=session)
+    assert outcome == 'recording_active'
+    assert updates == []
+
+
+def test_recovery_close_proceeds_once_the_lease_has_expired():
+    session = {
+        'uid': 'uid-1',
+        'conversation_id': 'conv-1',
+        'recording_session_id': 'session-1',
+        'lifecycle_phase': 'in_progress',
+        'lease_expires_at': _NOW - timedelta(minutes=5),
+    }
+    # Outcome only here; the shrinking status-only write itself is pinned above.
+    assert _recovery_close(_at_ceiling(**_SESSION_OWNER), session_row=session)[0] == 'closed'
+
+
+def test_recovery_close_treats_an_absent_session_document_as_no_lease():
+    # A gone session doc can never become known again; only a live lease refuses.
+    assert _recovery_close(_at_ceiling(**_SESSION_OWNER), session_row=None)[0] == 'closed'
+
+
+def test_recovery_close_refuses_a_blocking_account_deletion_marker():
+    marker = _MarkerSnapshot(True, {'wipe_status': 'pending'})
+    outcome, updates = _recovery_close(_at_ceiling(), marker=marker)
+    assert outcome == 'account_deleting'
+    assert updates == []
+
+
+def test_recovery_close_ignores_the_deletion_fence_when_no_marker_exists():
+    assert _recovery_close(_at_ceiling(), marker=_MarkerSnapshot(False))[0] == 'closed'
+
+
+def test_recovery_fences_are_opt_in_for_the_live_listen_sweep(monkeypatch):
+    """The wrapper only threads the recovery fences when asked, so the live-listen
+    path keeps its existing quiet-window-only contract (its own tests pin it)."""
+    calls = {}
+
+    def fake(uid, conversation_id, *, quiet_for, firestore_client=None, recovery_fences=False):
+        calls['recovery_fences'] = recovery_fences
+        calls['firestore_client'] = firestore_client
+        return 'closed'
+
+    monkeypatch.setattr(oversized_terminal_db, 'complete_oversized_in_progress_conversation', fake)
+
+    assert (
+        lifecycle_service.close_oversized_in_progress_conversation('uid-1', 'conv-1', quiet_for=timedelta(hours=1))
+        == 'closed'
+    )
+    assert calls['recovery_fences'] is False
+    assert (
+        lifecycle_service.close_oversized_in_progress_conversation(
+            'uid-1', 'conv-1', quiet_for=timedelta(hours=1), firestore_client='client', recovery_fences=True
+        )
+        == 'closed'
+    )
+    assert calls['recovery_fences'] is True
+    assert calls['firestore_client'] == 'client'
