@@ -7,12 +7,14 @@ live conversation itself stays open across lulls and reconnects for the occasion
 notes pass at its end, and never needs a merge. Noise that stands apart becomes its own short
 conversation and is discarded by relevance as today.
 
-- ``OCCASION_CONVERSATIONS_ENABLED``: kill switch, on unless set off (``0``/``false``/``off``/``no``).
-- Admission: the episodes cohort plus a capable client (``utils.episodes.client_gate``), so only
-  users whose app shows episodes change behavior.
-- ``OCCASION_GAP_SECONDS``: the silence window. A user's own longer timeout setting still wins.
-- ``OCCASION_MAX_SPAN_SECONDS``: a hard cap on one conversation's span (smart merge's cap), so
-  all-day ambient capture still rolls over and stays under the document size limit.
+- ``OCCASION_CONVERSATIONS_ENABLED`` (env): the one operator lever, a kill switch that is on unless
+  set off (``0``/``false``/``off``/``no``), like the other ship-on-by-default switches.
+- Admission: the episodes cohort plus a capable client (``utils.episodes.client_gate``), and only for
+  the mobile app's own capture: desktop listen sockets keep today's behavior even for the cohort.
+- ``OCCASION_GAP_SECONDS`` (constant, not env): the silence window. A user's own longer timeout
+  setting still wins.
+- ``OCCASION_MAX_SPAN_SECONDS`` (constant, not env): a hard cap on one conversation's span (smart
+  merge's cap), so all-day ambient capture still rolls over and stays under the document size limit.
 """
 
 from __future__ import annotations
@@ -24,10 +26,18 @@ OCCASION_GAP_SECONDS = 15 * 60
 OCCASION_MAX_SPAN_SECONDS = 3 * 60 * 60
 
 _OFF = frozenset({'0', 'false', 'off', 'no'})
+# Sources whose clients do not show episodes; their conversations keep today's boundaries.
+_NOT_OCCASION_SOURCES = frozenset({'desktop'})
 
 
 def occasion_conversations_enabled() -> bool:
     return (os.getenv(OCCASION_CONVERSATIONS_ENABLED_ENV) or '').strip().lower() not in _OFF
+
+
+def occasion_source(source: object) -> bool:
+    """Whether a listen session from this source may be an occasion (mobile app capture only)."""
+    value = getattr(source, 'value', source)
+    return isinstance(value, str) and value not in _NOT_OCCASION_SOURCES
 
 
 def occasion_timeout(timeout: int) -> int:

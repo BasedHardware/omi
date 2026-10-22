@@ -2,12 +2,12 @@
 conversation, outside it (or past the span cap, or for another device or source) it does not."""
 
 from datetime import timedelta
+from unittest.mock import AsyncMock
 
 import pytest
 
 from config import occasion_conversations as config
 from tests.unit.test_listen_reconnect_continuity import CaptureHarness
-from utils.transcribe_decisions import ConversationLifecycleAction
 
 
 @pytest.fixture
@@ -102,7 +102,45 @@ async def test_the_span_cap_stops_joining_and_rolls_the_occasion_over(monkeypatc
     assert later.host.state.current_conversation_id != cid
     # Without occasion mode the cap never applies.
     assert _occasion(harness.connect(client_id='rec-c'), False)._occasion_span_exceeded(row) is False
-    assert ConversationLifecycleAction.process_and_create_new  # the loop's rollover action exists
+
+
+@pytest.mark.anyio
+async def test_the_lifecycle_loop_rolls_a_capped_occasion_over_even_while_it_is_active(monkeypatch):
+    harness = CaptureHarness(monkeypatch)
+    controller = await _open(harness, 'rec-a')
+    cid = controller.host.state.current_conversation_id
+    # Still talking (finished_at is now), but the occasion is three hours old.
+    harness.rows[cid]['started_at'] = harness.now - timedelta(seconds=config.OCCASION_MAX_SPAN_SECONDS)
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id != cid
+    assert harness.creates == 2
+
+
+@pytest.mark.anyio
+async def test_the_lifecycle_loop_keeps_an_active_occasion_under_the_cap(monkeypatch):
+    harness = CaptureHarness(monkeypatch)
+    controller = await _open(harness, 'rec-a')
+    cid = controller.host.state.current_conversation_id
+    harness.rows[cid]['started_at'] = harness.now - timedelta(hours=2)
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id == cid
+    assert harness.creates == 1
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    'state', [{'status': 'processing'}, {'discarded': True}, {'is_locked': True}, {'deleted': True}]
+)
+async def test_an_open_conversation_that_is_not_live_and_clean_is_never_joined(monkeypatch, state):
+    harness = CaptureHarness(monkeypatch)
+    first = await _open(harness, 'rec-a')
+    cid = first.host.state.current_conversation_id
+    harness.rows[cid].update(state)
+    harness.now += timedelta(minutes=3)
+    second = await _open(harness, 'rec-b')
+    assert second.host.state.current_conversation_id != cid
 
 
 def test_the_kill_switch_and_the_window(monkeypatch):
@@ -123,7 +161,10 @@ def test_occasion_mode_needs_admission_and_a_capable_client(monkeypatch):
     monkeypatch.setattr(client_gate, 'episodes_enabled_for', lambda uid: True)
     monkeypatch.setattr(client_gate, 'client_seen_cached', lambda uid: uid == 'beta')
     assert client_gate.occasion_mode('beta') is True
+    assert client_gate.occasion_mode('beta', 'phone') is True
     assert client_gate.occasion_mode('store') is False
+    # The capability marker is per user; a cohort user's desktop capture keeps today's boundaries.
+    assert client_gate.occasion_mode('beta', 'desktop') is False
     monkeypatch.setenv(config.OCCASION_CONVERSATIONS_ENABLED_ENV, 'off')
     assert client_gate.occasion_mode('beta') is False
 
