@@ -227,12 +227,12 @@ class ServingTarget:
     # degrade to INVENTORY instead of asserting the snapshot value.
     opaque_shadowed_keys: frozenset[str] = frozenset()
     # Cloud Run keys whose live secret reference was rewritten from the
-    # revision's ``run.googleapis.com/secrets`` annotation. The platform
-    # normalizes those resources to project *numbers* while the repository
-    # state may carry the project *ID*: a hash mismatch on such a key is
-    # form-ambiguous, not proven drift, so it degrades to INVENTORY. A matching
-    # form still proves OK.
-    alias_resolved_keys: frozenset[str] = frozenset()
+    # revision's ``run.googleapis.com/secrets`` annotation, mapped to a
+    # canonical (project-stripped) hash. The platform normalizes the project
+    # segment to a number while repository state may carry the project ID:
+    # only a difference confined to that segment is ambiguous; name or
+    # version differences stay real drift. A matching full hash proves OK.
+    alias_canonical_hashes: Mapping[str, str] = field(default_factory=dict)
     # Explicit env keys bound through ``valueFrom.configMapKeyRef`` (live reads
     # only). The immutable pod spec proves the binding, but the value the
     # container resolved at start cannot be re-read: K8s requires a pod restart
@@ -313,6 +313,21 @@ def _secret_ref_hash(resource: str, version: str, *, optional: bool = False) -> 
     ref = resource if '/' in resource else resource.rsplit('/', 1)[-1]
     suffix = ':optional' if optional else ''
     return value_hash('secret', f'{ref}:{version or "latest"}{suffix}')
+
+
+_PROJECT_SECRET_RE = re.compile(r'^projects/[^/]+/secrets/(?P<name>[^/]+)$')
+
+
+def _strip_secret_project(resource: str) -> str:
+    """Reduce a secret resource to its bare name; only the dropped parts are form-ambiguous.
+
+    The platform normalizes the project segment to a number in the
+    ``run.googleapis.com/secrets`` annotation while repository state may carry
+    the project ID or the bare name (the service's own project is implicit),
+    so the qualifier cannot be compared; the secret name and version can.
+    """
+    match = _PROJECT_SECRET_RE.match(resource)
+    return match.group('name') if match else resource
 
 
 def env_entry_hash(entry: Mapping[str, Any]) -> str:
@@ -521,14 +536,34 @@ def _is_renderer_secret_entry(entry: Mapping[str, Any]) -> bool:
     )
 
 
+def _canonical_manifest_secret_hash(name: str, entry: object, *, environ: Mapping[str, str]) -> str:
+    """Project-stripped secret hash for a manifest binding (see ``_strip_secret_project``)."""
+    config = render_backend_runtime_env._as_config_dict(entry) or {}
+    if 'secret' in config:
+        resource = str(config['secret'])
+    else:
+        env_var = config.get('env_var')
+        resource = environ.get(env_var, '') if isinstance(env_var, str) else ''
+    return _secret_ref_hash(_strip_secret_project(resource or name), str(config.get('version', 'latest')))
+
+
 def expected_cloud_run_env(
     *,
     env: str,
     manifest_path: Path = DEFAULT_MANIFEST,
     rendered_state_path: Path | None = None,
     environ: Mapping[str, str] | None = None,
+    canonical_secret_hashes: dict[str, dict[str, str]] | None = None,
 ) -> tuple[str, str, dict[str, ExpectedEnv]]:
-    """Expected Cloud Run env per service: rendered deploy state wins over the raw manifest."""
+    """Expected Cloud Run env per service: rendered deploy state wins over the raw manifest.
+
+    When ``canonical_secret_hashes`` is given it receives, per service, a
+    project-stripped hash for every secret binding: a live revision that
+    resolves its secret through the ``run.googleapis.com/secrets`` annotation
+    may legitimately differ in the project segment alone (ID vs number), so
+    the comparison needs the canonical form to tell form differences from
+    real name/version drift.
+    """
     env_config = _manifest_env_config(env, manifest_path)
     project = compute_project(env_config)
     region = str(env_config.get('region') or DEFAULT_REGION)
@@ -554,11 +589,13 @@ def expected_cloud_run_env(
         env_map = render_backend_runtime_env._as_config_dict(service_config.get('env')) or {}
         secrets_map = render_backend_runtime_env._as_config_dict(service_config.get('secrets')) or {}
         service_expected: ExpectedEnv = {}
+        service_canonical: dict[str, str] = {}
         for key, entry in env_map.items():
             # Unresolved deploy-time bindings stay name-only (None): the renderer may omit them.
             service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=False, environ=environ)
         for key, entry in secrets_map.items():
             service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=True, environ=environ)
+            service_canonical[str(key)] = _canonical_manifest_secret_hash(str(key), entry, environ=environ)
         raw_rendered = rendered_services.get(service_name)
         if rendered_state_path is not None and not isinstance(raw_rendered, Mapping):
             # The rendered state is all-or-nothing per service: a missing or
@@ -655,7 +692,14 @@ def expected_cloud_run_env(
         for entry in rendered_service.get('env', []) or []:
             if isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']:
                 service_expected[entry['name']] = env_entry_hash(entry)
+                secret_ref = (entry.get('valueFrom') or {}).get('secretKeyRef')
+                if isinstance(secret_ref, Mapping):
+                    service_canonical[entry['name']] = _secret_ref_hash(
+                        _strip_secret_project(str(secret_ref.get('name', ''))), str(secret_ref.get('key', ''))
+                    )
         expected[str(service_name)] = service_expected
+        if canonical_secret_hashes is not None:
+            canonical_secret_hashes[str(service_name)] = service_canonical
     return project, region, expected
 
 
@@ -947,21 +991,22 @@ def _secret_alias_map(metadata: Mapping[str, Any] | None) -> dict[str, str]:
     return aliases
 
 
-def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> tuple[list[Any], frozenset[str]]:
+def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> tuple[list[Any], dict[str, str]]:
     """Rewrite ``secretKeyRef.name`` aliases to their declared secret resources.
 
     Expected hashes keep a project-qualified reference intact (see
     ``_secret_ref_hash``), so a live alias must resolve through the annotation
     before hashing or a correctly deployed cross-project secret reports a value
     mismatch. Only names the annotation explicitly declares are rewritten.
-    Returns ``(entries, rewritten keys)`` so the comparison can degrade
-    form-ambiguous mismatches on rewritten keys to INVENTORY (the platform
-    normalizes project IDs to numbers in the annotation).
+    Returns ``(entries, canonical hashes)`` where the canonical hash strips the
+    form-ambiguous ``projects/<token>/`` segment: a full-hash difference whose
+    canonical forms match is a project-ID/number form difference (INVENTORY),
+    while a canonical difference is real drift.
     """
     if not isinstance(entries, list) or not aliases:
-        return (entries if isinstance(entries, list) else []), frozenset()
+        return (entries if isinstance(entries, list) else []), {}
     resolved: list[Any] = []
-    rewritten: set[str] = set()
+    canonical: dict[str, str] = {}
     for entry in entries:
         if isinstance(entry, dict):
             value_from = entry.get('valueFrom')
@@ -975,12 +1020,14 @@ def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> tupl
                         'valueFrom': {'secretKeyRef': {**secret, 'name': resource}},
                     }
                     if isinstance(entry_name, str) and entry_name:
-                        rewritten.add(entry_name)
+                        canonical[entry_name] = _secret_ref_hash(
+                            _strip_secret_project(resource), str(secret.get('key', ''))
+                        )
         resolved.append(entry)
-    return resolved, frozenset(rewritten)
+    return resolved, canonical
 
 
-def _revision_env(revision_doc: Mapping[str, Any], *, revision: str) -> tuple[LiveEnv, frozenset[str]]:
+def _revision_env(revision_doc: Mapping[str, Any], *, revision: str) -> tuple[LiveEnv, dict[str, str]]:
     containers = (revision_doc.get('spec') or {}).get('containers')
     container = _application_container(containers, scope=f'Cloud Run revision {revision}')
     env, alias_resolved = _resolve_secret_aliases(
@@ -1053,7 +1100,7 @@ def read_cloud_run_service(
                     '--format=json',
                 ],
             )
-        env, alias_resolved = _revision_env(revision_doc, revision=revision)
+        env, alias_canonical = _revision_env(revision_doc, revision=revision)
         live.targets.append(
             (
                 ServingTarget(
@@ -1062,7 +1109,7 @@ def read_cloud_run_service(
                     key_count=len(env),
                     fingerprint=env_fingerprint(env),
                     display_fingerprint=env_fingerprint(env, redacted=True),
-                    alias_resolved_keys=alias_resolved,
+                    alias_canonical_hashes=alias_canonical,
                 ),
                 env,
             )
@@ -1236,7 +1283,9 @@ def read_gke_workload(
         # contents are never read, so those keys' effective values are
         # unproven until a later known source or an explicit env entry
         # re-binds them; comparing the ConfigMap's snapshot value would
-        # report false drift for a correct rollout.
+        # report false drift for a correct rollout. A prefixed opaque source
+        # can only produce names starting with its prefix, so only those
+        # earlier keys are shadowed.
         target_shadowed_keys: set[str] = set()
         contributed_keys: set[str] = set()
         for identity, is_secret, source_name, source_prefix, optional in descriptors:
@@ -1244,7 +1293,7 @@ def read_gke_workload(
                 # Secrets stay opaque: identity comparison only, keys unresolved.
                 refs_unresolved.add(identity)
                 target_degraded_refs.add(identity)
-                target_shadowed_keys |= contributed_keys
+                target_shadowed_keys |= {key for key in contributed_keys if key.startswith(source_prefix)}
                 continue
             data = resolve_configmap(source_name, optional=optional)
             if data is None:
@@ -1252,9 +1301,10 @@ def read_gke_workload(
                 target_degraded_refs.add(identity)
                 # An unreadable later source is as opaque as a Secret: its keys
                 # are unknown, so it may override any earlier known source's
-                # key (K8s last-source-wins). Earlier keys stay value-unproven
-                # until a later known source re-exports them.
-                target_shadowed_keys |= contributed_keys
+                # key its prefix can reach (K8s last-source-wins). Earlier keys
+                # stay value-unproven until a later known source re-exports
+                # them.
+                target_shadowed_keys |= {key for key in contributed_keys if key.startswith(source_prefix)}
                 continue
             contributed = frozenset(f'{source_prefix}{key}' for key in data)
             if contributed:
@@ -1315,6 +1365,7 @@ def compare_service(
     expected_envfrom_keys: frozenset[str] = frozenset(),
     expected_envfrom_keys_by_ref: Mapping[str, frozenset[str]] | None = None,
     expected_keyref_hashes: Mapping[str, str] | None = None,
+    expected_canonical_secret_hashes: Mapping[str, str] | None = None,
 ) -> ServiceEnvDrift:
     expected_env: ExpectedEnv = expected or {}
     declared = frozenset(expected_env)
@@ -1450,25 +1501,26 @@ def compare_service(
         # asserting the earlier ConfigMap source's value would report false
         # drift. The Secret source's own identity already reports INVENTORY.
         value_excluded |= target.opaque_shadowed_keys
-        # Alias-resolved live secret references came from the platform's
-        # annotation, which normalizes project IDs to project numbers; the
-        # repository state may carry the ID form. A hash difference on such a
-        # key is form-ambiguous, not proven drift: skip the value assertion and
-        # report it as unchecked (INVENTORY) instead. A matching form still
-        # compares OK.
-        alias_unproven |= target.alias_resolved_keys & declared - value_excluded
         for key in sorted(
-            (declared & set(env_map))
-            - target.unproven_envfrom_keys
-            - target.explicit_unproven_keys
-            - value_excluded
-            - alias_unproven
+            (declared & set(env_map)) - target.unproven_envfrom_keys - target.explicit_unproven_keys - value_excluded
         ):
             want = expected_env[key]
-            if want is not None and env_map[key] != want:
-                mismatches.append(
-                    ValueMismatch(key=key, expected_hash=want, live_hash=env_map[key], target=target.name)
-                )
+            if want is None or env_map[key] == want:
+                continue
+            # A key resolved through the run.googleapis.com/secrets annotation
+            # may legitimately differ from the expected reference in the
+            # project segment alone (the platform writes the project number,
+            # repository state may carry the project ID). Only a difference
+            # confined to that segment — canonical (project-stripped) hashes
+            # equal — degrades to INVENTORY; a name or version difference is
+            # real drift.
+            if (
+                key in target.alias_canonical_hashes
+                and (expected_canonical_secret_hashes or {}).get(key) == target.alias_canonical_hashes[key]
+            ):
+                alias_unproven.add(key)
+                continue
+            mismatches.append(ValueMismatch(key=key, expected_hash=want, live_hash=env_map[key], target=target.name))
         # A configMapKeyRef binding is provable from the immutable pod spec
         # even when the resolved ConfigMap data is not: compare the reference
         # identity hashes before degrading a key to INVENTORY. A rollout that
@@ -1599,9 +1651,19 @@ def inspect_services_drift(
     allowlist_map: Mapping[str, frozenset[str]] = LIVE_MANAGED_ENV_ALLOWLIST,
     runner: Any = subprocess.run,
     environ: Mapping[str, str] | None = None,
+    canonical_secret_hashes: dict[str, dict[str, str]] | None = None,
 ) -> tuple[str, str, tuple[ServiceEnvDrift, ...]]:
+    # The canonical map is derived, not caller input: default-construct it so
+    # the alias degradation works for every caller (the parameter stays so
+    # tests can observe what was derived).
+    if canonical_secret_hashes is None:
+        canonical_secret_hashes = {}
     manifest_project, manifest_region, expected_by_service = expected_cloud_run_env(
-        env=env, manifest_path=manifest_path, rendered_state_path=rendered_state_path, environ=environ
+        env=env,
+        manifest_path=manifest_path,
+        rendered_state_path=rendered_state_path,
+        environ=environ,
+        canonical_secret_hashes=canonical_secret_hashes,
     )
     resolved_project = project or manifest_project
     resolved_region = region or manifest_region
@@ -1628,6 +1690,7 @@ def inspect_services_drift(
                     live=live,
                     allowed=allowlist_for_service(service, allowlist_map),
                     platform='cloud_run',
+                    expected_canonical_secret_hashes=(canonical_secret_hashes or {}).get(service) or {},
                 )
             )
         except Exception as exc:

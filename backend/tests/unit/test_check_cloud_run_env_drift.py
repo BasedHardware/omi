@@ -3170,6 +3170,120 @@ def test_cloud_run_secret_alias_project_form_mismatch_degrades_to_inventory(chec
     assert checker.exit_code((sync,), strict=True) == 0
 
 
+def _alias_mismatch_state(checker, *, alias_name: str, annotation_resource: str) -> tuple[dict, dict]:
+    """(state, manifest) for a live revision that resolves ``alias_name`` through the annotation."""
+    serving_env = [{'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': alias_name, 'key': 'latest'}}}]
+    state = _replay_state(serving_env=_sync_env(queue='sync-jobs', repair='true'))
+    state['revisions'][SERVING_REVISION]['spec']['containers'][0]['env'] = serving_env
+    for revision_doc in state['revisions'].values():
+        revision_doc['metadata'] = {
+            'annotations': {checker.SECRET_ALIAS_ANNOTATION: f'{alias_name}:{annotation_resource}'}
+        }
+    state['services']['backend-sync']['spec']['template']['metadata']['annotations'] = {
+        checker.SECRET_ALIAS_ANNOTATION: f'{alias_name}:{annotation_resource}'
+    }
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend-sync': {
+                            'env': {},
+                            'secrets': {'TYPESENSE_HOST': {'secret': 'PLACEHOLDER', 'version': 'latest'}},
+                        }
+                    }
+                },
+            }
+        },
+    }
+    return state, manifest
+
+
+def test_cloud_run_secret_alias_version_difference_is_real_drift(checker, tmp_path: Path) -> None:
+    # Only the project segment of an alias-resolved reference is form-ambiguous.
+    # A version difference — the repository pins version 2 while the serving
+    # revision resolves latest — is unambiguous and must stay proven drift
+    # instead of hiding behind the alias degradation.
+    state, manifest = _alias_mismatch_state(
+        checker, alias_name='SHARED_TOKEN', annotation_resource='projects/123456789/secrets/SHARED_TOKEN'
+    )
+    manifest['environments']['prod']['cloud_run']['services']['backend-sync']['secrets']['TYPESENSE_HOST'] = {
+        'secret': 'projects/based-hardware/secrets/SHARED_TOKEN',
+        'version': '2',
+    }
+    manifest_path = tmp_path / 'runtime_env_version_pin.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.error is None, sync.error
+    assert 'TYPESENSE_HOST' in {m.key for m in sync.value_mismatches}, sync.value_mismatches
+    assert 'TYPESENSE_HOST' not in sync.alias_unproven_keys
+    assert sync.status == 'DRIFT', sync
+    assert checker.exit_code((sync,), strict=True) == 1
+
+
+def test_cloud_run_secret_alias_name_difference_is_real_drift(checker, tmp_path: Path) -> None:
+    # A different secret basename behind the alias is real drift for the same
+    # reason: only the project segment may differ in form.
+    state, manifest = _alias_mismatch_state(
+        checker, alias_name='OTHER_TOKEN', annotation_resource='projects/123456789/secrets/OTHER_TOKEN'
+    )
+    manifest['environments']['prod']['cloud_run']['services']['backend-sync']['secrets']['TYPESENSE_HOST'] = {
+        'secret': 'projects/based-hardware/secrets/EXPECTED_TOKEN',
+        'version': 'latest',
+    }
+    manifest_path = tmp_path / 'runtime_env_other_secret.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.error is None, sync.error
+    assert 'TYPESENSE_HOST' in {m.key for m in sync.value_mismatches}, sync.value_mismatches
+    assert 'TYPESENSE_HOST' not in sync.alias_unproven_keys
+    assert sync.status == 'DRIFT', sync
+    assert checker.exit_code((sync,), strict=True) == 1
+
+
+def test_cloud_run_secret_alias_bare_manifest_name_degrades_to_inventory(checker, tmp_path: Path) -> None:
+    # The manifest's dominant form binds the bare secret name (the service's
+    # own project is implicit) while the annotation carries the fully
+    # qualified resource with the project number. The difference is confined
+    # to the project qualifier, so it degrades to INVENTORY, not false drift.
+    state, manifest = _alias_mismatch_state(
+        checker, alias_name='SHARED_TOKEN', annotation_resource='projects/123456789/secrets/SHARED_TOKEN'
+    )
+    manifest['environments']['prod']['cloud_run']['services']['backend-sync']['secrets']['TYPESENSE_HOST'] = {
+        'secret': 'SHARED_TOKEN',
+        'version': 'latest',
+    }
+    manifest_path = tmp_path / 'runtime_env_bare_name.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.error is None, sync.error
+    assert 'TYPESENSE_HOST' not in {m.key for m in sync.value_mismatches}, sync.value_mismatches
+    assert 'TYPESENSE_HOST' in sync.alias_unproven_keys
+    assert sync.status == 'INVENTORY', sync
+    assert checker.exit_code((sync,), strict=True) == 0
+
+
 def test_gke_unresolved_later_configmap_shadows_earlier_keys(checker) -> None:
     # [A, B] where the snapshot omits B's data: B is as opaque as a Secret
     # (its keys are unknown and may override A's by last-source-wins), so A's
@@ -3202,3 +3316,70 @@ def test_gke_unresolved_later_configmap_shadows_earlier_keys(checker) -> None:
     assert shared not in {m.key for m in result.value_mismatches}
     assert result.status == 'INVENTORY', result
     assert checker.exit_code((result,), strict=True) == 0
+
+
+def test_gke_prefixed_secret_source_shadows_only_matching_keys(checker) -> None:
+    # A prefixed opaque Secret can only produce names starting with its
+    # prefix, so an unprefixed key from the earlier ConfigMap stays provable:
+    # its snapshot value is compared and a real mismatch is reported, instead
+    # of hiding behind the whole-ConfigMap shadow the pre-prefix fix applied.
+    cm_name, shared, literal_value, cm_data = _literal_configmap_key(checker)
+    cm_data[shared] = f'{literal_value}-tampered'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [
+        {'configMapRef': {'name': cm_name}},
+        {'prefix': 'SECRET_', 'secretRef': {'name': 'fixture-shadowing-secret'}},
+    ]
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        render='helm',
+        gke_state=gke_state,
+        runner=_helm_render_runner(deployment, 'pusher', serving_env, envfrom),
+    )
+    assert result.error is None, result.error
+    assert 'secret:fixture-shadowing-secret#SECRET_' in result.envfrom_unresolved
+    assert shared in {m.key for m in result.value_mismatches}, result.value_mismatches
+    assert result.status == 'DRIFT', result
+    assert checker.exit_code((result,), strict=True) == 1
+
+
+def test_gke_prefixed_unresolved_configmap_shadows_only_matching_keys(checker) -> None:
+    # Same confinement for the analogous unresolved-ConfigMap branch: a
+    # ``prefix: CFG_`` source the snapshot cannot read may only override
+    # ``CFG_*`` names, so an unprefixed earlier key remains value-comparable.
+    cm_name, shared, literal_value, cm_data = _literal_configmap_key(checker)
+    cm_data[shared] = f'{literal_value}-tampered'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [
+        {'configMapRef': {'name': cm_name}},
+        {'prefix': 'CFG_', 'configMapRef': {'name': 'fixture-unreadable-config'}},
+    ]
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        render='helm',
+        gke_state=gke_state,
+        runner=_helm_render_runner(deployment, 'pusher', serving_env, envfrom),
+    )
+    assert result.error is None, result.error
+    assert 'fixture-unreadable-config#CFG_' in result.envfrom_unresolved
+    assert shared in {m.key for m in result.value_mismatches}, result.value_mismatches
+    assert result.status == 'DRIFT', result
+    assert checker.exit_code((result,), strict=True) == 1
