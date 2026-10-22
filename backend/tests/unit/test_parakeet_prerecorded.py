@@ -119,22 +119,8 @@ class TestFactoryRouting:
         monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
         assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
 
-    def test_deepgram_client_is_constructed_lazily_once(self, monkeypatch):
-        client = MagicMock()
-        factory = MagicMock(return_value=client)
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
-        monkeypatch.setattr(pr, 'DeepgramClient', factory)
-        monkeypatch.setenv('DEEPGRAM_API_KEY', 'test-key')
-
-        assert pr._get_deepgram_client() is client
-        assert pr._get_deepgram_client() is client
-        assert factory.call_count == 1
-
     def test_deepgram_process_client_refuses_retired_provider(self, monkeypatch):
         """Deepgram retired 2026-08-27: the client boundary fails closed."""
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: None)
         monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
 
         with pytest.raises(pr.PrerecordedSTTConfigurationError) as exc_info:
@@ -145,11 +131,7 @@ class TestFactoryRouting:
 
     def test_deepgram_byok_cannot_bypass_retirement(self, monkeypatch):
         """Retirement outranks BYOK: no user key reopens the retired provider."""
-        client = MagicMock()
-        factory = MagicMock(return_value=client)
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, '_deepgram_options', MagicMock())
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: 'user-byok-key')
+        factory = MagicMock()
         monkeypatch.setattr(pr, 'DeepgramClient', factory)
         monkeypatch.delenv('DEEPGRAM_API_KEY', raising=False)
 
@@ -159,8 +141,6 @@ class TestFactoryRouting:
 
     def test_managed_credential_cannot_bypass_retirement_either(self, monkeypatch):
         """Deepgram retired 2026-08-27: even a configured managed key refuses."""
-        monkeypatch.setattr(pr, '_deepgram_client', None)
-        monkeypatch.setattr(pr, 'get_byok_key', lambda _provider: None)
         monkeypatch.setenv('DEEPGRAM_API_KEY', 'managed-key')
 
         with pytest.raises(pr.PrerecordedSTTConfigurationError, match='DEEPGRAM_RETIRED'):

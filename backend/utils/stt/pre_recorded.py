@@ -10,7 +10,6 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from io import BytesIO
 from math import ceil
-from threading import RLock
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import httpx
@@ -37,7 +36,6 @@ from config.stt_provider_policy import (
     provider_is_enabled,
 )
 from models.transcript_segment import TranscriptSegment
-from utils.byok import get_byok_key
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
 from utils.stt.stream_close import MODULATE_BUDGET_MARKERS
@@ -202,34 +200,6 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
 
     # Only reachable with every pre-recorded provider disabled, which no retry resolves.
     raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
-
-
-# Lazily initialized because constructing the SDK client at import makes every
-# backend consumer credential-dependent, including schema export and unit discovery.
-_deepgram_client: Optional[DeepgramClient] = None
-_deepgram_client_lock = RLock()
-
-
-def _deepgram_options() -> DeepgramClientOptions:
-    """Build fresh options per client.
-
-    DeepgramClient.__init__ calls config.set_apikey(), so a cached options
-    object shared with a BYOK client rewrites the credential the managed
-    client still holds — every later request would bill that user's key.
-    """
-    return DeepgramClientOptions(options={"keepalive": "true"})
-
-
-def _get_deepgram_client() -> DeepgramClient:
-    global _deepgram_client
-    if _deepgram_client is None:
-        with _deepgram_client_lock:
-            if _deepgram_client is None:
-                api_key = os.getenv('DEEPGRAM_API_KEY')
-                if not api_key:
-                    raise PrerecordedSTTConfigurationError(PrerecordedSTTService.DEEPGRAM, 'DEEPGRAM_API_KEY')
-                _deepgram_client = DeepgramClient(api_key, _deepgram_options())
-    return _deepgram_client
 
 
 def _deepgram_client_for_request() -> DeepgramClient:
