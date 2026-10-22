@@ -353,7 +353,10 @@ class IdleSonioxSocket(STTSocket):
 
             self._metrics.failures.inc()
             self._dead = True
-            self._reason = normalize_live_stt_reason(self._reason, failure_reason(error), default='other')
+            # A reopen failure the classifier cannot name degrades to typed
+            # connection_lost, never the ``other`` metric token: this latch is
+            # the leg's death reason on every later failover hop (P59).
+            self._reason = normalize_live_stt_reason(self._reason, failure_reason(error), default='connection_lost')
             self.idle_reopen_failed = True
             record_stt_provider_connect(provider='soniox', outcome=CONNECT_FAILURE, reason=self._reason)
             return False
