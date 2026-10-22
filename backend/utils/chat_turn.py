@@ -15,7 +15,7 @@ import uuid
 import base64
 from datetime import datetime, timezone
 from typing import Optional
-from utils.executors import db_executor, llm_executor, run_blocking, submit_with_context
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.messaging.receipt_presentation import app_receipt_text
 from utils.chat_citations import resolve_conversation_citations
 from fastapi import HTTPException
@@ -763,6 +763,8 @@ class _LeasedReplySink:
                     # A stopped or failed reply (client Stop, or a new message replacing it) must
                     # free the turn now, not when the lease goes stale. Submitted rather than
                     # awaited: this runs while the stream is being cancelled.
+                    from utils.executors import submit_with_context  # lazy: tests stub utils.executors
+
                     submit_with_context(db_executor, self._release_after_stop)
 
         return self.delegate.response(leased(), media_type=media_type)

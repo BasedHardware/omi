@@ -457,8 +457,9 @@ Future reportMessageServer(String messageId) async {
   wire.GeneratedMessageReportResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
 }
 
-/// A voice-message transcription failure with the server's status and outcome,
-/// so the caller can log what failed and tell a server fault from a bad clip.
+/// A voice-message transcription failure with the server's HTTP status, so the caller can
+/// log what failed and tell a server fault from a bad clip. The body is not read: the status
+/// carries the distinction, and response bodies decode only through generated models.
 class VoiceTranscriptionException implements Exception {
   final int? statusCode;
   final String? outcome;
@@ -474,24 +475,6 @@ class VoiceTranscriptionException implements Exception {
   @override
   String toString() => 'VoiceTranscriptionException(status: $statusCode, outcome: $outcome, retryable: $retryable'
       '${cause == null ? '' : ', cause: $cause'})';
-}
-
-VoiceTranscriptionException voiceTranscriptionFailure(int statusCode, String body) {
-  String? outcome;
-  bool? retryable;
-  try {
-    final decoded = jsonDecode(body);
-    final detail = decoded is Map ? decoded['detail'] : null;
-    if (detail is Map) {
-      final value = detail['outcome'];
-      outcome = value is String ? value : null;
-      final flag = detail['retryable'];
-      retryable = flag is bool ? flag : null;
-    }
-  } on FormatException {
-    // Proxies answer with HTML or plain text; the status code is enough.
-  }
-  return VoiceTranscriptionException(statusCode: statusCode, outcome: outcome, retryable: retryable);
 }
 
 /// Transcribe audio files sequentially (one request per file) to stay under
@@ -512,7 +495,7 @@ Future<String> transcribeVoiceMessage(List<File> audioFiles, {String? language})
     } catch (e) {
       throw VoiceTranscriptionException(cause: e.runtimeType.toString());
     }
-    if (response.statusCode != 200) throw voiceTranscriptionFailure(response.statusCode, response.body);
+    if (response.statusCode != 200) throw VoiceTranscriptionException(statusCode: response.statusCode);
 
     final data = wire.GeneratedVoiceMessageTranscriptionResponse.fromJson(
       jsonDecode(response.body) as Map<String, dynamic>,
