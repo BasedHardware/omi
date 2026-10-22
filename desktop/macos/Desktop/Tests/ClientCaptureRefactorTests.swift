@@ -97,7 +97,7 @@ final class ClientCaptureRefactorTests: XCTestCase {
 }
 
 final class ClientCaptureRefactorStorageTests: XCTestCase {
-  private var owner: String!
+  private var owner = ""
   override func setUp() async throws {
     owner = "l5-tests-\(UUID().uuidString)"
     await RewindDatabase.shared.close()
@@ -110,6 +110,7 @@ final class ClientCaptureRefactorStorageTests: XCTestCase {
     await RewindDatabase.shared.close()
     await TranscriptionStorage.shared.invalidateCache()
     RewindDatabase.currentUserId = nil
+    guard !owner.isEmpty else { return }
     let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("Omi").appendingPathComponent(owner)
     try? FileManager.default.removeItem(at: root)

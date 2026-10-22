@@ -163,3 +163,10 @@ def test_chunk_write_is_fenced_by_account_and_conversation_deletion(store):
         with pytest.raises(HTTPException):
             intake.stage_chunk(owner, 'c', chunk())
         assert not any(key[:2] == ('users', owner) and key[2] == 'from_segments_chunks' for key in store.rows)
+
+
+def test_shadow_metric_outcomes_are_closed():
+    intake.observe('bounded_test', 'unrecognized')
+    samples = [sample for metric in intake.SHADOW.collect() for sample in metric.samples]
+    outcomes = {sample.labels['outcome'] for sample in samples if sample.labels.get('check') == 'bounded_test'}
+    assert outcomes == {'error'}

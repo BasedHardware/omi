@@ -32,8 +32,15 @@ SHADOW = Counter('omi_clients_refactor_shadow_total', 'L5 bounded shadow compari
 
 
 def observe(check: str, outcome: str) -> None:
+    if outcome == 'agree':
+        counter = SHADOW.labels(check=check, outcome='agree')
+    elif outcome == 'disagree':
+        counter = SHADOW.labels(check=check, outcome='disagree')
+    else:
+        outcome = 'error'
+        counter = SHADOW.labels(check=check, outcome='error')
     logger.info('event=refactor_shadow lane=L5 check=%s outcome=%s', check, outcome)
-    SHADOW.labels(check=check, outcome=outcome).inc()
+    counter.inc()
 
 
 class ContinuationFields(BaseModel):
