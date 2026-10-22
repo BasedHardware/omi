@@ -54,6 +54,8 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   void dispose() {
     _helpTimer?.cancel();
     if (!_done) _provider?.cancelActiveScan();
+    // Invalidates the pending handleTap success callback and post-frame connect.
+    _done = true;
     super.dispose();
   }
 
@@ -103,7 +105,9 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   }
 
   void _finish(bool connected) {
-    if (_done) return;
+    // A connect that settles after the reader left the step (Back, Skip, or the step was
+    // disposed) must not advance onboarding a second time or touch a dead context.
+    if (_done || !mounted) return;
     _done = true;
     PlatformManager.instance.analytics
         .track('Onboarding Device Choice', properties: {'choice': connected ? 'connected' : 'skipped'});

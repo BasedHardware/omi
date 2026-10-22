@@ -141,15 +141,27 @@ void main() {
     expect(upgradeY, lessThan(planY));
   });
 
-  testWidgets('no row for a paid reader, a used-up trial, hidden subscription UI or no subscription yet',
-      (tester) async {
+  testWidgets('no row for a paid reader', (tester) async {
     await pump(tester, _response(plan: 'unlimited_v2', trialEligible: true));
     expect(row, findsNothing);
+    expect(find.byKey(const Key('settings_row_planAndUsage')), findsOneWidget);
+  });
+
+  testWidgets('no row when the trial is used up', (tester) async {
     await pump(tester, _response(plan: 'basic', trialEligible: false));
     expect(row, findsNothing);
+    expect(find.byKey(const Key('settings_row_planAndUsage')), findsOneWidget);
+  });
+
+  testWidgets('no row when the build hides subscription UI', (tester) async {
     await pump(tester, _response(plan: 'basic', trialEligible: true, showUi: false));
     expect(row, findsNothing);
+    expect(find.byKey(const Key('settings_row_planAndUsage')), findsOneWidget);
+  });
+
+  testWidgets('no row before the subscription has loaded', (tester) async {
     await pump(tester, null);
     expect(row, findsNothing);
+    expect(find.byKey(const Key('settings_row_planAndUsage')), findsOneWidget);
   });
 }
