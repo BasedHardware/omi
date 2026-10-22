@@ -172,6 +172,8 @@ def routers_bundle():
             "utils.product_metrics",
             "utils.social",
             "utils.notifications",
+            "utils.notification_dispatch",
+            "utils.integration_telemetry",
             "utils.log_sanitizer",
             "utils.request_validation",
             "utils.client_telemetry_metrics",
@@ -184,6 +186,8 @@ def routers_bundle():
             "database.apps",
             "database.webhook_health",
             "database.memories",
+            "database.notifications",
+            "database.announcements",
             "database.auth",
             "database.redis_db",
             "database.chat",
@@ -195,6 +199,8 @@ def routers_bundle():
             "database.firestore_read_origin",
             "models.app",
             "models.other",
+            "models.integrations",
+            "models.announcement",
             "models.shared",
             "models.feedback",
             "models.memory_admin",
@@ -212,6 +218,11 @@ def routers_bundle():
     for _cls_name in ("FeedbackContextHydrated", "FeedbackReport"):
         setattr(common_AutoMocks["models.feedback"], _cls_name, type(_cls_name, (), {}))
     setattr(common_AutoMocks["models.shared"], "StatusResponse", type("StatusResponse", (), {}))
+    for _cls_name in ("FcmTokenResponse", "SaveFcmTokenRequest", "SyncUserTimeZoneRequest"):
+        setattr(common_AutoMocks["models.other"], _cls_name, type(_cls_name, (), {}))
+    setattr(common_AutoMocks["models.integrations"], "IntegrationNotificationResponse", type("IntegrationNotificationResponse", (), {}))
+    for _cls_name in ("Announcement", "AnnouncementType", "Display", "Targeting"):
+        setattr(common_AutoMocks["models.announcement"], _cls_name, type(_cls_name, (), {}))
     setattr(
         common_AutoMocks["models.memory_admin"],
         "ShortTermLifecycleRunResponse",
@@ -241,6 +252,8 @@ def routers_bundle():
             "routers._test_feedback_admin", "routers/feedback_admin.py", common_AutoMocks
         ),
         "metrics": _load_router_isolated("routers._test_metrics", "routers/metrics.py", common_AutoMocks),
+        "notifications": _load_router_isolated("routers._test_notifications", "routers/notifications.py", common_AutoMocks),
+        "announcements": _load_router_isolated("routers._test_announcements", "routers/announcements.py", common_AutoMocks),
     }
 
 
@@ -308,6 +321,8 @@ def test_sibling_admin_and_metrics_verifiers_reject_non_ascii_without_type_error
     fair_use_admin = routers_bundle["fair_use_admin"]
     feedback_admin = routers_bundle["feedback_admin"]
     metrics_router = routers_bundle["metrics"]
+    notifications_router = routers_bundle["notifications"]
+    announcements_router = routers_bundle["announcements"]
 
     monkeypatch.setenv("ADMIN_KEY", "expected-admin-key")
     monkeypatch.setenv("METRICS_SECRET", "expected-metrics-secret")
@@ -336,9 +351,23 @@ def test_sibling_admin_and_metrics_verifiers_reject_non_ascii_without_type_error
             metrics_router.metrics(credentials=creds)
         assert exc.value.status_code == 401
 
+        with pytest.raises(_HTTPException) as exc:
+            notifications_router.send_notification_to_user(data={"uid": "u1", "title": "t", "body": "b"}, secret_key=non_ascii)
+        assert exc.value.status_code == 403
+
+        with pytest.raises(_HTTPException) as exc:
+            announcements_router._verify_admin_key(non_ascii)
+        assert exc.value.status_code == 403
+
     # Valid keys still succeed
     client_telemetry._verify_admin("expected-admin-key")
     assert device_diagnostics._admin_key(x_admin_key="expected-admin-key", x_admin_user="alice").startswith("admin:")
     assert fair_use_admin._verify_admin_key(x_admin_key="expected-admin-key").startswith("admin:")
     assert feedback_admin._verify_admin_key(x_admin_key="expected-admin-key", x_admin_user="alice").startswith("admin:")
     metrics_router.metrics(credentials=types.SimpleNamespace(credentials="expected-metrics-secret"))
+    announcements_router._verify_admin_key("expected-admin-key")
+    with mock.patch.object(notifications_router.hmac, "compare_digest", wraps=notifications_router.hmac.compare_digest) as spy:
+        assert notifications_router.send_notification_to_user(
+            data={"uid": "u1", "title": "t", "body": "b"}, secret_key="expected-admin-key"
+        ) == {"status": "Ok"}
+        spy.assert_called_once_with(b"expected-admin-key", b"expected-admin-key")
