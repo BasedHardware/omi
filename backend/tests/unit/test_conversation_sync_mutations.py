@@ -333,3 +333,86 @@ def test_http_contract_rejects_untyped_or_ambiguous_operations():
     response = client.post('/v1/conversations/conversation-1/mutations', json=payload)
 
     assert response.status_code == 422
+
+
+def test_new_mutation_on_soft_deleted_conversation_raises_not_found():
+    database = _Firestore(_conversation(deleted=True))
+
+    with pytest.raises(mutations_db.ConversationMutationNotFoundError):
+        _apply(database)
+
+    assert len(database.rows) == 1
+    receipt_paths = [p for p in database.rows if p[-2:-1] == ('mutation_receipts',)]
+    assert len(receipt_paths) == 0
+
+
+def test_retry_replays_committed_mutation_after_conversation_soft_deleted():
+    database = _Firestore(_conversation())
+    first = _apply(database)
+
+    database.rows[database.conversation_path]['deleted'] = True
+    database.update_times[database.conversation_path] = COMMIT_REVISION + timedelta(minutes=1)
+
+    replay = _apply(database)
+
+    assert replay == first
+    assert len(database.transactions[1].write_paths) == 0
+
+
+def test_set_title_mutation_triggers_search_index_sync(monkeypatch: pytest.MonkeyPatch):
+    database = _Firestore(_conversation())
+    synced: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        mutations_db,
+        '_sync_conversation_search_index',
+        lambda uid, conversation_id: synced.append((uid, conversation_id)),
+    )
+
+    response = _apply(database, operation={'type': 'set_title', 'title': 'Indexed Title'})
+
+    assert response['status'] == 'ok'
+    assert synced == [('user-1', 'conversation-1')]
+
+
+def test_set_starred_mutation_does_not_trigger_search_index_sync(monkeypatch: pytest.MonkeyPatch):
+    database = _Firestore(_conversation())
+    synced: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        mutations_db,
+        '_sync_conversation_search_index',
+        lambda uid, conversation_id: synced.append((uid, conversation_id)),
+    )
+
+    response = _apply(database, operation={'type': 'set_starred', 'starred': True})
+
+    assert response['status'] == 'ok'
+    assert synced == []
+
+
+def test_replayed_mutation_does_not_retrigger_search_index_sync(monkeypatch: pytest.MonkeyPatch):
+    database = _Firestore(_conversation())
+    synced: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        mutations_db,
+        '_sync_conversation_search_index',
+        lambda uid, conversation_id: synced.append((uid, conversation_id)),
+    )
+
+    _apply(database, operation={'type': 'set_title', 'title': 'Indexed Title'})
+    assert len(synced) == 1
+
+    _apply(database, operation={'type': 'set_title', 'title': 'Indexed Title'})
+    assert len(synced) == 1
+
+
+def test_sync_state_falls_back_to_generated_title_when_user_title_is_blank():
+    database = _Firestore(_conversation(user_title='', structured={'title': 'Generated Title'}))
+
+    response = _apply(database, operation={'type': 'set_starred', 'starred': True})
+
+    assert response['conversation']['title'] == 'Generated Title'
+
+    database_whitespace = _Firestore(_conversation(user_title='   ', structured={'title': 'Generated Title'}))
+    response_whitespace = _apply(database_whitespace, operation={'type': 'set_starred', 'starred': True})
+
+    assert response_whitespace['conversation']['title'] == 'Generated Title'
