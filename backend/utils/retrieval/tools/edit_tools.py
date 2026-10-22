@@ -18,12 +18,29 @@ from utils.mcp_server.handlers import other as mcp_people
 from utils.retrieval.turn_refs import resolve_edit_ref, tool_error
 
 
-def owner(config):
-    config = config or {}
-    uid = config.get('configurable', {}).get('user_id')
+def owner(config: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(config, dict):
+        raise PermissionError('Authenticated owner required')
+    configurable = config.get('configurable')
+    if not isinstance(configurable, dict):
+        configurable = {}
+    uid = (
+        configurable.get('user_id')
+        or config.get('user_id')
+        or config.get('uid')
+    )
     if not uid:
         raise PermissionError('Authenticated owner required')
-    return uid
+    return str(uid)
+
+
+def _get_configurable(config: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Safely extract non-None configurable dict from config."""
+    if isinstance(config, dict):
+        conf = config.get('configurable')
+        if isinstance(conf, dict):
+            return conf
+    return {}
 
 
 @tool
@@ -33,7 +50,7 @@ def update_conversation(
     title: Optional[str] = None,
     overview: Optional[str] = None,
     *,
-    config: RunnableConfig,
+    config: RunnableConfig = None,
 ) -> str:
     """Change a conversation title and/or overview only when the user asks or confirms a proposed correction.
 
@@ -43,8 +60,9 @@ def update_conversation(
     a transcript or delete a whole conversation. Returns a structured undo receipt.
     """
     uid = owner(config)
+    configurable = _get_configurable(config)
     conversation_id, error = resolve_edit_ref(
-        config.get('configurable', {}),
+        configurable,
         'conversations',
         conversation_id,
         parameter='conversation_id',
@@ -53,12 +71,14 @@ def update_conversation(
     if error:
         return error
     assert conversation_id is not None
-    if not correction.strip() or len(correction) > 2000 or (title is None and overview is None):
+    if not isinstance(correction, str) or not correction.strip() or len(correction) > 2000 or (title is None and overview is None):
         return tool_error('invalid_correction', 'Provide a confirmed correction and a title or overview.')
-    if title is not None and (not title.strip() or len(title) > 300):
-        return tool_error('invalid_title', 'Title must contain 1 to 300 characters.')
-    if overview is not None and (not overview.strip() or len(overview) > 20000):
-        return tool_error('invalid_overview', 'Overview must contain 1 to 20000 characters.')
+    if title is not None:
+        if not isinstance(title, str) or not title.strip() or len(title) > 300:
+            return tool_error('invalid_title', 'Title must contain 1 to 300 characters.')
+    if overview is not None:
+        if not isinstance(overview, str) or not overview.strip() or len(overview) > 20000:
+            return tool_error('invalid_overview', 'Overview must contain 1 to 20000 characters.')
     row = conversations.get_conversation(uid, conversation_id)
     if not row or row.get('deleted'):
         return tool_error('conversation_not_found', 'Conversation not found for the authenticated owner.')
@@ -87,14 +107,22 @@ def update_conversation(
 
 
 @tool
-def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
+def rename_person(person_id: Optional[str] = None, name: Optional[str] = None, *, config: RunnableConfig = None) -> str:
     """Rename a person only when the user asks or confirms a proposed correction.
 
     Retrieve the owned person ID first. Reuses the MCP rename implementation,
     retaining the previous name as an alias. Undo restores the prior name and aliases.
     """
+    if not isinstance(person_id, str) or not person_id.strip():
+        return 'Error: person_id is required.'
+    if not isinstance(name, str) or not name.strip():
+        return 'Error: name is required.'
+    person_id = person_id.strip()
+    name = name.strip()
+
     uid = owner(config)
-    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'people', person_id, parameter='person_id')
+    configurable = _get_configurable(config)
+    resolved_id, error = resolve_edit_ref(configurable, 'people', person_id, parameter='person_id')
     if error:
         return error
     assert resolved_id is not None
@@ -111,20 +139,25 @@ def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
 
 
 @tool
-def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
+def edit_memory(memory_id: Optional[str] = None, content: Optional[str] = None, *, config: RunnableConfig = None) -> str:
     """Edit a saved memory only when the user asks or confirms a proposed correction.
 
     Retrieve the owned memory ID first. Uses the same MemoryService method as MCP,
     preserving canonical correction history. Returns a structured undo receipt.
     """
+    if not isinstance(memory_id, str) or not memory_id.strip():
+        return 'Error: memory_id is required.'
+    if not isinstance(content, str) or not content.strip() or len(content) > 20000:
+        return 'Error: memory content must contain 1 to 20000 characters.'
+    memory_id = memory_id.strip()
+
     uid = owner(config)
-    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    configurable = _get_configurable(config)
+    resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error
     assert resolved_id is not None
     memory_id = resolved_id
-    if not content.strip() or len(content) > 20000:
-        return 'Error: memory content must contain 1 to 20000 characters.'
     db = get_data_plane_firestore_client()
     before = read_canonical_memory_item(uid, memory_id, db_client=db)
     if before is None or before.uid != uid or (before.promotion or {}).get('chat_deleted'):
@@ -142,15 +175,20 @@ def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
 
 
 @tool
-def delete_memory(memory_id: str, *, config: RunnableConfig) -> str:
+def delete_memory(memory_id: Optional[str] = None, *, config: RunnableConfig = None) -> str:
     """Remove a memory from current knowledge only when the user asks or confirms.
 
     Retrieve the owned memory ID first. This is reversible removal, preserving
     canonical history; it is not permanent privacy erasure. Use app privacy
     controls for permanent erasure. Returns a structured undo receipt.
     """
+    if not isinstance(memory_id, str) or not memory_id.strip():
+        return 'Error: memory_id is required.'
+    memory_id = memory_id.strip()
+
     uid = owner(config)
-    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    configurable = _get_configurable(config)
+    resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error
     assert resolved_id is not None
