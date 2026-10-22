@@ -68,7 +68,11 @@ _TASKS = frozenset(
 
 def _gauge(name: str, description: str):
     existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
-    return existing if existing is not None else Gauge(name, description, ['executor', 'task'])
+    if existing is not None:
+        if not isinstance(existing, Gauge) or existing._labelnames != ('executor', 'task'):
+            raise ValueError(f'executor metric {name} already has a different shape')
+        return existing
+    return Gauge(name, description, ['executor', 'task'])
 
 
 EXECUTOR_ACTIVE = _gauge('omi_executor_task_active', 'Active worker tasks by bounded task kind.')

@@ -580,3 +580,24 @@ def test_transition_requires_expected_and_cas_fences_a_racing_writer(monkeypatch
         lifecycle_service.transition('uid', 'conversation', ConversationStatus.merging)
     assert lifecycle_service.begin_merge('uid', 'conversation') is False
     assert claims == [(ConversationStatus.completed, ConversationStatus.merging)]
+
+
+@pytest.mark.parametrize('guard', ['deleted', 'is_locked'])
+def test_merge_cas_rechecks_privacy_guards(lifecycle_store, guard):
+    lifecycle_store.put_conversation('uid', 'conversation', status='completed', **{guard: True})
+    assert lifecycle_service.begin_merge('uid', 'conversation') is False
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == 'completed'
+
+
+def test_explicit_merge_can_include_a_discarded_completed_source(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status='completed', discarded=True)
+    assert lifecycle_service.begin_merge('uid', 'conversation') is True
+    assert lifecycle_store.conversation('uid', 'conversation')['discarded'] is True
+
+
+def test_failed_merge_restores_a_discarded_source_without_restoring_visibility(lifecycle_store):
+    lifecycle_store.put_conversation('uid', 'conversation', status='completed', discarded=True)
+    assert lifecycle_service.begin_merge('uid', 'conversation')
+    assert lifecycle_service.complete('uid', 'conversation')
+    row = lifecycle_store.conversation('uid', 'conversation')
+    assert row['status'] == 'completed' and row['discarded'] is True
