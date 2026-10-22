@@ -39,7 +39,7 @@ def collect_filtered_mcp_memories(
             for offset in range(0, len(snapshots), 100):
                 chunk = snapshots[offset : offset + 100]
                 slots, _ = read_canonical_scan_page(
-                    uid, limit=len(chunk), db_client=db_client, candidate_snapshots=chunk
+                    uid, limit=len(chunk), db_client=db_client, candidate_snapshots=chunk, budget=budget
                 )
                 rows.extend(memory.model_dump(mode='json') for memory, _cursor in slots if memory is not None)
         else:
@@ -60,4 +60,10 @@ def collect_filtered_mcp_memories(
                     )
                     if slots and slots[0][0] is not None:
                         rows.append(slots[0][0].memory.model_dump(mode='json'))
+    if budget is not None and budget.truncated:
+        raise ToolExecutionError(
+            'memory_filter_window_exceeded: request read budget exhausted during policy checks; narrow the filter.',
+            code=-32009,
+            http_status=503,
+        )
     return filter_and_sort_memories(rows, **filters)

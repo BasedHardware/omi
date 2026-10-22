@@ -382,3 +382,18 @@ def test_filtered_memory_budget_exhaustion_cannot_be_empty_success(monkeypatch):
             SimpleNamespace(db_client=object()), OWNER, filters={}, budget=budget
         )
     assert read.call_args.kwargs['budget'] is budget
+
+
+def test_filtered_candidate_policy_checks_share_the_request_budget(monkeypatch):
+    snapshot = SimpleNamespace(id='synthetic-memory')
+    monkeypatch.setattr(memory_reads, 'read_mcp_memory_candidates', MagicMock(side_effect=[[snapshot], []]))
+    policy = MagicMock(return_value=([], True))
+    monkeypatch.setattr(memory_reads, 'read_canonical_scan_page', policy)
+    budget = SimpleNamespace(truncated=False)
+    assert (
+        memory_reads.collect_filtered_mcp_memories(
+            SimpleNamespace(db_client=object()), OWNER, filters={}, budget=budget
+        )
+        == []
+    )
+    assert policy.call_args.kwargs['budget'] is budget
