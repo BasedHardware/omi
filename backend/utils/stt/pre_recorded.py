@@ -760,6 +760,7 @@ def modulate_prerecorded(
     if vendor_fail_fast_enabled():
         # Only the download is retried; the paid bytes path runs once per URL call
         # (its own single transient retry is bounded to 2 Modulate POSTs).
+        audio_bytes = b''
         for download_attempt in (0, 1):
             try:
                 with httpx.Client(timeout=_MODULATE_TIMEOUT) as client:
