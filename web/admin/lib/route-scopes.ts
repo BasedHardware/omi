@@ -183,6 +183,9 @@ export const ROUTE_POLICIES: Record<string, RoutePolicy> = {
   "PATCH /api/organizations/[id]": "partners:write",
 
   // Development
+  // GET only reports whether the local agent endpoint is enabled; the POST
+  // spawn is additionally 404 outside local development (lib/local-agent.ts).
+  "GET /api/omi/agent/customize": "dev:agent",
   "POST /api/omi/agent/customize": "dev:agent",
 
   // Team

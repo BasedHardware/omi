@@ -28,6 +28,7 @@ vi.mock("@/lib/email/invite", () => ({
 
 import { DELETE, GET, PATCH, POST } from "../route";
 import { GET as auditGET } from "../audit/route";
+import { LOCK_COLLECTION } from "@/lib/team/roster";
 import { SCOPES } from "@/lib/admin-access";
 
 const OWNER = "nik-uid-0001";
@@ -504,6 +505,57 @@ describe("multiple owners", () => {
     expect(members().get(OWNER).owner).toBe(true);
     expect(members().get(OWNER_2).owner).toBe(true);
     expect(auditRows()).toEqual([]);
+  });
+});
+
+describe("concurrent invites for the same email", () => {
+  /**
+   * The orphan-cleanup race: invite A provisions the Auth account, then
+   * stalls before its transaction; invite B adopts that account and lands
+   * its roster doc; A's transaction then rejects. A must not delete the
+   * account B's roster doc references. (Without the adopted-account check,
+   * A's rollback deleted the uid out from under B's committed doc.)
+   */
+  it("never deletes an Auth account a concurrent invite adopted", async () => {
+    let releaseA!: () => void;
+    const stalled = new Promise<void>((resolve) => (releaseA = resolve));
+    let aUid: string | null = null;
+    const realCreateUser = state.auth.createUser.bind(state.auth);
+    state.auth.createUser = async (input: { email: string }) => {
+      const user = await realCreateUser(input);
+      aUid = user.uid;
+      await stalled; // A holds the new account right after creating it
+      return user;
+    };
+
+    const inviteA = POST(as(ARCHIT, "POST", { email: "shared@example.com" }));
+    await vi.waitFor(() => expect(aUid).not.toBeNull());
+
+    // B sees the account A provisioned (never provisions its own) and
+    // lands the roster doc while A is still stalled inside createUser.
+    const responseB = await POST(
+      as(OWNER, "POST", { email: "SHARED@example.com", accessRole: "support" })
+    );
+    expect(responseB.status).toBe(201);
+    expect((await responseB.json()).provisioned).toBe(false);
+    expect(members().get(aUid!).accessRole).toBe("support");
+
+    releaseA();
+    const responseA = await inviteA;
+    expect(responseA.status).toBe(409); // already has admin access
+
+    // The account B adopted survives A's rejected invite.
+    expect(state.auth.users.has(aUid!)).toBe(true);
+    expect(state.auth.deleted).toEqual([]);
+    expect(members().get(aUid!).accessRole).toBe("support");
+  });
+
+  it("serializes invites per email on a lock doc", async () => {
+    await POST(as(ARCHIT, "POST", { email: "lock@example.com" }));
+    const inviteLocks = state.db
+      .rows(LOCK_COLLECTION)
+      .filter((row: any) => row.id.startsWith("invite-"));
+    expect(inviteLocks).toHaveLength(1);
   });
 });
 

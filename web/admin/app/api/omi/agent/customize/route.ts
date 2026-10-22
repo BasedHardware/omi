@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
+import { localAgentEnabled, localAgentSpawnEnv } from "@/lib/local-agent";
 import { spawn, type ChildProcess } from "node:child_process";
 import path from "node:path";
 
@@ -56,9 +57,22 @@ function defaultWorkingDir(): string {
   );
 }
 
+/** Reports whether the local agent endpoint is usable; the widget hides while false. */
+export async function GET(request: NextRequest) {
+  const auth = await requireScope(request, "dev:agent");
+  if (auth instanceof NextResponse) return auth;
+  return auth.json({ enabled: localAgentEnabled() });
+}
+
 export async function POST(request: NextRequest) {
   const auth = await requireScope(request, "dev:agent");
   if (auth instanceof NextResponse) return auth;
+
+  // The spawn is a local-development tool only: outside it (or without the
+  // explicit opt-in) the endpoint does not exist, whatever the caller's role.
+  if (!localAgentEnabled()) {
+    return new NextResponse(null, { status: 404 });
+  }
 
   let body: { prompt?: string; model?: string };
   try {
@@ -116,7 +130,7 @@ export async function POST(request: NextRequest) {
       try {
         child = spawn(cmd.bin, [...cmd.args, fullPrompt], {
           cwd,
-          env: process.env,
+          env: localAgentSpawnEnv(),
           stdio: ["ignore", "pipe", "pipe"],
         });
       } catch (err: any) {

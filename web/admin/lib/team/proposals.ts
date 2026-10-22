@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getDb } from "@/lib/firebase/admin";
 import {
@@ -11,12 +10,14 @@ import {
 import { parseAllowlist } from "@/lib/service-account-token";
 import {
   ADMIN_COLLECTION,
+  LOCK_COLLECTION,
   TeamError,
   addMember,
   assignmentSnapshot,
   audit,
   currentActor,
   humanAuditActor,
+  lockDigest,
   removeMember,
   setMemberRole,
   snapshot,
@@ -27,8 +28,6 @@ import {
 } from "@/lib/team/roster";
 
 export const PROPOSAL_COLLECTION = "adminProposals";
-/** Lock docs that serialize proposal creation per agent and per target. */
-export const LOCK_COLLECTION = "adminProposalLocks";
 /** An unapproved proposal stops being approvable after this long. */
 export const PROPOSAL_TTL_MS = 72 * 60 * 60 * 1000;
 /** Per agent, so a misbehaving agent cannot bury the owner in requests. */
@@ -107,9 +106,6 @@ const EXPIRY_ACTOR: AuditActor = {
   id: "proposal-expiry",
   email: null,
 };
-
-const digest = (value: string) =>
-  createHash("sha256").update(value).digest("hex").slice(0, 32);
 
 function agentActor(email: string): AuditActor {
   return { type: "agent", id: email, email };
@@ -205,9 +201,9 @@ export async function createProposal(
   // add_member): any kind of pending change on one target is the same lock,
   // so two different kinds cannot both be pending.
   const locks = db.collection(LOCK_COLLECTION);
-  const agentLock = locks.doc(`agent-${digest(agentEmail.toLowerCase())}`);
+  const agentLock = locks.doc(`agent-${lockDigest(agentEmail.toLowerCase())}`);
   const targetKey = target.uid ?? target.email ?? "";
-  const targetLock = locks.doc(`target-${digest(targetKey)}`);
+  const targetLock = locks.doc(`target-${lockDigest(targetKey)}`);
   await db.runTransaction(async (tx) => {
     await tx.get(agentLock);
     await tx.get(targetLock);

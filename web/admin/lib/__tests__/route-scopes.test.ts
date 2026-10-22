@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeAuth, FakeFirestore } from "./support/fake-firestore";
@@ -58,6 +58,37 @@ beforeEach(() => {
   vi.spyOn(console, "info").mockImplementation(() => {});
 });
 
+/** lib/auth.ts is the guard (and the wall) itself, so it is exempt. */
+const GUARD_FILE = resolve(ROOT, "lib/auth.ts");
+
+/** NextResponse.json construction of a bare error envelope — no scoped data. */
+const ERROR_ENVELOPE = /NextResponse\.json\(\s*\{\s*error\s*[,:}]/g;
+
+function bypassesGuard(file: string): boolean {
+  if (file === GUARD_FILE) return false;
+  return readFileSync(file, "utf8")
+    .replace(ERROR_ENVELOPE, "")
+    .includes("NextResponse.json(");
+}
+
+/** Local lib modules a handler file imports directly (route files use "@/lib/…"). */
+function localHelpersOf(file: string): string[] {
+  const sources = Array.from(
+    readFileSync(file, "utf8").matchAll(/from "(@\/lib\/[^"]+)"/g)
+  );
+  const found: string[] = [];
+  for (const [, specifier] of sources) {
+    const base = resolve(ROOT, specifier.replace("@/", ""));
+    for (const candidate of [`${base}.ts`, `${base}.tsx`, base]) {
+      if (existsSync(candidate) && statSync(candidate).isFile()) {
+        found.push(candidate);
+        break;
+      }
+    }
+  }
+  return found;
+}
+
 describe("route inventory", () => {
   it("declares a policy for every API handler", () => {
     const missing = ALL.filter((h) => !(h.key in ROUTE_POLICIES)).map(
@@ -96,11 +127,9 @@ describe("route inventory", () => {
       ALL.filter((h) => {
         const policy = ROUTE_POLICIES[h.key];
         return isScope(policy) || policy === "member";
-      }).map((h) => h.file)
+      }).flatMap((h) => [h.file, ...localHelpersOf(h.file)])
     );
-    const offenders = Array.from(files).filter((file) =>
-      readFileSync(file, "utf8").includes("NextResponse.json(")
-    );
+    const offenders = Array.from(files).filter((file) => bypassesGuard(file));
     expect(
       offenders,
       "respond via <identity>.json so financial fields are redacted"

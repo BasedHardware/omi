@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { UserRecord } from "firebase-admin/auth";
 import { getAdminAuth, getDb } from "@/lib/firebase/admin";
 import { sendAdminInviteEmail } from "@/lib/email/invite";
@@ -14,6 +15,12 @@ import {
 
 export const ADMIN_COLLECTION = "adminData";
 export const AUDIT_COLLECTION = "adminAuditLog";
+/** Lock docs that serialize proposal creation and invites per target. */
+export const LOCK_COLLECTION = "adminProposalLocks";
+
+/** Stable doc-id digest for lock docs (proposals, invites). */
+export const lockDigest = (value: string) =>
+  createHash("sha256").update(value).digest("hex").slice(0, 32);
 
 /** A person acting in the dashboard; agents never apply changes themselves. */
 export interface HumanActor {
@@ -274,7 +281,15 @@ export async function addMember(
   };
 
   try {
+    // Invites for one normalized email serialize on this lock doc (like the
+    // proposal locks): a concurrent invite's transaction conflicts and re-runs
+    // against whatever this one committed — including the roster doc that
+    // adopted the Auth account this request may have provisioned.
+    const inviteLock = db
+      .collection(LOCK_COLLECTION)
+      .doc(`invite-${lockDigest(email)}`);
     await db.runTransaction(async (tx) => {
+      await tx.get(inviteLock);
       // Re-authorize from the actor's current doc, not the request snapshot.
       const acting = await currentActor(tx, actor);
       if (!hasScope(acting.access, "team:invite")) {
@@ -289,6 +304,7 @@ export async function addMember(
       }
       await approval?.check(tx);
       approval?.commit(tx);
+      tx.set(inviteLock, { updatedAt: new Date().toISOString() });
       tx.set(memberRef, memberDoc);
       audit(tx, {
         action: "member.added",
@@ -304,17 +320,35 @@ export async function addMember(
   } catch (error) {
     // The grant did not land — the actor may have been demoted or removed
     // after the pre-check, or the person already had access. Undo the Auth
-    // account this request created (never one that already existed) so a
-    // rejected invite leaves no orphan behind. Best effort: a delete
-    // failure is logged, not swapped for the original error.
+    // account this request created (never one that already existed, and
+    // never one another request's roster doc adopted while this one was in
+    // flight: re-read adminData/{uid} after the transaction — a concurrent
+    // invite may have landed its grant on the account this request
+    // provisioned, and deleting it now would orphan that doc's uid). Best
+    // effort: a delete failure is logged, not swapped for the original error.
     if (provisioned) {
+      let adopted = true;
       try {
-        await getAdminAuth().deleteUser(firebaseUser.uid);
-      } catch (cleanupError) {
+        adopted = (await memberRef.get()).exists;
+      } catch (readError) {
         console.error(
-          `Could not remove the Auth account provisioned for ${email} after a rejected invite; remove uid ${firebaseUser.uid} manually.`,
-          cleanupError
+          `Could not re-check admin access for ${email} after a rejected invite; keeping uid ${firebaseUser.uid}.`,
+          readError
         );
+      }
+      if (adopted) {
+        console.error(
+          `Keeping the Auth account provisioned for ${email} (uid ${firebaseUser.uid}): a concurrent invite may have granted it admin access; remove the account manually if it is orphaned.`
+        );
+      } else {
+        try {
+          await getAdminAuth().deleteUser(firebaseUser.uid);
+        } catch (cleanupError) {
+          console.error(
+            `Could not remove the Auth account provisioned for ${email} after a rejected invite; remove uid ${firebaseUser.uid} manually.`,
+            cleanupError
+          );
+        }
       }
     }
     throw error;

@@ -171,6 +171,22 @@ function seedEverything() {
       createdAt: "2026-01-01T00:00:00.000Z",
     })
   );
+
+  // A fresh precomputed onboarding payload: the mobile onboarding routes
+  // serve it verbatim from the cache, so the wall must cover cached
+  // payloads too, not just inline computes.
+  state.db
+    .table("admin_stats_payload_cache")
+    .set("onboarding:mobile:v1:first-run:30", {
+      payload: JSON.stringify(
+        financialDocument({
+          days: 30,
+          totalUsers: 2,
+          methodology: "Completion, not views",
+        })
+      ),
+      freshAt: Date.now(),
+    });
 }
 
 beforeEach(() => {
@@ -205,48 +221,59 @@ afterEach(() => {
 });
 
 describe("the financial field wall over every scoped GET handler", () => {
-  it("leaks no financial field to a member who holds every scope except finance:read", async () => {
-    expect(scopedGets.length).toBeGreaterThan(30);
-    for (const h of scopedGets) {
-      const response = await call(h, "member");
-      let body: unknown;
-      try {
-        body = await response.json();
-      } catch {
-        continue; // not JSON (nothing to leak)
+  it(
+    "leaks no financial field to a member who holds every scope except finance:read",
+    { timeout: 30_000 },
+    async () => {
+      expect(scopedGets.length).toBeGreaterThan(30);
+      for (const h of scopedGets) {
+        const response = await call(h, "member");
+        let body: unknown;
+        try {
+          body = await response.json();
+        } catch {
+          continue; // not JSON (nothing to leak)
+        }
+        expect(financialKeys(body), `${h.key} -> ${response.status}`).toEqual(
+          []
+        );
       }
-      expect(financialKeys(body), `${h.key} -> ${response.status}`).toEqual([]);
     }
-  });
+  );
 
-  it("actually served the seeded data, so the scan above is not vacuous", async () => {
-    const byKey = (key: string) => scopedGets.find((h) => h.key === key)!;
-    // route key -> where the non-financial sentinel of the fixture surfaces
-    const carried: [string, string, (body: any) => unknown][] = [
-      ["GET /api/omi/apps", "Sentinel App", (b) => b[0]?.name],
-      ["GET /api/omi/apps/unapproved", "Sentinel App", (b) => b[0]?.name],
-      ["GET /api/omi/apps/[app_id]/details", "Sentinel App", (b) => b.name],
-      ["GET /api/omi/private-apps", "Sentinel App", (b) => b.apps[0]?.name],
-      ["GET /api/omi/summary-apps", "Sentinel App", (b) => b[0]?.name],
-      [
-        "GET /api/omi/fair-use/user/[uid]",
-        "user@example.com",
-        (b) => b.profile?.email,
-      ],
-      ["GET /api/omi/fair-use/flagged", "x1", (b) => b.users[0]?.uid],
-      [
-        "GET /api/organizations",
-        "Acme",
-        (b) => b.organizations[0]?.organisation_name,
-      ],
-      ["GET /api/distributors", "Dist", (b) => b.distributors[0]?.name],
-    ];
-    for (const [key, expected, read] of carried) {
-      const response = await call(byKey(key), "member");
-      expect(response.status, key).toBe(200);
-      expect(read(await response.json()), key).toBe(expected);
+  it(
+    "actually served the seeded data, so the scan above is not vacuous",
+    { timeout: 30_000 },
+    async () => {
+      const byKey = (key: string) => scopedGets.find((h) => h.key === key)!;
+      // route key -> where the non-financial sentinel of the fixture surfaces
+      const carried: [string, unknown, (body: any) => unknown][] = [
+        ["GET /api/omi/apps", "Sentinel App", (b) => b[0]?.name],
+        ["GET /api/omi/apps/unapproved", "Sentinel App", (b) => b[0]?.name],
+        ["GET /api/omi/apps/[app_id]/details", "Sentinel App", (b) => b.name],
+        ["GET /api/omi/private-apps", "Sentinel App", (b) => b.apps[0]?.name],
+        ["GET /api/omi/summary-apps", "Sentinel App", (b) => b[0]?.name],
+        [
+          "GET /api/omi/fair-use/user/[uid]",
+          "user@example.com",
+          (b) => b.profile?.email,
+        ],
+        ["GET /api/omi/fair-use/flagged", "x1", (b) => b.users[0]?.uid],
+        ["GET /api/omi/stats/onboarding/mobile", 2, (b) => b.totalUsers],
+        [
+          "GET /api/organizations",
+          "Acme",
+          (b) => b.organizations[0]?.organisation_name,
+        ],
+        ["GET /api/distributors", "Dist", (b) => b.distributors[0]?.name],
+      ];
+      for (const [key, expected, read] of carried) {
+        const response = await call(byKey(key), "member");
+        expect(response.status, key).toBe(200);
+        expect(read(await response.json()), key).toBe(expected);
+      }
     }
-  });
+  );
 
   it("shows the same fields to a caller who holds finance:read", async () => {
     const apps = scopedGets.find((h) => h.key === "GET /api/omi/apps")!;
