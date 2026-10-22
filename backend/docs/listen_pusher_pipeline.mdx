@@ -6246,9 +6246,12 @@ newest eligible first. A per-user `conversation_recovery_state/stale_in_progress
 CAS cursor advances before attempts, including refusals/errors; value cursors
 survive row deletion. Subsequent reconnects page toward older rows, wrap after
 the tail, and wait at least one minute between page claims. Each call reads at
-most two ten-row pages plus cursor state; concurrent reconnects cannot claim the
-same cursor generation. A process crash can postpone its claimed page until the
-next pass, but cannot pin later pages. Recovery remains reconnect-driven.
+most two ten-row pages plus cursor/deletion-marker state. Concurrent reconnects
+cannot claim the same cursor generation. The claim transaction checks the durable
+account-deletion marker before writing, so an erasure cannot be followed by
+recreated cursor data. Query, cursor and marker share the customer data plane.
+A process crash can postpone its claimed page until the next pass, but cannot pin
+later pages. Recovery remains reconnect-driven.
 
 Discarded, deleted, locked and deferred rows remain protected. The outcome log
 has only the conversation ID and a bounded disposition; it has no UID/content.
