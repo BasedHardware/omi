@@ -65,13 +65,13 @@ def call_fields(signals, context=None):
             if not link and signal.external_id and signal.external_id == context.get('calendar_event_id'):
                 link = context.get('meeting_link')
             if platform := meeting_platform(link):
-                calls.append((1, signal, platform))
+                calls.append((2, signal, platform))
         elif kind in ('desktop_meeting', 'screen_meeting') and getattr(signal, 'call_controls_detected', False) is True:
             platform = getattr(signal, 'call_platform', None) or 'unknown'
             # Never persist a client-supplied arbitrary string as a telemetry-like label.
             calls.append(
                 (
-                    2,
+                    1,
                     signal,
                     (
                         platform
@@ -89,8 +89,11 @@ def call_fields(signals, context=None):
             'other_participants_location': None,
         }
     calls.sort(key=lambda item: (item[0], item[1].started_at.isoformat(), item[1].external_id or ''))
-    _, _, platform = calls[0]
-    event = next((s.external_id for _, s, _ in calls if s.kind == 'calendar_event' and s.external_id), None)
+    priority = calls[0][0]
+    platforms = {p for rank, _, p in calls if rank == priority}
+    platform = next(iter(platforms)) if len(platforms) == 1 else 'unknown'
+    events = {s.external_id for _, s, p in calls if s.kind == 'calendar_event' and s.external_id and p == platform}
+    event = next(iter(events)) if len(events) == 1 else None
     return {
         'is_call': True,
         'call_platform': platform,

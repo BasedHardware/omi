@@ -155,3 +155,21 @@ def test_expired_boundary_index_cannot_erase_durable_call_metadata(monkeypatch):
     )
     calls.apply_call_metadata('synthetic-owner', c)
     assert c.is_call and c.calendar_event_id == 'event-1' and c.call_platform == 'google_meet'
+
+
+def test_joined_call_outranks_a_different_calendar_meeting():
+    calendar = signal('calendar_event', meeting_link='https://meet.google.com/abc-defg-hij')
+    desktop = signal('desktop_meeting', call_controls_detected=True, call_platform='teams')
+    fields = calls.call_fields([calendar, desktop])
+    assert fields['call_platform'] == 'teams'
+    assert fields['calendar_event_id'] is None
+    phone = calls.call_fields([calendar, signal('phone_call')])
+    assert phone['call_platform'] == 'phone' and phone['calendar_event_id'] is None
+
+
+def test_ambiguous_calendar_id_is_not_arbitrarily_linked():
+    first = signal('calendar_event', meeting_link='https://meet.google.com/abc-defg-hij')
+    second = signal('calendar_event', meeting_link='https://meet.google.com/abc-defg-hij')
+    second.external_id = 'event-2'
+    fields = calls.call_fields([first, second])
+    assert fields['is_call'] and fields['calendar_event_id'] is None
