@@ -859,7 +859,7 @@ export interface BoundarySignal {
   confidence?: number;
   ended_at?: string | null;
   external_id?: string | null;
-  kind: "calendar_event" | "desktop_meeting" | "screen_meeting" | "phone_call";
+  kind: "calendar_event" | "desktop_meeting" | "screen_meeting" | "phone_call" | "media_playback";
   participants?: Array<BoundaryParticipant>;
   source_device?: string | null;
   started_at: string;
@@ -1433,6 +1433,7 @@ export interface Conversation {
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
+  content_kind?: "conversation" | "media" | "noise" | null;
   conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
@@ -1633,6 +1634,7 @@ export interface ConversationSearchItem {
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
+  content_kind?: "conversation" | "media" | "noise" | null;
   conversation_audio?: ConversationAudio | null;
   created_at: string;
   data_protection_level?: string | null;
