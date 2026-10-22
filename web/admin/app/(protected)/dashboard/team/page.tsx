@@ -119,8 +119,12 @@ function AccessChange({
 
 export default function TeamPage() {
   const { teamMembers, viewer, isLoading, error, mutate } = useTeamMembers();
-  const { proposals, mutate: mutateProposals } = useTeamProposals();
-  const { entries, mutate: mutateAudit } = useTeamAudit();
+  const {
+    proposals,
+    error: proposalsError,
+    mutate: mutateProposals,
+  } = useTeamProposals();
+  const { entries, error: auditError, mutate: mutateAudit } = useTeamAudit();
   const { fetchWithAuth } = useAuthFetch();
   const { toast } = useToast();
   const [pendingRemoval, setPendingRemoval] = useState<TeamMember | null>(null);
@@ -275,6 +279,13 @@ export default function TeamPage() {
           {legacyCount} {legacyCount === 1 ? "person has" : "people have"} no
           assigned role and keep full access (everything except team management)
           until you choose one.
+        </div>
+      ) : null}
+
+      {proposalsError ? (
+        <div className="rounded-md border border-red-300 p-3 text-sm text-red-600">
+          Could not load agent proposals, so pending approvals may be missing.
+          Reload to try again.
         </div>
       ) : null}
 
@@ -460,7 +471,11 @@ export default function TeamPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
-          {entries.length === 0 ? (
+          {auditError ? (
+            <p className="p-6 text-sm text-red-600">
+              Could not load the audit log.
+            </p>
+          ) : entries.length === 0 ? (
             <p className="p-6 text-sm text-muted-foreground">No events yet.</p>
           ) : (
             <Table>
@@ -481,9 +496,9 @@ export default function TeamPage() {
                     </TableCell>
                     <TableCell className="text-sm">
                       {entry.actor.email ?? entry.actor.id}
-                      {entry.actor.type === "agent" ? (
+                      {entry.actor.type !== "human" ? (
                         <Badge variant="outline" className="ml-2">
-                          agent
+                          {entry.actor.type}
                         </Badge>
                       ) : null}
                     </TableCell>

@@ -211,32 +211,70 @@ export function hasScope(access: { scopes: readonly Scope[] }, scope: Scope) {
   return access.scopes.includes(scope);
 }
 
-/** Dashboard pages and the scope that unlocks each one in the sidebar. */
-export const PAGE_SCOPES: { prefix: string; scope: Scope }[] = [
+/**
+ * Dashboard pages: the scope that unlocks each one in the sidebar, and the
+ * scope its edit controls need (absent for pages with nothing to change).
+ */
+export const PAGE_SCOPES: { prefix: string; scope: Scope; write?: Scope }[] = [
   { prefix: "/dashboard/tv-links", scope: "analytics:share" },
-  { prefix: "/dashboard/apps", scope: "apps:read" },
-  { prefix: "/dashboard/summary-apps", scope: "apps:read" },
-  { prefix: "/dashboard/reviews", scope: "apps:read" },
+  { prefix: "/dashboard/apps", scope: "apps:read", write: "apps:write" },
+  {
+    prefix: "/dashboard/summary-apps",
+    scope: "apps:read",
+    write: "apps:write",
+  },
+  { prefix: "/dashboard/reviews", scope: "apps:read", write: "apps:write" },
   { prefix: "/dashboard/subscriptions", scope: "finance:read" },
   { prefix: "/dashboard/payouts", scope: "finance:read" },
-  { prefix: "/dashboard/affiliates", scope: "finance:read" },
-  { prefix: "/dashboard/organizations", scope: "partners:read" },
-  { prefix: "/dashboard/distributors", scope: "partners:read" },
+  {
+    prefix: "/dashboard/affiliates",
+    scope: "finance:read",
+    write: "finance:write",
+  },
+  {
+    prefix: "/dashboard/organizations",
+    scope: "partners:read",
+    write: "partners:write",
+  },
+  {
+    prefix: "/dashboard/distributors",
+    scope: "partners:read",
+    write: "partners:write",
+  },
   { prefix: "/dashboard/team", scope: "team:read" },
-  { prefix: "/dashboard/announcements", scope: "content:read" },
-  { prefix: "/dashboard/prompts", scope: "content:read" },
-  { prefix: "/dashboard/csat", scope: "content:read" },
+  {
+    prefix: "/dashboard/announcements",
+    scope: "content:read",
+    write: "content:write",
+  },
+  {
+    prefix: "/dashboard/prompts",
+    scope: "content:read",
+    write: "content:write",
+  },
+  { prefix: "/dashboard/csat", scope: "content:read", write: "content:write" },
   { prefix: "/dashboard/releases", scope: "content:read" },
-  { prefix: "/dashboard/chat-lab", scope: "content:read" },
+  {
+    prefix: "/dashboard/chat-lab",
+    scope: "content:read",
+    write: "content:write",
+  },
   { prefix: "/dashboard/notifications", scope: "users:read" },
-  { prefix: "/dashboard/fair-use", scope: "users:read" },
-  { prefix: "/dashboard/feedback", scope: "users:read" },
+  { prefix: "/dashboard/fair-use", scope: "users:read", write: "users:write" },
+  { prefix: "/dashboard/feedback", scope: "users:read", write: "users:write" },
   { prefix: "/dashboard", scope: "analytics:read" },
 ];
 
-export function pageScope(pathname: string): Scope | null {
-  const match = PAGE_SCOPES.find(
+function pageEntry(pathname: string) {
+  return PAGE_SCOPES.find(
     ({ prefix }) => pathname === prefix || pathname.startsWith(`${prefix}/`)
   );
-  return match?.scope ?? null;
+}
+
+export function pageScope(pathname: string): Scope | null {
+  return pageEntry(pathname)?.scope ?? null;
+}
+
+export function pageWriteScope(pathname: string): Scope | null {
+  return pageEntry(pathname)?.write ?? null;
 }

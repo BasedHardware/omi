@@ -40,6 +40,7 @@ const collections = new Set([
   "adminData",
   "adminAuditLog",
   "adminProposals",
+  "adminProposalLocks",
   "csat_ratings",
   "desktop_prompts",
   "plugins_data",

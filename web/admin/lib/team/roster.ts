@@ -24,7 +24,8 @@ export interface HumanActor {
 
 export type AuditActor =
   | { type: "human"; id: string; email: string | null }
-  | { type: "agent"; id: string; email: string };
+  | { type: "agent"; id: string; email: string }
+  | { type: "system"; id: string; email: null };
 
 export type AuditAction =
   | "member.added"

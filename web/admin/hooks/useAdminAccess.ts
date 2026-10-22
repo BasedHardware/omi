@@ -21,7 +21,8 @@ export function useAdminAccess() {
   const { data, error, isLoading } = useSWR<AdminAccess>(
     token ? ["/api/omi/access", token] : null,
     authenticatedFetcher,
-    { revalidateOnFocus: false }
+    // Roles can change while someone is signed in; follow them without a reload.
+    { revalidateOnFocus: true, refreshInterval: 60_000 }
   );
   return {
     access: data ?? null,

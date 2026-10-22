@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { DashboardSidebar } from "@/components/dashboard/sidebar";
 import { DashboardHeader } from "@/components/dashboard/header";
 import { useAdminAccess } from "@/hooks/useAdminAccess";
-import { SCOPE_LABELS, pageScope } from "@/lib/admin-access";
+import { SCOPE_LABELS, pageScope, pageWriteScope } from "@/lib/admin-access";
 
 /** Shown instead of a page whose scope the viewer's role does not include. */
 function NoAccess({ scope }: { scope: keyof typeof SCOPE_LABELS }) {
@@ -19,6 +19,16 @@ function NoAccess({ scope }: { scope: keyof typeof SCOPE_LABELS }) {
         It needs <code>{scope}</code> ({SCOPE_LABELS[scope]}). Ask the workspace
         owner or a deputy to change your role on the Team page.
       </p>
+    </div>
+  );
+}
+
+/** The page is readable, but its edit actions need a scope the role lacks. */
+function ReadOnlyNotice({ scope }: { scope: keyof typeof SCOPE_LABELS }) {
+  return (
+    <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-200">
+      Read-only for your role: changes here need <code>{scope}</code> (
+      {SCOPE_LABELS[scope]}) and will be refused.
     </div>
   );
 }
@@ -110,6 +120,11 @@ export default function DashboardLayout({
     access && requiredScope && !access.scopes.includes(requiredScope)
       ? requiredScope
       : null;
+  const writeScope = pageWriteScope(pathname ?? "");
+  const readOnlyScope =
+    access && writeScope && !access.scopes.includes(writeScope)
+      ? writeScope
+      : null;
   useScrollRestoration(mainRef, authenticated);
 
   useEffect(() => {
@@ -135,7 +150,16 @@ export default function DashboardLayout({
         <div className="flex min-h-screen flex-1 flex-col">
           <DashboardHeader />
           <main ref={mainRef} className="flex-1 overflow-y-auto p-4 md:p-6">
-            {blockedScope ? <NoAccess scope={blockedScope} /> : children}
+            {blockedScope ? (
+              <NoAccess scope={blockedScope} />
+            ) : (
+              <>
+                {readOnlyScope ? (
+                  <ReadOnlyNotice scope={readOnlyScope} />
+                ) : null}
+                {children}
+              </>
+            )}
           </main>
         </div>
       </div>

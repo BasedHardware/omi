@@ -1,13 +1,24 @@
 /**
  * In-memory stand-in for the slice of the Firestore Admin SDK and Firebase
  * Auth that the team roster uses. Transactions buffer writes and apply them
- * on success, so a throw inside one leaves nothing behind.
+ * on success, so a throw inside one leaves nothing behind. Like Firestore,
+ * a transaction retries when a document it read changed before it committed;
+ * query results are not protected that way (no phantom detection).
  */
 type Data = Record<string, any>;
 
 export class FakeFirestore {
   readonly store = new Map<string, Map<string, Data>>();
+  private readonly versions = new Map<string, number>();
   private nextId = 1;
+
+  version(collection: string, id: string) {
+    return this.versions.get(`${collection}/${id}`) ?? 0;
+  }
+
+  bump(collection: string, id: string) {
+    this.versions.set(`${collection}/${id}`, this.version(collection, id) + 1);
+  }
 
   table(name: string) {
     let table = this.store.get(name);
@@ -28,10 +39,12 @@ export class FakeFirestore {
   }
 
   async runTransaction<T>(fn: (tx: FakeTransaction) => Promise<T>): Promise<T> {
-    const tx = new FakeTransaction();
-    const result = await fn(tx);
-    await tx.apply();
-    return result;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const tx = new FakeTransaction(this);
+      const result = await fn(tx);
+      if (tx.commit()) return result;
+    }
+    throw new Error("FakeFirestore transaction contention");
   }
 }
 
@@ -52,18 +65,33 @@ export class FakeDocRef {
   }
 
   async set(data: Data) {
-    this.db.table(this.collection).set(this.id, structuredClone(data));
+    this.setNow(data);
   }
 
   async update(data: Data) {
+    this.updateNow(data);
+  }
+
+  async delete() {
+    this.deleteNow();
+  }
+
+  setNow(data: Data) {
+    this.db.table(this.collection).set(this.id, structuredClone(data));
+    this.db.bump(this.collection, this.id);
+  }
+
+  updateNow(data: Data) {
     const table = this.db.table(this.collection);
     const current = table.get(this.id);
     if (!current) throw new Error(`No document to update: ${this.id}`);
     table.set(this.id, { ...current, ...structuredClone(data) });
+    this.db.bump(this.collection, this.id);
   }
 
-  async delete() {
+  deleteNow() {
     this.db.table(this.collection).delete(this.id);
+    this.db.bump(this.collection, this.id);
   }
 }
 
@@ -128,36 +156,47 @@ class FakeQuery {
 }
 
 export class FakeTransaction {
-  private readonly writes: (() => Promise<void>)[] = [];
+  private readonly writes: (() => void)[] = [];
+  private readonly reads = new Map<FakeDocRef, number>();
   private wrote = false;
 
-  async get(ref: FakeDocRef) {
+  constructor(private readonly db: FakeFirestore) {}
+
+  async get(target: FakeDocRef | { get: () => Promise<any> }) {
     // Firestore requires every read before the first write.
     if (this.wrote)
       throw new Error("Firestore transactions must read before writing");
-    return ref.get();
+    if (target instanceof FakeDocRef) {
+      this.reads.set(target, this.db.version(target.collection, target.id));
+    }
+    return target.get();
   }
 
   set(ref: FakeDocRef, data: Data) {
     this.wrote = true;
-    this.writes.push(() => ref.set(data));
+    this.writes.push(() => ref.setNow(data));
     return this;
   }
 
   update(ref: FakeDocRef, data: Data) {
     this.wrote = true;
-    this.writes.push(() => ref.update(data));
+    this.writes.push(() => ref.updateNow(data));
     return this;
   }
 
   delete(ref: FakeDocRef) {
     this.wrote = true;
-    this.writes.push(() => ref.delete());
+    this.writes.push(() => ref.deleteNow());
     return this;
   }
 
-  async apply() {
-    for (const write of this.writes) await write();
+  /** Synchronous, so the version check and the writes are atomic. */
+  commit(): boolean {
+    for (const [ref, version] of Array.from(this.reads)) {
+      if (this.db.version(ref.collection, ref.id) !== version) return false;
+    }
+    for (const write of this.writes) write();
+    return true;
   }
 }
 

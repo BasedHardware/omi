@@ -12,6 +12,8 @@ const state = vi.hoisted(() => ({
   viewer: null as any,
   proposals: [] as any[],
   entries: [] as any[],
+  proposalsError: null as Error | null,
+  auditError: null as Error | null,
   fetchWithAuth: vi.fn(),
 }));
 
@@ -23,8 +25,16 @@ vi.mock("@/hooks/useTeamMembers", () => ({
     error: null,
     mutate: vi.fn(),
   }),
-  useTeamProposals: () => ({ proposals: state.proposals, mutate: vi.fn() }),
-  useTeamAudit: () => ({ entries: state.entries, mutate: vi.fn() }),
+  useTeamProposals: () => ({
+    proposals: state.proposals,
+    error: state.proposalsError,
+    mutate: vi.fn(),
+  }),
+  useTeamAudit: () => ({
+    entries: state.entries,
+    error: state.auditError,
+    mutate: vi.fn(),
+  }),
 }));
 
 vi.mock("@/hooks/useAuthToken", () => ({
@@ -69,6 +79,8 @@ beforeEach(() => {
   state.viewer = null;
   state.proposals = [];
   state.entries = [];
+  state.proposalsError = null;
+  state.auditError = null;
   state.fetchWithAuth
     .mockReset()
     .mockResolvedValue(new Response("{}", { status: 200 }));
@@ -242,5 +254,15 @@ describe("TeamPage", () => {
     expect(screen.getByText("owner@example.com")).toBeTruthy();
     expect(screen.getByText(/proposed by agent@x/)).toBeTruthy();
     expect(screen.getByText("Support")).toBeTruthy();
+  });
+
+  it("says when proposals or the audit log failed to load, instead of showing them empty", () => {
+    state.viewer = OWNER_VIEWER;
+    state.proposalsError = new Error("502");
+    state.auditError = new Error("502");
+    render(<TeamPage />);
+    expect(screen.getByText(/Could not load agent proposals/)).toBeTruthy();
+    expect(screen.getByText("Could not load the audit log.")).toBeTruthy();
+    expect(screen.queryByText("No events yet.")).toBeNull();
   });
 });

@@ -5,6 +5,7 @@ import {
   SCOPES,
   accessFor,
   pageScope,
+  pageWriteScope,
 } from "@/lib/admin-access";
 
 describe("accessFor", () => {
@@ -63,5 +64,11 @@ describe("pageScope", () => {
     expect(pageScope("/dashboard/fair-use/abc")).toBe("users:read");
     expect(pageScope("/dashboard/payouts")).toBe("finance:read");
     expect(pageScope("/login")).toBeNull();
+  });
+
+  it("names the scope a page's edit controls need", () => {
+    expect(pageWriteScope("/dashboard/announcements")).toBe("content:write");
+    expect(pageWriteScope("/dashboard/reviews")).toBe("apps:write");
+    expect(pageWriteScope("/dashboard/subscriptions")).toBeNull();
   });
 });

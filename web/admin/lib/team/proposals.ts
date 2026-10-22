@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { getDb } from "@/lib/firebase/admin";
 import {
@@ -24,6 +25,8 @@ import {
 } from "@/lib/team/roster";
 
 export const PROPOSAL_COLLECTION = "adminProposals";
+/** Lock docs that serialize proposal creation per agent and per target. */
+export const LOCK_COLLECTION = "adminProposalLocks";
 /** An unapproved proposal stops being approvable after this long. */
 export const PROPOSAL_TTL_MS = 72 * 60 * 60 * 1000;
 /** Per agent, so a misbehaving agent cannot bury the owner in requests. */
@@ -94,6 +97,16 @@ export interface Proposal {
 
 type Data = Record<string, unknown>;
 
+/** Expiry is a lifecycle event, not something the proposing agent did. */
+const EXPIRY_ACTOR: AuditActor = {
+  type: "system",
+  id: "proposal-expiry",
+  email: null,
+};
+
+const digest = (value: string) =>
+  createHash("sha256").update(value).digest("hex").slice(0, 32);
+
 function agentActor(email: string): AuditActor {
   return { type: "agent", id: email, email };
 }
@@ -127,20 +140,7 @@ export async function createProposal(
   const members = db.collection(ADMIN_COLLECTION);
   const proposals = db.collection(PROPOSAL_COLLECTION);
 
-  const pending = await db
-    .collection("adminProposals")
-    .where("status", "==", "pending")
-    .get();
   const now = Date.now();
-  const live = pending.docs
-    .map((doc) => ({ ...(doc.data() as Proposal), id: doc.id }))
-    .filter((p) => Date.parse(p.expiresAt) > now);
-  if (
-    live.filter((p) => p.proposedBy.email === agentEmail).length >=
-    MAX_PENDING_PER_AGENT
-  ) {
-    throw new TeamError(429, "Too many pending proposals from this agent.");
-  }
 
   let target: Proposal["target"];
   let before: AccessSnapshot | null = null;
@@ -175,20 +175,6 @@ export async function createProposal(
     }
   }
 
-  const duplicate = live.find(
-    (p) =>
-      p.kind === input.kind &&
-      (target.uid
-        ? p.target.uid === target.uid
-        : p.target.email === target.email)
-  );
-  if (duplicate) {
-    throw new TeamError(
-      409,
-      `Proposal ${duplicate.id} already covers this change.`
-    );
-  }
-
   const ref = proposals.doc();
   const proposal: Omit<Proposal, "id"> = {
     kind: input.kind,
@@ -211,7 +197,48 @@ export async function createProposal(
             },
           },
   };
+  // The per-agent cap and the one-pending-per-target rule are checked inside
+  // a transaction that also writes a lock doc for the agent and one for the
+  // target, so overlapping requests conflict and retry instead of both passing.
+  const locks = db.collection(LOCK_COLLECTION);
+  const agentLock = locks.doc(`agent-${digest(agentEmail.toLowerCase())}`);
+  const targetLock = locks.doc(
+    `target-${digest(`${input.kind}|${target.uid ?? target.email}`)}`
+  );
   await db.runTransaction(async (tx) => {
+    await tx.get(agentLock);
+    await tx.get(targetLock);
+    // Read after taking the locks: a conflicting commit re-runs this callback,
+    // so the retry sees the proposal that won.
+    const pending = await db
+      .collection("adminProposals")
+      .where("status", "==", "pending")
+      .get();
+    const live = pending.docs
+      .map((doc) => ({ ...(doc.data() as Proposal), id: doc.id }))
+      .filter((p) => Date.parse(p.expiresAt) > now);
+    if (
+      live.filter((p) => p.proposedBy.email === agentEmail).length >=
+      MAX_PENDING_PER_AGENT
+    ) {
+      throw new TeamError(429, "Too many pending proposals from this agent.");
+    }
+    const duplicate = live.find(
+      (p) =>
+        p.kind === input.kind &&
+        (target.uid
+          ? p.target.uid === target.uid
+          : p.target.email === target.email)
+    );
+    if (duplicate) {
+      throw new TeamError(
+        409,
+        `Proposal ${duplicate.id} already covers this change.`
+      );
+    }
+    const stamp = { updatedAt: new Date(now).toISOString() };
+    tx.set(agentLock, stamp);
+    tx.set(targetLock, stamp);
     tx.set(ref, proposal);
     audit(tx, {
       action: "proposal.created",
@@ -240,7 +267,7 @@ async function expireStale(docs: { id: string; data: Proposal }[]) {
       tx.update(ref, { status: "expired" });
       audit(tx, {
         action: "proposal.expired",
-        actor: agentActor(data.proposedBy.email),
+        actor: EXPIRY_ACTOR,
         target: data.target,
         before: data.before,
         after: data.after,
@@ -252,18 +279,29 @@ async function expireStale(docs: { id: string; data: Proposal }[]) {
   }
 }
 
+/**
+ * Every pending proposal (so an actionable one never falls off the page),
+ * plus the most recent history, newest first.
+ */
 export async function listProposals(limit = 100): Promise<Proposal[]> {
-  const snapshot = await getDb()
-    .collection(PROPOSAL_COLLECTION)
-    .orderBy("createdAt", "desc")
-    .limit(Math.min(Math.max(limit, 1), 200))
-    .get();
-  const docs = snapshot.docs.map((doc) => ({
-    id: doc.id,
-    data: doc.data() as Proposal,
-  }));
+  const db = getDb();
+  const [pending, recent] = await Promise.all([
+    db.collection("adminProposals").where("status", "==", "pending").get(),
+    db
+      .collection("adminProposals")
+      .orderBy("createdAt", "desc")
+      .limit(Math.min(Math.max(limit, 1), 200))
+      .get(),
+  ]);
+  const byId = new Map<string, Proposal>();
+  for (const doc of [...pending.docs, ...recent.docs]) {
+    byId.set(doc.id, doc.data() as Proposal);
+  }
+  const docs = Array.from(byId, ([id, data]) => ({ id, data }));
   await expireStale(docs);
-  return docs.map(({ id, data }) => ({ ...data, id }));
+  return docs
+    .map(({ id, data }) => ({ ...data, id }))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
 }
 
 /**

@@ -61,8 +61,10 @@ Every handler calls `requireScope(request, scope)` from `lib/auth.ts` (or
   403 for a signed-in non-admin;
 - checks agent routes refuse human tokens, and the stats reader keeps its scopes.
 
-The sidebar and the dashboard layout hide pages whose scope the viewer lacks
-(`PAGE_SCOPES`, `GET /api/omi/access`); the server check is the authority.
+The sidebar and the dashboard layout hide pages whose scope the viewer lacks,
+and mark a readable page read-only when its edit scope is missing
+(`PAGE_SCOPES`, `GET /api/omi/access`, refreshed every minute and on focus so
+role changes show without a reload). The server check is the authority.
 
 ## Agent API
 
@@ -89,7 +91,10 @@ Proposal bodies (`reason` is required, 1–500 characters):
 Refused: targets that are the agent itself, any `*.gserviceaccount.com` email
 or other allowlisted agent, the owner, unknown uids or roles, a second pending
 proposal for the same target (409), and more than 20 pending per agent (429).
-Proposals expire 72 hours after filing. The owner or a deputy approves or
+Overlapping requests are serialized by per-agent and per-target lock docs
+(`adminProposalLocks`) read and written in the filing transaction. Proposals
+expire 72 hours after filing; expiry is audited with a `system` actor
+(`proposal-expiry`) and the proposer in `proposedBy`. The owner or a deputy approves or
 rejects on the Team page (`POST /api/omi/team-members/proposals/{id}`, Firebase
 session with `team:manage`); approval re-runs the team management rules above,
 so a deputy cannot approve a deputy appointment.

@@ -31,7 +31,7 @@ import { POST as decidePOST } from "@/app/api/omi/team-members/proposals/[id]/ro
 import { GET as humanProposalsGET } from "@/app/api/omi/team-members/proposals/route";
 import { GET as humanRosterGET } from "@/app/api/omi/team-members/route";
 import { GET as userDataGET } from "@/app/api/omi/fair-use/flagged/route";
-import { PROPOSAL_TTL_MS } from "@/lib/team/proposals";
+import { MAX_PENDING_PER_AGENT, PROPOSAL_TTL_MS } from "@/lib/team/proposals";
 
 const AUDIENCE = "https://admin.omi.me/api/agent/team";
 const AGENT = "omi-team-agent@based-hardware.iam.gserviceaccount.com";
@@ -375,6 +375,71 @@ describe("proposals", () => {
     expect(members().has(ADMIN)).toBe(true);
     expect(proposals().get(proposal.id).status).toBe("expired");
     expect(actions()).toEqual(["proposal.created", "proposal.expired"]);
+    const expiry = state.db
+      .rows("adminAuditLog")
+      .find((e: any) => e.action === "proposal.expired");
+    // A lifecycle event, not something the agent did; the proposer stays recorded.
+    expect(expiry).toMatchObject({
+      actor: { type: "system", id: "proposal-expiry" },
+      proposedBy: AGENT,
+    });
+  });
+
+  it("files only one of two overlapping proposals for the same target", async () => {
+    const statuses = (
+      await Promise.all([
+        propose({ kind: "remove_member", uid: ADMIN, reason: "a" }),
+        propose({ kind: "remove_member", uid: ADMIN, reason: "b" }),
+      ])
+    ).map((r) => r.status);
+    expect(statuses.sort()).toEqual([201, 409]);
+    expect(proposals().size).toBe(1);
+  });
+
+  it("holds the per-agent cap under a burst of overlapping proposals", async () => {
+    const burst = Array.from({ length: MAX_PENDING_PER_AGENT + 3 }, (_, i) =>
+      propose({
+        kind: "add_member",
+        email: `p${i}@example.com`,
+        accessRole: "viewer",
+        reason: "burst",
+      })
+    );
+    const statuses = (await Promise.all(burst)).map((r) => r.status);
+    expect(statuses.filter((s) => s === 201)).toHaveLength(
+      MAX_PENDING_PER_AGENT
+    );
+    expect(statuses.filter((s) => s === 429)).toHaveLength(3);
+    expect(proposals().size).toBe(MAX_PENDING_PER_AGENT);
+  });
+
+  it("keeps an older pending proposal listed behind a long decided history", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-22T00:00:00Z"));
+    const { proposal } = await (
+      await propose({ kind: "remove_member", uid: ADMIN, reason: "left" })
+    ).json();
+    for (let i = 0; i < 120; i++) {
+      proposals().set(`old-${i}`, {
+        kind: "remove_member",
+        status: "rejected",
+        proposedBy: { type: "agent", email: AGENT },
+        createdAt: new Date(
+          Date.parse("2026-10-22T01:00:00Z") + i * 1000
+        ).toISOString(),
+        expiresAt: "2026-10-25T00:00:00.000Z",
+        target: { uid: ADMIN, email: "admin@example.com" },
+      });
+    }
+    const list = await (
+      await humanProposalsGET(
+        human(OWNER, "GET", "/api/omi/team-members/proposals")
+      )
+    ).json();
+    expect(list.proposals.map((p: any) => p.id)).toContain(proposal.id);
+    expect(list.proposals[0].createdAt >= list.proposals[1].createdAt).toBe(
+      true
+    );
   });
 
   it("expires stale proposals when the Team page lists them", async () => {
