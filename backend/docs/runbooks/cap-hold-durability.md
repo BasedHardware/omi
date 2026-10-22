@@ -330,3 +330,45 @@ separate budgets, and staging compose/reload/cleanup RPCs each use 10 s timeouts
 delivery + 2 s cleanup bound, but final cap custody runs outside that bound.
 There is no aggregate 8 s close deadline. Moving custody to an unowned detached
 task would weaken audio retention; it remains supervised and awaited.
+
+
+## Capture-order sliver regression (2026-10-22)
+
+The first `ro-prod` read of the fixed test account projected only hold shape
+fields; no encrypted metadata or content was read/decrypted, and no production
+logs or writes were used. Before recovery, it showed:
+
+| Created (UTC) | Seconds | Source frames | Stage part frames |
+| --- | ---: | ---: | --- |
+| 03:31:53.619 | 0.03 | 480 | 480 |
+| 03:31:54.462 | 0.03 | 480 | 480 |
+| 03:31:55.491 | 0.01 | 160 | 160 |
+| 03:32:08.191 | 44.9 | 718400 | 240000, 240000, 238400 |
+
+The first three capture starts were 03:31:57, 03:31:56 and 03:31:57 (the stored
+integer projection), not creation order. No plaintext session/group/owner keys
+were present in these projected rows. Sample indices and owner identities in
+encrypted metadata remain unread. The replay uses synthetic capture coordinates,
+not decrypted production metadata.
+
+`LiveHeldAudio.observe` previously appended unique denied pieces in callback
+order. `_append` queued the old run at a >100 ms wall discontinuity, bypassing
+`TailGrace.ready`. The 1 s updater published that pending run. `_flush` sealed
+its source at the next group-continuity mismatch and allocated another
+`Publication`; `live_cap_staging.append` creates the row at that group ID.
+Neither an updater tick itself nor a per-conversation/session document key
+creates a new hold. `live_cap_manifest` is the legacy fragment-off path.
+Thus a later receiver decision spanning the early pieces could deduplicate
+those bytes, but could no longer put the already-published pieces back in
+capture order. That is why the prior grace metric stayed zero.
+
+The behavioral regression drives the real `observe` / `observe_async` and
+publication coordinator with three 1 s-spaced early decisions, then an
+overlapping denied suffix. Unmodified source produces exactly the table's
+0.03/0.03/0.01/44.9 s, one/one/one/three-part shape. Ordered unpublished capture
+produces one 44.97 s source with 240000/240000/239520-frame parts, preserving
+all 719520 denied samples byte-for-byte while excluding the funded prefix.
+No new custody capacity or volatile-age allowance is introduced. Incompatible
+owners, rates, capture holes, months and wall discontinuities remain separate
+runs. The transition-tail counter now also observes coalesced/sealed tiny runs
+in this capture-order queue, rather than only explicit forced-seal grace.

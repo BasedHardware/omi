@@ -309,3 +309,20 @@ def test_copying_batch_admission_to_pusher_is_not_silently_allowed(gate: SimpleN
     assert any(
         'BATCH_PIPELINE_ENABLED is no longer listen-only' in error for error in gate.validate_preflight(chart_fixture)
     )
+
+
+@pytest.mark.parametrize('env', ('dev', 'prod'))
+def test_reconnect_recovery_switch_belongs_only_to_listen(gate: SimpleNamespace, env: str) -> None:
+    assert 'STALE_IN_PROGRESS_RECOVERY_ENABLED' in gate.LISTEN_ONLY_ALLOWED[env]
+    assert gate.validate_preflight(REPO_ROOT) == []
+
+
+def test_reconnect_recovery_switch_copied_to_pusher_is_rejected(gate: SimpleNamespace, chart_fixture: Path) -> None:
+    path = chart_fixture / 'backend/charts/pusher/prod_omi_pusher_values.yaml'
+    path.write_text(
+        path.read_text().replace('env:\n', 'env:\n  - name: STALE_IN_PROGRESS_RECOVERY_ENABLED\n    value: "true"\n', 1)
+    )
+    assert any(
+        'STALE_IN_PROGRESS_RECOVERY_ENABLED is no longer listen-only' in error
+        for error in gate.validate_preflight(chart_fixture)
+    )
