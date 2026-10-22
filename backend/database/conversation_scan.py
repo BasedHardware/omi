@@ -66,6 +66,7 @@ PEOPLE_STATS_FIELD_PATHS = (
     'is_locked',
     'discarded',
     'deleted',
+    'dream_duplicate_of',
     'started_at',
     'created_at',
     'transcript_segments',
