@@ -39,6 +39,7 @@ def emit_speaker_suggestion(
                 if person_id == USER_SELF_PERSON_ID
                 else person_id_for_client(person_id, host.request.speaker_auto_assign_enabled)
             ),
+            is_user=person_id == USER_SELF_PERSON_ID and not retracted,
             person_name=person_name,
             segment_id=segment_id,
             suggested_person_id=suggested_person_id,

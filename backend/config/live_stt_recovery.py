@@ -9,6 +9,8 @@ re-reading the environment, so a session never changes mode mid-flight.
 
 from __future__ import annotations
 
+from config.refactor_switches import default_off as rollout_default_off
+
 import os
 
 from config.policy.listen import current_listen_policy
@@ -28,7 +30,9 @@ def recovery_enabled() -> bool:
     return (
         policy.failover_recovery_enabled
         if policy is not None
-        else os.getenv(STT_FAILOVER_RECOVERY_ENV, 'false').lower() == 'true'
+        else rollout_default_off(
+            STT_FAILOVER_RECOVERY_ENV, os.getenv(STT_FAILOVER_RECOVERY_ENV, 'false').lower() == 'true'
+        )
     )
 
 

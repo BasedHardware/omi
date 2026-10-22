@@ -14,7 +14,19 @@ ACTION_ITEM_EXTRACTION_RULES = '''ACTION ITEM EXTRACTION RULES
   or "Morgan is working on the proposal". An ongoing activity alone is not a commitment or request.'''
 
 
-def conversation_notes_static_instructions(format_instructions: str) -> str:
+NOTE_BODY_OPENING = "- Write section bodies as '- ' bullets in plain, readable sentences. Each bullet should group one\n  coherent point with its useful supporting details. Separate distinct points when combining them\n  makes reading harder; do not force terse fragments or one bullet per sentence."
+
+
+SELECT_THREADS = '- Select the main meaningful threads, including social experiences, problems, reasons, proposals,\n  decisions, and unresolved questions. Keep concrete details that help recall them. Omit repetition,\n  incidental tangents, and unclear fragments; do not retain something just because it contains a name\n  or number. Understandable multilingual content is not noise.'
+
+
+def conversation_notes_static_instructions(
+    format_instructions: str,
+    *,
+    note_body_opening: str = NOTE_BODY_OPENING,
+    select_threads: str = SELECT_THREADS,
+    extra_rules: str = '',
+) -> str:
     """Task rules with no per-call interpolations.
 
     Production notes v2 used to mark the unique transcript as the cached prefix, so
@@ -27,15 +39,10 @@ def conversation_notes_static_instructions(format_instructions: str) -> str:
 Create the canonical conversation note and return JSON matching the schema below.
 
 NOTE BODY — READABLE, GROUNDED RECAP
-- Write section bodies as '- ' bullets in plain, readable sentences. Each bullet should group one
-  coherent point with its useful supporting details. Separate distinct points when combining them
-  makes reading harder; do not force terse fragments or one bullet per sentence.
+{note_body_opening}
 - Use short, specific headings. Order topics so the note is easy to follow, without inventing links
   between them. No preamble, repeated points, or concluding recap.
-- Select the main meaningful threads, including social experiences, problems, reasons, proposals,
-  decisions, and unresolved questions. Keep concrete details that help recall them. Omit repetition,
-  incidental tangents, and unclear fragments; do not retain something just because it contains a name
-  or number. Understandable multilingual content is not noise.
+{select_threads}
 - Balance the main threads before elaborating one of them. Clear everyday experiences and personal
   boundaries can matter as much as work decisions; do not let a longer business or planning thread
   crowd out a meaningful shared activity or interpersonal moment.
@@ -98,7 +105,7 @@ EVENTS AND CONSISTENCY
 - A tentative plan may be an action item with due_certainty=tentative, but must not also be emitted as a confirmed event.
 - The same fact must never have conflicting certainty between events and action items.
 
-{format_instructions}'''
+{extra_rules}{format_instructions}'''
 
 
 def conversation_note_density(word_count: int, rich: bool) -> str:
@@ -107,42 +114,3 @@ def conversation_note_density(word_count: int, rich: bool) -> str:
     if word_count < 2500:
         return f'Use 2-4 sections; target ~{240 if rich else 200} words across the entire note.'
     return f'Use 4-6 sections; target ~{480 if rich else 400} words across the entire note.'
-
-
-def conversation_notes_volatile_instructions(
-    *,
-    response_language: str,
-    density: str,
-    task_intelligence_capture: bool,
-    existing_context: str,
-    started_local_iso: str,
-    current_local_iso: str,
-    tz_label: str,
-    conversation_context: str,
-    wake_word_rules: str = '',
-) -> str:
-    """Per-call suffix: language, density, dates, open tasks, and the transcript."""
-    task_filter = (
-        'capture clear commitments and direct requests'
-        if task_intelligence_capture
-        else 'apply the conservative legacy task filter'
-    )
-    text = f'''Respond entirely in {response_language}.
-
-- {density} These are flexible guides, not quotas. Prefer one or two substantial bullets per section,
-  with connected sentences rather than splitting every sentence into its own bullet.
-  Give distinct subtopics room instead of cramming them into a final bullet. Keep the main threads
-  while removing minor details if the note grows much beyond the target.
-- For task-intelligence capture, {task_filter}.
-- Potentially related open tasks:
-{existing_context}
-
-DATE CONTEXT
-- Conversation local time: {started_local_iso}
-- Current local time: {current_local_iso}
-- Timezone: {tz_label}
-
-{conversation_context}'''
-    if wake_word_rules:
-        text = f'{text}\n\n{wake_word_rules}'
-    return text

@@ -23,6 +23,9 @@ from utils.conversations.factory import deserialize_conversations
 from utils.conversations.summary_selection import select_primary_summary
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
+from config.refactor_modes import serving_for
+from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
+from utils.llm.notes_refactor_metrics import shadow as record_notes_shadow
 from utils.memory.learned_today import memories_learned_payload, memory_review_card_block
 from utils.notifications import send_bulk_notification, send_notification_result
 from utils.other import daily_summary_metrics
@@ -174,7 +177,7 @@ def _generate_and_store_daily_summary(
         # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
         # any LLM tokens. The regenerate flow stays in-place via update_daily_summary.
         existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-        if existing_summary:
+        if existing_summary and not serving_for('NOTES_PACKET_V2_MODE', uid):
             logger.info(
                 f"Daily summary already exists for uid={uid} date={date_str} "
                 f"id={existing_summary.get('id')}; skipping duplicate generation"
@@ -184,6 +187,14 @@ def _generate_and_store_daily_summary(
         conversations_data = conversations_db.get_conversations(
             uid, start_date=start_date_utc, end_date=end_date_utc, date_field='started_at'
         )
+        fingerprint = None
+        if serving_for('NOTES_PACKET_V2_MODE', uid):
+            fingerprint = input_fingerprint(conversations_data or [])
+            if existing_summary and existing_summary.get(FINGERPRINT_FIELD) == fingerprint:
+                release_daily_summary_lock(uid, date_str)
+                record_notes_shadow('daily_recap_inputs', 'agree')
+                return existing_summary, False, None
+            record_notes_shadow('daily_recap_inputs', 'disagree')
         if not conversations_data or len(conversations_data) == 0:
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NO_CONVERSATIONS
@@ -231,7 +242,22 @@ def _generate_and_store_daily_summary(
             end_date_utc,
             memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
         )
-        summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
+        if fingerprint is not None:
+            summary_data[FINGERPRINT_FIELD] = fingerprint
+        if existing_summary:
+            summary_id = existing_summary['id']
+            # Preserve the existing deep link and completed-delivery marker on refresh.
+            # Content refresh must not send the same day's push again.
+            summary_data.update(
+                {
+                    key: existing_summary[key]
+                    for key in ('visibility', 'notification_delivery_completed')
+                    if key in existing_summary
+                }
+            )
+            daily_summaries_db.update_daily_summary(uid, summary_id, summary_data)
+        else:
+            summary_id = daily_summaries_db.create_daily_summary(uid, summary_data)
         # The stored id rides on the returned record so the delivery step can build the
         # `/daily-summary/{id}` deep link without a second read.
         return {**summary_data, 'id': summary_id}, True, None

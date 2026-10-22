@@ -152,6 +152,9 @@ async def run_listen_finalization_job(
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
 
     job_id, dispatch_generation = parsed
+    if job_id.startswith('merge-'):
+        status = await lifecycle_service.merge_jobs.run(job_id, dispatch_generation)
+        return JSONResponse(status_code=200, content={'status': status})
     if job_id.startswith('quiet-'):
         status = await run_blocking(db_executor, quiet_finalization.run, job_id, dispatch_generation)
         return JSONResponse(status_code=200, content={'status': status})

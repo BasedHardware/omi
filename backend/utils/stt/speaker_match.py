@@ -14,31 +14,13 @@ from typing import Any, Mapping, Optional, Sequence, TypeVar
 
 import numpy as np
 
-# Cosine distance operating point for enrolled-voiceprint verification only.
-#
-# Measured offline on real enrollments (2026-09-07, scripts/speaker_id_bench): the
-# same user's audio from a different session sits at a median distance of 0.40-0.53
-# from their stored voiceprint, while other users sit at 0.93. The former 0.45
-# (taken from a clean-studio VoxCeleb figure) rejected 40-70% of cross-session
-# owner audio at a 0.0% false-accept rate; 0.65 rejects 14-22% at <1% false-accept
-# against random users. Same-session audio matches at either value, which is why
-# the old constant looked fine in demos. In-session clustering has its own policy in
-# speaker_clustering.py and must not silently retune this boundary.
-SPEAKER_MATCH_THRESHOLD = 0.65
+from utils.speakers.policy import LIVE, MATCH_MARGIN, MIN_EVIDENCE_SECONDS, MAX_CLIPS, OWNER_NEAR_MISS_DISTANCE
 
-# A match must also beat the runner-up voiceprint by at least this much. Raising the
-# threshold alone would confuse the owner with a taught person in a minority of
-# households (owner-vs-own-person distances were measured as low as 0.43); the
-# margin keeps "the nearest is clearly nearest" as a second condition.
-SPEAKER_MATCH_MARGIN = 0.10
-
-# Live sessions decide on a speaker once this much clip audio has been embedded for
-# them (a single long clip, or a few short ones averaged). Two-second clips alone
-# had a 17% equal-error rate in the bench against 10% at five seconds.
-SPEAKER_MATCH_MIN_EVIDENCE_SECONDS = 5.0
-
-# How many recent clips per diarized speaker feed the running centroid.
-SPEAKER_MATCH_MAX_CLIPS = 3
+# Named policy entries preserve the live verification operating point.
+SPEAKER_MATCH_THRESHOLD = LIVE.distance
+SPEAKER_MATCH_MARGIN = MATCH_MARGIN
+SPEAKER_MATCH_MIN_EVIDENCE_SECONDS = MIN_EVIDENCE_SECONDS
+SPEAKER_MATCH_MAX_CLIPS = MAX_CLIPS
 
 
 @dataclass(frozen=True)
@@ -95,7 +77,7 @@ def select_speaker_match(
 # Calibration-only near-miss sweep on production vectors (five repeated,
 # conversation-disjoint two-fold splits) selected 0.70 in every fold. This band
 # changes evidence state only; acceptance remains strictly below 0.65.
-OWNER_NEAR_MISS_THRESHOLD = 0.70
+OWNER_NEAR_MISS_THRESHOLD = OWNER_NEAR_MISS_DISTANCE
 
 
 def owner_near_miss(decision: SpeakerMatchDecision) -> bool:

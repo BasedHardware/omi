@@ -1,26 +1,9 @@
-"""Conversation-wide speaker resolution: one diarization over the whole conversation.
+"""Pure conversation-wide diarization from per-segment wespeaker embeddings.
 
-Capture diarizes piecewise. Live labels restart on every reconnect or provider
-failover, and sync labels restart on every uploaded VAD chunk (<=300s), so the
-allocator in speaker_identity.py hands one person a new ``speaker_id`` per piece.
-A 3.6h pendant dinner measured 1874 speaker_ids for about five voices.
-
-This module re-diarizes the finished conversation from per-segment voice
-embeddings, so ``speaker_id`` means one voice for the whole conversation. It is
-pure: no network, storage, or Firestore. The caller supplies the segments, the
-embeddings it could compute, the manual receipt keys, and enrolled voiceprints.
-
-Operating points were measured on real pendant audio (far-field, noisy
-restaurants) embedded with the production wespeaker-resnet34 model, clips cut
-from the stored chunks exactly as speaker_resolution.py cuts them (transcription
-of the clips confirmed the alignment). Owner purity was scored with the owner's
-enrolled voiceprint: across AHC 0.65-0.75 and absorb 0.50-0.65, no confident
-owner clip left the owner's voice and at most 5 of about 1000 confident
-non-owner clips joined it; at 0.80 the owner absorbed 106. At 0.70/0.60 the
-1874-id dinner resolved to six participants and a two-person call with desktop
-mic/system ground truth to exactly two. The Parakeet server's per-chunk 0.55 cut
-(tuned on VoxConverse broadcast audio) is not what fragments these transcripts;
-chunk-local numbering is.
+Capture numbering restarts on reconnects and uploaded VAD chunks. This stage
+pools those scopes into voices, constrained by manual receipts. The existing
+0.70 AHC / 0.60 absorb points were measured on noisy pendant audio; enrolled
+voiceprint verification remains a separate operating point.
 """
 
 from __future__ import annotations
@@ -45,17 +28,19 @@ from utils.stt.speaker_match import (
     select_speaker_match,
 )
 
+from utils.speakers.policy import ABSORB, CONVERSATION_CLUSTER, CROSS_SCOPE_CLUSTER, FINALIZE
+
 RESOLUTION_VERSION = 2
 
-AHC_THRESHOLD = float(os.getenv('CONVERSATION_SPEAKER_AHC_THRESHOLD', '0.70'))
+AHC_THRESHOLD = CONVERSATION_CLUSTER.distance
 ANCHOR_SECONDS = float(os.getenv('CONVERSATION_SPEAKER_ANCHOR_SECONDS', '30'))
-ABSORB_DISTANCE = float(os.getenv('CONVERSATION_SPEAKER_ABSORB_DISTANCE', '0.60'))
+ABSORB_DISTANCE = ABSORB.distance
 # A voice counts as a participant once it has spoken this long.
 SIGNIFICANT_SECONDS = float(os.getenv('CONVERSATION_SPEAKER_SIGNIFICANT_SECONDS', '10'))
 # Shorter segments are too noisy to embed; they inherit a voice instead.
 MIN_EMBED_SECONDS = 1.0
 # A voice's pooled centroid against an enrolled voiceprint.
-VOICE_MATCH_THRESHOLD = float(os.getenv('CONVERSATION_SPEAKER_VOICE_MATCH_THRESHOLD', '0.50'))
+VOICE_MATCH_THRESHOLD = FINALIZE.distance
 
 OWNER_IDENTITY = 'user'
 
@@ -93,6 +78,8 @@ class SpeakerResolution:
     match_scores: List[dict] = field(default_factory=list)
     voice_identity_statuses: Dict[int, str] = field(default_factory=dict)
     """Evidence states for automatic voices only; manual receipts remain authoritative."""
+    voice_distances: Dict[int, Dict[str, float]] = field(default_factory=dict)
+    voice_centroids: Dict[int, Any] = field(default_factory=dict)
     owner_voiceprint_available: bool = False
     """Whether this pass's validated roster included the owner for identity comparison."""
 
@@ -190,7 +177,7 @@ def resolve_conversation_speakers(
     embedding_seconds: Optional[Mapping[str, float]] = None,
     grouping: str = 'incumbent',
     provider_keys: Optional[Mapping[str, Tuple[str, int]]] = None,
-    cross_scope_threshold: float = 0.60,
+    cross_scope_threshold: float = CROSS_SCOPE_CLUSTER.distance,
     grouping_deadline: float = float('inf'),
 ) -> Optional[SpeakerResolution]:
     """Resolve one speaker_id per voice across the whole conversation.
@@ -611,6 +598,15 @@ def resolve_conversation_speakers(
     except Exception:
         match_scores.record_failure(None)
     return SpeakerResolution(
+        voice_distances={
+            new_id_of[pos]: {
+                pid: min(distances[i][pid] for i in score_members[root] if pid in distances.get(i, {}))
+                for pid in {pid for i in score_members[root] for pid in distances.get(i, {})}
+            }
+            for pos, root in enumerate(keep)
+            if pos in new_id_of
+        },
+        voice_centroids={new_id_of[pos]: centroid(cluster) for pos, cluster in enumerate(clusters) if pos in new_id_of},
         owner_voiceprint_available=OWNER_IDENTITY in prints,
         contradicted_segment_ids=contradicted,
         speaker_ids=speaker_ids,

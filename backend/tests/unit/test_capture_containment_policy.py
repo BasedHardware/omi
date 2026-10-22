@@ -623,7 +623,12 @@ def _run_capture_flow(module, rows, last_id, monkeypatch, caplog):
     caplog.clear()
     with caplog.at_level(logging.INFO):
         module.link_duplicate_captures(UID, Conversation(**deepcopy(rows[last_id])))
-    return store, events, [record.message for record in caplog.records]
+    # Refactor shadow observations are additive telemetry, not serving output.
+    return (
+        store,
+        events,
+        [record.message for record in caplog.records if not record.message.startswith('event=refactor_shadow ')],
+    )
 
 
 def _snapshot(store):

@@ -6461,3 +6461,29 @@ counter increases for new volatile-custody failures, rather than infer health
 from whether this gauge changes.
 The existing publication counters and fleet staging/redrive snapshot remain
 available. No user/session/object identities are metric labels.
+
+## Capture/speaker/notes refactor integration
+
+The integrated composition and rollback contract is documented in
+[capture/speaker/notes refactor](capture_speaker_notes_refactor.md). The app-client
+surface now includes authenticated coverage queries and boundary-evidence intake;
+wire generation owns OpenAPI, Dart, Swift and TypeScript outputs. Live speaker
+suggestions include explicit `is_user`, and committed capture events preserve
+channel, epoch and recording-session identity. These additive fields are ignored
+by clients until their opt-in paths serve.
+
+Live durability → coverage ledger → committed event is the custody ordering.
+Continuation uploads stage encrypted chunks by deterministic session and index,
+retain incomplete/expired assemblies for client retry, and only return a completed
+receipt after durable projection. Tombstone-first deletion purges staging even
+without a conversation parent; seven-day expiry is checked at assembly, with
+physical Firestore TTL activation required before serving.
+
+Merge jobs share the finalization outbox. Admission is atomic across every source;
+epoch renewal fences stale workers. Correction transfer atomically seals the
+irreversible boundary, so recovery either rolls back preparation or replays only
+source cleanup. Empty quiet checks retain their durable successor until the
+lifecycle owner's content/lease-fenced delete succeeds. Notes/episode prompts use
+L2 roster priors and L3 rendering/language authorities; notes cache identities
+include effective packet selection and version. Cloud Run metric export includes
+the refactor families while retaining the prerecorded-language gate allowlist.
