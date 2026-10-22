@@ -11,6 +11,8 @@ Tables (all partitioned by `date`, no partition expiry):
   unit_cost_reconciliation what each pool cost vs what landed on user-days
   plan_revenue_daily       Stripe snapshot, carrying snapshot_date so it stays honest
   unit_cost_user_day       per (date, uid_hash) allocation. HASHED uids only, never raw.
+  mercury_*                vendor-spend aggregates (load_mercury; dark when Mercury is off)
+  stripe_fee_daily         measured Stripe processing fees (dark while the fee scope is missing)
 """
 
 from __future__ import annotations
@@ -104,6 +106,46 @@ CLUSTER = {
 
 SCHEMAS.update(load_mercury.SCHEMAS)
 CLUSTER.update(load_mercury.CLUSTER)
+
+# Measured Stripe processing fees (net of refunds), refreshed with the daily run
+# from balance transactions. Dark while the restricted key lacks the scope: a
+# skipped artifact means no table reads, writes or creation, exactly like Mercury.
+SCHEMAS["stripe_fee_daily"] = [
+    ("date", "DATE"),
+    ("fee_usd", "NUMERIC"),
+    ("volume_usd", "NUMERIC"),
+    ("transaction_count", "INT64"),
+    ("foreign_transaction_count", "INT64"),
+    ("run_id", "STRING"),
+    ("computed_at", "TIMESTAMP"),
+]
+CLUSTER["stripe_fee_daily"] = ["run_id"]
+STRIPE_FEE_KEYS = {"date", "fee_usd", "volume_usd", "transaction_count", "foreign_transaction_count"}
+
+
+def load_stripe_fees(raw: pathlib.Path, run_id: str, computed_at: str, ensure_table, load_replace) -> dict:
+    path = raw / "stripe_fee_daily.json"
+    if not path.exists():
+        return {}
+    snapshot = json.loads(path.read_text())
+    if snapshot.get("status") == "skipped":
+        return {}  # unavailable is not zero: no rows, no table creation, no guess
+    if set(snapshot) != {"status", "start", "end", "rows"} or snapshot["status"] != "ready":
+        raise SystemExit("invalid Stripe fee artifact")
+    window = set(load_mercury.days(snapshot["start"], snapshot["end"]))
+    for row in snapshot["rows"]:
+        if set(row) != STRIPE_FEE_KEYS or row["date"] not in window:
+            raise SystemExit("invalid Stripe fee aggregate")
+        counts = (row["transaction_count"], row["foreign_transaction_count"])
+        if any(type(c) is not int or c < 0 for c in counts):
+            raise SystemExit("invalid Stripe fee counts")
+        if row["volume_usd"] is None or float(row["volume_usd"]) < 0:
+            raise SystemExit("invalid Stripe fee volume")
+        # fee_usd may be negative: refunds return fees on their own day.
+    dates = sorted(window)
+    ensure_table("stripe_fee_daily")
+    rows = [dict(row, run_id=run_id, computed_at=computed_at) for row in snapshot["rows"]]
+    return {"stripe_fee_daily": load_replace("stripe_fee_daily", rows, dates)}
 
 
 def _bq_cmd() -> list[str]:
@@ -323,6 +365,7 @@ def main() -> None:
         ensure_table(name)
         loaded[name] = load_replace(name, tables[name], dates)
     loaded.update(load_mercury.load(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace, bq))
+    loaded.update(load_stripe_fees(pathlib.Path(a.raw), a.run_id, computed_at, ensure_table, load_replace))
     print(
         json.dumps(
             {"run_id": a.run_id, "dates": dates, "rows_loaded": loaded, "dataset": "%s.%s" % (PROJECT, DATASET)},

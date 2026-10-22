@@ -127,6 +127,8 @@ BigQuery `based-hardware.omi_finops` (location US, same as the billing export, s
 | `unit_cost_reconciliation` | date × pool | `pool_usd` vs `allocated_usd` vs `delta_pct` |
 | `plan_revenue_daily` | date × plan | Stripe **snapshot**; carries `snapshot_date` because Stripe is not replayable per historical day |
 | `unit_cost_user_day` | date × `uid_hash` | hashed uids only (`sha256[:16]`) |
+| `mercury_vendor_spend_daily`, `mercury_saas_daily` | date × vendor / date | Mercury aggregates (`load_mercury`; dark while Mercury is off) |
+| `stripe_fee_daily` | date | measured Stripe processing fees (dark while the fee scope is missing) |
 
 All four are partitioned by `date` and clustered. Loads are **idempotent per date**: the run's
 dates are deleted and re-inserted inside one BigQuery transaction, so re-running a date replaces
@@ -430,12 +432,16 @@ and `category_data`, never raw counterparty names. Google Workspace has a separa
 alias from Google Cloud, while `Google Payment Corp` maps to GCP; ambiguous
 `Google` remains uncategorized. Annual cadence is deliberately not inferred from
 the merchant name: set `annual: true` only after confirming a vendor's actual
-billing cadence.
+billing cadence. Ledger evidence 2026-07-04..2026-10-19 (read 2026-10-22,
+`mercury_vendor_spend_daily`): shopify, posthog, nevercode and pinecone all
+bill monthly (same-day-of-month repeats), so the "single annual payment"
+reading of the 2026-10-22 wall audit was wrong; no vendor in the window shows
+an annual cadence, which is why the committed map has none.
 
 | Category | Treatment |
 | --- | --- |
 | `saas` | Non-GCP software subscriptions; drives the TV SaaS line |
-| `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs |
+| `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs. Anthropic maps to `saas` since 2026-10-22: its Mercury cash is Claude team seats, not per-customer API spend |
 | `infra_non_gcp` | Non-GCP infrastructure/platform cash spend, including outgoing Stripe fees; separate from SaaS |
 | `gcp` | Excluded from TV addition; already covered by GCP billing |
 | `marketing`, `fulfillment`, `hardware_cogs`, `travel_meals`, `professional_services`, `facilities`, `other_opex` | Reconciliation categories only; never included in the SaaS line |
@@ -484,26 +490,30 @@ anniversary (Feb 29 clamps to Feb 28). Known annual aggregates continue contribu
 after they age out of the 90-day API refresh. NUMERIC outputs round to nine decimal
 places. SaaS never includes GCP, LLM, STT, other infrastructure or excluded spend.
 
-`inputs_complete` requires all 30 posted days, annual-history coverage when an
-annual vendor is configured, and no more than `max_uncategorized_usd` of
-uncategorized spend in the rolling 30-day window. The map defaults that threshold
+`inputs_complete` requires all 30 posted days and no more than
+`max_uncategorized_usd` of uncategorized spend in the rolling 30-day window
+(2026-10-22: the cash-window gate; see below for the separate annual-history
+signal). The map defaults that threshold
 to `$2,500`. The existing BigQuery fields `unmapped_usd` and `unmapped_count`
 retain their names for loader/admin compatibility; they now mean uncategorized
 USD and transaction count. Unlabelled wires/ACH are `other_opex`, so the
 residual is mostly unlabelled card spend; anything above the threshold (for
 example a kind with no rule) blocks completeness while it remains in the 30-day
 window, then ages out; it is never added to SaaS. Add a category or vendor map rule when its nature is known.
-When annual vendors are configured, a full preceding year of coverage is still
-required, but annual uncategorized spend blocks only when its total exceeds the
-same threshold. This prevents an initial 90-day pull from claiming to know older
-annual bills while allowing small residuals to reconcile.
+When annual vendors are configured, annual-history completeness is its own
+signal (`annual_history_complete`) instead of blocking the line: while it is
+false the value still amortizes every annual bill the seeded history contains
+and says so, rather than dropping the measured line back to a manual constant.
+Annual uncategorized spend still blocks `annual_history_complete` past the same
+threshold. A full preceding year of coverage (a 400-day pull) remains required
+before `annual_history_complete` turns true.
 The reader should require `inputs_complete=true` and fresh `computed_at` (for
-example within 3 days), prefer this USD value over `SAAS_MONTHLY_USD/30.4375`, and
-use the dated `SAAS_AS_OF` estimate with a missing/incomplete label otherwise.
-Preserve an explicit measured zero. `wall-cost.ts` currently has the measured STT
-argument; add an analogous SaaS date-map hook in the admin lane and propagate a
-`saasMeasured` source label/snapshot override. That frontend wiring is separate
-from this producer PR.
+example within 3 days), prefer this USD value over `SAAS_MONTHLY_USD/30.4375`,
+and use the dated `SAAS_AS_OF` estimate with a missing/incomplete label otherwise.
+Treat `annual_history_complete=false` as a disclosed partial (annual bills older
+than the seeded window are not yet amortized), not as an unavailable line.
+Preserve an explicit measured zero. The admin wall reads this table through
+`wall-finops.ts` (`saasMeasured`), which is in place.
 
 Bank posting dates and prepayments differ from provider usage days. Reconcile
 `mercury_vendor_spend_daily` by vendor/month against every non-GCP invoice and the
@@ -522,3 +532,25 @@ python /app/monorepo/backend/scripts/finops/pull_mercury.py --end 2026-10-15 --b
 The raw directory must belong to a fully assembled FinOps run; do not invoke the
 normal loader with only Mercury inputs. No backfill, database write or deployment
 was run as part of this implementation.
+
+## Measured Stripe processing fees
+
+`pull_stripe.py --end <date>` refreshes the trailing 90 posted UTC days of
+balance transactions into `raw/stripe_fee_daily.json`: per day the signed `fee`
+sum across **all** transaction types (a refund carries a negative fee, so fees
+are net of refunds on the refund's own day), gross `charge`/`payment` volume,
+the row count, and how many rows were non-USD (counted, never summed — no
+implicit FX). Only aggregates are persisted; no transaction or customer ids.
+The loader writes `omi_finops.stripe_fee_daily` (date-partitioned, idempotent
+per date, replaced with each refresh) and is **dark while the fee source is
+unavailable**: a restricted Stripe key without balance-transaction read scope
+gets 401/403, the artifact is written with `status=skipped` and the exact
+grant needed (Read on the "Balance" category, `GET /v1/balance_transactions`),
+no table is created or read, and the daily job is unaffected. Transport or
+shape failures also skip (`reason=error`) rather than publish a guessed number
+or lose the subscription book, which is written first.
+
+The TV reads it through `wall-finops.ts` (`fetchStripeFeeHistory`), kept
+outside the plan-cost query so a dark fee table can never fail the plan/STT/SaaS
+legs; the wall shows the fee line as unavailable with the missing scope until
+the first successful pull creates the table.

@@ -41,12 +41,18 @@ import { fetchShopifyWeek } from "./wall-shopify";
 import {
   fetchFinopsHistory,
   fetchPlanCostHistory,
+  fetchStripeFeeHistory,
   FinopsHistory,
   PlanCostHistory,
 } from "./wall-finops";
 import { wallFailure } from "./wall-source-error";
 import { COLD_STORE_WAIT, wallRefreshSettled } from "./wall-cache";
-import { allInCost, CostDay, estimateStatus } from "./wall-cost";
+import {
+  allInCost,
+  CostDay,
+  estimateStatus,
+  FEES_UNAVAILABLE_REASON,
+} from "./wall-cost";
 import { createHash } from "crypto";
 import {
   firestoreSeriesStore,
@@ -137,6 +143,8 @@ export interface SeriesSources {
   billing: () => Promise<Billing>;
   finops: (today: string) => Promise<FinopsHistory>;
   planCost: (today: string) => Promise<PlanCostHistory>;
+  /** Measured Stripe fees; throws while the fee table is dark (missing scope). */
+  fees?: (today: string) => Promise<Record<string, number>>;
   /** Shared cross-instance state; process memory when absent (tests). */
   store?: SeriesStore;
   /** Lease holder id; one per process by default. */
@@ -155,6 +163,7 @@ export const defaultSeriesSources: SeriesSources = {
   },
   finops: fetchFinopsHistory,
   planCost: fetchPlanCostHistory,
+  fees: fetchStripeFeeHistory,
   // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
   store: process.env.K_REVISION
     ? firestoreSeriesStore
@@ -177,6 +186,8 @@ export interface Legs {
   finops?: FinopsHistory;
   /** FinOps plan cost (margin by plan); settled about D−3. */
   planCost?: PlanCostHistory;
+  /** Measured Stripe processing fees by day (missing = the leg is unavailable). */
+  fees?: Record<string, number>;
   billing?: Billing;
   shopify?: {
     date: string;
@@ -192,7 +203,7 @@ const LEGS_FOR: Record<SeriesName, LegName[]> = {
   activation: ["activationHistory", "captureSource"],
   retention: ["curve", "retainedHistory", "establishedHistory", "growth"],
   revenue: ["finops", "mauPrior", "mauDaily", "shopify"],
-  health: ["billing", "finops", "mauPrior", "mauDaily", "planCost"],
+  health: ["billing", "finops", "mauPrior", "mauDaily", "planCost", "fees"],
 };
 
 /** Shift period numbers of a chunk read at an older end date. */
@@ -329,6 +340,10 @@ export function legJobs(
       ),
     finops: () => sources.finops(isoDay(now)),
     planCost: () => sources.planCost(isoDay(now)),
+    fees: () =>
+      sources.fees
+        ? sources.fees(isoDay(now))
+        : Promise.reject(new Error("Stripe fee source unavailable")),
     billing: async () => {
       const bill = await sources.billing();
       if (!bill || bill.summary.costSource !== "billing")
@@ -641,6 +656,10 @@ export function revenueFrames(
 ) {
   const end = utcDay(now);
   const live = usable(metric(snapshot, "revenue.mrr"));
+  // The stat is the FinOps book now (coupons applied); the live-book row only
+  // appears when the stat itself fell back to the live read.
+  const liveFallback =
+    live != null && (live.reason || "").includes("live renewal");
   const mrrPoints = new Map<string, Row>();
   for (const [day, plans] of Object.entries(legs.finops?.mrr || {})) {
     const row: Row = { source: "FinOps book" };
@@ -648,8 +667,8 @@ export function revenueFrames(
     row.total = round(mrrTotal(plans), 0);
     mrrPoints.set(day, row);
   }
-  if (live) {
-    const row: Row = { source: "Live Stripe book" };
+  if (liveFallback) {
+    const row: Row = { source: "Live Stripe book (fallback)" };
     for (const k of PLAN_KEYS) row[k] = live.breakdown?.[k] ?? 0;
     row.total = live.value;
     mrrPoints.set(isoDay(now), row);
@@ -699,24 +718,35 @@ export function healthFrames(
   const end = utcDay(now);
   const cutoff = isoDay(shiftDay(end, -2));
   // Same all-in model as the snapshot's cost stats (every cost line counted).
+  // The fee leg is unavailable, not zero, while the FinOps fee table is dark.
+  const feesUnavailable = legs.fees ? null : FEES_UNAVAILABLE_REASON;
   const allIn = allInCost(
     (legs.billing?.daily || []).filter((d) => d.date <= cutoff),
     legs.billing?.summary.coverage,
-    legs.planCost?.sttMeasured,
-    legs.planCost?.saasMeasured
+    {
+      sttMeasured: legs.planCost?.sttMeasured,
+      sttCash: legs.planCost?.sttCash,
+      saasMeasured: legs.planCost?.saasMeasured,
+      stripeFees: legs.fees,
+    },
+    feesUnavailable
   );
   const latestCostDay = allIn.daily.find((d) => d.date === cutoff);
   const estimates = estimateStatus(now, {
     STT: latestCostDay?.sttMeasured,
     SaaS: latestCostDay?.saasMeasured,
   });
-  // 1 when a manual estimate is older than ESTIMATE_STALE_DAYS.
+  // 1 when a manual estimate is older than its line's staleness threshold.
   const estimateStale = estimates.some((e) => e.stale) ? 1 : 0;
   const days = allIn.daily;
   const net = metric(snapshot, "cost.net_day");
   const snapshotTotals = new Map(
     (net?.trend || []).map((t) => [t.date, t.value])
   );
+  const lastFeeDay =
+    Object.keys(legs.fees || {})
+      .sort()
+      .at(-1) ?? null;
   const cost = days.slice(-60).map((d) => {
     const book = finopsMrr(legs.finops, new Date(ts(d.date)));
     return {
@@ -724,16 +754,24 @@ export function healthFrames(
       gcp: d.gcp,
       vertexLlm: d.vertexLlm,
       openai: d.openai,
-      anthropic: d.anthropic,
+      // Counted only when the admin API reports spend; seats are SaaS cash.
+      anthropic: d.anthropic != null && d.anthropic > 0 ? d.anthropic : null,
       stt: d.stt,
-      sttSource: d.sttMeasured ? "measured" : "estimate",
-      sttEstimateUsd: d.sttMeasured ? null : d.stt,
+      sttSource: d.sttMeasured
+        ? "measured"
+        : d.sttCash
+        ? "estimate+cash"
+        : "estimate",
+      sttEstimateUsd: d.sttMeasured ? null : d.stt - d.sttCash,
       sttMeasuredUsd: d.sttMeasured ? d.stt : null,
+      sttCashUsd: d.sttCash || null,
       saas: d.saas,
       saasSource: d.saasMeasured ? "measured" : "estimate",
       saasEstimateUsd: d.saasMeasured ? null : d.saas,
       saasMeasuredUsd: d.saasMeasured ? d.saas : null,
       estimateStale,
+      fees: d.fees,
+      feesUnavailable: d.fees == null ? 1 : 0,
       oneTimeExcluded: d.oneTime || null,
       // The snapshot uses estimates; measured vendor lines own the all-in total.
       total:
@@ -779,7 +817,17 @@ export function healthFrames(
     cost,
     costPerMau,
     marginByPlan,
-    marginStatus: [{ text: marginStatus(marginByPlan, days, now) }],
+    marginStatus: [
+      {
+        text:
+          marginStatus(marginByPlan, days, now) +
+          (feesUnavailable
+            ? " · Stripe fees unavailable (finops key scope)"
+            : ` · Stripe fees measured through ${
+                lastFeeDay ? shortDay(lastFeeDay) : "—"
+              }`),
+      },
+    ],
     estimates: estimates.map((e) => ({ ...e, stale: e.stale ? 1 : 0 })),
   };
 }
@@ -901,6 +949,7 @@ const HEADLINE_IDS = new Set<string>([
   "revenue.mrr",
   "revenue.arpmau",
   "cost.per_mau_month",
+  "cost.per_customer_month",
 ]);
 /** Sourceless wall metrics: one-line TV labels (contract audit 2026-10-15); the
  * route's full classified reason stays in the hidden `reason` column. */

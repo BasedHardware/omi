@@ -42,7 +42,7 @@
     "deepgram": {"category": "stt_vendor", "annual": false, "aliases": ["deepgram"]},
     "modulate": {"category": "stt_vendor", "annual": false, "aliases": ["modulate", "modulate ai"]},
     "openai": {"category": "llm_vendor", "annual": false, "aliases": ["openai", "open ai"]},
-    "anthropic": {"category": "llm_vendor", "annual": false, "aliases": ["anthropic", "claude ai"]},
+    "anthropic": {"category": "saas", "annual": false, "aliases": ["anthropic", "claude ai"]},
     "openrouter": {"category": "llm_vendor", "annual": false, "aliases": ["openrouter", "open router"]},
     "perplexity": {"category": "llm_vendor", "annual": false, "aliases": ["perplexity"]},
     "groq": {"category": "llm_vendor", "annual": false, "aliases": ["groq"]},

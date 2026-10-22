@@ -178,9 +178,11 @@ def anniversary(day: dt.date, years: int) -> dt.date:
 def saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
     """Normal SaaS: last 30 posted days / 30.4375. Annual: bill / 12 / 30.4375
     for the following 12 calendar months. Older annual aggregates survive refresh.
-    A complete line requires all 30 days, uncategorized spend at or below the map's
-    threshold, and (when annual vendors exist) a full preceding year's coverage
-    with uncategorized spend at or below that threshold. The legacy unmapped_usd
+    `inputs_complete` covers the 30-posted-day cash window: all 30 days fetched and
+    uncategorized spend at or below the map's threshold. Annual-history seeding is
+    its own signal, `annual_history_complete`: while it is false the line still
+    amortizes every annual bill the seeded history contains and says so, instead
+    of dropping back to a manual constant (2026-10-22). The legacy unmapped_usd
     and unmapped_count output fields now report uncategorized spend and transactions.
     """
     annual = {v for v, entry in config['vendors'].items() if entry['annual']}
@@ -227,7 +229,7 @@ def saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
                 'unmapped_count': unmapped_count,
                 'coverage_days': covered,
                 'annual_history_complete': annual_complete,
-                'inputs_complete': covered == 30 and annual_complete and uncategorized <= max_uncategorized,
+                'inputs_complete': covered == 30 and uncategorized <= max_uncategorized,
             }
         )
     return output

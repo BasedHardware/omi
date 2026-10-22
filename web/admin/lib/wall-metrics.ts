@@ -24,12 +24,21 @@ import {
 } from "./wall-mcp";
 import { WallSourceError, wallFailure } from "./wall-source-error";
 import { fetchShopifyWeek } from "./wall-shopify";
-import { fetchPlanCostHistory, PlanCostHistory } from "./wall-finops";
+import {
+  fetchFinopsHistory,
+  fetchPlanCostHistory,
+  fetchStripeFeeHistory,
+  FinopsHistory,
+  PlanCostHistory,
+} from "./wall-finops";
 import { WallJobCache } from "./wall-job-cache";
 import {
   allInCost,
+  estimateStatus,
+  FEES_UNAVAILABLE_REASON,
   SAAS_AS_OF,
   SAAS_MONTHLY_USD,
+  STT_AS_OF,
   STT_MONTHLY_USD,
   STT_SOURCE,
 } from "./wall-cost";
@@ -59,6 +68,12 @@ export const WALL_DEFINITIONS = [
   ["revenue.hardware_usd_week", "Hardware sales", "USD", "Revenue"],
   ["cost.net_day", "All-in cost / day", "USD/day", "Health"],
   ["cost.per_mau_month", "All-in cost / MAU", "USD/person/30d", "Health"],
+  [
+    "cost.per_customer_month",
+    "Software cost / paying customer",
+    "USD/customer/30d",
+    "Health",
+  ],
   ["cost.gross_margin_pct", "Gross margin · goal 60%", "percent", "Revenue"],
   ["health.crash_free", "Crash-free · macOS", "percent", "Health"],
   ["health.thumbs_positive", "Positive answers", "percent", "Health"],
@@ -129,6 +144,10 @@ export interface WallSources {
   query: Query;
   shopify: typeof fetchShopifyWeek;
   planCost?: (today: string) => Promise<PlanCostHistory>;
+  /** FinOps Stripe book history (MRR/paying by snapshot day). */
+  finops?: (today: string) => Promise<FinopsHistory>;
+  /** Measured Stripe processing fees; throws while the fee table is dark. */
+  fees?: (today: string) => Promise<Record<string, number>>;
   stripe: () => Promise<{
     usd: number;
     byPlan?: Record<string, number>;
@@ -158,6 +177,8 @@ export const defaultWallSources: WallSources = {
   query: queryPosthog,
   shopify: fetchShopifyWeek,
   planCost: fetchPlanCostHistory,
+  finops: fetchFinopsHistory,
+  fees: fetchStripeFeeHistory,
   stripe: async () => {
     const { getOptionalStripe } = await import("./stripe");
     const { fetchWallSubscriptionBook, wallSubscriptionBook } = await import(
@@ -196,6 +217,8 @@ const NULL_REASONS: Partial<Record<MetricId, string>> = {
   "revenue.mrr":
     "Stripe plan book unavailable; restricted read credentials required",
   "revenue.arpmau": "Corrected same-cutoff MRR snapshot unavailable",
+  "cost.per_customer_month":
+    "Paying-customer book unavailable; FinOps plan revenue required",
   "revenue.activated_paid_30d":
     "Paid-person billing join missing; signup linkage required",
   "revenue.payer_churn":
@@ -383,6 +406,8 @@ export async function computeWall(
           : "Zero cohort denominator; ") + COVERAGE_REASON;
   }
   let retryableFailures = 0;
+  // Set by the billing job for the derived per-customer stat (same invocation).
+  let windowPlans: PlanCostHistory | null = null;
   const jobs: (() => Promise<void>)[] = [];
   const guarded =
     (ids: MetricId[], source: string, job: () => Promise<void>) => async () => {
@@ -584,151 +609,279 @@ export async function computeWall(
       }
     )(),
     guarded(["revenue.mrr"], "Stripe", async () => {
-      const book = await sources.stripe();
       const m = metrics["revenue.mrr"];
-      m.fixture = book.fixture === true;
-      m.value =
-        book.usd === 0 &&
-        (book.partial || book.unmappedProducts > 0 || book.unsupportedItems > 0)
-          ? null
-          : book.usd;
-      m.partial =
-        book.partial || book.unmappedProducts > 0 || book.unsupportedItems > 0;
-      if (m.value != null && book.byPlan) m.breakdown = book.byPlan;
-      // Live Stripe is today's book. Never pretend it is a historical complete-day close.
-      m.status = m.value == null ? "null" : "proxy";
-      m.sourceRefreshedAt = new Date().toISOString();
-      m.dataThrough = now.toISOString();
-      m.stale = false;
-      m.reason = `Live renewal run-rate, not a complete-period snapshot; prior/trend unavailable. ${book.unmappedProducts} unmapped product items, ${book.unsupportedItems} tiered/non-USD items excluded; JPY stays yen, no implicit FX. Shopify cash excluded.`;
-      const sameCutoff =
-        book.dataThrough === isoDay(shiftDay(end, -1)) &&
-        Boolean(book.sourceRefreshedAt);
-      if (sameCutoff) {
+      // The FinOps book is the source of truth (David 2026-10-22): coupons
+      // applied, annual ÷ 12, trialing $0, refreshed daily by the producer.
+      // The live Stripe read stays only as a freshness cross-check — it ignores
+      // discounts, so a gap between the two is the coupon effect made visible.
+      const finopsSource = sources.finops;
+      const [finopsResult, liveResult] = await Promise.allSettled([
+        finopsSource
+          ? Promise.resolve().then(() => finopsSource(isoDay(now)))
+          : Promise.resolve(null),
+        Promise.resolve()
+          .then(() => sources.stripe())
+          .catch((error) => error as Error),
+      ]);
+      const finops =
+        finopsResult.status === "fulfilled" ? finopsResult.value : null;
+      const book =
+        liveResult.status === "fulfilled" &&
+        !(liveResult.value instanceof Error)
+          ? liveResult.value
+          : null;
+      const liveError =
+        liveResult.status === "fulfilled" && liveResult.value instanceof Error
+          ? liveResult.value
+          : finopsResult.status === "rejected"
+          ? (finopsResult.reason as Error)
+          : null;
+      // Latest complete-day book: never today's half-written snapshot.
+      const snapshotDays = Object.keys(finops?.mrr || {})
+        .filter((day) => day <= isoDay(shiftDay(end, -1)))
+        .sort();
+      const snap = snapshotDays.at(-1);
+      if (finops && snap) {
+        const plans = finops.mrr[snap];
+        const usd = Object.values(plans).reduce((s, v) => s + v, 0);
+        m.value = usd;
+        m.numerator = usd;
+        m.denominator = finops.paying[snap] ?? null;
+        m.breakdown = plans;
+        m.partial = false;
+        const refreshed = finops.refreshed[snap] ?? null;
         stamp(
           m,
-          shiftDay(end, -1),
-          end,
-          `${
-            book.fixture ? "LOCAL STRIPE FIXTURE · " : ""
-          }Omi-plan renewal run-rate snapshot; Shopify cash excluded; USD/approved FX only`,
-          book.sourceRefreshedAt
+          shiftDay(new Date(`${snap}T00:00:00Z`), 1),
+          shiftDay(new Date(`${snap}T00:00:00Z`), 1),
+          `FinOps Stripe book snapshot ${snap}: coupons applied, annual ÷ 12, trialing excluded, produced ${
+            refreshed?.slice(0, 10) ?? "unknown time"
+          }.` +
+            (book
+              ? ` Live Stripe cross-check $${Math.round(
+                  book.usd
+                ).toLocaleString("en-US")} (${book.usd >= usd ? "+" : ""}${
+                  usd ? ((100 * (book.usd - usd)) / usd).toFixed(1) : "?"
+                }%: live read applies no coupons).`
+              : " Live Stripe cross-check unavailable."),
+          refreshed
+        );
+        m.dataThrough = `${snap}T00:00:00Z`;
+        m.stale = freshness(refreshed, snap, "daily", now).stale;
+      } else if (book) {
+        m.fixture = book.fixture === true;
+        m.value =
+          book.usd === 0 &&
+          (book.partial ||
+            book.unmappedProducts > 0 ||
+            book.unsupportedItems > 0)
+            ? null
+            : book.usd;
+        m.partial =
+          book.partial ||
+          book.unmappedProducts > 0 ||
+          book.unsupportedItems > 0;
+        if (m.value != null && book.byPlan) m.breakdown = book.byPlan;
+        m.status = m.value == null ? "null" : "proxy";
+        m.sourceRefreshedAt = new Date().toISOString();
+        m.dataThrough = now.toISOString();
+        m.stale = false;
+        m.reason = `FinOps book unavailable; live renewal run-rate shown instead (no coupon handling): ${
+          liveError ? wallFailure("FinOps", liveError) : "no snapshot found"
+        }. ${book.unmappedProducts} unmapped product items, ${
+          book.unsupportedItems
+        } tiered/non-USD items excluded; JPY stays yen, no implicit FX. Shopify cash excluded.`;
+        const sameCutoff =
+          book.dataThrough === isoDay(shiftDay(end, -1)) &&
+          Boolean(book.sourceRefreshedAt);
+        if (sameCutoff)
+          stamp(
+            m,
+            shiftDay(end, -1),
+            end,
+            `${
+              book.fixture ? "LOCAL STRIPE FIXTURE · " : ""
+            }Omi-plan renewal run-rate snapshot; Shopify cash excluded; USD/approved FX only`,
+            book.sourceRefreshedAt
+          );
+      } else {
+        throw (
+          liveError || new WallSourceError("Stripe plan book unavailable", true)
         );
       }
     })(),
     // Billing's cost/MAU denominator is a PostHog read: after the pool.
     posthog.then(
-      guarded(["cost.net_day", "cost.per_mau_month"], "Billing", async () => {
-        const planCostSource = sources.planCost;
-        const [billResult, planCostResult] = await Promise.allSettled([
-          Promise.resolve().then(() => sources.billing()),
-          planCostSource
-            ? Promise.resolve().then(() => planCostSource(isoDay(now)))
-            : Promise.resolve(null),
-        ]);
-        if (billResult.status === "rejected") throw billResult.reason;
-        const bill = billResult.value;
-        const planCost =
-          planCostResult.status === "fulfilled" ? planCostResult.value : null;
-        // Source failures (not empty data): the cache keeps the last good cost.
-        if (!bill || bill.summary.costSource !== "billing")
-          throw new WallSourceError("Settled billing aggregate unavailable");
-        const cutoff = isoDay(shiftDay(end, -2));
-        // All-in: GCP net of CUD minus one-time incidents, plus OpenAI/Anthropic
-        // invoices and measured vendor lines when complete and fresh.
-        const cost = allInCost(
-          bill.daily.filter((d) => d.date <= cutoff),
-          bill.summary.coverage,
-          planCost?.sttMeasured,
-          planCost?.saasMeasured
-        );
-        const daily = cost.daily;
-        const last = daily.find((d) => d.date === cutoff);
-        if (!last)
-          throw new WallSourceError(`Billing data has not reached ${cutoff}`);
-        const sttLine = last.sttMeasured
-          ? `STT measured (Soniox): $${last.stt.toFixed(2)}/day`
-          : `STT ($${STT_MONTHLY_USD}/mo estimate, ${STT_SOURCE})`;
-        const saasLine = last.saasMeasured
-          ? `measured SaaS (Mercury): $${last.saas.toFixed(2)}/day`
-          : `SaaS (fixed $${SAAS_MONTHLY_USD}/mo estimate as of ${SAAS_AS_OF}; ${
-              planCostResult.status === "rejected"
-                ? "Mercury feed unavailable"
-                : "no complete fresh Mercury row"
-            })`;
-        const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI + Anthropic + ${sttLine} + ${saasLine}${
-          cost.missing.length ? `; missing: ${cost.missing.join(", ")}` : ""
-        }`;
-        const m = metrics["cost.net_day"];
-        m.value = last.total;
-        m.prev =
-          daily.find((d) => d.date === isoDay(shiftDay(end, -3)))?.total ??
-          null;
-        m.partial = true;
-        stamp(
-          m,
-          shiftDay(end, -2),
-          shiftDay(end, -1),
-          lines,
-          new Date(bill.generatedAt).toISOString()
-        );
-        m.stale = freshness(
-          m.sourceRefreshedAt,
-          m.dataThrough,
-          "settled",
-          now
-        ).stale;
-        m.trend = daily
-          .slice(-14)
-          .map((d) => ({ date: d.date, value: d.total }));
-        const window = completeWindow(30, now, 1); // ends D-1 exclusive, D-2 inclusive
-        const costs = daily.filter(
-          (d) => d.date >= isoDay(window.start) && d.date < isoDay(window.end)
-        );
-        if (new Set(costs.map((d) => d.date)).size !== 30) {
-          metrics["cost.per_mau_month"].reason =
-            "Billing window missing settled days";
-          return;
+      guarded(
+        ["cost.net_day", "cost.per_mau_month", "cost.per_customer_month"],
+        "Billing",
+        async () => {
+          const planCostSource = sources.planCost;
+          const feesSource = sources.fees;
+          const [billResult, planCostResult, feesResult] =
+            await Promise.allSettled([
+              Promise.resolve().then(() => sources.billing()),
+              planCostSource
+                ? Promise.resolve().then(() => planCostSource(isoDay(now)))
+                : Promise.resolve(null),
+              feesSource
+                ? Promise.resolve().then(() => feesSource(isoDay(now)))
+                : Promise.resolve(null),
+            ]);
+          if (billResult.status === "rejected") throw billResult.reason;
+          const bill = billResult.value;
+          const planCost =
+            planCostResult.status === "fulfilled" ? planCostResult.value : null;
+          // Fee source unreachable (missing key scope / dark table) is a labelled
+          // missing line, never a guess and never a failed cost stack.
+          const feesUnavailable =
+            feesResult.status === "rejected" ? FEES_UNAVAILABLE_REASON : null;
+          // Source failures (not empty data): the cache keeps the last good cost.
+          if (!bill || bill.summary.costSource !== "billing")
+            throw new WallSourceError("Settled billing aggregate unavailable");
+          const cutoff = isoDay(shiftDay(end, -2));
+          // All-in: GCP net of CUD minus one-time incidents, plus OpenAI, the
+          // Anthropic API leg only when it reports spend, measured STT vendor
+          // lines (+ Modulate cash), Mercury SaaS, and measured Stripe fees.
+          const vendor = {
+            sttMeasured: planCost?.sttMeasured,
+            sttCash: planCost?.sttCash,
+            saasMeasured: planCost?.saasMeasured,
+            stripeFees:
+              feesResult.status === "fulfilled"
+                ? feesResult.value ?? undefined
+                : undefined,
+          };
+          const cost = allInCost(
+            bill.daily.filter((d) => d.date <= cutoff),
+            bill.summary.coverage,
+            vendor,
+            feesUnavailable
+          );
+          const daily = cost.daily;
+          const last = daily.find((d) => d.date === cutoff);
+          if (!last)
+            throw new WallSourceError(`Billing data has not reached ${cutoff}`);
+          const staleEstimate = (
+            { stale }: { stale: boolean },
+            label: string
+          ) => (stale ? `${label} STALE` : label);
+          const sttEstimate = estimateStatus(now, {
+            STT: last.sttMeasured,
+          }).find((e) => e.line === "STT")!;
+          const sttLine = last.sttMeasured
+            ? `measured STT $${last.stt.toFixed(2)}/day${
+                last.sttCash
+                  ? ` (incl. $${last.sttCash.toFixed(2)} Mercury vendor cash)`
+                  : ""
+              }`
+            : staleEstimate(
+                sttEstimate,
+                `STT $${STT_MONTHLY_USD}/mo Soniox-console constant as of ${STT_AS_OF}${
+                  last.sttCash
+                    ? ` + $${last.sttCash.toFixed(2)} Mercury vendor cash`
+                    : ""
+                }`
+              );
+          const saasLine = last.saasMeasured
+            ? `measured SaaS (Mercury) $${last.saas.toFixed(2)}/day`
+            : `SaaS fixed $${SAAS_MONTHLY_USD}/mo estimate as of ${SAAS_AS_OF} (${
+                planCostResult.status === "rejected"
+                  ? "Mercury feed unavailable"
+                  : "no complete fresh Mercury row"
+              })`;
+          const feesLine =
+            last.fees != null
+              ? `measured Stripe fees $${last.fees.toFixed(2)}/day`
+              : `Stripe fees UNAVAILABLE (finops key lacks balance-transaction read scope)`;
+          const anthropicLine =
+            last.anthropic != null && last.anthropic > 0
+              ? ` + Anthropic $${last.anthropic.toFixed(2)}`
+              : last.anthropic != null
+              ? " + Anthropic $0 API (team seats are SaaS cash)"
+              : " + Anthropic API leg not configured (team seats are SaaS cash)";
+          const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI${anthropicLine} + ${sttLine} + ${saasLine} + ${feesLine}${
+            cost.missing.length ? `; missing: ${cost.missing.join(", ")}` : ""
+          }`;
+          const m = metrics["cost.net_day"];
+          m.value = last.total;
+          m.prev =
+            daily.find((d) => d.date === isoDay(shiftDay(end, -3)))?.total ??
+            null;
+          m.partial = true;
+          stamp(
+            m,
+            shiftDay(end, -2),
+            shiftDay(end, -1),
+            lines,
+            new Date(bill.generatedAt).toISOString()
+          );
+          m.stale = freshness(
+            m.sourceRefreshedAt,
+            m.dataThrough,
+            "settled",
+            now
+          ).stale;
+          m.trend = daily
+            .slice(-14)
+            .map((d) => ({ date: d.date, value: d.total }));
+          const window = completeWindow(30, now, 1); // ends D-1 exclusive, D-2 inclusive
+          const costs = daily.filter(
+            (d) => d.date >= isoDay(window.start) && d.date < isoDay(window.end)
+          );
+          if (new Set(costs.map((d) => d.date)).size !== 30) {
+            metrics["cost.per_mau_month"].reason =
+              "Billing window missing settled days";
+            metrics["cost.per_customer_month"].reason =
+              "Billing window missing settled days";
+            return;
+          }
+          // Software cost per paying customer shares the cost numerator with
+          // cost/MAU; the denominator comes from the FinOps book (derived block).
+          const windowTotal = costs.reduce((s, d) => s + d.total, 0);
+          metrics["cost.per_mau_month"].numerator = windowTotal;
+          metrics["cost.per_customer_month"].numerator = windowTotal;
+          windowPlans = planCost;
+          const rows = await sources.query(
+            activityQuery(window.end, 30, "active", 1)
+          );
+          const mau = rows
+            .filter((r) => Number(r[0]) === 0)
+            .reduce((s, r) => s + Number(r[2]), 0);
+          const c = metrics["cost.per_mau_month"];
+          if (!mau) {
+            c.reason = "Zero same-window MAU denominator";
+            return;
+          }
+          c.definitionVersion = MCP_ACTIVITY_VERSION;
+          c.value = windowTotal / mau;
+          c.numerator = windowTotal;
+          c.denominator = mau;
+          c.partial = true;
+          stamp(
+            c,
+            window.start,
+            window.end,
+            "Same-window 30-day all-in cost / qualified MAU. " +
+              lines +
+              "; " +
+              COVERAGE_REASON,
+            new Date(bill.generatedAt).toISOString()
+          );
+          c.sourceRefreshedAt = rows.sourceRefreshedAt
+            ? [
+                new Date(bill.generatedAt).toISOString(),
+                rows.sourceRefreshedAt,
+              ].sort()[0]
+            : null;
+          c.stale = freshness(
+            c.sourceRefreshedAt,
+            c.dataThrough,
+            "settled",
+            now
+          ).stale;
         }
-        const rows = await sources.query(
-          activityQuery(window.end, 30, "active", 1)
-        );
-        const mau = rows
-          .filter((r) => Number(r[0]) === 0)
-          .reduce((s, r) => s + Number(r[2]), 0);
-        const c = metrics["cost.per_mau_month"];
-        if (!mau) {
-          c.reason = "Zero same-window MAU denominator";
-          return;
-        }
-        c.definitionVersion = MCP_ACTIVITY_VERSION;
-        c.value = costs.reduce((s, d) => s + d.total, 0) / mau;
-        c.numerator = costs.reduce((s, d) => s + d.total, 0);
-        c.denominator = mau;
-        c.partial = true;
-        stamp(
-          c,
-          window.start,
-          window.end,
-          "Same-window 30-day all-in cost / qualified MAU. " +
-            lines +
-            "; " +
-            COVERAGE_REASON,
-          new Date(bill.generatedAt).toISOString()
-        );
-        c.sourceRefreshedAt = rows.sourceRefreshedAt
-          ? [
-              new Date(bill.generatedAt).toISOString(),
-              rows.sourceRefreshedAt,
-            ].sort()[0]
-          : null;
-        c.stale = freshness(
-          c.sourceRefreshedAt,
-          c.dataThrough,
-          "settled",
-          now
-        ).stale;
-      })
+      )
     ),
   ]);
   // Derived units recompute from reused source snapshots without querying Stripe
@@ -774,6 +927,61 @@ export async function computeWall(
       a.retryableFailure = m.retryableFailure || mau.retryableFailure;
     if (a.value == null && (m.sourceFailure || mau.sourceFailure))
       a.sourceFailure = m.sourceFailure || mau.sourceFailure;
+  }
+  // Software cost per paying customer (David 2026-10-22): the same 30-day
+  // all-in software cost as cost/MAU, over paying customers from the FinOps
+  // book. The breakdown exposes per-plan variable cost (FinOps
+  // `variable_total` ÷ cost-active user-days × 30.44) when the window has it.
+  {
+    const p = metrics["cost.per_customer_month"];
+    const m = metrics["revenue.mrr"];
+    const perMau = metrics["cost.per_mau_month"];
+    const paying = m.denominator;
+    if (p.numerator != null && paying) {
+      p.value = p.numerator / paying;
+      p.denominator = paying;
+      p.partial = perMau.partial || m.partial;
+      // Variable $/customer/month per plan over the same cost window.
+      const planWindow = windowPlans as PlanCostHistory | null;
+      if (planWindow) {
+        const window = completeWindow(30, now, 1);
+        const varUsd: Record<string, number> = {};
+        const varUsers: Record<string, number> = {};
+        for (const day of Object.keys(planWindow.plans)) {
+          if (day < isoDay(window.start) || day >= isoDay(window.end)) continue;
+          for (const [plan, row] of Object.entries(planWindow.plans[day])) {
+            varUsd[plan] = (varUsd[plan] || 0) + row.varUsd;
+            varUsers[plan] = (varUsers[plan] || 0) + row.varUsers;
+          }
+        }
+        const plans = Object.fromEntries(
+          Object.entries(varUsers)
+            .filter(([, users]) => users > 0)
+            .map(([plan, users]) => [plan, (varUsd[plan] / users) * 30.4375])
+        );
+        if (Object.keys(plans).length) p.breakdown = plans;
+      }
+      stamp(
+        p,
+        perMau.windowStart ? new Date(perMau.windowStart) : shiftDay(end, -31),
+        perMau.windowEnd ? new Date(perMau.windowEnd) : end,
+        `Same-window 30-day all-in software cost / paying customers (FinOps book${
+          m.dataThrough ? ` through ${String(m.dataThrough).slice(0, 10)}` : ""
+        }). ${perMau.reason ?? ""}${
+          p.breakdown
+            ? ` Per-plan breakdown: variable cost per customer/month.`
+            : ""
+        }`,
+        m.sourceRefreshedAt
+      );
+      p.stale = perMau.stale || m.stale;
+    } else {
+      p.reason = paying
+        ? `Cost numerator unavailable: ${perMau.reason}`
+        : `Paying-customer book unavailable: ${m.reason}`;
+    }
+    if (p.value == null && (m.sourceFailure || perMau.sourceFailure))
+      p.sourceFailure = m.sourceFailure || perMau.sourceFailure;
   }
   const list = WALL_DEFINITIONS.map(([id]) => metrics[id]);
   return {

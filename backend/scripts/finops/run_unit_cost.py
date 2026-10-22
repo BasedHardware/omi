@@ -237,7 +237,12 @@ def main() -> None:
         if "mercury" not in skip:
             sh([str(HERE / "pull_mercury.py"), "--end", end, "--raw", str(raw)], log, "mercury")
         if "stripe" not in skip:
-            sh([str(HERE / "pull_stripe.py"), "--raw", str(raw)], log, "stripe", required=False)
+            sh(
+                [str(HERE / "pull_stripe.py"), "--raw", str(raw), "--end", end],
+                log,
+                "stripe",
+                required=False,
+            )
         if "posthog" not in skip:
             # denominator colour only; the allocation does not depend on it
             nxt = (dt.date.fromisoformat(end) + dt.timedelta(days=1)).isoformat()
@@ -264,6 +269,10 @@ def main() -> None:
     mercury_invoice = raw / "mercury_vendor_spend_daily.json"
     if mercury_invoice.exists() and json.loads(mercury_invoice.read_text()).get("status") == "skipped":
         sys.stderr.write("WARNING: Mercury vendor spend unavailable; see pull.log\n")
+
+    stripe_fees = raw / "stripe_fee_daily.json"
+    if stripe_fees.exists() and json.loads(stripe_fees.read_text()).get("status") == "skipped":
+        sys.stderr.write("WARNING: Stripe fee line unavailable; see pull.log\n")
 
     cws = a.cohort_window_start
     with open(run / "assembly_output.md", "w") as fh:

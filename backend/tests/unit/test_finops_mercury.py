@@ -358,6 +358,52 @@ def test_annual_leap_day_expiry(mercury):
     assert Decimal(costs.saas_rows(rows, ['2025-02-28'], config)[0]['annual_monthly_usd']) == 0
 
 
+def test_committed_cadence_map_is_ledger_evidence_based(mercury):
+    """The cadence flags are a committed, evidence-backed map, not name inference.
+
+    Ledger evidence (omi_finops.mercury_vendor_spend_daily, 2026-07-04..2026-10-19,
+    read 2026-10-22): shopify bills monthly on the 3rd (2969/3011/4013), posthog
+    monthly on the ~7th (496/972/1800/2842), nevercode monthly on the 1st-2nd
+    (1136/731/1419), pinecone monthly on the 2nd (1112/1024/925). The 2026-10-22
+    wall audit suspected those four of being single annual payments; they are
+    monthly bills that each land once per 30-day window. No vendor in the ledger
+    window shows an annual cadence, so no `annual: true` may be committed without
+    new ledger evidence (a ~12-month repeat) or a vendor billing confirmation.
+    Anthropic is SaaS: its Mercury cash is Claude team seats (David 2026-10-22),
+    not per-customer API spend.
+    """
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    annual = {vendor for vendor, entry in config['vendors'].items() if entry['annual']}
+    assert annual == set()
+    for vendor in ('shopify', 'posthog', 'nevercode', 'pinecone'):
+        assert config['vendors'][vendor]['annual'] is False
+    assert config['vendors']['anthropic']['category'] == 'saas'
+    assert config['vendors']['anthropic']['annual'] is False
+    # Modulate cash is STT vendor spend, never SaaS, and never a GCP line.
+    assert config['vendors']['modulate']['category'] == 'stt_vendor'
+
+
+def test_annual_history_gap_keeps_cash_window_complete_and_flags_seeding(mercury):
+    """An unseeded annual history must not drop the measured line to a constant.
+
+    `inputs_complete` describes the 30-posted-day cash window only; the annual
+    seeding gap is `annual_history_complete=False` while every in-window annual
+    bill still amortizes (bill/12) into the daily value.
+    """
+    costs = load('mercury_costs')
+    config = costs.load_map()
+    config['vendors']['github']['annual'] = True
+    rows = coverage(costs, '2026-07-20', '2026-10-17') + [cash('2026-10-01', 'github', 1217.50)]
+    result = costs.saas_rows(rows, ['2026-10-17'], config)[0]
+    assert result['inputs_complete'] is True
+    assert result['annual_history_complete'] is False
+    assert Decimal(result['annual_monthly_usd']) == Decimal('101.458333333')  # 1217.50/12
+    assert Decimal(result['amount_usd']) == (Decimal('101.458333333') / costs.DAYS_PER_MONTH).quantize(
+        Decimal('0.000000001')
+    )
+
+
 def test_loader_keeps_old_annuals_and_replaces_the_whole_refresh_window(mercury, tmp_path, monkeypatch):
     loader = load('load_mercury')
     costs = load('mercury_costs')

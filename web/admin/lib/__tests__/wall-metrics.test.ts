@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { computeWall, WALL_DEFINITIONS, WallSources } from "../wall-metrics";
+import type { PlanCostHistory } from "../wall-finops";
 import { resetWallCache, wallPayload } from "../wall-cache";
 import { aggregateOrders, ShopOrder } from "../wall-shopify";
 import { wallSubscriptionBook } from "../stripe-subscriptions";
@@ -14,6 +15,8 @@ const sources = (): WallSources => ({
   stripe: fail,
   billing: fail,
   planCost: fail,
+  finops: fail,
+  fees: fail,
 });
 
 describe("wall source and payload contracts", () => {
@@ -267,9 +270,206 @@ it("uses a measured Mercury zero in the all-in stat and names the source", async
     plans: {},
     sttMeasured: {},
     saasMeasured: { "2026-10-13": 0 },
+    sttCash: {},
   });
   const wall = await computeWall(s, now);
   const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
   expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12));
-  expect(metric.reason).toContain("measured SaaS (Mercury): $0.00/day");
+  expect(metric.reason).toContain("measured SaaS (Mercury) $0.00/day");
+});
+
+it("adds Modulate Mercury cash to the STT line and keeps Soniox cash out", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: { "2026-10-13": 140 },
+    saasMeasured: { "2026-10-13": 0 },
+    sttCash: { "2026-10-13": { modulate: 20, soniox: 500, deepgram: 5 } },
+  });
+  const wall = await computeWall(s, now);
+  const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  // Measured Soniox + Modulate cash; the Soniox prepaid recharge and the
+  // Deepgram cash (a measured line exists) never stack on top.
+  expect(metric.value).toBeCloseTo(100 + 140 + 20 + 0);
+  expect(metric.reason).toContain("incl. $20.00 Mercury vendor cash");
+});
+
+it("shows Stripe fees as unavailable with the missing scope, never a guess", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: { costSource: "billing", partial: false, coverage: {} },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: {},
+    sttCash: {},
+  });
+  const wall = await computeWall(s, now);
+  const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(metric.reason).toContain("Stripe fees UNAVAILABLE");
+  expect(metric.reason).toContain("missing: Stripe processing fees");
+  expect(metric.value).toBeCloseTo(
+    100 + 5_300 / (365.25 / 12) + 4_800 / (365.25 / 12)
+  );
+});
+
+it("counts the Anthropic invoice only when the admin API reports spend", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0, anthropic: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { anthropic: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: {},
+    sttCash: {},
+  });
+  const wall = await computeWall(s, now);
+  const zero = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(zero.reason).toContain("Anthropic $0 API (team seats are SaaS cash)");
+  expect(zero.value).toBeCloseTo(
+    100 + 5_300 / (365.25 / 12) + 4_800 / (365.25 / 12)
+  );
+});
+
+it("uses the FinOps book snapshot for MRR and cross-checks the live read", async () => {
+  const s = sources();
+  s.query = async () => [[0, "macos", 10]];
+  s.finops = async () => ({
+    mrr: {
+      "2026-10-13": { unlimited_v2: 60_000, plus: 15_610 },
+      "2026-10-14": { unlimited_v2: 61_000, plus: 15_000 },
+    },
+    paying: { "2026-10-13": 3_100, "2026-10-14": 3_209 },
+    refreshed: {
+      "2026-10-13": "2026-10-13T14:36:00Z",
+      "2026-10-14": "2026-10-14T14:36:00Z",
+    },
+  });
+  s.stripe = async () => ({
+    usd: 80_000,
+    partial: false,
+    unmappedProducts: 0,
+    unsupportedItems: 0,
+  });
+  const wall = await computeWall(s, now);
+  const mrr = wall.metrics.find((m) => m.id === "revenue.mrr")!;
+  // The latest complete-day book (D-1 = 10-14), not today's half-written one.
+  expect(mrr.value).toBe(76_000);
+  expect(mrr.denominator).toBe(3_209);
+  expect(String(mrr.dataThrough).slice(0, 10)).toBe("2026-10-14");
+  expect(mrr.reason).toContain("FinOps Stripe book snapshot 2026-10-14");
+  expect(mrr.reason).toContain("coupons applied");
+  expect(mrr.reason).toContain("+5.3%");
+  expect(mrr.stale).toBe(false);
+});
+
+it("falls back to the live book with its gaps named when FinOps is down", async () => {
+  const s = sources();
+  s.query = async () => [[0, "macos", 10]];
+  s.stripe = async () => ({
+    usd: 1_400,
+    partial: false,
+    unmappedProducts: 0,
+    unsupportedItems: 1,
+  });
+  const wall = await computeWall(s, now);
+  const mrr = wall.metrics.find((m) => m.id === "revenue.mrr")!;
+  expect(mrr.value).toBe(1_400);
+  expect(mrr.reason).toContain("FinOps book unavailable");
+});
+
+const billingWindow = (now: Date) => {
+  const day = (offset: number) =>
+    new Date(now.getTime() - offset * 86_400_000).toISOString().slice(0, 10);
+  return Array.from({ length: 33 }, (_, k) => ({
+    date: day(k + 1),
+    total: 100,
+    components: { gcpInfra: 100, vertexLlm: 0 },
+  }));
+};
+
+it("derives software cost per paying customer with a per-plan variable breakdown", async () => {
+  const s = sources();
+  s.query = async () => [[0, "macos", 1_000]]; // MAU for cost/MAU
+  s.billing = async () => ({
+    daily: billingWindow(now),
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => {
+    const plans: PlanCostHistory["plans"] = {};
+    for (const d of billingWindow(now)) {
+      plans[d.date] = {
+        unlimited_v2: { usd: 1, users: 2, varUsd: 300, varUsers: 100 },
+        basic: { usd: 1, users: 2, varUsd: 100, varUsers: 100 },
+      };
+    }
+    return { plans, sttMeasured: {}, saasMeasured: {}, sttCash: {} };
+  };
+  s.finops = async () => ({
+    mrr: { "2026-10-14": { unlimited_v2: 76_000 } },
+    paying: { "2026-10-14": 3_209 },
+    refreshed: { "2026-10-14": "2026-10-14T14:36:00Z" },
+  });
+  const wall = await computeWall(s, now);
+  const perCustomer = wall.metrics.find(
+    (m) => m.id === "cost.per_customer_month"
+  )!;
+  // 30 settled days × $100 GCP + STT/SaaS constants ÷ 3,209 paying.
+  const windowTotal =
+    30 * 100 + 30 * (5_300 / (365.25 / 12)) + 30 * (4_800 / (365.25 / 12));
+  expect(perCustomer.numerator).toBeCloseTo(windowTotal);
+  expect(perCustomer.value).toBeCloseTo(windowTotal / 3_209);
+  expect(perCustomer.denominator).toBe(3_209);
+  expect(perCustomer.breakdown).toMatchObject({
+    unlimited_v2: (300 / 100) * 30.4375,
+    basic: (100 / 100) * 30.4375,
+  });
+  expect(
+    wall.metrics.find((m) => m.id === "cost.per_mau_month")!.value
+  ).toBeCloseTo(windowTotal / 1_000);
 });

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Live Stripe read-only: subscriptions -> paying subs, trialing subs, MRR and ARPU by plan.
+"""Live Stripe read-only: subscriptions -> paying subs, trialing subs, MRR and ARPU by plan,
+plus daily processing fees from balance transactions.
 
 This is a SNAPSHOT of the subscription book at the moment it runs. Stripe is not replayable
 per historical day from this endpoint, so `plan_revenue_daily` carries `snapshot_date`
@@ -13,6 +14,19 @@ Rules baked in:
   * subscriptions carrying metadata.app_id are marketplace app subscriptions, not Omi plans.
   * yearly/weekly/daily intervals are normalised to a monthly figure.
 The API key is read from the omi-stripe skill env and never printed or written.
+
+The fee leg refreshes the trailing 90 posted UTC days ending at --end into
+`stripe_fee_daily.json`: per day the net `fee` sum across ALL balance-transaction
+types (a refund carries a negative fee, so fees are net of refunds on their own
+day), the gross charge volume, the row count, and how many rows were non-USD
+(counted, never summed: no implicit FX). Only aggregates are persisted.
+
+A restricted key without balance-transaction read scope gets 401/403 here. That is
+an UNAVAILABLE state, never a guess: the artifact is written with
+status=skipped/permission_unavailable, the subscription book is unaffected, and
+the pull exits 0 so the daily job keeps running. The exact scope needed: Read on
+the "Balance" category (endpoint GET /v1/balance_transactions). Other HTTP or
+shape failures also skip (reason=error) rather than fail the whole pull.
 """
 
 from __future__ import annotations
@@ -20,10 +34,12 @@ from __future__ import annotations
 import argparse
 import base64
 import collections
+import datetime as dt
 import json
 import os
 import pathlib
 import sys
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -34,6 +50,18 @@ import auth_http  # noqa: E402
 CATALOG = HERE.parent.parent / "config" / "plan_catalog.json"
 ENV = pathlib.Path.home() / ".hermes/skills/omi/omi-stripe/references/.env"
 COUNTED_STATUSES = ("active", "trialing", "past_due")
+FEE_FILE = "stripe_fee_daily.json"
+FEE_WINDOW_DAYS = 90
+FEE_MAX_PAGES = 2000
+SCOPE_HINT = (
+    "Stripe fee line unavailable: the restricted key lacks read access to balance "
+    "transactions. Grant Read on the 'Balance' category (GET /v1/balance_transactions) "
+    "to the finops Stripe key."
+)
+
+
+class FeeUnavailable(RuntimeError):
+    """Bounded message only; never contains an HTTP body or the key."""
 
 
 def auth_header() -> str:
@@ -77,9 +105,109 @@ def apply_coupon(monthly: float, sub: dict) -> float:
     return monthly
 
 
+def fee_page(get, params: dict) -> dict:
+    """One balance-transaction page, with the scope/transport errors classified."""
+    try:
+        return get("/balance_transactions", **params)
+    except SystemExit:
+        raise FeeUnavailable("stripe redirect refused") from None
+    except urllib.error.HTTPError as error:
+        if error.code in (401, 403):
+            raise PermissionError("stripe balance-transaction permission unavailable") from None
+        raise FeeUnavailable("stripe fees HTTP %d" % error.code) from None
+    except (OSError, ValueError):
+        raise FeeUnavailable("stripe fees transport/JSON failure") from None
+
+
+def pull_fees(get, raw: pathlib.Path, end: str) -> None:
+    """Refresh the trailing FEE_WINDOW_DAYS ending at --end (inclusive) into aggregates.
+
+    Skips (permission, transport, shape) never fail the pull and never publish a
+    guessed number: the artifact carries status=skipped with the reason.
+    """
+    path = raw / FEE_FILE
+    path.unlink(missing_ok=True)  # a skipped refresh must not reuse a prior artifact
+    end_day = dt.date.fromisoformat(end)
+    start_day = end_day - dt.timedelta(days=FEE_WINDOW_DAYS - 1)
+    window = [(start_day + dt.timedelta(days=i)).isoformat() for i in range((end_day - start_day).days + 1)]
+    try:
+        rows = aggregate_fees(get, window)
+    except PermissionError:
+        sys.stderr.write("WARNING: %s\n" % SCOPE_HINT)
+        path.write_text(json.dumps({"status": "skipped", "reason": "permission_unavailable"}))
+        return
+    except FeeUnavailable as error:
+        sys.stderr.write("WARNING: Stripe fee line skipped: %s\n" % error)
+        path.write_text(json.dumps({"status": "skipped", "reason": "error"}))
+        return
+    path.write_text(json.dumps({"status": "ready", "start": window[0], "end": window[-1], "rows": rows}, indent=1))
+    month = sum(r["fee_usd"] for r in rows[-30:])
+    sys.stderr.write("Stripe fees %s..%s: last-30-posted-days net $%.2f\n" % (window[0], window[-1], month))
+
+
+def aggregate_fees(get, window: list[str]) -> list[dict]:
+    """Sum fee/amount/count per UTC created day over every balance-transaction type.
+
+    `fee` is signed: refunds return the original fee as a negative amount on the
+    refund's own day, so the per-day sum is fees net of refunds without pairing.
+    Non-USD rows are counted, never summed (no implicit FX).
+    """
+    start = dt.datetime.fromisoformat(window[0] + "T00:00:00+00:00")
+    end_excl = dt.datetime.fromisoformat(window[-1] + "T00:00:00+00:00") + dt.timedelta(days=1)
+    days = {day: {"fee": 0, "volume": 0, "count": 0, "foreign": 0} for day in window}
+    starting = None
+    for _ in range(FEE_MAX_PAGES):
+        params = {
+            "limit": 100,
+            "created[gte]": int(start.timestamp()),
+            "created[lt]": int(end_excl.timestamp()),
+        }
+        if starting:
+            params["starting_after"] = starting
+        page = fee_page(get, params)
+        try:
+            data = page["data"]
+            for txn in data:
+                day = dt.datetime.fromtimestamp(int(txn["created"]), dt.timezone.utc).date().isoformat()
+                bucket = days.get(day)
+                if bucket is None:
+                    raise FeeUnavailable("stripe fee day outside requested window")
+                if (txn.get("currency") or "usd") != "usd":
+                    bucket["foreign"] += 1
+                else:
+                    bucket["fee"] += int(txn.get("fee") or 0)
+                    if txn.get("type") in ("charge", "payment"):
+                        bucket["volume"] += int(txn.get("amount") or 0)
+                bucket["count"] += 1
+            if not page.get("has_more") or not data:
+                break
+            starting = data[-1]["id"]
+        except FeeUnavailable:
+            raise
+        except (KeyError, TypeError, ValueError):
+            raise FeeUnavailable("invalid stripe balance-transaction response") from None
+    else:
+        raise FeeUnavailable("stripe fee pagination did not terminate")
+    return [
+        {
+            "date": day,
+            "fee_usd": round(bucket["fee"] / 100, 6),
+            "volume_usd": round(bucket["volume"] / 100, 6),
+            "transaction_count": bucket["count"],
+            "foreign_transaction_count": bucket["foreign"],
+        }
+        for day, bucket in days.items()
+    ]
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--raw", required=True)
+    ap.add_argument(
+        "--end",
+        default=dt.datetime.now(dt.timezone.utc).date().isoformat(),
+        help="last fee UTC day, inclusive; the fee window refreshes 90 days ending here",
+    )
     a = ap.parse_args()
     hdr = auth_header()
 
@@ -170,6 +298,8 @@ def main() -> None:
             % (x["plan"], x["paying_subs"], x["trialing_subs"], x["mrr_usd"], x["arpu_usd"])
         )
     sys.stderr.write("subscriptions scanned: %d\n" % scanned)
+    # After the book: a fee-leg skip must never lose the subscription snapshot.
+    pull_fees(get, raw, a.end)
 
 
 if __name__ == "__main__":

@@ -104,6 +104,13 @@ const finopsMrr = Object.fromEntries(
     { unlimited: 500 + i, plus: 400 },
   ])
 );
+const finopsHistory = {
+  mrr: finopsMrr,
+  paying: Object.fromEntries(Object.keys(finopsMrr).map((day) => [day, 1_500])),
+  refreshed: Object.fromEntries(
+    Object.keys(finopsMrr).map((day) => [day, `${day}T14:36:00Z`])
+  ),
+};
 function sources(): SeriesSources & WallSources {
   return {
     query: vi.fn(query),
@@ -116,14 +123,14 @@ function sources(): SeriesSources & WallSources {
       unmappedProducts: 0,
       unsupportedItems: 0,
     }),
-    finops: vi.fn(async () => ({
-      mrr: finopsMrr,
-    })),
+    finops: vi.fn(async () => finopsHistory),
     planCost: vi.fn(async () => ({
       plans: {},
       sttMeasured: {},
       saasMeasured: {},
+      sttCash: {},
     })),
+    fees: vi.fn(async () => ({})),
   };
 }
 const value = (wall: WallPayload, id: string) =>
@@ -196,11 +203,13 @@ describe("v3 series agree with the v2 snapshot", () => {
       value(wall, "retention.if_activated").value!,
       1
     );
+    // The stat is the FinOps book now; the chart's last point is that book's
+    // snapshot day, not a live-read point.
     expect(f.revenue.mrr.at(-1)).toMatchObject({
       total: value(wall, "revenue.mrr").value,
-      unlimited: 600,
+      unlimited: finopsMrr[isoDay(shiftDay(end, -1))].unlimited,
       plus: 400,
-      source: "Live Stripe book",
+      source: "FinOps book",
     });
     expect(f.revenue.arpmau.at(-1)?.arpmau).toBeCloseTo(
       value(wall, "revenue.arpmau").value!,
@@ -385,6 +394,8 @@ describe("v3 series agree with the v2 snapshot", () => {
           ([day]) => day >= isoDay(shiftDay(end, -20))
         )
       ),
+      paying: finopsHistory.paying,
+      refreshed: finopsHistory.refreshed,
     }));
     const wall = await computeWall(s, now);
     const f = await all(wall, s);
@@ -425,6 +436,8 @@ describe("v3 series agree with the v2 snapshot", () => {
       mrr: Object.fromEntries(
         Object.entries(finopsMrr).filter(([day]) => day !== hole)
       ),
+      paying: finopsHistory.paying,
+      refreshed: finopsHistory.refreshed,
     }));
     const wall = await computeWall(s, now);
     const f = await all(wall, s);
@@ -482,14 +495,14 @@ describe("v3 series agree with the v2 snapshot", () => {
 describe("margin by plan (allocated estimate)", () => {
   const day = (k: number) => isoDay(shiftDay(end, -k));
   const plans = (scale: number) => ({
-    unlimited: { usd: 40 * scale, users: 4 },
-    unlimited_v2: { usd: 30 * scale, users: 3 },
-    operator: { usd: 10 * scale, users: 1 },
-    plus: { usd: 5 * scale, users: 1 },
-    architect: { usd: 2 * scale, users: 1 },
-    basic: { usd: 60 * scale, users: 8 },
-    unattributed: { usd: 0.5, users: 1 },
-    none: { usd: 0.25, users: 1 },
+    unlimited: { usd: 40 * scale, users: 4, varUsd: 0, varUsers: 0 },
+    unlimited_v2: { usd: 30 * scale, users: 3, varUsd: 0, varUsers: 0 },
+    operator: { usd: 10 * scale, users: 1, varUsd: 0, varUsers: 0 },
+    plus: { usd: 5 * scale, users: 1, varUsd: 0, varUsers: 0 },
+    architect: { usd: 2 * scale, users: 1, varUsd: 0, varUsers: 0 },
+    basic: { usd: 60 * scale, users: 8, varUsd: 0, varUsers: 0 },
+    unattributed: { usd: 0.5, users: 1, varUsd: 0, varUsers: 0 },
+    none: { usd: 0.25, users: 1, varUsd: 0, varUsers: 0 },
   });
   const book = {
     unlimited: 3_000,
@@ -508,10 +521,13 @@ describe("margin by plan (allocated estimate)", () => {
       plans: { [day(6)]: plans(1), [day(4)]: plans(1.1), [day(3)]: plans(1) },
       sttMeasured,
       saasMeasured,
+      sttCash: {},
     },
     // The book is missing day 4 (like 2026-09-29) and has today's snapshot.
     finops: {
       mrr: Object.fromEntries([7, 6, 5, 3, 2, 1, 0].map((k) => [day(k), book])),
+      paying: {},
+      refreshed: {},
     },
   });
 
@@ -561,7 +577,7 @@ describe("margin by plan (allocated estimate)", () => {
       `Margin through ${new Date(`${day(3)}T00:00:00Z`).toLocaleDateString(
         "en-US",
         { month: "short", day: "numeric", timeZone: "UTC" }
-      )} · STT estimate · SaaS estimate as of Oct 16`
+      )} · STT estimate · SaaS estimate as of Oct 16 · Stripe fees unavailable (finops key scope)`
     );
   });
 
@@ -580,7 +596,7 @@ describe("margin by plan (allocated estimate)", () => {
       1
     );
     expect(f.marginStatus[0].text).toMatch(
-      /· STT measured · SaaS estimate as of Oct 16$/
+      /· STT measured · SaaS estimate as of Oct 16 · Stripe fees unavailable \(finops key scope\)$/
     );
   });
 
@@ -608,7 +624,7 @@ describe("margin by plan (allocated estimate)", () => {
       (at(f.cost).total as number) - (at(estimate.cost).total as number)
     ).toBeCloseTo(-(at(estimate.cost).saas as number), 6);
     expect(f.marginStatus[0].text).toMatch(
-      /· STT estimate · measured SaaS \(Mercury\) as of Oct 16$/
+      /· STT estimate · measured SaaS \(Mercury\) as of Oct 16 · Stripe fees unavailable \(finops key scope\)$/
     );
   });
 
@@ -622,7 +638,7 @@ describe("margin by plan (allocated estimate)", () => {
       expect.objectContaining({ line: "SaaS", asOf: "2026-10-16", stale: 1 }),
     ]);
     expect(f.marginStatus[0].text).toBe(
-      "Margin through — · STT estimate · SaaS estimate as of Oct 16 (stale)"
+      "Margin through — · STT estimate · SaaS estimate as of Oct 16 (stale) · Stripe fees unavailable (finops key scope)"
     );
   });
 
@@ -1242,6 +1258,9 @@ describe("the snapshot is shared and never served cold as settled", () => {
     const failing = sources();
     failing.stripe = async () => {
       throw new Error("Stripe restricted read key unavailable");
+    };
+    failing.finops = async () => {
+      throw new Error("FinOps aggregate query failed");
     };
     failing.billing = vi.fn(async () => null);
     await wallPayload(new Date(), computeWith(failing), retain, store);
