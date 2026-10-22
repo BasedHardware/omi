@@ -92,3 +92,48 @@ background deadline:
   metadata survives at 60 s, and the call feature is `chat_metadata_extraction`;
 - control: restoring the background deadline reproduces the exact prod
   failure — `e Request timed out.` logged, empty filters returned.
+
+## Boundary hardening (2026-10-21): the typed, retrying fail-soft arm
+
+The deadline fix removed the *cause* of the `e Request timed out.` signature,
+but the boundary that catches a failed extraction kept the failure invisible
+and uncounted — the signature line itself was the bug's second half:
+
+- `retrieve_metadata_fields_from_transcript` logged `f'e {e}'`: for
+  `httpx`/`openai` transport faults the `{e}` payload stringifies empty or
+  opaque, and the line carried neither the exception type nor the path, so
+  the dominant failure class was unalertable (`FC-untyped-empty-error-payload-hides-failure-class`).
+- `_process_extracted_metadata` logged `Error extracting metadata: {e}` —
+  same blind spot, plus no way to tell the message lane from the text lane.
+- Two more fail-soft catches in the module shared the shape: the LangSmith
+  prompt-fetch arm and the memory-discard topics lane (450+ prod lines there
+  read `... : Invalid json output` and never named a failing type).
+- A single transient provider fault was terminal: one timeout permanently
+  erased the conversation's people/topics/entities/dates filters, and none of
+  these silent degradations emitted `omi_fallback_total` — against the repo
+  contract that every degrade branch record a fallback event.
+
+`tests/unit/test_metadata_extraction_boundary_resilience.py` pins the new
+behavior, driven through the real production functions:
+
+- both metadata boundaries log
+  `metadata extraction failed; returning empty filters path=<transcript|message|text> error=<Type>: <message>`
+  — type always present, message flattened and capped, no uid or transcript
+  content in the line;
+- one immediate whole-request retry for genuinely transient faults
+  (`openai.APITimeoutError`, `openai.APIConnectionError`, `httpx.TransportError`).
+  Deterministic faults (schema/parse rejections, deadline floors raising
+  builtin `TimeoutError`) never retry — a second call can only reproduce
+  them. The retry stays inside the `track_usage` scope (usage counted once)
+  and re-runs the cache-opt-out-bound runnable; no sleep is involved, so the
+  lane is safe on both sync finalization workers and the live pipeline loop;
+- every terminal degrade emits
+  `omi_fallback_total component=conversation_finalization from=metadata_extraction to=empty_filters reason=<timeout|other> outcome=degraded`
+  — timeouts land in `reason=timeout`, everything else in `other`;
+- the LangSmith and memory-discard arms keep their contracts (inline prompt
+  fallback; empty topics) but name the failing type.
+
+Operator-visible: the `ERROR:utils.llm.chat:e …` signature is replaced by
+typed, path-attributed lines; `omi_fallback_total{component=conversation_finalization,from=metadata_extraction}`
+becomes the countable residual signal for whole-conversation extractions
+that even 60 s cannot finish.

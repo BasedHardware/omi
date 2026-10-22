@@ -626,8 +626,8 @@ def test_provider_schema_violation_still_returns_empty_not_raises(provider, capl
     finally:
         llm_chat.get_llm = original
     assert metadata == {"people": [], "topics": [], "entities": [], "dates": []}
-    # The transcript-path boundary logs the bare "e {e}" line (the prod
-    # signature's shape for any provider failure), not the message-path text.
+    # The transcript-path boundary logs the typed, path-attributed line
+    # (formerly the bare ``e {e}`` prod signature), not the message-path text.
     assert any("model returned people as a string" in record.getMessage() for record in caplog.records)
 
 

@@ -4,7 +4,10 @@ from datetime import datetime, timezone
 
 _MAX_WORDS_HINT = "Use a maximum of 3 words per item."
 from html import escape
-from typing import Any, List, Optional, cast
+from typing import Any, Callable, List, Optional, cast
+
+import httpx
+import openai
 from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, Field, ValidationError
@@ -28,9 +31,85 @@ from utils.llm.temporal import MAX_EXTRACTED_DATE_LOOKAHEAD_DAYS, date_in_tz, no
 
 from .clients import get_llm
 from utils.llm.prompt_cache import with_cache_write_opt_out
+from utils.observability.fallback import record_fallback
 import logging
 
 logger = logging.getLogger(__name__)
+
+# A fail-soft LLM boundary retries only faults that can answer differently on
+# the same payload: transport timeouts and connection failures. HTTP 4xx
+# schema rejections and parse failures are deterministic — a repeat call
+# reproduces them — so they fall through to the typed failure arm.
+_RETRYABLE_EXTRACTION_FAILURES = (openai.APITimeoutError, openai.APIConnectionError, httpx.TransportError)
+
+# One extra whole-request attempt for a whole-conversation extraction call.
+# The first attempt may lose the race against a provider blip (connect reset,
+# read timeout); a second dial happens immediately and costs one extra
+# provider call, while the alternative — the fail-soft arm returning empty
+# filters — costs the conversation its searchable people/topics/entities/dates
+# until a later metadata update overwrites them.
+_EXTRACTION_ATTEMPTS = 2
+
+
+def _llm_failure_token(exc: BaseException) -> str:
+    """Bounded, typed token for a fail-soft LLM boundary failure.
+
+    Transport exceptions stringify empty surprisingly often (every
+    ``httpx.ConnectError`` raised without a message), which produced the
+    production sensor line ``ERROR:utils.llm.chat:e Request timed out.`` —
+    an ERROR record whose payload cannot name the feature, the path, or even
+    the exception type, so the class behind ×62/30m of pusher feed (2026-10-21)
+    was unalertable and unattributable. Always carry the exception type;
+    append the message only when it is non-empty, collapsed to one line and
+    capped so log lines stay bounded.
+    """
+    message = ' '.join(str(exc).split())
+    token = type(exc).__name__
+    if message:
+        token = f'{token}: {message[:160]}'
+    return token
+
+
+def _invoke_with_bounded_retry(invoke: Callable[[], Any]) -> Any:
+    """Run one LLM extraction call with a single retry on retryable faults.
+
+    Returns the invoked result, or re-raises the final failure for the
+    caller's fail-soft arm. Only transient transport faults retry; a
+    deterministic failure (schema rejection, parse error) re-raises on the
+    first attempt — a second call can only reproduce it.
+    """
+    for attempt in range(1, _EXTRACTION_ATTEMPTS + 1):
+        try:
+            return invoke()
+        except _RETRYABLE_EXTRACTION_FAILURES as exc:
+            if attempt >= _EXTRACTION_ATTEMPTS:
+                raise
+            logger.warning(
+                'llm extraction retryable failure; retrying attempt=%d/%d error=%s',
+                attempt,
+                _EXTRACTION_ATTEMPTS,
+                _llm_failure_token(exc),
+            )
+    raise AssertionError('unreachable: retry loop must return or raise')
+
+
+def _record_extraction_fallback(outcome: str, reason: str) -> None:
+    """Emit the shared fallback telemetry for a metadata-extraction degrade.
+
+    ``record_fallback`` never raises and buckets unknown labels, so the
+    fail-soft path cannot fail because telemetry failed. ``reason='timeout'``
+    keeps a genuine provider-capacity timeout distinguishable from the
+    catch-all: after the foreground-deadline fix this is the real residual
+    signal (whole-conversation extractions even 60 s cannot finish).
+    """
+    record_fallback(
+        component='conversation_finalization',
+        from_mode='metadata_extraction',
+        to_mode='empty_filters',
+        reason=reason,
+        outcome=outcome,
+        log=logger,
+    )
 
 
 def _content_str(response: Any) -> str:
@@ -670,7 +749,13 @@ Keep these goals in mind when giving advice or suggestions.
         return base_prompt.strip() + platform_section + selected_app_section
 
     except Exception as e:
-        logger.error(f"⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: {e}")
+        # Type token: the bare ``{e}`` stringifies empty for common transport
+        # errors, leaving an unattributable line. The inline fallback below is
+        # designed behavior, so this stays a plain log — no degrade event.
+        logger.error(
+            '⚠️  Error fetching/rendering LangSmith prompt, using inline fallback: error=%s',
+            _llm_failure_token(e),
+        )
 
     # Inline fallback prompt - used when LangSmith is unavailable
     #
@@ -1033,7 +1118,11 @@ def retrieve_memory_context_params(
             response = cast(TopicsContext, with_parser.invoke(prompt))
         return [e.value if hasattr(e, 'value') else str(e) for e in response.topics]
     except Exception as e:
-        logger.error(f'Error determining memory discard: {e}')
+        # The bare ``{e}`` payload stringified empty for common transport
+        # errors (450+ prod lines read ``Error determining memory discard:
+        # Invalid json output``, none naming the failing type). The typed
+        # token keeps the fail-soft return but makes the lane alertable.
+        logger.error('Error determining memory discard: error=%s', _llm_failure_token(e))
         return []
 
 
@@ -1249,9 +1338,27 @@ def retrieve_metadata_fields_from_transcript(
             # The shared chat_extraction feature stays on the background deadline
             # for its short interactive-chat prompts.
             structured = get_llm('chat_metadata_extraction').with_structured_output(ExtractedInformation)
-            result = cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
+
+            def _invoke() -> ExtractedInformation:
+                return cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
+
+            result = _invoke_with_bounded_retry(_invoke)
     except Exception as e:
-        logger.error(f'e {e}')
+        # The raw ``e {e}`` line this arm used to log was the production
+        # signature (pusher 2026-10-20/21, x42-69/30m): neither the exception
+        # type (empty for common transport errors) nor the path survived, so
+        # the class behind it was unalertable. The typed token plus the
+        # omi_fallback_total event make the residual failures countable —
+        # after the foreground-deadline fix these are genuine
+        # provider-capacity faults, not a mis-sized client deadline. The
+        # empty-filters return keeps the boundary's fail-soft contract with
+        # conversation finalization.
+        reason = 'timeout' if isinstance(e, (openai.APITimeoutError, httpx.TimeoutException, TimeoutError)) else 'other'
+        _record_extraction_fallback(outcome='degraded', reason=reason)
+        logger.error(
+            'metadata extraction failed; returning empty filters path=transcript error=%s',
+            _llm_failure_token(e),
+        )
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     metadata = ConversationMetadata(
@@ -1322,7 +1429,7 @@ def retrieve_metadata_from_message(
     ```
     '''.replace('    ', '')
 
-    return _process_extracted_metadata(uid, prompt, today)
+    return _process_extracted_metadata(uid, prompt, today, source_path='message')
 
 
 def retrieve_metadata_from_text(
@@ -1357,19 +1464,33 @@ def retrieve_metadata_from_text(
     ```
     '''.replace('    ', '')
 
-    return _process_extracted_metadata(uid, prompt, today)
+    return _process_extracted_metadata(uid, prompt, today, source_path='text')
 
 
-def _process_extracted_metadata(uid: str, prompt: str, reference_date: str) -> dict[str, Any]:
+def _process_extracted_metadata(
+    uid: str, prompt: str, reference_date: str, source_path: str = 'text'
+) -> dict[str, Any]:
     """Process the extracted metadata from any source"""
     try:
         with track_usage(uid, Features.CONVERSATION_PROCESSING):
             # Whole message/document body in one structured call — same
             # foreground-deadline feature as the transcript path above.
             structured = get_llm('chat_metadata_extraction').with_structured_output(ExtractedInformation)
-            result = cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
+
+            def _invoke() -> ExtractedInformation:
+                return cast(ExtractedInformation, with_cache_write_opt_out(structured).invoke(prompt))
+
+            result = _invoke_with_bounded_retry(_invoke)
     except Exception as e:
-        logger.error(f'Error extracting metadata: {e}')
+        # Typed, attributed sibling of the transcript-path arm above; same
+        # telemetry event, same fail-soft contract.
+        reason = 'timeout' if isinstance(e, (openai.APITimeoutError, httpx.TimeoutException, TimeoutError)) else 'other'
+        _record_extraction_fallback(outcome='degraded', reason=reason)
+        logger.error(
+            'metadata extraction failed; returning empty filters path=%s error=%s',
+            source_path,
+            _llm_failure_token(e),
+        )
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}
 
     metadata = ConversationMetadata(

@@ -319,7 +319,14 @@ def test_message_boundary_logs_the_distinct_error_text(resolved, monkeypatch, ca
     with caplog.at_level(logging.ERROR, logger="utils.llm.chat"):
         metadata = _run_message()
     assert metadata == {"people": [], "topics": [], "entities": [], "dates": []}
-    assert any("Error extracting metadata" in record.getMessage() for record in caplog.records)
+    # The boundary logs a typed, path-attributed line (the raw ``e {e}``/
+    # ``Error extracting metadata`` payloads could not name the failing type);
+    # the message lane stays distinguishable from the transcript lane.
+    records = [record for record in caplog.records if record.levelno >= logging.ERROR]
+    assert any(
+        "metadata extraction failed" in record.getMessage() and "path=message" in record.getMessage()
+        for record in records
+    )
 
 
 def test_text_boundary_also_returns_empty_under_the_background_deadline(resolved, monkeypatch):

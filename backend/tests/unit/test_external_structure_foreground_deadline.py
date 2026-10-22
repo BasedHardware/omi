@@ -368,10 +368,17 @@ def test_the_structurer_grounds_the_message_in_its_own_source_spec(provider):
 
 def test_experience_structurer_keeps_the_day_grounding_in_the_prompt(provider):
     """summarize_experience_text grounds relative dates against today in the
-    user's timezone — the grounding a background-deadline timeout discarded."""
+    user's timezone — the grounding a background-deadline timeout discarded.
+
+    The structurer grounds against the wall clock (``datetime.now`` in tz),
+    not a conversation timestamp, so the expected date is computed from the
+    same clock and timezone instead of a hardcoded day that breaks at the
+    next UTC midnight (caught live 2026-10-22 UTC: the original
+    ``"2026-10-20" or "2026-10-21"`` window expired one day after landing)."""
     _experience_call()
     prompt = provider.invocations[0]
-    assert "2026-10-20" in prompt or "2026-10-21" in prompt
+    expected_today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    assert f"today is {expected_today}" in prompt
     assert "UTC" in prompt
     assert "journal" in prompt
 
