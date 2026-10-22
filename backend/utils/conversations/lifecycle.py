@@ -112,7 +112,15 @@ def _is_recording_session_transient(error: BaseException) -> bool:
       traceback (prod backend-listen 2026-10-22: the renewal boundary
       ×32/30m, after the contention/retired-id drains). Nothing was written;
       the next minute's audio activity re-arms the renewal, so this is the
-      bounded transient, not a failed write.
+      bounded transient, not a failed write. The gapic layer itself retries
+      every RPC on the same availability set for ~60s and raises its drained
+      budget as ``google.api_core.exceptions.RetryError`` with the last fault
+      as the cause — the envelope around one of these faults is the same
+      bounded transient (the sustained-blip drain, prod backend-listen
+      2026-10-22: the renewal boundary ×31/30m once the single-fault shape
+      stopped), and ``is_transient_availability_error`` reads through it; an
+      envelope around a permanent refusal or an unknown failure does not
+      classify and stays in the failed-write arm below.
 
     A retirement that survives the restart budget is the same bounded
     transient by construction: a fresh transaction was already minted for

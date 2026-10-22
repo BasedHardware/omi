@@ -2119,6 +2119,19 @@ every budget; a blip on that probe now defers to the transactional open
 (`recording session open probe contended`) instead of escaping the
 boundary uncaught and killing the reconnect, and the transactional open
 stays the authority on existence — its tombstone fence still applies.
+One layer up, the gapic transport retries every RPC — each transactional
+read and commit included — on the same availability set for ~60s, and a
+fault that outlives that budget surfaces as
+`google.api_core.exceptions.RetryError` with the last fault chained as its
+cause. `RetryError` extends `GoogleAPIError`, not `GoogleAPICallError`, so
+that envelope is invisible to `isinstance` membership; since this change
+`is_transient_availability_error` reads one level through it, so a
+sustained-but-recovering data-plane fault — the envelope around a 503/504/500
+(prod backend-listen 2026-10-22: the renewal boundary ×31/30m) — sheds
+through the same log-only transient arm, while an envelope around
+`PermissionDenied`, an unknown failure, or nothing at all (the SDK's
+"Unknown error" envelope) keeps the loud failed-write classification: the
+envelope type alone never widens the arm.
 
 Since 2026-10-22 the renewal's caller learned the cadence half of the same
 family. `note_audio_activity` armed its once-per-minute throttle before

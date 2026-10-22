@@ -13,7 +13,7 @@ import re
 from urllib.parse import unquote, urlsplit
 
 from google.cloud import firestore
-from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, ServiceUnavailable
+from google.api_core.exceptions import Aborted, DeadlineExceeded, InvalidArgument, RetryError, ServiceUnavailable
 
 from config.mcp_client_ids import is_url_form_client_id
 from config.mcp_resource_urls import canonical_mcp_resource_url, legacy_mcp_resource_url, mcp_resource_urls_match
@@ -1157,12 +1157,29 @@ def rotate_refresh_token(
             # owns the three-attempt budget and always starts a fresh object.
             token_pair = _rotate(db.transaction(max_attempts=1))
             break
-        except (InvalidArgument, Aborted, ServiceUnavailable, DeadlineExceeded, ValueError) as error:
-            # Firestore wraps exhausted Aborted commits in ValueError.
+        except (
+            InvalidArgument,
+            Aborted,
+            ServiceUnavailable,
+            DeadlineExceeded,
+            RetryError,
+            ValueError,
+        ) as error:
+            # Firestore wraps exhausted Aborted commits in ValueError. A
+            # ``RetryError`` is the transport's own drained availability
+            # budget: the gapic layer retries every RPC on the availability
+            # set for ~60s and raises the envelope with the last fault as its
+            # cause, so a sustained-but-recovering 503 reached this boundary
+            # as an unclassified raise and skipped the three-attempt budget
+            # entirely. The cause, not the envelope type, decides: a drained
+            # retry of a permanent refusal is still permanent.
             transient = error.__cause__ if isinstance(error, ValueError) else error
+            inner: Any = transient
+            if isinstance(inner, RetryError):
+                inner = getattr(inner, "cause", None) or inner.__cause__
             if not (
-                (transient is not None and is_expired_transaction_error(transient))
-                or isinstance(transient, (Aborted, ServiceUnavailable, DeadlineExceeded))
+                (inner is not None and is_expired_transaction_error(inner))
+                or isinstance(inner, (Aborted, ServiceUnavailable, DeadlineExceeded))
             ):
                 raise
             if attempt == 2:
