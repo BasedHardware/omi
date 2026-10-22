@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-10-21 -->
+<!-- feature-flag-registry as-of: 2026-10-22 -->
 
 # Feature-flag authority registry
 
@@ -109,7 +109,7 @@ entries are exempt: they are queued for removal, not running.
 
 ## Overdue for a decision
 
-None as of 2026-10-21.
+None as of 2026-10-22.
 
 ## Flags
 
@@ -192,7 +192,7 @@ and an explicit empty literal renders as `''`.
 | `DEMAND_PROCESSING_SURFACE_REPORTING_ENABLED` | Default-off demand processing control: surface reporting enabled | backend, macos, mobile | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, pusher (chart)); {value: 'false', category: rollout} (desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | — | graduate | on | 2026-11-15 | dazheng |
 | `DEMAND_PROCESSING_TOOL_ENABLED` | Default-off demand processing control: tool enabled | backend | env | closed | {value: 'false', category: rollout} | false (backend-listen (chart), pusher (chart)); {value: 'false', category: rollout} (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, pusher (chart)); {value: 'false', category: rollout} (desktop-backend, gke/backend-listen, gke/pusher, job/notifications-job) | — | graduate | on | 2026-11-15 | dazheng |
 | `DEMAND_PROCESSING_UID_ALLOWLIST` | Default-off demand processing control: uid allowlist | backend | env | closed | {value: '', category: rollout} | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (gke/backend-listen, gke/pusher) | '' (backend-listen (chart), pusher (chart)); {value: '', category: rollout} (gke/backend-listen, gke/pusher) | — | kill | off | 2026-11-15 | dazheng |
-| `DREAM_AGENT_PAID_PERCENT` | Stable per-owner percent of paid owners eligible under ELIGIBILITY=paid; unset admits all paid owners, malformed admits none; listed owners always stay in | backend | env | closed | — | — | 5 | — | kill | off | 2026-11-04 | dazheng |
+| `DREAM_AGENT_PAID_PERCENT` | Stable per-owner percent of paid owners eligible under ELIGIBILITY=paid; unset admits all paid owners, malformed admits none; listed owners always stay in | backend | env | closed | — | — | 25 | — | kill | off | 2026-11-04 | dazheng |
 | `EDGE_SHADOW_PERCENT` | Plan D D2: static uid-hash cohort whose raw listen frames and VAD window decisions are mirrored fire-and-forget to listen-edge /v1/shadow; default 0 (kill switch) | backend | env | closed | — | — | 0 (backend-listen (chart)) | — | pending | undecided | 2026-11-20 | dazheng |
 | `ENRICHMENT_ROUTE` | Default sync_handler; enrichment_queue binds new sr- enrichment obligations to /v2/enrichment/run on the enrichment queue (plan C3) | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-02 | dazheng |
 | `EPISODES_CLIENT_CHANNELS` | Default beta; comma-separated X-Omi-App-Channel values (beta, store) whose episodes API calls are admitted and set the client-seen marker. A missing or unknown channel is never admitted | backend | env | closed | — | — | — | — | pending | on | 2026-11-03 | dazheng |
