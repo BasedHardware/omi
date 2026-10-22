@@ -11,6 +11,7 @@ import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart' show RecentRecapsLoader;
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
@@ -107,6 +108,8 @@ PendingWorkStore inertPendingWorkStore() => PendingWorkStore(
 Future<Widget> buildTypedConversationScreen(
   ConversationProvider provider, {
   SyncProvider? sync,
+  CaptureProvider? captureProvider,
+  EpisodeProvider? episodes,
   LocalRecordingsProvider? recordingsProvider,
   ThemeData? theme,
   bool initializePreferences = true,
@@ -127,11 +130,12 @@ Future<Widget> buildTypedConversationScreen(
   final speakerTagPrompts = SpeakerTagPromptsProvider(
     fetchPrompts: () async => const ApiSuccess(GeneratedSpeakerTagPromptsResponse()),
   );
-  final capture = CaptureProvider(
-    externalActions: const NoopCaptureExternalActions(),
-    inProgressConversationLoader: () async {},
-    localSegmentStore: LocalSegmentStore.disabled(),
-  );
+  final capture = captureProvider ??
+      CaptureProvider(
+        externalActions: const NoopCaptureExternalActions(),
+        inProgressConversationLoader: () async {},
+        localSegmentStore: LocalSegmentStore.disabled(),
+      );
 
   return MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -147,6 +151,7 @@ Future<Widget> buildTypedConversationScreen(
         ChangeNotifierProvider<DeviceProvider>.value(value: device),
         ChangeNotifierProvider<PhoneCallProvider>.value(value: phone),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
+        if (episodes != null) ChangeNotifierProvider<EpisodeProvider>.value(value: episodes),
         ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(value: speakerTagPrompts),
         ChangeNotifierProvider<SyncProvider>.value(value: sync ?? _InertSyncProvider()),
       ],

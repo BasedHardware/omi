@@ -1,5 +1,7 @@
 """Quality boundary for Parakeet's fixed European-language batch model."""
 
+from config.refactor_switches import default_on as rollout_default_on
+
 import math
 import os
 
@@ -17,7 +19,10 @@ def audio_lid_confidence_floor(probe_seconds: float | None) -> float:
     decoded audio, not the detector's response or the user's primary language.
     This floor is not a claim that longer or higher-confidence LID is infallible.
     """
-    if os.getenv('STT_PRERECORDED_SHORT_LID_GUARD_ENABLED', 'true').strip().lower() == 'false':
+    if not rollout_default_on(
+        'STT_PRERECORDED_SHORT_LID_GUARD_ENABLED',
+        not (os.getenv('STT_PRERECORDED_SHORT_LID_GUARD_ENABLED', 'true').strip().lower() == 'false'),
+    ):
         return MIN_AUDIO_LID_CONFIDENCE
     if (
         isinstance(probe_seconds, bool)
@@ -31,7 +36,10 @@ def audio_lid_confidence_floor(probe_seconds: float | None) -> float:
 
 def language_guard_enabled() -> bool:
     # Only the explicit kill value restores the old route; malformed values stay safe.
-    return os.getenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'true').strip().lower() != 'false'
+    return rollout_default_on(
+        'STT_PRERECORDED_LANGUAGE_GUARD_ENABLED',
+        os.getenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'true').strip().lower() != 'false',
+    )
 
 
 def language_class(language: str | None) -> str:
@@ -68,7 +76,10 @@ def self_lid_confidence_floor(probe_seconds: float | None) -> float | None:
 
 def language_gate_shadow_enabled() -> bool:
     """Kill switch for the shadow self-gate call beside the vendor probe; default on."""
-    return os.getenv('STT_PRERECORDED_LANGUAGE_GATE_SHADOW', 'true').strip().lower() != 'false'
+    return rollout_default_on(
+        'STT_PRERECORDED_LANGUAGE_GATE_SHADOW',
+        os.getenv('STT_PRERECORDED_LANGUAGE_GATE_SHADOW', 'true').strip().lower() != 'false',
+    )
 
 
 def language_gate_percent() -> int:

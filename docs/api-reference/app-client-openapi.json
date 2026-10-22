@@ -1354,6 +1354,52 @@
         "title": "AddTesterRequest",
         "type": "object"
       },
+      "AdmitResult": {
+        "description": "What an intake path may transcribe: only ``uncovered``. ``basis`` says how it was decided.",
+        "properties": {
+          "basis": {
+            "default": "unknown",
+            "enum": [
+              "frames",
+              "text_fallback",
+              "unknown"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "covered": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/FrameRange"
+            },
+            "title": "Covered",
+            "type": "array"
+          },
+          "covering_conversation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Covering Conversation Id"
+          },
+          "uncovered": {
+            "items": {
+              "$ref": "#/components/schemas/FrameRange"
+            },
+            "title": "Uncovered",
+            "type": "array"
+          }
+        },
+        "required": [
+          "uncovered"
+        ],
+        "title": "AdmitResult",
+        "type": "object"
+      },
       "AdviceAssistantSettings": {
         "properties": {
           "analysis_prompt": {
@@ -5323,6 +5369,119 @@
         "title": "Body_upload_video_frames_chat_v2_files_video_post",
         "type": "object"
       },
+      "BoundaryParticipant": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          }
+        },
+        "title": "BoundaryParticipant",
+        "type": "object"
+      },
+      "BoundarySignal": {
+        "properties": {
+          "confidence": {
+            "default": 1.0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "ended_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ended At"
+          },
+          "external_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External Id"
+          },
+          "kind": {
+            "enum": [
+              "calendar_event",
+              "desktop_meeting",
+              "screen_meeting",
+              "phone_call"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "participants": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BoundaryParticipant"
+            },
+            "title": "Participants",
+            "type": "array"
+          },
+          "source_device": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Device"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "kind",
+          "started_at"
+        ],
+        "title": "BoundarySignal",
+        "type": "object"
+      },
       "BudgetChoiceRecord": {
         "additionalProperties": false,
         "properties": {
@@ -7071,6 +7230,52 @@
           "id"
         ],
         "title": "CaptureGroupMember",
+        "type": "object"
+      },
+      "CaptureKey": {
+        "description": "Identifies one capture stream; the same fields as S1 ``CaptureEvidenceMetadata``.",
+        "properties": {
+          "capture_root": {
+            "title": "Capture Root",
+            "type": "string"
+          },
+          "channel": {
+            "default": "default",
+            "title": "Channel",
+            "type": "string"
+          },
+          "clock_epoch": {
+            "default": "default",
+            "title": "Clock Epoch",
+            "type": "string"
+          },
+          "device_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Device Id"
+          },
+          "recording_session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recording Session Id"
+          }
+        },
+        "required": [
+          "capture_root"
+        ],
+        "title": "CaptureKey",
         "type": "object"
       },
       "CaptureLinkSpec": {
@@ -11153,6 +11358,57 @@
                 "type": "null"
               }
             ]
+          },
+          "capture_key": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaptureKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "capture_segment_ranges": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/FrameRange"
+                },
+                "maxItems": 500,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Segment Ranges"
+          },
+          "chunk_count": {
+            "anyOf": [
+              {
+                "maximum": 128.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Count"
+          },
+          "chunk_index": {
+            "anyOf": [
+              {
+                "maximum": 127.0,
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Chunk Index"
           },
           "client_device_id": {
             "anyOf": [
@@ -16823,6 +17079,25 @@
           "status"
         ],
         "title": "FolderMutationResponse",
+        "type": "object"
+      },
+      "FrameRange": {
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "FrameRange",
         "type": "object"
       },
       "FrameRequest": {
@@ -46544,6 +46819,102 @@
         ]
       }
     },
+    "/v1/capture/boundary-evidence": {
+      "post": {
+        "operationId": "store_boundary_evidence_v1_capture_boundary_evidence_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/BoundarySignal"
+                },
+                "maxItems": 64,
+                "title": "Signals",
+                "type": "array"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Store Boundary Evidence V1 Capture Boundary Evidence Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Store Boundary Evidence",
+        "tags": [
+          "capture"
+        ]
+      }
+    },
     "/v1/chat/deferrals": {
       "post": {
         "description": "Receive one idempotent kernel-outbox deferral without touching Chat state.",
@@ -47487,7 +47858,7 @@
     },
     "/v1/conversations/merge": {
       "post": {
-        "description": "Merge multiple conversations into a new conversation (async).\n\nFlow:\n1. Validates conversations (locked? completed?)\n2. Returns immediately with 200 OK\n3. Background task creates new merged conversation\n4. Background task deletes source conversations\n5. FCM notification sent on completion\n\nThe merged conversation will have:\n- A new ID (source conversations are deleted)\n- Merged transcript segments with adjusted timestamps\n- Copied audio chunks\n- Regenerated title, summary, action items, memories via process_conversation()",
+        "description": "Admit completed sources, merge into a new ID asynchronously, then notify the client.",
         "operationId": "merge_conversations_v1_conversations_merge_post",
         "parameters": [
           {
@@ -79521,6 +79892,179 @@
         "tags": [
           "v2"
         ]
+      }
+    },
+    "/v2/capture-coverage": {
+      "get": {
+        "operationId": "get_capture_coverage_v2_capture_coverage_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "capture_root",
+            "required": true,
+            "schema": {
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Capture Root",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "title": "Start",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "integer"
+              },
+              "maxItems": 32,
+              "minItems": 1,
+              "title": "End",
+              "type": "array"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "default": "default",
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Channel",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "clock_epoch",
+            "required": false,
+            "schema": {
+              "default": "default",
+              "maxLength": 256,
+              "minLength": 1,
+              "title": "Clock Epoch",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "recording_session_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Recording Session Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdmitResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Capture Coverage"
       }
     },
     "/v2/chat-sessions": {

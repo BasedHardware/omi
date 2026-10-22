@@ -16,6 +16,7 @@ from utils.batch_pipeline.contracts import LeasedWork, Priority, WorkItem, WorkR
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.control import read_control, activate, field, migrate_legacy
 from utils.batch_pipeline.errors import validate_worker_failure
+from utils.batch_pipeline.retry_policy import quarantine_job, expire_lease, observe_recovery
 
 QUANTUM_SECONDS = 30.0
 LEASE_SECONDS = 120.0
@@ -483,26 +484,11 @@ class Scheduler:
                 return None
             policy = stage_in_transaction(tx, job, 'scheduler', candidates=candidates, observations=observations)
             if quarantine or worker_failure is not None or job['attempt'] >= policy.max_attempts:
-                # Serialize removal from the ordered pending set against merge
-                # and admission. No success/silence result or cursor is invented.
-                owner = tx.get('owners', job['owner_key'])
-                owner['revision'] = owner.get('revision', 0) + 1
-                job.update(
-                    state='quarantined',
-                    merge_pending=False,
-                    token='',
-                    lease_until=0.0,
-                    failure='worker_failed',
-                    quarantine_reason='worker_failed',
-                    quarantined_at=now,
-                    recovery_state='held',
-                )
+                quarantine_job(tx, job, now, 'worker_failed')
                 if quarantine and padded_retry in {'empty', 'skipped_oversize', 'skipped_long_speech'}:
                     job['worker_empty_evidence'] = {'padded_retry': padded_retry, 'version': 1}
                 if worker_failure is not None:
                     job['worker_failure'] = dict(worker_failure)
-                job.pop('retry_started_at', None)
-                tx.put('owners', job['owner_key'], owner)
             else:
                 _defer(job, now, 'worker_failed')
             tx.put('jobs', segment_id, job)
@@ -576,33 +562,42 @@ class Scheduler:
     def recover(self, now: float, limit: int = 100) -> int:
         self.store.run(lambda tx: migrate_legacy(tx, now))
         recovered = 0
+        candidates, observations = {}, []
         for state in ('leased', 'retry'):
             for segment_id in self.store.due(state, now, limit):
 
-                def commit(tx: Transaction) -> str | None:
+                def commit(tx: Transaction):
+                    observations.clear()
                     job = tx.get('jobs', segment_id)
                     if job.get('state') == 'leased' and job['lease_until'] <= now:
-                        _defer(job, now, 'lease_expired')
-                        event = 'lease_expired'
+                        outcome = expire_lease(
+                            tx,
+                            job,
+                            now,
+                            stage_policy=stage_in_transaction,
+                            candidates=candidates,
+                            observations=observations,
+                            defer=_defer,
+                        )
                     elif job.get('state') == 'retry' and job['available_at'] <= now:
                         control = read_control(tx, scheduler_control_key(job['owner_key']))
                         job['state'] = 'ready'
                         _append(tx, control, job)
-                        event = 'retry'
+                        outcome = ('retry', 0, None)
                     else:
                         return None
                     tx.put('jobs', segment_id, job)
-                    return event
+                    return outcome
 
                 try:
-                    event = self.store.run(commit)
+                    outcome = self.store.run(commit)
+                    record_policy_observations(observations)
                 except BatchPrivacyBlocked:
                     self.store.quarantine_fenced(segment_id, now)
                     continue
-                if event:
+                if outcome:
                     recovered += 1
-                    if self.metrics:
-                        self.metrics.record(event)
+                    observe_recovery(outcome, self.metrics)
         return recovered
 
     @staticmethod

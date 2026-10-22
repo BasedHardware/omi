@@ -6,6 +6,8 @@ read per decision, so a listen env change takes effect at the next session.
 
 from __future__ import annotations
 
+from config.refactor_switches import default_on as rollout_default_on
+
 import os
 
 # 1. A provider death caused by this pod draining is not provider evidence.
@@ -22,7 +24,7 @@ SAME_TARGET_RETRY_ENV = 'LISTEN_STT_SAME_TARGET_RETRY_ENABLED'
 
 
 def _default_on(name: str) -> bool:
-    return os.getenv(name, 'true').strip().lower() not in {'false', '0', 'off'}
+    return rollout_default_on(name, os.getenv(name, 'true').strip().lower() not in {'false', '0', 'off'})
 
 
 def drain_death_censor_enabled() -> bool:

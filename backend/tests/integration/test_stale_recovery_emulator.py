@@ -173,3 +173,24 @@ def test_default_recovery_client_uses_customer_plane_not_compute_plane(world, mo
         assert not compute_user.collection('conversation_recovery_state').document('stale_in_progress').get().exists
     finally:
         compute.close()
+
+
+@pytest.mark.parametrize('mode', ['serve', 'shadow'])
+def test_head_probe_sees_a_fresh_orphan_without_losing_tail_progress(world, monkeypatch, mode):
+    db, uid, user = world
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', mode)
+    rows = seed(user, 35)
+    page(db, uid)
+    second = page(db, uid, now=NOW + timedelta(minutes=1))
+    state = user.collection('conversation_recovery_state').document('stale_in_progress')
+    tail_cursor = state.get().to_dict()['cursor']
+    rows.document('fresh-orphan').set({'status': 'in_progress', 'finished_at': NOW - timedelta(hours=2)})
+    third = page(db, uid, now=NOW + timedelta(minutes=2))
+    if mode == 'serve':
+        assert third[0]['id'] == 'fresh-orphan'
+        assert state.get().to_dict()['cursor'] == tail_cursor
+        following = page(db, uid, now=NOW + timedelta(minutes=3))
+        assert following[0]['id'] == 'poison-20'
+    else:
+        assert third[0]['id'] == 'poison-20'
+        assert not ({r['id'] for r in second} & {r['id'] for r in third})

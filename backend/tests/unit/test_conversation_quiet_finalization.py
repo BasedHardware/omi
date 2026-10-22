@@ -448,3 +448,43 @@ def test_cutover_fences_retire_successor_instead_of_rewaking_forever(store, monk
     assert _job(store)['status'] == 'quiet_done'
     quiet.enqueue_listen_finalization_job.assert_not_called()
     assert 'finalization_job_id' not in store.rows[ROW]
+
+
+def test_empty_expired_check_returns_durable_cleanup_obligation_only_in_serve(store, monkeypatch):
+    store.rows[ROW].update(has_content=False, transcript_segments=[])
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    result = checks.evaluate_quiet_check(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert result['status'] == 'empty_ready'
+    assert _job(store)['status'] == 'waiting_quiet'
+    assert _job(store)['dispatch_generation'] == 2
+    assert result['recording_session_id'] == 'recording-old'
+
+
+@pytest.mark.parametrize('deleted', [True, False])
+def test_empty_ready_uses_lifecycle_deletion_and_finishes_only_after_success(store, monkeypatch, deleted):
+    store.rows[ROW].update(has_content=False, transcript_segments=[])
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 301)
+    cleanup = MagicMock(return_value=deleted)
+    process = MagicMock(side_effect=AssertionError('empty row must not get paid processing'))
+    monkeypatch.setattr(lifecycle, 'delete_empty_recording_conversation', cleanup)
+    monkeypatch.setattr(lifecycle, 'request_finalization', process)
+    result = quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert result == ('empty_deleted' if deleted else 'deferred')
+    assert cleanup.call_args.kwargs['require_expired_recording_lease'] is True
+    assert _job(store)['status'] == ('quiet_done' if deleted else 'waiting_quiet')
+    process.assert_not_called()
+
+
+def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store, monkeypatch):
+    row = store.rows[ROW]
+    row['last_speech_at'] = NOW - timedelta(minutes=5)
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'shadow')
+    assert checks.quiet_deadline(row, 120, uid='synthetic') == NOW + timedelta(seconds=120)
+    assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) == 'not_stale'
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    assert checks.quiet_deadline(row, 120, uid='synthetic') == NOW - timedelta(minutes=3)
+    assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) is None

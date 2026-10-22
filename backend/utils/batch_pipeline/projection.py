@@ -692,7 +692,9 @@ class Projector:
         if binding.record_origin:
             projection_speech_spans(payload, item.duration_seconds)
         parts = [(item, payload)] if binding.record_origin else split_result(item, payload)
-        manifest = None
+        from utils.capture.batch_coverage import optional_manifest
+
+        manifest = None if item.requires_compute_admission else optional_manifest(self, item, hint)
         if item.requires_compute_admission:
             if self.fetch_audio is None:
                 raise ProjectionBlocked('authenticated intake manifest loader required')
@@ -707,7 +709,6 @@ class Projector:
         receipts = entry.get('projection_parts') or {}
         for index, (part, part_payload) in enumerate(parts):
             if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
-                # Earlier parts are persisted; the next step resumes at this one.
                 raise StepDeadline()
             session = self.store.session(
                 item.segment_id,
@@ -723,9 +724,6 @@ class Projector:
             session.total_speech_seconds = float(speech)
             pending_candidate = None
             try:
-                # Resume at the first uncommitted group before rebuilding it.
-                # A walk's fresh read already shows this part unpersisted; the
-                # assignment transaction replays a receipt that raced in.
                 if not (
                     hint is not None and hint.successor and not entry.get('projection') and str(index) not in receipts
                 ):
@@ -733,7 +731,7 @@ class Projector:
                 if hint is not None and hint.parallel_candidate and not binding.target_conversation_id:
                     pending_candidate = self._start_candidate(binding, part, part_payload)
                 context = ResolvedContext(binding.target_conversation_id)
-                if manifest is not None:
+                if manifest is not None and item.requires_compute_admission:
                     with projection_phase('context', policy):
                         context = resolve_context(item, binding, manifest, self.store.client, projection_item=part)
                 if not part_payload['words']:
@@ -758,6 +756,9 @@ class Projector:
                         incoming['_batch_require_live_target'] = True
                     if context.binding_reason is not None and context.target_id:
                         incoming['_sync_lineage_binding'] = context.binding_reason
+                    from utils.capture.batch_coverage import admit_projection, record_projection
+
+                    admit_projection(binding.owner_id, incoming, manifest, capture_at=item.capture_at)
                     session.incoming_segment_count = len(incoming['transcript_segments'])
                     receipt_box = []
 
@@ -772,26 +773,37 @@ class Projector:
                             found, candidate = self._parallel_candidate(pending_candidate, span, deadline)
                             if not found:
                                 candidate = get_closest_conversation_to_timestamps(binding.owner_id, *span)
-                    try:
-                        assigned = conversations_db.assign_sync_conversation(
+                    if not incoming['transcript_segments']:
+                        receipt = session.persist_empty()
+                    else:
+                        try:
+                            assigned = conversations_db.assign_sync_conversation(
+                                binding.owner_id,
+                                incoming,
+                                target_id=context.target_id,
+                                candidate_id=candidate['id'] if candidate else None,
+                                firestore_client=self.store.client,
+                                before_assign=session.prepare,
+                                validate_plan=session.validate_plan,
+                                after_assign=persisted,
+                                retry_contention=policy.projection_contention,
+                                timing=policy.projection_timing,
+                                **self._index_options(hint),
+                            )
+                        finally:
+                            self._mirror_assignment(session)
+                        record_projection(
                             binding.owner_id,
                             incoming,
-                            target_id=context.target_id,
-                            candidate_id=candidate['id'] if candidate else None,
-                            firestore_client=self.store.client,
-                            before_assign=session.prepare,
-                            validate_plan=session.validate_plan,
-                            after_assign=persisted,
-                            retry_contention=policy.projection_contention,
-                            timing=policy.projection_timing,
-                            **self._index_options(hint),
+                            assigned[0],
+                            manifest,
+                            capture_at=item.capture_at,
+                            survivors=assigned[2],
                         )
-                    finally:
-                        self._mirror_assignment(session)
-                    receipt = receipt_box[0]
-                    record_labels(assigned[2])
-                    if assigned[0].pop('_sync_lineage_stamp_gap_refused', False):
-                        log_sync_lineage_stamp_gap_refused()
+                        receipt = receipt_box[0]
+                        record_labels(assigned[2])
+                        if assigned[0].pop('_sync_lineage_stamp_gap_refused', False):
+                            log_sync_lineage_stamp_gap_refused()
             except ProjectionReplay as replay:
                 receipt = replay.receipt
             except SyncAssignmentSuperseded:
