@@ -4953,6 +4953,29 @@
       ]
     },
     {
+      "collectionGroup": "conversations",
+      "fieldPath": "record_lane_owner",
+      "ttl": false,
+      "indexes": [
+        {
+          "queryScope": "COLLECTION",
+          "order": "ASCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "order": "DESCENDING"
+        },
+        {
+          "queryScope": "COLLECTION",
+          "arrayConfig": "CONTAINS"
+        },
+        {
+          "queryScope": "COLLECTION_GROUP",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "task_recurrence_inbox",
       "fieldPath": "status",
       "ttl": false,

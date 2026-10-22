@@ -43,6 +43,11 @@ LEGACY_TRANSCRIPTION_QUEUES = ('sync-jobs', 'sync-backfill', 'sync-backfill-fres
 # this module stays importable without a Firestore client.
 CLAIM_STALE_SECONDS = 2 * 24 * 60 * 60
 DARK_RETRY_AFTER_SECONDS = 60
+# A legacy job is created only on a mode read at most this old; an older read is
+# taken again first. With the 30s ramp cache that bounds how long after a flip a
+# stale 'on' can still create a legacy job, which is what final_pass_rehome's
+# flip grace relies on (it must exceed this plus the cache TTL).
+ADMISSION_REVALIDATE_SECONDS = 60
 
 
 class LegacySyncMode(StrEnum):
@@ -75,6 +80,7 @@ class LegacyDarkReason(StrEnum):
     LEGACY_ACTIVE_IN_DARK = 'legacy_active_in_dark'
     LEGACY_STRANDED = 'legacy_stranded'
     LEGACY_STRANDED_ADOPTED = 'legacy_stranded_adopted'
+    LEGACY_FINAL_PASS_REHOMED = 'legacy_final_pass_rehomed'
     LEGACY_CAPPED = 'legacy_capped'
     ADMISSION_REFUSED = 'admission_refused'
     SEQUENCER_DARK = 'sequencer_dark'
@@ -176,6 +182,30 @@ def current_mode() -> LegacySyncMode:
 def legacy_admission_allowed(mode: Optional[LegacySyncMode] = None) -> bool:
     """Whether a new legacy job may be created (admission, legacy-fresh, intake fallback)."""
     return (mode or current_mode()) is LegacySyncMode.ON
+
+
+def mode_age_seconds(now: Optional[datetime] = None) -> Optional[float]:
+    """Seconds since the served ramp document was last written; None when that is unknown.
+
+    A request that read ``on`` just before a flip keeps serving it for the rest
+    of that request (the mode is read once, from a 30s cache), so a caller that
+    must not race such a request waits this long after the write.
+    """
+    try:
+        from utils.rollout import runtime_percent
+
+        written = getattr(runtime_percent.ramp_snapshot(), 'updated_at', None)
+    except Exception:
+        return None
+    if not isinstance(written, str) or not written:
+        return None
+    try:
+        parsed = datetime.fromisoformat(written.replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return ((now or datetime.now(timezone.utc)) - parsed).total_seconds()
 
 
 def sequencer_registration_allowed(mode: Optional[LegacySyncMode] = None) -> bool:

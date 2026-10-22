@@ -1069,6 +1069,7 @@ async def sync_local_files_v2(
     # draining/dark (M3 review; batch intake reads the mode the same way).
     legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
     legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
+    legacy_mode_read_at = time.monotonic()
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
@@ -1242,6 +1243,9 @@ async def sync_local_files_v2(
             recording_session_id=recording_session_id,
             policy=batch_policy,
             loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
+            # A legacy_final_pass_v1 owner is re-homed to batch once legacy is
+            # draining/dark (final_pass_rehome); the route answers BATCH then.
+            legacy_mode=legacy_mode,
         )
         if isinstance(record_response, JSONResponse):
             return record_response
@@ -1289,6 +1293,13 @@ async def sync_local_files_v2(
             if batch_response is not None:
                 return batch_response
             sequencer_registration_started = False
+
+        if legacy_allowed and time.monotonic() - legacy_mode_read_at > legacy_dark.ADMISSION_REVALIDATE_SECONDS:
+            # A legacy job is created only on a young mode read: a request that read 'on'
+            # and then stalled (a long batch decode, a slow fallback) must not carry it past
+            # a draining re-home of the same conversation (final_pass_rehome's flip grace).
+            legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
+            legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
 
         if not legacy_allowed:
             # Legacy-dark (contract (h)): never create a legacy job. Content legacy
