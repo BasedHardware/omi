@@ -284,3 +284,15 @@ def test_home_hiding_requires_serve_and_existing_client_capability(monkeypatch):
     assert not noise_hidden_from_home('', {'content_kind': 'media'}, client_supports_discarded=True)
     monkeypatch.setenv(FLAG, 'off')
     assert not noise_hidden_from_home('', row, client_supports_discarded=True)
+
+
+def test_restore_and_stale_evidence_cannot_leave_old_exclusion(monkeypatch):
+    conversation = mock_inputs(monkeypatch)
+    conversation.content_kind = 'noise'
+    monkeypatch.setenv(FLAG, 'serve')
+    monkeypatch.setattr(adapter, '_speaker_evidence', lambda *_: None)
+    assert adapter.minimum_for_processing('', conversation, user_kept=True) is None
+    assert conversation.content_kind == 'conversation'
+    conversation.content_kind = 'media'
+    assert adapter.minimum_for_processing('', conversation) is None
+    assert conversation.content_kind is None

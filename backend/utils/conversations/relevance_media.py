@@ -43,6 +43,15 @@ def classify_for_processing(uid: str, conversation: Any, *, user_kept: bool = Fa
     """
     if not shadow_or_serve(FLAG):
         return None
+    if serving_for(FLAG, uid):
+        # A previous classification is not proof about a later transcript revision.
+        # In particular, missing evidence on restore must not retain an exclusion.
+        conversation.content_kind = None
+    if user_kept or value(conversation, 'photos') or value(conversation, 'user_title'):
+        if serving_for(FLAG, uid):
+            conversation.content_kind = 'conversation'
+        observe('classification', 'agree')
+        return None
     start, end = screen_time(value(conversation, 'started_at')), screen_time(value(conversation, 'finished_at'))
     if start is None or end is None or end <= start:
         return None
@@ -73,7 +82,12 @@ def classify_for_processing(uid: str, conversation: Any, *, user_kept: bool = Fa
             protected=bool(user_kept or value(conversation, 'photos') or value(conversation, 'user_title')),
         )
     except Exception:
+        from utils.observability.fallback import record_fallback
+
         observe('classification', 'error')
+        record_fallback(
+            component='other', from_mode='media_noise_evidence', to_mode='legacy', reason='other', outcome='degraded'
+        )
         return None
     observe(decision.content_kind, 'agree' if decision.content_kind == 'conversation' else 'disagree')
     if serving_for(FLAG, uid):
