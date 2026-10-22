@@ -607,7 +607,9 @@ class TestModulatePrerecorded(unittest.TestCase):
         self.assertEqual(exc_info.exception.provider, 'modulate')
         self.assertEqual(mock_client_cls.return_value.post.call_count, 1)
 
-    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    # Pins the legacy 3-attempt ladder under the fail-fast kill switch; the default
+    # (2 POSTs) is asserted in test_prerecorded_vendor_fail_fast.py.
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key', 'STT_PRERECORDED_VENDOR_FAIL_FAST': 'false'})
     @patch('utils.stt.pre_recorded.httpx.Client')
     def test_plain_429_stays_a_retryable_upstream_error(self, mock_client_cls):
         from utils.stt.outcomes import TranscriptionFailure

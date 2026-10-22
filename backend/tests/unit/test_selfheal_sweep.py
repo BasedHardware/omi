@@ -938,3 +938,38 @@ def test_fast_recovery_preserves_the_legacy_always_on_fallback(monkeypatch):
     assert calls[1]['content_due_scan'] is False
     assert calls[1]['stale_after'] == timedelta(hours=2)
     assert result['enqueued'] == 2
+
+
+def test_fast_recovery_pages_past_a_refused_lease_prefix():
+    rows = [_row('u1', f'unknown-{i}', _eligible_data()) for i in range(sweep.MAX_ELIGIBLE_PER_TICK)]
+    rows.append(_row('u1', 'expired', _eligible_data()))
+    state, kwargs = _harness(rows, mode='heal')
+    admitted = kwargs['request_finalization_fn']
+
+    def scan_fn(**options):
+        path = options['resume_after_path']
+        start = next((i + 1 for i, row in enumerate(rows) if row['path'] == path), 0)
+        remaining = rows[start:]
+        return {'rows': remaining, 'scanned': len(remaining), 'exhausted': True, 'resume_after_path': None}
+
+    def advance(generation, path, *, pending_verifications, **_options):
+        state['cursor'].update(
+            generation=generation + 1, resume_after_path=path, pending_verifications=pending_verifications
+        )
+        return True
+
+    def request(uid, cid, **options):
+        assert options['require_expired_recording_lease'] is True
+        if cid != 'expired':
+            return {'created': False, 'reason': 'refused_recording_lease_unknown'}
+        return admitted(uid, cid, **options)
+
+    kwargs.update(scan_fn=scan_fn, cursor_advancer=advance, request_finalization_fn=request)
+    options = dict(stale_after=timedelta(minutes=5), content_due_scan=True)
+    first = sweep.run_selfheal_tick(**kwargs, **options)
+    assert first['enqueued'] == 0
+    assert state['cursor']['resume_after_path'] == rows[-2]['path']
+    second = sweep.run_selfheal_tick(**kwargs, **options)
+    assert second['enqueued'] == 1
+    assert [call['conversation_id'] for call in state['finalization_calls']] == ['expired']
+    assert state['cursor']['resume_after_path'] is None

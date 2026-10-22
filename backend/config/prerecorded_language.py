@@ -43,3 +43,42 @@ def language_class(language: str | None) -> str:
 
 def requires_multilingual(language: str | None) -> bool:
     return language_guard_enabled() and language_class(language) != 'supported'
+
+
+# Self-hosted gate (Parakeet /v2/language, Whisper-base). The statistic is
+# P(supported) summed over the Parakeet-25 languages, not a vendor's top-1.
+# Offline maxima on unsupported speech: 0.922 at >=6 s, 0.978 for 3 s crops.
+SELF_LID_CONFIDENCE = 0.95
+SELF_LID_SHORT_CONFIDENCE = 0.985
+SELF_LID_SHORT_SECONDS = 6.0
+SELF_LID_MIN_SECONDS = 1.0
+
+
+def self_lid_confidence_floor(probe_seconds: float | None) -> float | None:
+    """None means too short or unmeasured: never Parakeet on the self gate's word alone."""
+    if (
+        isinstance(probe_seconds, bool)
+        or not isinstance(probe_seconds, (int, float))
+        or not math.isfinite(probe_seconds)
+        or probe_seconds < SELF_LID_MIN_SECONDS
+    ):
+        return None
+    return SELF_LID_CONFIDENCE if probe_seconds >= SELF_LID_SHORT_SECONDS else SELF_LID_SHORT_CONFIDENCE
+
+
+def language_gate_shadow_enabled() -> bool:
+    """Kill switch for the shadow self-gate call beside the vendor probe; default on."""
+    return os.getenv('STT_PRERECORDED_LANGUAGE_GATE_SHADOW', 'true').strip().lower() != 'false'
+
+
+def language_gate_percent() -> int:
+    """Share of cohorts whose prerecorded route uses the self gate instead of the vendor probe.
+
+    Default 0. Malformed values mean 0, so a typo can never widen enforcement.
+    """
+    raw = os.getenv('STT_PRERECORDED_LANGUAGE_GATE_PERCENT', '0').strip()
+    try:
+        value = int(raw)
+    except ValueError:
+        return 0
+    return min(max(value, 0), 100)

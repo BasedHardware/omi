@@ -95,3 +95,47 @@ synthetic TTS cases from `hardcases-e653-002`, with no user data. Tests assert
 that the provider that returned nonempty Latin phonetics is never called and
 that multilingual responses preserve the native text. They do not claim a new
 vendor replay or production-quality measurement.
+
+## Self-hosted language gate (P58)
+
+Parakeet serves `POST /v2/language`: Whisper-base's language-token head (fp16,
+on the GPU worker queue; Apache-2.0) scores at most the first 30 s of the probe
+and returns `p_supported`, the summed probability of the 25 Parakeet languages,
+with the top language and a route. MMS-LID scored better offline but is
+CC-BY-NC, so it cannot serve a commercial product. Parakeet needs
+`p_supported >= 0.95` for at least 6 s of audio, `>= 0.985` below 6 s, and never
+below 1 s. The backend re-derives that rule
+(`config/prerecorded_language.self_lid_confidence_floor`) instead of trusting the
+service's `route`, and also requires the top language to be supported. The model
+never sees recognizer text. `PARAKEET_LID_MODEL` defaults to `whisper-base`;
+`off` (the kill switch) makes the endpoint return 503.
+
+Offline, through this serving code (FLEURS 15 languages x 60 clips as full,
+6 s, 3 s and 8 kHz copies, plus the owned synthetic corpus; not prod audio), the
+highest `p_supported` Whisper-base gave an unsupported clip was 0.922 at >=6 s
+and 0.978 for a 3 s crop, so 0 of 2,349 unsupported clips clear the thresholds
+(2 did at 0.90/0.97). The cost is leakage of supported speech to the paid
+multilingual vendor: 6/420 full clips, 21/420 6 s crops, 189/420 3 s crops and
+100/420 8 kHz copies. It scores the staging Arabic 6 s canary that
+Modulate called `en` 0.9258 as `ar` (`p_supported` < 0.01), and the soak003
+Chinese 6 s cases as `zh`.
+
+Shadow (`STT_PRERECORDED_LANGUAGE_GATE_SHADOW`, default on): every
+unknown-language probe also calls the gate and counts
+`omi_stt_language_gate_shadow_total{surface,self_route,vendor_route,self_bucket,vendor_bucket,vendor_conf,dur_bucket}`.
+Routing is unchanged. When the gate says Parakeet but the vendor said an
+unsupported language, the backend logs `event=language_gate_shadow_disagreement`
+with bounded codes and scores only. Call outcomes are counted in
+`omi_stt_language_gate_self_total{surface,outcome}`.
+
+Enforcement (`STT_PRERECORDED_LANGUAGE_GATE_PERCENT`, default 0): a stable uid
+cohort on legacy sync, or an audio-hash cohort for voice messages, uses the gate
+instead of the Modulate probe, which no longer runs for that cohort. Any gate
+failure (503, timeout, malformed body, no `HOSTED_PARAKEET_API_URL`) falls back
+to the vendor probe path, counted as `route=vendor_fallback` in
+`omi_stt_language_gate_enforced_total`. Batch intake stays shadow-only at any
+percent until the GPU worker accepts `self_lid` evidence.
+
+Wrong-language alarm: Parakeet counts the text language of every `/v2`
+transcript with at least 24 letters in `parakeet_output_language_total{bucket}`.
+TDT always emits Latin script, so this is an alarm, not a router.

@@ -1522,6 +1522,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     path,
                     selector=get_prerecorded_service,
                     before_probe=lambda: not cap_enforced() or sync_allowed(uid, lane=cap_dispatch_lane),
+                    cohort_key=uid,
                 ),
             )
             if (
