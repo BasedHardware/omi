@@ -201,11 +201,16 @@ def receiver():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('forward', [True, False])
-async def test_funded_window_vad_pause_survives_cap_proxy_and_keeps_transcribing(monkeypatch, forward):
+@pytest.mark.parametrize('mode', ['forward', 'generic', 'legacy-signature'])
+async def test_funded_window_vad_pause_survives_cap_proxy_and_keeps_transcribing(monkeypatch, caplog, mode):
     from utils import stt_cap_dispatch as cap
 
+    forward = mode != 'generic'
     monkeypatch.setenv('STT_CAP_FINALIZE_FORWARD_ENABLED', str(forward).lower())
+    if mode == 'legacy-signature':
+        # Exact old proxy protocol: reject the provider's keyword at binding,
+        # before entering finalize or making any HTTP request.
+        monkeypatch.setattr(cap.CapSocket, 'finalize', lambda self: self.raw.finalize())
     monkeypatch.setattr(cap, 'customer_funded', lambda _provider: False)
     monkeypatch.setattr(cap, 'record_audio', Mock())
     state = cap.LiveAdmission('synthetic')
@@ -225,8 +230,18 @@ async def test_funded_window_vad_pause_survives_cap_proxy_and_keeps_transcribing
     try:
         for data, frames in [(b'\x01\x00' * 640, 50), (bytes(1280), 25)]:
             for _ in range(frames):
-                assert socket.send(data)
+                accepted = socket.send(data)
+                if mode == 'legacy-signature' and not accepted:
+                    assert socket.normalized_death_reason == 'send_failed'
+                    assert (
+                        'phase=finalize exception_class=TypeError raw_dead=false raw_closed=false proxy=cap'
+                        in caplog.text
+                    )
+                    assert client.requests == []
+                    return
+                assert accepted
                 await _REAL_SLEEP(0)
+        assert mode != 'legacy-signature', 'baseline protocol did not reproduce the VAD pause failure'
         assert finalize.call_count > 0
         assert finalize.call_args.kwargs == ({'vad_pause': True} if forward else {})
         await _wait_requests(client, 1)
