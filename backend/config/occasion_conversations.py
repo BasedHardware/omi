@@ -43,3 +43,13 @@ def occasion_source(source: object) -> bool:
 def occasion_timeout(timeout: int) -> int:
     """The silence window for an admitted session: at least the occasion gap."""
     return max(int(timeout), OCCASION_GAP_SECONDS)
+
+
+# Explicit rollout bindings for inventory and operators. The generic parser in
+# refactor_modes owns every read, including the two suffixes derived from a mode.
+EPISODE_BOUNDARIES_MODE_ENV = 'EPISODE_BOUNDARIES_MODE'
+EPISODE_BOUNDARIES_PERCENT_ENV = 'EPISODE_BOUNDARIES_MODE_SERVE_PERCENT'
+EPISODE_BOUNDARIES_DIGESTS_ENV = 'EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S'
+LIFECYCLE_V2_MODE_ENV = 'LIFECYCLE_V2_MODE'
+LIFECYCLE_V2_PERCENT_ENV = 'LIFECYCLE_V2_MODE_SERVE_PERCENT'
+LIFECYCLE_V2_DIGESTS_ENV = 'LIFECYCLE_V2_MODE_SERVE_UID_SHA256S'

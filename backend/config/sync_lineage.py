@@ -29,6 +29,8 @@ from __future__ import annotations
 
 import os
 
+from config.refactor_switches import default_on as rollout_default_on
+
 from config.rollout_cohorts import in_rollout_cohort
 
 SYNC_LINEAGE_RESOLVE_ENV = 'SYNC_LINEAGE_RESOLVE_ENABLED'
@@ -40,7 +42,7 @@ _ON_VALUES = frozenset({'1', 'true', 'on', 'yes', 'enabled'})
 def sync_lineage_resolve_enabled() -> bool:
     """Unset or blank is on; only an explicit on-token keeps it on when set."""
     raw = os.getenv(SYNC_LINEAGE_RESOLVE_ENV, '').strip().lower()
-    return not raw or raw in _ON_VALUES
+    return rollout_default_on(SYNC_LINEAGE_RESOLVE_ENV, not raw or raw in _ON_VALUES)
 
 
 def sync_lineage_resolve_uid_allowed(uid: object) -> bool:

@@ -2343,31 +2343,14 @@ def merge_conversations(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),
 ):
-    """
-    Merge multiple conversations into a new conversation (async).
-
-    Flow:
-    1. Validates conversations (locked? completed?)
-    2. Returns immediately with 200 OK
-    3. Background task creates new merged conversation
-    4. Background task deletes source conversations
-    5. FCM notification sent on completion
-
-    The merged conversation will have:
-    - A new ID (source conversations are deleted)
-    - Merged transcript segments with adjusted timestamps
-    - Copied audio chunks
-    - Regenerated title, summary, action items, memories via process_conversation()
-    """
+    """Admit completed sources, merge into a new ID asynchronously, then notify the client."""
     from utils.conversations.merge_conversations import validate_merge_compatibility, perform_merge_async
 
-    # Validate minimum number of conversations
     if len(request.conversation_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 conversations required to merge")
     if len(request.conversation_ids) != len(set(request.conversation_ids)):
         raise HTTPException(status_code=400, detail="Cannot merge duplicate conversations.")
 
-    # Fetch all conversations
     conversations = []
     for conv_id in request.conversation_ids:
         conv = conversations_db.get_conversation(uid, conv_id)
@@ -2375,16 +2358,33 @@ def merge_conversations(
             raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
         conversations.append(conv)
 
-    # Validate merge compatibility (returns warning for large gaps but doesn't reject)
     is_valid, error_message, warning_message = validate_merge_compatibility(conversations)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_message)
 
-    # Set all source conversations to 'merging' status so user knows they're being processed
-    for conv_id in request.conversation_ids:
-        lifecycle_service.begin_merge(uid, conv_id)
+    from config.refactor_modes import serving_for
 
-    # Start background merge task
+    if serving_for('LIFECYCLE_V2_MODE', uid):
+        job = lifecycle_service.merge_jobs.admit(uid, request.conversation_ids, request.reprocess)
+        if job is None:
+            raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
+        background_tasks.add_task(lifecycle_service.merge_jobs.run, job['job_id'], job['dispatch_generation'])
+        return MergeConversationsResponse(
+            status='merging',
+            message='Merge started',
+            warning=warning_message,
+            conversation_ids=request.conversation_ids,
+        )
+
+    # refactor: superseded by lifecycle.merge_jobs when LIFECYCLE_V2_MODE=serve
+    admitted = []
+    for conv_id in request.conversation_ids:
+        if not lifecycle_service.begin_merge(uid, conv_id):
+            for prior_id in admitted:
+                lifecycle_service.complete(uid, prior_id)
+            raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
+        admitted.append(conv_id)
+
     background_tasks.add_task(
         perform_merge_async,
         uid=uid,

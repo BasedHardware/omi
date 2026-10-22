@@ -26,12 +26,30 @@ _ROUTE_DEFAULTS = {'stt_route': 'parakeet', 'provider_reason': 'none', 'provider
 _UNSET = object()
 
 
-def cohort_bucket(uid: str, salt: str, *, bits: int = 32) -> float:
-    # Listen deployed 64-bit buckets; batch retains its original 32-bit buckets.
+def cohort_bucket(
+    uid: str,
+    salt: str,
+    *,
+    bits: int = 32,
+    formula: str = 'fraction',
+    separator: str = ':',
+    clamp_upper: bool = False,
+    empty_salt_prefix: bool = False,
+) -> float:
+    """Shared hash primitive preserving each deployed cohort's assignment.
+
+    Fractional buckets use the first 32/64 bits scaled to [0, 100]. Older
+    modulo cohorts deliberately retain their modulo bias. A caller's salt,
+    width and separator are part of its persisted rollout contract.
+    """
     if bits not in (32, 64):
         raise ValueError('cohort bucket requires 32 or 64 bits')
-    payload = uid if not salt else f'{salt}:{uid}'
-    return int.from_bytes(hashlib.sha256(payload.encode()).digest()[: bits // 8], 'big') / 2**bits * 100
+    if formula not in ('fraction', 'modulo'):
+        raise ValueError('cohort bucket requires fraction or modulo formula')
+    payload = f'{salt}{separator}{uid}' if salt or empty_salt_prefix else uid
+    value = int.from_bytes(hashlib.sha256(payload.encode()).digest()[: bits // 8], 'big')
+    bucket = value % 100 if formula == 'modulo' else value / 2**bits * 100
+    return min(bucket, math.nextafter(100.0, 0.0)) if clamp_upper else bucket
 
 
 @dataclass(frozen=True)
@@ -175,7 +193,7 @@ def resolve_batch_policy(
         return member(uid, env, name, key, explicit=flags is not None)
 
     def enabled(key, default='false', *, strip=True):
-        return boolean(env, key, default, strip=strip)
+        return boolean(env, key, default, strip=strip, uid=uid)
 
     percent_raw = env.get('BATCH_PIPELINE_PERCENT', '0')
     percent = parse_percent(percent_raw)

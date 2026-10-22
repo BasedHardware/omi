@@ -308,3 +308,34 @@ def test_empty_notes_checkpoint_is_not_first_summary_success(monkeypatch, summar
     else:
         generate.assert_not_called()
         assert output.overview == ''
+
+
+def test_effective_packet_cohort_and_version_invalidate_notes_checkpoint(enabled, monkeypatch):
+    from utils.llm import notes_packet
+    from config.refactor_modes import uid_digest
+
+    owner = 'synthetic-packet-account'
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'shadow')
+    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', raising=False)
+    monkeypatch.delenv('NOTES_PACKET_V2_MODE_SERVE_PERCENT', raising=False)
+    generate = Mock(return_value='synthetic output')
+
+    def digest():
+        hashes = {}
+        dedupe.notes(owner, enabled, 'synthetic prefix', generate, hashes)
+        return hashes[dedupe.NOTES_HASH]
+
+    legacy = digest()
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S', uid_digest(owner))
+    serving = digest()
+    assert serving != legacy
+    monkeypatch.setattr(notes_packet, 'PACKET_VERSION', notes_packet.PACKET_VERSION + 1)
+    assert digest() != serving
+    monkeypatch.setenv('NOTES_PACKET_V2_MODE', 'off')
+    assert digest() == legacy
+
+
+def test_implementation_digest_tracks_packet_output_language_and_evidence_modules():
+    # Read the actual dependency closure; a missing/renamed module must invalidate generation.
+    dedupe.implementation_digest.cache_clear()
+    assert len(dedupe.implementation_digest('notes')) == 64

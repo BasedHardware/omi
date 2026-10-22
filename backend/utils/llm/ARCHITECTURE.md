@@ -99,3 +99,52 @@ Tests: `tests/unit/test_agent_tool_rules.py`.
   logging them.
 - Add hermetic backend-unit coverage for routing and fallback changes; fallback
   branches use the shared fallback telemetry helper.
+
+## Capture/speaker/notes refactor (L3)
+
+`notes_packet.py` is the input authority for agent, one-shot, rich and fallback
+notes: resolved output language, local capture time (#4773), density/length,
+wake-word rules, trusted contact spellings, and L2 speaker evidence. It builds
+and compares packets in shadow without any second model call. `output_language.py`
+resolves the account preference, then the conversation language, then English.
+
+`notes_output.py` is the internal parser/tool schema. `notes_output_contract.py`
+validates title, length, participants, tasks and citations and applies the same
+static repairs to every arm. A coverage floor violation is sent back within the
+agent's existing budget; a depleted budget preserves grounded short notes rather
+than fabricating padding. Repaired agent submissions survive a later deadline or
+malformed turn, so salvage does not buy a second full-transcript writer.
+
+`NOTES_PACKET_V2_MODE` and `STT_LANGUAGE_HINTS_MODE` are read exclusively through
+`config/refactor_modes.py`. Both default to shadow, with no serving cohort in a
+manifest. `off` restores legacy output. Shadow records only counts/sizes, never
+packet text, contact names or account identifiers. Cohort selection uses the
+existing `_SERVE_PERCENT` and `_SERVE_UID_SHA256S` contract.
+
+`notes_short_clip.py` keeps transcript fragments below 12 words with the existing
+deterministic minimum and no emoji or paid notes, for every processing trigger.
+Duration never determines discarding; described photos retain their normal path.
+`daily_recap_fingerprint.py` refreshes the same recap ID when input IDs, revisions
+or legacy summary content change, preserving the completed-delivery receipt.
+
+`utils/episodes/moment_render.py` uses the notes voice-key renderer and owner gate.
+Its `name_segments(segments, names)` contract is for L4; `incremental.render_moment`
+accepts optional `uid`/`conversation_id` for L3 cohort and L2 evidence lookup.
+Pass `conversation_language` or the resolved `output_language` to the incremental
+update. `conversation_topic.generate_conversation_topic` accepts optional segments
+so it can exclude explicit `language_conformance=out_of_profile` inputs. These
+consumers never guess language conformance from short text. Persisting that
+classification belongs to the STT/transcript producer, outside this lane.
+
+The single-language Soniox hint overlay preserves `STT_LEARNED_LANGUAGE_PROFILE`
+and `STT_MULTI_LANGUAGE_HINTS`, never selects another provider and never changes
+prerecorded language gates. Off and shadow return the existing hint list.
+
+Metrics: `omi_notes_refactor_shadow_total{check,outcome}`,
+`omi_notes_refactor_results_total{check,outcome}`, and existing
+`omi_notes_agent_repairs_total{kind=salvaged_submission}`. Owner dazheng reviews
+synthetic acceptance, attribution/citation violations, latency and paid usage
+before expanding to 1%, 10%, 100% by 2026-10-26, with a complete 24h lookback at
+each step. Any error or attribution regression blocks expansion; rollback is off.
+The retired evidence writer and prompt contract live only under
+`testing/episode_notes/`; live episode lifecycle code is a separate feature.

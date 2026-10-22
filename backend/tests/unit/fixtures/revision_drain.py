@@ -164,7 +164,12 @@ def _callable_name(fn: Any, args: tuple) -> str:
             continue
         name = getattr(fn, '__name__', '')
         owner = getattr(fn, '__self__', None)
-        if name in {'_tracked', 'run'} and args and (name == '_tracked' or isinstance(owner, contextvars.Context)):
+        if name == '_tracked' and args:
+            # The executor wrapper carries task-label and start-event metadata
+            # before the wrapped callable's arguments.
+            fn, args = args[0], args[3:]
+            continue
+        if name == 'run' and args and isinstance(owner, contextvars.Context):
             fn, args = args[0], args[1:]
             continue
         break
