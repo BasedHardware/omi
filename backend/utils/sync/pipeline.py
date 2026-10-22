@@ -261,6 +261,7 @@ _SYNC_FAILURE_REASON_CODES = {
     'stt_empty_unexpected',
     'stt_invalid_input',
     'stt_provider_configuration_error',
+    'stt_provider_budget_exhausted',
     'stt_timeout',
     'stt_upstream_error',
     'sync_backfill_dispatch_unavailable',
@@ -520,6 +521,9 @@ def _deferred_segment_labels(
 _SYNC_ERROR_CODE_OUTCOMES = {
     'stt_provider_configuration_error': TranscriptionOutcome.CONFIG_ERROR,
     'stt_timeout': TranscriptionOutcome.TIMEOUT,
+    # Budget outranks the generic upstream error so a job that hit an
+    # out-of-credits provider keeps the actionable outcome at rollup.
+    'stt_provider_budget_exhausted': TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED,
     'stt_upstream_error': TranscriptionOutcome.UPSTREAM_ERROR,
     'stt_empty_unexpected': TranscriptionOutcome.EMPTY_UNEXPECTED,
     'stt_invalid_input': TranscriptionOutcome.INVALID_INPUT,
