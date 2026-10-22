@@ -5,7 +5,7 @@ from config import refactor_modes as rm
 
 @pytest.fixture(autouse=True)
 def _clean(monkeypatch):
-    for key in ('X_MODE', 'X_MODE_SERVE_PERCENT', 'X_MODE_SERVE_UID_SHA256S', 'K'):
+    for key in ('X_MODE', 'X_MODE_SERVE_PERCENT', 'X_MODE_SERVE_UID_SHA256S', 'X_MODE_SHADOW_PERCENT', 'K'):
         monkeypatch.delenv(key, raising=False)
     rm._warned.clear()
 
@@ -53,3 +53,17 @@ def test_shadow_or_serve(monkeypatch):
     assert rm.shadow_or_serve('X_MODE') is True
     monkeypatch.setenv('X_MODE', 'off')
     assert rm.shadow_or_serve('X_MODE') is False
+
+
+def test_shadow_sampled_keeps_cohort_and_samples_others(monkeypatch):
+    monkeypatch.delenv('X_MODE_SHADOW_PERCENT', raising=False)
+    assert rm.shadow_sampled('X_MODE', 'u1', 0) is False
+    assert rm.shadow_sampled('X_MODE', 'u1', 100) is True
+    monkeypatch.setenv('X_MODE_SERVE_UID_SHA256S', rm.uid_digest('u1'))
+    assert rm.shadow_sampled('X_MODE', 'u1', 0) is True
+    monkeypatch.setenv('X_MODE_SHADOW_PERCENT', '100')
+    assert rm.shadow_sampled('X_MODE', 'u2', 0) is True
+    monkeypatch.setenv('X_MODE', 'off')
+    assert rm.shadow_sampled('X_MODE', 'u2', 100) is False
+    monkeypatch.setenv('X_MODE', 'serve')
+    assert rm.shadow_sampled('X_MODE', 'u2', 0) is True

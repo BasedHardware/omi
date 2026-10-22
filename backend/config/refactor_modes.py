@@ -113,3 +113,22 @@ def serving_for(
 def shadow_or_serve(name: str, default: Mode = 'shadow') -> bool:
     """Whether the new path runs at all (to log in shadow, or to serve)."""
     return mode(name, default) != 'off'
+
+
+def shadow_sampled(name: str, uid: str | None, default_percent: float, default: Mode = 'shadow') -> bool:
+    """Whether a costly shadow path runs for this uid: always for the serve cohort, else a uid sample.
+
+    Shadow exists to measure; paying a database write for every user is not needed for that.
+    ``<NAME>_SHADOW_PERCENT`` overrides ``default_percent`` (0 to 100).
+    """
+    if serving_for(name, uid, default):
+        return True
+    if mode(name, default) != 'shadow' or not uid:
+        return False
+    raw = os.getenv(f'{name}_SHADOW_PERCENT', '').strip()
+    try:
+        percent = float(raw) if raw else default_percent
+    except ValueError:
+        _warn_once(f'{name}_SHADOW_PERCENT', raw)
+        percent = default_percent
+    return percent > 0 and cohort_bucket(uid, f'{name.lower()}:shadow') < percent

@@ -15,6 +15,8 @@ from utils.capture_evidence import Span, coverage_union, novel_coverage
 from utils.capture.coverage_metrics import ADMIT
 
 FLAG = 'CAPTURE_COVERAGE_MODE'
+# Shadow measures on a uid sample; the serve cohort always keeps a complete ledger.
+SHADOW_SAMPLE_PERCENT = 5.0
 MAX_QUERY_RANGES = 32
 MAX_QUERY_FRAMES = 360_000
 
@@ -53,7 +55,7 @@ def decide(ranges: list[FrameRange], records: list[CoverageRecord]) -> AdmitResu
 def query(uid: str, key: CaptureKey, ranges: list[FrameRange]) -> AdmitResult:
     incoming = normalized(ranges)
     store.key_payload(key)
-    if not refactor_modes.shadow_or_serve(FLAG):
+    if not refactor_modes.shadow_sampled(FLAG, uid, SHADOW_SAMPLE_PERCENT):
         return AdmitResult(uncovered=_ranges(incoming))
     return decide(ranges, store.read(uid, key))
 
@@ -70,6 +72,6 @@ def admit(uid: str, key: CaptureKey, ranges: list[FrameRange], *, origin: Covera
 
 
 def record(uid: str, key: CaptureKey, rec: CoverageRecord) -> None:
-    if refactor_modes.shadow_or_serve(FLAG):
+    if refactor_modes.shadow_sampled(FLAG, uid, SHADOW_SAMPLE_PERCENT):
         normalized(rec.ranges)
         store.record(uid, key, rec)
