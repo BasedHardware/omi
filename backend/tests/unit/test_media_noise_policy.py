@@ -311,3 +311,17 @@ def test_client_cannot_author_content_classification(kind):
     create.content_kind = kind
     stored = Conversation(id='synthetic-capture', created_at=START, structured=Structured(), **create.model_dump())
     assert stored.content_kind == kind
+
+
+def test_adjacent_media_frames_share_one_boundary_ledger_entry():
+    signals = media_playback_signals(screens(600), started_at=START, finished_at=START + timedelta(seconds=600))
+    assert len(signals) == 1
+    assert signals[0].started_at == START and signals[0].ended_at == START + timedelta(seconds=600)
+
+
+def test_media_observations_do_not_merge_across_unobserved_gap():
+    rows = screens(30) + [dict(screens(30)[0], timestamp=(START + timedelta(seconds=80)).isoformat())]
+    signals = media_playback_signals(rows, started_at=START, finished_at=START + timedelta(seconds=120))
+    assert len(signals) == 2
+    assert signals[0].ended_at == START + timedelta(seconds=60)
+    assert signals[1].started_at == START + timedelta(seconds=80)

@@ -92,8 +92,17 @@ def media_playback_signals(
     overlap = sum((right - left).total_seconds() for left, right, _ in spans)
     if overlap < max(min(15, duration), duration * MIN_MEDIA_SHARE):
         return []
-    signals = []
+    # The shared boundary ledger has a bounded recent-edge index. Adjacent
+    # snapshots of one player are one observation interval, not new boundaries.
+    intervals: list[tuple[datetime, datetime, str]] = []
     for left, right, title in spans:
+        if intervals and intervals[-1][2] == title and left <= intervals[-1][1]:
+            previous_left, previous_right, _ = intervals[-1]
+            intervals[-1] = (previous_left, max(previous_right, right), title)
+        else:
+            intervals.append((left, right, title))
+    signals = []
+    for left, right, title in intervals:
         identity = hashlib.sha256(f'{left.isoformat()}:{right.isoformat()}:{title}'.encode()).hexdigest()
         signals.append(
             BoundarySignal(
