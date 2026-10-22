@@ -411,3 +411,32 @@ def test_ffmpeg_stderr_is_drained_with_a_retained_line_cap():
     slow = [sys.executable, '-c', 'import time; time.sleep(30)']
     with pytest.raises(subprocess.TimeoutExpired):
         video_frames._run_keeping(slow, re.compile(rb'x'), timeout=1.0)
+
+
+def test_video_thumbnail_is_the_opening_frame_not_the_overview(tmp_path):
+    # Filmstrip: a red first cell, then a blue one.
+    grid = Image.new('RGB', (128, 48), (0, 0, 255))
+    grid.paste(Image.new('RGB', (64, 48), (255, 0, 0)), (0, 0))
+    output = BytesIO()
+    grid.save(output, 'JPEG')
+    strip = video_frames.Filmstrip(jpeg=output.getvalue(), times=(0.0, 1.0), columns=2, cell_width=64, cell_height=48)
+    thumbnail = tmp_path / 'sheet_thumbnail.jpeg'
+    Image.new('RGB', (128, 128), (0, 255, 0)).save(thumbnail, 'JPEG')  # the overview grid's shrink
+
+    chat_file.FileChatTool._write_poster(strip, thumbnail)
+
+    with Image.open(thumbnail) as poster:
+        assert poster.size == (64, 48)
+        red, green, blue = poster.convert('RGB').getpixel((32, 24))
+        assert red > 200 and green < 60 and blue < 60
+
+
+def test_video_thumbnail_keeps_the_overview_when_the_strip_is_unreadable(tmp_path):
+    strip = video_frames.Filmstrip(jpeg=b'not a jpeg', times=(0.0,), columns=1, cell_width=64, cell_height=48)
+    thumbnail = tmp_path / 'sheet_thumbnail.jpeg'
+    Image.new('RGB', (128, 128), (0, 255, 0)).save(thumbnail, 'JPEG')
+
+    chat_file.FileChatTool._write_poster(strip, thumbnail)
+
+    with Image.open(thumbnail) as kept:
+        assert kept.size == (128, 128)
