@@ -71,6 +71,7 @@ class _Doc:
 
 def _set_docs(goals, docs):
     chain = goals.db.collection.return_value.document.return_value.collection.return_value
+    chain.where.return_value.stream.return_value = docs
     chain.where.return_value.limit.return_value.stream.return_value = docs
 
 
