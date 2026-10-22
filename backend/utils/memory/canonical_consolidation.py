@@ -18,6 +18,7 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryOperation, MemoryOperationType
 from models.memory_promotion import PromotionGraphPlan, build_promotion_admission_receipt
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
+from models.product_memory import undecided_visible
 from utils.log_sanitizer import sanitize_pii
 from utils.memory.memory_system import ensure_canonical_apply_control_state
 from utils.memory.canonical_required_processing import (
@@ -155,7 +156,7 @@ def _route_result_status(decision: ConsolidationAgentDecision) -> LifecycleState
 
 def _route_target_tier(decision: ConsolidationAgentDecision, *, quarantine: bool) -> MemoryLayer:
     # explicit_archive_memory: non-durable L2 outcomes are retained only outside default reads.
-    if quarantine:
+    if quarantine or (decision.route == 'review' and undecided_visible()):
         return MemoryLayer.short_term
     return MemoryLayer.long_term if decision.route == "promote" else MemoryLayer.archive
 

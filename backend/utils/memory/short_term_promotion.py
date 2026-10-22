@@ -26,7 +26,14 @@ from jobs.short_term_lifecycle_worker import (
     fetch_expired_short_term_memory_items_firestore,
     process_short_term_lifecycle_item,
 )
-from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
+from models.product_memory import (
+    MemoryItem,
+    MemoryItemStatus,
+    MemoryLayer,
+    ProcessingState,
+    awaiting_memory_decision,
+    undecided_visible,
+)
 from utils.memory.atom_keyword_index import delete_atom_keyword_doc, sync_atom_keyword_index_for_item
 from models.memory_apply import MemoryControlState, WriterMode
 from utils.memory.canonical_consolidation import (
@@ -303,6 +310,10 @@ def run_canonical_short_term_ttl_lifecycle(
     for item in items:
         if job_budget_guard is not None:
             job_budget_guard()
+        if undecided_visible() and awaiting_memory_decision(item):
+            # Age is not a routing decision. Do not irreversibly hide owed intake
+            # or Review while the decision worker is unavailable.
+            continue
         disposition = None
         expired = item.tier == MemoryLayer.short_term and effective_short_term_expiry(item) <= current_time
         if expired:

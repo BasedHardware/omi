@@ -314,7 +314,8 @@ def test_promotion_and_supersession_share_one_commit_and_remove_old_assertion():
         ("reject", MemoryItemStatus.hidden),
     ],
 )
-def test_nonpromote_routes_are_terminal_archive_outcomes(route: str, expected_status: MemoryItemStatus):
+def test_nonpromote_routes_are_terminal_archive_outcomes(route: str, expected_status: MemoryItemStatus, monkeypatch):
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'false')
     source = _item(f"mem_{route}", "A broad but non-durable observation.")
     db = _db_for_items(source)
     decision = ConsolidationAgentDecision(
@@ -376,7 +377,7 @@ def test_expired_review_is_not_requeued_by_consolidation_replay():
     db.docs[review_path].update({'status': 'expired', 'permitted_uses': []})
     before = {path: dict(row) for path, row in db.docs.items()}
 
-    assert stored.tier == MemoryTier.archive
+    assert stored.tier == MemoryTier.short_term
     _apply(source, decision, db)
 
     assert db.docs == before
@@ -527,3 +528,14 @@ def test_already_processed_required_promote_rebinds_memory_text_to_l2_content():
         item_revision=stored.item_revision,
         promotion=stored.promotion or {},
     )
+
+
+def test_review_stays_short_term_and_rollback_restores_archive(monkeypatch):
+    for enabled, expected in [('true', MemoryTier.short_term), ('false', MemoryTier.archive)]:
+        monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', enabled)
+        source = _item('mem_review_switch', 'A synthetic observation awaiting confirmation.')
+        db = _db_for_items(source)
+        _apply(source, ConsolidationAgentDecision(source_memory_id=source.memory_id, route='review'), db)
+        stored = MemoryItem(**db.docs[f'users/{UID}/memory_items/{source.memory_id}'])
+        assert stored.tier == expected
+        assert stored.promotion['route'] == 'review'
