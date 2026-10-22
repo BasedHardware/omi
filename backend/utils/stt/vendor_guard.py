@@ -17,7 +17,9 @@ MODULATE_PROVIDER = 'modulate'
 ENDPOINT_STT = 'stt'
 ENDPOINT_LID = 'lid'
 
-QUOTA_HTTP_STATUSES = frozenset({401, 402, 403, 429})
+# 402 and 429-with-credits are budget refusals (pre_recorded._modulate_budget_refusal); a plain 429 is a
+# rate limit and stays transient.
+QUOTA_HTTP_STATUSES = frozenset({401, 402, 403})
 QUOTA_BODY_MARKER = 'insufficient credits'
 
 BREAKER_FAILURE_THRESHOLD = 5
@@ -66,7 +68,7 @@ def is_quota_error(exc: BaseException) -> bool:
 
 
 class _EndpointBreaker:
-    __slots__ = ('lock', 'failures', 'opened_at', 'trial_in_flight', 'trial_started_at')
+    __slots__ = ('lock', 'failures', 'opened_at', 'trial_in_flight', 'trial_started_at', 'budget')
 
     def __init__(self):
         self.lock = threading.Lock()
@@ -74,6 +76,7 @@ class _EndpointBreaker:
         self.opened_at: float | None = None
         self.trial_in_flight = False
         self.trial_started_at = 0.0
+        self.budget = False
 
     def evict(self, now: float) -> None:
         while self.failures and now - self.failures[0] > BREAKER_WINDOW_SECONDS:
@@ -129,7 +132,8 @@ def record_breaker_success(endpoint: str) -> None:
     _set_gauge(endpoint, 0)
 
 
-def record_breaker_quota_error(endpoint: str) -> None:
+def record_breaker_quota_error(endpoint: str, budget: bool = False) -> None:
+    """`budget` marks an account out-of-credits refusal; the open breaker then reports that outcome."""
     if not vendor_fail_fast_enabled():
         return
     state = _breaker_for(endpoint)
@@ -141,9 +145,16 @@ def record_breaker_quota_error(endpoint: str) -> None:
             # A failed half-open trial re-opens the breaker for another full window.
             state.opened_at = now
             state.trial_in_flight = False
+            state.budget = budget
         is_open = state.opened_at is not None
     if is_open:
         _set_gauge(endpoint, 1)
+
+
+def breaker_budget_exhausted(endpoint: str) -> bool:
+    state = _breaker_for(endpoint)
+    with state.lock:
+        return state.opened_at is not None and state.budget
 
 
 def record_breaker_other_failure(endpoint: str) -> None:

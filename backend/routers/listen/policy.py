@@ -138,7 +138,7 @@ async def initialize_session_policy(host):
     ):
         from utils.conversations.process_conversation import retrieve_in_progress_conversation
         from database.listen_continuations import calendar_continuity_row
-        from utils.conversation_continuity import calendar_continuity_identity, continuation_timeout, gap_splits
+        from models.conversation_continuity import calendar_continuity_identity, continuation_timeout, gap_splits
         from utils.transcribe_decisions import effective_conversation_timeout
         from utils.transcribe_decisions import should_attach_to_existing_in_progress
 

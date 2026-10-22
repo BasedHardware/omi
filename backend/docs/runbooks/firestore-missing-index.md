@@ -25,8 +25,9 @@ It routes through `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS`.
    `backend/.venv/bin/python backend/scripts/generate_firestore_indexes.py
    --write`. Every generated composite index entry must end in `__name__`.
 4. Open a PR for the registry and generated `firestore.indexes.json`. The
-   Firestore index workflow applies declared requirements after its
-   production approval. Do not create an index directly from the alert
+   Firestore index workflow prebuilds additive declarations during review
+   after its production approval; mixed changes stay main-only. See the
+   [prebuild runbook](../../../.github/agent-docs/firestore-queries-and-indexes.md#prebuild-additions-during-pr-review). Do not create an index directly from the alert
    response.
 5. After the requirement is ready, retry the affected request and confirm it
    succeeds. Record the incident and index PR in the alert policy notes.

@@ -122,9 +122,7 @@ def no_retry_sleep(monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    'status,body', [(429, 'rate limited'), (402, 'payment required'), (400, 'Insufficient Credits')]
-)
+@pytest.mark.parametrize('status,body', [(403, 'forbidden'), (401, 'unauthorized'), (400, 'Insufficient Credits')])
 def test_quota_error_fails_fast_with_a_single_post(monkeypatch, status, body):
     client = install_http(monkeypatch, stt, post=stt_reply(status, text=body))
     seconds_before = burn('stt', 'error')
@@ -135,6 +133,39 @@ def test_quota_error_fails_fast_with_a_single_post(monkeypatch, status, body):
     assert 'insufficient credits' not in str(exc_info.value).lower()
     assert client.post.call_count == 1
     assert burn('stt', 'error') - seconds_before == 2.0
+
+
+@pytest.mark.parametrize('status,body', [(402, 'payment required'), (429, '{"error": "Insufficient Credits."}')])
+def test_budget_refusal_is_typed_terminal_and_feeds_the_breaker(monkeypatch, status, body):
+    from utils.stt.outcomes import TranscriptionFailure, TranscriptionOutcome
+
+    client = install_http(monkeypatch, stt, post=stt_reply(status, text=body))
+    before = burn('stt', 'error')
+    for _ in range(vendor_guard.BREAKER_FAILURE_THRESHOLD):
+        with pytest.raises(TranscriptionFailure) as exc_info:
+            stt.modulate_prerecorded_from_bytes(wav_bytes(2))
+        assert exc_info.value.outcome == TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED
+        assert exc_info.value.retryable is False
+    assert client.post.call_count == vendor_guard.BREAKER_FAILURE_THRESHOLD
+    assert burn('stt', 'error') - before == 2.0 * vendor_guard.BREAKER_FAILURE_THRESHOLD
+    assert breaker_gauge('stt') == 1
+    # The open breaker reports the same typed budget outcome without another POST.
+    with pytest.raises(TranscriptionFailure) as exc_info:
+        stt.modulate_prerecorded_from_bytes(wav_bytes(2))
+    assert exc_info.value.outcome == TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED
+    assert client.post.call_count == vendor_guard.BREAKER_FAILURE_THRESHOLD
+
+
+def test_plain_429_rate_limit_is_transient_and_bounded_to_two_posts(monkeypatch):
+    from utils.stt.outcomes import TranscriptionFailure
+
+    client = install_http(monkeypatch, stt, post=stt_reply(429, text='{"error": "Too many requests"}'))
+    no_retry_sleep(monkeypatch)
+    with pytest.raises(RuntimeError) as exc_info:
+        stt.modulate_prerecorded_from_bytes(wav_bytes(2))
+    assert not isinstance(exc_info.value, (TranscriptionFailure, ModulateQuotaError))
+    assert client.post.call_count == 2
+    assert breaker_gauge('stt') == 0
 
 
 def test_5xx_retries_once_then_raises_runtime_error(monkeypatch):
@@ -167,7 +198,7 @@ def test_transient_retry_then_success_is_bounded_to_two_posts(monkeypatch):
 
 
 def test_non_wav_audio_burns_zero_seconds_without_raising(monkeypatch):
-    client = install_http(monkeypatch, stt, post=stt_reply(429))
+    client = install_http(monkeypatch, stt, post=stt_reply(403))
     before = burn('stt', 'error')
     with pytest.raises(ModulateQuotaError):
         stt.modulate_prerecorded_from_bytes(b'not-a-wav')
@@ -201,7 +232,7 @@ def test_kill_switch_is_read_at_call_time(monkeypatch):
 
 
 def test_url_wrapper_quota_is_one_download_and_one_post(monkeypatch):
-    client = install_http(monkeypatch, stt, post=stt_reply(429), get=download_ok())
+    client = install_http(monkeypatch, stt, post=stt_reply(403), get=download_ok())
     with pytest.raises(ModulateQuotaError, match=r'^Modulate transcription failed'):
         stt.modulate_prerecorded('https://storage.test/wave')
     assert client.get.call_count == 1
@@ -238,7 +269,7 @@ def test_kill_switch_restores_the_legacy_five_post_url_retry(monkeypatch):
 
 
 def prime_stt_breaker(monkeypatch, failures=5):
-    client = install_http(monkeypatch, stt, post=stt_reply(429))
+    client = install_http(monkeypatch, stt, post=stt_reply(403))
     for _ in range(failures):
         with pytest.raises(ModulateQuotaError):
             stt.modulate_prerecorded_from_bytes(wav_bytes())
@@ -432,7 +463,7 @@ def test_detect_outcome_unsupported_format(monkeypatch):
 
 
 def test_detect_outcome_breaker_open(monkeypatch):
-    client = install_http(monkeypatch, lid, post=lid_reply(429))
+    client = install_http(monkeypatch, lid, post=lid_reply(403))
     for _ in range(5):
         assert_unavailable(lid.detect(wav_bytes(6)))
     assert client.post.call_count == 5
@@ -445,7 +476,7 @@ def test_detect_outcome_breaker_open(monkeypatch):
 
 
 def test_detect_quota_failure_burns_probe_seconds_as_error(monkeypatch):
-    install_http(monkeypatch, lid, post=lid_reply(429))
+    install_http(monkeypatch, lid, post=lid_reply(403))
     before = burn('lid', 'error')
     assert_unavailable(lid.detect(wav_bytes(6)))
     assert burn('lid', 'error') - before == 6.0

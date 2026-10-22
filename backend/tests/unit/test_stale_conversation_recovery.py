@@ -18,12 +18,15 @@ NOW = datetime(2026, 10, 22, 4, tzinfo=timezone.utc)
 def test_page_claim_cas_and_backoff():
     db = StrictFirestore()
     ref = db.collection('users').document('u').collection('conversation_recovery_state').document('stale_in_progress')
+    marker = db.collection('account_deletions').document('u')
     cursor = {'id': 'poison', 'finished_at': NOW - timedelta(days=30)}
-    assert recovery._claim_page_txn(db.transaction(), ref, 0, cursor, NOW)
+    assert recovery._claim_page_txn(db.transaction(), ref, 0, cursor, NOW, deletion_ref=marker)
     assert ref.get().to_dict() == {'revision': 1, 'cursor': cursor, 'not_before': NOW + recovery.PAGE_BACKOFF}
-    assert not recovery._claim_page_txn(db.transaction(), ref, 0, None, NOW + timedelta(minutes=2))
-    assert not recovery._claim_page_txn(db.transaction(), ref, 1, None, NOW + timedelta(seconds=59))
-    assert recovery._claim_page_txn(db.transaction(), ref, 1, None, NOW + recovery.PAGE_BACKOFF)
+    assert not recovery._claim_page_txn(db.transaction(), ref, 0, None, NOW + timedelta(minutes=2), deletion_ref=marker)
+    assert not recovery._claim_page_txn(
+        db.transaction(), ref, 1, None, NOW + timedelta(seconds=59), deletion_ref=marker
+    )
+    assert recovery._claim_page_txn(db.transaction(), ref, 1, None, NOW + recovery.PAGE_BACKOFF, deletion_ref=marker)
     assert ref.get().to_dict()['cursor'] is None
 
 
@@ -139,3 +142,22 @@ def test_unexpected_metric_input_folds_to_unknown():
         sample.labels['outcome'] for metric in STALE_RECOVERY_OUTCOME_TOTAL.collect() for sample in metric.samples
     }
     assert 'private account diagnostic' not in labels
+
+
+@pytest.mark.parametrize('status', [None, 'pending', 'running', 'completed', 'unrecognized'])
+def test_account_deletion_marker_blocks_cursor_creation(status):
+    db = StrictFirestore()
+    ref = db.collection('users').document('u').collection('conversation_recovery_state').document('stale_in_progress')
+    marker = db.collection('account_deletions').document('u')
+    marker.create({'wipe_status': status})
+    assert not recovery._claim_page_txn(db.transaction(), ref, 0, None, NOW, deletion_ref=marker)
+    assert not ref.get().exists
+
+
+@pytest.mark.parametrize('status', ['cancelled', 'billing_failed'])
+def test_explicitly_restored_account_can_claim_recovery(status):
+    db = StrictFirestore()
+    ref = db.collection('users').document('u').collection('conversation_recovery_state').document('stale_in_progress')
+    marker = db.collection('account_deletions').document('u')
+    marker.create({'wipe_status': status})
+    assert recovery._claim_page_txn(db.transaction(), ref, 0, None, NOW, deletion_ref=marker)

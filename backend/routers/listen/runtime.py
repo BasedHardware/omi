@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from utils.conversations import quiet_finalization
+
 import asyncio
 import logging
 import os
@@ -1380,17 +1382,25 @@ class ListenSessionRuntime:
                         conversation_id,
                         read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
                     )
+                    if conversation and conversation.get('source') in {'omi', 'phone'} and quiet_finalization.enabled():
+                        try:
+                            await self.persistence.call(
+                                quiet_finalization.arm,
+                                self.request.uid,
+                                conversation_id,
+                                self.conversation_creation_timeout,
+                                requires_byok=bool(get_byok_keys()),
+                            )
+                        except Exception as error:
+                            logger.error('Quiet disconnect check persistence failed type=%s', type(error).__name__)
                     finalization_reason = getattr(self.state, 'finalization_reason', None)
                     if conversation and finalization_reason:
-                        external_data = dict(conversation.get('external_data') or {})
-                        external_data['conversation_finalization_reason'] = finalization_reason
                         await self.persistence.call(
                             conversations_db.update_conversation,
                             self.request.uid,
                             conversation_id,
-                            {'external_data': external_data},
+                            {'external_data.conversation_finalization_reason': finalization_reason},
                         )
-                        conversation['external_data'] = external_data
                     if (
                         conversation
                         and self.state.close_code == 1000

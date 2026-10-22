@@ -59,6 +59,7 @@ _REASON_ERROR_CLASS = {
     'provider_5xx': ERROR_CLASS_SERVER_ERROR,
     'server_error': ERROR_CLASS_SERVER_ERROR,
     'provider_429': ERROR_CLASS_RATE_LIMITED,
+    'provider_rate_limited': ERROR_CLASS_RATE_LIMITED,
     'modulate_serve_error': ERROR_CLASS_SERVER_ERROR,
     'config_incomplete': ERROR_CLASS_CAPABILITY,
     'capability_mismatch': ERROR_CLASS_CAPABILITY,

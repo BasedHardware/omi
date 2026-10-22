@@ -20,6 +20,11 @@ def jobs(text):
 # the nightly graph's cost stays what CI budgets. Record the new value here
 # with the PR that changed it; the assertion below then pins the exact value,
 # so any later drift still fails until this dict is edited in review.
+# P65: PR-triggered schema provisioning is an external writer, not an offline
+# test suite. Calling it from the nightly graph would cross the no-writes
+# boundary. Its behavioral tests still run via backend-unit-tests.yml.
+PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
+
 INTENTIONAL_BUDGET_CHANGES = {
     # iOS Compile Check: the 40-min ceiling sat below the measured cold path
     # (39:25 real steps + ~1 min post-job Post Setup Flutter cache save, run
@@ -39,9 +44,17 @@ class WorkflowTests(unittest.TestCase):
         for path in WORKFLOWS.glob("*.yml"):
             text = path.read_text()
             triggers = text.split("\njobs:\n", 1)[0]
-            if re.search(r"(?m)^  pull_request:", triggers):
+            if re.search(r"(?m)^  pull_request:", triggers) and path.name not in PR_SCHEMA_WRITERS:
                 expected.add(path.name)
         self.assertEqual(set(self.calls.values()), expected)
+
+    def test_pr_schema_writers_stay_outside_the_offline_nightly_graph(self):
+        self.assertTrue(PR_SCHEMA_WRITERS.isdisjoint(self.calls.values()))
+        for filename in PR_SCHEMA_WRITERS:
+            text = (WORKFLOWS / filename).read_text()
+            self.assertIn('firestore-schema-', text)
+            self.assertIn('id-token:', text)
+            self.assertIn('--provision-missing', text)
 
     def test_nightly_does_not_implement_tests_or_inherit_secrets(self):
         self.assertIn("cron: '7 3 * * *'", self.nightly)
