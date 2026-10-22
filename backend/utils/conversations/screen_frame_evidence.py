@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import base64
 import io
+import math
 import logging
 import re
 import time
@@ -60,10 +61,43 @@ class ScreenFrameEvidence:
     summary: str
 
 
+_UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _safe_banner_suitability(val: Any) -> float:
+    if isinstance(val, bool) or val is None:
+        return 0.0
+    try:
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return 0.0
+        return f
+    except (ValueError, TypeError):
+        return 0.0
+
+
 def _as_utc(value: Any) -> Optional[datetime]:
-    if not isinstance(value, datetime):
+    if isinstance(value, bool) or value is None:
         return None
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (ValueError, OverflowError, OSError):
+            return None
+    if isinstance(value, str):
+        cleaned = value.strip()
+        if not cleaned:
+            return None
+        if cleaned.endswith("Z") or cleaned.endswith("z"):
+            cleaned = cleaned[:-1] + "+00:00"
+        try:
+            dt = datetime.fromisoformat(cleaned)
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        except (ValueError, TypeError):
+            return None
+    return None
 
 
 def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tuple[ScreenFrameEvidence, ...]:
@@ -96,7 +130,7 @@ def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tupl
                 frame_id=frame_id,
                 captured_at=captured_at,
                 role=str(doc.get('role') or 'strip'),
-                banner_suitability=float(doc.get('banner_suitability') or 0.0),
+                banner_suitability=_safe_banner_suitability(doc.get('banner_suitability')),
                 names=names,
                 summary=summary.strip() if isinstance(summary, str) else '',
             )
@@ -215,17 +249,22 @@ def with_screen_frame_participants(
         calendar_event_id='screen-frames',
         title='Video meeting',
         participants=participants,
-        start_time=started_at,
+        start_time=_as_utc(started_at),
         duration_minutes=max(1, duration_minutes),
         calendar_source='screen_activity',
     )
 
 
-def _offset_label(captured_at: datetime, started_at: Optional[datetime]) -> str:
+def _offset_label(captured_at: Any, started_at: Optional[datetime]) -> str:
+    cap = _as_utc(captured_at)
+    if cap is None:
+        if isinstance(captured_at, datetime):
+            return captured_at.strftime('%H:%M')
+        return "00:00"
     start = _as_utc(started_at)
     if start is None:
-        return captured_at.strftime('%H:%M')
-    seconds = max(0, int((captured_at - start).total_seconds()))
+        return cap.strftime('%H:%M')
+    seconds = max(0, int((cap - start).total_seconds()))
     return f'+{seconds // 60:02d}:{seconds % 60:02d}'
 
 
@@ -254,7 +293,7 @@ def _select_for_images(evidence: Sequence[ScreenFrameEvidence]) -> list[ScreenFr
     chosen = [rest[int(index * step)] for index in range(slots)]
     if banner:
         chosen.append(banner)
-    return sorted(chosen, key=lambda item: item.captured_at)
+    return sorted(chosen, key=lambda item: _as_utc(item.captured_at) or _UTC_MIN)
 
 
 def _downscale_jpeg(raw: bytes) -> bytes:
