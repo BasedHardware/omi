@@ -144,3 +144,108 @@ async def test_production_callback_deduplication_against_last_end(monkeypatch):
     assert emitted[1]["start"] == 296.50
     assert emitted[1]["end"] == 300.00
     assert session.last_end == 300.00
+
+
+@pytest.mark.anyio
+async def test_mid_session_parakeet_window_replacement_emits_fresh_audio():
+    """Verify that a successor WindowedParakeetSocket created mid-session (session.last_end > 0)
+    measures stream time on its own socket axis (starting at 0.0) and emits fresh audio
+    instead of dropping it due to cross-axis last_emitted_end seeding.
+    """
+    # 1. Correct successor socket: _last_emitted_end starts at 0.0 (the socket's own stream axis)
+    socket = object.__new__(WindowedParakeetSocket)
+    socket._last_emitted_end = 0.0
+    socket._embedded_this_window = False
+    socket._slice_pcm = lambda pcm, s, e: b""
+    socket._assign_speaker = AsyncMock(return_value=0)
+    socket._record_materialize_drop = MagicMock()
+
+    raw = RawSegment(text="fresh words after reconnect", start=1.0, end=4.5)
+
+    emitted, beyond = await socket._materialize(
+        [raw],
+        pcm=b"\x00" * 32000,
+        start=0.0,
+        dur=10.0,
+    )
+
+    # Fresh audio must be emitted, NOT dropped as 'already_emitted'
+    assert len(emitted) == 1
+    assert emitted[0]["text"] == "fresh words after reconnect"
+    assert emitted[0]["start"] == 1.0
+    assert emitted[0]["end"] == 4.5
+    # The socket's stream boundary advances to 4.5
+    socket._last_emitted_end = max(socket._last_emitted_end, max(float(item["end"]) for item in emitted))
+    assert socket._last_emitted_end == 4.5
+    socket._record_materialize_drop.assert_not_called()
+
+    # 2. Bugged socket: if seeded with session.last_end = 600.0, _materialize drops all fresh audio
+    bugged_socket = object.__new__(WindowedParakeetSocket)
+    bugged_socket._last_emitted_end = 600.0  # Erroneous cross-axis seeding
+    bugged_socket._embedded_this_window = False
+    bugged_socket._slice_pcm = lambda pcm, s, e: b""
+    bugged_socket._assign_speaker = AsyncMock(return_value=0)
+    bugged_socket._record_materialize_drop = MagicMock()
+
+    bugged_emitted, _ = await bugged_socket._materialize(
+        [raw],
+        pcm=b"\x00" * 32000,
+        start=0.0,
+        dur=10.0,
+    )
+    # The bug would silently drop all fresh audio whose stream end (4.5) <= 600.0!
+    assert len(bugged_emitted) == 0
+
+
+@pytest.mark.anyio
+async def test_new_window_socket_axis_not_contaminated_by_session_last_end(monkeypatch):
+    """Verify that LiveChainSession.new_window does not seed last_emitted_end with session.last_end,
+    ensuring that a successor socket preserves its own stream clock boundary at 0.0.
+    """
+    from types import SimpleNamespace
+    from utils.stt import live_session
+    from tests.unit.test_live_speaker_carry import _managed_receiver
+
+    created_sockets = []
+
+    class MockWindowSocket:
+        def __init__(self):
+            self.last_emitted_end = 0.0
+            self.allow_no_text_rescue = False
+            self.progress_deadline_enabled = False
+            self.is_connection_dead = False
+
+        def finish(self):
+            pass
+
+    def mock_connect_window(callback, sample_rate):
+        sock = MockWindowSocket()
+        created_sockets.append(sock)
+        return sock
+
+    monkeypatch.setattr("utils.stt.parakeet_window.connect_window", mock_connect_window)
+
+    receiver, _ = _managed_receiver()
+    receiver.host.stt_service = live_session.st.STTService.parakeet
+    receiver.host.stt_model = "parakeet-window"
+    session = live_session.LiveChainSession(receiver)
+    # Session has already progressed to 600s before mid-session socket replacement
+    session.last_end = 600.0
+
+    monkeypatch.setenv("HOSTED_PARAKEET_API_URL", "http://fake-parakeet")
+    monkeypatch.setattr(live_session, "window_allocation", lambda uid: True)
+    monkeypatch.setattr(live_session, "window_language_supported", lambda h, l: True)
+    monkeypatch.setattr(live_session, "VADStreamingGate", lambda **kwargs: MagicMock())
+
+    async def fake_pick_window(**kwargs):
+        return await kwargs["connect_primary"](), kwargs["primary_service"]
+
+    monkeypatch.setattr(live_session.st, "connect_stt_socket_with_fallback", fake_pick_window)
+    monkeypatch.setattr(live_session.st, "stt_service_models", ["parakeet-window"])
+
+    await session.connect(16000)
+
+    assert len(created_sockets) == 1
+    # The socket's stream axis must remain at 0.0, NOT contaminated by session.last_end (600.0)
+    assert created_sockets[0].last_emitted_end == 0.0
+

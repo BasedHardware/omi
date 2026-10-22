@@ -337,8 +337,6 @@ class LiveChainSession:
 
                     def new_window():
                         window_raw = connect_window(callback, sample_rate)
-                        if self.last_end > 0:
-                            window_raw.last_emitted_end = float(self.last_end)
                         if self.no_text_rescue.enabled:
                             window_raw.allow_no_text_rescue = self.no_text_rescue.allow_window_rescue
                             window_raw.progress_deadline_enabled = True

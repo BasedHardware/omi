@@ -384,14 +384,6 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
     def capacity_subtype(self) -> str | None:
         return self._capacity_subtype
 
-    @property
-    def last_emitted_end(self) -> float:
-        return self._last_emitted_end
-
-    @last_emitted_end.setter
-    def last_emitted_end(self, value: float) -> None:
-        self._last_emitted_end = float(value)
-
     def has_untranscribed_speech(self) -> bool:
         """Whether replay still protects speech that this leg has not emitted."""
         # finish() clears the PCM/spans. A failed or closing leg must still
@@ -1352,10 +1344,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         return emitted
 
 
-def connect_window(
-    callback: Callable[[list[dict[str, Any]]], None],
-    sample_rate: int,
-) -> WindowedParakeetSocket:
+def connect_window(callback: Callable[[list[dict[str, Any]]], None], sample_rate: int) -> WindowedParakeetSocket:
     try:
         min_replicas = int(os.getenv('PARAKEET_BATCH_PRESSURE_MIN_REPLICAS', '2'))
     except ValueError:
@@ -1368,12 +1357,7 @@ def connect_window(
         raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
     release = admission.acquire()
     try:
-        socket = WindowedParakeetSocket(
-            callback,
-            os.environ['HOSTED_PARAKEET_API_URL'],
-            sample_rate,
-            release,
-        )
+        socket = WindowedParakeetSocket(callback, os.environ['HOSTED_PARAKEET_API_URL'], sample_rate, release)
         socket.start()
         # Count only a socket whose pump started successfully. Keeping this at the
         # connection boundary makes the accepted outcome describe an actual
