@@ -6238,3 +6238,23 @@ Operator redrive payloads may carry `redrive_mode: 'minimal'` to re-transcribe p
 Runtime STT-cap and ladder execution scope shares the 60-second, environment-fenced
 Firestore token cache; session admission does not wait for it. Existing live sessions
 retain admitted state until reconnect. See [runtime ramp and rollback](stt-cap-dispatch.md#runtime-cohort-no-restart).
+
+### Stale reconnect recovery
+
+Reconnect recovery claims at most ten `in_progress` rows older than one hour,
+newest eligible first. A per-user `conversation_recovery_state/stale_in_progress`
+CAS cursor advances before attempts, including refusals/errors; value cursors
+survive row deletion. Subsequent reconnects page toward older rows, wrap after
+the tail, and wait at least one minute between page claims. Each call reads at
+most two ten-row pages plus cursor state; concurrent reconnects cannot claim the
+same cursor generation. A process crash can postpone its claimed page until the
+next pass, but cannot pin later pages. Recovery remains reconnect-driven.
+
+Discarded, deleted, locked and deferred rows remain protected. The outcome log
+has only the conversation ID and a bounded disposition; it has no UID/content.
+`omi_stale_recovery_outcome_total{outcome}` distinguishes accepted handoff/empty
+deletion, not-admitted, error, oversized-close attempt, cancellation and current-session skip.
+Unexpected metric inputs fold to the shared reason enum’s `unknown` bucket.
+Acceptance is not worker completion. `STALE_IN_PROGRESS_RECOVERY_ENABLED=false`
+is the default-on feature's kill switch; it disables this reconnect sweep only.
+The new descending status/activity composite must be READY before shipment.
