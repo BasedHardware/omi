@@ -15,7 +15,9 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 import pytest
 
+from database import _client, conversation_finalization_jobs as jobs
 from database import stale_conversation_recovery as recovery
+from utils.conversations import lifecycle
 from routers.listen import conversations as live
 
 pytestmark = pytest.mark.integration
@@ -80,14 +82,21 @@ def test_concurrent_reconnects_only_claim_one_page(world):
     assert sorted(map(len, pages)) == [0, 0, 0, 10]
 
 
-async def test_todays_orphan_finalizes_despite_old_discarded_head(world):
+async def test_todays_orphan_finalizes_despite_old_discarded_head(world, monkeypatch):
     db, uid, user = world
+    monkeypatch.setattr(_client, '_firestore_client', db)
+    monkeypatch.setattr(live, 'get_byok_keys', lambda: {})
+    monkeypatch.setattr(lifecycle, 'is_listen_finalization_dispatch_enabled', lambda: False)
+    monkeypatch.setattr(live.conversations_db, 'invalidate_people_stats_cache', lambda *_: None)
     rows = seed(user, 25)
     rows.document('today').set(
         {
             'status': 'in_progress',
             'finished_at': NOW - timedelta(hours=2),
             'transcript_segments': [{'text': 'synthetic'}],
+            'has_content': True,
+            'has_photos': False,
+            'source': 'omi',
         }
     )
     rows.document('active').set({'status': 'in_progress', 'finished_at': NOW})
@@ -98,23 +107,35 @@ async def test_todays_orphan_finalizes_despite_old_discarded_head(world):
             return fn(*args, **kwargs, now=NOW, firestore_client=db)
         if fn is live.conversations_db.get_conversation:
             return rows.document(args[1]).get().to_dict()
+        if fn is lifecycle.request_finalization:
+            return fn(*args, **kwargs, firestore_client=db)
         raise AssertionError(fn.__name__)
+
+    async def worker(cid, job_id, generation):
+        # Replace paid providers/fanout only. Admission, lease, completion and
+        # replay fences use the real lifecycle/database transactions.
+        claim = jobs.claim_finalization_job(job_id, generation, firestore_client=db)
+        assert claim['status'] == 'claimed'
+        assert lifecycle.complete(uid, cid)
+        epoch = claim['lease_epoch']
+        assert jobs.claim_finalization_fanout(job_id, generation, epoch, firestore_client=db)['status'] == 'claimed'
+        assert jobs.mark_finalization_fanout_completed(job_id, generation, epoch, firestore_client=db)
+        assert jobs.mark_finalization_completed(job_id, generation, epoch, firestore_client=db)
+        finalized.append(cid)
 
     host = SimpleNamespace(
         request=SimpleNamespace(uid=uid),
         state=SimpleNamespace(current_conversation_id='active'),
         persistence=SimpleNamespace(call=call),
+        client_kind='ios',
+        request_conversation_processing=worker,
+        spawn=lambda coro, **_: coro.close(),
     )
     controller = live.LiveConversationController(host, clock=lambda: NOW)
-
-    async def finalize(cid):
-        finalized.append(cid)
-        rows.document(cid).update({'status': 'completed'})
-        return True
-
-    controller.schedule_finalization = finalize
     await controller.recover_stale_in_progress()
     assert finalized == ['today']
+    job_id = rows.document('today').get().to_dict()['finalization_job_id']
+    assert jobs.get_finalization_job(job_id, firestore_client=db)['status'] == 'completed'
     assert rows.document('today').get().to_dict()['status'] == 'completed'
     assert sum(doc.to_dict().get('discarded', False) for doc in rows.stream()) == 25
     assert rows.document('active').get().to_dict()['status'] == 'in_progress'
