@@ -23,15 +23,8 @@ from database._client import get_firestore_client, run_transactional, is_retryab
 from database.legal_holds import external_write_fence
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.observability.held_content import record_capture, PCM_CUSTODY_SECONDS
-from utils.sync import (
-    cap_hold,
-    live_cap_manifest,
-    live_cap_capacity,
-    live_cap_codec,
-    live_cap_staging,
-    live_cap_upload,
-    live_cap_journal,
-)
+from utils.sync import cap_hold, live_cap_manifest, live_cap_capacity, live_cap_codec
+from utils.sync import live_cap_staging, live_cap_upload, live_cap_journal
 from utils.sync.live_cap_publication import Publication
 from utils.sync.live_cap_tail import TailGrace
 from utils.sync.live_cap_capture import OrderedCapture
