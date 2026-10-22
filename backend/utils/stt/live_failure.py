@@ -705,10 +705,16 @@ async def send_live_stt_audio(
         # A socket that predates the capture-position seam: send without it.
         try:
             accepted = stt_socket.send(audio)
-        except Exception:
+        except Exception as error:
+            from utils.stt.local_send_diagnostics import record_local_send_failure
+
+            record_local_send_failure(provider, 'send_call', stt_socket, error)
             await _recoverable_failure('send_failed')
             return False
-    except Exception:
+    except Exception as error:
+        from utils.stt.local_send_diagnostics import record_local_send_failure
+
+        record_local_send_failure(provider, 'send_call', stt_socket, error)
         await _recoverable_failure('send_failed')
         return False
 

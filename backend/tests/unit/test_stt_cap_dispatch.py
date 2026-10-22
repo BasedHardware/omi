@@ -100,6 +100,29 @@ async def test_held_constructor_resumes_after_reset_without_reopening_capture(mo
     raw.finish.assert_called_once()
 
 
+@pytest.mark.parametrize('flag', [None, 'true', 'false', '0', 'off'])
+def test_cap_proxy_preserves_provider_finalize_arguments(monkeypatch, flag):
+    if flag is None:
+        monkeypatch.delenv('STT_CAP_FINALIZE_FORWARD_ENABLED', raising=False)
+    else:
+        monkeypatch.setenv('STT_CAP_FINALIZE_FORWARD_ENABLED', flag)
+    raw = Mock(finalize=Mock(return_value='finalized'))
+    state = cap.LiveAdmission('synthetic')
+    socket = cap.CapSocket(state, 'parakeet', 16000, AsyncMock(), raw)
+    assert socket.finalize(vad_pause=True) == 'finalized'
+    if flag in {'false', '0', 'off'}:
+        raw.finalize.assert_called_once_with()
+    else:
+        raw.finalize.assert_called_once_with(vad_pause=True)
+
+
+def test_cap_finalize_while_held_never_opens_provider():
+    factory = AsyncMock()
+    socket = cap.CapSocket(cap.LiveAdmission('synthetic'), 'parakeet', 16000, factory)
+    assert socket.finalize(vad_pause=True) is None
+    factory.assert_not_called()
+
+
 async def test_resumed_registry_leg_unwraps_nested_provider_and_debits_once(monkeypatch):
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
     state = cap.LiveAdmission('synthetic')

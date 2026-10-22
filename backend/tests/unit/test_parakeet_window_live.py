@@ -5,6 +5,7 @@ from collections import deque
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from unittest.mock import Mock
 
 import httpx
 import numpy as np
@@ -197,6 +198,45 @@ def receiver():
         _telemetry_platform=lambda: 'ios',
         emitted=emitted,
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('forward', [True, False])
+async def test_funded_window_vad_pause_survives_cap_proxy_and_keeps_transcribing(monkeypatch, forward):
+    from utils import stt_cap_dispatch as cap
+
+    monkeypatch.setenv('STT_CAP_FINALIZE_FORWARD_ENABLED', str(forward).lower())
+    monkeypatch.setattr(cap, 'customer_funded', lambda _provider: False)
+    monkeypatch.setattr(cap, 'record_audio', Mock())
+    state = cap.LiveAdmission('synthetic')
+    state.managed, state.remaining = True, None
+    recv = receiver()
+    recv.cap_admission = state
+    client = Client(data={'segments': [{'text': 'Still here.', 'start': 0, 'end': 1.8}]})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    socket = await LiveChainSession(recv).connect(16000)
+    # Use the real cap proxy, window, VAD hangover, managed leg and POST pump.
+    # The proxy advertises its provider class; this is the production dispatch.
+    assert isinstance(socket.raw, window.WindowedParakeetSocket)
+    assert type(socket.raw) is cap.CapSocket
+    raw = socket.raw.raw
+    finalize = Mock(wraps=raw.finalize)
+    monkeypatch.setattr(raw, 'finalize', finalize)
+    try:
+        for data, frames in [(b'\x01\x00' * 640, 50), (bytes(1280), 25)]:
+            for _ in range(frames):
+                assert socket.send(data)
+                await _REAL_SLEEP(0)
+        assert finalize.call_count > 0
+        assert finalize.call_args.kwargs == ({'vad_pause': True} if forward else {})
+        await _wait_requests(client, 1)
+        for _ in range(10):
+            await _REAL_SLEEP(0)
+        assert not socket.is_connection_dead
+        assert socket.send(b'\x01\x00' * 640)
+        assert [segment['text'] for segment in recv.emitted] == ['Still here.']
+    finally:
+        await socket.drain_and_close()
 
 
 @pytest.mark.asyncio
