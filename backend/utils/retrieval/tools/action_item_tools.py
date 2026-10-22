@@ -29,6 +29,39 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+def _safe_int(val: Any, default: int) -> int:
+    """Safely coerce int or numeric string, rejecting booleans, None, and invalid types."""
+    if val is None or isinstance(val, bool):
+        return default
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _get_config_and_uid(config: RunnableConfig) -> Tuple[Optional[Dict[str, Any]], Dict[str, Any], Optional[str]]:
+    """Extract config dict, non-None configurable dict, and user ID with top-level fallbacks."""
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    if cfg is None:
+        try:
+            ctx_cfg = agent_config_context.get()
+            if ctx_cfg:
+                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
+        except LookupError:
+            cfg = None
+    if cfg is None:
+        return None, {}, None
+
+    configurable = cfg.get('configurable') if isinstance(cfg, dict) else None
+    configurable = configurable if isinstance(configurable, dict) else {}
+    uid = (
+        configurable.get('user_id')
+        or (cfg.get('user_id') if isinstance(cfg, dict) else None)
+        or (cfg.get('uid') if isinstance(cfg, dict) else None)
+    )
+    return cfg, configurable, str(uid) if uid else None
+
+
 # Import agent_config_context for fallback config access
 try:
     from utils.retrieval.agentic import agent_config_context
@@ -84,8 +117,8 @@ def _bounded_action_items_result(result: str, truncated: bool, order: str = "dat
 
 @tool
 def get_action_items_tool(
-    limit: int = 50,
-    offset: int = 0,
+    limit: Any = 50,
+    offset: Any = 0,
     completed: Optional[bool] = None,
     conversation_id: Optional[str] = None,
     start_date: Optional[str] = None,
@@ -153,43 +186,17 @@ def get_action_items_tool(
         f"due_start_date: {due_start_date}, due_end_date: {due_end_date}"
     )
 
-    # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    limit = _safe_int(limit, 50)
+    offset = _safe_int(offset, 0)
+
+    cfg, configurable, uid = _get_config_and_uid(config)
     if cfg is None:
-        try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
-                logger.info(f"🔧 get_action_items_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ get_action_items_tool - config not found in context variable")
-            cfg = None
-
-    # Safely access config
-    try:
-        if cfg is None:
-            logger.info(f"❌ get_action_items_tool - config is None")
-            return "Error: Configuration not available"
-
-        if 'configurable' not in cfg:
-            logger.info(
-                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(cfg.keys()) if cfg else 'None'}"
-            )
-            return "Error: Configuration format invalid"
-
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-        if not uid:
-            logger.info(
-                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(configurable.keys()) if configurable else 'None'}"
-            )
-            return "Error: User ID not found in configuration"
-        clock = clock_for_config(cfg, uid)
-
-        logger.info(f"✅ get_action_items_tool - uid: {uid}, limit: {limit}")
-    except Exception as config_error:
-        logger.error(f"❌ get_action_items_tool - error accessing config: {config_error}", exc_info=True)
-        return "Error: Configuration error."
+        logger.info(f"❌ get_action_items_tool - config is None")
+        return "Error: Configuration not available"
+    if not uid:
+        logger.info(f"❌ get_action_items_tool - no user_id in config")
+        return "Error: User ID not found in configuration"
+    clock = clock_for_config(cfg, uid)
 
     # Hard-scope: force conversation_id and intersect creation dates with chat_scope (#4515).
     scope = chat_scope_from_config(configurable)
@@ -215,6 +222,8 @@ def get_action_items_tool(
     end_dt = None
 
     if start_date:
+        if not isinstance(start_date, str):
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
         try:
             # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
@@ -227,6 +236,8 @@ def get_action_items_tool(
             )
 
     if end_date:
+        if not isinstance(end_date, str):
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
         try:
             # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
@@ -241,6 +252,8 @@ def get_action_items_tool(
     due_end_dt = None
 
     if due_start_date:
+        if not isinstance(due_start_date, str):
+            return f"Error: Invalid due_start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_start_date}"
         try:
             # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             due_start_dt = datetime.fromisoformat(due_start_date.replace('Z', '+00:00'))
@@ -251,6 +264,8 @@ def get_action_items_tool(
             return f"Error: Invalid due_start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_start_date}"
 
     if due_end_date:
+        if not isinstance(due_end_date, str):
+            return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date}"
         try:
             # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             due_end_dt = datetime.fromisoformat(due_end_date.replace('Z', '+00:00'))
@@ -382,7 +397,7 @@ def get_action_items_tool(
 
 @tool
 def create_action_item_tool(
-    description: str,
+    description: Optional[str] = None,
     due_at: Optional[str] = None,
     conversation_id: Optional[str] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
@@ -420,36 +435,17 @@ def create_action_item_tool(
     """
     logger.info('create_action_item_tool called')
 
-    # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
-                logger.info(f"🔧 create_action_item_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ create_action_item_tool - config not found in context variable")
-            cfg = None
-
+    cfg, configurable, uid = _get_config_and_uid(config)
     if cfg is None:
         logger.info(f"❌ create_action_item_tool - config is None")
         return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ create_action_item_tool - error accessing config: {e}", exc_info=True)
-        return "Error: Configuration not available"
-
     if not uid:
         logger.info(f"❌ create_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     clock = clock_for_config(cfg, uid)
 
     # Validate description
-    if not description or not description.strip():
+    if not isinstance(description, str) or not description.strip():
         return "Error: Description is required to create an action item."
     # Prepare action item data
     action_item_data: Dict[str, Any] = {
@@ -475,6 +471,8 @@ def create_action_item_tool(
 
     # Parse or set due date
     if due_at is not None:
+        if not isinstance(due_at, str):
+            return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at}"
         # Parse provided due date (must be ISO format with timezone)
         try:
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
@@ -564,7 +562,7 @@ def create_action_item_tool(
 
 @tool
 def update_action_item_tool(
-    action_item_id: str,
+    action_item_id: Optional[str] = None,
     completed: Optional[bool] = None,
     description: Optional[str] = None,
     due_at: Optional[str] = None,
@@ -609,29 +607,14 @@ def update_action_item_tool(
         f"completed: {completed}, description: {description}, due_at: {due_at}"
     )
 
-    # Get config from parameter or context variable (like other tools do)
-    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
-        try:
-            ctx_cfg: object = agent_config_context.get()
-            if ctx_cfg:
-                cfg = cast(Optional[Dict[str, Any]], ctx_cfg)
-                logger.info(f"🔧 update_action_item_tool - got config from context variable")
-        except LookupError:
-            logger.warning(f"❌ update_action_item_tool - config not found in context variable")
-            cfg = None
+    if not isinstance(action_item_id, str) or not action_item_id.strip():
+        return "Error: action_item_id is required to update an action item."
+    action_item_id = action_item_id.strip()
 
+    cfg, configurable, uid = _get_config_and_uid(config)
     if cfg is None:
         logger.info(f"❌ update_action_item_tool - config is None")
         return "Error: Configuration not available"
-
-    try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-    except (KeyError, TypeError, AttributeError) as e:
-        logger.error(f"❌ update_action_item_tool - error accessing config: {e}", exc_info=True)
-        return "Error: Configuration not available"
-
     if not uid:
         logger.info(f"❌ update_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
@@ -668,10 +651,14 @@ def update_action_item_tool(
             changes.append("marked as pending")
 
     if description is not None:
-        update_data['description'] = description
-        changes.append(f"description updated to '{description}'")
+        if not isinstance(description, str) or not description.strip():
+            return "Error: Description cannot be empty."
+        update_data['description'] = description.strip()
+        changes.append(f"description updated to '{description.strip()}'")
 
     if due_at is not None:
+        if not isinstance(due_at, str):
+            return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at}"
         try:
             # Parse due date (must be ISO format with timezone)
             due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
