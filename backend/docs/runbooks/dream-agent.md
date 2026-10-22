@@ -116,7 +116,12 @@ An hourly sweep drains a durable `dream_due` queue ordered by due time, which
 combines backlog and staleness. Product writes enqueue immediately. Independent
 discovery scans 20 pages of 499 owners (9,980/hour), committing each page in
 100-owner transactions so a fully eligible page stays inside the 3 s RPC
-deadlines, without overwriting dirty work or waiting for model sessions. A
+deadlines, without overwriting dirty work or waiting for model sessions. Each
+chunk reads every owner's queue row (both the no-clobber skip and the stale-row
+delete need it) but reads `dream_users` state only for eligible owners not
+already queued — no state read at all when none qualify, so a steady-state sweep
+that mostly re-finds queued owners costs about two reads per scanned owner
+instead of three. A
 discovery failure (for example a Firestore `DeadlineExceeded`) or its 120 s
 wall budget only degrades that sweep to the already-due queue — one payload-free
 warning plus a `record_fallback` — and never fails the sweep; the cursor

@@ -162,7 +162,7 @@ registry_extension = SimpleNamespace(
             covered_by=('database.dream_scheduler.candidate_page',),
             reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            body_digest='e3faaf588a36d6fd7ad709122fe009bb358c7433078297917b4de261c5b42eec',
+            body_digest='e614de2d842268bb1b96e7e7a12c885b3e1bbcef9bd63da881baccf177d1c722',
         )
     },
     SKIPS={},

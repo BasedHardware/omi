@@ -120,6 +120,10 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
 
             @firestore.transactional
             def initialize(tx):
+                # Every row's dream_due state is consumed: for eligible rows it
+                # is the no-clobber guard against concurrent mark_dirty/finish
+                # due_at writes, and for ineligible rows it is what says a
+                # stale queue row must be deleted, so this read cannot shrink.
                 queued = {
                     snapshot.id
                     for snapshot in database.get_all(
@@ -129,17 +133,25 @@ def discover(database, now, *, pages=20, budget_seconds=DISCOVERY_BUDGET_SECONDS
                     )
                     if snapshot.exists
                 }
-                states = {
-                    snapshot.id: snapshot.to_dict() or {}
-                    for snapshot in database.get_all(
-                        [database.collection('dream_users').document(row.id) for row in chunk],
-                        transaction=tx,
-                        timeout=3,
-                    )
-                }
+                eligible_owners = {row.id: eligible(row.id, row.to_dict() or {}) for row in chunk}
+                # dream_users state only feeds due_time() for owners this chunk
+                # is about to enqueue; skip the bulk read when none qualify.
+                state_refs = [
+                    database.collection('dream_users').document(uid)
+                    for uid, is_eligible in eligible_owners.items()
+                    if is_eligible and uid not in queued
+                ]
+                states = (
+                    {
+                        snapshot.id: snapshot.to_dict() or {}
+                        for snapshot in database.get_all(state_refs, transaction=tx, timeout=3)
+                    }
+                    if state_refs
+                    else {}
+                )
                 for row in chunk:
                     target = database.collection('dream_due').document(row.id)
-                    if eligible(row.id, row.to_dict() or {}):
+                    if eligible_owners[row.id]:
                         if row.id not in queued:
                             tx.set(target, {'due_at': due_time(states.get(row.id, {}), now)})
                     elif row.id in queued:
