@@ -5,6 +5,7 @@ These tools allow the LLM to search and query files uploaded to chat sessions.
 """
 
 import contextvars
+import math
 from collections.abc import Mapping
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
@@ -99,6 +100,19 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return None
 
 
+def _parse_seconds(val: Any) -> Optional[float]:
+    """Safely parse and validate numeric seconds, returning None for invalid values."""
+    if val is None:
+        return None
+    try:
+        f = float(val)
+        if math.isnan(f) or math.isinf(f):
+            return None
+        return f
+    except (ValueError, TypeError):
+        return None
+
+
 @tool
 def search_files_tool(
     question: str,
@@ -134,24 +148,40 @@ def search_files_tool(
     Returns:
         Answer based on the file contents
     """
+    # Validate question parameter
+    if question is None or not isinstance(question, str) or not question.strip():
+        return "Error: A non-empty question is required to search files."
+    question = question.strip()
+
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
         if cfg:
-            logger.info(f"🔧 search_files_tool - got config from context variable")
+            logger.info("🔧 search_files_tool - got config from context variable")
 
-    if cfg is None:
-        logger.info(f"❌ search_files_tool - config is None")
+    if cfg is None or not isinstance(cfg, dict):
+        logger.info("❌ search_files_tool - config is None or invalid")
         return "Error: Configuration not available"
 
     try:
         configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-        chat_session_id = configurable.get('chat_session_id')
+        if configurable is None or not isinstance(configurable, dict):
+            configurable = cfg
+
+        uid = configurable.get('user_id') or configurable.get('uid') or cfg.get('user_id') or cfg.get('uid')
+        chat_session_id = configurable.get('chat_session_id') or cfg.get('chat_session_id')
     except (KeyError, TypeError, AttributeError) as e:
         logger.error("❌ search_files_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration error"
+
+    if not uid and not chat_session_id:
+        logger.error("❌ search_files_tool - missing user_id and chat_session_id in configuration")
+        return "Error: Configuration error"
+
+    if not uid:
+        logger.error("❌ search_files_tool - user_id not found in configuration")
+        return "Error: User ID not found in configuration."
 
     if not chat_session_id:
         return "No active chat session. Files are not available."
@@ -165,12 +195,22 @@ def search_files_tool(
 
         chat_session = ChatSession(**session_data)
 
+        # Normalize file_ids input
+        normalized_file_ids: Optional[List[str]] = None
+        if isinstance(file_ids, str):
+            cleaned_id = file_ids.strip()
+            normalized_file_ids = [cleaned_id] if cleaned_id else []
+        elif isinstance(file_ids, (list, tuple, set)):
+            normalized_file_ids = [str(fid).strip() for fid in file_ids if fid is not None and str(fid).strip()]
+        elif file_ids is not None:
+            normalized_file_ids = []
+
         # Determine which files to search
-        if file_ids and len(file_ids) > 0:
+        if normalized_file_ids is not None and len(normalized_file_ids) > 0:
             # Use specified files
             # Validate that these files belong to the session
             session_file_ids = set(chat_session.file_ids or [])
-            file_ids_to_search = [fid for fid in file_ids if fid in session_file_ids]
+            file_ids_to_search = [fid for fid in normalized_file_ids if fid in session_file_ids]
 
             if not file_ids_to_search:
                 return "The specified files are not available in this chat session."
@@ -184,9 +224,11 @@ def search_files_tool(
         # Use FileChatTool to query files
         fc_tool = FileChatTool(uid, chat_session_id)
         video_window = None
-        if start_seconds is not None or end_seconds is not None:
-            start = max(0.0, float(start_seconds if start_seconds is not None else max(0.0, (end_seconds or 0) - 5)))
-            end = max(start, float(end_seconds if end_seconds is not None else start + 5))
+        parsed_start = _parse_seconds(start_seconds)
+        parsed_end = _parse_seconds(end_seconds)
+        if parsed_start is not None or parsed_end is not None:
+            start = max(0.0, parsed_start if parsed_start is not None else max(0.0, (parsed_end or 0.0) - 5.0))
+            end = max(start, parsed_end if parsed_end is not None else start + 5.0)
             video_window = (start, end)
         answer = fc_tool.process_chat_with_file(question, file_ids_to_search, video_window)
 
