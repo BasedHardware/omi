@@ -350,3 +350,20 @@ def test_duplicate_line_rate_includes_unrelated_candidate_lines():
     decision = alignment.align(row(10), row(11, 'apple_watch', scene=2))
     assert decision.secondary_lines == 3 and decision.duplicate_lines == 0
     assert decision.duplicate_line_rate == 0
+
+
+def test_snapshot_failure_keeps_captures_and_logs_no_request_data(harness, monkeypatch, caplog):
+    owner, store = harness
+    first, second = row(10), row(11, 'apple_watch')
+    add(harness, first, second)
+    before = deepcopy(store.rows)
+
+    def fail(*args):
+        raise RuntimeError(owner + tokens(1, 0))
+
+    monkeypatch.setattr(cross, 'get_shared_speech_snapshot', fail)
+    with caplog.at_level('INFO'):
+        assert cross.reconcile(owner, first['id'], [second['id']])
+    assert store.rows == before
+    assert 'cross_device_fold outcome=error' in caplog.text
+    assert owner not in caplog.text and tokens(1, 0) not in caplog.text

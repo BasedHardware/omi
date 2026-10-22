@@ -19,6 +19,7 @@ from utils.capture.coverage_alignment import align, policy_metadata, quality_ran
 from utils.capture.coverage_metrics import CROSS_DEVICE, CROSS_DEVICE_LINES
 from utils.capture.identity import capture_keys
 from utils.capture.shadow import compare
+from utils.observability.fallback import record_fallback
 from utils.conversations.overlap_shared_speech import shared_speech_group_guard
 
 FLAG = 'CAPTURE_COVERAGE_MODE'
@@ -44,7 +45,7 @@ def _observe(decision) -> None:
 def _alias_group(uid: str, rows: dict[str, dict[str, Any]], fingerprints: dict[str, str], group_id: str) -> None:
     primary = min(rows.values(), key=quality_rank)
     for secondary in rows.values():
-        if secondary['id'] == primary['id'] or not align(primary, secondary).would_fold:
+        if secondary['id'] == primary['id']:
             continue
         keys = capture_keys(secondary)
         if len(keys) > MAX_KEYS:
@@ -160,4 +161,12 @@ def reconcile(uid: str, candidate_id: str, other_ids: list[str]) -> bool:
             # No exception text: decryption/provider failures may contain data.
             compare('cross_device_fold', 'error')
             CROSS_DEVICE.labels(outcome='error').inc()
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='cross_device_coverage',
+                to_mode='separate_captures',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
     return serving
