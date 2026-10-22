@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getStripeRead } from "@/lib/stripe";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const stripe = getStripeRead();
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      return NextResponse.json({
+      return authResult.json({
         total_count: totalCount,
       });
     }
@@ -107,7 +107,7 @@ export async function GET(request: NextRequest) {
       metadata: subscription.metadata,
     }));
 
-    return NextResponse.json({
+    return authResult.json({
       subscriptions: transformedSubscriptions,
       total: subscriptions.data.length,
       has_more: subscriptions.has_more,
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error fetching subscriptions:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch subscriptions" },
       { status: 500 }
     );

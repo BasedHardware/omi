@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/firebase/admin";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import type Stripe from "stripe";
 import { getStripeRead } from "@/lib/stripe";
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ interface PayoutWithAppInfo {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const stripe = getStripeRead();
@@ -120,7 +120,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const response = NextResponse.json({
+    const response = authResult.json({
       payouts: transformedPayouts,
       hasMore: allPayoutsWithAppInfo.length > limit,
       totalCount: allPayoutsWithAppInfo.length,
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
     return response;
   } catch (error) {
     console.error("Error fetching all payouts:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch payouts" },
       { status: 500 }
     );

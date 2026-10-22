@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
 import { OMI_PLAN_PRODUCTS } from "../stripe-subscriptions";
+import { testIdentity } from "./support/test-identity";
 
 /**
  * Honesty coverage for the Stripe-backed stats routes: every number these payloads publish must
@@ -11,7 +12,7 @@ const listMock = vi.fn();
 const stripe = { subscriptions: { list: listMock } } as unknown as Stripe;
 
 vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn(async () => ({ uid: "test" })),
+  requireScope: vi.fn(async () => testIdentity(undefined, "test")),
 }));
 vi.mock("@/lib/payload-cache", () => ({
   getPayload: vi.fn(async () => null),

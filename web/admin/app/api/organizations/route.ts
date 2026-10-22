@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import admin, { getDb, getAdminAuth } from "@/lib/firebase/admin";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
+import { hasScope } from "@/lib/admin-access";
 import { getStripeRead } from "@/lib/stripe";
 import { updateUserSubscriptionDetails } from "@/lib/utils/user-subscription";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ async function fetchStripePaymentDetails(paymentId: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "partners:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest) {
     const organizationsRef = db.collection("organisations");
     const snapshot = await organizationsRef.orderBy("added_on", "desc").get();
 
+    // The billing block rides along here; authResult.json strips it (and
+    // any other financial field) unless the caller holds finance:read.
     const organizations = snapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
@@ -53,10 +56,10 @@ export async function GET(request: NextRequest) {
         })) || [],
     }));
 
-    return NextResponse.json({ organizations });
+    return authResult.json({ organizations });
   } catch (error) {
     console.error("Error fetching organizations:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch organizations" },
       { status: 500 }
     );
@@ -64,7 +67,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "partners:write");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -80,7 +83,7 @@ export async function POST(request: NextRequest) {
     } = body;
 
     if (!organisation_name || !admin_name || !admin_email) {
-      return NextResponse.json(
+      return authResult.json(
         {
           error:
             "Missing required fields: organisation_name, admin_name, admin_email",
@@ -91,9 +94,20 @@ export async function POST(request: NextRequest) {
 
     // Validate Stripe payment ID format if provided
     if (stripe_payment_id && !stripe_payment_id.startsWith("pi_")) {
-      return NextResponse.json(
+      return authResult.json(
         { error: 'Invalid Stripe payment ID format. Must start with "pi_"' },
         { status: 400 }
+      );
+    }
+
+    // Attaching billing is a finance action, not a partner-metadata edit.
+    if (stripe_payment_id && !hasScope(authResult.access, "finance:write")) {
+      return authResult.json(
+        {
+          error: "Attaching a Stripe payment requires finance:write.",
+          scope: "finance:write",
+        },
+        { status: 403 }
       );
     }
 
@@ -111,7 +125,7 @@ export async function POST(request: NextRequest) {
       if (userDoc.exists) {
         const userData = userDoc.data();
         if (userData?.organisation_id) {
-          return NextResponse.json(
+          return authResult.json(
             {
               error:
                 "User is already a member of another organization. Please choose a different user.",
@@ -140,7 +154,7 @@ export async function POST(request: NextRequest) {
       try {
         paymentData = await fetchStripePaymentDetails(stripe_payment_id);
       } catch (error) {
-        return NextResponse.json(
+        return authResult.json(
           {
             error:
               error instanceof Error
@@ -187,7 +201,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({
+    return authResult.json({
       success: true,
       organization: {
         id: orgRef.id,
@@ -201,7 +215,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Error creating organization:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to create organization" },
       { status: 500 }
     );

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/firebase/admin";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
+import { hasScope } from "@/lib/admin-access";
 import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
 import { getStripeRead } from "@/lib/stripe";
 import { updateUserSubscriptionDetails } from "@/lib/utils/user-subscription";
@@ -36,7 +37,7 @@ export async function PATCH(
   props: { params: Promise<{ id: string }> }
 ) {
   const params = await props.params;
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "partners:write");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -52,12 +53,12 @@ export async function PATCH(
     } = body;
     const organizationId = params.id;
     if (!isSafeDocumentId(organizationId)) {
-      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+      return authResult.json({ error: "Invalid id" }, { status: 400 });
     }
 
     // Exclude employees from updates - employees should not be editable through this endpoint
     if (employees !== undefined) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "Employees cannot be updated through this endpoint" },
         { status: 400 }
       );
@@ -65,7 +66,7 @@ export async function PATCH(
 
     // Validate the fields being updated
     if (is_active !== undefined && typeof is_active !== "boolean") {
-      return NextResponse.json(
+      return authResult.json(
         { error: "is_active must be a boolean value" },
         { status: 400 }
       );
@@ -75,7 +76,7 @@ export async function PATCH(
       max_seats !== undefined &&
       (typeof max_seats !== "number" || max_seats < 0)
     ) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "max_seats must be a non-negative number" },
         { status: 400 }
       );
@@ -86,14 +87,14 @@ export async function PATCH(
       (typeof organisation_name !== "string" ||
         organisation_name.trim().length === 0)
     ) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "organisation_name must be a non-empty string" },
         { status: 400 }
       );
     }
 
     if (website !== undefined && typeof website !== "string") {
-      return NextResponse.json(
+      return authResult.json(
         { error: "website must be a string" },
         { status: 400 }
       );
@@ -104,9 +105,25 @@ export async function PATCH(
       stripe_payment_id &&
       !stripe_payment_id.startsWith("pi_")
     ) {
-      return NextResponse.json(
+      return authResult.json(
         { error: 'Invalid Stripe payment ID format. Must start with "pi_"' },
         { status: 400 }
+      );
+    }
+
+    // Setting or clearing billing is a finance action, not a partner-metadata
+    // edit; the check runs before any Firestore or Stripe work.
+    if (
+      stripe_payment_id !== undefined &&
+      !hasScope(authResult.access, "finance:write")
+    ) {
+      return authResult.json(
+        {
+          error:
+            "Changing an organization's Stripe payment requires finance:write.",
+          scope: "finance:write",
+        },
+        { status: 403 }
       );
     }
 
@@ -114,7 +131,7 @@ export async function PATCH(
     const orgDoc = await orgRef.get();
 
     if (!orgDoc.exists) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "Organization not found" },
         { status: 404 }
       );
@@ -127,7 +144,7 @@ export async function PATCH(
         try {
           paymentData = await fetchStripePaymentDetails(stripe_payment_id);
         } catch (error) {
-          return NextResponse.json(
+          return authResult.json(
             {
               error:
                 error instanceof Error
@@ -173,7 +190,7 @@ export async function PATCH(
     const updatedDoc = await orgRef.get();
     const updatedData = updatedDoc.data();
 
-    return NextResponse.json({
+    return authResult.json({
       success: true,
       organization: {
         id: updatedDoc.id,
@@ -191,7 +208,7 @@ export async function PATCH(
     });
   } catch (error) {
     console.error("Error updating organization:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to update organization" },
       { status: 500 }
     );

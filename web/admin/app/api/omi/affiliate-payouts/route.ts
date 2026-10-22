@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 export const dynamic = "force-dynamic";
 
 const GOAFFPRO_BASE = "https://api.goaffpro.com/v1";
@@ -65,7 +65,7 @@ function parseTrafficSource(landingPage: string): {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -188,18 +188,18 @@ export async function GET(request: NextRequest) {
           b.pending_amount - a.pending_amount
       );
 
-      return NextResponse.json({ affiliates: enriched });
+      return authResult.json({ affiliates: enriched });
     }
 
     if (action === "history") {
       const historyRes = await goaffproGet("/admin/payments?limit=50");
-      return NextResponse.json(historyRes);
+      return authResult.json(historyRes);
     }
 
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    return authResult.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
     console.error("Affiliate payouts error:", error);
-    return NextResponse.json(
+    return authResult.json(
       {
         error: error instanceof Error ? error.message : "Failed to fetch data",
       },
@@ -209,7 +209,7 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:write");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -220,7 +220,7 @@ export async function POST(request: NextRequest) {
       const { affiliate_id } = body;
 
       if (!affiliate_id) {
-        return NextResponse.json(
+        return authResult.json(
           { error: "affiliate_id is required" },
           { status: 400 }
         );
@@ -241,7 +241,7 @@ export async function POST(request: NextRequest) {
       );
       const pendingEntry = (pendingRes.pending || [])[0];
       if (!pendingEntry || pendingEntry.pending < 10) {
-        return NextResponse.json(
+        return authResult.json(
           { error: "No pending amount above minimum threshold" },
           { status: 400 }
         );
@@ -267,7 +267,7 @@ export async function POST(request: NextRequest) {
       }
 
       if (!stripeAccountId) {
-        return NextResponse.json(
+        return authResult.json(
           { error: "Affiliate has no Stripe account connected" },
           { status: 400 }
         );
@@ -280,13 +280,13 @@ export async function POST(request: NextRequest) {
           .getStripeRead()
           .accounts.retrieve(stripeAccountId);
         if (!account.charges_enabled || !account.details_submitted) {
-          return NextResponse.json(
+          return authResult.json(
             { error: "Stripe account exists but onboarding is incomplete" },
             { status: 400 }
           );
         }
       } catch {
-        return NextResponse.json(
+        return authResult.json(
           { error: "Stripe account does not exist on this platform" },
           { status: 400 }
         );
@@ -319,7 +319,7 @@ export async function POST(request: NextRequest) {
           .filter(Boolean);
 
         if (txIds.length === 0) {
-          return NextResponse.json({
+          return authResult.json({
             success: true,
             partial: true,
             transfer_id: transfer.id,
@@ -345,7 +345,7 @@ export async function POST(request: NextRequest) {
           "Stripe transfer succeeded but GoAffPro mark-as-paid failed:",
           markError
         );
-        return NextResponse.json({
+        return authResult.json({
           success: true,
           partial: true,
           transfer_id: transfer.id,
@@ -355,16 +355,16 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      return NextResponse.json({
+      return authResult.json({
         success: true,
         transfer_id: transfer.id,
       });
     }
 
-    return NextResponse.json({ error: "Invalid action" }, { status: 400 });
+    return authResult.json({ error: "Invalid action" }, { status: 400 });
   } catch (error) {
     console.error("Affiliate payout transfer error:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: error instanceof Error ? error.message : "Transfer failed" },
       { status: 500 }
     );

@@ -53,8 +53,7 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.cloud_tasks import is_audio_merge_dispatch_enabled
-from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
+from utils.other.storage import upload_audio_chunks_batch
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
     OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL,
@@ -384,22 +383,6 @@ async def _websocket_util_trigger(
                             schedule_person_voice_learning_retry(uid, conv_id)
                             if len(identity_refreshed) < 128:
                                 identity_refreshed.add(conv_id)
-                            # Rebuild the conversation playback artifact if a stamped one
-                            # went stale. No stamp (the live-conversation common case) → no-op.
-                            if is_audio_merge_dispatch_enabled():
-                                stamp = await run_blocking(
-                                    storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
-                                )
-                                if stamp:
-                                    await run_blocking(
-                                        storage_executor,
-                                        maybe_invalidate_conversation_playback,
-                                        uid,
-                                        conv_id,
-                                        {'conversation_audio': stamp},
-                                        files_payload,
-                                        'pusher_flush',
-                                    )
                         else:
                             deleted_conversations.add(conv_id)
                             logger.info(f"Conversation gone, stopped private cloud sync {uid} {conv_id}")

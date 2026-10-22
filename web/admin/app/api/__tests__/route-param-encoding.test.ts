@@ -32,9 +32,16 @@ function makeFirestoreNode() {
   return node;
 }
 
-vi.mock("@/lib/auth", () => ({
-  verifyAdmin: vi.fn().mockResolvedValue({ uid: "admin-uid" }),
-}));
+vi.mock("@/lib/auth", async () => {
+  const { testIdentity } = await import(
+    "@/lib/__tests__/support/test-identity"
+  );
+  return {
+    requireScope: vi
+      .fn()
+      .mockResolvedValue(testIdentity(undefined, "admin-uid")),
+  };
+});
 vi.mock("@/lib/firebase/admin", () => ({
   default: { firestore: { Timestamp: { now: () => ({}) } } },
   getDb: () => ({ collection: vi.fn(() => makeFirestoreNode()) }),
@@ -58,6 +65,7 @@ import {
 import { GET as announceGET } from "../omi/announcements/[id]/route";
 import { POST as appUpdatePOST } from "../omi/apps/[app_id]/update/route";
 import { DELETE as tvLinkDELETE } from "../omi/tv-links/[id]/route";
+import { testIdentity } from "@/lib/__tests__/support/test-identity";
 import { PUT as distributorPUT } from "../distributors/route";
 import { PATCH as orgPATCH } from "../organizations/[id]/route";
 import { GET as userNotifGET } from "../omi/notifications/user-notifications/route";
