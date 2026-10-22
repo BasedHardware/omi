@@ -40,10 +40,14 @@ void main() {
     addTearDown(view.dispose);
     await view.refresh();
     expect(await File('${dir.path}/$name').exists(), isTrue);
+    expect(view.recordings.single.state.name, 'processing');
     await ledger.reconcileUploadedWals();
     await done.future;
     expect(surfaced, ['conversation']);
     expect((await ledger.getAllWals()).single.status, WalStatus.synced);
+    expect((await ledger.getAllWals()).single.holdForUser, isFalse);
+    await view.refresh();
+    expect(view.recordings, isEmpty);
     await ledger.reconcileUploadedWals();
     expect(surfaced, ['conversation'], reason: 'a finished job surfaces once');
   });
@@ -68,6 +72,11 @@ void main() {
     addTearDown(view.dispose);
     await view.refresh();
     await ledger.reconcileUploadedWals();
+    await view.refresh();
+    final wal = (await ledger.getAllWals()).single;
+    expect(wal.holdForUser, isTrue);
+    expect(wal.status, WalStatus.miss);
+    expect(view.recordings.single.state.name, 'failed');
     expect(surfaced, isEmpty);
     expect(ledger.conversationCompletions.value, isNull);
     expect(await File('${dir.path}/$name').exists(), isTrue);

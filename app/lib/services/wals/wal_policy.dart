@@ -141,3 +141,36 @@ extension _WalConversationCompletion on LocalWalSyncImpl {
         SyncLocalFilesResponse(newConversationIds: newIds.toList(), updatedConversationIds: updatedIds.toList());
   }
 }
+
+/// Transport sends alone are not a server custody guarantee.
+bool watchWalWillReachServer(Wal wal) =>
+    (wal.conversationId?.isNotEmpty ?? false) ||
+    wal.syncedAt > 0 ||
+    (wal.status == WalStatus.miss && !wal.holdForUser && !wal.onDeviceOnly);
+
+extension WatchCustodyJournal on LocalWalSyncImpl {
+  Future<void> refreshWatchCoverage(WatchLiveCoverage coverage) async {
+    final generation = _sessionGeneration;
+    final records = <(String, double, double, bool)>[];
+    for (final wal in List<Wal>.of(_wals)) {
+      if (wal.deviceType != DeviceType.appleWatch ||
+          wal.ownerUid == null ||
+          !await nativeWalIsDurable(wal, generation)) {
+        continue;
+      }
+      records.add((
+        wal.ownerUid!,
+        wal.timerStart.toDouble(),
+        wal.timerStart + wal.totalFrames * wal.frameSize / wal.sampleRate,
+        watchWalWillReachServer(wal)
+      ));
+    }
+    if (_isCurrent(generation)) await coverage.recordMany(records);
+  }
+
+  void _observeNativeUpload(Iterable<Wal> wals) {
+    for (final wal in wals) {
+      if (wal.device.startsWith('omibatchwatch')) nativeCustodyObserved(NativeCustodyObservedOutcome.watchUploaded);
+    }
+  }
+}

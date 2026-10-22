@@ -7,7 +7,7 @@ enum LocalRecordingState {
   /// On disk, not yet uploaded. The user can transcribe it.
   pending,
 
-  /// Upload in flight (multipart POST to /v2/sync-local-files).
+  /// Upload in flight (multipart POST to custody upload).
   uploading,
 
   /// Uploaded; the server is transcribing in the background (job reconciling).

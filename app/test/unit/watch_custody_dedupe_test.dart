@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/services/wals/native_recording_intake.dart';
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
@@ -30,8 +31,8 @@ void main() {
   });
 
   test('covered Watch copy is deleted without upload and native receipt stays', () async {
-    await coverage.record('owner', start.toDouble(), start + .5);
-    await coverage.record('owner', start + .4, start + .95);
+    await coverage.record('owner', start.toDouble(), start + .5, serverReachable: true);
+    await coverage.record('owner', start + .4, start + .95, serverReachable: true);
     final ledger = await custodyLedger();
     await NativeRecordingIntake(ledger, coverage: coverage, dedupeOff: () async => false).scan();
     expect(await File('${dir.path}/$name').exists(), isFalse);
@@ -45,7 +46,7 @@ void main() {
 
   for (final mode in ['uncovered', 'kill-switch', 'flag-error', 'unknown']) {
     test('$mode keeps Watch audio in automatic, unbound custody', () async {
-      if (mode != 'uncovered') await coverage.record('owner', start.toDouble(), start + 1);
+      if (mode != 'uncovered') await coverage.record('owner', start.toDouble(), start + 1, serverReachable: true);
       final ledger = await custodyLedger();
       await NativeRecordingIntake(ledger,
               coverage: coverage,
@@ -63,8 +64,64 @@ void main() {
     });
   }
 
+  for (final mode in ['bind', 'timeout', 'miss']) {
+    test('unbound Watch coverage defers; $mode resolves custody safely', () async {
+      final ledger = await custodyLedger();
+      final live = Wal(
+          timerStart: start,
+          codec: BleAudioCodec.pcm16,
+          sampleRate: 16000,
+          seconds: 1,
+          totalFrames: 100,
+          storage: WalStorage.disk,
+          status: mode == 'miss' ? WalStatus.miss : WalStatus.synced,
+          device: 'watch-live',
+          deviceType: DeviceType.appleWatch,
+          ownerUid: 'owner',
+          filePath: 'audio_watch-live_pcm16_16000_1_$start.bin');
+      await File('${dir.path}/${live.filePath}')
+          .writeAsBytes(encodeWalFrames(List.generate(100, (_) => List.filled(320, 0))));
+      await ledger.addExternalWal(live, admittedGeneration: ledger.sessionGeneration);
+      final intake = NativeRecordingIntake(ledger, coverage: coverage, dedupeOff: () async => false);
+      await intake.scan();
+      final file = File('${dir.path}/$name');
+      if (mode != 'miss') {
+        expect(await file.exists(), isTrue);
+        expect(ledger.nativeWalForFileName(name), isNull, reason: 'deferred copies neither upload nor delete');
+        if (mode == 'bind') {
+          await ledger.stampConversationId(start, 'server-conversation');
+          expect(live.conversationId, 'server-conversation');
+        } else {
+          await File('${dir.path}/.watch-receipts/$name').setLastModified(
+              DateTime.now().subtract(NativeRecordingIntake.unboundWatchReceiptTimeout + const Duration(seconds: 1)));
+        }
+        await intake.scan();
+      }
+      if (mode == 'timeout') {
+        expect(await file.exists(), isTrue);
+        final admitted = ledger.nativeWalForFileName(name)!;
+        expect(admitted.status, WalStatus.miss);
+        expect(admitted.holdForUser, isFalse);
+        expect(admitted.recordingSessionId, isNull);
+      } else {
+        expect(await file.exists(), isFalse);
+        expect(ledger.nativeWalForFileName(name), isNull);
+      }
+      expect(await File('${dir.path}/.watch-receipts/$name').exists(), isTrue);
+    });
+  }
+
+  test('legacy journal without server-binding proof cannot delete a copy', () async {
+    await File('${dir.path}/watch_live_coverage.json').writeAsString(jsonEncode({
+      'owner': [
+        [start, start + 1]
+      ]
+    }));
+    expect(await coverage.covers('owner', start.toDouble(), start + 1), isFalse);
+  });
+
   test('coverage below 95 percent, gaps and expired proof keep audio', () async {
-    await coverage.record('owner', start.toDouble(), start + .94);
+    await coverage.record('owner', start.toDouble(), start + .94, serverReachable: true);
     expect(await coverage.covers('owner', start.toDouble(), start + 1), isFalse);
     final expired =
         WatchLiveCoverage(() async => dir, now: () => DateTime.fromMillisecondsSinceEpoch((start + 8 * 86400) * 1000));
@@ -88,7 +145,11 @@ void main() {
     await ledger.syncAll();
     expect(live.storage, WalStorage.disk);
     expect(await ledger.hasDurableWal(live, admittedGeneration: ledger.sessionGeneration), isTrue);
-    expect(await ledger.watchCoverage.covers('owner', live.timerStart.toDouble(), live.timerStart + 1), isTrue);
+    expect(await ledger.watchCoverage.covers('owner', live.timerStart.toDouble(), live.timerStart + 1), isFalse);
+    expect(
+        await ledger.watchCoverage
+            .covers('owner', live.timerStart.toDouble(), live.timerStart + 1, serverReachable: false),
+        isTrue);
   });
 
   test('an index failure creates no Watch coverage proof', () async {
@@ -124,6 +185,10 @@ void main() {
     expect(live.deviceType, DeviceType.appleWatch);
     expect(live.totalFrames, 100);
     expect(live.recordingSessionId, 'live-session');
-    expect(await ledger.watchCoverage.covers('owner', live.timerStart.toDouble(), live.timerStart + 1), isTrue);
+    expect(await ledger.watchCoverage.covers('owner', live.timerStart.toDouble(), live.timerStart + 1), isFalse);
+    expect(
+        await ledger.watchCoverage
+            .covers('owner', live.timerStart.toDouble(), live.timerStart + 1, serverReachable: false),
+        isTrue);
   });
 }

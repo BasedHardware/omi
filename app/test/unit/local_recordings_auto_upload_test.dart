@@ -56,7 +56,7 @@ void main() {
     final wal = (await ledger.getAllWals()).single;
     expect(wal.status, WalStatus.uploaded);
     expect(wal.jobId, 'old-job');
-    expect(wal.holdForUser, isFalse);
+    expect(wal.holdForUser, isTrue);
     expect(SharedPreferencesUtil().getString('localRecordingJobs'), isEmpty);
     expect(await File('${dir.path}/omibatch_owners.json').exists(), isFalse);
     await NativeRecordingIntake(ledger).scan();
@@ -80,7 +80,21 @@ void main() {
     expect(SharedPreferencesUtil().getString('localRecordingJobs'), isEmpty);
   });
 
-  test('hold persists compatibly, never drains or repairs; accepted manual upload clears it', () async {
+  test('malformed legacy jobs are quarantined once without blocking native intake', () async {
+    await audio('omibatchphone');
+    await SharedPreferencesUtil().saveString('localRecordingJobs', '{broken');
+    final ledger = await custodyLedger();
+    final intake = NativeRecordingIntake(ledger);
+    await intake.scan();
+    expect((await ledger.getAllWals()).single.holdForUser, isTrue);
+    expect(SharedPreferencesUtil().getString('localRecordingJobsCorrupt'), '{broken');
+    expect(SharedPreferencesUtil().getString('localRecordingJobs'), isEmpty);
+    await intake.scan();
+    expect((await ledger.getAllWals()).length, 1);
+    expect(SharedPreferencesUtil().getString('localRecordingJobsCorrupt'), '{broken');
+  });
+
+  test('hold persists compatibly, never drains or repairs; accepted manual upload retains processing hold', () async {
     await audio('omibatchphone');
     var uploads = 0;
     final gate = SyncUploadGate(
@@ -112,7 +126,7 @@ void main() {
     expect(uploads, 0);
     await ledger.syncWal(wal: wal);
     expect(uploads, 1);
-    expect(wal.holdForUser, isFalse);
+    expect(wal.holdForUser, isTrue);
     expect(wal.status, WalStatus.uploaded);
   });
 
@@ -164,7 +178,14 @@ void main() {
     await for (final file in Directory('lib').list(recursive: true)) {
       if (file is! File || !file.path.endsWith('.dart') || file.path.endsWith('local_wal_sync.dart')) continue;
       final source = await file.readAsString();
-      if (source.contains('SyncUploadGate') && RegExp(r'\.\s*upload\s*\(').hasMatch(source)) offenders.add(file.path);
+      final gated = source.contains('SyncUploadGate') && RegExp(r'\.\s*upload\s*\(').hasMatch(source);
+      final httpClient = file.path.endsWith('backend/http/api/conversations.dart');
+      final rawCalls = !httpClient && RegExp(r'uploadLocalFilesV2\s*\(|fetchSyncJobStatus\s*\(').hasMatch(source);
+      final rawPath = !httpClient &&
+          !file.path.endsWith('backend/http/api_edge_throttle_telemetry.dart') &&
+          source.contains('sync-local-files');
+      final raw = rawCalls || rawPath;
+      if (gated || raw) offenders.add(file.path);
     }
     expect(offenders, isEmpty);
   });

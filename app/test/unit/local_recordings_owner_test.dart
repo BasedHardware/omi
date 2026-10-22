@@ -50,8 +50,34 @@ void main() {
     expect(await ledger.getAllWals(), isEmpty);
     SharedPreferencesUtil().uid = 'owner';
     await File('${dir.path}/omibatch_owners.json').writeAsString('{broken');
-    await expectLater(NativeRecordingIntake(ledger).scan(), throwsFormatException);
+    await NativeRecordingIntake(ledger).scan();
     expect(await ledger.getAllWals(), isEmpty);
+  });
+
+  test('corrupt legacy ownership defers old files repeatedly but admits new files including overflow', () async {
+    await audio(name);
+    final owners = File('${dir.path}/omibatch_owners.json');
+    await owners.writeAsString('{broken');
+    final boundary = DateTime.now().subtract(const Duration(minutes: 1));
+    await owners.setLastModified(boundary);
+    final newer = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final newName = 'audio_omibatchphone_opus_16000_1_fs320_$newer.bin';
+    final overflow = 'audio_omibatchoverflow_opus_16000_1_fs320_$newer.bin';
+    await audio(newName);
+    await audio(overflow);
+    final ledger = await custodyLedger();
+    await ledger.intakeNativeRecordings();
+    await ledger.intakeNativeRecordings();
+    expect(ledger.nativeWalForFileName(name), isNull);
+    expect(await File('${dir.path}/$name').exists(), isTrue);
+    expect(ledger.nativeWalForFileName(newName)!.ownerUid, 'owner');
+    expect(ledger.nativeWalForFileName(overflow)!.onDeviceOnly, isTrue);
+    expect(await owners.readAsString(), '{broken');
+  });
+
+  test('a differing batch directory is diagnosed before indexing inaccessible files', () async {
+    await SharedPreferencesUtil().saveString('batchAudioDir', '${dir.path}/elsewhere');
+    await expectLater(nativeRecordingDirectory(), throwsStateError);
   });
 
   test('Watch takes only its committed receipt owner; missing receipts stay untouched', () async {

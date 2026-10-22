@@ -46,7 +46,8 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
 ## Invariants (each has a test)
 
 1. **One uploader.** Only `LocalWalSyncImpl` calls `SyncUploadGate.upload`. A lint-style test
-   fails if any other file under `lib/` does.
+   fails if any other file under `lib/` does. It also forbids direct `uploadLocalFilesV2`,
+   `fetchSyncJobStatus`, and the custody endpoint path outside the ledger and HTTP-client namespace.
 2. **Delete only on confirmation.** A custody file is deleted only when its upload job completes,
    when the live transcript covers it (`confirmSessionTranscription`), when the user deletes it,
    or when a Watch copy is proven redundant (invariant 5).
@@ -54,24 +55,40 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    deleted. Watch copies take the owner from their iPhone receipt. Other native files take the
    signed-in uid at intake, the same as every other producer. Once registered, the ledger
    keeps that owner across account changes. During upgrade, an existing legacy owners-file stamp
-   is preserved (including parked foreign-account WALs); a malformed owners file defers migration
-   rather than reassigning private audio. New ownership is never assigned while signed out.
+   is preserved (including parked foreign-account WALs). A malformed owners file stays intact:
+   potentially legacy-stamped files are deferred, with telemetry on each deferral. Intake continues
+   for receipt-owned Watch files and non-Watch files whose native creation timestamp AND file mtime
+   are newer than the owners file mtime; these cannot have a legacy stamp. Overflow uses the same
+   resolver. New ownership is never assigned while signed out.
 4. **Idempotent intake.** Registering the same native file twice is a no-op, keyed by file name.
    A file already uploaded under the old path (its job id in the legacy `localRecordingJobs`
    sidecar) is registered as `uploaded` with that job id, so the shared poller finishes it rather
-   than uploading it again.
+   than uploading it again. Malformed jobs are quarantined once in
+   `localRecordingJobsCorrupt`, with telemetry; intake proceeds with an empty job map.
 5. **Watch copies are not a second transcript.** The ledger keeps a live-coverage journal: the
    wall-clock ranges of Watch audio that the phone received live and made durable in custody.
-   A Watch copy that the journal covers to ≥ 95% is redundant: it is acknowledged (its iPhone
-   receipt stays, so retransmission cannot bring it back) and deleted without upload. Kill switch:
-   PostHog flag `watch_copy_dedupe_off`; when set, unknown, or unreadable, every Watch copy is kept
-   and uploaded. Only an explicitly resolved false enables dedupe. Journal ranges are owner-scoped,
-   merged and expire after seven days; they are written only after the live WAL and index are durable.
+   A copy is deleted only with ≥ 95% server-reachable coverage: durable live WALs stamped with a
+   `conversationId`, confirmed with `syncedAt > 0`, or `miss` WALs queued for the drain. Transport-only
+   `synced` WALs (`syncedAt == 0`, no conversation) prove only local durability. If combined durable
+   coverage reaches 95% but server-reachable coverage does not, keep the copy without uploading or
+   deleting and re-judge on subsequent scans. After `unboundWatchReceiptTimeout` (30 minutes from
+   the iPhone receipt mtime), admit it for automatic upload if still unbound. Uncovered copies upload
+   automatically with no session binding. The iPhone receipt stays after deletion so retransmission
+   remains acknowledged. Kill switch: PostHog `watch_copy_dedupe_off`; when true, unknown, or unreadable,
+   keep and upload. Only an explicitly resolved false enables dedupe. Journal v2 tracks durable and
+   server-reachable ranges separately, owner-scoped, merged, with a seven-day TTL; old unclassified
+   journals provide no deletion proof. Ranges are written only after audio and index are durable;
+   conversation stamping promotes durable Watch ranges before transcript cleanup can remove them.
    Watch live frames are retained even after socket sends (a send is not server confirmation).
    Before judging a new Watch receipt, intake checkpoints the live Watch tail without ending its
    capture session: the 60-second receipt can precede the ordinary 105-second disk flush.
 6. **Home shows only what waits for the user.** Home lists `holdForUser` recordings only, one row
-   per file. Everything else is visible on the Sync page, as every other custody WAL already is.
+   per file, including accepted jobs in the processing state. A manual recording keeps its hold
+   until the job completes (or the synchronous result completes); failure leaves the hold in place
+   for another explicit retry. This replaces acceptance-time release to preserve Home recovery. Everything else is visible on the Sync page, as every other custody WAL already is.
+
+Native batch directory and WAL documents directory must match. A mismatch emits
+`Native Custody Observed / directory_mismatch` and defers intake before inaccessible files are indexed.
 
 ## Server contract used
 

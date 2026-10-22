@@ -47,7 +47,7 @@ PhoneMicSessionMode selectPhoneMicSessionMode({
 ///
 ///   audio_{device}_{codec}_{sampleRate}_{channel}_fs{frameSize}_{timestamp}.bin
 ///
-/// Mirrors how the backend `/v2/sync-local-files` pipeline interprets the name:
+/// Mirrors how the backend `custody upload` pipeline interprets the name:
 /// codec is detected from the `_pcm16_`/`_pcm8_` markers (otherwise opus), the
 /// frame size from `_fs<n>`, and the timestamp from the trailing segment
 /// (milliseconds are normalized to seconds). Kept pure so it can be unit tested.

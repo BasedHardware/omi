@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
@@ -13,20 +14,34 @@ import 'package:omi/services/wals/watch_live_coverage.dart';
 import 'package:omi/services/experiments/watch_copy_dedupe.dart';
 import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
+import 'legacy_recording_owners.dart';
+import 'native_custody_diagnostics.dart';
 
 Future<Directory> nativeRecordingDirectory() async {
   final configured = SharedPreferencesUtil().getString('batchAudioDir');
-  return configured.isNotEmpty ? Directory(configured) : await getApplicationDocumentsDirectory();
+  final documents = await getApplicationDocumentsDirectory();
+  if (configured.isNotEmpty && path.normalize(path.absolute(configured)) != path.normalize(documents.absolute.path)) {
+    nativeCustodyObserved(NativeCustodyObservedOutcome.directoryMismatch);
+    // Ledger paths resolve against documents: defer rather than index inaccessible audio.
+    throw StateError('Native batch directory differs from WAL documents directory');
+  }
+  return documents;
 }
 
 /// The only native-file discovery and migration path. Serialized scans prevent
 /// finalize/resume/receipt races, while the ledger persists file-name identity.
 class NativeRecordingIntake {
   NativeRecordingIntake(this.ledger,
-      {Future<Directory> Function()? directory, Future<bool> Function()? dedupeOff, WatchLiveCoverage? coverage})
-      : directory = directory ?? nativeRecordingDirectory,
+      {Future<Directory> Function()? directory,
+      Future<bool> Function()? dedupeOff,
+      WatchLiveCoverage? coverage,
+      DateTime Function()? now})
+      : _now = now ?? DateTime.now,
+        directory = directory ?? nativeRecordingDirectory,
         coverage = coverage ?? WatchLiveCoverage(getApplicationDocumentsDirectory),
         dedupeOff = dedupeOff ?? WatchCopyDedupePolicy.keepRecoveryCopies;
+  static const unboundWatchReceiptTimeout = Duration(minutes: 30);
+  final DateTime Function() _now;
   final LocalWalSyncImpl ledger;
   final Future<Directory> Function() directory;
   final WatchLiveCoverage coverage;
@@ -46,12 +61,19 @@ class NativeRecordingIntake {
     final dir = await directory();
     if (!await dir.exists()) return;
     final ownersFile = File('${dir.path}/omibatch_owners.json');
-    // Only migration reads this file. Existing ownership must survive upgrade.
-    final owners =
-        await ownersFile.exists() ? await _decodeLegacyMap(await ownersFile.readAsString()) : <String, String>{};
+    final owners = await LegacyRecordingOwners.read(dir);
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('localRecordingJobs') ?? '';
-    final jobs = raw.isEmpty ? <String, String>{} : await _decodeLegacyMap(raw);
+    Map<String, String> jobs;
+    try {
+      jobs = raw.isEmpty ? <String, String>{} : await _decodeLegacyMap(raw);
+    } catch (_) {
+      // Preserve the evidence before retiring the poison pill. Emit only on quarantine.
+      await prefs.setString('localRecordingJobsCorrupt', raw);
+      await prefs.remove('localRecordingJobs');
+      nativeCustodyObserved(NativeCustodyObservedOutcome.legacyJobsQuarantined);
+      jobs = {};
+    }
     final files = <String, File>{};
     await for (final entry in dir.list()) {
       if (entry is! File) continue;
@@ -76,7 +98,7 @@ class NativeRecordingIntake {
         if (jobs.containsKey(name) && existing.status == WalStatus.miss) {
           existing.status = WalStatus.uploaded;
           existing.jobId = jobs[name];
-          existing.holdForUser = false;
+          existing.holdForUser = info.holdForUser;
         }
         if (jobs.containsKey(name) || !await ledger.nativeWalIsDurable(existing, generation)) {
           await ledger.persistRetryMetadata(existing);
@@ -84,13 +106,16 @@ class NativeRecordingIntake {
         jobs.remove(name);
         continue;
       }
-      final owner = info.isWatch ? await watchRecordingOwner(dir, name) : (owners[name] ?? uid);
+      final owner = info.isWatch
+          ? await watchRecordingOwner(dir, name)
+          : await owners.resolve(file, name, uid, timerStart: info.timerStart);
       if (owner == null || owner.isEmpty) {
         complete = false;
         continue;
       }
       if (info.isWatch && owner == uid && !watchCheckpointed) {
         await ledger.checkpointWatchAudio();
+        await ledger.refreshWatchCoverage(coverage);
         watchCheckpointed = true;
       }
       final exists = await file.exists();
@@ -109,7 +134,19 @@ class NativeRecordingIntake {
           if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
           // The native receipt is deliberately retained: retransmission stays acknowledged.
           await file.delete();
+          nativeCustodyObserved(NativeCustodyObservedOutcome.watchDeleted);
           continue;
+        }
+        if (!off &&
+            frames > 0 &&
+            await coverage.covers(owner, info.timerStart.toDouble(), info.timerStart + duration,
+                serverReachable: false)) {
+          final receipt = await File('${dir.path}/.watch-receipts/$name').stat();
+          if (_now().difference(receipt.modified) < unboundWatchReceiptTimeout) {
+            nativeCustodyObserved(NativeCustodyObservedOutcome.watchDeferred);
+            complete = false;
+            continue;
+          }
         }
       }
       if (!await ledger.ensureStorageAdmission(bytes: size, admittedGeneration: generation)) {
@@ -128,7 +165,7 @@ class NativeRecordingIntake {
           filePath: name,
           device: info.marker,
           ownerUid: owner,
-          holdForUser: job == null && info.holdForUser,
+          holdForUser: info.holdForUser,
           jobId: job,
           geolocation: await readNativeBatchGeolocation(file.path))
         ..frameSize = info.frameSize;
@@ -145,7 +182,7 @@ class NativeRecordingIntake {
       }
     }
     if (generation != ledger.sessionGeneration || uid != SharedPreferencesUtil().uid) return;
-    if (complete && jobs.isEmpty) {
+    if (complete && jobs.isEmpty && owners.corruptModified == null) {
       await prefs.remove('localRecordingJobs');
       if (await ownersFile.exists()) await ownersFile.delete();
     }

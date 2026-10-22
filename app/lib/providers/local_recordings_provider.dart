@@ -155,7 +155,9 @@ class LocalRecordingsProvider extends ChangeNotifier {
         unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.userRetry));
       }
       if (result != null) await _surface(result);
-      return !wal.holdForUser ? LocalUploadOutcome.started : LocalUploadOutcome.failed;
+      return wal.status == WalStatus.uploaded || wal.status == WalStatus.synced
+          ? LocalUploadOutcome.started
+          : LocalUploadOutcome.failed;
     } on SyncRateLimitedException catch (e) {
       return switch (e.kind) {
         SyncRateLimitKind.fairUse => LocalUploadOutcome.fairUseLimited,
