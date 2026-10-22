@@ -304,6 +304,11 @@ class PublicHolidayHandlerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class RequestJsonTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Tests below swap in a fake app.state; restore the real one so later tests never inherit it.
+        original_state = main.app.state
+        self.addCleanup(setattr, main.app, "state", original_state)
+
     async def test_request_json_initializes_missing_client(self):
         main.app.state = types.SimpleNamespace()
         _RecordingClient.instances = []
@@ -375,6 +380,11 @@ class ManifestContractTests(unittest.IsolatedAsyncioTestCase):
 
 
 class UpstreamRejectionTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Tests below swap in a fake app.state; restore the real one so later tests never inherit it.
+        original_state = main.app.state
+        self.addCleanup(setattr, main.app, "state", original_state)
+
     async def test_request_json_raises_rejection_for_404_and_400(self):
         for status in (404, 400):
             with self.subTest(status=status):
