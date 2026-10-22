@@ -180,3 +180,11 @@ def test_start_only_cannot_bypass_full_manifest_readiness(tmp_path):
             timeout_seconds=10,
             poll_interval_seconds=1,
         )
+
+
+def test_new_composite_requires_canonical_terminal_document_key(tmp_path):
+    invalid = copy.deepcopy(INDEX)
+    invalid['fields'][-1]['fieldPath'] = 'created_at'
+    before, after = manifests(tmp_path, empty(), {'indexes': [invalid], 'fieldOverrides': []})
+    with pytest.raises(ValueError, match='end in __name__'):
+        reconcile.additive_index_manifest(before, after)

@@ -49,7 +49,13 @@ The existing workflow-level `firestore-schema-prod` lock serializes PR builds
 with main reconcile and manual exemptions; development retains its own lock.
 PR jobs use `--start-only` to submit builds and exit without polling or holding
 a runner for 1–2 hours; a successful submission does not assert READY. GitHub concurrency keeps
-only one pending run, so superseded PR plans may need a later synchronize event.
+only one pending run: either a PR plan or a main reconcile can be superseded.
+A queued prod approval also retains the workflow lock. If a train is blocked
+because a main reconcile was superseded, the lead must run the existing confirmed
+main reconcile/approval path and verify READY; never bypass deploy readiness.
+Superseded PR plans may need a later synchronize event. The main/PR schema lock
+is deliberately unchanged; async PR submission bounds runner occupancy, but
+approval queues still require operator attention.
 
 `--add-only-base BASE --manifest HEAD --provision-missing` revalidates the diff
 and sends only new requirements through the existing composite and

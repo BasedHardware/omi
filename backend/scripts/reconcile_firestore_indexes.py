@@ -233,6 +233,9 @@ def additive_index_manifest(base_path: Path, candidate_path: Path) -> dict[str, 
             or entry.get('ttl', False) != other.get('ttl', False)
         ):
             raise ValueError('field override removals or changes stay main-only')
+    for entry in candidate['indexes']:
+        if _index_signature(entry) not in before and entry['fields'][-1]['fieldPath'] != '__name__':
+            raise ValueError('new composite declarations must end in __name__; regenerate the manifest')
     added_fields = [entry for key, entry in candidate_fields.items() if key not in base_fields]
     if any(not entry['indexes'] for entry in added_fields):
         raise ValueError('new field exemptions stay main-only')

@@ -807,3 +807,27 @@ def test_start_only_never_repatches_existing_builds(state):
         == set()
     )
     assert [method for method, _, _ in request.calls] == ['GET']
+
+
+def test_start_only_reports_immediate_operation_failure():
+    def payload(method, url, body):
+        if method == 'PATCH':
+            return {
+                'name': f'projects/{PROJECT}/databases/{DATABASE}/operations/build',
+                'done': True,
+                'error': {'code': 9},
+            }
+        return {'name': _field_name(_STATUS), 'indexConfig': {'indexes': _collection_defaults('status')}}
+
+    with pytest.raises(fields.FieldIndexError, match='failed on submission'):
+        fields.provision_field_requirements(
+            requirements=(_STATUS,),
+            wait_for_ready=False,
+            project=PROJECT,
+            database=DATABASE,
+            request=_request(payload),
+            timeout_seconds=10,
+            poll_interval_seconds=1,
+            sleep=lambda _: pytest.fail('start-only must not sleep'),
+            monotonic=lambda: 0,
+        )

@@ -553,6 +553,8 @@ def _launch_field_patch(
     operation = request('PATCH', f'{url}?updateMask=indexConfig', patch)
     if not isinstance(operation, Mapping):
         raise FieldIndexError('Firestore field index update returned a non-object')
+    if operation.get('error'):
+        raise FieldIndexError('Firestore field index update failed on submission')
     operation_name = operation.get('name')
     return _operation_resource_name(operation_name, project=project, database=database)
 
