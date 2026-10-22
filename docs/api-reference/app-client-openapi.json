@@ -5434,7 +5434,8 @@
               "calendar_event",
               "desktop_meeting",
               "screen_meeting",
-              "phone_call"
+              "phone_call",
+              "media_playback"
             ],
             "title": "Kind",
             "type": "string"
@@ -9025,6 +9026,22 @@
               }
             ]
           },
+          "content_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "conversation",
+                  "media",
+                  "noise"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Kind"
+          },
           "conversation_audio": {
             "anyOf": [
               {
@@ -10282,6 +10299,22 @@
                 "type": "null"
               }
             ]
+          },
+          "content_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "conversation",
+                  "media",
+                  "noise"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Kind"
           },
           "conversation_audio": {
             "anyOf": [

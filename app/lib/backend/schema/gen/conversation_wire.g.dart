@@ -966,6 +966,7 @@ class GeneratedConversation {
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
+  final String? contentKind;
   final GeneratedConversationAudio? conversationAudio;
   final DateTime createdAt;
   final String? dataProtectionLevel;
@@ -1021,6 +1022,7 @@ class GeneratedConversation {
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
+    this.contentKind,
     this.conversationAudio,
     required this.createdAt,
     this.dataProtectionLevel,
@@ -1078,6 +1080,7 @@ class GeneratedConversation {
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
+      contentKind: _readFieldValue<String>(_readField(json, const ["content_kind"]), "content_kind", _readString, requiredField: false, nullable: true),
       conversationAudio: _readFieldValue<GeneratedConversationAudio>(_readField(json, const ["conversation_audio"]), "conversation_audio", (value) => _readObject(value, GeneratedConversationAudio.fromJson), requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
@@ -1136,6 +1139,7 @@ class GeneratedConversation {
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),
+      'content_kind': contentKind,
       'conversation_audio': conversationAudio?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
@@ -1382,6 +1386,7 @@ class GeneratedConversationSearchItem {
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
+  final String? contentKind;
   final GeneratedConversationAudio? conversationAudio;
   final DateTime createdAt;
   final String? dataProtectionLevel;
@@ -1438,6 +1443,7 @@ class GeneratedConversationSearchItem {
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
+    this.contentKind,
     this.conversationAudio,
     required this.createdAt,
     this.dataProtectionLevel,
@@ -1496,6 +1502,7 @@ class GeneratedConversationSearchItem {
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
+      contentKind: _readFieldValue<String>(_readField(json, const ["content_kind"]), "content_kind", _readString, requiredField: false, nullable: true),
       conversationAudio: _readFieldValue<GeneratedConversationAudio>(_readField(json, const ["conversation_audio"]), "conversation_audio", (value) => _readObject(value, GeneratedConversationAudio.fromJson), requiredField: false, nullable: true),
       createdAt: _required(_readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: true, nullable: false), "created_at"),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
@@ -1555,6 +1562,7 @@ class GeneratedConversationSearchItem {
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),
+      'content_kind': contentKind,
       'conversation_audio': conversationAudio?.toJson(),
       'created_at': createdAt.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,

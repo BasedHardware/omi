@@ -11,7 +11,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
-BoundaryKind = Literal['calendar_event', 'desktop_meeting', 'screen_meeting', 'phone_call']
+BoundaryKind = Literal['calendar_event', 'desktop_meeting', 'screen_meeting', 'phone_call', 'media_playback']
 
 
 class BoundaryParticipant(BaseModel):

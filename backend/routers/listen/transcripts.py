@@ -18,6 +18,7 @@ from routers.listen.capture_merges import snapshot_proofs, acknowledge_proofs
 from models.capture_window_proof import CaptureWindowProof
 from config.live_capture import capture_window_reason
 from routers.listen.coverage import publish_committed, committed_snapshot
+from utils.stt.transcript_admission import AdmissionState, admit_segments
 from config.refactor_modes import serving_for
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 
@@ -142,6 +143,7 @@ class ConversationCache:
 class TranscriptProcessor:
     def __init__(self, host: Any):
         self.host = host
+        self.media_admission = AdmissionState()
         self.segment_buffer: deque[Dict[str, Any]] = deque(maxlen=host.limits.max_segment_buffer_size)
         self.photo_buffer: deque[ConversationPhoto] = deque(maxlen=host.limits.max_photo_buffer_size)
         self.cache = ConversationCache(self._load_conversation)
@@ -308,6 +310,8 @@ class TranscriptProcessor:
         for raw in segments:
             if not raw.get('id'):
                 raw['id'] = str(uuid.uuid4())
+        # refactor: superseded by utils.stt.transcript_admission when MEDIA_NOISE_MODE=serve
+        segments = admit_segments(self.host.request.uid, segments, origin='live', state=self.media_admission)
         if not getattr(self.host.state, 'capture_timeline_v2', False):
             self.segment_buffer.extend(segments)
             return
