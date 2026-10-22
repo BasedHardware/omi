@@ -100,7 +100,7 @@ def resume_source_cleanup(job: dict) -> bool:
     """Replay only sealed source cleanup: no transcription or paid notes call."""
     from database import conversations
     from utils.conversations import merge_conversations
-    from utils.notifications import send_merge_completed_message
+    from utils.notification_dispatch import dispatch_merge_completed
 
     owner, target = job['uid'], job['merge_target_id']
     checkpoint(job['job_id'], job['lease_epoch'])
@@ -115,5 +115,5 @@ def resume_source_cleanup(job: dict) -> bool:
         if source.get('merge_job_id') != job['job_id'] or source.get('transcript_corrections_moved_to') != target:
             raise MergeLeaseLost('merge source binding changed; retain it')
         merge_conversations.delete_merged_source(owner, cid, target)
-    send_merge_completed_message(owner, target, job['conversation_ids'])
+    dispatch_merge_completed(owner, target, job['conversation_ids'])
     return True

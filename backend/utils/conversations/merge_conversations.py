@@ -234,7 +234,7 @@ def perform_merge_async(
         reprocess: Whether to process merged conversation (generate summary, etc.)
     """
     from utils.conversations.process_conversation import process_conversation
-    from utils.notifications import send_merge_completed_message
+    from utils.notification_dispatch import dispatch_merge_completed
 
     def checkpoint(phase: str | None = None) -> None:
         if merge_job_id is not None:
@@ -456,7 +456,7 @@ def perform_merge_async(
             )
 
         # 10. Send FCM notification
-        send_merge_completed_message(uid, new_conversation_id, conversation_ids)
+        dispatch_merge_completed(uid, new_conversation_id, conversation_ids)
 
         logger.info(
             f"Merge completed: uid={uid}, new_id={new_conversation_id}, merged={len(conversation_ids)} conversations"
