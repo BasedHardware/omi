@@ -36,6 +36,7 @@ from database import action_items as action_items_db
 from database import episodes as episodes_db
 from database import notifications as notification_db
 from database import users as users_db
+from utils.episodes import moment_render
 from utils.episodes import client_gate, incremental, metrics, policy
 from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
@@ -106,13 +107,7 @@ def _named_segments(uid: str, segments: Sequence[Mapping[str, Any]], c: Collabor
                 }
         except Exception as error:
             logger.warning('event=episode_moment people_lookup_failed exception_type=%s', type(error).__name__)
-    out = []
-    for segment in segments:
-        item = dict(segment)
-        if item.get('person_id') and names.get(str(item['person_id'])):
-            item['person_name'] = names[str(item['person_id'])]
-        out.append(item)
-    return out
+    return moment_render.name_segments(segments, names)
 
 
 def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
