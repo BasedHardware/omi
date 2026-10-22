@@ -100,8 +100,22 @@ describe("the organization edit dialog", () => {
     expect(screen.queryByText("Stripe Payment ID")).toBeNull();
   });
 
-  it("keeps the billing field for an editor who holds finance:write", async () => {
+  it("sends no billing field to an editor who can write but not read billing", async () => {
     state.scopes = ["partners:read", "partners:write", "finance:write"];
+    await editOrganization();
+
+    const [, body] = state.updateOrganization.mock.calls[0];
+    expect(body).not.toHaveProperty("stripe_payment_id");
+    expect(screen.queryByText("Stripe Payment ID")).toBeNull();
+  });
+
+  it("keeps the billing field for an editor who holds finance:read and finance:write", async () => {
+    state.scopes = [
+      "partners:read",
+      "partners:write",
+      "finance:read",
+      "finance:write",
+    ];
     await editOrganization();
 
     expect(screen.getByText("Stripe Payment ID")).toBeTruthy();

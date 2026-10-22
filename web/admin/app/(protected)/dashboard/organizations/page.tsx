@@ -58,10 +58,10 @@ export default function OrganizationsPage() {
     updateOrganization,
   } = useOrganizations();
   const { access, can } = useAdminAccess();
-  // Billing is a finance action (finance:write on the server). Without it the
-  // Stripe field is neither shown nor sent, so an ordinary metadata edit never
-  // reads as an attempt to change billing.
-  const canBill = access ? can("finance:write") : false;
+  // Billing is a finance action (finance:read + finance:write on the server).
+  // Without both the Stripe field is neither shown nor sent: an editor who
+  // can't read the current payment would otherwise submit it blank and clear it.
+  const canBill = access ? can("finance:read") && can("finance:write") : false;
   const { toast } = useToast();
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isCreating, setIsCreating] = useState(false);

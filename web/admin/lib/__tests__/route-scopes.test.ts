@@ -469,6 +469,24 @@ describe("the financial wall on organization billing", () => {
     expect(state.db.table("organisations").size).toBe(1);
   });
 
+  it("refuses clearing an org payment for a billing writer who can't read billing", async () => {
+    seedOrganisation();
+    state.db.table("adminData").set("partner", {
+      accessRole: "deputy",
+      scopeOverrides: { deny: ["finance:read"] },
+    });
+    const response = await call(
+      route("PATCH /api/organizations/[id]"),
+      firebaseToken("partner"),
+      { stripe_payment_id: "" }
+    );
+    expect(response.status).toBe(403);
+    expect((await response.json()).scope).toBe("finance:read");
+    expect(state.db.table("organisations").get("x1")!.subscription).toEqual(
+      subscription
+    );
+  });
+
   it("still lets partners:write edit org metadata without billing", async () => {
     seedOrganisation();
     state.db.table("adminData").set("partner", {
