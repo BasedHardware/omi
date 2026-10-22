@@ -672,6 +672,24 @@ def expected_cloud_run_env(
                 f'Rendered state {rendered_state_path} entry for service {service_name!r} '
                 'has a malformed env entry (valueFrom must be secretKeyRef with name and key)'
             )
+        if rendered_state_path is not None:
+            rendered_name_list = [
+                entry['name']
+                for entry in rendered_env
+                if isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']
+            ]
+            duplicate_names = sorted({name for name in rendered_name_list if rendered_name_list.count(name) > 1})
+            if duplicate_names:
+                # The renderer emits each manifest binding key exactly once. A
+                # duplicated name is not renderer output; the later entry would
+                # silently win the expected-hash merge (deploy-time env_var
+                # bindings have no manifest hash to contradict), so a corrupted
+                # state ending on a stale value could match a stale serving
+                # revision and report OK. Reject as an operational input error.
+                raise ValueError(
+                    f'Rendered state {rendered_state_path} entry list for service {service_name!r} '
+                    f'declares {duplicate_names[0]!r} more than once; the renderer emits each binding exactly once'
+                )
         if rendered_service:
             # The rendered state is the exact deploy contract. The renderer
             # omits an env_var binding only when it is explicitly provisional

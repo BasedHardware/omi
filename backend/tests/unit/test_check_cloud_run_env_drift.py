@@ -2434,6 +2434,55 @@ def test_rendered_state_rejects_omitted_required_env_var_binding(checker, tmp_pa
         checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=rendered)
 
 
+def test_rendered_state_rejects_duplicate_env_names(checker, tmp_path: Path) -> None:
+    # Thread: an exact --rendered-state containing the same deploy-time env_var
+    # binding twice passed every structural validation; rendered_names collapsed
+    # the duplicate and the later entry silently won the expected-hash merge.
+    # Deploy-time bindings have no manifest hash to contradict, so a corrupted
+    # state ending on a stale value could match a stale serving revision and
+    # report OK. The renderer emits each binding exactly once, so reject.
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend': {
+                            'env': {
+                                'ALWAYS_THERE': {'value': 'a'},
+                                'REQUIRED_THING': {'env_var': 'REQUIRED_THING_FOR_TEST'},
+                            }
+                        }
+                    }
+                },
+            }
+        },
+    }
+    path = tmp_path / 'm.yaml'
+    path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    rendered = tmp_path / 'state.json'
+    rendered.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {
+                        'env': [
+                            {'name': 'ALWAYS_THERE', 'value': 'a'},
+                            {'name': 'REQUIRED_THING', 'value': 'first'},
+                            {'name': 'REQUIRED_THING', 'value': 'second'},
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    with pytest.raises(ValueError, match="declares 'REQUIRED_THING' more than once"):
+        checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=rendered)
+
+
 def test_sensitive_key_detection_is_case_insensitive(checker) -> None:
     # Thread: the sensitive-name regex was case-sensitive, so lowercase or
     # mixed-case names (api_key, dbPassword) published a deterministic digest
