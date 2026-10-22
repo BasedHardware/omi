@@ -367,3 +367,17 @@ def test_snapshot_failure_keeps_captures_and_logs_no_request_data(harness, monke
     assert store.rows == before
     assert 'cross_device_fold outcome=error' in caplog.text
     assert owner not in caplog.text and tokens(1, 0) not in caplog.text
+
+
+def test_long_capture_cannot_bridge_two_different_rooms_into_one_group(harness):
+    owner, store = harness
+    primary, room_a, room_b = row(10), row(11, 'apple_watch'), row(12, 'phone', scene=2)
+    primary['transcript_segments'].extend(deepcopy(room_b['transcript_segments']))
+    add(harness, primary, room_a)
+    cross.reconcile(owner, primary['id'], [room_a['id']])
+    assert store.rows[path(owner, room_a['id'])]['capture_group']
+    add(harness, room_b)
+    cross.reconcile(owner, room_b['id'], [primary['id']])
+    assert not store.rows[path(owner, room_b['id'])].get('capture_group')
+    assert len(store.rows[path(owner, primary['id'])]['capture_group']['members']) == 2
+    assert coverage.query(owner, key(room_b), [FrameRange(start=10, end=30)]).covering_conversation_id == room_b['id']
