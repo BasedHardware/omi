@@ -67,3 +67,10 @@ def test_shadow_sampled_keeps_cohort_and_samples_others(monkeypatch):
     assert rm.shadow_sampled('X_MODE', 'u2', 100) is False
     monkeypatch.setenv('X_MODE', 'serve')
     assert rm.shadow_sampled('X_MODE', 'u2', 0) is True
+
+
+@pytest.mark.parametrize('raw', ['nan', 'inf', '-1', '101', 'typo'])
+def test_shadow_invalid_sample_keeps_bounded_default(monkeypatch, raw):
+    monkeypatch.setenv('X_MODE_SHADOW_PERCENT', raw)
+    assert not rm.shadow_sampled('X_MODE', 'sample', 0)
+    assert rm.shadow_sampled('X_MODE', 'sample', 100)

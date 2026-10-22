@@ -14,6 +14,7 @@ _REVISION_FIELDS = (
     'updated_at',
     'notes_llm_output_hash',
     'discarded',
+    'content_kind',
     'is_locked',
 )
 _CONTENT_FIELDS = ('structured', 'apps_results')

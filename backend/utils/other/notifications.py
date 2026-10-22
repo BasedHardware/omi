@@ -22,6 +22,7 @@ from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.summary_selection import select_primary_summary
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.conversations.relevance_content import exclude_from_derived
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from config.refactor_modes import serving_for
 from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
@@ -202,6 +203,7 @@ def _generate_and_store_daily_summary(
         conversations = deserialize_conversations(
             [convo_data for convo_data in conversations_data if not convo_data.get('is_locked')]
         )
+        conversations = [c for c in conversations if not exclude_from_derived(uid, c, consumer='daily_summary')]
         if not conversations:
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NOTHING_TO_SUMMARIZE

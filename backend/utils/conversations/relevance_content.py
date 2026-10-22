@@ -5,10 +5,11 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from config.refactor_modes import serving_for, shadow_or_serve
 from models.boundary_evidence import BoundarySignal
+from models.conversation_enums import ContentKind
 from models.speaker_evidence import OWNER, SpeakerEvidence
 from utils.capture.media import media_playback_signals, screen_time
 from utils.conversations.relevance_rules import EXPLICIT_REMINDER_RE, transcript_word_count
@@ -19,7 +20,6 @@ FLAG = MEDIA_NOISE_MODE_ENV
 # Declare derived cohort names for registry tooling, read only through refactor_modes.
 MEDIA_SERVE_PERCENT_ENV = 'MEDIA_NOISE_MODE_SERVE_PERCENT'
 MEDIA_SERVE_DIGESTS_ENV = 'MEDIA_NOISE_MODE_SERVE_UID_SHA256S'
-ContentKind = Literal['conversation', 'media', 'noise']
 OWNER_FLOOR_SECONDS = 2.0
 WORD_FLOOR = 12
 BYSTANDER_MIN_SECONDS = 10 * 60

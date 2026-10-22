@@ -43,8 +43,7 @@ def distinct_streams(first: Mapping[str, Any], second: Mapping[str, Any]) -> boo
     a, b = device(first), device(second)
     if a and b:
         return a != b
-    # Explicit capture surfaces remain useful for older devices without IDs.
-    return bool(first.get('source') and second.get('source') and first['source'] != second['source'])
+    return False
 
 
 def quality_rank(row: Mapping[str, Any]) -> tuple:

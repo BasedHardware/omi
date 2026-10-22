@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 def _observe(decision) -> None:
     outcome = 'disagree' if decision.would_fold else 'agree'
-    compare('cross_device_fold', outcome)
+    compare('cross_device_fold', outcome, lane='V3')
     CROSS_DEVICE_LINES.labels(outcome='duplicate').inc(decision.duplicate_lines)
     CROSS_DEVICE_LINES.labels(outcome='examined').inc(decision.secondary_lines)
     logger.info(
@@ -159,7 +159,7 @@ def reconcile(uid: str, candidate_id: str, other_ids: list[str]) -> bool:
                 _alias_group(uid, rows, fingerprints, group_id)
         except Exception:
             # No exception text: decryption/provider failures may contain data.
-            compare('cross_device_fold', 'error')
+            compare('cross_device_fold', 'error', lane='V3')
             CROSS_DEVICE.labels(outcome='error').inc()
             record_fallback(
                 component='conversation_finalization',

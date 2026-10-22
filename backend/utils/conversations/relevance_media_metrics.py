@@ -13,6 +13,7 @@ SHADOW = getattr(REGISTRY, '_names_to_collectors', {}).get(_NAME) or Counter(
 _CHECKS = frozenset(
     (
         'classification',
+        'conversation',
         'media',
         'noise',
         'admission_live',
@@ -28,7 +29,8 @@ _CHECKS = frozenset(
 
 
 def observe(check: str, outcome: str) -> None:
-    check = check if check in _CHECKS else 'classification'
+    if check not in _CHECKS:
+        raise ValueError('unknown media/noise check')
     outcome = reason_label(ReasonFamily.PARITY, outcome, RefactorShadowOutcome)
     SHADOW.labels(check=check, outcome=outcome).inc()
     logger.info('event=refactor_shadow lane=V2 check=%s outcome=%s', check, outcome)

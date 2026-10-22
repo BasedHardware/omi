@@ -328,3 +328,13 @@ def test_media_observations_do_not_merge_across_unobserved_gap():
     assert len(signals) == 2
     assert signals[0].ended_at == START + timedelta(seconds=60)
     assert signals[1].started_at == START + timedelta(seconds=80)
+
+
+def test_media_metrics_reject_unknown_check_and_keep_conversation_bucket():
+    from utils.conversations.relevance_media_metrics import observe, SHADOW
+
+    before = SHADOW.labels(check='conversation', outcome='agree')._value.get()
+    observe('conversation', 'agree')
+    assert SHADOW.labels(check='conversation', outcome='agree')._value.get() == before + 1
+    with pytest.raises(ValueError, match='unknown media/noise check'):
+        observe('invalid-consumer', 'agree')

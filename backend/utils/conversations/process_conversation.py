@@ -66,6 +66,8 @@ from models.conversation_enums import (
     ExternalIntegrationConversationSource,
 )
 from config.refactor_modes import serving_for
+from utils.conversations.relevance import content_minimum
+from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.llm.notes_short_clip import quiet_minimum
 from utils.llm.output_language import resolve_output_language
 from utils.conversations.deterministic_minimum import (
@@ -348,6 +350,18 @@ def _get_structured(
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             # An unreadable stored blob is never evidence of an empty capture.
             return Structured(), False
+        # refactor: superseded by utils.conversations.relevance_media when MEDIA_NOISE_MODE=serve
+        media_minimum = None if is_release_probe_uid(uid) else content_minimum(uid, conversation, user_kept=user_kept)
+        if media_minimum is not None:
+            hidden = noise_hidden_from_home(
+                uid,
+                conversation,
+                user_kept=user_kept,
+                client_supports_discarded=getattr(conversation, 'client_platform', None) in ('ios', 'android'),
+            )
+            if relevance_observer is not None:
+                relevance_observer(RelevanceDecision('discard' if hidden else 'keep', 'rule', 'content_kind', trigger))
+            return media_minimum, hidden
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
@@ -996,6 +1010,8 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     Finalization workers use this public boundary while holding their durable
     lease. Keep the private helper below for existing in-module async callers.
     """
+    if exclude_from_derived(uid, conversation, consumer='memories'):
+        return
     # The deployment-wide capability fence is mandatory even when this
     # account's non-compatibility writer delegates formation to the sweep.
     # Otherwise a reused release-probe principal could skip the exact static
@@ -1973,6 +1989,8 @@ def _save_action_items(
     commands and the few real commitments, or nothing — and what it admits is
     written as a task.
     """
+    if exclude_from_derived(uid, conversation, consumer='action_items'):
+        return
     if not conversation.structured:
         return
 
@@ -2724,7 +2742,10 @@ def process_conversation(
     # integrations, vectors, memories, action items, audio artifacts, folders,
     # calendar links, usage, or webhooks from a stale in-memory snapshot.
     conversation.status = ConversationStatus.completed
+    content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
+    if serving_for('MEDIA_NOISE_MODE', uid):
+        payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True if content_excluded else None
     payload.update(llm_hashes)
     from config.sync_reprocess import dedupe_enabled
     from utils.conversations.llm_input_dedupe import NOTES_HASH, NOTES_OUTPUT_HASH, L1_HASH
@@ -2752,7 +2773,7 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    if recovery_minimum_fallback or silent_backfill:
+    if recovery_minimum_fallback or silent_backfill or content_excluded:
         report_persistence(
             persisted,
             completed=conversation,
@@ -2768,7 +2789,7 @@ def process_conversation(
         )
         return conversation
 
-    if silent_backfill:
+    if silent_backfill or content_excluded:
         # Historical enrichment is summary-only. No extraction/reminder, app,
         # goal, webhook, lazy-effects queue or notification can escape this seam.
         if derived_effects_disposition_observer is not None:

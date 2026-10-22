@@ -13,6 +13,11 @@ from utils.speakers.refinement import pcm_energy
 from utils.stt.conversation_speakers import Identity
 
 
+@pytest.fixture(autouse=True)
+def explicit_shadow_storage_sample(monkeypatch):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT', '100')
+
+
 def segments(count):
     return [
         dict(
@@ -93,7 +98,7 @@ def test_same_name_people_stay_competing_candidates():
     assert len(context.unique_roster(roster)) == 2
     rows = segments(1)
     result = evidence.build_evidence(rows, resolution(rows, [[1, 0]], {1000: {'p1': 0.4, 'p2': 0.42}}), roster=roster)
-    assert evidence.project_labels(result, {}) == {'s0': (False, None)}
+    assert evidence.project_labels(result, {}) == {}
     assert {c.person_id for c in result.clusters[0].candidates if c.source == 'roster'} == {'p1', 'p2'}
     assert not any(c.label_eligible for c in result.clusters[0].candidates)
 
@@ -112,14 +117,14 @@ def test_two_johns_can_be_distinct_voice_matches():
 def test_enrolled_person_uses_existing_live_calibration_at_finalize(distance, accepted):
     rows = segments(1)
     result = evidence.build_evidence(rows, resolution(rows, [[1, 0]], {1000: {'p1': distance, 'user': 1}}))
-    assert (evidence.project_labels(result, {})['s0'][1] == 'p1') == accepted
+    assert (evidence.project_labels(result, {}).get('s0', (False, None))[1] == 'p1') == accepted
 
 
 def test_owner_does_not_get_relaxed_person_threshold():
     rows = segments(1)
     result = evidence.build_evidence(rows, resolution(rows, [[1, 0]], {1000: {'user': 0.55}}))
     assert result.owner_anchor == 'none'
-    assert evidence.project_labels(result, {})['s0'] == (False, None)
+    assert evidence.project_labels(result, {}).get('s0', (False, None)) == (False, None)
 
 
 @pytest.mark.parametrize('gap,allowed,expected', [(15, True, 'near_field'), (5, True, 'none'), (15, False, 'none')])
@@ -132,7 +137,9 @@ def test_near_field_requires_repeatable_energy_gap_and_wearer_source(gap, allowe
     result = evidence.build_evidence(rows, resolved, energies=energies, near_field_allowed=allowed)
     assert result.owner_anchor == expected
     labels = evidence.project_labels(result, {})
-    assert all(labels[s['id']][0] == (expected == 'near_field' and i % 2 == 0) for i, s in enumerate(rows))
+    assert all(
+        labels.get(s['id'], (False, None))[0] == (expected == 'near_field' and i % 2 == 0) for i, s in enumerate(rows)
+    )
 
 
 def test_missing_competing_audio_does_not_anchor_owner():
@@ -145,7 +152,7 @@ def test_desktop_channel_anchor_and_manual_rejection():
     rows = segments(2)
     result = evidence.build_evidence(rows, channel_ids=['s0'])
     assert result.owner_anchor == 'channel'
-    assert evidence.project_labels(result, {}) == {'s0': (True, None), 's1': (False, None)}
+    assert evidence.project_labels(result, {}) == {'s0': (True, None)}
     receipt = {'segments': {'s0': {'is_user': False, 'person_id': 'p1', 'generation': 1}}}
     assert evidence.project_labels(result, receipt)['s0'] == (False, 'p1')
 
@@ -281,7 +288,7 @@ def test_surplus_merge_never_blends_desktop_mic_with_remote_channel():
     assert len(result.clusters) == 2
     assert result.owner_anchor == 'channel'
     labels = evidence.project_labels(result, {})
-    assert [labels[s['id']][0] for s in rows] == [True, True, True, False, False, False]
+    assert [labels.get(s['id'], (False, None))[0] for s in rows] == [True, True, True, False, False, False]
 
 
 def test_partial_resolution_does_not_publish_participant_list(monkeypatch):
@@ -305,3 +312,68 @@ def test_partial_resolution_does_not_publish_participant_list(monkeypatch):
     processing.capture_resolution(partial)
     processing.finish(token, uuid.uuid4().hex, conversation, {})
     assert conversation.speaker_resolution.participant_speaker_ids == []
+
+
+def test_null_cluster_cannot_replace_numbered_speaker(monkeypatch):
+    from models.transcript_segment import TranscriptSegment
+    from models.speaker_evidence import VoiceCluster
+
+    item = TranscriptSegment(id='s0', speaker_id=1, start=0, end=8, text='', is_user=False)
+    conversation = SimpleNamespace(id='fixture', source='omi', transcript_segments=[item])
+    proposed = SpeakerEvidence(
+        status='resolved',
+        policy_version='fixture',
+        owner_anchor='none',
+        clusters=[VoiceCluster(id='v0', speaker_id=None, segment_ids=['s0'])],
+    )
+    monkeypatch.setenv(evidence.FLAG, 'serve')
+    monkeypatch.setattr(processing, 'build_evidence', lambda *a, **k: proposed)
+    monkeypatch.setattr(processing, '_roster', lambda *a: [])
+    monkeypatch.setattr(processing.storage, 'store_evidence', lambda *a, **k: None)
+    token = processing.begin(conversation)
+    processing.capture_resolution(SimpleNamespace(speaker_ids={'s0': 1}, coverage=1))
+    processing.finish(token, uuid.uuid4().hex, conversation, {})
+    assert item.speaker_id == 1
+    assert item.speaker != 'SPEAKER_None'
+
+
+def test_desktop_channel_split_is_not_a_count_reduction(monkeypatch, caplog):
+    from models.transcript_segment import TranscriptSegment
+    import logging
+
+    rows = segments(2)
+    for row in rows:
+        row['speaker_id'] = 0
+    transcript = [TranscriptSegment(**row, text='') for row in rows]
+    transcript[0].is_user = True
+    conversation = SimpleNamespace(id='fixture', source='desktop', transcript_segments=transcript)
+    monkeypatch.setenv(evidence.FLAG, 'shadow')
+    monkeypatch.setattr(processing, '_roster', lambda *a: ROSTER)
+    monkeypatch.setattr(processing.storage, 'store_evidence', lambda *a, **k: None)
+    with caplog.at_level(logging.INFO, logger=processing.__name__):
+        token = processing.begin(conversation)
+        processing.finish(token, uuid.uuid4().hex, conversation, {})
+    assert 'check=participant_count outcome=agree' in caplog.text
+    assert 'check=participant_count outcome=disagree' not in caplog.text
+
+
+@pytest.mark.parametrize(
+    'mode,sample,writes', [('off', '100', 0), ('shadow', '0', 0), ('shadow', '100', 1), ('serve', '0', 1)]
+)
+def test_evidence_shadow_writes_are_sampled(monkeypatch, mode, sample, writes):
+    from models.transcript_segment import TranscriptSegment
+
+    conversation = SimpleNamespace(
+        id='fixture',
+        source='omi',
+        transcript_segments=[TranscriptSegment(id='s0', speaker_id=0, start=0, end=8, text='', is_user=False)],
+    )
+    monkeypatch.setenv(evidence.FLAG, mode)
+    monkeypatch.setenv(evidence.FLAG + '_SERVE_PERCENT', '0')
+    monkeypatch.delenv(evidence.FLAG + '_SERVE_UID_SHA256S', raising=False)
+    monkeypatch.setenv(evidence.FLAG + '_SHADOW_PERCENT', sample)
+    monkeypatch.setattr(processing, '_roster', lambda *a: [])
+    stored = []
+    monkeypatch.setattr(processing.storage, 'store_evidence', lambda *a, **k: stored.append(a))
+    processing.finish(processing.begin(conversation), uuid.uuid4().hex, conversation, {})
+    assert len(stored) == writes

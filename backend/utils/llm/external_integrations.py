@@ -1,4 +1,5 @@
 from utils.daily_summary_read_contract import screen_observation_minutes
+from utils.conversations.relevance_content import exclude_from_derived
 from utils.mcp_data import action_item_source
 import database.screen_activity as screen_activity_db
 from utils.generated_compute import require_generated_compute
@@ -284,6 +285,9 @@ def summarize_experience_text(
 
 
 def get_conversation_summary(uid: str, memories: List[Conversation]) -> str:
+    memories = [c for c in memories if not exclude_from_derived(uid, c, consumer='recap')]
+    if not memories:
+        return ''
     require_generated_compute(uid, 'daily_summary_simple')
     user_name, memories_str = get_prompt_memories(uid)
     user_language = users_db.get_user_language_preference(uid)
@@ -353,6 +357,9 @@ def generate_comprehensive_daily_summary(
 
     Returns a dictionary matching the DailySummary model structure.
     """
+    conversations = [c for c in conversations if not exclude_from_derived(uid, c, consumer='daily_summary')]
+    if not conversations:
+        return {}
     require_generated_compute(uid, 'daily_summary')
     learned_refs: List[Dict[str, Any]] = list(memories_learned or [])
     # Get user's timezone

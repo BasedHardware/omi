@@ -17,6 +17,7 @@ from models.chat import Message
 from models.client_processing import ClientProcessing
 from models.conversation_enums import (
     CategoryEnum,
+    ContentKind,
     ConversationProcessingState,
     ConversationSource,
     ConversationStatus,
@@ -604,7 +605,7 @@ class Conversation(BaseModel):
     # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
     capture_group: Optional[CaptureGroup] = None
 
-    content_kind: Optional[Literal['conversation', 'media', 'noise']] = None
+    content_kind: Optional[ContentKind] = None
     discarded: bool = False
     # True for conversations created via an external data import (e.g. Limitless ZIP).
     # Distinct from source=limitless, which also covers pendant/sync uploads of Limitless audio.
@@ -770,7 +771,7 @@ class ConversationSyncConflictResponse(BaseModel):
 
 
 class CreateConversation(BaseModel):
-    content_kind: SkipJsonSchema[Optional[Literal['conversation', 'media', 'noise']]] = None
+    content_kind: SkipJsonSchema[Optional[ContentKind]] = None
 
     @field_validator('content_kind', mode='before')
     @classmethod
@@ -814,7 +815,7 @@ class CreateConversation(BaseModel):
 
 
 class ExternalIntegrationCreateConversation(BaseModel):
-    content_kind: SkipJsonSchema[Optional[Literal['conversation', 'media', 'noise']]] = None
+    content_kind: SkipJsonSchema[Optional[ContentKind]] = None
 
     @field_validator('content_kind', mode='before')
     @classmethod

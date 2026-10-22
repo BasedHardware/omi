@@ -115,6 +115,18 @@ def _manual_decision(current: Mapping, origin: Mapping, receipt: Mapping, reject
     return max(decisions, key=lambda d: d.get('generation', 0), default=None)
 
 
+def cluster_key(segment: Any, resolution: Any, channel_ids: set[str]) -> tuple:
+    """The producer and count observer share the same voice/channel partition."""
+    sid = _get(segment, 'id')
+    resolved = resolution.speaker_ids.get(sid) if resolution else None
+    key = (
+        ('resolved', resolved)
+        if resolved is not None
+        else (_get(segment, 'speaker_id_scope'), _get(segment, 'speaker_id'))
+    )
+    return (*key, sid in channel_ids)
+
+
 def build_evidence(
     segments: Sequence[Any],
     resolution: Any = None,
@@ -138,9 +150,7 @@ def build_evidence(
         if not sid or speaker == 99:
             continue
         scope = _get(segment, 'speaker_id_scope')
-        resolved = resolution.speaker_ids.get(sid) if resolution else None
-        key = ('resolved', resolved) if resolved is not None else (scope, speaker)
-        key = (*key, sid in channel_set)
+        key = cluster_key(segment, resolution, channel_set)
         groups[key].append(segment)
         refs.append(EvidenceSegment(id=sid, speaker_id=speaker, speaker_id_scope=_receipt_scope(segment, scope)))
     references = {ref.id: ref.model_dump() for ref in refs}

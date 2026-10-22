@@ -18,6 +18,11 @@ from models.audio_file import AudioFile, ChunkSpan
 
 
 @pytest.fixture(autouse=True)
+def explicit_shadow_storage_sample(monkeypatch):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT', '100')
+
+
+@pytest.fixture(autouse=True)
 def evidence_store(monkeypatch):
     rows = []
     monkeypatch.setattr(

@@ -8,9 +8,9 @@ from typing import Any
 
 from prometheus_client import Counter
 
-from config.refactor_modes import serving_for, shadow_or_serve
+from config.refactor_modes import serving_for, shadow_or_serve, shadow_sampled
 from database import speaker_evidence as storage
-from utils.speakers.evidence import FLAG, build_evidence, project_labels, roster_candidates
+from utils.speakers.evidence import FLAG, build_evidence, cluster_key, project_labels, roster_candidates
 from utils.observability.fallback import record_fallback
 from utils.conversations.audio_placement import text_window_refusal
 from utils.speakers.context import unique_roster
@@ -22,6 +22,7 @@ AGREEMENT = Counter('omi_speaker_evidence_shadow_agreement_total', 'Label projec
 OWNER_SHARE = Counter('omi_speaker_evidence_confident_owner_total', 'Conversations with a confident owner', ['present'])
 ANCHORS = Counter('omi_speaker_evidence_owner_anchor_total', 'Owner anchor method', ['anchor'])
 COUNT_HINTS = Counter('omi_speaker_evidence_count_hint_total', 'Participant count refinement', ['outcome'])
+SHADOW_SAMPLE_PERCENT = 5.0
 
 
 @dataclass
@@ -140,14 +141,14 @@ def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
             ),
         )
         labels = project_labels(evidence, receipt or {})
-        previous_count = (
-            len(set(current.resolution.speaker_ids.values()))
-            if current.resolution
-            else len(
-                {(s.speaker_id_scope, s.speaker_id) for s in conversation.transcript_segments if s.speaker_id != 99}
-            )
+        previous_count = len(
+            {
+                cluster_key(s, current.resolution, set(current.channel_ids))
+                for s in conversation.transcript_segments
+                if s.id and s.speaker_id != 99
+            }
         )
-        count_changed = previous_count != len(evidence.clusters)
+        count_changed = previous_count > len(evidence.clusters)
         logger.info(
             'event=refactor_shadow lane=L2 check=participant_count outcome=%s', 'disagree' if count_changed else 'agree'
         )
@@ -155,10 +156,12 @@ def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
             labels.get(s.id) == (s.is_user, s.person_id) for s in conversation.transcript_segments if s.id in labels
         )
         outcome = 'agree' if agrees else 'disagree'
-        storage.store_evidence(
-            uid, conversation.id, evidence, expected_updated_at=getattr(conversation, 'updated_at', None)
-        )
-        TOTAL.labels(status=evidence.status, outcome='stored').inc()
+        sampled = shadow_sampled(FLAG, uid, SHADOW_SAMPLE_PERCENT)
+        if sampled:
+            storage.store_evidence(
+                uid, conversation.id, evidence, expected_updated_at=getattr(conversation, 'updated_at', None)
+            )
+        TOTAL.labels(status=evidence.status, outcome='stored' if sampled else 'observed').inc()
         ANCHORS.labels(anchor=evidence.owner_anchor).inc()
         COUNT_HINTS.labels(
             outcome=(
@@ -181,7 +184,9 @@ def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
         if serving_for(FLAG, uid) and receipt is not None:
             by_segment = {sid: cluster for cluster in evidence.clusters for sid in cluster.segment_ids}
             for segment in conversation.transcript_segments:
-                if segment.id in labels and text_window_refusal(segment.start, segment.end) is None:
+                if text_window_refusal(segment.start, segment.end) is not None:
+                    continue
+                if segment.id in labels:
                     segment.is_user, segment.person_id = labels[segment.id]
                     segment.speaker_identity_status = (
                         'user'
@@ -196,13 +201,15 @@ def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
                             )
                         )
                     )
-                    cluster = by_segment[segment.id]
-                    if (
-                        current.resolution
-                        and segment.id in current.resolution.speaker_ids
-                        and cluster.speaker_id != segment.speaker_id
-                    ):
-                        segment.assign_resolved_speaker(cluster.speaker_id, f'conversation:{conversation.id}')
+                cluster = by_segment.get(segment.id)
+                if (
+                    cluster is not None
+                    and current.resolution
+                    and segment.id in current.resolution.speaker_ids
+                    and cluster.speaker_id is not None
+                    and cluster.speaker_id != segment.speaker_id
+                ):
+                    segment.assign_resolved_speaker(cluster.speaker_id, f'conversation:{conversation.id}')
             if (
                 current.resolution
                 and current.resolution.coverage >= 0.9

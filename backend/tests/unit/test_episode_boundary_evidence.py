@@ -14,6 +14,7 @@ ACCOUNT = 'test-account'
 
 @pytest.fixture
 def store(monkeypatch):
+    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT', '100')
     db = StrictFirestore()
     monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', 'serve')
     monkeypatch.setattr(boundary_store, 'get_firestore_client', lambda: db)
@@ -244,3 +245,15 @@ def test_saved_context_cannot_rewind_an_authoritative_calendar_reschedule(store)
     boundaries.ingest_context(ACCOUNT, original, firestore_client=store)
     key = boundary_store.signal_id(boundaries.context_signal(original))
     assert boundary_store.load(ACCOUNT, [key], firestore_client=store)[0].started_at == NOW + timedelta(minutes=10)
+
+
+@pytest.mark.parametrize(
+    'mode,sample,writes', [('off', '100', 0), ('shadow', '0', 0), ('shadow', '100', 1), ('serve', '0', 1)]
+)
+def test_boundary_shadow_writes_are_sampled(store, monkeypatch, mode, sample, writes):
+    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE', mode)
+    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SERVE_PERCENT', '0')
+    monkeypatch.delenv('EPISODE_BOUNDARIES_MODE_SERVE_UID_SHA256S', raising=False)
+    monkeypatch.setenv('EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT', sample)
+    assert boundary_store.record(ACCOUNT, [signal()], firestore_client=store) == writes
+    assert bool(store.rows) == bool(writes)

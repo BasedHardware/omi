@@ -7,6 +7,7 @@ import logging
 import math
 import time
 import uuid
+from utils.speakers.context import name_only_allowed
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
@@ -1543,6 +1544,8 @@ class TranscriptProcessor:
                     _observe_refusal(speaker, 'queue_full', segment.speaker_id_scope)
             detection = detect_speaker_introduction(segment.text, language=self.host.language)
             if not detection:
+                continue
+            if not name_only_allowed(self.host.request.uid):
                 continue
             if not await speaker.named_speakers_allowed():
                 continue
