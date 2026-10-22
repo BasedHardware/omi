@@ -26,9 +26,20 @@ def test_outcome_vocabulary_is_closed_and_complete():
         'empty_unexpected',
         'timeout',
         'upstream_error',
+        'provider_budget_exhausted',
         'config_error',
         'invalid_input',
     }
+
+
+def test_provider_budget_failure_is_terminal_and_names_the_provider():
+    failure = TranscriptionFailure(TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED, provider='modulate')
+    assert failure.provider == 'modulate'
+    assert failure.retryable is False
+    assert failure.status_code == 502
+    assert failure.error_code == 'stt_provider_budget_exhausted'
+    assert failure.as_detail()['outcome'] == 'provider_budget_exhausted'
+    assert 'credits' not in str(failure.as_detail())
 
 
 def test_wrapped_configuration_error_preserves_provider_without_env_leak():

@@ -96,10 +96,20 @@ def _safe_cost_stage(identity: str, language: str | None) -> int:
 
 
 def failure_reason(error: BaseException) -> str:
-    from utils.stt.streaming import DeepgramConnectionRejection, ParakeetConnectionError
+    from utils.stt.streaming import (
+        DeepgramConnectionRejection,
+        ModulateConnectionRejection,
+        ParakeetConnectionError,
+    )
 
     if isinstance(error, DeepgramConnectionRejection) or getattr(error, 'reason', None) == 'auth':
         return 'auth'
+    if isinstance(error, ModulateConnectionRejection):
+        # Velma answered the upgrade with account state (402 payment / 429
+        # insufficient credits) or a rate limit; .reason is already the bounded
+        # token, so provider_budget_exhausted reaches the ACCOUNT_REJECTION
+        # handling below instead of collapsing into provider_5xx.
+        return error.reason
     if isinstance(error, ParakeetConnectionError):
         return error.reason
     if isinstance(error, TimeoutError):

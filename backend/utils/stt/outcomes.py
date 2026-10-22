@@ -32,6 +32,11 @@ _PUBLIC_FAILURES: dict[TranscriptionOutcome, tuple[int, str, str]] = {
         'stt_upstream_error',
         'The transcription provider could not complete the request.',
     ),
+    TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED: (
+        502,
+        'stt_provider_budget_exhausted',
+        'The transcription provider could not complete the request.',
+    ),
     TranscriptionOutcome.CONFIG_ERROR: (
         503,
         'stt_provider_configuration_error',
