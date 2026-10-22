@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} iš {total} min.",
     "deviceRecently": "Neseniai",
     "deviceDisconnectedFor": "Atsijungta {duration}",
-    "deviceControls": "Valdikliai"
+    "deviceControls": "Valdikliai",
+    "homeBackgroundLine": "Taip pat: {items}"
 }

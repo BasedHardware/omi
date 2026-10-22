@@ -14521,4 +14521,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get deviceControls => 'Bediening';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Ook: $items';
+  }
 }

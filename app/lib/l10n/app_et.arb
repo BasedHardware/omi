@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} / {total} min",
     "deviceRecently": "Hiljuti",
     "deviceDisconnectedFor": "Ühendus puudus {duration}",
-    "deviceControls": "Juhtimine"
+    "deviceControls": "Juhtimine",
+    "homeBackgroundLine": "Lisaks: {items}"
 }

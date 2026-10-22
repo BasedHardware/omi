@@ -14541,4 +14541,9 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deviceControls => 'నియంత్రణలు';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'అలాగే: $items';
+  }
 }

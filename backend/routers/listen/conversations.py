@@ -46,6 +46,7 @@ from utils.transcribe_decisions import (
     should_attach_to_existing_in_progress,
 )
 from utils.transcribe_store import calendar_db, conversations_db, redis_db
+from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -484,6 +485,11 @@ class LiveConversationController:
             source = ConversationSource.omi
         use_client_conversation_id = bool(self.host.client_conversation_id) and not rollover
         proposed_id = self.host.client_conversation_id if use_client_conversation_id else str(uuid.uuid4())
+        if use_client_conversation_id:
+            # Occasion conversations: a new recording id (a pendant reconnect, a new session) inside
+            # the occasion window continues the open conversation instead of starting another. An
+            # already-bound id ignores this proposal, so a true reconnect resumes as before.
+            proposed_id = await self._occasion_attach_target() or proposed_id
         proposed_id_is_server_generated = not use_client_conversation_id
         binding = await self.host.persistence.call(
             lifecycle_service.open_live_recording_session,
@@ -911,6 +917,46 @@ class LiveConversationController:
                 continue
             await self._finalize_isolated(self.process_conversation, conversation['id'], stage='stale_in_progress')
 
+    def _occasion_span_exceeded(self, conversation: dict[str, Any]) -> bool:
+        if not getattr(self.host, 'occasion_mode', False):
+            return False
+        started = conversation.get('started_at')
+        if not isinstance(started, datetime):
+            return False
+        started = started if started.tzinfo else started.replace(tzinfo=timezone.utc)
+        return (self.clock() - started).total_seconds() >= OCCASION_MAX_SPAN_SECONDS
+
+    async def _occasion_attach_target(self) -> Optional[str]:
+        """The user's open conversation when this session may continue it as the same occasion."""
+        if not getattr(self.host, 'occasion_mode', False) or self.host.is_multi_channel:
+            return None
+        if self.host.request.onboarding_mode and self.host.onboarding_admitted:
+            return None
+        existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
+        if not existing or existing.get('status') not in (ConversationStatus.in_progress, 'in_progress'):
+            return None
+        source = getattr(existing.get('source'), 'value', existing.get('source'))
+        if (
+            any(existing.get(key) for key in ('deleted', 'discarded', 'is_locked'))
+            or existing.get('client_device_id') != self.host.client_device_context.client_device_id
+            or not should_attach_to_existing_in_progress(
+                existing_source=source if isinstance(source, str) else None, request_source=self.host.request.source
+            )
+            or self._occasion_span_exceeded(existing)
+        ):
+            return None
+        existing = await self._continuity_row(existing)
+        if not resumable_continuation(
+            existing,
+            source=normalize_listen_source(self.host.request.source),
+            device_id=self.host.client_device_context.client_device_id,
+            now=self.clock(),
+            timeout=self.host.conversation_creation_timeout,
+        ):
+            return None
+        logger.info('event=occasion_attach conversation=%s', existing['id'])
+        return str(existing['id'])
+
     async def lifecycle_loop(self) -> None:
         while self.host.state.active:
             if await self.host.wait(5):
@@ -938,6 +984,10 @@ class LiveConversationController:
                     conversation, self.host.conversation_creation_timeout
                 ),
             )
+            if action == ConversationLifecycleAction.continue_current and self._occasion_span_exceeded(conversation):
+                # One occasion is capped like a smart-merged chain: all-day capture still rolls over.
+                logger.info('event=occasion_span_rollover conversation=%s', conversation_id)
+                action = ConversationLifecycleAction.process_and_create_new
             if action == ConversationLifecycleAction.create_new:
                 await self.create_new_in_progress_conversation(rollover=True)
             elif action == ConversationLifecycleAction.process_and_create_new:

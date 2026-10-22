@@ -14556,4 +14556,9 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get deviceControls => 'Controls';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'També: $items';
+  }
 }

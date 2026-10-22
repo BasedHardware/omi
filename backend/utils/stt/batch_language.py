@@ -17,9 +17,21 @@ from config.prerecorded_language import (
     MIN_AUDIO_LID_CONFIDENCE,
     audio_lid_confidence_floor,
     language_class,
+    language_gate_shadow_enabled,
     language_guard_enabled,
+    self_lid_confidence_floor,
 )
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, normalized_stt_language
+from utils.stt import language_gate
+from utils.stt.vendor_guard import (
+    ENDPOINT_LID,
+    breaker_allows,
+    is_quota_error,
+    record_breaker_other_failure,
+    record_breaker_quota_error,
+    record_breaker_success,
+    record_vendor_burn,
+)
 
 MAX_PROBE_SECONDS = 30
 MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
@@ -31,6 +43,7 @@ DETECTIONS = Counter(
 PROBE_SECONDS = Counter(
     'omi_batch_pipeline_language_probe_audio_seconds_total', 'Bounded paid audio LID samples', ['outcome']
 )
+PROBE_OUTCOMES = Counter('omi_batch_pipeline_language_probe_total', 'One outcome per LID probe call', ['outcome'])
 
 
 @dataclass(frozen=True)
@@ -42,6 +55,10 @@ class LanguageDecision:
 
     @property
     def parakeet_safe(self):
+        if self.evidence == 'self_lid':
+            # confidence is P(supported) over the Parakeet-25 set, not a top-1 score.
+            floor = self_lid_confidence_floor(self.probe_seconds)
+            return floor is not None and language_class(self.language) == 'supported' and floor <= self.confidence <= 1
         minimum = audio_lid_confidence_floor(self.probe_seconds) if self.evidence == 'audio_lid' else MIN_CONFIDENCE
         return language_class(self.language) == 'supported' and minimum <= self.confidence <= 1
 
@@ -71,14 +88,38 @@ def probe_wav(audio: bytes, *, sample_rate=16000, channels=1, encoding=None) -> 
     return output.getvalue(), duration
 
 
+def _probe_failure_outcome(exc: BaseException) -> str:
+    if is_quota_error(exc):
+        return 'quota'
+    if isinstance(exc, httpx.TimeoutException):
+        return 'timeout'
+    if isinstance(exc, httpx.TransportError):
+        return 'transport'
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = getattr(getattr(exc, 'response', None), 'status_code', 0) or 0
+        return 'http_5xx' if 500 <= status <= 599 else 'http_4xx'
+    return 'error'
+
+
 def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecision:
     """One cheap classification request; no client retries or content logging."""
     outcome, seconds, sent = 'error', 0.0, False
     decision = LanguageDecision('und', 0.0, 'unavailable')
     try:
-        body, seconds = probe_wav(audio, **audio_options)
+        try:
+            body, seconds = probe_wav(audio, **audio_options)
+        except ValueError:
+            outcome = 'unsupported_format'
+            return decision
         key = os.getenv('MODULATE_API_KEY', '')
-        if not key or before_probe is not None and not before_probe():
+        if not key:
+            outcome = 'no_key'
+            return decision
+        if before_probe is not None and not before_probe():
+            outcome = 'skipped'
+            return decision
+        if not breaker_allows(ENDPOINT_LID):
+            outcome = 'breaker_open'
             return decision
         with httpx.Client(timeout=httpx.Timeout(8, connect=2)) as client:
             sent = True
@@ -86,6 +127,7 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
                 LID_URL, headers={'X-API-Key': key}, files={'upload_file': ('language.wav', body, 'audio/wav')}
             )
         response.raise_for_status()
+        record_breaker_success(ENDPOINT_LID)
         outcome = 'accepted'
         data = response.json()
         code = data.get('predicted_language_code')
@@ -100,24 +142,62 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             or not math.isfinite(confidence)
             or not 0 <= confidence <= 1
         ):
+            outcome = 'invalid_response'
             return decision
         decision = LanguageDecision(code.lower(), float(confidence), 'audio_lid', seconds)
         return decision
-    except Exception:
+    except Exception as e:
+        outcome = _probe_failure_outcome(e)
+        if outcome == 'quota':
+            record_breaker_quota_error(ENDPOINT_LID)
+        elif sent:
+            record_breaker_other_failure(ENDPOINT_LID)
         return decision
     finally:
+        try:
+            PROBE_OUTCOMES.labels(outcome).inc()
+        except Exception:
+            pass
         if seconds and sent:
             try:
                 PROBE_SECONDS.labels(outcome).inc(seconds)
             except Exception:
                 pass
+            record_vendor_burn(ENDPOINT_LID, 'ok' if outcome == 'accepted' else 'error', seconds)
 
 
-def resolve_language(language, audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecision:
+def _self_gate(audio: bytes, surface: str, cohort_key, audio_options) -> tuple[bool, language_gate.SelfVerdict | None]:
+    """(enforced, verdict). Batch intake is shadow-only until its GPU worker accepts self_lid evidence."""
+    try:
+        probe, _ = probe_wav(audio, **audio_options)
+    except Exception:
+        return False, None
+    enforced = surface != 'batch' and language_gate.enforced_for(cohort_key, probe)
+    if not enforced and not language_gate_shadow_enabled():
+        return False, None
+    return enforced, language_gate.self_detect(probe, surface=surface)
+
+
+def _self_decision(verdict: language_gate.SelfVerdict) -> LanguageDecision:
+    return LanguageDecision(verdict.language, verdict.p_supported, 'self_lid', verdict.audio_seconds)
+
+
+def resolve_language(
+    language, audio: bytes, *, before_probe=None, surface='prerecorded', cohort_key=None, **audio_options
+) -> LanguageDecision:
     code = normalized_stt_language(language.strip() if isinstance(language, str) else None)
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return LanguageDecision(code, 1.0, 'declared')
-    decision = detect(audio, before_probe=before_probe, **audio_options)
+    enforced, verdict = _self_gate(audio, surface, cohort_key, audio_options)
+    if enforced:
+        language_gate.record_enforced(surface, verdict)
+    if enforced and verdict is not None:
+        decision = _self_decision(verdict)
+    else:
+        # Gate unavailable in an enforced cohort falls back to today's vendor path.
+        decision = detect(audio, before_probe=before_probe, **audio_options)
+        if not enforced:
+            language_gate.record_shadow(surface, verdict, decision)
     bounded = decision.language if decision.language in MODULATE_SUPPORTED_LANGUAGES else 'other'
     if decision.language == 'und':
         bounded = 'und'
@@ -143,14 +223,14 @@ def select_decision(language, decision, selector):
     return selected
 
 
-def resolve_file(language, path, *, selector, before_probe=None):
+def resolve_file(language, path, *, selector, before_probe=None, cohort_key=None):
     """Return the final provider before a sync segment's dispatch/accounting."""
     if not language_guard_enabled() or language_class(language) != 'unknown':
         return selector(language)
     try:
         with wave.open(str(path), 'rb') as source:
             body, _ = probe_wav_from_reader(source)
-        decision = resolve_language(language, body, before_probe=before_probe)
+        decision = resolve_language(language, body, before_probe=before_probe, cohort_key=cohort_key)
     except Exception:
         decision = LanguageDecision('und', 0.0, 'unavailable')
     return select_decision(language, decision, selector)

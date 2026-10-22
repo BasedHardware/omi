@@ -20,11 +20,12 @@ import json
 from typing import Any, Mapping, Optional
 
 from models.conversation_enums import CategoryEnum
+from models.structured_extraction import SALIENCE_DESCRIPTION
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
 from utils.llm.shaped_agent import model_json
 
-PROMPT_VERSION = 'notes-agent-v5'
+PROMPT_VERSION = 'notes-agent-v6'
 SUBMIT = 'submit_notes'
 VIEW_SCREENSHOT = 'view_screenshot'
 OWNER_PROFILE_CHARACTERS = 1500
@@ -93,6 +94,9 @@ FORMAT
   `action_items`.
 - title: at most 70 characters and specific. Lead with the counterpart's name when known; never use the owner's
   own name. overview: one or two plain sentences.
+- salience: "highlight" when the owner would want this as its own entry (time with people, a meeting or call,
+  plans, decisions, ideas, tasks); "background" when it is worth keeping but not a highlight (media playing,
+  ambient chatter, a passing remark, a trivial errand).
 - When the transcript has `[segment-id k]` headers, cite the smallest sufficient exact ids in source_segment_ids
   (for `[s01234 0]` cite "s01234"). Never put ids in prose; never invent them.
 
@@ -144,6 +148,7 @@ SUBMIT_SCHEMA = _fn(
         'overview': _STR,
         'emoji': _STR,
         'category': {'type': 'string', 'enum': [item.value for item in CategoryEnum]},
+        'salience': {'type': 'string', 'enum': ['highlight', 'background'], 'description': SALIENCE_DESCRIPTION},
         'participants': {
             'type': 'array',
             'items': {

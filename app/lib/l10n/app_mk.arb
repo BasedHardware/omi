@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done} од {total} мин",
     "deviceRecently": "Неодамна",
     "deviceDisconnectedFor": "Исклучено {duration}",
-    "deviceControls": "Контроли"
+    "deviceControls": "Контроли",
+    "homeBackgroundLine": "Исто така: {items}"
 }

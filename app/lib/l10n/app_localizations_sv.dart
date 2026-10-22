@@ -14490,4 +14490,9 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kontroller';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Även: $items';
+  }
 }

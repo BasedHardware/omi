@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} av {total} min",
     "deviceRecently": "Nylig",
     "deviceDisconnectedFor": "Frakoblet i {duration}",
-    "deviceControls": "Kontroller"
+    "deviceControls": "Kontroller",
+    "homeBackgroundLine": "Også: {items}"
 }

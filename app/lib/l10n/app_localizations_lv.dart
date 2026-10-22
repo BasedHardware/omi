@@ -14514,4 +14514,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceControls => 'Vadīklas';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Arī: $items';
+  }
 }
