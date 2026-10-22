@@ -4,6 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from utils.llm import action_item_v2 as v2
+from utils.llm.notes_agent_prompt import INSTRUCTIONS
 from utils.conversations import action_item_extraction as extraction
 
 
@@ -106,3 +107,13 @@ def test_notes_task_block_swap_is_idempotent_and_keeps_other_rules(monkeypatch):
     selected = v2.instructions_for('synthetic-owner', prompt)
     assert selected == 'Existing notes rules\n' + v2.RULES + '\nExisting speaker rules'
     assert v2.instructions_for('synthetic-owner', selected) == selected
+
+
+def test_agentic_notes_do_not_keep_a_conflicting_owner_only_rule(monkeypatch):
+    from utils.llm.notes_agent_prompt import INSTRUCTIONS
+
+    assert v2.instructions_for('synthetic-owner', INSTRUCTIONS) == INSTRUCTIONS
+    monkeypatch.setenv(v2.FLAG, 'serve')
+    selected = v2.instructions_for('synthetic-owner', INSTRUCTIONS)
+    assert 'emit only explicit commitments the owner made' not in selected
+    assert 'commitments by or for the owner' in selected

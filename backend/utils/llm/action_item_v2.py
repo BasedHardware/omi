@@ -112,4 +112,10 @@ def instructions_for(uid, instructions):
     """Swap only the task block on the existing notes mount; no second extractor."""
     from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 
-    return instructions.replace(ACTION_ITEM_EXTRACTION_RULES, rules_for(uid, ACTION_ITEM_EXTRACTION_RULES))
+    selected = instructions.replace(ACTION_ITEM_EXTRACTION_RULES, rules_for(uid, ACTION_ITEM_EXTRACTION_RULES))
+    if serving_for(FLAG, uid):
+        selected = selected.replace(
+            'conservative filter and emit only explicit commitments the owner made, or nothing.',
+            'conservative filter and emit only explicit commitments by or for the owner, or nothing.',
+        )
+    return selected
