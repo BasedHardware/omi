@@ -837,9 +837,8 @@ def apply_speaker_resolution(
                 # No new identity evidence (missing prints/short audio) cannot
                 # revoke an existing decision, including a prior partial pass.
                 continue
-            # Conversation-wide evidence supersedes capture's automatic owner
-            # guesses too. Manual voices are absent from this map, and the
-            # persistence transaction re-applies the latest manual receipt.
+            # refactor: superseded by utils.speakers.evidence.project_labels when SPEAKER_EVIDENCE_MODE=serve
+            # Manual voices are absent; persistence reapplies the latest receipt.
             segment.is_user = False
             segment.person_id = None
             segment.speaker_identity_status = identity_statuses[new_id]

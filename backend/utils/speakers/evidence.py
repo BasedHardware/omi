@@ -24,7 +24,16 @@ from models.speaker_evidence import (
 from utils.manual_speaker_assignments import apply_manual_assignments, manual_assignment_decision
 from utils.speakers import policy
 
-FLAG = 'SPEAKER_EVIDENCE_MODE'
+# Explicit declaration of the shared parser's derived env contract, so registry
+# tooling and operators can enumerate it without adding a second env reader.
+_COHORT_ENV = dict(
+    mode='SPEAKER_EVIDENCE_MODE',
+    percent='SPEAKER_EVIDENCE_MODE_SERVE_PERCENT',
+    digests='SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S',
+)
+FLAG = _COHORT_ENV['mode']
+assert _COHORT_ENV['percent'] == f'{FLAG}_SERVE_PERCENT'
+assert _COHORT_ENV['digests'] == f'{FLAG}_SERVE_UID_SHA256S'
 MAX_VOICE_CANDIDATES = 16
 MAX_ROSTER_CANDIDATES = 32
 MAX_SIMILARITIES = 256
