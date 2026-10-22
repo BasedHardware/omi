@@ -79,11 +79,12 @@ def create_subscription_checkout_session(
             },
         }
 
-        if trial_period_days:
+        if trial_period_days and not promotion_code_id:
             session_params['subscription_data']['trial_period_days'] = trial_period_days
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]
+            session_params['adaptive_pricing'] = {'enabled': False}
         else:
             session_params['allow_promotion_codes'] = True
 
@@ -94,7 +95,20 @@ def create_subscription_checkout_session(
         if idempotency_key:
             session_params['idempotency_key'] = idempotency_key
 
-        checkout_session = stripe.checkout.Session.create(**session_params)
+        try:
+            checkout_session = stripe.checkout.Session.create(**session_params)
+        except stripe.error.InvalidRequestError as e:
+            if promotion_code_id and ('minimum amount' in str(e).lower() or 'minimum_amount' in str(e).lower()):
+                try:
+                    promo = stripe.PromotionCode.retrieve(promotion_code_id, expand=['coupon'])
+                    coupon_id = promo.coupon.id if hasattr(promo.coupon, 'id') else promo.coupon
+                    session_params['discounts'] = [{'coupon': coupon_id}]
+                    session_params.pop('adaptive_pricing', None)
+                    checkout_session = stripe.checkout.Session.create(**session_params)
+                except Exception:
+                    raise e
+            else:
+                raise
         return checkout_session
     except stripe.error.InvalidRequestError:  # type: ignore[reportAttributeAccessIssue,reportUnknownMemberType]  # stripe.error exposed dynamically at runtime
         raise
