@@ -39,10 +39,21 @@ private func verifyRecorderLifecycle() throws {
     recorder.stopRecording()
     precondition(!recorder.isRecording && deactivations == 5, "repeated Stop must remain safe")
 
+    recorder.startRecording()
+    permissions.removeFirst()(false)
+    precondition(!recorder.isRecording && activations == 1 && deactivations == 6,
+                 "denied permission must release startup without activating audio")
+
+    UserDefaults.standard.removeObject(forKey: "omiOwnerUID")
+    recorder.startRecording()
+    permissions.removeFirst()(true)
+    precondition(!recorder.isRecording && activations == 1 && deactivations == 7,
+                 "an unbound account must never activate audio")
+
     let output = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("watch-controls-result.json")
     try JSONSerialization.data(withJSONObject: [
-        "passed": true, "cases": 5, "activationAttempts": activations,
+        "passed": true, "cases": 7, "activationAttempts": activations,
         "deactivations": deactivations, "physicalAudio": false
     ]).write(to: output, options: .atomic)
 }
@@ -50,9 +61,12 @@ private func verifyRecorderLifecycle() throws {
 @MainActor
 final class ControlsFixture: WatchRecorderControlling {
     @Published var isRecording = !ProcessInfo.processInfo.arguments.contains("--idle")
-    @Published var recordingStartedAt: Date? = Date().addingTimeInterval(-2397)
-    @Published var pendingRecoverySegments = 40
-    var recoveryError: String? { nil }
+    @Published var recordingStartedAt: Date? = ProcessInfo.processInfo.arguments.contains("--idle")
+        ? nil : Date().addingTimeInterval(-2397)
+    @Published var pendingRecoverySegments = ProcessInfo.processInfo.arguments.contains("--no-pending") ? 0 : 40
+    var recoveryError: String? {
+        ProcessInfo.processInfo.arguments.contains("--error") ? String(localized: "watch.recovery.savedAudioError") : nil
+    }
     func startRecording() { isRecording = true; recordingStartedAt = Date() }
     func stopRecording() { isRecording = false; recordingStartedAt = nil }
     func retryRecoveryTransfers() {}
@@ -64,6 +78,7 @@ struct WatchControlsProbeApp: App {
     var body: some Scene {
         WindowGroup {
             WatchRecorderView(viewModel: recorder)
+                .environment(\.dynamicTypeSize, ProcessInfo.processInfo.arguments.contains("--large-type") ? .accessibility3 : .large)
                 .task {
                     if ProcessInfo.processInfo.arguments.contains("--verify-lifecycle") {
                         do { try verifyRecorderLifecycle() }

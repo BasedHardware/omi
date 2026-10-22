@@ -28,6 +28,13 @@
       "description": "Production recording detail sheet on iPhone simulator; synthetic playback state and existing Process Now/menu controls. No audio upload, real playback or deletion performed.",
       "captured_by": "agent",
       "source": "screencapture"
+    },
+    {
+      "file": "005-mobile-ios-watch-idle-pending.png",
+      "platform": "mobile-ios",
+      "description": "Actual 40 mm Watch simulator stopped state with synthetic pending files; the 44 pt Record target leaves Retry transfer fully visible. No physical transfer or microphone claim.",
+      "captured_by": "agent",
+      "source": "screencapture"
     }
   ]
 }

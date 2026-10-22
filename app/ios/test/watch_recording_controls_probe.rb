@@ -69,6 +69,6 @@ until File.exist?(result_path)
   sleep 0.2
 end
 result = JSON.parse(File.read(result_path))
-abort "Probe failed: #{result}" unless result['passed'] == true && result['cases'] == 5
+abort "Probe failed: #{result}" unless result['passed'] == true && result['cases'] == 7
 File.write(File.join(output, 'result.json'), JSON.pretty_generate(result) + "\n")
 puts JSON.generate(result)

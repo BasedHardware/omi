@@ -1,5 +1,5 @@
 // Native UI fixture: production rows/navigation with synthetic saved recordings.
-// No account, microphone, real recording or backend is used by this target.
+// No production account, microphone, real recording or app backend is used by this target.
 import 'package:flutter/material.dart';
 import 'package:marionette_flutter/marionette_flutter.dart';
 import 'package:provider/provider.dart';

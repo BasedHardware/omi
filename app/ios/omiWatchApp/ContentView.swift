@@ -30,11 +30,11 @@ struct WatchRecorderView<Recorder: WatchRecorderControlling>: View {
                                 ZStack {
                                     Circle()
                                         .fill(Color.white)
-                                        .frame(width: hasRecoveryStatus ? 60 : 80, height: hasRecoveryStatus ? 60 : 80)
+                                        .frame(width: hasRecoveryStatus ? 44 : 80, height: hasRecoveryStatus ? 44 : 80)
                                     Image("OmiLogo")
                                         .resizable()
                                         .aspectRatio(contentMode: .fit)
-                                        .frame(width: hasRecoveryStatus ? 30 : 40, height: hasRecoveryStatus ? 30 : 40)
+                                        .frame(width: hasRecoveryStatus ? 24 : 40, height: hasRecoveryStatus ? 24 : 40)
                                 }
                             }
                             .buttonStyle(.plain)

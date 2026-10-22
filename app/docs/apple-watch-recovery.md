@@ -129,7 +129,7 @@ https://developer.apple.com/documentation/watchconnectivity/wcsessiondelegate/se
 
 The active Watch control is a labelled native Stop recording button. It stays
 visible while recovery transfers wait; Retry transfer remains a separate action.
-The 40 mm layout fits both controls. The stopped state offers Record and retains
+The 40 mm layout fits both controls; the stopped-state Record target is 44 pt when recovery status is present so Retry also fits. The stopped state offers Record and retains
 saved-audio status. Recovery status never gates the recording control.
 
 The recorder validates its original start attempt after permission before
@@ -156,14 +156,24 @@ and requires an iPhone release with its Watch companion after merge.
 ### Controls/grouping checklist
 
 - [x] Native Watch target compiles and the 40 mm render shows Stop and Retry.
-- [x] Five real view-model lifecycle cases pass in the Watch simulator with
+- [x] Seven real view-model lifecycle cases pass in the Watch simulator with
   synthetic permission/audio-session I/O; no microphone is opened by the probe.
 - [x] Native custody/presentation/relay regressions pass (24 tests).
 - [x] Grouping retains 666 original parts, stable identity, out-of-order delivery
   and cross-midnight grouping; unrelated recordings never join.
 - [x] Production row/navigation tests pass in light/dark at 200% text size,
   including account clear without deleting the original files.
-- [ ] Finish full app, analyzer, journeys, preflight and CI checks.
+- [x] Analyzer ratchet, 23 selected journeys and 30 preflight checks pass.
+- [x] Additional simulator inspection catches and fixes the 40 mm stopped-state
+  Retry clipping; active/error/accessibility text states retain a visible Stop.
+- [ ] Obtain a clean full app/CI result for the final commit. The initial full
+  run passed 7,070 tests and skipped four, but two new detail-sheet tests failed
+  on missing native waveform I/O and unsettled sheet animation, and an unrelated
+  analytics wall-clock timeout failed under load. The corrected detail tests and
+  analytics test pass together in isolation (seven tests total).
+- [ ] Keep the PR in draft until physical paired-device acceptance and required
+  final checks pass. The simulator does not support WatchConnectivity file
+  transfers; a harness receipt roundtrip is not an OS-delivery acceptance test.
 - [ ] Merge, then release the signed iPhone app with the updated Watch companion.
 - [ ] Qualify on paired hardware: Stop must remove the microphone indicator with
   the phone reachable and unavailable, during pending transfers and after screen
