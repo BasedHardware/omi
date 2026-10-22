@@ -14,6 +14,7 @@ import 'package:omi/pages/settings/widgets/plans/contextual_plans.dart';
 import 'package:omi/pages/settings/widgets/plans/storefront_plans_content.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 
 Map<String, dynamic> fixture([String name = 'plus_monthly_yearly_toggle']) =>
     jsonDecode(File('test/fixtures/storefront_v2/$name.json').readAsStringSync()) as Map<String, dynamic>;
@@ -103,8 +104,8 @@ Future<void> pumpSheet(
       'Ahem'
     ]) {
       final loader = FontLoader(family)
-        ..addFont(rootBundle.load('assets/fonts/SFPRODISPLAYREGULAR.OTF'))
-        ..addFont(rootBundle.load('assets/fonts/SFPRODISPLAYMEDIUM.OTF'));
+        ..addFont(sfProFont('SFPRODISPLAYREGULAR.OTF'))
+        ..addFont(sfProFont('SFPRODISPLAYMEDIUM.OTF'));
       await loader.load();
     }
   });

@@ -33,6 +33,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
 
 import '../../integration_test/visual_audit/fakes.dart' show AuditDeviceProvider;
+import '../helpers/sfpro_font_fixtures.dart';
 
 typedef Reason = DeviceConnectFailureShownFailureReason;
 
@@ -122,7 +123,7 @@ Future<void> loadFonts() async {
     await loader.load();
   }
   for (final name in ['.SF UI Text', '.SF UI Display', '.SF Pro Text', 'CupertinoSystemText']) {
-    final loader = FontLoader(name)..addFont(rootBundle.load('assets/fonts/SFPRODISPLAYREGULAR.OTF'));
+    final loader = FontLoader(name)..addFont(sfProFont('SFPRODISPLAYREGULAR.OTF'));
     await loader.load();
   }
   var dir = File(Platform.resolvedExecutable).parent;
