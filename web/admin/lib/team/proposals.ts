@@ -11,12 +11,14 @@ import { parseAllowlist } from "@/lib/service-account-token";
 import {
   ADMIN_COLLECTION,
   LOCK_COLLECTION,
+  PROPOSAL_COLLECTION,
   TeamError,
   addMember,
   assignmentSnapshot,
   audit,
   currentActor,
   humanAuditActor,
+  inviteLockId,
   lockDigest,
   removeMember,
   setMemberRole,
@@ -27,7 +29,6 @@ import {
   type HumanActor,
 } from "@/lib/team/roster";
 
-export const PROPOSAL_COLLECTION = "adminProposals";
 /** An unapproved proposal stops being approvable after this long. */
 export const PROPOSAL_TTL_MS = 72 * 60 * 60 * 1000;
 /** Per agent, so a misbehaving agent cannot bury the owner in requests. */
@@ -147,6 +148,10 @@ export async function createProposal(
   let after: AccessSnapshot | null = null;
   if (input.kind === "add_member") {
     assertTargetIsAPerson(agentEmail, input.email);
+    // Fast path outside the locks; the authoritative re-check runs inside
+    // the transaction below, after the per-email lock is taken. Query
+    // chains keep string literals so the Firestore contract test can
+    // extract them (imported constants do not resolve across files).
     const existing = await db
       .collection("adminData")
       .where("email", "==", input.email)
@@ -198,21 +203,42 @@ export async function createProposal(
   // a transaction that also writes a lock doc for the agent and one for the
   // target, so overlapping requests conflict and retry instead of both passing.
   // The target identity is the member's uid (or the invitee's email for
-  // add_member): any kind of pending change on one target is the same lock,
-  // so two different kinds cannot both be pending.
+  // add_member, which locks the very same doc a direct invite takes): any
+  // kind of pending change on one target is the same lock, so two different
+  // kinds cannot both be pending.
   const locks = db.collection(LOCK_COLLECTION);
   const agentLock = locks.doc(`agent-${lockDigest(agentEmail.toLowerCase())}`);
   const targetKey = target.uid ?? target.email ?? "";
-  const targetLock = locks.doc(`target-${lockDigest(targetKey)}`);
+  const targetLock = locks.doc(
+    input.kind === "add_member"
+      ? inviteLockId(input.email)
+      : `target-${lockDigest(targetKey)}`
+  );
+  const stale: { id: string; data: Proposal }[] = [];
   await db.runTransaction(async (tx) => {
     await tx.get(agentLock);
     await tx.get(targetLock);
     // Read after taking the locks: a conflicting commit re-runs this callback,
-    // so the retry sees the proposal that won.
+    // so the retry sees the proposal (or roster doc) that won.
+    stale.length = 0;
+    if (input.kind === "add_member") {
+      const existing = await db
+        .collection("adminData")
+        .where("email", "==", input.email)
+        .get();
+      if (!existing.empty) {
+        throw new TeamError(409, `${input.email} already has admin access.`);
+      }
+    }
     const pending = await db
       .collection("adminProposals")
       .where("status", "==", "pending")
       .get();
+    for (const doc of pending.docs) {
+      if (Date.parse((doc.data() as Proposal).expiresAt) <= now) {
+        stale.push({ id: doc.id, data: doc.data() as Proposal });
+      }
+    }
     const live = pending.docs
       .map((doc) => ({ ...(doc.data() as Proposal), id: doc.id }))
       .filter((p) => Date.parse(p.expiresAt) > now);
@@ -246,6 +272,14 @@ export async function createProposal(
       reason: input.reason,
     });
   });
+  // The filing committed; stale proposals it superseded now persist their
+  // expiry (best effort — a cleanup failure never fails the filing, and the
+  // derived display already reads them as expired).
+  try {
+    await expireStale(stale);
+  } catch (error) {
+    console.error("Could not persist stale proposal expiries:", error);
+  }
   return { id: ref.id, ...proposal };
 }
 
@@ -278,7 +312,7 @@ async function expireStale(docs: { id: string; data: Proposal }[]) {
  * Derives the displayed status: a pending proposal past its expiry reads as
  * expired whether or not a write has persisted the transition yet. Reads
  * never mutate; the transition (and its audit entry) persists on the next
- * write — deciding, or an agent filing against the same target.
+ * write — deciding, or the next filing (see createProposal).
  */
 export function displayedStatus(
   proposal: Pick<Proposal, "status" | "expiresAt">,

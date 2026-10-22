@@ -15,12 +15,20 @@ import {
 
 export const ADMIN_COLLECTION = "adminData";
 export const AUDIT_COLLECTION = "adminAuditLog";
+export const PROPOSAL_COLLECTION = "adminProposals";
 /** Lock docs that serialize proposal creation and invites per target. */
 export const LOCK_COLLECTION = "adminProposalLocks";
 
 /** Stable doc-id digest for lock docs (proposals, invites). */
 export const lockDigest = (value: string) =>
   createHash("sha256").update(value).digest("hex").slice(0, 32);
+
+/**
+ * The one lock doc id for a normalized email: direct invites and
+ * `add_member` proposals for the same person serialize on it, so whichever
+ * commits first forces the other to re-run against its result.
+ */
+export const inviteLockId = (email: string) => `invite-${lockDigest(email)}`;
 
 /** A person acting in the dashboard; agents never apply changes themselves. */
 export interface HumanActor {
@@ -289,14 +297,14 @@ export async function addMember(
   };
 
   // Invites for one normalized email serialize on this lock doc (like the
-  // proposal locks): a concurrent invite's transaction conflicts and re-runs
-  // against whatever this one committed — including the roster doc that
-  // adopted the Auth account this request may have provisioned. Rejected
-  // invites deliberately leave any provisioned account in place (see the
-  // provisioning note above); nothing below deletes Auth accounts.
-  const inviteLock = db
-    .collection(LOCK_COLLECTION)
-    .doc(`invite-${lockDigest(email)}`);
+  // proposal locks — agent add_member proposals for the same email take the
+  // very same doc): a concurrent invite's or proposal's transaction
+  // conflicts and re-runs against whatever this one committed — including
+  // the roster doc that adopted the Auth account this request may have
+  // provisioned. Rejected invites deliberately leave any provisioned
+  // account in place (see the provisioning note above); nothing below
+  // deletes Auth accounts.
+  const inviteLock = db.collection(LOCK_COLLECTION).doc(inviteLockId(email));
   await db.runTransaction(async (tx) => {
     await tx.get(inviteLock);
     // Re-authorize from the actor's current doc, not the request snapshot.
@@ -310,6 +318,34 @@ export async function addMember(
     assertNoBroaderThanActor(acting, input.accessRole, overrides);
     if ((await tx.get(memberRef)).exists) {
       throw new TeamError(409, `${email} already has admin access.`);
+    }
+    // One pending change per person: a live add-person proposal for this
+    // email conflicts with a direct invite, so decide that proposal
+    // (approving it runs through here too, its own id excluded) instead of
+    // landing a divergent second grant.
+    const pending = await db
+      .collection(PROPOSAL_COLLECTION)
+      .where("status", "==", "pending")
+      .get();
+    const now = Date.now();
+    const conflicting = pending.docs.find((doc) => {
+      if (doc.id === approval?.proposalId) return false;
+      const data = doc.data() as {
+        kind?: string;
+        expiresAt?: string;
+        target?: { email?: string | null };
+      };
+      return (
+        data.kind === "add_member" &&
+        data.target?.email === email &&
+        Date.parse(data.expiresAt ?? "") > now
+      );
+    });
+    if (conflicting) {
+      throw new TeamError(
+        409,
+        `${email} already has a pending proposal; approve or reject it instead.`
+      );
     }
     await approval?.check(tx);
     approval?.commit(tx);

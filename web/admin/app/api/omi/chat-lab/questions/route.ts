@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireScope } from "@/lib/auth";
 import { getDb } from "@/lib/firebase/admin";
+import { hasScope } from "@/lib/admin-access";
 
 export const dynamic = "force-dynamic";
 
@@ -96,51 +97,56 @@ export async function GET(request: NextRequest) {
   try {
     const db = getDb();
 
-    // 1. Fetch messages from the known user (no compound index needed)
-    const knownUserSnapshot = await db
-      .collection("users")
-      .doc(KNOWN_USER_UID)
-      .collection("messages")
-      .orderBy("created_at", "desc")
-      .limit(500)
-      .get();
+    // Sampling real users' messages is user-data access, not content
+    // curation: without users:read no user message is read or returned,
+    // and the caller gets the curated questions only.
+    const canSampleUsers = hasScope(authResult.access, "users:read");
+    let yourQuestions: QuestionEntry[] = [];
+    let allUsersQuestions: QuestionEntry[] = [];
+    if (canSampleUsers) {
+      // 1. Fetch messages from the known user (no compound index needed)
+      const knownUserSnapshot = await db
+        .collection("users")
+        .doc(KNOWN_USER_UID)
+        .collection("messages")
+        .orderBy("created_at", "desc")
+        .limit(500)
+        .get();
 
-    const knownUserMessages = knownUserSnapshot.docs
-      .map((doc) => doc.data())
-      .filter((m) => m.sender === "human") as { text: string }[];
-    const yourQuestions = extractTopQuestions(
-      knownUserMessages,
-      KNOWN_USER_UID
-    );
+      const knownUserMessages = knownUserSnapshot.docs
+        .map((doc) => doc.data())
+        .filter((m) => m.sender === "human") as { text: string }[];
+      yourQuestions = extractTopQuestions(knownUserMessages, KNOWN_USER_UID);
 
-    // 2. Sample from a few other active users (avoid collection group index requirements)
-    const usersSnap = await db.collection("users").limit(30).get();
-    const otherUids = usersSnap.docs
-      .map((d) => d.id)
-      .filter((id) => id !== KNOWN_USER_UID)
-      .slice(0, 20);
+      // 2. Sample from a few other active users (avoid collection group index requirements)
+      const usersSnap = await db.collection("users").limit(30).get();
+      const otherUids = usersSnap.docs
+        .map((d) => d.id)
+        .filter((id) => id !== KNOWN_USER_UID)
+        .slice(0, 20);
 
-    const otherResults = await Promise.allSettled(
-      otherUids.map((uid) =>
-        db
-          .collection("users")
-          .doc(uid)
-          .collection("messages")
-          .orderBy("created_at", "desc")
-          .limit(100)
-          .get()
-      )
-    );
+      const otherResults = await Promise.allSettled(
+        otherUids.map((uid) =>
+          db
+            .collection("users")
+            .doc(uid)
+            .collection("messages")
+            .orderBy("created_at", "desc")
+            .limit(100)
+            .get()
+        )
+      );
 
-    const otherMessages = otherResults
-      .filter(
-        (r): r is PromiseFulfilledResult<FirebaseFirestore.QuerySnapshot> =>
-          r.status === "fulfilled"
-      )
-      .flatMap((r) => r.value.docs.map((doc) => doc.data()))
-      .filter((m) => m.sender === "human") as { text: string }[];
+      const otherMessages = otherResults
+        .filter(
+          (r): r is PromiseFulfilledResult<FirebaseFirestore.QuerySnapshot> =>
+            r.status === "fulfilled"
+        )
+        .flatMap((r) => r.value.docs.map((doc) => doc.data()))
+        .filter((m) => m.sender === "human") as { text: string }[];
 
-    const allUsersQuestions = extractTopQuestions(otherMessages, "all_users");
+      allUsersQuestions = extractTopQuestions(otherMessages, "all_users");
+    }
 
     // 3. Check for curated questions
     const curatedSnapshot = await db

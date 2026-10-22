@@ -30,7 +30,10 @@ import { GET as auditGET } from "../audit/route";
 import { GET as proposalsGET, POST as proposePOST } from "../proposals/route";
 import { POST as decidePOST } from "@/app/api/omi/team-members/proposals/[id]/route";
 import { GET as humanProposalsGET } from "@/app/api/omi/team-members/proposals/route";
-import { GET as humanRosterGET } from "@/app/api/omi/team-members/route";
+import {
+  GET as humanRosterGET,
+  POST as membersPOST,
+} from "@/app/api/omi/team-members/route";
 import { GET as userDataGET } from "@/app/api/omi/fair-use/flagged/route";
 import { sendAdminInviteEmail } from "@/lib/email/invite";
 import { MAX_PENDING_PER_AGENT, PROPOSAL_TTL_MS } from "@/lib/team/proposals";
@@ -588,6 +591,100 @@ describe("proposals", () => {
     expect((await decide(OWNER, id, "approve")).status).toBe(410);
     expect(proposals().get(id).status).toBe("expired");
     expect(actions()).toEqual(["proposal.created", "proposal.expired"]);
+  });
+
+  it("persists the expiry of stale proposals on the next filing, with the system actor", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-22T00:00:00Z"));
+    const stale = (
+      await (
+        await propose({ kind: "remove_member", uid: ADMIN, reason: "left" })
+      ).json()
+    ).proposal;
+    vi.setSystemTime(
+      new Date(Date.parse("2026-10-22T00:00:00Z") + PROPOSAL_TTL_MS + 1000)
+    );
+
+    // An agent filing for a different target is the cleanup path: the
+    // stale proposal's persisted status and audit entry land, so the
+    // pending set the next listing or filing reads stays bounded.
+    expect(
+      (await propose({ kind: "remove_member", uid: DEPUTY, reason: "gone" }))
+        .status
+    ).toBe(201);
+    expect(proposals().get(stale.id).status).toBe("expired");
+    expect(actions()).toEqual([
+      "proposal.created",
+      "proposal.created",
+      "proposal.expired",
+    ]);
+    expect(
+      state.db
+        .rows("adminAuditLog")
+        .find((e: any) => e.action === "proposal.expired")
+    ).toMatchObject({
+      actor: { type: "system", id: "proposal-expiry" },
+      proposedBy: AGENT,
+    });
+  });
+
+  it("refuses a direct invite while an add-person proposal is pending, until decided", async () => {
+    state.auth.add({ uid: "new-uid", email: "new@example.com" });
+    const invite = () =>
+      membersPOST(
+        human(OWNER, "POST", "/api/omi/team-members", {
+          email: "new@example.com",
+          accessRole: "viewer",
+        })
+      );
+    const { proposal } = await (
+      await propose({
+        kind: "add_member",
+        email: "new@example.com",
+        accessRole: "viewer",
+        reason: "new hire",
+      })
+    ).json();
+
+    // One pending change per person: the owner decides the proposal
+    // instead of landing a divergent direct grant beside it.
+    expect((await invite()).status).toBe(409);
+    expect(members().has("new-uid")).toBe(false);
+
+    expect((await decide(OWNER, proposal.id, "approve")).status).toBe(200);
+    expect(members().get("new-uid")).toMatchObject({ accessRole: "viewer" });
+    // Decided, so the email is free again: the 409 is now "already has
+    // access" — never a silent second grant.
+    expect((await invite()).status).toBe(409);
+    expect(members().has("new-uid")).toBe(true);
+  });
+
+  it("lets only one of an overlapping direct invite and add-person proposal land", async () => {
+    state.auth.add({ uid: "new-uid", email: "new@example.com" });
+    // Both serialize on the same per-email lock doc: whichever transaction
+    // commits first forces the other to re-run against its result, so the
+    // person is either added directly or proposed — never both at once.
+    const [invite, filing] = await Promise.all([
+      membersPOST(
+        human(OWNER, "POST", "/api/omi/team-members", {
+          email: "new@example.com",
+          accessRole: "viewer",
+        })
+      ),
+      propose({
+        kind: "add_member",
+        email: "new@example.com",
+        accessRole: "viewer",
+        reason: "new hire",
+      }),
+    ]);
+    const inviteWon = invite.status === 200;
+    expect(
+      [invite.status, filing.status].sort().join(","),
+      `invite ${invite.status}, filing ${filing.status}`
+    ).toBe(inviteWon ? "200,409" : "201,409");
+    expect(members().has("new-uid")).toBe(inviteWon);
+    expect(proposals().size).toBe(inviteWon ? 0 : 1);
   });
 
   describe("in-flight authority: decisions re-read the approver's doc", () => {

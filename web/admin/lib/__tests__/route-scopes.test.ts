@@ -145,7 +145,7 @@ describe("route inventory", () => {
   });
 
   it("never serializes scoped JSON outside the guard's json()", () => {
-    // The financial field wall (lib/financial-fields.ts) lives in
+    // The sensitive field wall (lib/sensitive-fields.ts) lives in
     // AdminIdentity.json; a scoped route that calls NextResponse.json
     // directly would bypass it. Guard responses (401/403 from requireScope)
     // are returned, not constructed, so they need no wall.
@@ -467,6 +467,24 @@ describe("the financial wall on organization billing", () => {
       subscription
     );
     expect(state.db.table("organisations").size).toBe(1);
+  });
+
+  it("refuses clearing an org payment for a billing writer who can't read billing", async () => {
+    seedOrganisation();
+    state.db.table("adminData").set("partner", {
+      accessRole: "deputy",
+      scopeOverrides: { deny: ["finance:read"] },
+    });
+    const response = await call(
+      route("PATCH /api/organizations/[id]"),
+      firebaseToken("partner"),
+      { stripe_payment_id: "" }
+    );
+    expect(response.status).toBe(403);
+    expect((await response.json()).scope).toBe("finance:read");
+    expect(state.db.table("organisations").get("x1")!.subscription).toEqual(
+      subscription
+    );
   });
 
   it("still lets partners:write edit org metadata without billing", async () => {

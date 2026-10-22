@@ -94,7 +94,9 @@ export const ROUTE_POLICIES: Record<string, RoutePolicy> = {
   "GET /api/omi/stats/response-reliability": "analytics:read",
   "GET /api/omi/stats/retention/posthog": "analytics:read",
   "GET /api/omi/stats/viral-metrics": "analytics:read",
-  "GET /api/omi/csat/stats": "analytics:read",
+  // The CSAT page's own feed; its free-text comments are additionally
+  // wall-gated on users:read (lib/sensitive-fields.ts).
+  "GET /api/omi/csat/stats": "content:read",
   "GET /api/omi/tv-links": "analytics:share",
   "POST /api/omi/tv-links": "analytics:share",
   "DELETE /api/omi/tv-links/[id]": "analytics:share",
