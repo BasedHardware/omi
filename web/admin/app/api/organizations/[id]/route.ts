@@ -112,19 +112,22 @@ export async function PATCH(
     }
 
     // Setting or clearing billing is a finance action, not a partner-metadata
-    // edit; the check runs before any Firestore or Stripe work.
-    if (
-      stripe_payment_id !== undefined &&
-      !hasScope(authResult.access, "finance:write")
-    ) {
-      return authResult.json(
-        {
-          error:
-            "Changing an organization's Stripe payment requires finance:write.",
-          scope: "finance:write",
-        },
-        { status: 403 }
+    // edit; the check runs before any Firestore or Stripe work. It needs
+    // finance:read too: a caller who can't see the current payment (it is
+    // redacted for them) can't knowingly replace or clear it.
+    if (stripe_payment_id !== undefined) {
+      const missing = (["finance:write", "finance:read"] as const).find(
+        (scope) => !hasScope(authResult.access, scope)
       );
+      if (missing) {
+        return authResult.json(
+          {
+            error: `Changing an organization's Stripe payment requires ${missing}.`,
+            scope: missing,
+          },
+          { status: 403 }
+        );
+      }
     }
 
     const orgRef = db.collection("organisations").doc(organizationId);

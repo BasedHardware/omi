@@ -127,6 +127,7 @@ export function getAdminAuth() {
  */
 const BAD_TOKEN_CODES = new Set([
   "auth/argument-error", // malformed token or signature mismatch
+  "auth/invalid-id-token", // structurally valid JWT that failed verification
   "auth/id-token-expired",
   "auth/id-token-revoked",
 ]);

@@ -531,6 +531,7 @@ export default function AnalyticsPage() {
   // which endpoints are fetched and which tiles render.
   const { access, can } = useAdminAccess();
   const canSeeFinance = access ? can("finance:read") : false;
+  const canSeeContent = access ? can("content:read") : false;
   const localAgent = useLocalAgentEnabled();
   const [months, setMonths] = useState(12);
   const [retentionDays, setRetentionDays] = useState(30);
@@ -4081,11 +4082,12 @@ export default function AnalyticsPage() {
       viralHeader,
       ...remainingViralCharts,
 
-      chatRatingsHeader,
-      ...chatRatingsItems,
+      // Chat ratings need content:read; the header hides with the widget.
+      ...(canSeeContent ? [chatRatingsHeader, ...chatRatingsItems] : []),
     ];
   }, [
     canSeeFinance,
+    canSeeContent,
     growthGoalItems,
     responseReliabilityItems,
     topKpiAndNewWidgets,
@@ -4190,6 +4192,11 @@ interface ChatRatingsVersionData {
 }
 
 function useChatRatingsItems({ token }: { token: string | null }): ChartItem[] {
+  // Chat ratings come from a content:read endpoint; without it (e.g. a
+  // Finance member on this fallback dashboard) the widget is neither
+  // fetched nor rendered — no 403 turned into zero totals.
+  const { access, can } = useAdminAccess();
+  const canSeeContent = access ? can("content:read") : false;
   const [platform, setPlatform] = useState<"all" | "desktop" | "mobile">(
     "desktop"
   );
@@ -4197,7 +4204,7 @@ function useChatRatingsItems({ token }: { token: string | null }): ChartItem[] {
 
   const { data: weekData, isLoading: weekLoading } =
     useSWR<ChatRatingsWeekData>(
-      token && groupBy === "week"
+      token && canSeeContent && groupBy === "week"
         ? [
             `/api/omi/chat-lab/ratings?platform=${platform}&group_by=week`,
             token,
@@ -4207,7 +4214,7 @@ function useChatRatingsItems({ token }: { token: string | null }): ChartItem[] {
     );
   const { data: versionData, isLoading: versionLoading } =
     useSWR<ChatRatingsVersionData>(
-      token && groupBy === "version"
+      token && canSeeContent && groupBy === "version"
         ? [
             `/api/omi/chat-lab/ratings?platform=${platform}&group_by=version`,
             token,
@@ -4379,5 +4386,5 @@ function useChatRatingsItems({ token }: { token: string | null }): ChartItem[] {
     [platform, groupBy, isLoading, chartData, stats]
   );
 
-  return items;
+  return canSeeContent ? items : [];
 }
