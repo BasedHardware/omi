@@ -229,7 +229,13 @@ def repair_contract(
             count = len(_WORD.findall(line))
             if count > remaining:
                 repairs.append('length_bounded')
-                continue
+                if remaining <= 0:
+                    continue
+                # Retain a grounded prefix, never drop an entire substantive
+                # section merely because the model made one oversized bullet.
+                tokens = list(_WORD.finditer(line))
+                line = line[: tokens[remaining - 1].end()].rstrip() + '…'
+                count = remaining
             # Never retain an orphaned nested detail as its own claim.
             if not lines and line.startswith((' ', '\t')):
                 line = line.lstrip()
@@ -314,7 +320,10 @@ def finish_notes_contract(
                 repairs=len(check.repairs),
             )
             if serve:
-                result('output_contract', 'repaired' if check.repairs else 'passed')
+                result(
+                    'output_contract',
+                    'repaired' if check.repairs else 'accepted_with_problems' if check.findings else 'passed',
+                )
                 return target
         except Exception:
             shadow('output_contract', 'error')

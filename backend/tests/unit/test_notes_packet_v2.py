@@ -501,3 +501,13 @@ def test_empty_segments_do_not_create_a_visible_minimum(monkeypatch):
     monkeypatch.setenv(packet.FLAG, 'serve')
     capture = SimpleNamespace(transcript_segments=[{'text': ''}], photos=[])
     assert notes_short_clip.quiet_minimum('synthetic-account', capture) is None
+
+
+def test_ceiling_repair_preserves_grounded_content_of_one_long_bullet():
+    repaired, repairs = contract.repair_contract(
+        {'title': 'Workshop', 'sections': [{'heading': 'Topic', 'body_markdown': '- ' + 'synthetic ' * 220}]},
+        transcript_words=100,
+    )
+    assert repaired['sections'] and repaired['sections'][0]['body_markdown'].startswith('- synthetic')
+    assert contract.body_words(repaired['sections']) == 170
+    assert 'length_bounded' in repairs
