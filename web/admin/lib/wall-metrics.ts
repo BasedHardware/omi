@@ -952,13 +952,21 @@ export async function computeWall(
             : "";
           const sttLine = `STT ${sonioxText}${deepgramText}; ${modulateText}${reconText}`;
           const annualPartial = planCost?.saasAnnualPartial?.[last.date];
+          // The run rate stays measured while history is short, but it may not
+          // be called complete: label the partial with the producer's reason.
+          const saasPartialNote =
+            annualPartial === "history_under_12_months"
+              ? " (partial: SaaS ledger history under 12 months; one-off vendors amortized ÷12, estimated)"
+              : annualPartial
+              ? ` (partial: ${annualPartial})`
+              : "";
           const saasLine = last.saasMeasured
-            ? `measured SaaS (Mercury) $${last.saas.toFixed(2)}/day`
+            ? `measured SaaS (Mercury) $${last.saas.toFixed(
+                2
+              )}/day${saasPartialNote}`
             : `SaaS fixed $${SAAS_MONTHLY_USD}/mo estimate as of ${SAAS_AS_OF} (${
                 planCostResult.status === "rejected"
                   ? "Mercury feed unavailable"
-                  : annualPartial
-                  ? "Mercury cash complete but annual history incomplete — amortizes only seeded annual bills, gated as partial, not measured"
                   : "no complete fresh Mercury row"
               })`;
           // Foreign-currency fee rows sit in a non-USD balance and carry no

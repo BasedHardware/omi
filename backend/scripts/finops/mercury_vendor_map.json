@@ -43,6 +43,7 @@
   "category_data_rules": {
     "marketing advertising": "marketing",
     "software subscriptions": "saas",
+    "software costs": "saas",
     "manufacturing": "hardware_cogs",
     "inventory materials": "hardware_cogs",
     "shipping postage": "fulfillment",
@@ -67,7 +68,8 @@
       "category": "stt_vendor",
       "annual": false,
       "aliases": [
-        "deepgram"
+        "deepgram",
+        "www deepgram com"
       ]
     },
     "modulate": {
@@ -327,7 +329,29 @@
       "annual": false,
       "aliases": [
         "modal labs",
-        "modal com"
+        "modal com",
+        "modal group"
+      ]
+    },
+    "vanta": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "vanta"
+      ]
+    },
+    "mintlify": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "mintlify"
+      ]
+    },
+    "greptile": {
+      "category": "saas",
+      "annual": false,
+      "aliases": [
+        "greptile"
       ]
     },
     "aws": {

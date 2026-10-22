@@ -341,7 +341,19 @@ describe("FinOps plan cost reader", () => {
         saas: [
           { day: "2026-10-13", usd: 0, annual_complete: true },
           { day: "2026-10-12", usd: 8.5, annual_complete: true },
-          { day: "2026-10-11", usd: 9.5, annual_complete: false },
+          {
+            day: "2026-10-11",
+            usd: 9.5,
+            annual_complete: false,
+            annual_reason: "history_under_12_months",
+          },
+          {
+            day: "2026-10-10",
+            usd: 7.5,
+            annual_complete: false,
+            annual_reason: "uncategorized_above_threshold",
+          },
+          { day: "2026-10-09", usd: 6.5, annual_complete: false },
         ],
         sttCash: [
           { day: "2026-10-13", vendor: "modulate", usd: 19.8 },
@@ -358,9 +370,21 @@ describe("FinOps plan cost reader", () => {
       },
       // Provider-specific: soniox and deepgram stay separate (Luna P1).
       sttMeasured: { "2026-10-13": { soniox: 143, deepgram: 11 } },
-      // An incomplete annual history keeps the day OFF the measured line.
-      saasMeasured: { "2026-10-13": 0, "2026-10-12": 8.5 },
-      saasAnnualPartial: { "2026-10-11": true },
+      // An annual-history gap keeps the amortized value measured; the day is
+      // labelled partial with the producer's reason (a missing reason falls
+      // back to the short-history wording).
+      saasMeasured: {
+        "2026-10-13": 0,
+        "2026-10-12": 8.5,
+        "2026-10-11": 9.5,
+        "2026-10-10": 7.5,
+        "2026-10-09": 6.5,
+      },
+      saasAnnualPartial: {
+        "2026-10-11": "history_under_12_months",
+        "2026-10-10": "uncategorized_above_threshold",
+        "2026-10-09": "history_under_12_months",
+      },
       sttCash: { "2026-10-13": { modulate: 19.8, soniox: 500 } },
     });
   });
@@ -373,8 +397,10 @@ describe("FinOps plan cost reader", () => {
     expect(FINOPS_PLAN_COST_QUERY).toContain("mercury_saas_daily");
     expect(FINOPS_PLAN_COST_QUERY).toContain("variable_total");
     expect(FINOPS_PLAN_COST_QUERY).toContain("mercury_vendor_spend_daily");
-    // The annual-history status is selected and can gate the measured line.
+    // The annual-history status and its reason are selected so the wall can
+    // label the measured line partial until the ledger covers 12 months.
     expect(FINOPS_PLAN_COST_QUERY).toContain("annual_history_complete");
+    expect(FINOPS_PLAN_COST_QUERY).toContain("annual_history_reason");
   });
 });
 

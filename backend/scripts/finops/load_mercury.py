@@ -24,10 +24,12 @@ SCHEMAS = {
         ('category', 'STRING'),
         ('amount_usd', 'NUMERIC'),
         ('annual_monthly_usd', 'NUMERIC'),
+        ('annual_estimated_usd', 'NUMERIC'),
         ('unmapped_usd', 'NUMERIC'),
         ('unmapped_count', 'INT64'),
         ('coverage_days', 'INT64'),
         ('annual_history_complete', 'BOOL'),
+        ('annual_history_reason', 'STRING'),
         ('inputs_complete', 'BOOL'),
     ]
     + META,

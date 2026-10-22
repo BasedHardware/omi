@@ -433,13 +433,22 @@ threshold. It seeds explicit known vendor aliases and generic category rules;
 rule-classified aggregates use the synthetic vendor labels `mercury_category`
 and `category_data`, never raw counterparty names. Google Workspace has a separate
 alias from Google Cloud, while `Google Payment Corp` maps to GCP; ambiguous
-`Google` remains uncategorized. Annual cadence is deliberately not inferred from
-the merchant name: set `annual: true` only after confirming a vendor's actual
-billing cadence. Ledger evidence 2026-07-04..2026-10-19 (read 2026-10-22,
+`Google` remains uncategorized. Yearly cadence is **detected from charge
+history** (`detect_annual_charges`), never inferred from a merchant name: a
+charge is an annual bill when it repeats about every 12 months (gap 304–426 days
+to its neighbour), when it is ≥5× that vendor's other-charge median, or — for a
+vendor seen exactly once — as an ambiguous one-off amortized ÷12 and reported as
+`estimated`. `annual: true` in the map is only a manual correction that forces
+the annual treatment (SaaS vendors only); `annual: false` means auto-detect, the
+default. Ledger evidence 2026-07-04..2026-10-19 (read 2026-10-22,
 `mercury_vendor_spend_daily`): shopify, posthog, nevercode and pinecone all
 bill monthly (same-day-of-month repeats), so the "single annual payment"
-reading of the 2026-10-22 wall audit was wrong; no vendor in the window shows
-an annual cadence, which is why the committed map has none.
+reading of the 2026-10-22 wall audit was wrong — detection classifies that
+pattern monthly, which is why the committed map carries no `annual: true`
+override. A 2026-10-23 read-only 13-month Mercury check found real once-a-year
+postings outside the ledger window (for example a $12,000 wire on 2026-01-08 to
+`Modal Group, Inc.`, plus once-each software bills); that evidence drives the
+completeness gate below, not the cadence of any named vendor.
 
 | Category | Treatment |
 | --- | --- |
@@ -453,11 +462,18 @@ an annual cadence, which is why the committed map has none.
 
 Category rules reconcile common advertising, shipping, travel, meal, hardware,
 professional-service and office spend without claiming those expenses are SaaS.
-`Software` / `Software & Subscriptions` map to `saas` after vendor aliases and
-Mercury categories have been checked. Thus an Advertising transaction remains
-marketing even if its accounting category says Software & Subscriptions. Vendor
-aliases remain the most specific source: `Google Payment Corp` stays GCP and
-Shopify stays SaaS even when the category fields disagree.
+`Software` / `Software & Subscriptions` / `Software Costs` map to `saas` after
+vendor aliases and Mercury categories have been checked. Thus an Advertising
+transaction remains marketing even if its accounting category says Software &
+Subscriptions. Vendor aliases remain the most specific source: `Google Payment
+Corp` stays GCP and Shopify stays SaaS even when the category fields disagree.
+Aliases added from the 2026-10-23 read-only 13-month check (company vendors
+only, never person names): `modal group` (Modal's compute wire →
+`infra_non_gcp`, not SaaS), `www deepgram com` (annual-scale STT cash wire →
+`stt_vendor`), and named SaaS entries for the Software-category posters seen
+once in 12 months (`vanta`, `mintlify`) plus monthly `greptile`, so cadence
+detection reads each vendor's own series instead of the blended
+`mercury_category` aggregate.
 
 Incoming credits/refunds are outside this outgoing-spend feed and are not netted
 against bills. External ACH/wire transfers are **not** blanket-excluded: they may
@@ -477,8 +493,10 @@ The existing `load_bigquery.py` path loads two new date-partitioned aggregate ta
 - `based-hardware.omi_finops.mercury_vendor_spend_daily`: `date`, `vendor`, `category`,
   `amount_usd` (NUMERIC, positive outgoing spend), `transaction_count`, `run_id`, `computed_at`.
 - `based-hardware.omi_finops.mercury_saas_daily`: `date`, `vendor='all'`, `category='saas'`,
-  **`amount_usd`** (daily TV line), `annual_monthly_usd`, `unmapped_usd`, `unmapped_count`,
-  `coverage_days`, `annual_history_complete`, `inputs_complete`, `run_id`, `computed_at`.
+  **`amount_usd`** (daily TV line), `annual_monthly_usd`, `annual_estimated_usd`
+  (the ÷12 portion from ambiguous one-off vendors), `unmapped_usd`, `unmapped_count`,
+  `coverage_days`, `annual_history_complete`, `annual_history_reason`,
+  `inputs_complete`, `run_id`, `computed_at`.
 
 Every successful refresh replaces **all 90 dates**, including zero-spend dates,
 through the existing per-table delete/insert transaction. The daily unmapped row
@@ -489,9 +507,13 @@ Late corrections older than 90 days require an explicit backfill.
 
 TV `amount_usd` = `(non-annual SaaS paid over [date-29,date] + active annual bills/12) / 30.4375`.
 Annual bills remain active from posted day through the day before their 12-month
-anniversary (Feb 29 clamps to Feb 28). Known annual aggregates continue contributing
-after they age out of the 90-day API refresh. NUMERIC outputs round to nine decimal
-places. SaaS never includes GCP, LLM, STT, other infrastructure or excluded spend.
+anniversary (Feb 29 clamps to Feb 28); a bill is annual by detected cadence
+(yearly repeat, ≥5× the vendor's monthly-median outlier, ambiguous one-off, or a
+manual `annual: true` override), and one-off amortization is broken out in
+`annual_estimated_usd` so the `estimated` label is visible in the data. Known
+annual aggregates continue contributing after they age out of the 90-day API
+refresh. NUMERIC outputs round to nine decimal places. SaaS never includes GCP,
+LLM, STT, other infrastructure or excluded spend.
 
 `inputs_complete` requires all 30 posted days and no more than
 `max_uncategorized_usd` of uncategorized spend in the rolling 30-day window
@@ -503,28 +525,56 @@ USD and transaction count. Unlabelled wires/ACH are `other_opex`, so the
 residual is mostly unlabelled card spend; anything above the threshold (for
 example a kind with no rule) blocks completeness while it remains in the 30-day
 window, then ages out; it is never added to SaaS. Add a category or vendor map rule when its nature is known.
-When annual vendors are configured, annual-history completeness is its own
-signal (`annual_history_complete`) instead of blocking the line: while it is
-false the value still amortizes every annual bill the seeded history contains
-and says so, rather than dropping the measured line back to a manual constant.
-Annual uncategorized spend still blocks `annual_history_complete` past the same
-threshold. A full preceding year of coverage (a 400-day pull) remains required
-before `annual_history_complete` turns true.
+`annual_history_complete` is its own signal and now requires a full preceding
+365 covered days **regardless of configured annual vendors** — an empty
+override map no longer implies complete (2026-10-23, Luna r3 finding 4: the
+2026-07-04 ledger start is ~109 days and cannot rule out yearly bills; the
+13-month read-only check confirmed such charges exist outside the window).
+Annual uncategorized spend above the same threshold also blocks it. While
+incomplete, `annual_history_reason` names the gate — `history_under_12_months`
+or `uncategorized_above_threshold` — and the value still amortizes every annual
+bill and one-off the seeded history contains.
 The reader should require `inputs_complete=true` and fresh `computed_at` (for
 example within 3 days), prefer this USD value over `SAAS_MONTHLY_USD/30.4375`,
-and use the dated `SAAS_AS_OF` estimate with a missing/incomplete label otherwise.
-Treat `annual_history_complete=false` as a disclosed partial (annual bills older
-than the seeded window are not yet amortized), not as an unavailable line.
+and use the dated `SAAS_AS_OF` estimate only when no complete fresh row exists.
+Treat `annual_history_complete=false` as a disclosed partial labelled with its
+reason, not as an unavailable line: the wall shows the amortized value and
+appends the partial note.
 Preserve an explicit measured zero. The admin wall reads this table through
-`wall-finops.ts` (`saasMeasured`), which is in place.
+`wall-finops.ts` (`saasMeasured` + `saasAnnualPartial`), which is in place.
 
 Bank posting dates and prepayments differ from provider usage days. Reconcile
 `mercury_vendor_spend_daily` by vendor/month against every non-GCP invoice and the
 unmapped total, allowing timing, credits and prepaid-balance differences; do not
 replace daily usage invoices with same-day bank debits or sum both.
 
-To seed complete annual history, the orchestrator can pull at most 400 days into
-an existing complete FinOps run's raw directory, then invoke the existing loader:
+To seed complete annual history, run the deployed producer once with a widened
+window. `pull_mercury.py` reads `FINOPS_MERCURY_BACKFILL_DAYS` (91..400) from
+the environment because the Cloud Run job invokes it with fixed arguments; the
+env var widens that one run's Mercury pull to N posted days ending at the run's
+D-2 date. The one-time deploy step for the lead:
+
+```bash
+# 1. Add the var to the deployed job. The workflow deploys the job with a fixed
+#    env list, so --set-env-vars must repeat all of it (project: based-hardware).
+gcloud run jobs update finops-unit-cost-job --region us-central1 \
+  --set-env-vars=FINOPS_LOCK_BUCKET=based-hardware-finops-runs,FINOPS_AUTH=cloudrun,FINOPS_WRITER_SA=finops-writer@based-hardware.iam.gserviceaccount.com,FINOPS_MERCURY_ENABLED=true,FINOPS_MERCURY_BACKFILL_DAYS=400
+# 2. Execute once (gap-fill loads the frontier date; Mercury pulls 400 days).
+gcloud run jobs execute finops-unit-cost-job --region us-central1 --wait
+# 3. Remove the var: re-run step 1 without FINOPS_MERCURY_BACKFILL_DAYS, or
+#    redeploy the job from the workflow, which resets the env list.
+```
+
+The backfill is idempotent on (date, vendor): the aggregate artifact is keyed
+(date, vendor, category) — duplicate keys are rejected — and the loader's
+per-date delete/insert transaction replaces exactly the window's dates, never
+appending, so re-running the backfill re-derives the same rows. A 400-day window
+covers 13 months, after which `annual_history_complete` can turn true for
+current dates (subject to the uncategorized year-window gate).
+
+The manual in-image path stays available for an explicit window, pulling into
+an existing complete FinOps run's raw directory, then invoking the existing
+loader:
 
 ```bash
 # Inside the producer image, writer runtime identity, access/mount/flag already ready.

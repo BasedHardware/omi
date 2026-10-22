@@ -126,12 +126,14 @@ export function parseFinopsHistory(json: string): FinopsHistory {
  * plan rows (USD and cost-active user-days) from `unit_cost_daily`, per-vendor
  * measured STT lines (provider-specific, never collapsed: Soniox and Deepgram
  * stay separate so each provider combines with its own cash), Mercury SaaS
- * aggregates (complete inputs AND complete annual history — an annual-history
- * gap keeps the day off the measured line), and Mercury STT-vendor cash by
- * vendor (Modulate has no usage feed; Soniox/Deepgram cash is a cross-check
- * that must not be stacked on their measured usage). Each source keeps its own
- * latest run so a vendor line never hides plan rows. Incomplete or
- * older-than-3-day Mercury rows are omitted and the TV keeps its dated estimate.
+ * aggregates (complete inputs; an annual-history gap keeps the amortized value
+ * but labels the day partial with the producer's reason — until the ledger
+ * covers 12 months the run rate cannot be called complete), and Mercury
+ * STT-vendor cash by vendor (Modulate has no usage feed; Soniox/Deepgram cash
+ * is a cross-check that must not be stacked on their measured usage). Each
+ * source keeps its own latest run so a vendor line never hides plan rows.
+ * Incomplete or older-than-3-day Mercury rows are omitted and the TV keeps its
+ * dated estimate.
  */
 export const FINOPS_PLAN_COST_QUERY = `
 WITH runs AS (
@@ -144,6 +146,7 @@ WITH runs AS (
 ), mercury AS (
   SELECT date, amount_usd,
     annual_history_complete AS annual_complete,
+    annual_history_reason AS annual_reason,
     ROW_NUMBER() OVER (PARTITION BY date ORDER BY computed_at DESC, run_id DESC) AS rk
   FROM \`based-hardware.omi_finops.mercury_saas_daily\`
   WHERE date >= DATE_SUB(@today, INTERVAL @days DAY) AND date <= @today
@@ -166,7 +169,7 @@ SELECT TO_JSON_STRING(STRUCT(
         FROM runs WHERE rk = 1 AND segment_type = 'plan' GROUP BY day, plan ORDER BY day, plan) AS plans,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, component, SUM(usd) AS usd
         FROM runs WHERE rk = 1 AND segment_type = 'total' GROUP BY day, component ORDER BY day, component) AS stt,
-  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, amount_usd AS usd, IFNULL(annual_complete, FALSE) AS annual_complete
+  ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, amount_usd AS usd, IFNULL(annual_complete, FALSE) AS annual_complete, IFNULL(annual_reason, '') AS annual_reason
         FROM mercury WHERE rk = 1 ORDER BY day) AS saas,
   ARRAY(SELECT AS STRUCT FORMAT_DATE('%F', date) AS day, vendor,
           amount_usd AS usd
@@ -188,12 +191,14 @@ export interface PlanCostHistory {
    * provider-specific (soniox / deepgram / …) so vendors never collapse. */
   sttMeasured: Record<string, Record<string, number>>;
   /** date → complete, fresh Mercury SaaS USD; explicit zeroes are retained.
-   * A day whose annual history is incomplete is listed in `saasAnnualPartial`
-   * instead and keeps the wall's dated estimate. */
+   * A day whose annual history is incomplete keeps its amortized value here and
+   * is listed in `saasAnnualPartial` with the producer's reason — the run rate
+   * stays measured but is labelled partial, never complete, until the ledger
+   * covers 12 months. */
   saasMeasured: Record<string, number>;
-  /** Mercury SaaS days held back because the seeded annual history is
-   * incomplete (inputs_complete was true; the annual window was not). */
-  saasAnnualPartial: Record<string, boolean>;
+  /** Mercury SaaS days labelled partial: day → producer reason
+   * (`history_under_12_months` or `uncategorized_above_threshold`). */
+  saasAnnualPartial: Record<string, string>;
   /** date → Mercury STT-vendor cash by vendor (soniox/deepgram/modulate). */
   sttCash: Record<string, Record<string, number>>;
 }
@@ -230,7 +235,12 @@ export function parsePlanCost(json: string): PlanCostHistory {
       settled: boolean | null;
     }[];
     stt?: { day: string; component: string; usd: number }[];
-    saas?: { day: string; usd: number; annual_complete?: boolean | null }[];
+    saas?: {
+      day: string;
+      usd: number;
+      annual_complete?: boolean | null;
+      annual_reason?: string | null;
+    }[];
     sttCash?: { day: string; vendor: string; usd: number }[];
   };
   const unsettled = new Set(
@@ -260,12 +270,12 @@ export function parsePlanCost(json: string): PlanCostHistory {
       (history.sttMeasured[r.day]?.[vendor] || 0) + Number(r.usd);
   }
   for (const r of parsed.saas || []) {
+    // inputs_complete already gated the query; an annual-history gap keeps the
+    // amortized value (measured, best run rate) and labels the day partial.
+    history.saasMeasured[r.day] = Number(r.usd);
     if (r.annual_complete === false) {
-      // Complete cash inputs but an incompletely seeded annual history: not
-      // measured — the day keeps the dated estimate and is disclosed.
-      history.saasAnnualPartial[r.day] = true;
-    } else {
-      history.saasMeasured[r.day] = Number(r.usd);
+      history.saasAnnualPartial[r.day] =
+        r.annual_reason || "history_under_12_months";
     }
   }
   for (const r of parsed.sttCash || [])

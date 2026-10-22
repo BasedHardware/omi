@@ -733,7 +733,7 @@ it("labels measured Stripe fees partial while foreign-currency rows exist (Luna 
   );
 });
 
-it("gates a Mercury SaaS day with incomplete annual history as partial, not measured (Luna P2)", async () => {
+it("labels a measured Mercury SaaS day partial while history is under 12 months (Luna P2)", async () => {
   const s = sources();
   s.query = async () => [];
   s.billing = async () => ({
@@ -754,20 +754,51 @@ it("gates a Mercury SaaS day with incomplete annual history as partial, not meas
   s.planCost = async () => ({
     plans: {},
     sttMeasured: {},
-    saasMeasured: {},
-    saasAnnualPartial: { "2026-10-13": true },
+    // The amortized Mercury value stays the run rate; it is just labelled
+    // partial until the ledger covers a full year.
+    saasMeasured: { "2026-10-13": 12.5 },
+    saasAnnualPartial: { "2026-10-13": "history_under_12_months" },
     sttCash: {},
   });
   const wall = await computeWall(s, now);
   const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
-  // The annual-partial day keeps the dated estimate, with the gate named.
-  expect(metric.value).toBeCloseTo(
-    100 + 5_300 / (365.25 / 12) + 4_800 / (365.25 / 12)
-  );
+  // Measured SaaS replaces the dated constant; STT keeps its own estimate.
+  expect(metric.value).toBeCloseTo(100 + 5_300 / (365.25 / 12) + 12.5);
+  expect(metric.reason).toContain("measured SaaS (Mercury) $12.50/day");
   expect(metric.reason).toContain(
-    "Mercury cash complete but annual history incomplete"
+    "partial: SaaS ledger history under 12 months"
   );
-  expect(metric.reason).toContain("gated as partial, not measured");
+  expect(metric.reason).toContain("one-off vendors amortized ÷12, estimated");
+});
+
+it("labels the measured SaaS line with the producer's other partial reason verbatim", async () => {
+  const s = sources();
+  s.query = async () => [];
+  s.billing = async () => ({
+    daily: [
+      {
+        date: "2026-10-13",
+        total: 100,
+        components: { gcpInfra: 100, vertexLlm: 0 },
+      },
+    ],
+    generatedAt: now.getTime(),
+    summary: {
+      costSource: "billing",
+      partial: false,
+      coverage: { openai: true },
+    },
+  });
+  s.planCost = async () => ({
+    plans: {},
+    sttMeasured: {},
+    saasMeasured: { "2026-10-13": 12.5 },
+    saasAnnualPartial: { "2026-10-13": "uncategorized_above_threshold" },
+    sttCash: {},
+  });
+  const wall = await computeWall(s, now);
+  const metric = wall.metrics.find((m) => m.id === "cost.net_day")!;
+  expect(metric.reason).toContain("(partial: uncategorized_above_threshold)");
 });
 
 it("marks MRR partial when the book carries non-USD payers (Luna P1: no yen-as-dollars)", async () => {

@@ -525,7 +525,7 @@ describe("margin by plan (allocated estimate)", () => {
   const legs = async (
     sttMeasured: Record<string, Record<string, number>> = {},
     saasMeasured: Record<string, number> = {},
-    saasAnnualPartial: Record<string, boolean> = {}
+    saasAnnualPartial: Record<string, string> = {}
   ) => ({
     billing: await billing(),
     // FinOps cost settles ~D−3: days 6..3, with day 5 missing.
