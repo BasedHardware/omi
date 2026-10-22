@@ -117,15 +117,24 @@ class TestDevApiDeletedConversationGuard:
 
         mock_record_deletion = MagicMock()
         monkeypatch.setattr(dev_routes.conversation_tombstones, 'record_deletion', mock_record_deletion)
-        mock_delete_sources = MagicMock()
+        # The delete also purges derived evidence (#23010); none of it may reach real GCS here.
+        mock_prompt_cache = MagicMock()
+        monkeypatch.setattr('utils.other.storage.delete_owner_prompt_embedding_cache', mock_prompt_cache)
+        mock_frames = MagicMock()
+        monkeypatch.setattr('utils.screen_frames.store.delete_conversation_screen_frames', mock_frames)
+        mock_delete_evidence = MagicMock()
         monkeypatch.setattr(
-            'utils.conversations.merge_conversations.delete_conversation_with_sync_sources', mock_delete_sources
+            'services.conversation_frame_evidence.delete_conversation_and_frame_evidence', mock_delete_evidence
         )
+        monkeypatch.setattr(dev_routes.vector_db, 'delete_vector', MagicMock())
+        monkeypatch.setattr(dev_routes.vector_db, 'delete_transcript_chunk_vectors', MagicMock())
 
         result = dev_routes.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert result == {"success": True}
         mock_record_deletion.assert_called_once_with('test-uid', 'conv-1')
-        mock_delete_sources.assert_called_once_with('test-uid', 'conv-1')
+        mock_prompt_cache.assert_called_once_with('test-uid', 'conv-1')
+        mock_frames.assert_called_once_with('test-uid', 'conv-1')
+        mock_delete_evidence.assert_called_once_with('test-uid', 'conv-1')
 
     def test_patch_conversation_rejects_deleted(self, monkeypatch):
         """PATCH /v1/dev/user/conversations/{id} must raise 404 when deleted=True."""
