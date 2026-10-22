@@ -272,7 +272,8 @@ def _strip_capture_word_ranges(segments: List[Dict[str, Any]]) -> None:
 
 class ListenReceiver(ReplayFilterMixin):
     def __init__(self, host: Any, channel_configs: List[ChannelConfig], channel_id_to_index: Dict[int, int]):
-        self.soniox_idle_budget = SonioxIdleBudget()
+        # Test hosts may carry no request; a uid-less budget resolves control.
+        self.soniox_idle_budget = SonioxIdleBudget(uid=getattr(getattr(host, 'request', None), 'uid', None))
         self.host = host
         self.cap_admission: LiveAdmission | None = None
         if stt_cap_dispatch_configured() and not host.use_custom_stt:

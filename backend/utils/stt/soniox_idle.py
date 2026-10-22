@@ -16,9 +16,8 @@ from typing import Any, Awaitable, Callable
 from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
 from config.soniox_idle import (
     VAD_HANGOVER_SECONDS,
-    idle_max_closes_per_hour,
     idle_no_frames_seconds,
-    idle_rearm_seconds,
+    idle_settings_for,
 )
 from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
@@ -38,9 +37,12 @@ _sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
 class SonioxIdleBudget:
     """Session-owned churn limits, retained through leg rotation/recovery."""
 
-    def __init__(self):
-        self.rearm_seconds = idle_rearm_seconds()
-        self.max_closes_per_hour = idle_max_closes_per_hour()
+    def __init__(self, uid: str | None = None):
+        settings = idle_settings_for(uid)
+        self.arm = settings.arm
+        self.close_seconds = settings.close_seconds
+        self.rearm_seconds = settings.rearm_seconds
+        self.max_closes_per_hour = settings.max_closes_per_hour
         self.rearm_at = 0.0
         self.close_times: deque[float] = deque()
 
@@ -241,7 +243,9 @@ class IdleSonioxSocket(STTSocket):
             # Avoided time starts only after the transport is actually closed.
             self._idle_closed_at = time.monotonic()
             self._metrics.closes.inc()
+            self._metrics.cohort_closes.labels(arm=self._idle_budget.arm).inc()
             self._metrics.closes_by_trigger.labels(trigger=self._close_trigger).inc()
+            self._metrics.cohort_closes_by_trigger.labels(arm=self._idle_budget.arm, trigger=self._close_trigger).inc()
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
         self._last_frame_at = time.monotonic()
@@ -342,6 +346,7 @@ class IdleSonioxSocket(STTSocket):
             if accepted:
                 self._resumed_audio = data
                 self._metrics.reopens.inc()
+                self._metrics.cohort_reopens.labels(arm=self._idle_budget.arm).inc()
                 self._start_watchdog()
                 record_stt_provider_connect(provider='soniox', outcome=CONNECT_SUCCESS)
             return accepted
@@ -352,6 +357,7 @@ class IdleSonioxSocket(STTSocket):
             from utils.stt.live_chain import failure_reason
 
             self._metrics.failures.inc()
+            self._metrics.cohort_failures.labels(arm=self._idle_budget.arm).inc()
             self._dead = True
             # A reopen failure the classifier cannot name degrades to typed
             # connection_lost, never the ``other`` metric token: this latch is
@@ -362,6 +368,7 @@ class IdleSonioxSocket(STTSocket):
             return False
         finally:
             self._metrics.latency.observe(time.monotonic() - started)
+            self._metrics.cohort_latency.labels(arm=self._idle_budget.arm).observe(time.monotonic() - started)
 
     def _socket_callback(self, offset: float, epoch: int) -> Any:
         def callback(segments: list[dict[str, Any]]) -> None:
@@ -406,7 +413,9 @@ class IdleSonioxSocket(STTSocket):
 
     def _account_avoided(self) -> None:
         if self._idle_closed_at is not None:
-            self._metrics.avoided.inc(max(0.0, time.monotonic() - self._idle_closed_at))
+            avoided = max(0.0, time.monotonic() - self._idle_closed_at)
+            self._metrics.avoided.inc(avoided)
+            self._metrics.cohort_avoided.labels(arm=self._idle_budget.arm).inc(avoided)
             self._idle_closed_at = time.monotonic()
 
     def enable_writer_pacing(self, *args: Any) -> None:

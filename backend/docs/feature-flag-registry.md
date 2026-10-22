@@ -409,6 +409,10 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | dazheng |
 | `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | backend |
+| `SONIOX_IDLE_COHORT_CLOSE_SECONDS` | Treatment-arm close seconds for the uid-hash idle cohort; unset/off keeps the global value; floored at 20 s | backend | env | open | — | — | — | — | keep | keep | — | backend |
+| `SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR` | Treatment-arm rolling-hour close cap for the uid-hash idle cohort; unset keeps the global value; zero or negative keeps the global value | backend | env | open | — | — | — | — | keep | keep | — | backend |
+| `SONIOX_IDLE_COHORT_PERCENT` | Percent of uids (salted hash) running the treatment idle values; default 0 is the cohort kill switch | backend | env | closed | — | — | — | — | keep | keep | — | backend |
+| `SONIOX_IDLE_COHORT_REARM_SECONDS` | Treatment-arm re-arm seconds for the uid-hash idle cohort; unset keeps the global value; floored at 5 s | backend | env | open | — | — | — | — | keep | keep | — | backend |
 | `STALE_IN_PROGRESS_RECOVERY_ENABLED` | Incident stop for reconnect stale in-progress recovery; default on | backend | env | open | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | — | keep | keep | — | backend listen |
 | `STT_NO_TEXT_RESCUE_ENABLED` | Default-off bounded paid rescue and cheap failback for silent window episodes; requires recovery enabled | backend | env | closed | — | — | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | backend |
 | `STT_PRERECORDED_LANGUAGE_GUARD_ENABLED` | Default on unless false; unknown/multilingual audio needs independent supported-language detection at confidence >=0.9 for probes under10s or >=0.8 for longer probes to use Parakeet; unsupported or uncertain speech uses Modulate | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
@@ -719,6 +723,10 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SELFHEAL_MODE` — Conversation self-heal sweeper mode: off/detect-only/nudge/heal (fail: closed)
 - `SONIOX_ELAPSED_AXIS` — Measure Soniox elapsed timestamps before enabling speaker windows (fail: closed)
 - `SONIOX_IDLE_CLOSE_SECONDS` — Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch (fail: open)
+- `SONIOX_IDLE_COHORT_CLOSE_SECONDS` — Treatment-arm close seconds for the uid-hash idle cohort; unset/off keeps the global value; floored at 20 s (fail: open)
+- `SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR` — Treatment-arm rolling-hour close cap for the uid-hash idle cohort; unset keeps the global value; zero or negative keeps the global value (fail: open)
+- `SONIOX_IDLE_COHORT_PERCENT` — Percent of uids (salted hash) running the treatment idle values; default 0 is the cohort kill switch (fail: closed)
+- `SONIOX_IDLE_COHORT_REARM_SECONDS` — Treatment-arm re-arm seconds for the uid-hash idle cohort; unset keeps the global value; floored at 5 s (fail: open)
 - `SPEAKER_GROUPING_CROSS_SCOPE_THRESHOLD` — G2 cross-scope cosine-distance threshold; default 0.60; invalid configuration uses 0.60 (fail: closed)
 - `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
 - `STT_CAP_RECOVERY_COHORT` — Optional recovery-only cohort intersection; unset preserves dispatch scope, malformed denies all recovery (fail: closed)

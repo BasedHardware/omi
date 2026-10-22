@@ -4122,6 +4122,18 @@ Every reopen starts a new provider speaker scope (see below), so the VAD policy
 keeps the prod values. Lower VAD thresholds wait for speaker scope to survive a
 reopen: keep the conversation scope and remap the new socket's `SPEAKER_N`.
 
+A uid-hash treatment cohort can run tighter values on a static percent of users
+without touching the global knobs: `SONIOX_IDLE_COHORT_PERCENT` (default `0`,
+the cohort kill switch) selects sessions by
+`cohort_bucket(uid, 'soniox-idle-close', bits=64)`, and in-cohort sessions read
+`SONIOX_IDLE_COHORT_CLOSE_SECONDS`, `SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR`
+and `SONIOX_IDLE_COHORT_REARM_SECONDS` when set, each falling back to the
+global knob when unset. Out-of-cohort sessions always keep the global values,
+and `SONIOX_IDLE_CLOSE_SECONDS=0` disables the idle wrapper for everyone
+either way. The receiver-owned budget resolves the arm once per logical session;
+the `omi_soniox_idle_cohort_*` companions carry the same
+closes/reopens/latency/avoided series labelled `arm=control|treatment`.
+
 The first raw VAD silence decision starts a monotonic timer. After the threshold
 and the normal VAD hangover, a skipped-silence chunk schedules a planned close:
 queue `finalize` behind admitted audio, queue the empty end-of-audio frame, drain
