@@ -70,6 +70,23 @@ def _unsupported_chat_file_error(file_path: Union[str, Path]) -> UnsupportedChat
     return UnsupportedChatFileError(f"Unsupported attachment: {label} not supported in chat.")
 
 
+def _image_url_part(url: str) -> ChatCompletionContentPartParam:
+    """Vision content part that points the provider at a public image URL.
+
+    The URL comes from our chat files bucket ('public, no-cache' blobs), so the
+    provider downloads it directly instead of our own per-question base64
+    re-read of provider-hosted bytes. Falls back are owned by the callers: they
+    only send this when an attach-time storage copy exists.
+    """
+    return cast(
+        ChatCompletionContentPartParam,
+        {
+            "type": "image_url",
+            "image_url": {"url": url, "detail": "auto"},
+        },
+    )
+
+
 def safe_file_chats(files_data: List[Dict[str, Any]]) -> List[FileChat]:
     """Build FileChat objects from raw file docs, skipping (not raising on) a malformed one.
 
@@ -496,6 +513,12 @@ class FileChatTool:
         openai_client = _get_async_openai()
         for file in files:
             if file.is_image():
+                if file.source_url and not file.video:
+                    # Attach-time storage copy of the full image: the provider
+                    # downloads the public URL directly, so no provider file
+                    # re-read and no base64 body on every question.
+                    contents.append(_image_url_part(file.source_url))
+                    continue
                 try:
                     file_content = await openai_client.files.content(file.openai_file_id)
                     raw = file_content.read()
@@ -534,6 +557,10 @@ class FileChatTool:
         contents: List[ChatCompletionContentPartParam] = [{"type": "text", "text": question}]
         for file in files:
             if file.is_image():
+                if file.source_url and not file.video:
+                    # Attach-time storage copy, same contract as the streaming lane.
+                    contents.append(_image_url_part(file.source_url))
+                    continue
                 windowed = bool(file.video and video_window and file.video.strip_file_id)
                 try:
                     source = file.video.strip_file_id if windowed and file.video else file.openai_file_id
