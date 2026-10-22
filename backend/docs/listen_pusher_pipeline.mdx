@@ -5388,7 +5388,12 @@ precache on open, and audio download enqueue the existing named audio-merge task
 GCS listing generations/checksums plus the complete ordered chunk geometry select
 stable UUIDs. Entries without immutable source evidence retain fresh IDs. The worker
 verifies stamped sources before/after merge. Conversation MP3s use immutable
-fingerprint paths, including the conversation origin used for seek offsets. Raw
+fingerprint paths, including the conversation origin used for seek offsets. The
+conversation key also includes `CONVERSATION_BUILD_FORMAT` (bump on gap-collapse,
+span-projection or export changes), with a canonical audio-file list order.
+Corrupt span sidecars invalidate only the observed MP3/sidecar generations and
+rebuild as a cache miss; missing legacy sidecars are published for stamp-retry
+reuse. See `docs/runbooks/playback-write-amplification.md` for force regeneration. Raw
 capture bytes, metadata, retention and consent rules remain unchanged. Up to 128 recent prior IDs per group resolve to the current source identity (never
 to an old artifact); stored objects remain untouched. Clients refresh `/urls` after
 a longer revision history or a group split. Newly rebuilt groups receive stable IDs.
