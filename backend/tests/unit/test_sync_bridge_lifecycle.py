@@ -524,3 +524,28 @@ def test_redirect_during_refresh_retains_transitive_sync_donors(system, monkeypa
         donor = store.rows[('users', 'u', 'conversations', source)]
         assert donor['sync_bridge_cleaned_revision'] == donor['sync_content_revision']
     assert ('u', [{'id': 'chunk-008'}], 'chunk-000') in [c.args for c in copy.call_args_list]
+
+
+def test_silent_bridge_keeps_notification_capable_cleanup_debt(system, monkeypatch):
+    from utils.sync import bridge
+
+    store, ingest, retract, copy = system
+    ingest(0)
+    ingest(4)
+    # Persist a bridge without running its ordinary post-persist callback.
+    from utils.conversations import lifecycle
+
+    incoming = capture(2)
+    incoming.update(status='completed', data_protection_level='enhanced', private_cloud_sync_enabled=True)
+    lifecycle.ingest_sync_conversation('u', incoming)
+    transfer = MagicMock()
+    monkeypatch.setattr(bridge, 'transfer_donor', transfer)
+    assert bridge.finish_sync_bridges('u', 'chunk-000', silent=True) == 'chunk-000'
+    transfer.assert_not_called()
+    retract.assert_not_called()
+    assert 'sync_bridge_cleaned_revision' not in store.rows[('users', 'u', 'conversations', 'chunk-004')]
+    copy.assert_called_once()
+    # Normal later work still owns the retained cleanup; silence is not global.
+    bridge.finish_sync_bridges('u', 'chunk-000')
+    transfer.assert_called_once()
+    retract.assert_called_once()

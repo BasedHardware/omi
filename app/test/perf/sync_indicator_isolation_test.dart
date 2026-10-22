@@ -69,6 +69,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   List<TranscriptSegment> get segments => const [];
   @override
+  DateTime? get liveCaptureStartedAt => null;
+  @override
   void addMetricsListener() {}
   @override
   void removeMetricsListener() {}

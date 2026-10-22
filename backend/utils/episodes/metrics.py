@@ -37,10 +37,14 @@ def _reuse_or_create(factory, name: str, documentation: str, labelnames: list[st
 MOMENT_OUTCOMES = frozenset(
     {'applied', 'skipped_short', 'skipped_applied', 'rate_limited', 'llm_error', 'parse_error', 'conflict', 'error'}
 )
-MOMENT_TRIGGERS = frozenset({'pause', 'rollover', 'finalize'})
+MOMENT_TRIGGERS = frozenset({'pause', 'rollover', 'interval', 'session_end', 'finalize'})
+# Gated work that never ran: ended moments by trigger, plus conversation attaches.
+SKIP_TRIGGERS = MOMENT_TRIGGERS | {'attach'}
 CLOSE_REASON_LABELS = frozenset({'user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on'})
 PROVISIONAL_OUTCOMES = frozenset({'kept', 'dropped', 'dismissed'})
-BOUNDARY_OUTCOMES = frozenset({'new', 'continue', 'parallel', 'close', 'jev_continue', 'jev_close', 'jev_no_answer'})
+BOUNDARY_OUTCOMES = frozenset(
+    {'new', 'continue', 'parallel', 'pending', 'close', 'jev_continue', 'jev_close', 'jev_no_answer'}
+)
 
 EPISODE_MOMENT_UPDATES_TOTAL = _reuse_or_create(
     Counter,
@@ -92,13 +96,13 @@ EPISODE_BOUNDARY_TOTAL = _reuse_or_create(
 EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL = _reuse_or_create(
     Counter,
     'omi_episode_moments_skipped_no_client_total',
-    'Admitted moments (and finalization tails) skipped because the user has no client that called /v1/episodes.',
+    'Admitted moments, finalization tails and conversation attaches skipped because the user has no client that called /v1/episodes.',
     ['trigger'],
 )
 EPISODE_LIVE_SESSIONS_TOTAL = _reuse_or_create(
     Counter,
     'omi_episode_live_sessions_total',
-    'Admitted live conversations at their first ended moment, by whether a capable client was seen (true|false).',
+    'Admitted live conversations at their first speech, by whether a capable client was seen (true|false).',
     ['client_seen'],
 )
 CLIENT_CHANNELS = frozenset({'beta', 'store', 'unknown'})
@@ -113,6 +117,43 @@ EPISODE_CLIENT_REQUESTS_TOTAL = _reuse_or_create(
 
 def _label(value: str, allowed: frozenset[str]) -> str:
     return value if value in allowed else 'other'
+
+
+def _prime() -> None:
+    """Export every bounded series at zero from process start.
+
+    Cloud Run and pusher replicas come and go; a series born at its first increment
+    makes ``increase()`` miss that increment, and for a rare event (a few calls a day)
+    that was most of them: the cost counter read about zero.
+    """
+    try:
+        for trigger in MOMENT_TRIGGERS:
+            for outcome in MOMENT_OUTCOMES:
+                EPISODE_MOMENT_UPDATES_TOTAL.labels(trigger=trigger, outcome=_label(outcome, MOMENT_OUTCOMES))
+        for trigger in SKIP_TRIGGERS:
+            EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL.labels(trigger=trigger)
+        for kind in ('input', 'output'):
+            EPISODE_MOMENT_TOKENS_TOTAL.labels(kind=kind)
+        for reason in CLOSE_REASON_LABELS:
+            EPISODE_CLOSED_TOTAL.labels(reason=_label(reason, CLOSE_REASON_LABELS))
+        for outcome in PROVISIONAL_OUTCOMES:
+            EPISODE_PROVISIONAL_ITEMS_TOTAL.labels(outcome=_label(outcome, PROVISIONAL_OUTCOMES))
+        for outcome in BOUNDARY_OUTCOMES:
+            EPISODE_BOUNDARY_TOTAL.labels(outcome=_label(outcome, BOUNDARY_OUTCOMES))
+        for outcome in MOMENT_OUTCOMES:
+            EPISODE_MOMENT_LATENCY_SECONDS.labels(outcome=_label(outcome, MOMENT_OUTCOMES))
+        for reason in CLOSE_REASON_LABELS:
+            EPISODE_WRAPUP_LATENCY_SECONDS.labels(reason=_label(reason, CLOSE_REASON_LABELS))
+        for seen in ('true', 'false'):
+            EPISODE_LIVE_SESSIONS_TOTAL.labels(client_seen=seen)
+        for channel in CLIENT_CHANNELS:
+            for outcome in CLIENT_REQUEST_OUTCOMES:
+                EPISODE_CLIENT_REQUESTS_TOTAL.labels(channel=channel, outcome=_label(outcome, CLIENT_REQUEST_OUTCOMES))
+    except Exception:
+        pass
+
+
+_prime()
 
 
 def estimated_cost_usd(input_tokens: int, output_tokens: int) -> float:
@@ -170,7 +211,7 @@ def record_boundary(outcome: str) -> None:
 
 def record_moment_skipped_no_client(trigger: str) -> None:
     try:
-        EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL.labels(trigger=_label(trigger, MOMENT_TRIGGERS)).inc()
+        EPISODE_MOMENTS_SKIPPED_NO_CLIENT_TOTAL.labels(trigger=_label(trigger, SKIP_TRIGGERS)).inc()
     except Exception:
         pass
 

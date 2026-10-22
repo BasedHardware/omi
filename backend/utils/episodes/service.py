@@ -2,6 +2,11 @@
 
 Entry points (all synchronous, fail-open, run on a worker thread by callers):
 
+- ``attach_conversation``: a conversation's first live speech. Open or join the
+  live episode by the cheap rules alone, with no model call, so the episode, its
+  start and its member conversations exist from the first words. An ambiguous
+  gap joins provisionally (``pending_boundary``) and the conversation's first
+  moment settles it with Jev, splitting it off when the user moved on.
 - ``record_moment``: a moment ended (a pause or a word-budget rollover in the
   live stream, or its conversation finalized). Decide the boundary, run the one
   cheap incremental update on the previous state plus this moment's new text,
@@ -26,7 +31,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 
-from config.episodes import MOMENT_MIN_INTERVAL_SECONDS, MOMENT_MIN_WORDS, episodes_enabled_for
+from config.episodes import CLOSE_GAP_SECONDS, MOMENT_MIN_INTERVAL_SECONDS, MOMENT_MIN_WORDS, episodes_enabled_for
 from database import action_items as action_items_db
 from database import episodes as episodes_db
 from database import notifications as notification_db
@@ -111,11 +116,28 @@ def _named_segments(uid: str, segments: Sequence[Mapping[str, Any]], c: Collabor
 
 
 def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
+    return _new_episode(
+        conversation_id=moment.conversation_id,
+        started_at=moment.started_at,
+        last_activity_at=moment.ended_at,
+        calendar_identity=moment.calendar_identity,
+        now=now,
+    )
+
+
+def _new_episode(
+    *,
+    conversation_id: str,
+    started_at: datetime,
+    last_activity_at: datetime,
+    calendar_identity: Optional[str],
+    now: datetime,
+) -> dict[str, Any]:
     return {
         'id': episodes_db.new_episode_id(),
         'status': 'live',
-        'started_at': moment.started_at,
-        'last_activity_at': moment.ended_at,
+        'started_at': started_at,
+        'last_activity_at': last_activity_at,
         'closed_at': None,
         'close_reason': None,
         'title': '',
@@ -127,8 +149,9 @@ def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
         'conversation_ids': [],
         'sources': [],
         'applied': {},
-        'calendar_identity': moment.calendar_identity,
-        'primary_conversation_id': moment.conversation_id,
+        'calendar_identity': calendar_identity,
+        'pending_boundary': {},
+        'primary_conversation_id': conversation_id,
         'closing_conversation_id': None,
         'wrap_up_requested_at': None,
         'state_updated_at': None,
@@ -147,25 +170,163 @@ def _with_conversation(episode: Mapping[str, Any], conversation_id: str, source:
     return {'conversation_ids': ids, 'sources': sources}
 
 
-def _close(uid: str, episode: Mapping[str, Any], reason: str, c: Collaborators, *, now: datetime) -> None:
-    """Close once; resolve any provisional item still open as dropped (never a task)."""
+def _close(
+    uid: str,
+    episode: Mapping[str, Any],
+    reason: str,
+    c: Collaborators,
+    *,
+    now: datetime,
+    detach: Optional[str] = None,
+) -> None:
+    """Close once; resolve any provisional item still open as dropped (never a task).
+
+    ``detach`` removes a conversation that joined provisionally and turned out to
+    start the next occasion; its link is rewritten by the episode it opens.
+    """
     items = provisional_items(episode)
     dropped = 0
     for item in items:
-        if item.get('status') == 'provisional':
+        if item.get('status') == 'provisional' and item.get('conversation_id') != detach:
             item['status'] = 'dropped'
             dropped += 1
+    # A provisional join still unsettled at close stays with this episode (it joined on the cheap rules).
+    extra: dict[str, Any] = {'provisional_items': items, 'pending_boundary': {}}
+    if detach:
+        extra['conversation_ids'] = [cid for cid in episode.get('conversation_ids') or [] if cid != detach]
+        extra['provisional_items'] = [item for item in items if item.get('conversation_id') != detach]
     closed = episodes_db.close_episode(
         uid,
         str(episode['id']),
         reason,
-        closed_at=now,
-        extra={'provisional_items': items},
+        closed_at=_idle_closed_at(episode, now) if reason == 'idle' else now,
+        extra=extra,
         firestore_client=c.firestore_client,
     )
     if closed is not None:
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
+
+
+def _pending(episode: Optional[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Provisional joins awaiting their first moment, by conversation id."""
+    raw = (episode or {}).get('pending_boundary')
+    return {str(k): dict(v) for k, v in raw.items() if isinstance(v, Mapping)} if isinstance(raw, Mapping) else {}
+
+
+def _idle_closed_at(episode: Mapping[str, Any], now: datetime) -> datetime:
+    """An idle episode ended when its quiet reached the close gap, not when a later read noticed."""
+    last = policy.utc(episode.get('last_activity_at'))
+    return min(now, last + timedelta(seconds=CLOSE_GAP_SECONDS)) if last else now
+
+
+def _close_stale_current(
+    uid: str, episode: Optional[Mapping[str, Any]], conversation_id: str, c: Collaborators, now: datetime
+):
+    """Close an idle live episode, or one whose wrap-up is waiting on another conversation."""
+    if episode is not None and policy.idle_close_due(episode, now):
+        _close(uid, episode, 'idle', c, now=now)
+        return None
+    if episode and episode.get('wrap_up_requested_at') and conversation_id != episode.get('closing_conversation_id'):
+        # Speech after "Wrap up now" starts the next episode.
+        _close(uid, episode, 'user', c, now=now)
+        return None
+    return episode
+
+
+def attach_conversation(
+    uid: str,
+    conversation_id: str,
+    source: Optional[str],
+    *,
+    started_at: datetime,
+    collaborators: Optional[Collaborators] = None,
+) -> str:
+    """A conversation's first live speech joins or opens the live episode. No model call; never raises."""
+    c = collaborators or Collaborators()
+    if not episodes_enabled_for(uid) or not conversation_id:
+        return 'disabled'
+    outcome = 'conflict'
+    for _ in range(2):
+        try:
+            outcome = _attach_once(uid, conversation_id, source, started_at, c)
+        except episodes_db.EpisodeConflict:
+            outcome = 'conflict'
+            continue
+        except Exception as error:
+            logger.warning('event=episode_attach outcome=error exception_type=%s', type(error).__name__)
+            outcome = 'error'
+        break
+    return outcome
+
+
+def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_at: datetime, c: Collaborators) -> str:
+    now = _now(c)
+    episode = _close_stale_current(
+        uid, episodes_db.get_current_episode(uid, firestore_client=c.firestore_client), conversation_id, c, now
+    )
+    if episode and conversation_id in (episode.get('conversation_ids') or []):
+        return 'attached'
+    if episode is None and episodes_db.get_episode_for_conversation(
+        uid, conversation_id, firestore_client=c.firestore_client
+    ):
+        # Already owned by a closed episode (e.g. it finalized first): never reopen it.
+        return 'attached'
+    facts = policy.MomentFacts(
+        conversation_id=conversation_id,
+        source=source,
+        started_at=started_at,
+        ended_at=started_at,
+        calendar_identity=None,
+        speakers=frozenset(),
+    )
+    decision = policy.boundary(episode, facts)
+    if decision.action == 'close' and episode:
+        metrics.record_boundary('close')
+        _close(uid, episode, decision.reason or 'gap', c, now=now)
+        episode = None
+    if episode is None:
+        metrics.record_boundary('new')
+        base = _new_episode(
+            conversation_id=conversation_id,
+            started_at=started_at,
+            last_activity_at=started_at,
+            calendar_identity=None,
+            now=now,
+        )
+        episodes_db.commit_moment(
+            uid,
+            expected_episode_id=None,
+            expected_version=None,
+            new_episode={**base, **_with_conversation(base, conversation_id, source)},
+            link_conversation_ids=[conversation_id],
+            firestore_client=c.firestore_client,
+        )
+        return 'opened'
+    updates: dict[str, Any] = _with_conversation(episode, conversation_id, source)
+    if decision.parallel:
+        metrics.record_boundary('parallel')
+    else:
+        last = policy.utc(episode.get('last_activity_at'))
+        updates['last_activity_at'] = max(started_at, last) if last else started_at
+    if decision.action == policy.ASK:
+        # Join now so the app hides it under the live episode; its first moment asks Jev.
+        metrics.record_boundary('pending')
+        updates['pending_boundary'] = {
+            **_pending(episode),
+            conversation_id: {'gap_seconds': decision.gap_seconds or 0.0, 'source_changed': decision.source_changed},
+        }
+    elif not decision.parallel:
+        metrics.record_boundary('continue')
+    episodes_db.commit_moment(
+        uid,
+        expected_episode_id=str(episode['id']),
+        expected_version=episode.get('state_version'),
+        updates=updates,
+        link_conversation_ids=[conversation_id],
+        firestore_client=c.firestore_client,
+    )
+    return 'pending' if decision.action == policy.ASK else 'joined'
 
 
 def record_moment(uid: str, moment: MomentInput, collaborators: Optional[Collaborators] = None) -> str:
@@ -191,18 +352,9 @@ def record_moment(uid: str, moment: MomentInput, collaborators: Optional[Collabo
 
 def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
     now = _now(c)
-    episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
-    if episode is not None and policy.idle_close_due(episode, now):
-        _close(uid, episode, 'idle', c, now=now)
-        episode = None
-    elif (
-        episode
-        and episode.get('wrap_up_requested_at')
-        and (moment.conversation_id != episode.get('closing_conversation_id'))
-    ):
-        # Speech after "Wrap up now" starts the next episode.
-        _close(uid, episode, 'user', c, now=now)
-        episode = None
+    episode = _close_stale_current(
+        uid, episodes_db.get_current_episode(uid, firestore_client=c.firestore_client), moment.conversation_id, c, now
+    )
     applied_until = -1.0
     if episode and moment.conversation_id in (episode.get('conversation_ids') or []):
         applied_until = float((episode.get('applied') or {}).get(moment.conversation_id, -1.0))
@@ -224,6 +376,15 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         speakers=policy.speaker_keys(segments),
     )
     decision = policy.boundary(episode, facts)
+    pending = _pending(episode).get(moment.conversation_id)
+    if episode and pending is not None and decision.action == policy.CONTINUE:
+        # It joined provisionally at its first words; with its text in hand, settle it now.
+        decision = policy.Boundary(
+            policy.ASK,
+            gap_seconds=float(pending.get('gap_seconds') or 0.0),
+            source_changed=bool(pending.get('source_changed')),
+        )
+    detach = moment.conversation_id if pending is not None else None
     if decision.action == policy.ASK and episode:
         prior_speakers = frozenset(episode.get('speaker_keys') or [])
         p_same = incremental.ask_same_occasion(
@@ -244,7 +405,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
             metrics.record_boundary('jev_close')
     if decision.action == 'close' and episode:
         metrics.record_boundary('close')
-        _close(uid, episode, decision.reason or 'gap', c, now=now)
+        _close(uid, episode, decision.reason or 'gap', c, now=now, detach=detach)
         episode = None
     elif decision.action == policy.NEW:
         metrics.record_boundary('new')
@@ -288,6 +449,17 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         metrics.record_moment_update(
             trigger=moment.trigger, outcome=failure.outcome, latency_seconds=failure.latency_seconds
         )
+        if episode is None:
+            # The notes failed, the occasion did not: open it without notes (a split already closed
+            # the old one), so the live row and its hidden fragments survive until the next moment.
+            episodes_db.commit_moment(
+                uid,
+                expected_episode_id=None,
+                expected_version=None,
+                new_episode={**base, **_with_conversation(base, moment.conversation_id, moment.source)},
+                link_conversation_ids=[moment.conversation_id],
+                firestore_client=c.firestore_client,
+            )
         return failure.outcome
 
     end_offset = max((_segment_end(s) for s in segments), default=0.0)
@@ -334,6 +506,8 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         'last_activity_at': max(moment.ended_at, last_activity) if last_activity else moment.ended_at,
         'calendar_identity': base.get('calendar_identity') or moment.calendar_identity,
     }
+    if pending is not None:
+        updates['pending_boundary'] = {k: v for k, v in _pending(base).items() if k != moment.conversation_id}
     if episode is None:
         episodes_db.commit_moment(
             uid,

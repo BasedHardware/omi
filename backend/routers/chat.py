@@ -81,6 +81,7 @@ from utils.stt.streaming import get_stt_service_for_language, process_audio_modu
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
+from models.transcription_wire import TranscriptionOutcome as WireTranscriptionOutcome
 from config.stt_provider_policy import MODULATE_PROVIDER, STTServingSurface, provider_for_service
 from utils.stt.outcomes import TranscriptionFailure, bounded_provider, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
@@ -143,12 +144,14 @@ class VoiceMessageTranscriptionResponse(BaseModel):
     language: Optional[str] = None
     stt_provider: Optional[str] = None
     stt_model: Optional[str] = None
-    outcome: Optional[TranscriptionOutcome] = None
+    # Wire vocabulary frozen by the released app-client contract; internal-only
+    # outcome values map onto their public counterpart (models/transcription_wire).
+    outcome: Optional[WireTranscriptionOutcome] = None
 
 
 class TranscriptionErrorDetail(BaseModel):
     error: str
-    outcome: TranscriptionOutcome
+    outcome: WireTranscriptionOutcome
     provider: str
     retryable: bool
     message: str

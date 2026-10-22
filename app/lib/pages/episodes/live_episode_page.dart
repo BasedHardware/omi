@@ -299,7 +299,9 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
         context.select<CaptureProvider, int>((c) => c.segmentsPhotosVersion);
         final provider = context.read<CaptureProvider>();
         final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
-        final started = episode?.startedAt ?? now.subtract(EpisodePresentation.elapsed(null, provider, now));
+        final anchor = context.read<EpisodeProvider?>()?.liveAnchor;
+        final started =
+            episode?.startedAt ?? now.subtract(EpisodePresentation.elapsed(null, provider, now, anchor: anchor));
         // Named from the transcript's own speaker resolution, so the header and the lines agree.
         final participants = _participantsMemo(provider, people);
         final title = (episode?.title ?? '').trim().isEmpty ? l10n.episodeListeningNow : episode!.title;
@@ -330,7 +332,7 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                           builder: (context, time) => Text(
                             listening
                                 ? l10n.episodeLiveFor(EpisodePresentation.runningLength(
-                                    EpisodePresentation.elapsed(episode, provider, time), l10n))
+                                    EpisodePresentation.elapsed(episode, provider, time, anchor: anchor), l10n))
                                 : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
                             key: const Key('live_episode_status'),
                             style: meta.copyWith(

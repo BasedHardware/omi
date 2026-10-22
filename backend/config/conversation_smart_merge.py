@@ -96,7 +96,7 @@ ELIGIBLE_SOURCES = frozenset({'omi'})
 MERGE_THRESHOLD = 0.35
 
 # Ask only inside this gap window. The minimum is the live split itself
-# (``utils/conversation_continuity.DEFAULT_GAP_SECONDS``); both the recorded gap
+# (``models/conversation_continuity.DEFAULT_GAP_SECONDS``); both the recorded gap
 # and the speech gap must reach it, which also skips sync shards whose start
 # drifted. Above one hour only 2 of 9 pairs were continuations.
 MIN_GAP_SECONDS = 120

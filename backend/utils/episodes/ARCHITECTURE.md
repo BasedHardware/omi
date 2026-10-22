@@ -24,6 +24,16 @@ one capture window's evidence.
 1. `live.py` sees every batch of final segments through
    `utils.app_integrations._async_trigger_realtime_integrations` (pusher, or the
    listen fallback) and buffers them per user in process (TTL + size cap).
+   - **Structure first** (`service.attach_conversation`): a conversation's first
+     words attach it to the live episode by the cheap rules, with no model call.
+     The app gets the episode, its real start and its member conversations at
+     once, so live splits, short fragments and parallel captures hide under one
+     row instead of waiting for the first notes. An ambiguous gap joins
+     provisionally (`pending_boundary`); the conversation's first moment asks Jev
+     and, on a confident "moved on", splits it into the next episode.
+   - A moment also ends after `MOMENT_MAX_SECONDS` of steady speech (`interval`)
+     and when the pusher session closes (`session_end`), so continuous talk keeps
+     the notes current and a pod move or reconnect does not strand the buffer.
 2. When a moment ends, `service.record_moment` runs on `postprocess_executor` as
    a tracked background task:
    - **Boundary** (`policy.boundary`): the hard cap (`MAX_EPISODE_SECONDS`), a gap at
@@ -69,7 +79,8 @@ The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
   that conversation's finalization. That is the normal processing pass, run once
   through the client-finalize trigger. Without a conversation, it closes now.
 - A read that finds an episode idle for `CLOSE_GAP_SECONDS` closes it lazily
-  (`idle`). No scheduler is involved.
+  (`idle`), dated when the quiet reached the gap rather than when the read
+  happened. No scheduler is involved.
 
 ## Kill switch, cohort and client capability
 

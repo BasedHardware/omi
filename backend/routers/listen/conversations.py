@@ -26,9 +26,10 @@ from utils.live_speaker_carry import carried_receipt
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_listen_audio_outcome
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import quiet_finalization
 from utils.conversations.live_continuation import resolve_live_continuation
 from database.listen_continuations import calendar_continuity_row
-from utils.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
+from models.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.projection_payload import omit_null_processing_state
@@ -77,6 +78,24 @@ class LiveConversationController:
         self.host = host
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self._last_recording_session_lease_renewal: datetime | None = None
+
+    async def _persist_policy_and_arm_quiet_check(self, conversation_id: str) -> None:
+        await persist_conversation_policy(self.host, conversation_id)
+        if (
+            not getattr(self.host, 'is_multi_channel', False)
+            and normalize_listen_source(self.host.request.source) in {'omi', 'phone'}
+            and quiet_finalization.enabled()
+        ):
+            # Do not expose a new recording generation to ingress until its
+            # durable recovery obligation exists. Enqueue failure is safe: the
+            # check remains indexed for the independent reconciler.
+            await self.host.persistence.call(
+                quiet_finalization.arm,
+                self.host.request.uid,
+                conversation_id,
+                self.host.conversation_creation_timeout,
+                requires_byok=bool(get_byok_keys()),
+            )
 
     def note_audio_activity(self) -> None:
         """Renew the active recording fence at most once per minute."""
@@ -147,8 +166,8 @@ class LiveConversationController:
             return False
         self.host.recording_session_id = pointer['recording_session_id']
         self.host.batch_record_capture = capture_snapshot(existing)
+        await self._persist_policy_and_arm_quiet_check(binding['conversation_id'])
         self.host.state.current_conversation_id = binding['conversation_id']
-        await persist_conversation_policy(self.host, binding['conversation_id'])
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
         self._adopt_capture_timeline(binding['conversation_id'], (existing or {}).get('started_at'))
         if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
@@ -523,8 +542,8 @@ class LiveConversationController:
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
                 self.host.batch_record_capture = capture_snapshot(existing)
+                await self._persist_policy_and_arm_quiet_check(conversation_id)
                 self.host.state.current_conversation_id = conversation_id
-                await persist_conversation_policy(self.host, conversation_id)
                 self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
                 # Persist the custom-STT marker on resume so a conversation that
                 # started under normal STT but continues under custom STT keeps
@@ -662,8 +681,8 @@ class LiveConversationController:
         await self.host.persistence.call(redis_db.set_in_progress_conversation_id, request.uid, conversation_id)
         if source == ConversationSource.desktop and meeting:
             await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, meeting['id'])
+        await self._persist_policy_and_arm_quiet_check(conversation_id)
         self.host.state.current_conversation_id = conversation_id
-        await persist_conversation_policy(self.host, conversation_id)
         # Fresh v2 generation: the origin is pinned by the receiver at the
         # first accepted audio frame associated with this conversation.
         self._adopt_capture_timeline(conversation_id, None)
@@ -763,8 +782,8 @@ class LiveConversationController:
                 return None
             existing = current
         self.host.batch_record_capture = capture_snapshot(existing)
+        await self._persist_policy_and_arm_quiet_check(existing['id'])
         self.host.state.current_conversation_id = existing['id']
-        await persist_conversation_policy(self.host, existing['id'])
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
         self._adopt_capture_timeline(existing['id'], existing.get('started_at'))
         self.send_conversation_session(binding, self.host.recording_session_id)
