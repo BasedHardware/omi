@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, memo } from 'react';
+import { useEffect, useState, useRef, memo } from 'react';
 import { motion } from 'framer-motion';
 import { Star, Check, CheckSquare, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -40,6 +40,12 @@ export const ConversationTile = memo(function ConversationTile({
   const [isHovered, setIsHovered] = useState(false);
   // One star request at a time, so a failed one puts back the value it replaced
   const starRequestPending = useRef(false);
+
+  useEffect(() => {
+    if (!starRequestPending.current) {
+      setIsStarred(conversation.starred);
+    }
+  }, [conversation.starred]);
 
   const startedAt = new Date(conversation.started_at || conversation.created_at);
   const finishedAt = conversation.finished_at ? new Date(conversation.finished_at) : null;
