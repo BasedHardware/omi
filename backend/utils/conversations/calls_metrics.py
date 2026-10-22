@@ -32,6 +32,7 @@ _CHECKS = frozenset(
         'call_metadata',
         'recap_timing',
         'recap_pending',
+        'recap_not_generated',
         'recap_no_recordings',
         'recap_failed',
         'recap_generated',

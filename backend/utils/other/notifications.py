@@ -85,12 +85,8 @@ def _display_date_for_now(tz_name: Optional[str], at: Optional[datetime] = None)
 # queries on holes it cannot fill.
 _DECLINE_LOCKED = 'locked'
 _DECLINE_NO_CONVERSATIONS = 'no_conversations'
-# The window held conversations, but none this job may summarize (all ``is_locked``, none
-# carried transcript content, or nothing carried summary body content — titles alone).
-# Distinct from ``no_conversations`` because the owner *was*
-# active: their earlier days are worth walking back for, and the caller may say so.
+# Locked/thin input still proves activity, so older days remain worth backfilling.
 _DECLINE_NOTHING_TO_SUMMARIZE = 'nothing_to_summarize'
-# Public name for the one decline a caller outside this module has to act on differently.
 DAILY_SUMMARY_DECLINE_LOCKED = _DECLINE_LOCKED
 DAILY_SUMMARY_DECLINE_NO_CONVERSATIONS = _DECLINE_NO_CONVERSATIONS
 DAILY_SUMMARY_DECLINE_NOTHING_TO_SUMMARIZE = _DECLINE_NOTHING_TO_SUMMARIZE
@@ -868,7 +864,9 @@ def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) 
 
 
 def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
-    if not generated_compute_allowed(user_data[0], 'daily_summary'):
+    if not serving_for('CALLS_RECAP_MODE', user_data[0]) and not generated_compute_allowed(
+        user_data[0], 'daily_summary'
+    ):
         return
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None

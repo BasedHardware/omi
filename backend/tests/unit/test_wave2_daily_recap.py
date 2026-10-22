@@ -184,3 +184,26 @@ def test_content_kind_change_invalidates_existing_recap(producer, monkeypatch):
     assert generate()[0] is None
     assert producer.store['day']['status'] == 'no_recordings'
     assert producer.model.call_count == 1
+
+
+def test_budget_denied_day_records_not_generated_without_spending(producer, monkeypatch):
+    monkeypatch.setattr(notif, 'generated_compute_allowed', lambda *_: False)
+    result, created, declined = generate()
+    assert result is None and not created and declined == 'usage_budget_exhausted'
+    assert producer.store['day']['status'] == 'not_generated'
+    assert producer.store['day']['generated_at'] is None
+    producer.model.assert_not_called()
+
+
+def test_unchanged_empty_day_remains_dormant(producer):
+    producer.rows.clear()
+    generate()
+    assert generate()[2] == notif.DAILY_SUMMARY_DECLINE_NO_CONVERSATIONS
+
+
+def test_spend_denial_does_not_erase_an_already_generated_day(producer, monkeypatch):
+    original = generate()[0]
+    monkeypatch.setattr(notif, 'generated_compute_allowed', lambda *_: False)
+    assert generate()[0] == original
+    assert producer.store['day']['status'] == 'generated'
+    assert producer.store['day']['generated_at'] == original['generated_at']

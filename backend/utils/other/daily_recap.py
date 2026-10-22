@@ -87,8 +87,7 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
 
     if not serving_for(FLAG, uid):
         return legacy(uid, date_str, start_date_utc, end_date_utc, prepare_delivery=prepare_delivery)
-    if not n.generated_compute_allowed(uid, 'daily_summary'):
-        return None, False, 'usage_budget_exhausted'
+    compute_allowed = n.generated_compute_allowed(uid, 'daily_summary')
     if not n.try_acquire_daily_summary_lock(uid, date_str):
         return None, False, n.DAILY_SUMMARY_DECLINE_LOCKED
     existing = None
@@ -96,6 +95,11 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
     try:
         existing = n.daily_summaries_db.get_daily_summary_by_date(uid, date_str)
         looked_up = True
+        if not compute_allowed:
+            if existing and existing.get('status') == 'generated':
+                return existing, False, 'usage_budget_exhausted'
+            _state(n, uid, date_str, existing, 'not_generated')
+            return None, False, 'usage_budget_exhausted'
         now = datetime.now(timezone.utc)
         if now < end_date_utc + GRACE:
             _state(n, uid, date_str, existing, 'pending')
@@ -112,7 +116,9 @@ def generate(uid, date_str, start_date_utc, end_date_utc, *, legacy, prepare_del
             and existing.get('status') in ('generated', 'no_recordings')
             and existing.get(FINGERPRINT_FIELD) == fingerprint
         ):
-            return (existing if existing['status'] == 'generated' else None), False, None
+            if existing['status'] == 'no_recordings':
+                return None, False, n.DAILY_SUMMARY_DECLINE_NO_CONVERSATIONS
+            return existing, False, None
         if not rows:
             _state(n, uid, date_str, existing, 'no_recordings', fingerprint)
             return None, False, n.DAILY_SUMMARY_DECLINE_NO_CONVERSATIONS
