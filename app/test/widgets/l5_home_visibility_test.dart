@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/pages/conversations/live_episode_visibility.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/env/env.dart';
@@ -77,6 +78,23 @@ void main() {
   setUpAll(() async {
     Env.init(const _EnvFields());
     await _loadFonts();
+  });
+  test('serving Home hides in-progress, processing and merging until a terminal outcome', () {
+    final statuses = [
+      ConversationStatus.in_progress,
+      ConversationStatus.processing,
+      ConversationStatus.merging,
+      ConversationStatus.completed,
+      ConversationStatus.failed
+    ];
+    final rows = [
+      for (final status in statuses)
+        ServerConversation(
+            id: status.name, createdAt: DateTime.utc(2026), structured: Structured('Synthetic', ''), status: status)
+    ];
+    final ids = rows.map((row) => row.id).toSet();
+    expect(hiddenLiveConversations(ids, rows, serving: false), ids);
+    expect(hiddenLiveConversations(ids, rows, serving: true), {'in_progress', 'processing', 'merging'});
   });
   for (final serving in [false, true]) {
     testWidgets('real Home keeps finished episode rows and highlights (serve=$serving)', (tester) async {

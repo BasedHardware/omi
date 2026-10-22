@@ -118,3 +118,16 @@ async def test_runtime_emits_the_contract_event_as_socket_json():
     wire = socket.send_json.await_args.args[0]
     assert wire == event.model_dump(mode='json')
     assert wire['type'] == 'capture_committed'
+
+
+@pytest.mark.asyncio
+async def test_optional_publication_failure_does_not_fail_an_already_durable_flush(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock
+
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    host = SimpleNamespace(
+        request=SimpleNamespace(uid='synthetic'),
+        persistence=SimpleNamespace(call=AsyncMock(side_effect=RuntimeError('unavailable'))),
+    )
+    await coverage.publish_committed(host, 'synthetic', snapshot())

@@ -10,9 +10,13 @@ def teaching_segment_ids_for_deleted_sample(person: Optional[dict], conversation
     if not person or not conversation_id:
         return []
     if person.get('person_voice_confirmations') is not None:
+        entries = [
+            *person['person_voice_confirmations'],
+            {'source': (person.get('person_voice_base') or {}).get('source') or {}},
+        ]
         return [
             str(sid)
-            for entry in person['person_voice_confirmations']
+            for entry in entries
             if entry.get('source', {}).get('conversation_id') == conversation_id
             for sid in entry['source'].get('segment_ids') or []
             if sid

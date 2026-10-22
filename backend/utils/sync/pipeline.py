@@ -2609,6 +2609,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     capture_evidence_claims,
                     wav_paths,
                     decoded_frames,
+                    cleanup_paths=safety_coverage_paths,
                     run_blocking=run_blocking,
                     db_executor=db_executor,
                     storage_executor=storage_executor,

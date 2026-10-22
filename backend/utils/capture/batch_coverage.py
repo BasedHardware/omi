@@ -186,7 +186,7 @@ def record_projection(uid, incoming, assigned, manifest, *, capture_at, survivor
 
 def optional_manifest(projector, item, hint):
     """Provider units carry the same authenticated context as GPU units."""
-    if not refactor_modes.shadow_or_serve(coverage.FLAG) or projector.fetch_audio is None:
+    if not refactor_modes.shadow_or_serve(coverage.FLAG):
         return None
     from utils.batch_pipeline.audio import read_context
 
@@ -194,6 +194,9 @@ def optional_manifest(projector, item, hint):
         prefetched = hint.prefetched if hint is not None else None
         if prefetched is not None and prefetched.manifest is not None:
             return prefetched.manifest
+        # Shadow may reuse work already paid for, never download a whole WAV.
+        if not refactor_modes.serving_for(coverage.FLAG, item.owner_id) or projector.fetch_audio is None:
+            return None
         return read_context(projector.fetch_audio(item))
     except Exception as error:
         failed('batch_manifest', error)

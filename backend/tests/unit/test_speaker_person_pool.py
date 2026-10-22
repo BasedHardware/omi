@@ -85,3 +85,39 @@ def test_manual_correction_retracts_donor_contribution_without_erasing_other_sam
     )
     assert updates['p']['speaker_embedding'] == [0, 1]
     assert removed == ['donor.wav']
+
+
+def test_legacy_multisample_provenance_is_retained_and_sample_removal_keeps_remaining_source():
+    from utils.speakers.person_pool import remove_sample
+
+    legacy = {
+        **profile('legacy', [1, 0]),
+        'speech_samples_version': 3,
+        'speech_samples': ['old-a.wav', 'old-b.wav'],
+        'speech_sample_transcripts': ['', ''],
+    }
+    pooled, removed = pool_profile(legacy, profile('new', [0, 1]))
+    assert removed == []
+    assert pooled['speech_samples'] == ['old-a.wav', 'old-b.wav', 'new.wav']
+    remaining = remove_sample(pooled, 'new.wav')
+    assert remaining['speech_sample_source'] == legacy['speech_sample_source']
+    assert remaining['speaker_embedding'] == [1, 0]
+
+
+def test_migrated_legacy_aggregate_retracts_and_replaces_as_one_conversation_contribution():
+    legacy = {
+        **profile('legacy', [1, 0]),
+        'speech_samples_version': 3,
+        'speech_samples': ['old-a.wav', 'old-b.wav'],
+        'speech_sample_transcripts': ['', ''],
+    }
+    pooled, _ = pool_profile(legacy, profile('new', [0, 1]))
+    from utils.speech_profile_deletion import teaching_segment_ids_for_deleted_sample
+
+    assert teaching_segment_ids_for_deleted_sample(pooled, 'legacy') == ['s']
+    undone, removed = retract_profile(pooled, ['legacy'], ['s'])
+    assert undone['speaker_embedding'] == [0, 1]
+    assert set(removed) == {'old-a.wav', 'old-b.wav'}
+    replaced, removed = pool_profile(legacy, profile('legacy', [0, 1]))
+    assert replaced['speaker_embedding'] == [0, 1]
+    assert set(removed) == {'old-a.wav', 'old-b.wav'}

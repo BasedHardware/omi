@@ -93,6 +93,19 @@ final class ClientCaptureRefactorTests: XCTestCase {
       MeetingConversationBoundaryPolicy.transition(previousRole: .ambient, meetingActive: true)?.nextRole, .meeting)
   }
 
+  func testContinuationMissingFinishUsesLastSegmentEndAndPreservesExplicitFinish() {
+    let start = Date(timeIntervalSince1970: 100)
+    XCTAssertEqual(
+      SegmentContinuationUpload.finishedAt(
+        startedAt: start, finishedAt: nil,
+        segmentEnds: [0.5, 3, 2, .nan]), start.addingTimeInterval(3))
+    XCTAssertEqual(
+      SegmentContinuationUpload.finishedAt(
+        startedAt: start, finishedAt: start.addingTimeInterval(5),
+        segmentEnds: [3]), start.addingTimeInterval(5))
+    XCTAssertNil(SegmentContinuationUpload.finishedAt(startedAt: start, finishedAt: nil, segmentEnds: []))
+  }
+
   private func record(id: String, isUser: Bool = false, person: String? = nil) -> TranscriptionSegmentRecord {
     TranscriptionSegmentRecord(
       sessionId: 1, speaker: 0, text: "synthetic", startTime: 0, endTime: 1,

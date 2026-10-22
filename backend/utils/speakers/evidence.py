@@ -6,6 +6,7 @@ names remain low-prior hypotheses, including when there is exactly one attendee.
 
 from collections import defaultdict
 import heapq
+import logging
 from math import isfinite
 from typing import Any, Mapping, Sequence
 
@@ -35,6 +36,7 @@ _COHORT_ENV = dict(
     percent='SPEAKER_EVIDENCE_MODE_SERVE_PERCENT',
     digests='SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S',
 )
+logger = logging.getLogger(__name__)
 FLAG = _COHORT_ENV['mode']
 assert _COHORT_ENV['percent'] == f'{FLAG}_SERVE_PERCENT'
 assert _COHORT_ENV['digests'] == f'{FLAG}_SERVE_UID_SHA256S'
@@ -44,7 +46,25 @@ MAX_SIMILARITIES = 256
 
 
 def get_evidence(uid: str, conversation_id: str) -> SpeakerEvidence | None:
-    return storage.get_evidence(uid, conversation_id) if shadow_or_serve(FLAG) else None
+    if not shadow_or_serve(FLAG):
+        return None
+    try:
+        return storage.get_evidence(uid, conversation_id)
+    except Exception as error:
+        # Corrupt evidence cannot prevent notes using the transcript. Storage's
+        # strict read boundary still records malformed payload diagnostics.
+        from utils.observability.fallback import record_fallback
+
+        logger.warning('event=speaker_evidence_read outcome=error exception_type=%s', type(error).__name__)
+        record_fallback(
+            component='other',
+            from_mode='speaker_evidence',
+            to_mode='existing_labels',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return None
 
 
 def _get(value: Any, key: str, default: Any = None) -> Any:
@@ -214,6 +234,9 @@ def project_labels(evidence: SpeakerEvidence, receipt: Mapping) -> dict[str, tup
         for sid in cluster.segment_ids:
             current = {'id': sid, 'speaker_id': cluster.speaker_id, 'speaker_id_scope': cluster.speaker_id_scope}
             decision = _manual_decision(current, metadata.get(sid, current), receipt, rejected)
+            # Abstention is no new decision: preserve existing labels and status.
+            if accepted is None and decision is None:
+                continue
             automatic = {
                 **current,
                 'is_user': bool(accepted and accepted.person_id == OWNER),

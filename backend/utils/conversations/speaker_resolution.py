@@ -1,8 +1,6 @@
 """Resolve stored conversation audio before processing reads speaker identity.
-
-Capture IDs restart across providers and uploads. Verified clips feed the pure
-conversation resolver; encrypted cached embeddings bound repeated work. Missing
-or untrusted audio abstains, and manual receipts govern every projection.
+Capture IDs restart across providers and uploads; the pure resolver unifies them.
+Encrypted embeddings bound repeat work; missing audio abstains and manual receipts govern projections.
 """
 
 from __future__ import annotations
@@ -667,6 +665,7 @@ def _verified_read_session(
                     if (window := placement.window) is not None
                 )
             ):
+                # refactor: superseded by per-window evidence when SPEAKER_EVIDENCE_MODE=serve
                 resolver_reason('decoded_overlap')
                 return None
     for segment in pending:
@@ -950,6 +949,7 @@ def resolve_speakers_for_processing(
                         if segment.speaker_match_source != 'batch_abstention'
                     ]
                 )
+        # refactor: superseded by per-window evidence when SPEAKER_EVIDENCE_MODE=serve
         final_record = (batch_record and not serving_for('SPEAKER_EVIDENCE_MODE', uid)) or (
             not batch_record
             and authoritative_for(uid)

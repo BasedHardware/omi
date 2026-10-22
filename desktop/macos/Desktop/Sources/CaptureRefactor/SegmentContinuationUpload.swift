@@ -33,6 +33,12 @@ extension APIClient {
 }
 
 enum SegmentContinuationUpload {
+  static func finishedAt(startedAt: Date, finishedAt: Date?, segmentEnds: [Double]) -> Date? {
+    if let finishedAt { return finishedAt }
+    guard let end = segmentEnds.filter({ $0.isFinite && $0 > 0 }).max() else { return nil }
+    return startedAt.addingTimeInterval(end)
+  }
+
   static func chunks<T>(_ segments: [T]) -> [[T]] {
     stride(from: 0, to: segments.count, by: 500).map { Array(segments[$0..<min($0 + 500, segments.count)]) }
   }

@@ -2,11 +2,14 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/services/experiments/client_refactor_flags.dart';
 
-/// A live episode replaces only an in-progress conversation. Finished rows,
+/// A live episode replaces unfinished conversations. Finished rows,
 /// including highlights, become available without waiting for the episode to close.
 Set<String> hiddenLiveConversations(Set<String> episodeIds, Iterable<ServerConversation> conversations,
     {required bool serving}) {
-  final inProgress = conversations.where((c) => c.status == ConversationStatus.in_progress).map((c) => c.id).toSet();
+  final inProgress = conversations
+      .where((c) => c.status != ConversationStatus.completed && c.status != ConversationStatus.failed)
+      .map((c) => c.id)
+      .toSet();
   final hidden = episodeIds.intersection(inProgress);
   ClientRefactorFlags.compare('home_visibility', hidden.length == episodeIds.length);
   // refactor: superseded by live_episode_visibility when clients_refactor=serve

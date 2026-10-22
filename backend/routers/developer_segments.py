@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any, Callable, cast
 
@@ -43,7 +44,8 @@ def observe(check: str, outcome: str) -> None:
     else:
         outcome = 'error'
         counter = SHADOW.labels(check=check, outcome='error')
-    logger.info('event=refactor_shadow lane=L5 check=%s outcome=%s', check, outcome)
+    if outcome != 'agree':
+        logger.info('event=refactor_shadow lane=L5 check=%s outcome=%s', check, outcome)
     counter.inc()
 
 
@@ -87,6 +89,16 @@ def stage_chunk(
     """
     if request.chunk_index is None or request.chunk_count is None or not request.client_session_id:
         raise HTTPException(status_code=422, detail='Incomplete continuation metadata')
+    # Reject malformed frozen input before persisting any constituent chunk.
+    for segment in request.transcript_segments:
+        if (
+            not math.isfinite(segment.start)
+            or not math.isfinite(segment.end)
+            or segment.start < 0
+            or segment.end <= segment.start
+            or not segment.text.strip()
+        ):
+            raise HTTPException(status_code=422, detail='Invalid transcript segment')
     client: Any = firestore_client if firestore_client is not None else get_firestore_client()
     user = client.collection('users').document(uid)
     chunks = user.collection('from_segments_chunks')

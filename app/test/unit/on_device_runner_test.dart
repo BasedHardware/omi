@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/on_device/on_device_engine.dart';
 import 'package:omi/services/on_device/on_device_runner.dart';
+import 'package:omi/services/on_device/on_device_segment_snapshot.dart';
 import 'package:omi/services/on_device/on_device_projection.dart';
 import 'package:omi/services/on_device/on_device_provenance.dart';
 import 'package:omi/services/on_device/on_device_settings.dart';
@@ -237,6 +238,74 @@ void main() {
     controller.dispose();
   });
 
+  for (final count in [10, 501]) {
+    test('disabled continuation terminalizes prepared input once without speech or upload ($count)', () async {
+      await setRefactorFlags({'clients_from_segments_chunks': false});
+      final file = await recording(frames: 100);
+      final prepared = OnDeviceSegmentSnapshot(
+          segments: List.generate(
+              count,
+              (i) => TranscriptSegment(
+                  id: '$i',
+                  text: 'synthetic',
+                  speaker: 'SPEAKER_00',
+                  isUser: false,
+                  personId: null,
+                  translations: const [],
+                  start: i.toDouble(),
+                  end: i + .5)),
+          duration: count.toDouble(),
+          language: 'en',
+          engine: 'synthetic',
+          projection: null);
+      final wal = Wal(
+          timerStart: 1700000000,
+          codec: BleAudioCodec.pcm16,
+          seconds: 1,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+          filePath: 'synthetic.bin',
+          onDeviceOnly: true,
+          onDevicePreparedUpload: prepared.toJson());
+      var saves = 0;
+      final sync = LocalWalSyncImpl(_Listener(), persistWals: (_) async {
+        saves++;
+      })
+        ..testWals = [wal];
+      final controller = OnDeviceTranscriptionController(model: FakeOnDeviceModel(), power: FakePhonePowerSource())
+        ..debugActivate();
+      addTearDown(controller.dispose);
+      await controller.model.remove();
+      var modelCalls = 0, sends = 0;
+      final runner = OnDeviceRunner(
+          sync: sync,
+          controller: controller,
+          publish: (_) {},
+          transcribeChunk: (_, __) async {
+            modelCalls++;
+            throw StateError('must not recognize');
+          },
+          send: (_) async {
+            sends++;
+            return http.Response('', 503);
+          });
+      addTearDown(runner.dispose);
+      await runner.run(transcribeNow: true);
+      expect(runner.lastError, 'continuation_disabled');
+      expect(wal.status, WalStatus.uploadRejected);
+      expect(wal.onDevicePreparedUpload, isNull);
+      expect(wal.onDeviceUploadFailure, 'continuation_disabled');
+      final restored = Wal.fromJson(jsonDecode(jsonEncode(wal.toJson())) as Map<String, dynamic>);
+      expect(restored.onDeviceUploadFailure, 'continuation_disabled');
+      expect(restored.status, WalStatus.uploadRejected);
+      final saved = saves;
+      await runner.run(transcribeNow: true);
+      expect(saves, saved);
+      expect(modelCalls, 0);
+      expect(sends, 0);
+      expect(await file.exists(), isTrue);
+    });
+  }
   test('continuation restart reuses the durable transcript without rerunning speech', () async {
     await setRefactorFlags({'clients_from_segments_chunks': true});
     await recording(frames: 100);
