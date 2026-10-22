@@ -758,6 +758,28 @@ def expected_cloud_run_env(
             if not (isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']):
                 continue
             key = entry['name']
+            # The renderer emits each manifest binding with the source type its
+            # section declares: `env` bindings as literals, `secrets` bindings
+            # as valueFrom.secretKeyRef. A rendered entry whose source type
+            # contradicts its section (a manifest env literal rendered as
+            # secretKeyRef, or a manifest secret rendered as a literal) is not
+            # renderer output; adopting its hash would let a corrupted state
+            # plus a serving revision carrying the same invalid source report
+            # OK. Validate the source type before adopting.
+            if rendered_state_path is not None:
+                rendered_is_secret = isinstance((entry.get('valueFrom') or {}).get('secretKeyRef'), Mapping)
+                if key in secrets_map and not rendered_is_secret:
+                    raise ValueError(
+                        f'Rendered state {rendered_state_path} entry for {key!r} on service '
+                        f'{service_name!r} is a literal, but the manifest binds it as a secret; '
+                        'the renderer emits secrets bindings as valueFrom.secretKeyRef'
+                    )
+                if key in env_map and rendered_is_secret:
+                    raise ValueError(
+                        f'Rendered state {rendered_state_path} entry for {key!r} on service '
+                        f'{service_name!r} is a secretKeyRef, but the manifest binds it as an env '
+                        'literal; the renderer emits env bindings as values'
+                    )
             # The renderer resolves deploy-time bindings but cannot legitimately
             # alter a manifest-owned literal or fixed ``secret`` reference: a
             # state generated from an older commit or another environment would
@@ -787,6 +809,16 @@ def expected_cloud_run_env(
                 service_canonical[key] = _secret_ref_form(
                     str(secret_ref.get('name', '')), str(secret_ref.get('key', ''))
                 )
+        # The sync-backfill worker deploys through an overlay the renderer
+        # cannot see (sync-backfill-lifecycle rewrites these to the worker
+        # service's own URL after the shared render): the rendered state's
+        # values for them are never what reaches Cloud Run, so comparing them
+        # would report value drift for a correct deployment. Degrade to
+        # name-only (presence still required) for that service.
+        if service_name.endswith('-sync-backfill'):
+            for overlay_key in ('SYNC_TASKS_HANDLER_URL', 'SYNC_TASKS_OIDC_AUDIENCE'):
+                if overlay_key in service_expected:
+                    service_expected[overlay_key] = None
         expected[str(service_name)] = service_expected
         if canonical_secret_hashes is not None:
             canonical_secret_hashes[str(service_name)] = service_canonical

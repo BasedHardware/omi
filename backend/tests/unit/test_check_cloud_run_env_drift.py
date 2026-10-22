@@ -2613,6 +2613,155 @@ def test_gke_live_template_envfrom_lookup_failure_does_not_mask_serving(checker)
     assert result.status == 'INVENTORY'
 
 
+def test_rendered_state_rejects_source_type_swaps(checker, tmp_path: Path) -> None:
+    # Thread: a corrupted rendered state could represent a manifest env literal
+    # as valueFrom.secretKeyRef (or a manifest secrets binding as a literal).
+    # Deploy-time env_var bindings have no manifest hash to contradict, so the
+    # swap bypassed the contradiction check entirely and a serving revision
+    # carrying the same invalid source reported OK. The renderer emits each
+    # section with its own source type; validate before adopting the hash.
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend': {
+                            'env': {'DEPLOY_RESOLVED': {'env_var': 'DEPLOY_RESOLVED_FOR_TEST'}},
+                            'secrets': {'A_SECRET': {'secret': 'some-secret', 'version': 'latest'}},
+                        }
+                    }
+                },
+            }
+        },
+    }
+    path = tmp_path / 'm.yaml'
+    path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+
+    # Env binding rendered as a secretKeyRef: rejected.
+    swapped = tmp_path / 'swapped.json'
+    swapped.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {
+                        'env': [
+                            {'name': 'DEPLOY_RESOLVED', 'valueFrom': {'secretKeyRef': {'name': 's', 'key': 'k'}}},
+                            {
+                                'name': 'A_SECRET',
+                                'valueFrom': {'secretKeyRef': {'name': 'some-secret', 'key': 'A_SECRET'}},
+                            },
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    with pytest.raises(ValueError, match='is a secretKeyRef, but the manifest binds it as an env'):
+        checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=swapped)
+
+    # Secrets binding rendered as a literal: rejected.
+    as_literal = tmp_path / 'as_literal.json'
+    as_literal.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {
+                        'env': [
+                            {'name': 'DEPLOY_RESOLVED', 'value': 'resolved'},
+                            {'name': 'A_SECRET', 'value': 'leaked-literal'},
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    with pytest.raises(ValueError, match='is a literal, but the manifest binds it as a secret'):
+        checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=as_literal)
+
+    # The legitimate shapes still pass: env binding as a literal, secret as
+    # secretKeyRef (the renderer emits key=str(version)).
+    valid = tmp_path / 'valid.json'
+    valid.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {
+                        'env': [
+                            {'name': 'DEPLOY_RESOLVED', 'value': 'resolved'},
+                            {
+                                'name': 'A_SECRET',
+                                'valueFrom': {'secretKeyRef': {'name': 'some-secret', 'key': 'latest'}},
+                            },
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    _p, _r, expected = checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=valid)
+    assert set(expected['backend']) == {'DEPLOY_RESOLVED', 'A_SECRET'}
+
+
+def test_backfill_overlay_bindings_are_name_only(checker, tmp_path: Path) -> None:
+    # Thread: sync-backfill-lifecycle rewrites SYNC_TASKS_HANDLER_URL and
+    # SYNC_TASKS_OIDC_AUDIENCE to the backfill service's own URL after the
+    # shared render, so the rendered state's values for them are never what
+    # reaches Cloud Run on backend-sync-backfill — comparing them reported
+    # value drift for a correct deployment. Those keys are name-only for
+    # -sync-backfill services (presence still required).
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend-sync-backfill': {
+                            'env': {
+                                'PLAIN': {'value': 'p'},
+                                'SYNC_TASKS_HANDLER_URL': {'env_var': 'SYNC_TASKS_HANDLER_URL'},
+                                'SYNC_TASKS_OIDC_AUDIENCE': {'env_var': 'SYNC_TASKS_HANDLER_URL'},
+                            }
+                        }
+                    }
+                },
+            }
+        },
+    }
+    path = tmp_path / 'm.yaml'
+    path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    rendered = tmp_path / 'state.json'
+    rendered.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend-sync-backfill': {
+                        'env': [
+                            {'name': 'PLAIN', 'value': 'p'},
+                            {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://backend-sync-.../run'},
+                            {'name': 'SYNC_TASKS_OIDC_AUDIENCE', 'value': 'https://backend-sync-.../run'},
+                        ]
+                    }
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    _p, _r, expected = checker.expected_cloud_run_env(env='prod', manifest_path=path, rendered_state_path=rendered)
+    service = expected['backend-sync-backfill']
+    # Presence still required; the values are unprovable through the overlay.
+    assert service['SYNC_TASKS_HANDLER_URL'] is None
+    assert service['SYNC_TASKS_OIDC_AUDIENCE'] is None
+    assert service['PLAIN'] == checker.value_hash('value', 'p')
+
+
 def test_sensitive_key_detection_is_case_insensitive(checker) -> None:
     # Thread: the sensitive-name regex was case-sensitive, so lowercase or
     # mixed-case names (api_key, dbPassword) published a deterministic digest
