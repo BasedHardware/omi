@@ -19,6 +19,9 @@ class _LoadedTaskIntegrationProvider extends TaskIntegrationProvider {
 Future<Widget> buildTypedActionItemsScreen(ActionItemsProvider provider) async {
   SharedPreferences.setMockInitialValues({});
   await SharedPreferencesUtil.init();
+  // Own any real loopback reads in the caller's runAsync setup, before widget fake time.
+  // The production composition now also owns the Suggestions projection.
+  await provider.suggestions?.load();
 
   return MaterialApp(
     localizationsDelegates: AppLocalizations.localizationsDelegates,

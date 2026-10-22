@@ -285,7 +285,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   /// The `trial` arm's placement: once, right after sign-up and consent, before the first step.
-  /// Dismissing it ("Continue with the free plan") just continues onboarding.
+  /// Dismissing it (close button) just continues onboarding.
   Future<void> _maybeShowSignupPaywall() async {
     if (_signupPaywallShown) return;
     final config = await PaywallExperiment.resolve();

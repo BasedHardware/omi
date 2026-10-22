@@ -13390,9 +13390,6 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Jätka tasuta plaaniga';
-
-  @override
   String get paywallTrialCancelNote => 'Tühista igal ajal. Ei mingeid tasusid ega trahve.';
 
   @override
@@ -14377,4 +14374,105 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi salvestab edasi';
+
+  @override
+  String get episodeNow => 'Praegu';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Otse · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hetke',
+      one: '1 hetk',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Hetked';
+
+  @override
+  String get episodeSoFar => 'Seni';
+
+  @override
+  String get episodeUpdatedJustNow => 'Uuendatud just praegu · täielikud märkmed lõpus';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Uuendatud $minutes min tagasi · täielikud märkmed lõpus';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Märkmed ilmuvad pärast esimesi vestlusminuteid.';
+
+  @override
+  String get episodeOpenAll => 'Ava kõik';
+
+  @override
+  String get episodeWrapUpNow => 'Lõpeta kohe';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi lõpetab selle, kui liigud edasi';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Ülesanne tabatud: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Meeldetuletus tabatud: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Ülesanne salvestatud: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'lisatakse $duration sinu Omist';
+  }
+
+  @override
+  String get episodeListeningNow => 'Kuulab praegu';
+
+  @override
+  String get deviceHeardToday => 'Täna kuuldud';
+
+  @override
+  String get deviceToSync => 'sünkroonida';
+
+  @override
+  String get deviceRightNow => 'Praegu';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Otseepisood · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Järele jõudmas';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done / $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Hiljuti';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Ühendus puudus $duration';
+  }
+
+  @override
+  String get deviceControls => 'Juhtimine';
 }

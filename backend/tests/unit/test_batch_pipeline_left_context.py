@@ -171,6 +171,7 @@ def run(units, audio, spans, *, worker=None, ctx=8, flights=None, devices=None):
     blobs = {u.segment_id: staged(u, audio[u.segment_id], **(devices or {}).get(u.segment_id, {})) for u in units}
     source = StagedAudio(lambda work: blobs[work.segment_id])
     worker = worker or PipelineWorker(
+        language_of=lambda item: 'en',
         decode=source.decode,
         stream_of=source.stream,
         vad=lambda samples: spans[int(samples[0] * 100)],
@@ -230,6 +231,7 @@ def test_without_a_stream_identity_no_context_attaches():
     units = [item('p', 100, 10), item('s', 110, 10)]
     saved = {}
     worker = PipelineWorker(
+        language_of=lambda item: 'en',
         decode=lambda work: AUDIO[work.segment_id],  # no staged intake context
         vad=lambda samples: SPANS[int(samples[0] * 100)],
         words_providers={'parakeet': Words()},
@@ -258,6 +260,7 @@ def test_prefix_only_words_leave_the_unit_empty_asr():
     units = [item('p', 100, 10), item('s', 110, 10)]
     source = StagedAudio(lambda work: staged(work, AUDIO[work.segment_id]))
     worker = PipelineWorker(
+        language_of=lambda item: 'en',
         decode=source.decode,
         stream_of=source.stream,
         vad=lambda samples: SPANS[int(samples[0] * 100)],

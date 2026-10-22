@@ -48,14 +48,27 @@ on:
         description: 'Why the live capacity gate is unavailable (required with skip_live_capacity_gate)'
         required: false
         default: ''
+      break_glass_lock:
+        description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
+        required: false
+        default: false
+        type: boolean
 
 # The LLM Gateway path reapplies shared backend-secrets; standalone pusher only
 # mutates its own GKE release and therefore keeps a separate environment lock.
+# B5 (named by David, 2026-10-19 fourth round #9): every prod deploy writer shares the
+# prod-train lock, so trains, config-trains and GPU/listen deploys never overlap and the
+# ramp controller can refuse while one runs (backend/scripts/prod_train_lock.py).
+# Break-glass keeps the pre-B5 per-target lock. Development groups are unchanged.
 concurrency:
-  group: ${{ (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: ${{ github.event.inputs.service || 'pusher' }}
   REGION: us-central1
 
@@ -138,6 +151,8 @@ jobs:
             echo "Production Pusher requires a numeric successful development qualification run ID." >&2
             exit 1
           fi
+          # The promotion contract fingerprint reads the Pusher slice of runtime_env.yaml.
+          python3 -m pip install -q pyyaml
           QUALIFICATION_DIR="$RUNNER_TEMP/pusher-dev-qualification-$QUALIFICATION_RUN_ID"
           mkdir -p "$QUALIFICATION_DIR"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$QUALIFICATION_RUN_ID" > "$QUALIFICATION_DIR/run.json"

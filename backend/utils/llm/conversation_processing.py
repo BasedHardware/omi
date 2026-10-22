@@ -24,6 +24,7 @@ from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
 from models.structured import ActionItem, Event, Structured
 from models.structured_extraction import (
+    AgentNotesSubmission,
     RichStructuredExtraction,
     StructuredExtraction,
 )
@@ -65,6 +66,11 @@ from utils.llm.meeting_notes_validation import (
     validate_structured_source_segment_ids,
 )
 from utils.llm.notes_observability import current_run, observe_notes
+
+try:
+    from utils.llm.notes_agent_serving import agentic_notes_payload as _serve_agentic_notes
+except ImportError:  # pragma: no cover - file-loading harnesses exec this module with stubbed packages
+    _serve_agentic_notes = None
 from utils.llm.shaped_agent import Budget, Mount, Turn, route_for_uid, run_loop
 from utils.llm.shaped_notes_transport import isolated_notes_model
 from utils.llm.model_config import FOREGROUND_REQUEST_TIMEOUT_SECONDS
@@ -281,6 +287,34 @@ def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
 # Notes must use the foreground structure budget, not the gateway's background
 # first-byte deadline. The owning feature route declares it in model_config.
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
+# The notes run_loop deadline is the transport's whole recovery budget, not one
+# attempt. The conv_structure model client already enforces the per-attempt
+# deadline above — the seam this class's earlier fixes designated — and the
+# direct lane retries once, so a loop deadline equal to a single attempt fired
+# while that attempt or its retry was still in flight and ended whole-transcript
+# structuring as a bare TimeoutError (2026-10-18 prod: asyncio/timeouts.py:115
+# surfacing at _get_structured's llm_input_dedupe.notes call).
+#
+# The route, not this loop, owns the client-visible cut on synchronous
+# create/reprocess: 2x60s of transport recovery plus the auth/db preamble does
+# not fit the middleware's 120s default, and EPISODE_DEADLINES.md keeps sync at
+# one 60s attempt with extended recovery owned by the durable finalizer's 1500s
+# lease — the lane where this whole budget actually fits. Never shrink this
+# deadline to "reserve headroom" under the route budget: that would preempt the
+# retry again on that lease and resurrect this error group there. A sync request
+# that outruns the middleware gets a 504 on the response only — the handler runs
+# on a threadpool thread and the notes loop on its own asyncio.run loop, so the
+# recovery finishes after the 504 — with the processing_admission_guard orphan
+# sweep as the crash floor. messaging.summarize sizes its mount by the same
+# per-attempt multiplier method, at 2x its lane's per-attempt deadline.
+#
+# The recovery budget is strictly more than two attempts: the SDK sleeps before
+# its retry — 0.5s doubling backoff after a timed-out attempt (8s cap), or a
+# server Retry-After of up to 60s after a retried status response — and the
+# per-attempt deadline buys each HTTP attempt afresh. An exactly-2x loop
+# deadline cancelled the viable retry in its final stretch, so the mount sizes
+# at two attempts plus one inter-attempt delay bound (3x).
+NOTES_LOOP_DEADLINE_SECONDS = 3 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
 _NOTES_TIER_MIN_WORDS = 1500
 _NOTES_TIER_MIN_SCREEN_FRAMES = 5
@@ -375,6 +409,13 @@ def _parse_notes_model_output(parser: PydanticOutputParser, content: str) -> Any
         return parser.parse(repaired)
 
 
+def agentic_notes_payload(**kwargs: Any) -> Optional[dict[str, Any]]:
+    """Agentic notes seam; None keeps the one-shot path."""
+    if _serve_agentic_notes is None:
+        return None
+    return _serve_agentic_notes(**kwargs)
+
+
 def notes_mount() -> Mount:
     return Mount(
         instructions=_conversation_notes_static_instructions('') + """
@@ -384,7 +425,7 @@ person. Attribute speech only from the original speaker map or direct evidence.
 Do not infer attendance, absence, or a no-show from either listing.
 """ + '\n\n' + ACTION_ITEM_EXTRACTION_RULES,
         schema=StructuredExtraction,
-        budget=Budget(turns=1, tool_calls=0, deadline_seconds=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS),
+        budget=Budget(turns=1, tool_calls=0, deadline_seconds=NOTES_LOOP_DEADLINE_SECONDS),
     )
 
 
@@ -396,11 +437,13 @@ def get_conversation_notes(
 ) -> Structured:
     if route_for_uid(uid) != 'new':
         raise RuntimeError('Shaped notes disabled; restore the previous image for legacy serving')
-    return _get_shaped_conversation_notes(prefix, **kwargs)
+    return _get_shaped_conversation_notes(prefix, uid=uid, **kwargs)
 
 
 @observe_notes
-def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: Any) -> Structured:
+def _get_shaped_conversation_notes(
+    prefix: ConversationPromptPrefix, *, uid: Optional[str] = None, **kwargs: Any
+) -> Structured:
     frames = kwargs.get('screen_frames') or ()
     # Never reuse the old prefix metadata: it may already have bound a roster.
     context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
@@ -439,6 +482,15 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
     # carries a cache breakpoint; parser-based extraction needs no provider
     # cache hint to work on any lane.
     model = get_llm('conv_structure', request_timeout=CONVERSATION_STRUCTURE_TIMEOUT_SECONDS)
+    # Long or meeting-like conversations get the agentic writer; it returns None
+    # (one-shot below, unchanged) when ineligible, disabled, or on any failure.
+    agent_payload = agentic_notes_payload(
+        uid=uid, prefix=prefix, model=model, capture_evidence=context, words=words, frames=frames, kwargs=kwargs
+    )
+    if agent_payload is not None:
+        return _finish_shaped_notes(
+            AgentNotesSubmission.model_validate(agent_payload).to_structured(), prefix, rich_mode, kwargs['tz']
+        )
     extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
     format_instructions = extraction_parser.get_format_instructions()
     static_instructions = mount.instructions + '\n\n' + format_instructions
@@ -473,13 +525,19 @@ def _get_shaped_conversation_notes(prefix: ConversationPromptPrefix, **kwargs: A
 
     result = asyncio.run(invoke())
     structured = StructuredExtraction.model_validate(result.value).to_structured()
+    return _finish_shaped_notes(structured, prefix, rich_mode, kwargs['tz'])
+
+
+def _finish_shaped_notes(
+    structured: Structured, prefix: ConversationPromptPrefix, rich_mode: bool, tz: Optional[str]
+) -> Structured:
     # A one-turn mount cannot buy the legacy presentation revision call.
     enforce_static_conversation_note_presentation(
         structured, prefix.transcript_segment_ids, title_people=() if rich_mode else prefix.title_people
     )
     now = datetime.now(timezone.utc)
     try:
-        user_tz = ZoneInfo(kwargs['tz']) if kwargs['tz'] else timezone.utc
+        user_tz = ZoneInfo(tz) if tz else timezone.utc
     except Exception:
         user_tz = timezone.utc
     for item in structured.action_items:

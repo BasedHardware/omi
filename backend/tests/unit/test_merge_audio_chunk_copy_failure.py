@@ -48,7 +48,9 @@ def _install(monkeypatch, *, chunks_by_conv, bucket, list_raises_for=()):
     storage_client.bucket.return_value = bucket
     monkeypatch.setattr(merge, "_get_storage_client", lambda: storage_client)
 
-    def _list_audio_chunks(uid, conv_id):
+    def _list_audio_chunks(uid, conv_id, **kwargs):
+        # Source deletion follows the copy: only a complete listing may drive it.
+        assert kwargs == {'require_archive': True}
         if conv_id in list_raises_for:
             raise Exception(f"simulated transient GCS listing error for {conv_id}")
         return chunks_by_conv.get(conv_id, [])

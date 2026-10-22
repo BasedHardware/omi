@@ -13427,9 +13427,6 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Turpināt ar bezmaksas plānu';
-
-  @override
   String get paywallTrialCancelNote => 'Atcelt jebkurā laikā. Bez maksas, bez soda sankcijām.';
 
   @override
@@ -14416,4 +14413,105 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi joprojām ieraksta';
+
+  @override
+  String get episodeNow => 'Tagad';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Tiešraidē · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count mirkļi',
+      one: '1 mirklis',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Mirkļi';
+
+  @override
+  String get episodeSoFar => 'Līdz šim';
+
+  @override
+  String get episodeUpdatedJustNow => 'Atjaunināts tikko · pilnas piezīmes beigās';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Atjaunināts pirms $minutes min · pilnas piezīmes beigās';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Piezīmes parādās pēc pirmajām sarunas minūtēm.';
+
+  @override
+  String get episodeOpenAll => 'Atvērt visu';
+
+  @override
+  String get episodeWrapUpNow => 'Pabeigt tagad';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi to pabeigs, kad pāriesiet pie kā cita';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Uztverts uzdevums: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Uztverts atgādinājums: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Uzdevums saglabāts: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'tiek pievienotas $duration no jūsu Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Klausās tagad';
+
+  @override
+  String get deviceHeardToday => 'Dzirdēts šodien';
+
+  @override
+  String get deviceToSync => 'jāsinhronizē';
+
+  @override
+  String get deviceRightNow => 'Pašlaik';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Tiešraides epizode · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Panāk';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done no $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Nesen';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Atvienots $duration';
+  }
+
+  @override
+  String get deviceControls => 'Vadīklas';
 }

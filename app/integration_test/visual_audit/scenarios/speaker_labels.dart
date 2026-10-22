@@ -10,7 +10,7 @@ import 'package:omi/backend/http/api/speaker_labels.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/schema.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversation_detail/widgets/speaker_tag_outcome.dart';
@@ -27,7 +27,7 @@ import 'capture.dart';
 import '../../../test/helpers/reprocess_fakes.dart';
 
 const _transcript = 'lib/pages/conversation_detail/widgets/transcript_tab.dart (TranscriptWidgets)';
-const _live = 'lib/pages/conversation_capturing/page.dart (ConversationCapturingPage)';
+const _live = 'lib/pages/episodes/live_episode_page.dart (LiveEpisodePage)';
 
 Person _person(String id, String name, {String voice = 'learned'}) => Person(
       id: id,
@@ -234,7 +234,7 @@ final speakerLabelScenarios = <AuditScenario>[
     state: 'The pendant records; Maya was labeled in the previous conversation of the same recording',
     run: (a) async {
       final people = await a.tester.runAsync(_people);
-      await a.pump(const ConversationCapturingPage(), scaffold: false, providers: [
+      await a.pump(const LiveEpisodePage(), scaffold: false, providers: [
         ChangeNotifierProvider<CaptureProvider>.value(value: _CarriedCaptureProvider()),
         ChangeNotifierProvider<PeopleProvider>.value(value: people!),
         ChangeNotifierProvider<DeviceProvider>.value(

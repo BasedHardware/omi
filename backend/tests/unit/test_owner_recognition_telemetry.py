@@ -594,7 +594,7 @@ def _wire_sync_store(monkeypatch, store):
         return pipeline.conversations_db.prepare_conversation_for_read(deepcopy(plain), uid)
 
     monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', _get)
-    monkeypatch.setattr(pipeline.lifecycle_service, 'discard_by_relevance', lambda *args, **kwargs: True)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'rule_discard_outcome', lambda *args, **kwargs: 'discarded')
     return lifecycle, pipeline
 
 

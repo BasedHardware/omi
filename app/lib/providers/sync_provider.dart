@@ -13,6 +13,8 @@ import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -510,6 +512,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         onTransferStarted: _keepAlive.acquire,
         onTransferFinished: _keepAlive.release,
         onConnectivityRestored: _walService.getSyncs().phone.resetExhaustedAutoRetries,
+        networkChanges: ConnectivityService().onNetworkChange,
+        hasPendingWork: () => pendingWals.isNotEmpty || uploadedWals.isNotEmpty,
+        onPassTimedOut: _onTransferPassTimedOut,
       );
       _periodicSync?.dispose();
       _periodicSync = PeriodicRecordingSync(
@@ -521,6 +526,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } catch (e) {
       Logger.debug('SyncProvider: attach recording transfer coordinator failed: $e');
     }
+  }
+
+  /// The abandoned pass may still hold a BLE storage read or an upload; cancel
+  /// it so the next pass does not contend with it.
+  void _onTransferPassTimedOut(WakeTrigger trigger, Duration limit) {
+    _walService.getSyncs().cancelSync();
+    unawaited(DebugLogManager.logWarning('transfer_pass_stuck', {'trigger': trigger.name, 'limit_s': limit.inSeconds}));
+    const TypedEvents().emit(CaptureRecoveryObserved(
+      kind: CaptureRecoveryObservedKind.transferPassTimedOut,
+      trigger: trigger == WakeTrigger.periodic
+          ? CaptureRecoveryObservedTrigger.periodic
+          : CaptureRecoveryObservedTrigger.other,
+    ));
   }
 
   /// Called by the reconciler when a background job finished and produced

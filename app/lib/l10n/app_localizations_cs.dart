@@ -13398,9 +13398,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Pokračovat s bezplatným plánem';
-
-  @override
   String get paywallTrialCancelNote => 'Zrušte kdykoli. Žádné poplatky, žádné sankce.';
 
   @override
@@ -14384,4 +14381,105 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi stále nahrává';
+
+  @override
+  String get episodeNow => 'Teď';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Živě · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count okamžiků',
+      one: '1 okamžik',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Okamžiky';
+
+  @override
+  String get episodeSoFar => 'Zatím';
+
+  @override
+  String get episodeUpdatedJustNow => 'Aktualizováno právě teď · úplné poznámky na konci';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Aktualizováno před $minutes min · úplné poznámky na konci';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Poznámky se objeví po prvních minutách hovoru.';
+
+  @override
+  String get episodeOpenAll => 'Otevřít vše';
+
+  @override
+  String get episodeWrapUpNow => 'Uzavřít teď';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi to uzavře, až přejdete k něčemu jinému';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Zachycený úkol: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Zachycená připomínka: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Úkol uložen: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'přidává se $duration z vašeho Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Teď poslouchá';
+
+  @override
+  String get deviceHeardToday => 'Slyšeno dnes';
+
+  @override
+  String get deviceToSync => 'k synchronizaci';
+
+  @override
+  String get deviceRightNow => 'Právě teď';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Živá epizoda · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Dohání';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done z $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Nedávno';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Odpojeno na $duration';
+  }
+
+  @override
+  String get deviceControls => 'Ovládání';
 }

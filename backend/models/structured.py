@@ -137,6 +137,9 @@ except ModuleNotFoundError:
         source: Literal['roster', 'transcript'] = Field(
             description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
         )
+        evidence: Optional[str] = Field(
+            default=None, description='Short evidence that identifies this participant; agentic notes only'
+        )
 
     class Insight(BaseModel):
         text: str = Field(description='One insight connecting background context to this conversation')

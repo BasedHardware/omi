@@ -1,6 +1,14 @@
 name: Backend Unit Tests
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches:
       - main
@@ -110,19 +118,32 @@ permissions:
   issues: read
 
 concurrency:
-  # PR updates supersede earlier test runs; main and manual runs retain an
-  # independent result for every dispatch.
-  group: backend-unit-tests-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
-  cancel-in-progress: true
+  # PR updates supersede earlier test runs. Main pushes share one ref-keyed
+  # group with cancel-in-progress false: the running suite finishes and only
+  # the newest pending main SHA runs next, so a burst of merges no longer
+  # queues a full superseded suite for every intermediate SHA. Manual
+  # dispatches keep per-run groups and an independent result: sharing the
+  # push group would let a dispatch evict the newest pending push run, and a
+  # cancelled push check fails scripts/pre_push_ci_verified.py for that SHA.
+  group: backend-unit-tests-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.ref) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   ci-tier:
     name: Resolve CI Tier
     runs-on: ubuntu-latest
     outputs:
-      full_ci: ${{ steps.resolve.outputs.full_ci }}
+      full_ci: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.resolve.outputs.full_ci) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - id: resolve
         uses: ./.github/actions/ci-tier
 
@@ -151,6 +172,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # Full history is required: the pull_request path resolves the merge base
           # live via scripts/changed-files. blob:none keeps the history without
           # downloading every historical file blob.
@@ -228,6 +250,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - name: Set up Python
         uses: actions/setup-python@v6

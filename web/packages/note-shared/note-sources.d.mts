@@ -11,3 +11,4 @@ export function presentableNoteSection<T extends PresentableNoteSectionInput>(
 export function presentableNoteText(text: string | null | undefined, transcriptIDs?: readonly string[]): string;
 export function noteTranscriptIDs(segments?: readonly ({ id?: string | null } | null | undefined)[] | null): string[];
 export function presentableNoteStructured<T>(structured: T, transcriptIDs?: readonly string[]): T;
+export function presentableNoteTitle(text: string | null | undefined, transcriptIDs?: readonly string[]): string;

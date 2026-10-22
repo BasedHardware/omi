@@ -756,7 +756,7 @@ extension AppState {
         mode: mode,
         meetingStateReady: meetingStateReady,
         shouldCapture: shouldCapture,
-        segmentCount: totalSegmentCount,
+        segmentCount: totalSegmentCount, conversationRole: currentConversationRole,
         hasSpeakerSegments: !speakerSegments.isEmpty
       )
     {
@@ -771,7 +771,7 @@ extension AppState {
             mode: self.audioRecordingMode,
             meetingStateReady: self.meetingDetector?.hasObservedState == true,
             shouldCapture: self.meetingDetector?.isMeetingActive == true,
-            segmentCount: self.totalSegmentCount,
+            segmentCount: self.totalSegmentCount, conversationRole: self.currentConversationRole,
             hasSpeakerSegments: !self.speakerSegments.isEmpty
           )
         else {

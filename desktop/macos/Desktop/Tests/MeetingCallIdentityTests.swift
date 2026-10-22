@@ -115,6 +115,8 @@ final class MeetingDetectorCallChangeTests: XCTestCase {
     let detector = makeDetector(onCallChanged: { callChanges += 1 }, onChange: { edges.append($0) })
 
     detector.applyDetected(true, callIDs: ["meet:aaa-bbbb-ccc"])
+    now += MeetingDetectionTiming.confirmationPeriod
+    detector.applyDetected(true, callIDs: ["meet:aaa-bbbb-ccc"])
     now += 4
     detector.applyDetected(false)  // A left: pending off
     now += 4
@@ -134,6 +136,8 @@ final class MeetingDetectorCallChangeTests: XCTestCase {
     var callChanges = 0
     let detector = makeDetector(onCallChanged: { callChanges += 1 })
 
+    detector.applyDetected(true, callIDs: ["meet:aaa-bbbb-ccc"])
+    now += MeetingDetectionTiming.confirmationPeriod
     detector.applyDetected(true, callIDs: ["meet:aaa-bbbb-ccc"])
     now += 4
     detector.applyDetected(true, callIDs: ["meet:ddd-eeee-fff"])

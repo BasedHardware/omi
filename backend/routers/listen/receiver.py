@@ -20,10 +20,6 @@ from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config import audio_timeline as audio_flags
 from config.translation import resolve_ondemand_config
-from config.capture_evidence import (
-    capture_evidence_dark_write_enabled,
-    listen_committed_capture_coverage_enabled,
-)
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
 from routers.listen.demand_routing import attach_live_demand
@@ -77,6 +73,7 @@ from utils.stt.live_failure import (
     live_stt_socket_is_dead,
     live_stt_terminal_reason,
     live_stt_upstream_failure,
+    local_tail_terminal_reason,
     send_live_stt_audio,
     settle_terminal_socket,
     terminate_live_stt_session,
@@ -127,6 +124,7 @@ from utils.stt.resilient_stream import (
 )
 from utils.stt.language_policy import observe_live_segments, record_live_connection
 from utils.stt.provider_resilience import fallback_socket_is_serving
+from utils.stt.provider_stream_end import US_FAILOVER, US_TIMEOUT, note_stream_close_intent, session_teardown_closer
 from utils.stt.socket import release_live_stt_socket, track_live_stt_socket
 from utils.stt.streaming import (
     STTService,
@@ -143,6 +141,7 @@ from utils.stt.streaming import (
 from routers.listen.stt_callbacks import attach_legacy_capture_window, build_stt_callbacks
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
+from utils.stt import edge_shadow
 from utils.transcribe_decisions import (
     TARGET_SAMPLE_RATE,
     custom_stt_clock_origin,
@@ -178,6 +177,17 @@ from utils.metrics import (
 from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
+
+
+def mark_listen_internal_error(state: Any) -> None:
+    """Close the listen socket when a turn raised after audio was not staged.
+
+    A staged publication returns. The receive loop does not call this, and the
+    socket stays up so the redrive can seal. A staging write that did not land
+    still raises, and both listen failure sites close with 1011 through here.
+    """
+    state.close_code = 1011
+
 
 # Cadence for the frame-independent provider-death monitor (#10028). Short enough
 # to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
@@ -322,6 +332,7 @@ class ListenReceiver(ReplayFilterMixin):
         self.aac_decoder: Any = None
         self.lc3_decoder: Any = None
         self.vad_gate: Any = None
+        self.edge_shadow: Optional[edge_shadow.EdgeShadowMirror] = None  # D2; edge_shadow.session_mirror
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
         self.decode_failure_streak = 0
@@ -363,17 +374,14 @@ class ListenReceiver(ReplayFilterMixin):
             # Pin the persistence mode for the recording's life; the flag is
             # never re-read per message or per callback.
             self.capture_timeline_v2 = host.state.capture_timeline_v2 = audio_flags.audio_timeline_v2_enabled()
-            self.capture_timeline_spans = host.state.capture_timeline_spans = audio_flags.audio_timeline_spans_enabled()
+            self.capture_timeline_spans = host.state.capture_timeline_spans = True
             host.state.capture_timeline = self.capture_timeline
             # Conversation ownership of recent capture ranges. Entries are
             # *runs* (contiguous samples under one conversation), coalesced by
             # `_note_accepted_frame`, so retention is time-based (120 s) and a
             # hard entry cap counts conversation switches, not frames.
             host.state.conversation_sample_ranges = deque(maxlen=CAPTURE_RANGE_MAX_RUNS)
-            if capture_evidence_dark_write_enabled():
-                host.state.source_position_map = SourcePositionMap(
-                    committed=listen_committed_capture_coverage_enabled()
-                )
+            host.state.source_position_map = SourcePositionMap(committed=True)
         # The loop this receiver serves. Deepgram's SDK delivers transcripts on
         # its own thread; those callbacks hop back onto this loop (see
         # `_run_on_listen_loop`) so timeline/send-map state is only ever
@@ -491,7 +499,7 @@ class ListenReceiver(ReplayFilterMixin):
         is retained as explicitly unplaced under its provider SEND owner.
         """
         source_map = getattr(self.host.state, 'source_position_map', None)
-        if source_map is not None and capture_evidence_dark_write_enabled():
+        if source_map is not None:
             source_map.remember_transcripts(segments)
         _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
@@ -562,7 +570,7 @@ class ListenReceiver(ReplayFilterMixin):
         LIVE_SPEAKER_CAPTURE_CLOCK=false restores legacy speaker-ID timing.
         """
         source_map = getattr(self.host.state, 'source_position_map', None)
-        if source_map is not None and capture_evidence_dark_write_enabled():
+        if source_map is not None:
             source_map.remember_transcripts(segments)
         _strip_capture_word_ranges(segments)
         segments = self._filter_replayed_segments(segments, provider)
@@ -903,6 +911,11 @@ class ListenReceiver(ReplayFilterMixin):
         if callable(start_transcription):
             start_transcription()
 
+    def edge_shadow_tap(self) -> Any:
+        """A tap for a newly built VAD gate when the session is mirrored (D2), else None."""
+        mirror = edge_shadow.session_mirror(self)
+        return mirror.tap() if mirror is not None else None
+
     def initialize_decoders(self) -> None:
         request = self.host.request
         if self.host.is_multi_channel:
@@ -1168,6 +1181,7 @@ class ListenReceiver(ReplayFilterMixin):
             ring.close()
         sockets = self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]
         for socket in sockets:
+            note_stream_close_intent(socket, session_teardown_closer(self.host))
             target = socket._conn if isinstance(socket, GatedSTTSocket) else socket  # type: ignore[reportPrivateUsage]
             if target is None:
                 release_live_stt_socket(socket)
@@ -1325,6 +1339,7 @@ class ListenReceiver(ReplayFilterMixin):
                     )
                 except Exception:
                     logger.exception('VAD gate initialization failed; continuing without it')
+                edge_shadow.attach_tap(self.vad_gate, self)
 
             parakeet_callback, modulate_callback, epoch = self._build_stt_callbacks()
             raw = await self._create_stt_socket(
@@ -1592,6 +1607,7 @@ class ListenReceiver(ReplayFilterMixin):
         outcome = getattr(raw, 'leg_outcome', None)
         if outcome is not None:
             outcome.claim(live_stt_terminal_reason(raw, 'connection_lost'))
+        note_stream_close_intent(raw, US_FAILOVER)
         try:
             await abort_replay_socket(raw)
         except asyncio.CancelledError:
@@ -1599,6 +1615,7 @@ class ListenReceiver(ReplayFilterMixin):
                 outcome.settle()
             raise
         if previous is not None:
+            note_stream_close_intent(previous, US_FAILOVER)
             try:
                 await abort_replay_socket(previous)
             finally:
@@ -1674,6 +1691,7 @@ class ListenReceiver(ReplayFilterMixin):
                 self._stt_failed_providers.add(provider_for_service(timed_out) or timed_out.value)
                 if raw is not None:
                     retire_window_replay_socket(self, raw)
+                    note_stream_close_intent(raw, US_TIMEOUT)
                     await abort_replay_socket(raw)
                 self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
                 hop.note_failure(None, continuing=True)
@@ -1760,6 +1778,7 @@ class ListenReceiver(ReplayFilterMixin):
             if window_ring is not None and callable(retire):
                 retire()
             if previous is not None:
+                note_stream_close_intent(previous, US_FAILOVER)
                 try:
                     await abort_replay_socket(previous)
                 except Exception:
@@ -1983,11 +2002,13 @@ class ListenReceiver(ReplayFilterMixin):
                             self._recover_ingested_audio(), name='stt_replay_recovery'
                         )
                     if self.recovery.exhausted and not self.recovery.client_has_left():
+                        # Not accepted means the live tail hit one of its own
+                        # bounds; this site never votes on the provider circuit.
                         await terminate_live_stt_session(
                             request.websocket,
                             self.host.state,
                             failure=live_stt_upstream_failure(self._serving_provider()),
-                            reason='capacity_full',
+                            reason=local_tail_terminal_reason(delivery),
                             platform=self._telemetry_platform(),
                         )
                     return
@@ -2300,7 +2321,7 @@ class ListenReceiver(ReplayFilterMixin):
                         self.host.spawn(
                             self.host.transcripts.on_translation_demand_changed(), name='translation_demand_reconcile'
                         )
-        elif kind == 'capture_evidence_frame' and capture_evidence_dark_write_enabled():
+        elif kind == 'capture_evidence_frame':
             # The next binary message alone may consume this claim. A new
             # control message supersedes an unpaired one, never a later frame.
             self._pending_source_frame = payload
@@ -2388,6 +2409,7 @@ class ListenReceiver(ReplayFilterMixin):
             else None
         )
         frame_timer = FrameTimer(request.codec, multi_channel=self.host.is_multi_channel)
+        shadow = edge_shadow.session_mirror(self)
         try:
             while self.host.state.active:
                 frame_timer.stop()
@@ -2465,6 +2487,8 @@ class ListenReceiver(ReplayFilterMixin):
                         # (opcode-101 start) is v2-only: with the flag off the
                         # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
+                        if shadow is not None:  # D2 edge shadow copy, fire-and-forget
+                            shadow.frame(start_sample, end_sample - start_sample, data)
                         if not self.host.use_custom_stt and self.recovery_enabled:
                             self._live_birth.note(start_sample, end_sample)
                         source_map = self.host.state.source_position_map
@@ -2518,9 +2542,11 @@ class ListenReceiver(ReplayFilterMixin):
             note_ws_close(self.host.state, 'client', error.code)
         except Exception as error:
             logger.error('Listen receive failure type=%s', type(error).__name__)
-            self.host.state.close_code = 1011
+            mark_listen_internal_error(self.host.state)
         finally:
             frame_timer.stop()
+            if shadow is not None:
+                shadow.close()
             self.client_closing = True
             self._receiving = False
             for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
@@ -2554,7 +2580,7 @@ class ListenReceiver(ReplayFilterMixin):
                         self.host.state.active = False
                         raise  # Custody remains supervised and keeps the PCM alive.
                     except Exception as error:
-                        self.host.state.close_code = 1011
+                        mark_listen_internal_error(self.host.state)
                         logger.error(
                             'event=stt_cap_live_held outcome=persist_failed exception_type=%s', type(error).__name__
                         )
@@ -2741,6 +2767,7 @@ class ListenReceiver(ReplayFilterMixin):
             ring.close()
         for socket in self.stt_sockets_multi if self.host.is_multi_channel else [self.stt_socket]:
             if socket:
+                note_stream_close_intent(socket, session_teardown_closer(self.host))
                 try:
                     socket.finish()
                 except Exception:

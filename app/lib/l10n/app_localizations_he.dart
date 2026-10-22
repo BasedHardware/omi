@@ -13302,9 +13302,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'המשך עם התוכנית החינמית';
-
-  @override
   String get paywallTrialCancelNote => 'בטל בכל עת. ללא עמלות, ללא קנסות.';
 
   @override
@@ -14282,4 +14279,105 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi ממשיך להקליט';
+
+  @override
+  String get episodeNow => 'עכשיו';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'בשידור חי · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count רגעים',
+      one: 'רגע אחד',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'רגעים';
+
+  @override
+  String get episodeSoFar => 'עד כה';
+
+  @override
+  String get episodeUpdatedJustNow => 'עודכן עכשיו · הערות מלאות בסיום';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'עודכן לפני $minutes דק׳ · הערות מלאות בסיום';
+  }
+
+  @override
+  String get episodeNotesSoon => 'ההערות יופיעו אחרי הדקות הראשונות של השיחה.';
+
+  @override
+  String get episodeOpenAll => 'פתח הכול';
+
+  @override
+  String get episodeWrapUpNow => 'סכם עכשיו';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi יסכם את זה כשתעבור הלאה';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'משימה זוהתה: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'תזכורת זוהתה: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'המשימה נשמרה: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'מוסיף $duration מה-Omi שלך';
+  }
+
+  @override
+  String get episodeListeningNow => 'מאזין עכשיו';
+
+  @override
+  String get deviceHeardToday => 'נשמע היום';
+
+  @override
+  String get deviceToSync => 'לסנכרון';
+
+  @override
+  String get deviceRightNow => 'כרגע';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'פרק חי · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'משלים פערים';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done מתוך $total דק׳';
+  }
+
+  @override
+  String get deviceRecently => 'לאחרונה';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'מנותק למשך $duration';
+  }
+
+  @override
+  String get deviceControls => 'פקדים';
 }

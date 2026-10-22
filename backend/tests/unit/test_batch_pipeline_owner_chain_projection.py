@@ -19,6 +19,7 @@ import pytest
 
 from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
+from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from database.batch_pipeline_store import projection_successor
 from utils.batch_pipeline import projection, projection_followup
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
@@ -134,7 +135,7 @@ class ResultLog:
             earlier = self.results.get(predecessor or '')
             if not earlier or earlier['projection_state'] != 'erased':
                 self.blocked_checks += 1
-                raise ProjectionBlocked('earlier committed projection must persist first')
+                raise ProjectionPredecessorPending('earlier committed projection must persist first')
             predecessor = earlier['previous_segment_id']
 
     def persisted(self, owner):
@@ -305,9 +306,9 @@ def test_reconcile_drains_then_walks_owner_before_generic_sweep(monkeypatch):
     projector.project_owner.side_effect = lambda owner, recovered: calls.append(('chain', owner, recovered)) or ['seg']
     projector.sweep.side_effect = lambda: calls.append(('sweep',))
     service = Serving(MemoryStore(), projector=projector)
-    monkeypatch.setattr(service, 'drain_owner', lambda owner: calls.append(('drain', owner)))
+    monkeypatch.setattr(service, 'drain_owner', lambda owner, recovered=None: calls.append(('drain', owner, recovered)))
     assert service.reconcile(owner_id=BURST, recovered='r') == ['seg']
-    assert calls == [('drain', BURST), ('chain', BURST, 'r'), ('sweep',)]
+    assert calls == [('drain', BURST, 'r'), ('chain', BURST, 'r'), ('sweep',)]
     calls.clear()
     assert service.reconcile() == []
     assert calls == [('sweep',)]
@@ -498,9 +499,8 @@ async def test_recovered_tail_unit_projects_in_the_recovery_pass(monkeypatch):
 def test_sweep_chain_persists_backlog_in_the_pass_that_reaches_its_head(monkeypatch, sweep_chain):
     """Without the recovery wake, the sweep itself walks the owner's chain.
 
-    The assignment cursor sits past the head, so the first pass sees only
-    blocked successors and wraps; the next pass reaches the head and, with the
-    continuation, persists the whole chain in that same pass.
+    The assignment cursor sits past the head. With predecessor replay, the
+    first blocked successor wakes the head and persists the chain immediately.
     """
     monkeypatch.setenv('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED', str(sweep_chain).lower())
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED', str(sweep_chain).lower())
@@ -516,6 +516,4 @@ def test_sweep_chain_persists_backlog_in_the_pass_that_reaches_its_head(monkeypa
         assert passes < 200
         projector.sweep()
     assert log.persist_order == burst
-    # The first pass is all blocked successors either way; the continuation
-    # saves the two further passes the replay-filled mixed page needs.
-    assert (passes, log.blocked_checks) == ((2, 21) if sweep_chain else (4, 21))
+    assert (passes, log.blocked_checks) == ((1, 1) if sweep_chain else (4, 21))

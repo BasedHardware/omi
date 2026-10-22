@@ -517,9 +517,9 @@ actor EmbeddingService {
     }
 
     /// Expected product-gating / backend-limit states (paywall/trial-expired, rate-limited,
-    /// Local-provider cloud-assist off). These are not actionable bugs: they should be
-    /// logged locally rather than reported to Sentry as high-priority errors, and must
-    /// not drive tight retry loops.
+    /// Local-provider cloud-assist off). These are not actionable bugs: they should be logged
+    /// locally rather than reported to as high-priority errors, and must not drive tight
+    /// retry loops.
     var isExpectedBackendState: Bool {
       if case .serverError(let statusCode, _) = self {
         return statusCode == 402 || statusCode == 429

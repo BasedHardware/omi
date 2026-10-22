@@ -332,6 +332,8 @@ def test_legacy_prices_resolve_api_read_limit_to_none():
 
 @pytest.fixture
 def choice_http(monkeypatch):
+    import os
+
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers import budget_choice
@@ -341,6 +343,13 @@ def choice_http(monkeypatch):
 
     store = StrictFirestore()
     monkeypatch.setenv('HELD_CONTENT_ENABLED', 'true')
+
+    def cohort_tokens():
+        if os.getenv('HELD_CONTENT_ENABLED', 'false').lower() != 'true':
+            return ''
+        return os.getenv('HELD_CONTENT_COHORT', 'all')
+
+    monkeypatch.setattr(budget_choice.held_content_cohort.runtime_cohort, 'tokens', cohort_tokens)
     monkeypatch.setattr(
         budget_choice,
         'resolve_transcription_allowance',

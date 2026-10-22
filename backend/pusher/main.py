@@ -1,15 +1,16 @@
 import json
-import logging
 import os
 from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-from utils.logging_config import configure_split_stream_logging
+from omi_logging import configure_logging
 
-# Route INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
-# classify routine request logs as ERROR severity (issues #9136, #9138, #9135).
-configure_split_stream_logging(level=logging.INFO)
+# Text routes INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
+# classify routine request logs as ERROR severity (issues #9136, #9138, #9135), and keeps
+# textPayload for log metrics until pusher's consumers are admitted for JSON
+# (docs/runbooks/structured-logging-rollout.md). Pusher keeps its Uvicorn access lines.
+configure_logging('pusher', access_policy='keep', default_format='text')
 
 import firebase_admin
 from fastapi import FastAPI, Request

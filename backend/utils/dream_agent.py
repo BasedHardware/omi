@@ -3,10 +3,12 @@
 from utils.generated_compute import generated_compute_allowed, generated_compute_configured
 
 import asyncio
+import logging
 from datetime import datetime, timezone
 from collections import Counter
 from dataclasses import replace
 from functools import partial
+from pathlib import Path
 from typing import Any
 
 from config.dream_agent import (
@@ -41,9 +43,49 @@ from utils.dream_instructions import INSTRUCTIONS
 from utils.dream_metrics import record_pass, error_code, record_reclaimed
 from database.dream_effect_fence import ACTIVE_RUN
 from utils.executors import db_executor, run_blocking
+from utils.model_text import ContextWindow
 
 TAIL_BUDGET_NOTICE_THRESHOLD = 0.20
+logger = logging.getLogger(__name__)
+_FAILURE_STAGES = {
+    ('dream_seed.py', 'load'): 'seed',
+    ('dream_store.py', 'acquire'): 'acquire',
+    ('dream_store.py', 'assert_lease'): 'lease_check',
+    ('dream_store.py', 'finish'): 'finish',
+    ('dream_turns.py', 'reserve'): 'turn_reserve',
+    ('dream_turns.py', 'settle'): 'turn_settle',
+    ('dream_harness_transport.py', 'attempt_room'): 'request_sizing',
+    ('dream_harness_transport.py', 'model_turn'): 'model_turn',
+    ('dream_verify.py', 'verify'): 'verify',
+    ('session.py', 'execute'): 'tools',
+}
+
+
+def _log_pass_failure(exc, *, stage):
+    # Frame metadata identifies the failing boundary without exception messages,
+    # traceback locals, owner ids, tool arguments, or provider response bodies.
+    site = 'unknown'
+    for error in _exception_chain(exc):
+        frame = error.__traceback__
+        while frame is not None:
+            code = frame.tb_frame.f_code
+            name = Path(code.co_filename).name
+            stage = _FAILURE_STAGES.get((name, code.co_name), stage)
+            if Path(__file__).resolve().parents[1] in Path(code.co_filename).resolve().parents:
+                site = f'{name}:{code.co_name}:{frame.tb_lineno}'
+            frame = frame.tb_next
+    logger.error(
+        'Dream pass failure stage=%s exception_type=%s cause_type=%s site=%s',
+        stage,
+        type(exc).__name__,
+        type(exc.__cause__).__name__ if exc.__cause__ is not None else 'none',
+        site,
+    )
+
+
 MINUTE_HEADROOM_RETRIES = 3
+CAPACITY_CALL_RETRIES = 5
+CAPACITY_RETRY_HEADROOM_SECONDS = 20
 PROVIDER_STOP_CODES = frozenset({'dream_gateway_rejected', 'dream_gateway_failure'})
 # A billed but unusable model reply late in a pass; staged work is still verified.
 MODEL_OUTPUT_STOP_CODES = frozenset({'dream_response_truncated', 'dream_invalid_tool_calls'})
@@ -150,17 +192,25 @@ async def run_session(
         records=records,
         instructions=INSTRUCTIONS,
         question_policy=lambda item: item.value > 2,
+        # Dream reviews the owner's day: temporal search defaults to the trailing 24 hours.
+        context_window=ContextWindow.trailing_day(label='dream day'),
     )
+    stage = 'session'
 
     async def active():
+        nonlocal stage
+        previous, stage = stage, 'lease_check'
         if not enabled():
             raise ValueError('dream_disabled')
         if lease is not None:
             await run_blocking(db_executor, dream_store.assert_lease, uid, lease['run_id'])
+        stage = previous
 
     session.check_active = active
 
     async def usage(result):
+        nonlocal stage
+        previous, stage = stage, 'usage'
         report['tokens'] += result.tokens
         report['accounted_tokens'] += result.tokens if result.accounted_tokens is None else result.accounted_tokens
         weighted = getattr(result, 'price_weighted_tokens', None)
@@ -204,14 +254,37 @@ async def run_session(
             report['cost_status'] = 'unpriced'
             report.pop('cost_micro_usd', None)
         if lease is not None:
+            stage = 'turn_settle'
             await run_blocking(db_executor, dream_turns.settle, uid, lease['run_id'], result)
+        stage = previous
 
     main_history = {'prompt_tokens': None, 'messages': 0, 'cached_tokens': None}
     budget_notice_sent = False
 
     async def invoke(lane, mount, messages):
-        nonlocal budget_notice_sent
+        for attempt in range(CAPACITY_CALL_RETRIES + 1):
+            try:
+                return await invoke_once(lane, mount, messages)
+            except dream_harness_transport.CapacityWait as exc:
+                if not exc.retryable or attempt == CAPACITY_CALL_RETRIES:
+                    raise
+                await active()
+                mode, allowlisted = admission_for(uid)
+                if not await dream_capacity.wait_for_capacity(
+                    deadline,
+                    CAPACITY_RETRY_HEADROOM_SECONDS,
+                    mode=mode,
+                    owner_allowlisted=allowlisted,
+                ):
+                    raise
+                logger.info('Dream capacity retry lane=%s attempt=%d', lane, attempt + 1)
+                # invoke_once rechecks the kill switch/lease and reserves this attempt.
+                # The shaped loop retains history, tool results and staged proposals.
+
+    async def invoke_once(lane, mount, messages):
+        nonlocal budget_notice_sent, stage
         await active()
+        stage = 'request_sizing'
         remaining = (
             limits.tokens - report['price_weighted_tokens'] - session.counters['search_embedding_token_upper_bound']
         )
@@ -272,6 +345,7 @@ async def run_session(
         )
         micro, price_status = conservative_attempt_micro('gemini', 'gemini-3.8-flash', estimate, completion_room)
         if lease is not None:
+            stage = 'turn_reserve'
             for attempt in range(MINUTE_HEADROOM_RETRIES + 1):
                 try:
                     await run_blocking(
@@ -295,11 +369,13 @@ async def run_session(
                         raise
                     await asyncio.sleep(pause)
                     await active()
-        report['model_lanes'].append(lane)
+        stage = 'model_turn'
         sink = {}
+        counted = False
         try:
             if turn is not None:
                 result = await turn(uid, lane, mount, messages)
+                report['model_lanes'].append(lane)
                 await usage(result)
                 if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                     main_history['prompt_tokens'] = result.prompt_tokens
@@ -309,6 +385,7 @@ async def run_session(
                         if result.cached_tokens is not None and getattr(result, 'cache_unreported_tokens', 0) == 0
                         else None
                     )
+                stage = 'tools' if lane == dream_harness_transport.MAIN_LANE else 'verify'
                 return result
             result = await dream_harness_transport.model_turn(
                 uid,
@@ -326,6 +403,8 @@ async def run_session(
                 prior_message_count=prior_count,
                 cached_tokens_estimate=cached_estimate,
             )
+            report['model_lanes'].append(lane)
+            counted = True
             if lane == dream_harness_transport.MAIN_LANE and result.prompt_tokens:
                 main_history['prompt_tokens'] = result.prompt_tokens
                 main_history['messages'] = len(messages)
@@ -334,8 +413,13 @@ async def run_session(
                     if result.cached_tokens is not None and result.cache_unreported_tokens == 0
                     else None
                 )
+            stage = 'tools' if lane == dream_harness_transport.MAIN_LANE else 'verify'
             return result
         finally:
+            # A call counts as a model turn once its transport completed, even if the
+            # payload then fails to parse; zero-cost capacity retries never complete.
+            if not counted and turn is None and sink.get('transport_complete'):
+                report['model_lanes'].append(lane)
             if lane == dream_harness_transport.VERIFY_LANE and sink.get('transport_complete'):
                 report['verifier_transport_responses'] = report.get('verifier_transport_responses', 0) + 1
             report['usage_unknown'] |= sink.get('usage_unknown', False)
@@ -448,6 +532,7 @@ async def run_session(
             if budget_stop_without_staged_work:
                 support, calls = {}, 0
             else:
+                stage = 'verify'
                 support, calls = await dream_verify.verify(
                     staged,
                     partial(invoke, dream_harness_transport.VERIFY_LANE),
@@ -468,6 +553,7 @@ async def run_session(
                 isinstance(vote, bool) for votes in support.values() for vote in votes
             )
             decisions = Counter()
+            stage = 'demotion_check'
             demoted = await run_blocking(db_executor, dream_store.demoted_types, uid, caps)
             automatic = auto_apply_kinds(uid) - demoted
             offered = []
@@ -475,6 +561,7 @@ async def run_session(
                 raise ValueError('dream_lease_required')
             effect_scope = ACTIVE_RUN.set((uid, lease['run_id']) if lease else None)
             token = dream_writing.set(True)
+            stage = 'effects'
             try:
                 for item in staged:
                     decision = dream_verify.disposition(support[item.id])
@@ -580,6 +667,8 @@ async def run_session(
             report['stop_reason'] = code
         if isinstance(exc, dream_harness_transport.CapacityWait) or str(exc) == 'dream_minute_headroom':
             report.update(status='waiting', reason='reserved_capacity')
+        else:
+            _log_pass_failure(exc, stage=stage)
     report['accounted_tokens'] += session.counters['search_embedding_token_upper_bound']
     report['price_weighted_tokens'] += session.counters['search_embedding_token_upper_bound']
     report.update(
@@ -742,6 +831,10 @@ async def run_pass(
             await dream_capacity.release(slot)
 
 
+RESERVED_RECHECKS = 4
+RESERVED_RECHECK_SECONDS = 30
+
+
 async def drain(*, limit=5000):
     if not enabled() or limit <= 0:
         return []
@@ -749,6 +842,14 @@ async def drain(*, limit=5000):
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
             reserved_open = await dream_capacity.available_model(mode='reserved') is not None
+            if not reserved_open and not on_demand_enabled():
+                # The first check can only start the probe that refreshes stale evidence; recheck
+                # before giving up the hourly sweep.
+                for _ in range(RESERVED_RECHECKS):
+                    await asyncio.sleep(RESERVED_RECHECK_SECONDS)
+                    if await dream_capacity.available_model(mode='reserved') is not None:
+                        reserved_open = True
+                        break
             if not reserved_open and not on_demand_enabled():
                 report = {'status': 'waiting', 'reason': 'reserved_capacity'}
                 record_pass(report)
@@ -758,17 +859,21 @@ async def drain(*, limit=5000):
 
             async def worker():
                 for uid in owners:
-                    if not enabled():
-                        return
-                    try:
-                        report = await run_pass(uid)
-                    except Exception as exc:
-                        report = {'status': 'failed', 'error_type': type(exc).__name__, 'error_code': error_code(exc)}
-                    results.append(report)
-                    while report['status'] == 'waiting' and enabled():
-                        await asyncio.sleep(60)
-                        report = await run_pass(uid)
+                    while enabled():
+                        try:
+                            report = await run_pass(uid)
+                        except Exception as exc:
+                            _log_pass_failure(exc, stage='pass')
+                            report = {
+                                'status': 'failed',
+                                'error_type': type(exc).__name__,
+                                'error_code': error_code(exc),
+                            }
+                            record_pass(report)
                         results.append(report)
+                        if report['status'] != 'waiting':
+                            break
+                        await asyncio.sleep(dream_capacity.COOLDOWN_SECONDS)
 
             async with asyncio.TaskGroup() as group:
                 for _ in range(concurrency()):

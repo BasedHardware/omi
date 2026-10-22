@@ -111,16 +111,32 @@ class FreemiumSwitchHandler {
       return true;
     }
     var dontAskAgain = false;
-    final choice = await showOnDeviceAtCapSheet(context,
-        liveHoursReturnOn: onDeviceUsageResetsOn(DateTime.now()),
-        copy: copy,
-        onDontAskAgain: (value) => dontAskAgain = value);
-    if (!context.mounted || choice == null) return true;
-    if (copy != null && record is ApiSuccess<GeneratedBudgetChoiceResponse>) {
+    var current = record;
+    OnDeviceAtCapChoice? choice;
+    for (var ask = 0; ask < 2; ask++) {
+      dontAskAgain = false;
+      choice = await showOnDeviceAtCapSheet(context,
+          liveHoursReturnOn: onDeviceUsageResetsOn(DateTime.now()),
+          copy: copy,
+          onDontAskAgain: (value) => dontAskAgain = value);
+      if (!context.mounted || choice == null) return true;
+      if (copy == null || current is! ApiSuccess<GeneratedBudgetChoiceResponse>) break;
       final saved = await api.save(
-          record.data.period, choice == OnDeviceAtCapChoice.upgrade ? 'upgrade' : 'on_device', dontAskAgain);
-      if (saved is! ApiSuccess || !context.mounted) return true;
+          current.data.period, choice == OnDeviceAtCapChoice.upgrade ? 'upgrade' : 'on_device', dontAskAgain);
+      if (!context.mounted) return true;
+      if (saved is ApiSuccess) break;
+      if (!budgetPeriodChanged(saved) || ask == 1) return true;
+      final reloaded = await api.load();
+      if (!context.mounted || reloaded is! ApiSuccess<GeneratedBudgetChoiceResponse>) return true;
+      current = reloaded;
+      if (!reloaded.data.ask) {
+        if (reloaded.data.state == 'on_device') {
+          await controller.updateSettings(controller.settings.copyWith(enabled: true));
+        }
+        return true;
+      }
     }
+    if (choice == null) return true;
     switch (choice) {
       case OnDeviceAtCapChoice.transcribeOnPhone:
         await controller.updateSettings(controller.settings.copyWith(enabled: true));

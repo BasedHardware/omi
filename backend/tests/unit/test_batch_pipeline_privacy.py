@@ -107,12 +107,12 @@ def test_owner_orphan_sweep_stays_inside_owner_namespace_and_checks_versions(mon
 
 def test_completion_ttl_manifest_is_stage_bounded_and_has_no_privacy_authorities():
     resources = ttl_resources('demo-synthetic', 'synthetic-db')
-    assert len(resources) == len(set(resources)) == 10
+    assert len(resources) == len(set(resources)) == 14
     assert all(resource.endswith('/fields/expires_at') for resource in resources)
     assert {resource.split('/collectionGroups/')[1].split('/')[0] for resource in resources} == {
         f'batch_pipeline_{stage}_{table}'
         for stage in ('prod', 'dev')
-        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes')
+        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes', 'shadow_jobs', 'shadow_spend')
     }
     with pytest.raises(ValueError):
         ttl_resources('foreign/path')

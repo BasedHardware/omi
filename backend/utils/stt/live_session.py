@@ -17,6 +17,7 @@ from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio, set_cap_capture
 from utils.stt import streaming as st
+from utils.stt.edge_shadow import attach_tap as attach_edge_tap
 from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
@@ -232,6 +233,7 @@ class LiveChainSession:
                 record_fallback(
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
+            attach_edge_tap(gate, self.receiver)
             passthrough = service == st.STTService.modulate
             if epoch is not None:
                 epoch.set_validation_callback(
@@ -841,14 +843,15 @@ class LiveLegSocket(STTSocket):
         circuit = target_circuit(target)
         if reason in ACCOUNT_REJECTION_REASONS:
             circuit.record_account_failure(
-                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
+                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')),
+                error_class=reason,
             )
             health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
             health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
         elif getattr(self.raw, 'idle_reopen_failed', False) is True:
             circuit.record_failure()
         else:
-            circuit.record_serve_failure()
+            circuit.record_serve_failure(error_class=reason)
             health.quarantine(
                 self.service.value, 'selection', circuit.serve_error_bench_seconds, endpoint=self.routing_endpoint
             )

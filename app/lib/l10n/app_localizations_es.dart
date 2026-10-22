@@ -13435,9 +13435,6 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Continuar con el plan gratuito';
-
-  @override
   String get paywallTrialCancelNote => 'Cancela en cualquier momento. Sin cargos ni penalizaciones.';
 
   @override
@@ -14428,4 +14425,105 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi sigue grabando';
+
+  @override
+  String get episodeNow => 'Ahora';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'En directo · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count momentos',
+      one: '1 momento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Momentos';
+
+  @override
+  String get episodeSoFar => 'Hasta ahora';
+
+  @override
+  String get episodeUpdatedJustNow => 'Actualizado ahora mismo · notas completas al terminar';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Actualizado hace $minutes min · notas completas al terminar';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Las notas aparecen tras los primeros minutos de conversación.';
+
+  @override
+  String get episodeOpenAll => 'Abrir todo';
+
+  @override
+  String get episodeWrapUpNow => 'Terminar ahora';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi lo termina cuando pasas a otra cosa';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Tarea detectada: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Recordatorio detectado: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Tarea guardada: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'añadiendo $duration de tu Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Escuchando ahora';
+
+  @override
+  String get deviceHeardToday => 'Escuchado hoy';
+
+  @override
+  String get deviceToSync => 'por sincronizar';
+
+  @override
+  String get deviceRightNow => 'Ahora mismo';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Episodio en directo · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Poniéndose al día';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done de $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Recientemente';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Desconectado durante $duration';
+  }
+
+  @override
+  String get deviceControls => 'Controles';
 }

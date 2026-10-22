@@ -13392,9 +13392,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'ادامه با طرح رایگان';
-
-  @override
   String get paywallTrialCancelNote => 'هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.';
 
   @override
@@ -14379,4 +14376,105 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi همچنان در حال ضبط است';
+
+  @override
+  String get episodeNow => 'اکنون';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'زنده · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count لحظه',
+      one: '۱ لحظه',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'لحظه‌ها';
+
+  @override
+  String get episodeSoFar => 'تا اینجا';
+
+  @override
+  String get episodeUpdatedJustNow => 'همین حالا به‌روز شد · یادداشت کامل در پایان';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes دقیقه پیش به‌روز شد · یادداشت کامل در پایان';
+  }
+
+  @override
+  String get episodeNotesSoon => 'یادداشت‌ها پس از چند دقیقهٔ اول گفت‌وگو نمایش داده می‌شوند.';
+
+  @override
+  String get episodeOpenAll => 'باز کردن همه';
+
+  @override
+  String get episodeWrapUpNow => 'اکنون جمع‌بندی کن';
+
+  @override
+  String get episodeWrapsUpHint => 'وقتی سراغ کار دیگری بروید، Omi این را جمع‌بندی می‌کند';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'کار ثبت شد: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'یادآوری ثبت شد: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'کار ذخیره شد: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'در حال افزودن $duration از Omi شما';
+  }
+
+  @override
+  String get episodeListeningNow => 'در حال گوش دادن';
+
+  @override
+  String get deviceHeardToday => 'شنیده‌شده امروز';
+
+  @override
+  String get deviceToSync => 'در انتظار همگام‌سازی';
+
+  @override
+  String get deviceRightNow => 'همین حالا';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'بخش زنده · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'در حال همگام شدن';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done از $total دقیقه';
+  }
+
+  @override
+  String get deviceRecently => 'اخیراً';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'قطع اتصال به مدت $duration';
+  }
+
+  @override
+  String get deviceControls => 'کنترل‌ها';
 }

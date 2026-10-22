@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from utils.observability.sync_phases import sync_phase
 from config.batch_pipeline import live_record_enabled_for, record_capture_eligible
+from config.policy import resolve_batch_policy
+from database.batch_ramp import ramp_admission_policy
 
 import logging
 import os
@@ -103,7 +105,13 @@ def _require_status(data: Mapping[str, Any], *allowed: ConversationStatus) -> No
 def _reserve_batch_live_capture(uid: str, conversation_data: dict[str, Any]) -> None:
     # Resolve privacy at the existing write boundary before deciding ownership.
     # The downstream DB decorator sees the resolved value and performs no second lookup.
-    if record_capture_eligible(uid, conversation_data):
+    if conversation_data.get('record_lane_owner'):
+        return
+    policy = resolve_batch_policy(uid)
+    if (
+        record_capture_eligible(uid, conversation_data, policy=policy)
+        and ramp_admission_policy(uid, policy).live_record_enabled
+    ):
         conversation_data['record_lane_owner'] = 'batch_live_v1'
 
 
@@ -471,6 +479,22 @@ def begin_merge(uid: str, conversation_id: str) -> bool:
 def discard(uid: str, conversation_id: str) -> None:
     """Discard is terminal and deliberately cannot be undone by a generic write."""
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
+
+
+def rule_discard_outcome(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict[str, Any],
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> str:
+    """``discarded`` on a write, ``already_discarded`` for a stored hide, else ``refused``."""
+    return conversations_db.rule_discard_outcome(
+        uid,
+        conversation_id,
+        relevance_decision,
+        expected_sync_content_revision=expected_sync_content_revision,
+    )
 
 
 def discard_by_relevance(

@@ -13428,9 +13428,6 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Продовжити з безкоштовним планом';
-
-  @override
   String get paywallTrialCancelNote => 'Скасувати будь-коли. Без комісій, без штрафів.';
 
   @override
@@ -14415,4 +14412,105 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi продовжує запис';
+
+  @override
+  String get episodeNow => 'Зараз';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Наживо · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count моментів',
+      one: '1 момент',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Моменти';
+
+  @override
+  String get episodeSoFar => 'Поки що';
+
+  @override
+  String get episodeUpdatedJustNow => 'Оновлено щойно · повні нотатки наприкінці';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Оновлено $minutes хв тому · повні нотатки наприкінці';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Нотатки з’являться після перших хвилин розмови.';
+
+  @override
+  String get episodeOpenAll => 'Відкрити все';
+
+  @override
+  String get episodeWrapUpNow => 'Завершити зараз';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi завершить це, коли ви перейдете до іншого';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Помічено завдання: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Помічено нагадування: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Завдання збережено: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'додається $duration з вашого Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Слухає зараз';
+
+  @override
+  String get deviceHeardToday => 'Почуто сьогодні';
+
+  @override
+  String get deviceToSync => 'до синхронізації';
+
+  @override
+  String get deviceRightNow => 'Просто зараз';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Епізод наживо · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Наздоганяє';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done з $total хв';
+  }
+
+  @override
+  String get deviceRecently => 'Нещодавно';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Відключено на $duration';
+  }
+
+  @override
+  String get deviceControls => 'Керування';
 }

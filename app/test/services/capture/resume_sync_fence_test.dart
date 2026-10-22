@@ -42,7 +42,7 @@ class _Drain {
   late Future<void> wake;
   Future<void> start() async {
     wake = runZoned(
-      () => coordinator.wake(WakeTrigger.deviceConnected),
+      () => coordinator.wake(WakeTrigger.periodic),
       // Async await continuations may otherwise chain inline on this VM.
       // Yield the producer once at depth zero, allowing the consumer to dispatch
       // before pass 2 rises. The real coordinator, fence and effects all run.
@@ -158,7 +158,7 @@ void main() {
     final resume = world.controller.resumeCapture();
     await world.settle();
     // Coalesce BEFORE releasing pass 1; idle resolves before pass 2 starts.
-    unawaited(draining.coordinator.wake(WakeTrigger.deviceConnected));
+    unawaited(draining.coordinator.wake(WakeTrigger.periodic));
     draining.release[0].complete();
     await draining.entered[1].future;
     await settle();
@@ -179,7 +179,7 @@ void main() {
     final draining = await drain(yieldAtDrop: true);
     final resume = world.controller.resumeCapture();
     await world.settle();
-    unawaited(draining.coordinator.wake(WakeTrigger.deviceConnected));
+    unawaited(draining.coordinator.wake(WakeTrigger.periodic));
     draining.release[0].complete();
     await draining.entered[1].future;
     await settle();
@@ -324,7 +324,7 @@ void main() {
     final subscriptions = world.deviceConnection!.audioSubscriptionsOpened;
     final draining = await drain(yieldAtDrop: true);
     await world.controller.streamDeviceRecording(device: pendant);
-    unawaited(draining.coordinator.wake(WakeTrigger.deviceConnected));
+    unawaited(draining.coordinator.wake(WakeTrigger.periodic));
     draining.release[0].complete();
     await draining.entered[1].future;
     await world.controller.streamDeviceRecording();

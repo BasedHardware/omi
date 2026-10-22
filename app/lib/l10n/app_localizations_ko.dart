@@ -13214,9 +13214,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => '무료 플랜으로 계속하기';
-
-  @override
   String get paywallTrialCancelNote => '언제든지 취소 가능. 수수료나 위약금 없음.';
 
   @override
@@ -14186,4 +14183,105 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi에서 계속 녹음 중';
+
+  @override
+  String get episodeNow => '지금';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return '라이브 · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '순간 $count개',
+      one: '순간 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => '순간';
+
+  @override
+  String get episodeSoFar => '지금까지';
+
+  @override
+  String get episodeUpdatedJustNow => '방금 업데이트됨 · 끝나면 전체 노트';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes분 전에 업데이트됨 · 끝나면 전체 노트';
+  }
+
+  @override
+  String get episodeNotesSoon => '대화가 몇 분 지나면 노트가 나타납니다.';
+
+  @override
+  String get episodeOpenAll => '모두 열기';
+
+  @override
+  String get episodeWrapUpNow => '지금 마무리';
+
+  @override
+  String get episodeWrapsUpHint => '다른 일로 넘어가면 Omi가 마무리합니다';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return '할 일 감지: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return '알림 감지: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return '할 일 저장됨: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'Omi에서 $duration 추가 중';
+  }
+
+  @override
+  String get episodeListeningNow => '지금 듣는 중';
+
+  @override
+  String get deviceHeardToday => '오늘 들은 시간';
+
+  @override
+  String get deviceToSync => '동기화 대기';
+
+  @override
+  String get deviceRightNow => '현재';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return '라이브 에피소드 · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => '따라잡는 중';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total분';
+  }
+
+  @override
+  String get deviceRecently => '최근';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration 동안 연결 끊김';
+  }
+
+  @override
+  String get deviceControls => '제어';
 }

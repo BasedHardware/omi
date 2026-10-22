@@ -9,6 +9,7 @@ import hashlib
 from enum import Enum
 from typing import Any
 
+from config.firestore_read_levers import lever_enabled
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 
 PRIVACY_COLLECTION = 'batch_pipeline_privacy'
@@ -46,6 +47,27 @@ def privacy_owner_key(uid: str) -> str:
     return hashlib.sha256(uid.encode()).hexdigest()
 
 
+class BatchPrivacyMemo:
+    """Document snapshots for the read phase of ONE transaction callback attempt.
+
+    Construct inside the callback, including on retries; never retain across
+    transactions or reuse a session's memo when its prepare callback runs again.
+    Actual reads still enroll every document (including absence) in Firestore's
+    conflict set. Decisions, generation comparisons and walk budgets are never memoized.
+    """
+
+    def __init__(self, client: Any, transaction: Any):
+        if transaction is None:
+            raise ValueError('privacy memo requires a transaction attempt')
+        self.client, self.transaction = client, transaction
+        self.snapshots: dict = {}
+
+    def get(self, reference):
+        if reference.path not in self.snapshots:
+            self.snapshots[reference.path] = reference.get(transaction=self.transaction)
+        return self.snapshots[reference.path]
+
+
 def assert_batch_write_allowed(
     client: Any,
     transaction: Any,
@@ -54,6 +76,7 @@ def assert_batch_write_allowed(
     conversation_ids: Iterable[str] = (),
     expected_generation: int | None = None,
     snapshots: dict | None = None,
+    memo: BatchPrivacyMemo | None = None,
 ) -> int:
     """Fence a mutation. Admission records the returned generation for replay.
 
@@ -62,14 +85,22 @@ def assert_batch_write_allowed(
     are denied even if their deletion marker has disappeared.
     """
     key = privacy_owner_key(uid)
-    marker = client.collection('account_deletions').document(uid).get(transaction=transaction)
+    if memo is not None and not lever_enabled('batch_privacy_memoize', uid):
+        memo = None
+    if memo is not None and (memo.client is not client or memo.transaction is not transaction):
+        raise ValueError('privacy memo belongs to another transaction attempt')
+
+    def read(reference):
+        return memo.get(reference) if memo is not None else reference.get(transaction=transaction)
+
+    marker = read(client.collection('account_deletions').document(uid))
     status = normalize_account_deletion_status(
         marker_exists=marker.exists, raw_status=(marker.to_dict() or {}).get('wipe_status')
     )
     if account_deletion_blocks_access(status):
         raise BatchPrivacyBlocked('account_deleted')
     user = client.collection('users').document(uid)
-    snapshot = user.get(transaction=transaction)
+    snapshot = read(user)
     data = snapshot.to_dict() or {}
     if snapshots is not None:
         snapshots['user'] = data
@@ -80,7 +111,7 @@ def assert_batch_write_allowed(
         or data.get('migration_status') is not None
     ):
         raise BatchPrivacyBlocked('data_protection_changed')
-    privacy = client.collection(PRIVACY_COLLECTION).document(key).get(transaction=transaction).to_dict() or {}
+    privacy = read(client.collection(PRIVACY_COLLECTION).document(key)).to_dict() or {}
     generation = int(privacy.get('generation', 0))
     if (
         privacy.get('blocked')
@@ -109,9 +140,9 @@ def assert_batch_write_allowed(
                 raise BatchPrivacyBlocked('conversation_fence_budget')
             if not conversation_id or '/' in conversation_id or len(conversation_id.encode()) > 256:
                 raise ValueError('bounded conversation document ID required')
-            if user.collection('deleted_conversations').document(conversation_id).get(transaction=transaction).exists:
+            if read(user.collection('deleted_conversations').document(conversation_id)).exists:
                 raise BatchPrivacyBlocked('conversation_deleted')
-            conversation = user.collection('conversations').document(conversation_id).get(transaction=transaction)
+            conversation = read(user.collection('conversations').document(conversation_id))
             row = conversation.to_dict() or {}
             chain[conversation_id] = bool(conversation.exists)
             if snapshots is not None:

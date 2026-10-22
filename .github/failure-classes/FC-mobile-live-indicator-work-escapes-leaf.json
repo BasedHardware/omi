@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-mobile-live-indicator-work-escapes-leaf",
+  "violated_contract": "A mobile live indicator must not repaint unchanged surrounding content on animation frames, and diagnostics or sync notifications must not rebuild a whole settings page when its visible inputs did not change (INV-PERF-1).",
+  "canonical_prevention": "Drive the activity arc with a CustomPainter repaint listenable inside a RepaintBoundary, stop its controller when inactive, under Reduce Motion or outside TickerMode, and select visible provider values at the smallest dependent subtree. Exercise real Home header and Device page widgets with rebuild and surrounding-paint counters plus positive state-change controls.",
+  "canonical_prevention_artifact": ["app/test/perf/sync_indicator_isolation_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/ui/components/omi_live_indicators.dart", "app/lib/pages/settings/device_settings.dart"],
+  "status": "open"
+}

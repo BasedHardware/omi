@@ -17,7 +17,7 @@ from config.policy import ProjectionPolicy
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay
 from database.batch_pipeline_projection_claim import projection_claim
 from utils.batch_pipeline.contracts import WorkItem
-from utils.batch_pipeline.projection import projection_phase
+from utils.batch_pipeline.projection import error_site_field, error_type, projection_phase
 from utils.batch_pipeline.scheduler import owner_key
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
@@ -178,7 +178,11 @@ class ProjectionFollowups:
         except (ProjectionBlocked, BatchPrivacyBlocked):
             logger.info('event=batch_projection_followup outcome=blocked')
         except Exception as error:
-            logger.error('event=batch_projection_followup outcome=retry exception_type=%s', type(error).__name__)
+            logger.error(
+                'event=batch_projection_followup outcome=retry exception_type=%s%s',
+                error_type(error),
+                error_site_field(error),
+            )
         finally:
             if entered:
                 # Cleanup must not hold a follow-up slot if Redis/the DB pool

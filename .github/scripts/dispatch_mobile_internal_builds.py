@@ -186,8 +186,10 @@ def dispatch(app_id: str, workflow_id: str, token: str, branch: str, source_sha:
     """Dispatch a branch build carrying a checked-out source pin.
 
     Codemagic accepts a branch plus custom environment variables, but not a commit
-    parameter. The workflow checks this pin against its own HEAD before any build
-    work, so branch movement fails closed instead of silently building a newer tip.
+    parameter. Before any build work the workflow runs app/scripts/checkout_release_source_pin.sh,
+    which checks out this pin when the cloned tip still contains it (main moving
+    during the dispatch-to-clone window) and fails closed otherwise, so it never
+    silently builds a newer tip.
     """
     if not valid_source_sha(source_sha):
         raise DispatchError("evaluated source SHA must be 40 lowercase hexadecimal characters")

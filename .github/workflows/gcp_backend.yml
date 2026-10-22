@@ -55,6 +55,11 @@ on:
         required: true
         default: false
         type: boolean
+      # Plan B B2 opt-in; blank changes nothing. See backend/docs/runbooks/role-image-cutover.md.
+      service_images:
+        description: 'mode=deploy only: service=<role image>@sha256 pairs from a build-only run of this release_sha (blank = every service keeps its current image)'
+        required: false
+        default: ''
       # Break-glass: the eligibility proof requires a *successful* Release
       # Eligibility push-run on this exact SHA. A flaky or red check therefore
       # poisons that SHA permanently -- rerunning does not retroactively make
@@ -77,14 +82,27 @@ on:
         description: 'Why the eligibility proof is unavailable (required with skip_eligibility_proof)'
         required: false
         default: ''
+      break_glass_lock:
+        description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
+        required: false
+        default: false
+        type: boolean
 
 # Cloud Run revision promotion/traffic repair and the shared backend GKE resources
 # are one environment-scoped mutation domain across the backend deploy workflows.
+# B5 (named by David, 2026-10-19 fourth round #9): every prod deploy writer shares the
+# prod-train lock, so trains, config-trains and GPU/listen deploys never overlap and the
+# ramp controller can refuse while one runs (backend/scripts/prod_train_lock.py).
+# Break-glass keeps the pre-B5 per-target lock. Development groups are unchanged.
 concurrency:
-  group: deploy-backend-stack-${{ github.event.inputs.environment }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: backend
   REGION: us-central1
   # Development keeps its existing tagged no-traffic candidate probe. Production
@@ -131,6 +149,7 @@ jobs:
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
           DEPLOY_TARGETS: ${{ github.event.inputs.deploy_targets }}
           WORKFLOW_MODE: ${{ github.event.inputs.mode }}
+          SERVICE_IMAGES: ${{ github.event.inputs.service_images }}
         run: |
           set -euo pipefail
           if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
@@ -155,6 +174,10 @@ jobs:
           fi
           if [[ "$WORKFLOW_MODE" == "build-only" && "${{ github.event.inputs.deploy_gateway }}" == "true" ]]; then
             echo "mode=build-only builds only the backend image; deploy_gateway=true is unsupported." >&2
+            exit 1
+          fi
+          if [[ "$WORKFLOW_MODE" != "deploy" && -n "${SERVICE_IMAGES//[[:space:],]/}" ]]; then
+            echo "service_images applies only to mode=deploy." >&2
             exit 1
           fi
 
@@ -563,6 +586,101 @@ jobs:
             echo "\`gh workflow run gcp_backend_listen_helm.yml --ref main -f environment=${DEPLOY_ENVIRONMENT} -f branch=main -f mode=deploy -f image_tag=${SHORT_SHA}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
+  # Plan B B2 release train: build-only also publishes every role image
+  # (backend/Dockerfile.roles targets and listen-edge) from the admitted SHA,
+  # stamped OMI_RELEASE_SHA and labelled with that revision, on the private base.
+  # It deploys nothing: a later mode=deploy opts services in through
+  # service_images, by the digests this job prints.
+  build-role-images:
+    needs: [validate-production-boundary, firestore_readiness, record_break_glass]
+    if: >-
+      always() && !cancelled() &&
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.mode == 'build-only' &&
+      needs.validate-production-boundary.result == 'success' &&
+      needs.firestore_readiness.result == 'success' &&
+      (needs.record_break_glass.result == 'success' || needs.record_break_glass.result == 'skipped')
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      ADMITTED_SHA: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+      # Written after the docker builds, so it never enters a build context.
+      MANIFEST: role-images.json
+    steps:
+      - name: Delete huge unnecessary tools folder
+        run: rm -rf /opt/hostedtoolcache
+
+      - name: Checkout admitted runtime source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
+
+      - name: Checkout immutable image-contract controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .deploy-control
+          persist-credentials: false
+          fetch-depth: 1
+          sparse-checkout: |
+            .github
+            backend
+
+      - name: Google Auth (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          service_account: ${{ github.event.inputs.environment == 'prod' && 'omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com' || 'omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com' }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Login to GCR
+        run: gcloud auth configure-docker
+
+      # No setup-buildx-action here: the runner's default docker builder loads each
+      # image into the local store for the docker run probes, and pushes plain
+      # single-platform manifests whose config `imagetools inspect` reads at deploy.
+      - name: Build role images from backend/Dockerfile.roles and backend/edge/Dockerfile
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$ADMITTED_SHA"
+          # --baseline also builds today's backend/Dockerfile so the report compares sizes.
+          python3 .deploy-control/backend/scripts/role_images.py build \
+            --sha "$ADMITTED_SHA" --registry "gcr.io/${PROJECT_ID}" --baseline --context . --manifest "$MANIFEST"
+
+      - name: Smoke role images before publish
+        # runtime_image_contracts.py smoke --dockerfile backend/Dockerfile.roles --target <t>
+        # per Python role image; listen-edge gets its HTTP health, identity and drain probe.
+        run: python3 .deploy-control/backend/scripts/role_images.py verify --manifest "$MANIFEST"
+
+      - name: Measure role image size and cold start
+        run: python3 .deploy-control/backend/scripts/role_images.py measure --manifest "$MANIFEST"
+
+      - name: Publish verified role images
+        run: python3 .deploy-control/backend/scripts/role_images.py publish --manifest "$MANIFEST"
+
+      - name: Record role-image release vector
+        if: always()
+        run: |
+          set -euo pipefail
+          test -f "$MANIFEST" || exit 0
+          python3 .deploy-control/backend/scripts/role_images.py summary --manifest "$MANIFEST" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload role-image release vector
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: role-images-${{ github.event.inputs.environment }}
+          path: role-images.json
+          if-no-files-found: ignore
+
   deploy:
     needs: [validate-production-boundary, firestore_readiness, record_break_glass]
     if: >-
@@ -599,6 +717,7 @@ jobs:
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
+          service_images: ${{ github.event.inputs.service_images }}
           release_version: ${{ github.event.inputs.release_version }}
           # Prod: GitHub WIF as omi-ci-deployer-prod@ (no Owner, no key; WS-C).
           # Development: GitHub WIF as omi-ci-deployer-dev@ (WS-D). No JSON key.

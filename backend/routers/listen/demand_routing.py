@@ -264,6 +264,29 @@ def attach_live_demand(receiver) -> LiveDemandRouting | None:
     return LiveDemandRouting(receiver, eligible=getattr(host, '_demand_cohort', None) == 'admitted')
 
 
+def ineligible_reason(host) -> str | None:
+    """The first admission condition this host fails, in the order
+    ``capture_demand_admission`` checks them; None when it fails none.
+
+    Telemetry only (the ``ineligible_reason`` label on the demand sessions
+    metric). Eligibility itself stays the conjunction below, so this never
+    decides admission; it only names why a session is in the ineligible cohort.
+    """
+    if not session_recovery_enabled(host):
+        return 'recovery_off'
+    if not managed_chain_enabled(host) or host.is_multi_channel or host.use_custom_stt:
+        return 'unmanaged_chain'
+    if host.request.onboarding_mode:
+        return 'onboarding'
+    if host.request.source == 'phone_call':
+        return 'phone_call'
+    if getattr(host, 'language_profile', None) is None:
+        return 'no_profile'
+    if not language_qualified(host):
+        return 'language_unqualified'
+    return None
+
+
 def capture_demand_admission(host) -> DemandTelemetry | None:
     existing = host_telemetry(host)
     if getattr(host, '_demand_cohort', None) is not None:
@@ -280,4 +303,4 @@ def capture_demand_admission(host) -> DemandTelemetry | None:
     )
     cohort = ('admitted' if config.admits(host.request.uid) else 'eligible_control') if eligible else 'ineligible'
     host._demand_cohort = cohort
-    return attach_demand_telemetry(host, cohort)
+    return attach_demand_telemetry(host, cohort, None if eligible else ineligible_reason(host))

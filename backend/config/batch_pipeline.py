@@ -215,6 +215,15 @@ def long_speech_handoff_enabled() -> bool:
     return os.getenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'true').strip().lower() != 'false'
 
 
+def second_multilingual_enabled() -> bool:
+    """Kill switch (unset is on; only ``false`` disables it).
+
+    A long-speech handoff unit whose Modulate recovery came back valid-empty gets
+    one Deepgram multilingual call inside the same paid recovery intent.
+    """
+    return os.getenv('BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED', 'true').strip().lower() != 'false'
+
+
 def worker_validation_disposition_enabled() -> bool:
     """Ship-on deterministic validation handoff; false restores bounded GPU retries."""
     return os.getenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true').strip().lower() == 'true'
@@ -285,11 +294,28 @@ def owner_chain_projection_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED')
 
 
+def recovered_merge_release_enabled() -> bool:
+    """Kill switch: the post-recovery owner wake commits the recovered unit (and
+    its content's ready siblings) at once past an unready merge head, and the
+    unit itself past the catch-up depth hold, so the wake's chain walk can
+    project it."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED')
+
+
 def sweep_owner_chain_enabled() -> bool:
     """Kill switch: a sweep that advances an owner's head keeps walking that chain."""
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED')
+
+
+def projection_predecessor_replay_enabled() -> bool:
+    """Kill switch: blocked page successors wake their owner's missing head."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED')
 
 
 def projection_pending_page_enabled() -> bool:
@@ -311,6 +337,27 @@ def projection_index_deferred_enabled() -> bool:
     from config.policy import kill_switch
 
     return kill_switch('BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED')
+
+
+def held_terminal_status_enabled() -> bool:
+    """Kill switch: an upload whose failures are all settled held units reads `completed`."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED')
+
+
+def held_partial_enabled() -> bool:
+    """Kill switch: an upload whose unprojected units are all held completes as partial on the ledger."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_HELD_PARTIAL_ENABLED')
+
+
+def recovery_policy_refresh_enabled() -> bool:
+    """Kill switch: a recovery-disabled snapshot with no paid intent re-resolves the setting."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED')
 
 
 PROJECTION_PREFETCH_DEFAULT = 4

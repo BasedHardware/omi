@@ -19308,5 +19308,771 @@
       "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-stt-chain-exhausted-ratio",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - sessions exhausting the provider chain above 8% for an hour",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[60m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 600 && $B > 0.08",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "20m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "15",
+      "summary": "More than 8% of accepted /v4/listen sessions exhausted every live STT provider over the last hour",
+      "threshold": "omi_stt_chain_exhausted_total / omi_listen_accepted_total over 60m > 0.08 with >= 600 accepted sockets in 60m, for 20m",
+      "user_impact": "Those sessions lose live transcription entirely until the client reconnects; audio falls back to offline sync.",
+      "scope": "backend-listen omi_stt_chain_exhausted_total (all demand cohorts) over omi_listen_accepted_total. This is the session-level exhaustion counter, not the stt_selection fallback count that omi-stt-chain-exhausted-warn (> 0.35) uses. The series is incremented only on the configured chain (STT_CONNECT_ORDER_FROM_CONFIG, utils/stt/live_chain.py), which prod runs: 120 live series across 3 demand cohorts on 2026-10-20; it is empty on any deployment without the configured chain.",
+      "verification": "Backtest (prod Prometheus via the Grafana proxy). 20m window, 2026-10-10..10-20, 5m steps: daily p50 0.035-0.131 (10-20 is 0.035, the post-fix baseline), so a 5%/20m rule would fire 62x in 10d. 60m window, 2026-10-17..10-20, 10m steps: > 0.08 sustained 20m fires 6x in 3d (10-17 19:17Z, 10-18 00:07Z, 10-19 10:17Z, 10-19 15:17Z, 10-20 00:27Z, 10-20 15:07Z), including the 10-20 Soniox-bench incident (0.085-0.097 from 15:07Z). A dynamic threshold (2x the median of the same hour 1d/2d/7d ago, floor 0.08) was evaluated and rejected: the 3-offset query takes ~17s per instant evaluation (the 7-offset p50 8-29s, near the 30s evaluation timeout), and it would NOT have fired on 10-20 because the prior days were degraded at that hour (baseline 0.07-0.11).",
+      "evaluated_bad": "0.097 (2026-10-20 16:07Z 60m)",
+      "evaluated_good": "0.020 (2026-10-20 12:07Z 60m)",
+      "safe_next_action": "Check omi_stt_cost_routing_stage by target first: if no target is at 100 the router is in its availability escape (see omi-stt-no-full-stage-target). Then split omi_fallback_total{outcome=exhausted} by from_mode/to_mode/reason before touching provider config or rolling listen.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-chain-exhausted-ratio",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-stt-no-full-stage-target",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live STT - no provider at stage 100 (router availability escape)",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(count((min by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) == 100) or (max by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) != max by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}))) or vector(0)) and on () (count(omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) > 0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A == 0",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "10m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "omi-resilience-fallbacks",
+      "__panelId__": "16",
+      "summary": "No live STT target has been at cost-routing stage 100 for 10m, so the router serves every session from its availability escape",
+      "threshold": "count of targets whose fleet-min omi_stt_cost_routing_stage is 100 (or NaN, a pristine GateState) == 0, while the stage gauge is present, for 10m",
+      "user_impact": "With every target in trial or benched, each session gets all available targets ordered by stage, so trial and benched providers (e.g. Modulate at stage 0) serve real sessions and chain exhaustion rises.",
+      "scope": "backend-listen omi_stt_cost_routing_stage by target (live_router.py availability escape: all(stage < 100) for available targets). NaN means a pristine GateState (stage 100) and counts as full.",
+      "verification": "Backtest 2026-10-10..10-20 (2m steps): 11 episodes over 10m in 10d (10-13 08:11Z 238m, 10-13 18:15Z 38m, 10-14 17:05Z 70m, 10-14 19:29Z 300m, 10-15 20:31Z 96m, 10-16 01:03Z 94m, 10-16 05:57Z 134m, 10-16 19:05Z 226m, 10-18 00:45Z 62m, 10-19 23:29Z 138m, 10-20 13:45Z 70m). The 10-20 13:45Z episode is the Soniox bench after the 13:37Z listen roll, which ended when the Soniox GateState keys were reset at 14:53Z.",
+      "evaluated_bad": "0 targets at stage 100 (2026-10-20 13:45Z-14:55Z)",
+      "evaluated_good": "1 target at stage 100 (soniox, 2026-10-20 15:00Z)",
+      "safe_next_action": "Read omi_stt_cost_routing_stage by target and the live_stt_gate bench/stage log lines. If a target was benched by a restart burst rather than its own failure rate, the documented lever is saving and resetting that target's GateState keys (data/run-2026-10-13-two-lane-nemotron/stt-degradation-2026-10-20.md); never roll listen at peak to clear it.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md"
+    },
+    "labels": {
+      "alert_identity": "omi-stt-no-full-stage-target",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-sync-failure-reason-step",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync jobs - a failure reason is running above 3x its 7-day rate",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))) / clamp_min((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[7d] offset 60m))) or ((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))) * 0), 0.0001)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "G",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m])))) / on (namespace) clamp_min((min by (namespace) (label_replace((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[7d] offset 60m))), \"baseline\", \"rolling\", \"\", \"\") or label_replace(label_replace(vector(0.0064), \"namespace\", \"backend-sync-backfill\", \"\", \"\"), \"baseline\", \"pinned\", \"\", \"\"))) or (((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m])))) * 0), 0.0001)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "G"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50 && $B > 3 && $G > 1.5",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-workspace:data/run-2026-10-13-two-lane-nemotron/sync-upstream-error-2026-10-21.md",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "summary": "A sync job failure reason (outcome) on one sync service is more than 3x its 7-day share of jobs, with at least 50 such jobs in the last 60m",
+      "threshold": "per (service, outcome != success|expected_silence): 60m share of jobs > 3x the 7-day share (the 7 days before the window), with >= 50 jobs of that outcome in 60m, AND the service's total failure share in 60m > 1.5x its baseline, for 15m. Total-failure baseline = the lower of the rolling 7 days before the window and backfill's pinned pre-regression share 0.64% (the 7 days ending 2026-10-16T16:00Z, as a constant so evaluation stays under the 30s limit); the pin keeps backfill's post-#22977 leftover visible until the backfill assignment_conflict fix lands, then is removed. A reason or service with no baseline counts as new (floor 0.01%). The guard means a relabel or split of failures between reasons (no rise in total failures) does not page.",
+      "user_impact": "Uploaded recordings on that service are failing to finalize at a new, higher rate; users see missing or late conversations from offline sync.",
+      "scope": "omi_sync_transcription_job_total from Managed Prometheus (datasource gmp-cloud-run, job omi-cloud-run-application-metrics; the in-cluster Prometheus could not scan 7 days of raw samples within the 30s evaluation limit), namespaces backend-sync and backend-sync-backfill (backend-integration emits no omi_sync_transcription_job_total series and is out of scope until it does), keyed by the outcome label so new reasons (the sync-fresh-fix split of upstream_error) are covered automatically. The counter records terminal attempt outcomes, not finalized jobs, so it is compared only with its own baseline; the finalized-job count is event=sync_transcription_job_finalized in Cloud Logging.",
+      "verification": "Backtest 2026-10-14..10-21 (15m steps, prod Prometheus via the Grafana proxy). Without the total-failure guard: 24 sustained episodes, including backend-sync internal_error at 09:00Z right after #22977 split internal failures out of upstream_error (a relabel: backend-sync total failures fell 7.35% -> 1.19%). With the guard: 22 episodes; every 10-16..10-21 regression episode is kept, backend-sync internal_error is dropped, and backfill internal_error (total 4.76% vs pinned 0.64%) still fires. Rolling-only baseline would have hidden backfill after 60m (23 episodes). Re-run on Managed Prometheus after moving off the in-cluster Prometheus (2026-10-21 11Z, which timed out at 30s): 25 episodes, same shape (10-16..10-21 regression kept; backend-sync internal_error quiet; backfill internal_error fires). Instant evaluation 4.6s.",
+      "evaluated_bad": "backend-sync upstream_error onset 2026-10-16 (episodes from 14:38Z)",
+      "evaluated_good": "backend-sync upstream_error 2.44x (2026-10-21 05Z)",
+      "safe_next_action": "Run the two-lane sentinel scripts/sync_failure_reasons.sh for the failure_phase / failure_class split of finalized jobs, then check the sync_finalize_exception and sync_persistence_exception site fields before changing lanes or flags.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-failure-reason-step"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-sync-total-failure-share-ceiling",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync jobs - a sync service is failing more than 8% of jobs",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0.08 && $B >= 200",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-workspace:data/run-2026-10-13-two-lane-nemotron/sync-upstream-error-2026-10-21.md",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "summary": "A sync service is failing more than 8% of sync job attempts over 60m, regardless of its baseline",
+      "threshold": "per service: (attempts with outcome != success|expected_silence) / all attempts over 60m > 8%, with >= 200 attempts in 60m, for 30m. Absolute ceiling: it does not move with the 7-day baseline, so a regression that has become the baseline still warns.",
+      "user_impact": "More than 1 in 12 sync attempts on that service fail; offline recordings finalize late or not at all.",
+      "scope": "omi_sync_transcription_job_total via the cloud-run-application-metrics bridge, namespaces backend-sync and backend-sync-backfill (backend-integration emits no series). Counts terminal attempt outcomes, not finalized jobs. Pairs with omi-sync-failure-reason-step, which catches relative steps per reason; this rule catches a level that stays high.",
+      "verification": "2026-10-21 (Grafana proxy, attempt counter): backfill total failure share 0.58-0.87% before 10-16, 7.1% over 10-17..10-20, 8.92% in the 6h to 08:25Z, 4.76% after #22977; backend-sync 3.6% (10-17..20), 7.35% (6h to 08:25Z), 1.19% after #22977. Set at 8% with the two-lane lead while backfill internal_error (assignment_conflict) is silenced as known and owned by the backfill-conflict lane: a rise past 8% still warns. Backtest 10-14..10-21 (15m steps): 10 sustained episodes, all in the 10-17..10-21 regression (backfill 9x, backend-sync 1x), none after #22977.",
+      "evaluated_bad": "backend-sync upstream_error onset 2026-10-16 (episodes from 14:38Z)",
+      "evaluated_good": "backend-sync upstream_error 2.44x (2026-10-21 05Z)",
+      "safe_next_action": "Run the two-lane sentinel scripts/sync_failure_reasons.sh for the failure_phase / failure_class split of finalized jobs, then check the sync_finalize_exception and sync_persistence_exception site fields before changing lanes or flags.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-total-failure-share-ceiling"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-firestore-commit-resource-exhausted",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - Commit RESOURCE_EXHAUSTED sustained",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "60s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type",
+              "=",
+              "firestore.googleapis.com/api/request_count",
+              "AND",
+              "metric.label.api_method",
+              "=",
+              "Commit",
+              "AND",
+              "metric.label.response_code",
+              "=",
+              "RESOURCE_EXHAUSTED"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce",
+          "settings": {
+            "mode": "dropNN"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$B > 10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-knowledge-base:projects/two-lane-transcription/evidence/2026-10-21-firestore-hotspots-key-visualizer.md",
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "Firestore Commit calls are returning RESOURCE_EXHAUSTED at more than 10 per minute for 5 consecutive minutes",
+      "threshold": "firestore.googleapis.com/api/request_count{api_method=Commit,response_code=RESOURCE_EXHAUSTED}, 60s ALIGN_DELTA summed, last point > 10, for 5m",
+      "user_impact": "Contended or throttled commits expire in-flight transactions (batch retention, cap persist); work retries or is lost until the hotspot clears.",
+      "scope": "Cloud Monitoring firestore.googleapis.com/api/request_count for the based-hardware default database, Commit only. Hotspot evidence: KB projects/two-lane-transcription/evidence/2026-10-21-firestore-hotspots-key-visualizer.md.",
+      "verification": "Backtest 2026-10-14..10-21 (Cloud Monitoring, 60s ALIGN_DELTA): RESOURCE_EXHAUSTED on Commit was nonzero in 958 minutes (60.7k total; nonzero-minute p50 9, p90 147, max 2,351). Sustained episodes: > 0 for 2m = 217 in 7d (too noisy to page on); > 10/min for 5m = 18 (latest 10-20 16:16Z, 18:02Z, 18:32Z); > 50/min for 5m = 8; > 10/min for 10m = 5.",
+      "evaluated_bad": "> 100/min for 5m on 2026-10-20 16:18Z",
+      "evaluated_good": "0/min (most minutes; 958 of ~10,080 minutes were nonzero)",
+      "safe_next_action": "Open the Firestore Key Visualizer for the hot key range and match it to the batch retention / cap-persist writers before changing write rates.",
+      "runbook": "backend/docs/runbooks/resilience-dashboards.md"
+    },
+    "labels": {
+      "component": "firestore",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-commit-resource-exhausted"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

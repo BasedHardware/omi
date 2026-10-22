@@ -44,6 +44,14 @@ from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.log_sanitizer import sanitize_provider_error
 from utils.stt.committed_words import remember_provider_word
 from utils.stt.failure_diagnostics import connection_loss_cause
+from utils.stt.provider_stream_end import (
+    US_TIMEOUT,
+    VENDOR,
+    DETACHED_STREAM_END,
+    ProviderStreamEnd,
+    log_connect_rejection,
+    observe_connect_seconds,
+)
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
 from config import live_stt_state
 from config.live_stt_registry import DEFAULT_IDS, Target
@@ -51,6 +59,11 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.socket import STTSocket
+from utils.stt.live_reason import (
+    LOCAL_DELIVERY_EXPIRED,
+    LOCAL_DELIVERY_REPLAY_SEND_STALLED,
+    LOCAL_DELIVERY_SEND_QUEUE_FULL,
+)
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
 from utils.observability.demand_cohort import MeteredSyncTransport, create_wire_meter, telemetry_call
@@ -250,14 +263,14 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str, endpoi
         return False
     circuit = _circuit_for_primary(service)
     if configured_chain_enabled() and reason in ACCOUNT_REJECTION_REASONS:
-        circuit.record_account_failure(account_circuit_cooldown())
+        circuit.record_account_failure(account_circuit_cooldown(), error_class=reason)
     else:
         if endpoint is not None and endpoint != live_stt_state.family_endpoint(service.value):
             circuit = target_circuit(
                 Target(DEFAULT_IDS.get(service.value, service.value), service.value, 0, endpoint=endpoint),
                 circuit,
             )
-        circuit.record_serve_failure()
+        circuit.record_serve_failure(error_class=reason)
     health.quarantine(
         service.value,
         'account' if reason in ACCOUNT_REJECTION_REASONS else 'selection',
@@ -489,7 +502,7 @@ async def connect_stt_socket_with_fallback(
                 socket = await connect_primary()
             if socket is None:
                 reason = 'config_incomplete'
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
             elif primary_service is STTService.modulate and circuit.state == 'half_open':
                 # This probe was admitted under a serve-error bench. The
                 # breaker must re-close on real serving evidence — a
@@ -518,7 +531,7 @@ async def connect_stt_socket_with_fallback(
                     circuit.release_probe()
                 else:
                     reason = _fallback_failure_reason(RuntimeError(detail))
-                    circuit.record_failure()
+                    circuit.record_failure(error_class=reason)
             elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
                 record_stt_provider_connect(provider=primary_service.value, outcome=CONNECT_SUCCESS)
@@ -536,7 +549,7 @@ async def connect_stt_socket_with_fallback(
                     circuit.release_probe()
                 else:
                     reason = _fallback_failure_reason(RuntimeError(detail))
-                    circuit.record_failure()
+                    circuit.record_failure(error_class=reason)
         except DeepgramConnectionRejection:
             # A typed, non-retryable account refusal (HTTP 401/402/403) keeps
             # its class for the fallback legs and the circuit: mapping it to
@@ -544,20 +557,20 @@ async def connect_stt_socket_with_fallback(
             # from stt_selection telemetry (the 2026-09-18 HTTP 402 incident
             # was only diagnosable from the raw SDK error lines).
             reason = 'auth'
-            circuit.record_failure()
+            circuit.record_failure(error_class=reason)
         except ParakeetConnectionError as error:
             reason = error.reason
             capacity_subtype = error.capacity_subtype if reason == 'capacity_full' else None
             if reason in EXPECTED_REJECTIONS:
                 circuit.record_rejection(reason)
             else:
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
         except ProviderAccountRejection as error:
             # A deepgram primary hitting its own account rejection: the primary
             # circuit IS the rejected provider's, so the account cooldown holds
             # here too, and selection walks the configured fallbacks.
             reason = 'quota'
-            circuit.record_account_rejection()
+            circuit.record_account_rejection(error_class='quota')
             logger.warning(
                 '%s is rejecting sessions at account level (%s); holding it out for the account cooldown',
                 error.provider,
@@ -565,13 +578,13 @@ async def connect_stt_socket_with_fallback(
             )
         except (asyncio.TimeoutError, TimeoutError):
             reason = 'timeout'
-            circuit.record_failure()
+            circuit.record_failure(error_class=reason)
         except Exception as error:
             reason = _fallback_failure_reason(error)
             if recovery_on and reason == 'provider_429':
                 circuit.release_probe()
             else:
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
         # One attempt, one increment: the not-serving branches left their typed
         # death reason in typed_connect_reason, everything else lands here with
         # the bounded `reason` the except chain already computed.
@@ -614,7 +627,7 @@ async def connect_stt_socket_with_fallback(
                 fallback_socket = await _connect_serving_fallback(connect, service)
         except ProviderAccountRejection as error:
             service_circuit = _circuit_for_primary(service)
-            service_circuit.record_account_rejection()
+            service_circuit.record_account_rejection(error_class='quota')
             logger.warning(
                 '%s is rejecting sessions at account level (%s); holding it out of fallback for %ds',
                 error.provider,
@@ -1444,6 +1457,7 @@ def modulate_death_reason(err: Any) -> Optional[str]:
 
 class SafeModulateSocket(STTSocket):
     max_replay_rate = 1.0  # Real-time ceiling; see replay_delivery and the replay runbook.
+    stream_end: ProviderStreamEnd = DETACHED_STREAM_END  # Replaced in __init__.
     replay_limits = ReplayLimits()
 
     def __init__(
@@ -1457,6 +1471,7 @@ class SafeModulateSocket(STTSocket):
     ) -> None:
         self._demand_wire = create_wire_meter('modulate', sample_rate)
         self._ws: Any = ws
+        self.stream_end = ProviderStreamEnd('modulate', ws)
         self._stream_transcript: Callable[[List[Dict[str, Any]]], None] = stream_transcript
         self._loop: asyncio.AbstractEventLoop = loop
         self._preseconds: int = preseconds
@@ -1599,7 +1614,7 @@ class SafeModulateSocket(STTSocket):
         try:
             self._send_queue.put_nowait(queued_data)
         except asyncio.QueueFull:
-            self._mark_dead('send queue full', typed_reason='capacity_full')
+            self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
             return False
 
         if prepend_header:
@@ -1622,7 +1637,7 @@ class SafeModulateSocket(STTSocket):
                 timeout=timeout if timeout is not None else self.replay_limits.queue_wait_seconds,
             )
         except TimeoutError:
-            self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
+            self._mark_dead('replay send queue stalled', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
         return not (self._dead or self._closed)
 
     def finalize(self) -> None:
@@ -1633,12 +1648,25 @@ class SafeModulateSocket(STTSocket):
             if self._closed:
                 return
             self._closed = True
+        self.stream_end.record(unless_closing=True)  # Only when no owner will close this transport.
         try:
             self._loop.call_soon_threadsafe(lambda: self._send_queue.put_nowait(b''))
         except (RuntimeError, Exception):
             pass
 
     async def drain_and_close(self) -> None:
+        self.stream_end.begin_close()
+        self._done_timed_out = False
+        cancelled = False
+        try:
+            await self._drain_and_close()
+        except asyncio.CancelledError:
+            cancelled = True  # The abort that follows closes the transport and records first.
+            raise
+        finally:
+            self.stream_end.record_after_drain(cancelled=cancelled, closer=US_TIMEOUT if self._done_timed_out else None)
+
+    async def _drain_and_close(self) -> None:
         try:
             await asyncio.sleep(0)
             _EOS_SENTINEL = b'__EOS__'
@@ -1654,6 +1682,7 @@ class SafeModulateSocket(STTSocket):
                 await asyncio.wait_for(self._done_event.wait(), timeout=60)
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 logger.warning('Modulate drain timed out waiting for done message')
+                self._done_timed_out = True
                 if self._prev_partial_text:
                     self._flush_partial()
         except Exception:
@@ -1673,6 +1702,7 @@ class SafeModulateSocket(STTSocket):
                 self._wire_header_written = True
                 data = data[len(header) :]
             telemetry_call(self, '_demand_wire', 'written', data)
+            self.stream_end.note_audio_sent()
         except Exception:
             pass
 
@@ -1730,9 +1760,10 @@ class SafeModulateSocket(STTSocket):
                     if not written:
                         self._send_queue.discard(data)
         except AudioDeliveryExpired:
-            self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
+            self._mark_dead('live audio delivery expired', typed_reason=LOCAL_DELIVERY_EXPIRED)
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws send closed: {e}', cause=connection_loss_cause(e))
+            self.stream_end.record(self._ws, error=e)
         except Exception as e:
             self._mark_dead(f'ws send error: {e}', cause=connection_loss_cause(e))
 
@@ -1754,6 +1785,8 @@ class SafeModulateSocket(STTSocket):
                     err = msg.get('error', msg.get('message', 'unknown error'))
                     typed = modulate_death_reason(err)
                     record_stt_stream_close(provider=STTService.modulate.value, reason=typed)
+                    self.stream_end.note_frame(msg)
+                    self.stream_end.note_vendor_error(typed)
                     if typed in {MODULATE_DEATH_SERVE_ERROR, PROVIDER_BUDGET_EXHAUSTED}:
                         # The provider accepted the stream and then failed to
                         # serve it: a provider fault, and the outage signal an
@@ -1761,17 +1794,19 @@ class SafeModulateSocket(STTSocket):
                         # 2026-08-31: ×11/30m "Internal server error", ×5/30m
                         # "Unable to complete the request").
                         logger.error(
-                            'Modulate streaming error: reason=%s %s',
+                            'Modulate streaming error: reason=%s %s request_id=%s',
                             typed,
                             sanitize_provider_error(err, code=msg.get('error_code') or msg.get('code')),
+                            self.stream_end.request_id or 'none',
                         )
                     else:
                         # Client/session-caused frames (e.g. invalid audio we
                         # sent) are the protocol answering, not an outage.
                         logger.warning(
-                            'Modulate stream closed: reason=%s %s',
+                            'Modulate stream closed: reason=%s %s request_id=%s',
                             typed,
                             sanitize_provider_error(err, code=msg.get('error_code') or msg.get('code')),
+                            self.stream_end.request_id or 'none',
                         )
                     if self._prev_partial_text:
                         self._flush_partial()
@@ -1799,8 +1834,10 @@ class SafeModulateSocket(STTSocket):
             # for another client audio frame (#10028).
             if not self._closed and not self._done_event.is_set():
                 self._mark_dead('modulate ws closed cleanly without terminal frame', cause='clean_eof')
+                self.stream_end.record(self._ws, closer=VENDOR, reason='clean_eof')
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws recv closed: {e}', cause=connection_loss_cause(e))
+            self.stream_end.record(self._ws, error=e)
         except Exception as e:
             self._mark_dead(f'ws recv error: {e}', cause=connection_loss_cause(e))
 
@@ -1821,6 +1858,7 @@ class SafeModulateSocket(STTSocket):
         text = msg.get('text', '').strip()
         if not text:
             return
+        self.stream_end.note_text()
         start_ms = msg.get('start_ms', 0)
         self._prev_partial_text = text
         self._prev_partial_start_ms = start_ms
@@ -1860,6 +1898,7 @@ class SafeModulateSocket(STTSocket):
             return
 
         self._observe_served()
+        self.stream_end.note_text()
         self._prev_partial_text = ''
         self._prev_partial_word_count = 0
 
@@ -1917,7 +1956,13 @@ async def process_audio_modulate(
     uri = f'wss://modulate-developer-apis.com/api/velma-2-stt-streaming?{urllib.parse.urlencode(params)}'
 
     logger.info(f'Connecting to Modulate Velma-2 streaming sample_rate={sample_rate} language={language}')
-    ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
+    started = time.monotonic()
+    try:
+        ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
+    except Exception as error:
+        log_connect_rejection('modulate', error)
+        raise
+    observe_connect_seconds('modulate', time.monotonic() - started)
     loop = asyncio.get_running_loop()
     sock = SafeModulateSocket(ws, stream_transcript, loop, preseconds=preseconds, sample_rate=sample_rate)
     logger.info('Modulate Velma-2 streaming connection established')
