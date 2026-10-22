@@ -30,7 +30,6 @@ def _phase_enabled(phase: str) -> bool:
         return rollout_default_on(
             'AUDIO_ARCHIVE_READ_ENABLED', os.getenv('AUDIO_ARCHIVE_READ_ENABLED', 'true').lower() == 'true'
         )
-
     if phase == 'STOP_PCM':
         return rollout_default_off(
             'AUDIO_ARCHIVE_STOP_PCM_ENABLED', os.getenv('AUDIO_ARCHIVE_STOP_PCM_ENABLED', 'false').lower() == 'true'
