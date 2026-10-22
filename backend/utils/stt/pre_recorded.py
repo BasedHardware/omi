@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import httpx
 import numpy as np
-from deepgram import DeepgramClient, DeepgramClientOptions
+from deepgram import DeepgramClient
 from pydub import AudioSegment  # pydub is untyped
 
 from config.prerecorded_stt import (
