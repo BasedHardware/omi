@@ -27,6 +27,7 @@ from config.rollout_cohorts import (
 )
 from database.rollout_cohorts import read_memberships, read_cohort_members
 from utils import executors
+from utils.observability.fallback import record_fallback
 from utils.rollout.runtime_percent import configure_runtime_percent
 from utils.stt_cap_cohort import runtime_cohort
 
@@ -118,8 +119,6 @@ _cache = _TTLReads(read_memberships)
 
 
 def _dream_cohort_degraded(outcome: str) -> None:
-    from utils.observability.fallback import record_fallback
-
     logger.error('event=dream_cohort_health outcome=%s', outcome)
     record_fallback(
         component='agent_tools',

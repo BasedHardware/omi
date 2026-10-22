@@ -22,11 +22,13 @@ from redis.exceptions import WatchError
 
 from config.vertex_reservations import (
     ACTIVE_FRESH_SECONDS,
+    EVIDENCE_FRESH_SECONDS,
     RESERVATIONS,
     Evidence,
     State,
     STATE_OVERRIDE_ENV,
     PROBE_SECONDS,
+    PROBE_TIMEOUT_SECONDS,
     observe,
     observed_state,
 )
@@ -160,21 +162,31 @@ class ReservationState:
             evidence[model] = observe(evidence[model], now=now, outcome=outcome)
         states = {m: observed_state(m, evidence, now=now) for m in RESERVATIONS}
         leases = {m: at for m, at in doc.get('leases', {}).items() if m in RESERVATIONS}
+        # A targeted admission waiting behind a discovery lease gets the next
+        # window. Discovery must not keep renewing a non-teaching probe ahead
+        # of it. Expiry bounds abandoned requests without stealing a live lease.
+        requests = {m: at for m, at in doc.get('probe_requests', {}).items() if m in RESERVATIONS and at > now}
+        window = fresh_seconds if fresh_seconds is not None else EVIDENCE_FRESH_SECONDS
+        if claim and probe_model in RESERVATIONS:
+            at = evidence[probe_model].success_at
+            if not at or not 0 <= now - at <= window:
+                requests[probe_model] = now + PROBE_SECONDS + PROBE_TIMEOUT_SECONDS
         selected = None
         if claim:
             for m in RESERVATIONS:
-                if probe_model and (
-                    m != probe_model
-                    or (
-                        fresh_seconds is not None
-                        and evidence[m].success_at
-                        and 0 <= now - evidence[m].success_at <= fresh_seconds
-                    )
-                ):
+                if probe_model and m != probe_model:
+                    continue
+                # Routing ACTIVE lasts a day; discovery should not consume a
+                # ten-minute lease while the strict admission proof is fresh.
+                if evidence[m].success_at and 0 <= now - evidence[m].success_at <= window:
+                    requests.pop(m, None)
+                    continue
+                if not probe_model and m in requests:
                     continue
                 if (probe_model or m in discovery_models(os.environ)) and now >= leases.get(m, 0):
                     selected = m
                     leases[m] = now + PROBE_SECONDS
+                    requests.pop(m, None)
                     break
         unknown_since = {}
         for m, spec in RESERVATIONS.items():
@@ -190,9 +202,25 @@ class ReservationState:
             'evidence': {m: asdict(e) for m, e in evidence.items()},
             'states': {m: state.value for m, (state, _) in states.items()},
             'leases': leases,
+            'probe_requests': requests,
             'unknown_shared_since': unknown_since,
         }
         return new, states, selected
+
+    def _log_probe_claim(self, doc: dict[str, Any], now: float, selected: str | None, probe_model: str) -> None:
+        model = selected or probe_model
+        if model not in RESERVATIONS:
+            return
+        at = doc['evidence'][model]['success_at']
+        logger.info(
+            'vertex_reservation_probe_claim model=%s scope=%s decision=%s lease_until=%d success_at=%d source=%s',
+            model,
+            self.key(),
+            'claimed' if selected else ('leased' if model in doc['probe_requests'] else 'fresh'),
+            doc['leases'].get(model, 0),
+            at,
+            'admission' if probe_model else 'discovery',
+        )
 
     def _committed(
         self,
@@ -216,6 +244,16 @@ class ReservationState:
                 at = after['unknown_shared_since'][m]
                 self._unknown_shared_since[m] = min(at, self._unknown_shared_since.get(m, at))
         for m, (state, reason) in states.items():
+            success = after['evidence'][m]['success_at']
+            previous = before.get('evidence', {}).get(m, {}).get('success_at', 0)
+            if success > previous and (not previous or success - previous > EVIDENCE_FRESH_SECONDS):
+                logger.info(
+                    'vertex_reservation_evidence model=%s scope=%s storage=%s outcome=dedicated_success success_at=%d',
+                    m,
+                    self.key(),
+                    storage,
+                    success,
+                )
             if before.get('states', {}).get(m, 'unknown') != state.value:
                 own = after['evidence'][m]
                 successor_success = max(
@@ -267,6 +305,8 @@ class ReservationState:
                 )
                 self._local_doc = new
                 self._committed(before, new, states, now, pending, 'process_local')
+                if claim:
+                    self._log_probe_claim(new, now, selected, probe_model)
                 return {m: s for m, (s, _) in states.items()}, selected
             async with asyncio.timeout(0.3):
                 for _ in range(3):
@@ -287,6 +327,8 @@ class ReservationState:
                                 pipe.set(self.key(), json.dumps(new), ex=172800)
                                 await pipe.execute()
                             self._committed(doc, new, states, now, pending, 'redis')
+                            if claim:
+                                self._log_probe_claim(new, now, selected, probe_model)
                             return {m: s for m, (s, _) in states.items()}, selected
                         except WatchError:
                             continue
@@ -410,13 +452,16 @@ class ReservationState:
 
     async def _run_probe(self, model: str, probe: Probe, key: str, *, respect_overrides: bool = True) -> None:
         if (respect_overrides and model not in discovery_models(os.environ)) or key != self.key():
+            logger.info('vertex_reservation_probe_skip model=%s scope=%s reason=scope_or_override_changed', model, key)
             return
         spec = RESERVATIONS[model]
         location = os.getenv(spec.location_env, spec.location) if spec.location_env else spec.location
+        logger.info('vertex_reservation_probe_start model=%s scope=%s location=%s', model, key, location)
         try:
-            async with asyncio.timeout(30):
+            async with asyncio.timeout(PROBE_TIMEOUT_SECONDS):
                 outcome = await probe(model, location)
-        except Exception:
+        except Exception as exc:
+            logger.info('vertex_reservation_probe_error model=%s exc=%s', model, type(exc).__name__)
             outcome = 'inconclusive'
         if (
             outcome in {'dedicated_success', 'capacity_error'}
@@ -424,6 +469,7 @@ class ReservationState:
             and key == self.key()
         ):
             await self.transact(model, outcome)
+        logger.info('vertex_reservation_probe_complete model=%s scope=%s outcome=%s', model, key, outcome)
         # A completed probe releases the local snapshot so the next refresh can
         # discover another model. Non-teaching outcomes still publish no evidence.
         self._snapshot = {}

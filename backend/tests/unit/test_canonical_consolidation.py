@@ -113,7 +113,10 @@ def test_undecided_and_historical_review_stay_visible_after_ttl(monkeypatch, tie
     assert is_default_access_eligible(item, MemoryAccessPolicy.for_omi_chat(), now=NOW).allowed
     assert visible_memory_tier(item) == MemoryTier.short_term
     monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'off')
-    assert not is_default_access_eligible(item, MemoryAccessPolicy.for_omi_chat(), now=NOW).allowed
+    rolled_back = is_default_access_eligible(item, MemoryAccessPolicy.for_omi_chat(), now=NOW)
+    assert rolled_back.allowed == (tier == MemoryTier.short_term)
+    if tier == MemoryTier.short_term:
+        assert rolled_back.reason == "short_term_expired_pending_adjudication"
 
 
 @pytest.mark.parametrize(

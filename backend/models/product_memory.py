@@ -432,9 +432,7 @@ def is_default_access_eligible(
         # Time alone is not a terminal lifecycle decision. Active Short-term
         # rows remain readable until canonical apply records promote/archive/
         # review/reject and moves them out of this state.
-        if undecided_visible() and awaiting_memory_decision(item):
-            return AccessDecision(True, "short_term_expired_pending_adjudication")
-        return AccessDecision(False, "short_term_expired")
+        return AccessDecision(True, "short_term_expired_pending_adjudication")
     if tier in {MemoryLayer.short_term, MemoryLayer.long_term}:
         return AccessDecision(True, "default_memory_allowed")
     return AccessDecision(False, "unsupported_tier")
