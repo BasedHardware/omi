@@ -163,7 +163,18 @@ jobs:
   backend-unit-shard:
     name: Backend unit shard ${{ matrix.shard }}/6
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # This ceiling covers runner SETUP plus the 720s step budget, unlike the
+    # step budget it must leave room for: setup measured 73-92s typical but
+    # 227s worst (run 39741901310 attempt 2, 2026-10-22: checkout 72s, apt
+    # 155s), and 227s + 720s = 947s > the old 900s line, so the job timeout
+    # cancelled shards mid-run while their test step was still inside budget
+    # (conclusion 'cancelled' → gate "backend unit shards result was
+    # 'cancelled'"; four such 917-920s walls in the week to 2026-10-22:
+    # 39741901310, 39739120103, 39676205452, 39668020536). 20m holds the
+    # 720s budget plus worst-plausible setup (apt is step-capped at 3m) and
+    # teardown; slow TEST steps still fail loudly through the step's own
+    # 720s budget check, so this ceiling stays a hang bound, not the gate.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:

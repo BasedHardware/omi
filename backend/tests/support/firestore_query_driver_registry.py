@@ -3024,6 +3024,10 @@ def _messaging_claim(client, combo, trial):
     client.documents['channel_identities/link/inbox/job'] = {'status': 'pending', 'created_at': T0, 'payload': '{}'}
 
 
+def _messaging_supersede(client, combo, trial):
+    client.documents['channel_identities/link/inbox/job'] = {'status': 'running', 'created_at': T0, 'chat': 'c'}
+
+
 def _messaging_decryption(client):
     return unittest.mock.patch('utils.encryption.decrypt', lambda value, uid: '{}')
 
@@ -3045,6 +3049,7 @@ for method, base, setup in (
         _messaging_session,
     ),
     ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
+    ('superseding_pending', {'path': 'channel_identities/link/inbox/job'}, _messaging_supersede),
     ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
     ('delete_account', {'uid': UID}, None),
 ):

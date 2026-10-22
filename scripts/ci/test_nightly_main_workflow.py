@@ -31,6 +31,16 @@ INTENTIONAL_BUDGET_CHANGES = {
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
     # step passed. 50 restores wedge headroom; budget_p50 stays 19.
     ("mobile-app-checks.yml", "ios-compile-check", "timeout-minutes"): "50",
+    # Backend unit shard: the 15-min job ceiling includes runner setup, but
+    # the 720s step regression budget excludes it, leaving 180s for setup.
+    # Setup measured 73-92s typical, 227s worst (run 39741901310 attempt 2:
+    # checkout 72s, apt-get 155s), so 227s + 720s crossed the ceiling and the
+    # shard was cancelled mid-run while still inside its step budget — four
+    # such 917-920s walls in the week to 2026-10-22 (39741901310,
+    # 39739120103, 39676205452, 39668020536). 20m holds the 720s budget plus
+    # worst-plausible setup; the step budget stays the regression gate, so
+    # budget_p50 stays 8.
+    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "20",
 }
 
 

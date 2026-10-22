@@ -21,7 +21,7 @@ void main() {
         addTearDown(() async {
           await tester.runAsync(world.close);
         });
-        await world.boot(tester);
+        await world.boot(tester, extraProviders: providersFor(name, world));
         await pumpFrames(tester, 10);
         await tester.runAsync(() async {
           await Future<void>.delayed(const Duration(milliseconds: 250));

@@ -65,6 +65,7 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-stage-disagreement",
     "omi-stt-enabled-state-unknown",
     "omi-stt-capacity-full-exhausted",
+    "omi-stt-local-delivery-exhausted",
     "omi-stt-provider-terminal-failure-ratio",
     "omi-stt-chain-exhausted-ratio",
     "omi-stt-no-full-stage-target",
