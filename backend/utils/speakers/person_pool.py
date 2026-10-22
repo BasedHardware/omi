@@ -25,7 +25,7 @@ def _materialize(base: Mapping, entries: Sequence[Mapping]) -> dict[str, Any]:
 
 def pool_profile(person: Mapping, profile: Mapping) -> tuple[dict, list[str]]:
     """One contribution per conversation; duplicates replace rather than amplify it."""
-    base = dict(person.get(BASE_KEY) or {})
+    base: dict[str, Any] = dict(person.get(BASE_KEY) or {})
     entries = list(person.get(POOL_KEY) or [])
     if person.get(BASE_KEY) is None and person.get(POOL_KEY) is None and usable_person_voiceprint(person):
         source = person.get('speech_sample_source') or {}
@@ -38,13 +38,20 @@ def pool_profile(person: Mapping, profile: Mapping) -> tuple[dict, list[str]]:
                     'source': source,
                 }
             )
-        elif not source:
+        else:
+            # Preserve a legacy aggregate with multiple clips as one base; no
+            # per-clip vectors exist to split its authority safely.
             base = {
                 'embedding': person['speaker_embedding'],
                 'samples': person.get('speech_samples') or [],
                 'transcripts': person.get('speech_sample_transcripts') or [],
+                'source': source or None,
             }
     source = profile['speech_sample_source']
+    if source.get('conversation_id') and (base.get('source') or {}).get('conversation_id') == source.get(
+        'conversation_id'
+    ):
+        base = {}  # One legacy aggregate contribution is replaced as a unit.
     entries = [e for e in entries if e['source'].get('conversation_id') != source.get('conversation_id')]
     entries.append(
         {
@@ -74,9 +81,12 @@ def retract_profile(
         if e['source'].get('conversation_id') not in ids
         or not segments.intersection(e['source'].get('segment_ids') or [])
     ]
-    if len(kept) == len(entries):
+    base = person.get(BASE_KEY) or {}
+    source = base.get('source') or {}
+    retract_base = source.get('conversation_id') in ids and bool(segments.intersection(source.get('segment_ids') or []))
+    if len(kept) == len(entries) and not retract_base:
         return {}, []
-    update = _materialize(person.get(BASE_KEY) or {}, kept)
+    update = _materialize({} if retract_base else base, kept)
     return update, [p for p in person.get('speech_samples') or [] if p not in update['speech_samples']]
 
 

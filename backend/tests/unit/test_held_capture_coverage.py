@@ -240,6 +240,8 @@ def test_missing_or_malformed_proof_never_suppresses_audio(ledger, identity, tmp
 
 @pytest.mark.parametrize('mode,outcome', [('serve', 'skipped'), ('shadow', 'would_skip')])
 def test_held_batch_metrics_count_covered_samples_once(ledger, identity, tmp_path, monkeypatch, mode, outcome):
+    # Shadow measures a uid sample; this test measures the shadow arithmetic for a sampled uid.
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE_SHADOW_PERCENT', '100')
     from utils.capture.coverage_metrics import SECONDS
 
     uid, key = identity

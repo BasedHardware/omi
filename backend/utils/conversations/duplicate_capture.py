@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from config.capture_shared_speech import shared_speech_mode
+from config.refactor_modes import serving_for
 from utils.conversations.lifecycle_clocks import speech_clock, utc
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
@@ -73,10 +74,11 @@ def capture_record(record: Any, uid: str | None = None) -> CaptureRecord | None:
 
     if field('discarded') or field('status') != 'completed':
         return None
-    start = utc(field('started_at')) if uid else field('started_at')
+    normalize = uid is not None and serving_for('LIFECYCLE_V2_MODE', uid)
+    start = utc(field('started_at')) if normalize else field('started_at')
     finish = (
         speech_clock(uid, {'finished_at': field('finished_at'), 'last_speech_at': field('last_speech_at')})
-        if uid
+        if normalize and uid is not None
         else field('finished_at')
     )
     if not isinstance(start, datetime) or not isinstance(finish, datetime):

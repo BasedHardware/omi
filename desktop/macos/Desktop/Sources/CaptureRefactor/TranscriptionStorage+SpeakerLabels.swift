@@ -89,7 +89,7 @@ extension TranscriptionStorage {
           let agrees =
             !((legacy?.hasSpeakerAssignment == true)
             && (proposed.isUser != legacy?.isUser || proposed.personId != legacy?.personId))
-          log("event=refactor_shadow lane=L5 check=label_graft outcome=\(agrees ? "agree" : "disagree")")
+          if !agrees { log("event=refactor_shadow lane=L5 check=label_graft outcome=disagree") }
           if serving {
             record = proposed
             // refactor: superseded by ServerSegmentLabelMerge when clients_refactor=serve

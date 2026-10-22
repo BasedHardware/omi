@@ -304,10 +304,8 @@ actor ConversationFinalizationService {
     let chunked = await ClientRefactorFlags.chunks
     // refactor: superseded by SegmentContinuationUpload when clients_from_segments_chunks=serve
     let uploadSegments = chunked ? merged : Self.compactSegmentsForBackendLimit(merged)
-    log(
-      "event=refactor_shadow lane=L5 check=segment_compaction outcome=\(uploadSegments.count == merged.count ? "agree" : "disagree")"
-    )
     if uploadSegments.count != merged.count {
+      log("event=refactor_shadow lane=L5 check=segment_compaction outcome=disagree")
       log(
         "ConversationFinalization: Compacted local session \(sessionId) from \(merged.count) to \(uploadSegments.count) segments for backend upload"
       )
@@ -323,7 +321,11 @@ actor ConversationFinalizationService {
       transcript_segments: uploadSegments,
       source: bundle.session.source,
       started_at: iso.string(from: bundle.session.startedAt),
-      finished_at: bundle.session.finishedAt.map { iso.string(from: $0) },
+      finished_at: (chunked
+        ? SegmentContinuationUpload.finishedAt(
+          startedAt: bundle.session.startedAt,
+          finishedAt: bundle.session.finishedAt, segmentEnds: uploadSegments.map(\.end))
+        : bundle.session.finishedAt).map { iso.string(from: $0) },
       language: bundle.session.language,
       client_conversation_id: Self.localClientConversationId(session: bundle.session, sessionId: sessionId),
       conversation_role: bundle.session.conversationRole.rawValue,

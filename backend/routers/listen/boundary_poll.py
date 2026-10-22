@@ -23,7 +23,7 @@ async def poll_calendar(controller) -> None:
 async def ingest_calendar(controller, meeting):
     if not shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
         return
-    await controller.host.persistence.call(ingest_context, controller.host.request.uid, meeting)
+    await controller.host.persistence.call(ingest_context, controller.host.request.uid, meeting, allow_reschedule=True)
 
 
 async def conversation_action(controller, row):

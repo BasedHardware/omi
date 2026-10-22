@@ -8,13 +8,15 @@ or index is needed. Historical payloads retain idempotency after index eviction.
 from __future__ import annotations
 
 import hashlib
+from threading import RLock
+from cachetools import TTLCache
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google.cloud import firestore
 
 from config.occasion_conversations import EPISODE_BOUNDARIES_MODE_ENV
-from config.refactor_modes import shadow_or_serve
+from config.refactor_modes import shadow_or_serve, serving_for
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -23,6 +25,10 @@ from utils.encryption import encrypt, decrypt
 
 MAX_SIGNALS = 128
 RETENTION = timedelta(days=7)
+# Shadow observations may lag one calendar-poll period; serving always reads fresh.
+_shadow_windows: TTLCache = TTLCache(maxsize=1024, ttl=60)
+_seen_contexts: TTLCache = TTLCache(maxsize=2048, ttl=60)
+_cache_lock = RLock()
 
 
 class BoundaryCapacityError(ValueError):
@@ -39,7 +45,9 @@ def _refs(uid: str, client: Any):
     return user.collection('capture_boundary_signals'), user.collection('capture_boundary_state').document('v1')
 
 
-def record(uid: str, signals: list[BoundarySignal], *, firestore_client: Any = None) -> int:
+def record(
+    uid: str, signals: list[BoundarySignal], *, firestore_client: Any = None, allow_reschedule: bool = True
+) -> int:
     if not shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
         return 0
     client = firestore_client if firestore_client is not None else get_firestore_client()
@@ -64,10 +72,14 @@ def record(uid: str, signals: list[BoundarySignal], *, firestore_client: Any = N
             previous = snapshots[key]
             if previous:
                 old = BoundarySignal.model_validate_json(decrypt(previous['content'], uid))
-                if old.started_at != signal.started_at:
+                moved = old.started_at != signal.started_at
+                if moved and signal.kind == 'calendar_event' and not allow_reschedule:
+                    continue  # A saved conversation context cannot rewind current calendar truth.
+                if moved and signal.kind != 'calendar_event':
                     raise ValueError('boundary start is immutable for an external identity')
-                # An end edge never reopens or moves later on a delayed retry.
-                if old.ended_at is not None:
+                # A rescheduled calendar identity replaces its old window. Within
+                # one start, a delayed retry still cannot reopen a closed edge.
+                if not moved and old.ended_at is not None:
                     signal = signal.model_copy(update={'ended_at': min(old.ended_at, signal.ended_at or old.ended_at)})
                 if old == signal:
                     continue
@@ -97,15 +109,48 @@ def record(uid: str, signals: list[BoundarySignal], *, firestore_client: Any = N
             transaction.set(state_ref, {'entries': entries, 'updated_at': now})
         return len(writes)
 
-    return write(client.transaction())
+    written = write(client.transaction())
+    if written:
+        with _cache_lock:
+            _shadow_windows.pop((uid, id(client)), None)
+    return written
+
+
+def record_context(
+    uid: str, signal: BoundarySignal, *, firestore_client: Any = None, allow_reschedule: bool = False
+) -> None:
+    """In shadow, ingest an unchanged row context at most once per minute."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    shadow = not serving_for(EPISODE_BOUNDARIES_MODE_ENV, uid)
+    key = (uid, id(client), hashlib.sha256(signal.model_dump_json().encode()).hexdigest(), allow_reschedule)
+    if shadow:
+        with _cache_lock:
+            if _seen_contexts.get(key) is client:
+                return
+    record(uid, [signal], firestore_client=client, allow_reschedule=allow_reschedule)
+    if shadow:
+        with _cache_lock:
+            # Holding the bounded client reference prevents object-id reuse.
+            _seen_contexts[key] = client
 
 
 def windows(uid: str, *, firestore_client: Any = None) -> dict[str, dict]:
     if not shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
         return {}
     client = firestore_client if firestore_client is not None else get_firestore_client()
+    key = (uid, id(client))
+    shadow = not serving_for(EPISODE_BOUNDARIES_MODE_ENV, uid)
+    if shadow:
+        with _cache_lock:
+            cached = _shadow_windows.get(key)
+            if cached is not None and cached[0] is client:
+                return {k: dict(v) for k, v in cached[1].items()}
     _, ref = _refs(uid, client)
-    return (ref.get().to_dict() or {}).get('entries') or {}
+    result = (ref.get().to_dict() or {}).get('entries') or {}
+    if shadow:
+        with _cache_lock:
+            _shadow_windows[key] = (client, result)
+    return {k: dict(v) for k, v in result.items()}
 
 
 def load(uid: str, keys: list[str], *, firestore_client: Any = None) -> list[BoundarySignal]:

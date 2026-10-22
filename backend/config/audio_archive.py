@@ -5,7 +5,7 @@ on by default, flag-only, no percent cohort. The remaining phases stay staged
 dark rollouts behind their flag plus a percent cohort.
 """
 
-from config.refactor_switches import default_off as rollout_default_off
+from config.refactor_switches import default_off as rollout_default_off, default_on as rollout_default_on
 
 import os
 
@@ -23,9 +23,14 @@ def _phase_enabled(phase: str) -> bool:
     # leave the as-captured ruling unimplemented on every service that has not
     # pinned the env.
     if phase == 'LIVE':
-        return os.getenv('AUDIO_ARCHIVE_LIVE_ENABLED', 'true').lower() == 'true'
+        return rollout_default_on(
+            'AUDIO_ARCHIVE_LIVE_ENABLED', os.getenv('AUDIO_ARCHIVE_LIVE_ENABLED', 'true').lower() == 'true'
+        )
     if phase == 'READ':
-        return os.getenv('AUDIO_ARCHIVE_READ_ENABLED', 'true').lower() == 'true'
+        return rollout_default_on(
+            'AUDIO_ARCHIVE_READ_ENABLED', os.getenv('AUDIO_ARCHIVE_READ_ENABLED', 'true').lower() == 'true'
+        )
+
     if phase == 'STOP_PCM':
         return rollout_default_off(
             'AUDIO_ARCHIVE_STOP_PCM_ENABLED', os.getenv('AUDIO_ARCHIVE_STOP_PCM_ENABLED', 'false').lower() == 'true'

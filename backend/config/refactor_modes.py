@@ -41,6 +41,8 @@ CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256
 _COHORT_ENVS = {
     CAPTURE_COVERAGE_MODE_ENV: (CAPTURE_COVERAGE_SERVE_PERCENT_ENV, CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV),
 }
+CAPTURE_COVERAGE_SHADOW_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SHADOW_PERCENT'
+_SHADOW_PERCENT_ENVS = {CAPTURE_COVERAGE_MODE_ENV: CAPTURE_COVERAGE_SHADOW_PERCENT_ENV}
 
 
 def _warn_once(name: str, raw: str) -> None:
@@ -134,3 +136,23 @@ def cohort_configured(name: str, *, environ: Mapping[str, str] | None = None) ->
         return math.isfinite(percent) and 0 < percent <= 100
     except ValueError:
         return False
+
+
+def shadow_sampled(name: str, uid: str | None, default_percent: float, default: Mode = 'shadow') -> bool:
+    """Whether a costly shadow path runs for this uid: always for the serve cohort, else a uid sample.
+
+    Shadow exists to measure; paying a database write for every user is not needed for that.
+    ``<NAME>_SHADOW_PERCENT`` overrides ``default_percent`` (0 to 100).
+    """
+    if serving_for(name, uid, default):
+        return True
+    if mode(name, default) != 'shadow' or not uid:
+        return False
+    env = _SHADOW_PERCENT_ENVS.get(name, f'{name}_SHADOW_PERCENT')
+    raw = os.getenv(env, '').strip()
+    try:
+        percent = float(raw) if raw else default_percent
+    except ValueError:
+        _warn_once(env, raw)
+        percent = default_percent
+    return percent > 0 and cohort_bucket(uid, f'{name.lower()}:shadow') < percent

@@ -106,6 +106,32 @@ void main() {
     expect(copy.status, WalStatus.miss);
     expect(copy.keptForTranscriptRecovery, isTrue);
   });
+  for (final flush in [false, true]) {
+    test('index save failure reverts committed release before retention (flush=$flush)', () async {
+      await setRefactorFlags({'custody_capture_committed_release': true});
+      var fail = false;
+      final ledger = await custodyLedger(persist: (_) async {
+        if (fail) throw StateError('synthetic save failure');
+      });
+      final copy = wal();
+      final file = File('${directory.path}/${copy.filePath}');
+      await file.writeAsBytes([1, 0, 0, 0, 1]);
+      ledger.testWals = [copy];
+      fail = true;
+      if (flush) {
+        await ledger.captureCommits.record('owner', receipt(0, 100));
+        await expectLater(ledger.syncAll(), throwsStateError);
+      } else {
+        await expectLater(ledger.recordCaptureCommitted(receipt(0, 100)), throwsStateError);
+      }
+      expect(copy.status, WalStatus.miss);
+      expect(copy.syncedAt, 0);
+      expect(copy.keptForTranscriptRecovery, isTrue);
+      expect(await file.exists(), isTrue);
+      await ledger.enforceRetentionPolicyForTesting();
+      expect(await file.exists(), isTrue);
+    });
+  }
   test('held, local-only, unstamped and in-flight WALs cannot release', () async {
     await setRefactorFlags({'custody_capture_committed_release': true});
     final ledger = await custodyLedger();

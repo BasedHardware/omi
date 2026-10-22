@@ -533,3 +533,40 @@ def test_citations_cannot_reference_segments_removed_from_language_inputs():
         transcript_segment_ids=['synthetic-en', 'synthetic-noise'],
     )
     assert context.transcript_segment_ids == frozenset({'synthetic-en'})
+
+
+def test_ambiguous_contact_names_keep_both_spellings_without_choosing(monkeypatch):
+    monkeypatch.setenv(packet.FLAG, 'serve')
+    fixture = FIXTURES['ambiguous_contact_spelling']
+    contacts = fixture['people']
+    ambiguous = SpeakerEvidence(
+        status='partial',
+        policy_version='synthetic-v1',
+        clusters=[
+            VoiceCluster(
+                id='v0',
+                segment_ids=['s'],
+                candidates=[
+                    SpeakerCandidate(
+                        person_id=p['id'], name=p['name'], probability=0.1, band='unknown', source='roster'
+                    )
+                    for p in contacts
+                ],
+            )
+        ],
+    )
+    monkeypatch.setattr(packet, 'get_evidence', lambda *args: ambiguous)
+    selected = packet.select_notes_packet(
+        {}, prefix=prefix(), uid='synthetic-account', capture_evidence='John', words=1, inputs=inputs(people=contacts)
+    )
+    rules = selected['speaker_evidence']
+    assert 'keep the transcript spelling and do not pick one' in rules
+    assert 'Never merge two people because they share a first name' in rules
+    assert selected['capture_evidence'] == 'John'
+    for person in contacts:
+        assert person['name'] in selected['contact_name_spellings']
+    for person in contacts:
+        assert person['name'] in rules
+    from utils.speakers.evidence import project_labels
+
+    assert project_labels(ambiguous, {}) == {}

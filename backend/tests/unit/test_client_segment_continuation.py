@@ -184,3 +184,13 @@ def test_staging_ttl_is_seven_days_and_expired_parts_cannot_complete_assembly(st
     assert intake.stage_chunk(owner, 'c', chunk(1)) is None
     assert intake.stage_chunk(owner, 'c', chunk(0)) is not None
     assert first is not store.rows[('users', owner, 'from_segments_chunks', 'c-000')]
+
+
+@pytest.mark.parametrize('updates', [{'start': 1, 'end': 1}, {'start': -1}, {'text': ' '}])
+def test_bad_early_chunk_never_enters_staging(store, updates):
+    request = chunk()
+    request.transcript_segments[0] = request.transcript_segments[0].model_copy(update=updates)
+    with pytest.raises(HTTPException) as error:
+        intake.stage_chunk(uuid4().hex, 'synthetic', request)
+    assert error.value.status_code == 422
+    assert store.rows == {} and not store.transactions

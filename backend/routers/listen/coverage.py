@@ -36,14 +36,18 @@ def record_committed(
         observe('live_coverage', None)
         return []
     grouped: dict[tuple[str, str, str], list[FrameRange]] = defaultdict(list)
-    for run in snapshot.get('runs') or []:
-        start, end = run.get('source_frame_start'), run.get('source_frame_end')
-        root = run.get('capture_root')
-        if not root or type(start) is not int or type(end) is not int or start < 0 or end <= start:
-            continue
-        grouped[(str(root), str(run.get('channel', 'mono')), str(run.get('clock_epoch', 'default')))].append(
-            FrameRange(start=start, end=end)
-        )
+    try:
+        for run in snapshot.get('runs') or []:
+            start, end = run.get('source_frame_start'), run.get('source_frame_end')
+            root = run.get('capture_root')
+            if not root or type(start) is not int or type(end) is not int or start < 0 or end <= start:
+                continue
+            grouped[(str(root), str(run.get('channel', 'mono')), str(run.get('clock_epoch', 'default')))].append(
+                FrameRange(start=start, end=end)
+            )
+    except (AttributeError, TypeError, ValueError):
+        observe('live_coverage', None)
+        return []
     events = []
     for (root, channel, epoch), ranges in grouped.items():
         key = CaptureKey(
@@ -80,17 +84,23 @@ async def publish_committed(host: Any, conversation_id: str, snapshot: dict[str,
     """Offload the ledger and emit only after the caller's durable segment write."""
     if not snapshot or snapshot.get('proof') != PROOF_KIND or not shadow_or_serve('CAPTURE_COVERAGE_MODE'):
         return
-    events = await host.persistence.call(
-        record_committed,
-        host.request.uid,
-        conversation_id,
-        snapshot,
-        recording_session_id=getattr(host, 'recording_session_id', None),
-        device_id=getattr(getattr(host, 'client_device_context', None), 'client_device_id', None),
-    )
-    if serving_for('CAPTURE_COVERAGE_MODE', host.request.uid):
-        for event in events:
-            host.send_event(event)
+    try:
+        events = await host.persistence.call(
+            record_committed,
+            host.request.uid,
+            conversation_id,
+            snapshot,
+            recording_session_id=getattr(host, 'recording_session_id', None),
+            device_id=getattr(getattr(host, 'client_device_context', None), 'client_device_id', None),
+        )
+        if serving_for('CAPTURE_COVERAGE_MODE', host.request.uid):
+            for event in events:
+                host.send_event(event)
+
+    except Exception:
+        # Transcript durability already succeeded; an optional custody publication
+        # failure must never trigger rollover/re-ingestion of the same speech.
+        observe('live_coverage', None)
 
 
 def committed_snapshot(host: Any, conversation_id: str, segments) -> dict:

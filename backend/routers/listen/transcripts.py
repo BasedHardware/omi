@@ -1570,6 +1570,7 @@ class TranscriptProcessor:
                     speaker_id=cast(int, segment.speaker_id),
                     person_id=person_id_for_client(person_id, self.host.request.speaker_auto_assign_enabled),
                     person_name=name,
+                    is_user=False,  # Contact-only; owner decisions use the owner wire adapter.
                     segment_id=segment_id,
                 )
             )
