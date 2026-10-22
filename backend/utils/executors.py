@@ -36,7 +36,7 @@ import functools
 import logging
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
-from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar
+from typing import Any, Callable, Coroutine, Dict, List, ParamSpec, TypeVar, cast
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,21 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if type(error).__name__ == 'DestructiveOperationInProgress':
         logger.info('background task %s deferred reason=destructive_operation', name)
         return
+    # A task body that itself submits to a pool already shut down (e.g. the
+    # audio precache fan-out on storage_executor) is refused by the same drain
+    # that cancelled everything else; one bounded INFO keeps the drain
+    # observable without a traceback per refused fan-out arm.
+    if isinstance(error, RuntimeError) and 'cannot schedule new futures' in str(error):
+        logger.info('background task %s skipped reason=executor_drained', name)
+        return
     logger.error("background task %s failed: %s", name, error, exc_info=error)
+
+
+def _drain_refusal_future(name: str) -> "Future[Any]":
+    """One resolved no-op future standing in for work refused at shutdown."""
+    future: Future[Any] = Future()
+    future.set_result(None)
+    return future
 
 
 def submit_with_context(
@@ -183,9 +197,32 @@ def submit_with_context(
     Callers overwhelmingly discard the Future, so a raised exception would otherwise
     be retained on it and never surface. The done callback logs it instead; callers
     that do read the Future keep their own handling.
+
+    Shutdown drain refuses a submit with ``RuntimeError: cannot schedule new
+    futures after shutdown`` once ``shutdown_executors()`` has run (deploys restart
+    the pod while in-flight conversation processing is still mid-flight). That
+    refusal is the drain, not a fault in the caller's work — and raising it here
+    crashed the whole composition boundary on its way out: the conversation
+    finalization path wrapped its background fan-out inside an audio block whose
+    catch degraded to ``Error creating audio files: cannot schedule new futures
+    after shutdown`` (pusher ×9/30m) while the sibling boundary logged
+    ``Conversation processing failed: RuntimeError`` (pusher ×14/30m), both in the
+    same drain window. The refused submit resolves to a no-op future and emits one
+    bounded INFO naming the pool and task: nothing was scheduled, exactly like a
+    future the drain cancelled, and the caller finishes its own return path.
     """
     ctx = contextvars.copy_context()
-    future = executor.submit(ctx.run, fn, *args, **kwargs)
+    try:
+        future = executor.submit(ctx.run, fn, *args, **kwargs)
+    except RuntimeError as error:
+        if 'cannot schedule new futures' not in str(error):
+            raise
+        logger.info(
+            'background task %s skipped reason=executor_drained executor=%s',
+            getattr(fn, '__name__', repr(fn)),
+            getattr(executor, 'name', type(executor).__name__),
+        )
+        return cast(Future[T], _drain_refusal_future(getattr(fn, '__name__', repr(fn))))
     future.add_done_callback(functools.partial(_log_background_failure, getattr(fn, '__name__', repr(fn))))
     return future
 

@@ -6,7 +6,7 @@ Provides generation and retrieval of yearly recap data.
 
 from typing import Any, Dict, Optional
 
-from utils.executors import llm_executor
+from utils.executors import llm_executor, submit_with_context
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -118,7 +118,7 @@ def generate_wrapped(
         if wrapped_db.is_wrapped_stuck(wrapped):
             # Restart stuck job
             wrapped_db.reset_wrapped_for_regeneration(uid, year)
-            llm_executor.submit(_run_wrapped_generation, uid, year)
+            submit_with_context(llm_executor, _run_wrapped_generation, uid, year)
             return GenerateWrappedResponse(
                 status=WrappedStatus.PROCESSING,
                 message="Restarting stuck generation...",
@@ -136,7 +136,7 @@ def generate_wrapped(
         wrapped_db.create_wrapped(uid, year)
 
     # Start generation in background
-    llm_executor.submit(_run_wrapped_generation, uid, year)
+    submit_with_context(llm_executor, _run_wrapped_generation, uid, year)
 
     return GenerateWrappedResponse(
         status=WrappedStatus.PROCESSING,

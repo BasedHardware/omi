@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 
-from utils.executors import postprocess_executor, storage_executor
+from utils.executors import postprocess_executor, storage_executor, submit_with_context
 from utils.other import audio_opus
 from utils.other.audio_opus import decode_opus_to_pcm, encode_pcm_to_opus
 from google.api_core.exceptions import PreconditionFailed
@@ -1511,7 +1511,7 @@ def get_or_create_merged_audio(
     if audio_archive.admitted(uid, 'COALESCE'):
         _upload_to_cache()
     else:
-        storage_executor.submit(_upload_to_cache)
+        submit_with_context(storage_executor, _upload_to_cache)
 
     return wav_data, False
 
@@ -1917,7 +1917,7 @@ def precache_conversation_audio(
             except Exception:
                 pass
 
-    postprocess_executor.submit(_precache_all)
+    submit_with_context(postprocess_executor, _precache_all)
 
 
 # **********************************

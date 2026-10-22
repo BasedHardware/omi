@@ -5281,3 +5281,38 @@ Failure-Class: FC-permanent-write-rejection-retried-forever — sibling
 instance in `backend/routers/listen/transcripts.py` (live speaker-map flush,
 drain boundary): an unclassified deterministic refusal rode the tick cadence
 forever because the boundary had no retry policy of its own.
+
+#### Shutdown drain refuses late background submits, not the caller
+
+`shutdown_executors()` (deploy drain, `utils/executors.py`) refuses every later
+`executor.submit` with `RuntimeError: cannot schedule new futures after
+shutdown`. Conversation finalization was still running when a deploy drained
+its pools, and its background fan-out — structured vector save, action items,
+goals, the conversation-created webhook, and the private-cloud audio precache —
+crossed that boundary. The refusal escaped twice into the prod feed in the
+same drain window (pusher 2026-10-21 23:00Z): the audio block degraded to
+`Error creating audio files: cannot schedule new futures after shutdown`
+(x9/30m) and the composition boundary returned/logged
+`Conversation processing failed: RuntimeError` (x14/30m) for a conversation
+whose processing had otherwise succeeded.
+
+The contract now is submit-time classification at the shared boundary:
+`submit_with_context` recognizes the drain refusal, resolves the submit to a
+no-op future, and emits one bounded INFO
+(`background task <name> skipped reason=executor_drained executor=<pool>`)
+per refusal — exactly how the drain treats work it cancelled itself. Every
+fire-and-forget submit (routers/wrapped.py generation kick-off,
+routers/mcp.py + routers/developer.py persona refresh, routers/imports.py
+limitless import, utils/chat_turn.py goal extraction,
+utils/other/storage.py precache fan-out and audio-merge cache upload) rides
+that boundary, so a drained endpoint still returns its real response instead
+of a 500. Result-consuming submits (RAG fan-out, knowledge-graph rebuild,
+speaker-tag verification) intentionally keep raising: their callers need the
+real failure, not a silent skip. `_log_background_failure` likewise
+downgrades a drain refusal raised by a task body to the same INFO — one line
+per refused arm, no traceback per fan-out.
+
+Failure-Class: FC-drain-refusal-crashes-fire-and-forget-caller — a
+fire-and-forget executor submit raised the shutdown drain's refusal into its
+caller, turning the drain (expected, bounded) into a caller-visible 500 or
+degrade at every deploy.

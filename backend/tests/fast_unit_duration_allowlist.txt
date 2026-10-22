@@ -14,6 +14,13 @@
 # One full _proxy round trip (metering -> sanitize -> dispatch -> terminal telemetry) with an
 # in-process capturing client; hermetic, but the end-to-end path costs ~0.15-0.19s CPU.
 tests/unit/test_desktop_proxy.py::test_proxy_dispatches_server_paid_bodies_with_the_2048_cap
+# Drain-refusal regression suite: the first tests of the file amortize the wrapped-router
+# import graph (routers.wrapped + database.wrapped) under file-isolation; measured
+# 0.18-0.62s CPU solo, inflates past the guard under parallel-suite load.
+tests/unit/test_executor_drain_refusal.py::test_wrapped_generation_start_during_drain_still_answers_processing
+tests/unit/test_executor_drain_refusal.py::test_wrapped_generation_task_body_still_runs_off_drain
+tests/unit/test_executor_drain_refusal.py::test_chat_turn_goal_extraction_rides_the_boundary
+tests/unit/test_executor_drain_refusal.py::test_precache_conversation_audio_during_drain_returns_instead_of_raising
 # First test in the file: get_llm('conv_structure') pays the gateway client graph under file isolation (~0.22-0.30s CPU).
 tests/unit/test_pusher_conversation_ledger_instrument.py::test_conversation_lane_gateway_client_is_attributed
 # Renders all eight first-party charts in dev and prod; still hermetic and required in the unit lane.

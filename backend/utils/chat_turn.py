@@ -14,7 +14,7 @@ import uuid
 import base64
 from datetime import datetime, timezone
 from typing import Optional
-from utils.executors import db_executor, llm_executor, run_blocking
+from utils.executors import db_executor, llm_executor, run_blocking, submit_with_context
 from utils.messaging.receipt_presentation import app_receipt_text
 from utils.chat_citations import resolve_conversation_citations
 from fastapi import HTTPException
@@ -383,7 +383,7 @@ def _run_chat_turn(uid, surface, session, message, reply_sink, *, principal, opt
 
     # Check for goal progress (background) — rate-limited to one call per user per 5 min
     if runtime is None and try_acquire_goal_extraction_lock(uid):
-        llm_executor.submit(extract_and_update_goal_progress, uid, data.text)
+        submit_with_context(llm_executor, extract_and_update_goal_progress, uid, data.text)
 
     # Preserve the legacy optional app lookup, including its None input.
     legacy_app_id: Any = compat_app_id

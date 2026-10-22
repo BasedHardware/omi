@@ -16,6 +16,7 @@ import importlib.util
 import os
 import shutil
 import sys
+from concurrent.futures import Future
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -132,6 +133,19 @@ def wire_common_stubs(install) -> SimpleNamespace:
     executors.llm_executor = MagicMock()
     executors.storage_executor = MagicMock()
     executors.sync_executor = MagicMock()
+
+    def _submit_with_context_side_effect(executor, fn, *args, **kwargs):
+        # Fire the task inline like run_blocking_side_effect does: the chat
+        # suites assert on behavior, not scheduling, and a resolved future
+        # matches the boundary's real contract.
+        future: Future = Future()
+        try:
+            future.set_result(fn(*args, **kwargs))
+        except Exception as error:  # pragma: no cover - scenario mocks decide
+            future.set_exception(error)
+        return future
+
+    executors.submit_with_context = _submit_with_context_side_effect
 
     async def run_blocking_side_effect(_executor, fn, *args, **kwargs):
         return fn(*args, **kwargs)

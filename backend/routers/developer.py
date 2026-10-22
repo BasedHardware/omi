@@ -91,7 +91,7 @@ from utils.conversations.meeting_receipt import (
     projected_meeting_treatment_eligible,
     record_finalized_meeting_receipt,
 )
-from utils.executors import postprocess_executor
+from utils.executors import postprocess_executor, submit_with_context
 from utils.external_read_contract import ignore_unknown_query, pagination_headers, utc_window
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
@@ -543,7 +543,7 @@ def create_memory(
         memories=[memory_db],
     )
     if memory.visibility == 'public':
-        postprocess_executor.submit(update_personas_async, uid)
+        submit_with_context(postprocess_executor, update_personas_async, uid)
     return DeveloperMemory(
         id=memory_db.id,
         content=memory_db.content,
@@ -626,7 +626,7 @@ def create_memories_batch(
         memories=created_dbs,
     )
     if has_public:
-        postprocess_executor.submit(update_personas_async, uid)
+        submit_with_context(postprocess_executor, update_personas_async, uid)
 
     created_memories = [
         DeveloperMemory(

@@ -59,9 +59,16 @@ class TestImportsExecutorMigration:
     """Verify imports router uses storage_executor for batch import work."""
 
     def test_import_uses_storage_executor(self):
-        """Limitless import dispatched to storage_executor (batch I/O, not latency-sensitive)."""
+        """Limitless import dispatched to storage_executor (batch I/O, not latency-sensitive).
+
+        The kick-off is fire-and-forget, so it rides ``submit_with_context``:
+        a submit refused by the shutdown drain resolves to a no-op future
+        instead of crashing the endpoint with
+        ``RuntimeError: cannot schedule new futures after shutdown``.
+        """
         src = _read_source('routers/imports.py')
-        assert 'storage_executor.submit(process_limitless_import' in src
+        assert 'submit_with_context(storage_executor, process_limitless_import' in src
+        assert 'storage_executor.submit(process_limitless_import' not in src
 
     def test_import_does_not_use_critical_executor(self):
         """Long-running import must not use critical_executor (would starve request-path)."""
@@ -259,8 +266,9 @@ class TestChatExecutorMigration:
         assert 'threading.Thread' not in src
 
     def test_uses_llm_executor_for_goals(self):
+        """Goal extraction stays on llm_executor, via the drain-tolerant boundary."""
         src = _read_source('utils/chat_turn.py')
-        assert 'llm_executor.submit(' in src
+        assert 'submit_with_context(llm_executor, extract_and_update_goal_progress' in src
 
     def test_uses_critical_executor_for_rate_limit(self):
         src = _read_source('routers/chat.py')

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from utils.executors import postprocess_executor
+from utils.executors import postprocess_executor, submit_with_context
 from utils.mcp_data import end_of_day_utc, parse_date_only_utc
 
 from fastapi import APIRouter, HTTPException, Depends, Request, Response
@@ -266,7 +266,7 @@ def create_memory(
         operation="mcp_memory_create",
         upsert_vector=True,
     )
-    postprocess_executor.submit(update_personas_async, uid)
+    submit_with_context(postprocess_executor, update_personas_async, uid)
     return memory_db
 
 
