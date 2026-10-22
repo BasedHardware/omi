@@ -851,15 +851,12 @@ def read_canonical_scan_page(
     item_filter: Optional[Callable[[MemoryItem], bool]] = None,
     candidate_snapshots: Optional[List[Any]] = None,
 ) -> Tuple[List[CanonicalScanSlot], bool]:
-    """Read one bounded canonical raw scan page via Firestore keyset order.
+    """Read a bounded canonical keyset, or apply its policy to supplied candidates.
 
-    Each slot corresponds to one candidate ``memory_items`` document in newest-first
-    ``updated_at DESC, __name__ ASC`` order. ``None`` memory means the row was
-    filtered by access/device/pending/archive/lineage policy and must still
-    advance the scan cursor. ``snapshot.id`` is the sole ``__name__`` authority;
-    payload ``memory_id`` mismatches fail closed as filtered slots. Callers
-    over-fetch additional pages when filters shrink the visible stream. Never
-    loads the full canonical set.
+    Normal order is ``updated_at DESC, __name__ ASC``. Ineligible rows yield
+    None slots so callers advance the scan; payload/document ID mismatches fail
+    closed. Supplied candidate snapshots retain all access/device/archive/lineage
+    checks. Callers refill filtered pages; the canonical set is never reloaded.
     """
     client = db_client if db_client is not None else default_db_client
     bounded_limit = max(1, min(int(limit or 100), _CANONICAL_SCAN_PAGE_MAX))

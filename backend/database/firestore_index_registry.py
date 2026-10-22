@@ -6,6 +6,11 @@ Index-only requirements stay explicit until callers migrate to query specs.
 from __future__ import annotations
 
 from typing import Any
+from database.mcp_read_queries import (
+    MCP_DAILY_RECORDINGS_QUERY,
+    MCP_MEMORY_FILTER_QUERIES,
+    MCP_CONVERSATION_CARD_QUERY_SPECS,
+)
 from database.review_queries import REVIEW_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
@@ -1026,38 +1031,6 @@ UNIVERSAL_CANONICAL_LIST_SCAN_QUERY = FirestoreQuerySpec(
     index_fields=(_desc('updated_at'), _asc('__name__')),
 )
 
-MCP_DAILY_RECORDINGS_QUERY = FirestoreQuerySpec(
-    identifier='mcp_daily_recordings_count',
-    collection_group='conversations',
-    query_scope='COLLECTION',
-    filters=(
-        FirestoreQueryFilter('discarded', '==', 'discarded'),
-        FirestoreQueryFilter('started_at', '>=', 'start'),
-        FirestoreQueryFilter('started_at', '<=', 'end'),
-    ),
-    index_fields=(_asc('discarded'), _asc('started_at'), _asc('__name__')),
-)
-
-# MCP candidate windows use a single necessary predicate; the policy adapter
-# rechecks every filter after canonical/historical suppression and decryption.
-MCP_MEMORY_FILTER_QUERIES = {}
-for _origin in ('memory_items', 'memories'):
-    for _predicate, _path, _op in (
-        ('all', None, None),
-        ('updated_after', 'updated_at', '>='),
-        ('reviewed', 'promotion.reviewed' if _origin == 'memory_items' else 'reviewed', '=='),
-        ('manually_added', 'user_asserted' if _origin == 'memory_items' else 'manually_added', '=='),
-        ('categories', 'promotion.category' if _origin == 'memory_items' else 'category', 'in'),
-    ):
-        MCP_MEMORY_FILTER_QUERIES[(_origin, _predicate)] = FirestoreQuerySpec(
-            identifier=f'mcp_{_origin}_{_predicate}',
-            collection_group=_origin,
-            query_scope='COLLECTION',
-            filters=(FirestoreQueryFilter(_path, _op, _predicate),) if _path else (),
-            index_fields=((_asc(_path),) if _path and _path != 'updated_at' else ())
-            + (_desc('updated_at'), _asc('__name__')),
-        )
-
 # Released list candidates use existing required canonical fields. Each branch
 # is a necessary condition, never a replacement for the authority's row policy.
 # In particular processed Short-term remains readable after expiry (§1.3).
@@ -1503,35 +1476,6 @@ CONVERSATIONS_COUNT_CREATED_RANGE_QUERY = FirestoreQuerySpec(
     ),
     index_fields=(_asc('discarded'), _asc('created_at'), _asc('__name__')),
 )
-
-MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
-for _has_categories in (False, True):
-    for _has_start_date in (False, True):
-        for _has_end_date in (False, True):
-            _suffixes = []
-            _filters = [
-                FirestoreQueryFilter('discarded', '==', 'discarded'),
-                FirestoreQueryFilter('status', '==', 'status'),
-            ]
-            _index_fields = [_asc('discarded'), _asc('status')]
-            if _has_categories:
-                _suffixes.append('category')
-                _filters.append(FirestoreQueryFilter('structured.category', 'in', 'categories'))
-                _index_fields.append(_asc('structured.category'))
-            if _has_start_date:
-                _suffixes.append('start')
-                _filters.append(FirestoreQueryFilter('created_at', '>=', 'start_date'))
-            if _has_end_date:
-                _suffixes.append('end')
-                _filters.append(FirestoreQueryFilter('created_at', '<=', 'end_date'))
-            _variant = '_'.join(_suffixes) or 'all'
-            MCP_CONVERSATION_CARD_QUERY_SPECS[(_has_categories, _has_start_date, _has_end_date)] = FirestoreQuerySpec(
-                identifier=f'mcp_conversation_cards_{_variant}',
-                collection_group='conversations',
-                query_scope='COLLECTION',
-                filters=tuple(_filters),
-                index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
-            )
 
 # Sync safety-WAL binding: the newest rollover generations of one recording that
 # started before the upload's audio ends (utils/sync/recording_lineage.py).

@@ -268,12 +268,8 @@ class ExternalMemoryWriteContext:
 
 @dataclass(frozen=True)
 class UniversalMemoryListPage:
-    """One mixed-view page plus an opaque continuation cursor.
-
-    ``truncated`` is True only when the request's list-read budget ended the
-    scan early (#11831); a truncated page carries no continuation cursor
-    because its cursor state would not cover every consumed scan position.
-    """
+    """A mixed page; budget-truncated pages have no cursor because consumed
+    scan positions cannot all be proven."""
 
     memories: List[MemoryDB]
     next_cursor: Optional[str]
@@ -3102,13 +3098,9 @@ class MemoryService:
         view: str = 'released',
         as_of: Optional[datetime] = None,
     ) -> UniversalMemoryListPage:
-        """Page the mixed newest-first view with an opaque composite cursor.
-
-        Legacy offset paging remains on ``read``. This path advances independent
-        canonical and historical positions, walks through suppressed historical
-        rows without emitting them, and refuses scope/archive authority changes
-        midstream via the signed cursor claims. Canonical continuation uses a
-        bounded Firestore keyset scan — never a full-set reload.
+        """Merge bounded canonical/historical keysets under signed scope/archive claims.
+        Suppressed rows advance without emission; legacy offset paging stays on read.
+        Canonical continuation never reloads the full set.
         """
         sort_key = (
             window_sort_key
