@@ -228,11 +228,12 @@ class ServingTarget:
     opaque_shadowed_keys: frozenset[str] = frozenset()
     # Cloud Run keys whose live secret reference was rewritten from the
     # revision's ``run.googleapis.com/secrets`` annotation, mapped to a
-    # canonical (project-stripped) hash. The platform normalizes the project
-    # segment to a number while repository state may carry the project ID:
-    # only a difference confined to that segment is ambiguous; name or
-    # version differences stay real drift. A matching full hash proves OK.
-    alias_canonical_hashes: Mapping[str, str] = field(default_factory=dict)
+    # segment-preserving comparison form (see ``_secret_ref_form``). The
+    # platform normalizes the project segment to a number while repository
+    # state may carry the project ID or the bare name: only a genuine
+    # ID-vs-number/implicit form difference degrades to INVENTORY; unequal
+    # projects, names or versions stay real drift. A matching full hash proves OK.
+    alias_ref_forms: Mapping[str, str] = field(default_factory=dict)
     # Explicit env keys bound through ``valueFrom.configMapKeyRef`` (live reads
     # only). The immutable pod spec proves the binding, but the value the
     # container resolved at start cannot be re-read: K8s requires a pod restart
@@ -315,19 +316,45 @@ def _secret_ref_hash(resource: str, version: str, *, optional: bool = False) -> 
     return value_hash('secret', f'{ref}:{version or "latest"}{suffix}')
 
 
-_PROJECT_SECRET_RE = re.compile(r'^projects/[^/]+/secrets/(?P<name>[^/]+)$')
+_PROJECT_SECRET_RE = re.compile(r'^projects/(?P<project>[^/]+)/secrets/(?P<name>[^/]+)$')
 
 
-def _strip_secret_project(resource: str) -> str:
-    """Reduce a secret resource to its bare name; only the dropped parts are form-ambiguous.
+def _secret_ref_form(resource: str, version: str) -> str:
+    """Canonical comparison form ``project\\0name\\0version`` for a secret reference.
 
-    The platform normalizes the project segment to a number in the
-    ``run.googleapis.com/secrets`` annotation while repository state may carry
-    the project ID or the bare name (the service's own project is implicit),
-    so the qualifier cannot be compared; the secret name and version can.
+    The form keeps every segment: the alias comparison decides per segment
+    which differences are provable (see ``_alias_mismatch_is_form_ambiguous``).
+    A non-matching resource (a bare name) keeps the whole string as the name.
     """
     match = _PROJECT_SECRET_RE.match(resource)
-    return match.group('name') if match else resource
+    if match:
+        return f'{match.group("project")}\x00{match.group("name")}\x00{version or "latest"}'
+    return f'\x00{resource}\x00{version or "latest"}'
+
+
+def _alias_mismatch_is_form_ambiguous(expected_form: str, live_form: str) -> bool:
+    """Whether an expected/live secret-reference mismatch is only a form difference.
+
+    The platform normalizes the project segment of the
+    ``run.googleapis.com/secrets`` annotation to a project *number* while
+    repository state may carry the project *ID* or the bare name (the
+    service's own project is implicit). Only that ambiguity is unprovable:
+    a project *number* versus a project *ID* (in either direction), or an
+    implicit bare name versus a qualified reference. Two different project
+    *numbers*, two different project IDs, or any name/version difference are
+    provably different references (real drift).
+    """
+    expected_project, _, expected_rest = expected_form.partition('\x00')
+    live_project, _, live_rest = live_form.partition('\x00')
+    if expected_rest != live_rest:
+        return False  # secret name or version differs: real drift
+    if expected_project == live_project:
+        return True  # identical reference; nothing provably differs
+    if not expected_project or not live_project:
+        return True  # implicit (bare-name) project vs qualified: form ambiguity
+    if expected_project.isdigit() != live_project.isdigit():
+        return True  # project ID vs project number: the platform-normalized form
+    return False  # two different numbers or two different IDs: provably different projects
 
 
 def env_entry_hash(entry: Mapping[str, Any]) -> str:
@@ -536,15 +563,15 @@ def _is_renderer_secret_entry(entry: Mapping[str, Any]) -> bool:
     )
 
 
-def _canonical_manifest_secret_hash(name: str, entry: object, *, environ: Mapping[str, str]) -> str:
-    """Project-stripped secret hash for a manifest binding (see ``_strip_secret_project``)."""
+def _canonical_manifest_secret_form(name: str, entry: object, *, environ: Mapping[str, str]) -> str:
+    """Comparison form for a manifest secret binding (see ``_secret_ref_form``)."""
     config = render_backend_runtime_env._as_config_dict(entry) or {}
     if 'secret' in config:
         resource = str(config['secret'])
     else:
         env_var = config.get('env_var')
         resource = environ.get(env_var, '') if isinstance(env_var, str) else ''
-    return _secret_ref_hash(_strip_secret_project(resource or name), str(config.get('version', 'latest')))
+    return _secret_ref_form(resource or name, str(config.get('version', 'latest')))
 
 
 def expected_cloud_run_env(
@@ -596,7 +623,7 @@ def expected_cloud_run_env(
             service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=False, environ=environ)
         for key, entry in secrets_map.items():
             service_expected[str(key)] = _manifest_entry_hash(str(key), entry, secret=True, environ=environ)
-            service_canonical[str(key)] = _canonical_manifest_secret_hash(str(key), entry, environ=environ)
+            service_canonical[str(key)] = _canonical_manifest_secret_form(str(key), entry, environ=environ)
         raw_rendered = rendered_services.get(service_name)
         if rendered_state_path is not None and not isinstance(raw_rendered, Mapping):
             # The rendered state is all-or-nothing per service: a missing or
@@ -703,22 +730,25 @@ def expected_cloud_run_env(
             # current manifest; replacement stays reserved for deploy-time
             # ``env_var`` bindings the manifest cannot resolve.
             if key in service_expected and service_expected[key] is not None:
+                manifest_hash = service_expected[key]
+                assert manifest_hash is not None  # guarded above; narrows for the type checker
                 rendered_hash = env_entry_hash(entry)
-                if rendered_hash != service_expected[key]:
+                if rendered_hash != manifest_hash:
                     binding = bindings.get(key) if rendered_state_path is not None else None
                     is_deploy_time = isinstance(binding, Mapping) and bool(binding.get('env_var'))
                     if not is_deploy_time:
                         raise ValueError(
                             f'Rendered state {rendered_state_path} entry for {key!r} on service '
                             f'{service_name!r} contradicts the manifest binding '
-                            f'(manifest hash {service_expected[key]}, rendered hash {rendered_hash}); '
+                            f'(manifest hash {display_hash(key, manifest_hash)}, '
+                            f'rendered hash {display_hash(key, rendered_hash)}); '
                             'the renderer emits literals and fixed secret references unchanged'
                         )
             service_expected[key] = env_entry_hash(entry)
             secret_ref = (entry.get('valueFrom') or {}).get('secretKeyRef')
             if isinstance(secret_ref, Mapping):
-                service_canonical[key] = _secret_ref_hash(
-                    _strip_secret_project(str(secret_ref.get('name', ''))), str(secret_ref.get('key', ''))
+                service_canonical[key] = _secret_ref_form(
+                    str(secret_ref.get('name', '')), str(secret_ref.get('key', ''))
                 )
         expected[str(service_name)] = service_expected
         if canonical_secret_hashes is not None:
@@ -1021,10 +1051,11 @@ def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> tupl
     ``_secret_ref_hash``), so a live alias must resolve through the annotation
     before hashing or a correctly deployed cross-project secret reports a value
     mismatch. Only names the annotation explicitly declares are rewritten.
-    Returns ``(entries, canonical hashes)`` where the canonical hash strips the
-    form-ambiguous ``projects/<token>/`` segment: a full-hash difference whose
-    canonical forms match is a project-ID/number form difference (INVENTORY),
-    while a canonical difference is real drift.
+    Returns ``(entries, comparison forms)`` where the form keeps the project
+    segment separate (see ``_secret_ref_form``): a full-hash difference is
+    degraded to INVENTORY only when it is confined to a genuine
+    ID-vs-number/implicit project form difference; unequal projects, names or
+    versions stay real drift.
     """
     if not isinstance(entries, list) or not aliases:
         return (entries if isinstance(entries, list) else []), {}
@@ -1043,9 +1074,7 @@ def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> tupl
                         'valueFrom': {'secretKeyRef': {**secret, 'name': resource}},
                     }
                     if isinstance(entry_name, str) and entry_name:
-                        canonical[entry_name] = _secret_ref_hash(
-                            _strip_secret_project(resource), str(secret.get('key', ''))
-                        )
+                        canonical[entry_name] = _secret_ref_form(resource, str(secret.get('key', '')))
         resolved.append(entry)
     return resolved, canonical
 
@@ -1132,7 +1161,7 @@ def read_cloud_run_service(
                     key_count=len(env),
                     fingerprint=env_fingerprint(env),
                     display_fingerprint=env_fingerprint(env, redacted=True),
-                    alias_canonical_hashes=alias_canonical,
+                    alias_ref_forms=alias_canonical,
                 ),
                 env,
             )
@@ -1481,21 +1510,25 @@ def compare_service(
             skip_missing = frozenset().union(
                 *(envfrom_keys_by_ref.get(ref, frozenset()) for ref in degraded_expected_refs)
             )
-            # An opaque Secret source may also *supply* an expected key the
+            # An opaque later source may also *supply* an expected key the
             # earlier known sources did not contribute: Secret contents are
-            # never readable in any run mode, so the key's absence from
-            # env_map proves nothing. Excuse only expected names the Secret's
-            # prefix can reach — a ``prefix: SECRET_`` Secret can never supply
-            # an unprefixed expected key, whose absence stays proven missing
-            # drift. Unresolvable ConfigMap siblings stay excluded: they are
-            # run-scoped degradations, not inherently unreadable sources, and
-            # expected keys stay attributed to the source the repo declares.
-            secret_prefixes = [
-                _parse_envfrom_ref_identity(ref)[1] for ref in target.envfrom_degraded_refs if ref.startswith('secret:')
+            # never readable in any run mode, and an unresolved ConfigMap's
+            # data is unknown in this run, so the key's absence from env_map
+            # proves nothing — it may come from the opaque source (K8s
+            # last-source-wins makes a later source the effective one). Excuse
+            # only expected names the source's prefix can reach (a ``prefix:
+            # SECRET_`` source can never supply an unprefixed key, whose
+            # absence stays proven missing drift). A degraded-but-read source
+            # (live ConfigMap whose data cannot prove what running pods
+            # resolved) is excluded: its key set is known, so it cannot supply
+            # names beyond its contribution.
+            known_key_sets = dict(target.envfrom_key_contributions)
+            opaque_prefixes = [
+                _parse_envfrom_ref_identity(ref)[1] for ref in target.envfrom_degraded_refs if ref not in known_key_sets
             ]
-            if secret_prefixes:
+            if opaque_prefixes:
                 skip_missing |= {
-                    key for key in expected_envfrom_keys for prefix in secret_prefixes if key.startswith(prefix)
+                    key for key in expected_envfrom_keys for prefix in opaque_prefixes if key.startswith(prefix)
                 }
         missing |= declared - set(env_map) - skip_missing
         # Unproven live ConfigMap data only degrades keys whose effective value
@@ -1548,14 +1581,13 @@ def compare_service(
                 continue
             # A key resolved through the run.googleapis.com/secrets annotation
             # may legitimately differ from the expected reference in the
-            # project segment alone (the platform writes the project number,
-            # repository state may carry the project ID). Only a difference
-            # confined to that segment — canonical (project-stripped) hashes
-            # equal — degrades to INVENTORY; a name or version difference is
-            # real drift.
-            if (
-                key in target.alias_canonical_hashes
-                and (expected_canonical_secret_hashes or {}).get(key) == target.alias_canonical_hashes[key]
+            # project segment's *form* alone (the platform writes the project
+            # number, repository state may carry the project ID or the bare
+            # name). Only that ID-vs-number/implicit form difference degrades
+            # to INVENTORY; unequal projects, a different secret name or a
+            # different version is real drift.
+            if key in target.alias_ref_forms and _alias_mismatch_is_form_ambiguous(
+                (expected_canonical_secret_hashes or {}).get(key, '\x00\x00'), target.alias_ref_forms[key]
             ):
                 alias_unproven.add(key)
                 continue

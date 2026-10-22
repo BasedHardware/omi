@@ -1645,20 +1645,21 @@ def test_field_ref_hash_ignores_server_defaulted_api_version(checker) -> None:
     assert checker.env_entry_hash(rendered) == checker.env_entry_hash(served)
 
 
-def test_gke_expected_envfrom_keys_suppress_only_the_degraded_source(checker) -> None:
-    # Thread: when a workload has multiple expected envFrom references and only
-    # one is degraded (here: offline snapshot proving ConfigMap A's data while
-    # omitting external ConfigMap B), the missing-key suppression must cover
-    # only the degraded source's keys. Before the fix every expected envFrom
-    # key was skipped, so a required key missing from the *proven* A snapshot
-    # went unreported and --strict stayed 0 despite known drift.
+def test_gke_missing_key_excuse_stops_at_the_opaque_source_prefix(checker) -> None:
+    # Thread lineage: when a workload has multiple expected envFrom references
+    # and only one is degraded (here: offline snapshot proving ConfigMap A's
+    # data while omitting external ConfigMap B), the missing-key suppression
+    # must stay scoped. An unprefixed opaque B may supply any expected name, so
+    # its potential contributions degrade to INVENTORY; but B with a prefix the
+    # dropped key does not share cannot supply it, so the *proven* A snapshot's
+    # missing key stays real drift and --strict stays 1.
     cm_name, cm_data = _prod_configmap_fixture(checker)
     dropped_key = sorted(cm_data)[0]
     snapshot_data = {key: value for key, value in cm_data.items() if key != dropped_key}
     cm_b = 'fixture-config-b'
     deployment = 'prod-omi-pusher'
     serving_env = [{'name': 'X', 'value': 'x'}]
-    envfrom = [{'configMapRef': {'name': cm_name}}, {'configMapRef': {'name': cm_b}}]
+    envfrom = [{'configMapRef': {'name': cm_name}}, {'prefix': 'CFG_', 'configMapRef': {'name': cm_b}}]
     rendered = yaml.safe_dump_all(
         [
             {
@@ -1697,13 +1698,57 @@ def test_gke_expected_envfrom_keys_suppress_only_the_degraded_source(checker) ->
         env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
     )
     assert result.error is None, result.error
-    assert result.envfrom_unresolved == (cm_b,)
-    # The proven source's required key is absent from the serving snapshot:
-    # real drift, not suppressed by the degraded sibling reference.
+    assert result.envfrom_unresolved == (f'{cm_b}#CFG_',)
+    # The proven source's required key is absent from the serving snapshot and
+    # the prefixed opaque sibling cannot supply it: real drift.
     assert result.missing_from_live == (dropped_key,)
     assert result.status == 'DRIFT'
     assert result.has_drift
     assert checker.exit_code((result,), strict=True) == 1
+
+
+def test_gke_unprefixed_unresolved_configmap_may_supply_missing_expected_keys(checker) -> None:
+    # Same layout, but the unresolved later ConfigMap B carries no prefix: it
+    # may supply any expected key name, so A's snapshot missing the key is
+    # unproven presence (INVENTORY), not missing drift — the missing-key
+    # uncertainty must extend to opaque ConfigMap sources, not only Secrets.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    dropped_key = sorted(cm_data)[0]
+    snapshot_data = {key: value for key, value in cm_data.items() if key != dropped_key}
+    cm_b = 'fixture-config-b'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [{'configMapRef': {'name': cm_name}}, {'configMapRef': {'name': cm_b}}]
+    rendered = yaml.safe_dump_all(
+        [
+            {
+                'kind': 'Deployment',
+                'metadata': {'name': deployment},
+                'spec': {
+                    'template': {'spec': {'containers': [{'name': 'pusher', 'env': serving_env, 'envFrom': envfrom}]}}
+                },
+            }
+        ]
+    )
+
+    def runner(argv, **_kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+    gke_state = {
+        'configmaps': {cm_name: {'data': snapshot_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), render='helm', gke_state=gke_state, runner=runner
+    )
+    assert result.error is None, result.error
+    assert result.envfrom_unresolved == (cm_b,)
+    assert result.missing_from_live == (), result.missing_from_live
+    assert result.status == 'INVENTORY', result
+    assert checker.exit_code((result,), strict=True) == 0
 
 
 def test_gke_template_comparison_includes_envfrom_identities(checker) -> None:
@@ -2090,6 +2135,39 @@ def test_rendered_state_rejects_contradicting_manifest_literal(checker, tmp_path
     )
     with pytest.raises(ValueError, match='contradicts the manifest binding'):
         checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=rendered)
+
+
+def test_rendered_state_contradiction_redacts_sensitive_hashes(checker, tmp_path: Path) -> None:
+    # The validation error reaches stderr through main() before any report-level
+    # redaction, so it must redact digests itself: a sensitive key's hash in a
+    # CI log is an offline oracle for candidate low-entropy values.
+    manifest = {
+        'schema_version': 2,
+        'environments': {
+            'prod': {
+                'compute_project': 'based-hardware',
+                'region': 'us-central1',
+                'cloud_run': {
+                    'services': {
+                        'backend': {'env': {'AUDIO_ARCHIVE_UID_ALLOWLIST': {'value': 'uid-1'}}},
+                    }
+                },
+            }
+        },
+    }
+    manifest_path = tmp_path / 'sensitive.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    rendered = tmp_path / 'stale-sensitive.json'
+    rendered.write_text(
+        json.dumps({'services': {'backend': {'env': [{'name': 'AUDIO_ARCHIVE_UID_ALLOWLIST', 'value': 'uid-2'}]}}}),
+        encoding='utf-8',
+    )
+    with pytest.raises(ValueError) as excinfo:
+        checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=rendered)
+    message = str(excinfo.value)
+    assert 'redacted' in message
+    assert checker.value_hash('value', 'uid-1') not in message
+    assert checker.value_hash('value', 'uid-2') not in message
 
 
 def test_gke_prefixed_secret_source_may_supply_missing_expected_keys(checker) -> None:
@@ -3412,6 +3490,59 @@ def test_cloud_run_secret_alias_bare_manifest_name_degrades_to_inventory(checker
     assert 'TYPESENSE_HOST' in sync.alias_unproven_keys
     assert sync.status == 'INVENTORY', sync
     assert checker.exit_code((sync,), strict=True) == 0
+
+
+def test_cloud_run_secret_alias_unequal_numeric_projects_is_real_drift(checker, tmp_path: Path) -> None:
+    # Two different project *numbers* are provably different projects: the
+    # alias resolution rebinds the key to another project's secret, which is
+    # real drift, not the ID-vs-number form ambiguity the degradation covers.
+    state, manifest = _alias_mismatch_state(
+        checker, alias_name='SHARED_TOKEN', annotation_resource='projects/456/secrets/SHARED_TOKEN'
+    )
+    manifest['environments']['prod']['cloud_run']['services']['backend-sync']['secrets']['TYPESENSE_HOST'] = {
+        'secret': 'projects/123/secrets/SHARED_TOKEN',
+        'version': 'latest',
+    }
+    manifest_path = tmp_path / 'runtime_env_other_number.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.error is None, sync.error
+    assert 'TYPESENSE_HOST' in {m.key for m in sync.value_mismatches}, sync.value_mismatches
+    assert 'TYPESENSE_HOST' not in sync.alias_unproven_keys
+    assert sync.status == 'DRIFT', sync
+    assert checker.exit_code((sync,), strict=True) == 1
+
+
+def test_cloud_run_secret_alias_unequal_project_ids_is_real_drift(checker, tmp_path: Path) -> None:
+    # Two different non-numeric project IDs are equally provable: the platform
+    # never rewrites one project ID into another, so this is a real rebind.
+    state, manifest = _alias_mismatch_state(
+        checker, alias_name='SHARED_TOKEN', annotation_resource='projects/other-project/secrets/SHARED_TOKEN'
+    )
+    manifest['environments']['prod']['cloud_run']['services']['backend-sync']['secrets']['TYPESENSE_HOST'] = {
+        'secret': 'projects/based-hardware/secrets/SHARED_TOKEN',
+        'version': 'latest',
+    }
+    manifest_path = tmp_path / 'runtime_env_other_id.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.error is None, sync.error
+    assert 'TYPESENSE_HOST' in {m.key for m in sync.value_mismatches}, sync.value_mismatches
+    assert 'TYPESENSE_HOST' not in sync.alias_unproven_keys
+    assert sync.status == 'DRIFT', sync
+    assert checker.exit_code((sync,), strict=True) == 1
 
 
 def test_gke_unresolved_later_configmap_shadows_earlier_keys(checker) -> None:
