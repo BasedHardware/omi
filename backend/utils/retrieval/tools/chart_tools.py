@@ -56,32 +56,57 @@ def create_chart_tool(
     Returns:
         Confirmation message. The chart data is automatically attached to the response.
     """
+    clean_title = str(title or "").strip()
+    if not clean_title:
+        return "Error: title cannot be empty."
+
+    clean_type = str(chart_type or "").strip().lower()
+    if clean_type not in ('line', 'bar'):
+        return "Error: chart_type must be 'line' or 'bar'."
+
+    if labels is None or values is None:
+        return "Error: labels and values must not be None."
+
+    if not isinstance(labels, list) or not isinstance(values, list):
+        return "Error: labels and values must be lists."
+
     if len(labels) != len(values):
         return "Error: labels and values must have the same length."
-
-    if chart_type not in ('line', 'bar'):
-        return "Error: chart_type must be 'line' or 'bar'."
 
     if len(labels) == 0:
         return "Error: at least one data point is required."
 
+    coerced_values: List[float] = []
+    for v in values:
+        try:
+            if v is None:
+                return "Error: values cannot contain None."
+            coerced_values.append(float(v))
+        except (ValueError, TypeError):
+            return f"Error: all values must be valid numbers; got {v!r}"
+
+    coerced_labels: List[str] = [str(lbl or "") for lbl in labels]
+
     chart_data = {
-        "chart_type": chart_type,
-        "title": title,
+        "chart_type": clean_type,
+        "title": clean_title,
         "x_label": x_label,
         "y_label": y_label,
         "datasets": [
             {
-                "label": dataset_label,
-                "data_points": [{"label": l, "value": v} for l, v in zip(labels, values)],
+                "label": dataset_label or "Data",
+                "data_points": [{"label": l, "value": v} for l, v in zip(coerced_labels, coerced_values)],
                 "color": color,
             }
         ],
     }
 
     config = _agent_config()
-    if config:
-        configurable = config.get('configurable', {})
+    if isinstance(config, dict):
+        configurable = config.get('configurable')
+        if not isinstance(configurable, dict):
+            configurable = {}
+            config['configurable'] = configurable
         configurable['chart_data'] = chart_data
 
-    return f"Chart created: {title} ({chart_type} chart with {len(labels)} data points). The chart will be displayed inline in the chat."
+    return f"Chart created: {clean_title} ({clean_type} chart with {len(coerced_labels)} data points). The chart will be displayed inline in the chat."
