@@ -499,3 +499,8 @@ tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_no
 tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[False-no_dispatch]
 tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[True-bare_429]
 tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[True-no_dispatch]
+# Main #23176's short-probe worker-barrier case (zh 6s PCM16 decode): 1.05s then 1.00s CPU vs the
+# 1.00s fail limit on PR #23100's shard-6 runners (two attempts, 10-22), under the limit on main's
+# --all shards and locally. Same boundary shape as the Dream retry entries above; the decode is the
+# test's real work, so keep it in the unit lane via the allowlist rather than a global threshold bump.
+tests/unit/test_batch_audio_language.py::test_admitted_short_false_permission_cannot_bypass_worker_barrier[zh-clean_speech-6s-pcm16]

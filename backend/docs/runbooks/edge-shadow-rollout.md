@@ -32,9 +32,13 @@ record).
    the digest from the run's "Role images" summary table.
 2. **Chart**: `gcp_backend_listen_helm.yml` deploys `backend/charts/listen-edge`
    in namespace `<env>-omi-backend` when dispatched with
-   `listen_edge_image_digest` (validated: this project's registry, revision
-   label = the checked-out SHA). Blank input leaves the listen-edge release
-   untouched — re-pass the same digest to apply a chart-only change.
+   `listen_edge_image_digest` (validated by
+   `backend/scripts/admit_listen_edge_image.py`: this project's registry, the
+   listen-edge image, revision label = its `OMI_RELEASE_SHA` stamp, and that
+   revision a commit the checked-out source contains — prod checks out main, so
+   any digest from a train at or before main's tip is admissible, including the
+   previous one for a rollback). Blank input leaves the listen-edge release
+   untouched — re-pass a digest to apply a chart-only change.
 3. **Token (optional)**: `EDGE_SHADOW_TOKEN` is a secret
    (`config/deployment-setting-classification.json`) and is never a committed
    env entry. If used, the same shared value goes in two protected places —

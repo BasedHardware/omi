@@ -111,6 +111,16 @@
         ".github/workflows/gcp_backend_listen_helm.yml"
       ]
     },
+    "listen-edge": {
+      "platform": "gke",
+      "role": "realtime",
+      "image": "listen-edge",
+      "current_image": "listen-edge",
+      "current_deploy": [
+        ".github/workflows/gcp_backend_listen_helm.yml"
+      ],
+      "image_built_elsewhere": "The listen workflow rolls the listen-edge GKE chart by an admitted digest (LISTEN_EDGE_IMAGE_DIGEST); build-only role-image trains (role_images.yml, gcp_backend.yml) build, probe and publish the native image, and the deploy never builds it."
+    },
     "pusher": {
       "platform": "gke",
       "role": "realtime",
