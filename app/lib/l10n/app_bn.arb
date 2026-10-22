@@ -11832,5 +11832,7 @@
     "deviceCatchingUpProgress": "{done}/{total} মিনিট",
     "deviceRecently": "সম্প্রতি",
     "deviceDisconnectedFor": "{duration} ধরে সংযোগ বিচ্ছিন্ন",
-    "deviceControls": "নিয়ন্ত্রণ"
+    "deviceControls": "নিয়ন্ত্রণ",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

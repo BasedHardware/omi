@@ -4406,5 +4406,7 @@
     "deviceCatchingUpProgress": "{done}/{total} phút",
     "deviceRecently": "Gần đây",
     "deviceDisconnectedFor": "Mất kết nối {duration}",
-    "deviceControls": "Điều khiển"
+    "deviceControls": "Điều khiển",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

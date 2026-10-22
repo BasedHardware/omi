@@ -4406,5 +4406,7 @@
     "deviceCatchingUpProgress": "{done} / {total} min",
     "deviceRecently": "Hiljuti",
     "deviceDisconnectedFor": "Ühendus puudus {duration}",
-    "deviceControls": "Juhtimine"
+    "deviceControls": "Juhtimine",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

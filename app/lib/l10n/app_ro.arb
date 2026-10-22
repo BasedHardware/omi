@@ -4406,5 +4406,7 @@
     "deviceCatchingUpProgress": "{done} din {total} min",
     "deviceRecently": "Recent",
     "deviceDisconnectedFor": "Deconectat timp de {duration}",
-    "deviceControls": "Comenzi"
+    "deviceControls": "Comenzi",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

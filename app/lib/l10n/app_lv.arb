@@ -4406,5 +4406,7 @@
     "deviceCatchingUpProgress": "{done} no {total} min",
     "deviceRecently": "Nesen",
     "deviceDisconnectedFor": "Atvienots {duration}",
-    "deviceControls": "Vadīklas"
+    "deviceControls": "Vadīklas",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

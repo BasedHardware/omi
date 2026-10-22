@@ -14544,4 +14544,10 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceControls => 'Comenzi';
+
+  @override
+  String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
+
+  @override
+  String get onboardingChatOnTelegramBody => 'Text Omi like you do in the app — right from Telegram.';
 }

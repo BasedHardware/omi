@@ -4406,5 +4406,7 @@
     "deviceCatchingUpProgress": "{done}/{total} min",
     "deviceRecently": "Äskettäin",
     "deviceDisconnectedFor": "Yhteys katkesi {duration} ajaksi",
-    "deviceControls": "Säätimet"
+    "deviceControls": "Säätimet",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -4406,5 +4406,7 @@
     "deviceCatchingUpProgress": "{done} iš {total} min.",
     "deviceRecently": "Neseniai",
     "deviceDisconnectedFor": "Atsijungta {duration}",
-    "deviceControls": "Valdikliai"
+    "deviceControls": "Valdikliai",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

@@ -4406,5 +4406,7 @@
     "deviceCatchingUpProgress": "{done} จาก {total} นาที",
     "deviceRecently": "ล่าสุด",
     "deviceDisconnectedFor": "ตัดการเชื่อมต่อ {duration}",
-    "deviceControls": "การควบคุม"
+    "deviceControls": "การควบคุม",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

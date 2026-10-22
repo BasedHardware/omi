@@ -14478,4 +14478,10 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get deviceControls => 'নিয়ন্ত্রণ';
+
+  @override
+  String get onboardingChatOnTelegramTitle => 'Chat with Omi on Telegram';
+
+  @override
+  String get onboardingChatOnTelegramBody => 'Text Omi like you do in the app — right from Telegram.';
 }

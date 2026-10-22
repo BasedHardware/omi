@@ -4502,5 +4502,7 @@
     "deviceCatchingUpProgress": "{done}/{total} perc",
     "deviceRecently": "Nemrég",
     "deviceDisconnectedFor": "{duration} szétkapcsolva",
-    "deviceControls": "Vezérlők"
+    "deviceControls": "Vezérlők",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }

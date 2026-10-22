@@ -11832,5 +11832,7 @@
     "deviceCatchingUpProgress": "{done} מתוך {total} דק׳",
     "deviceRecently": "לאחרונה",
     "deviceDisconnectedFor": "מנותק למשך {duration}",
-    "deviceControls": "פקדים"
+    "deviceControls": "פקדים",
+    "onboardingChatOnTelegramTitle": "Chat with Omi on Telegram",
+    "onboardingChatOnTelegramBody": "Text Omi like you do in the app — right from Telegram."
 }
