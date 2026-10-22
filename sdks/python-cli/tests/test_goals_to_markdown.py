@@ -508,3 +508,27 @@ class TestGoalsToMarkdown(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_safe_path_allows_names_that_merely_contain_double_dots(self) -> None:
+        """A file name with two dots is not a traversal; only a '..' component is."""
+        for ok_path in ("data..goals.md", "my..export/output.md"):
+            self.assertEqual(str(g2m.validate_safe_path(ok_path)), ok_path)
+
+    def test_goal_text_is_markdown_escaped(self) -> None:
+        """Titles and free text must not be able to inject checklist structure."""
+        goal = {
+            "id": "g1",
+            "title": "Ship [beta] *now* #launch <b>x</b>",
+            "goal_type": "boolean",
+            "desired_outcome": "ship - [ ] injected checkbox",
+            "subtasks": [{"title": "**bold** sub", "completed": False}],
+            "success_criteria": ["- [ ] not a real task"],
+        }
+
+        rendered = g2m.format_goal_tree(goal)
+
+        self.assertIn(r"Ship \[beta\] \*now\* \#launch \<b\>x\</b\>", rendered)
+        self.assertIn(r"ship - \[ \] injected checkbox", rendered)
+        self.assertIn(r"\*\*bold\*\* sub", rendered)
+        self.assertIn(r"- \[ \] not a real task", rendered)
+        self.assertEqual(rendered.count("\n- [ ]"), 0)
