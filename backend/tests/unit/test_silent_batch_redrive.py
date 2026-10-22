@@ -1,7 +1,5 @@
 """Silent repair survives CAS replay, revision changes, and asynchronous enrichment."""
 
-from copy import deepcopy
-from dataclasses import asdict
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -14,6 +12,8 @@ from utils.batch_pipeline.speech_redrive import redrive_one
 from utils.conversations.silent_redrive import is_silent_redrive
 from database.batch_pipeline_projection import ProjectionStore
 from database.batch_pipeline_projection_protocol import ProjectionBlocked
+from models.conversation_enums import ConversationSource
+from utils.enrichment import callback
 
 
 def test_silent_intent_is_persisted_and_cannot_change_on_replay(setup, monkeypatch, legacy_dependencies):
@@ -76,9 +76,6 @@ def test_suppression_requires_exact_positive_integer_revision(revision, marker, 
 
 @pytest.mark.parametrize('silent', [True, False])
 def test_enrichment_uses_durable_revision_and_never_sends_silent_creation_webhook(monkeypatch, silent):
-    from utils.enrichment import callback
-    from models.conversation_enums import ConversationSource
-
     data = {'id': 'synthetic', 'sync_content_revision': 7, 'sync_silent_redrive_revision': 7 if silent else 6}
     monkeypatch.setattr(callback.conversations_db, 'get_conversation', lambda *a: data)
     monkeypatch.setattr(callback, 'repair_fenced', lambda _: False)
