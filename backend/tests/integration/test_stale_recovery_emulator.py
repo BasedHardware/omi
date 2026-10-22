@@ -139,3 +139,37 @@ async def test_todays_orphan_finalizes_despite_old_discarded_head(world, monkeyp
     assert rows.document('today').get().to_dict()['status'] == 'completed'
     assert sum(doc.to_dict().get('discarded', False) for doc in rows.stream()) == 25
     assert rows.document('active').get().to_dict()['status'] == 'in_progress'
+
+
+def test_account_deletion_started_after_scan_cannot_recreate_cursor(world, monkeypatch):
+    db, uid, user = world
+    seed(user)
+    claim = recovery._claim_page_txn
+
+    def deletion_wins(*args, **kwargs):
+        db.collection('account_deletions').document(uid).set({'wipe_status': 'pending'})
+        return claim(*args, **kwargs)
+
+    monkeypatch.setattr(recovery, '_claim_page_txn', deletion_wins)
+    attempted = page(db, uid)
+    assert not user.collection('conversation_recovery_state').document('stale_in_progress').get().exists
+    assert attempted == []
+
+
+def test_default_recovery_client_uses_customer_plane_not_compute_plane(world, monkeypatch):
+    db, uid, user = world
+    seed(user, 1)
+    compute = firestore.Client(project='demo-p54-compute', credentials=AnonymousCredentials())
+    try:
+        compute_user = compute.collection('users').document(uid)
+        compute_user.collection('conversations').document('wrong-plane').set(
+            {'status': 'in_progress', 'finished_at': NOW - timedelta(days=30)}
+        )
+        monkeypatch.setattr(_client, '_firestore_client', compute)
+        monkeypatch.setattr(_client, '_data_plane_firestore_client', db)
+        selected = recovery.get_stale_recovery_page(uid, cutoff=NOW - timedelta(hours=1), now=NOW)
+        assert selected == [{'id': 'poison-00'}]
+        assert user.collection('conversation_recovery_state').document('stale_in_progress').get().exists
+        assert not compute_user.collection('conversation_recovery_state').document('stale_in_progress').get().exists
+    finally:
+        compute.close()

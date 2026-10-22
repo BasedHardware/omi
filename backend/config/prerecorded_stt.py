@@ -35,6 +35,10 @@ class TranscriptionOutcome(str, Enum):
     EMPTY_UNEXPECTED = 'empty_unexpected'
     TIMEOUT = 'timeout'
     UPSTREAM_ERROR = 'upstream_error'
+    # Provider answered account state (Modulate 402, or 429 "insufficient
+    # credits"): deterministic until the account is funded, so it is counted
+    # separately from a retryable upstream_error (2026-10-22 outage).
+    PROVIDER_BUDGET_EXHAUSTED = 'provider_budget_exhausted'
     CONFIG_ERROR = 'config_error'
     INVALID_INPUT = 'invalid_input'
 
