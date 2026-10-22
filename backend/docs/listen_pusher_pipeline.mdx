@@ -6307,8 +6307,11 @@ counts rows whose old recording lease is unknown). Alert on a positive increase 
 window such as ten minutes; retries can observe the same row more than once.
 This measures missing finalization handoff, not missing capture or STT ingress.
 
-Roll out the producer code on GKE listen and the consumer code on backend
-API/reconciler/worker hosts. Keep the existing Cloud Run durable-finalization
+Deploy the queue-capable Cloud Run API/reconciler/worker consumer code before
+the GKE listen producer for minute-scale recovery and metric acceptance. A
+producer-only rollout retains durable indexed custody, but recovery wakes and
+the orphan metric wait for the consumer revision to serve; treat that interval
+as a partial rollout. Keep the existing Cloud Run durable-finalization
 queue/handler bindings; GKE listen retains inline finalization. Verify check creation, deferral for
 same-conversation continuation, a single processing revision after lease expiry,
 and the alert signal before declaring runtime acceptance. The declared due-content index must be READY before rollout; the existing
