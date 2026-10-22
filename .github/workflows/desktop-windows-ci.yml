@@ -161,17 +161,46 @@ jobs:
             ~/.cache/electron-builder
           key: electron-builder-linux-${{ hashFiles('desktop/windows/pnpm-lock.yaml') }}
           restore-keys: electron-builder-linux-
+      # The runtime-dependency install below pulls ~35 MB of .debs from the
+      # Ubuntu mirror on every uncached run. Runner<->mirror throughput is
+      # intermittently degraded (~70 KB/s in job 120062237675's log), so the
+      # download alone can blow the step budget while every connection is
+      # still streaming — the per-request apt timeouts cannot catch that.
+      # Caching the .debs makes steady-state installs download-free; apt
+      # verifies each cached file against the fresh indexes and fetches only
+      # version changes. The key tracks this file so package-list edits
+      # rotate the cache; the restore-key prefix carries over still-current
+      # .debs across any edit to this workflow.
+      - name: Cache apt runtime packages
+        uses: actions/cache@v6
+        with:
+          path: ~/apt-debs
+          key: apt-linux-runtime-${{ hashFiles('.github/workflows/desktop-windows-ci.yml') }}
+          restore-keys: apt-linux-runtime-
       - name: Install Linux runtime dependencies
         # Bound apt's network calls explicitly: a stalled mirror connection
         # (observed against the azure.archive.ubuntu.com mirror) otherwise
         # hangs with no output and no built-in timeout, burning the full 6h
         # job ceiling instead of failing fast. DEBIAN_FRONTEND=noninteractive
         # avoids any possibility of a debconf prompt blocking on stdin.
-        timeout-minutes: 5
+        # 10 minutes, not the previous 5: a cold cache must download the full
+        # ~35 MB, which needs ~9 minutes at the worst observed degraded
+        # throughput; 5 minutes cut two runs off mid-download (120062237675
+        # on PR #23335, 113037996050 on a main push). Warm-cache runs
+        # download nothing and finish in seconds.
+        timeout-minutes: 10
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
+          if compgen -G "$HOME/apt-debs/*.deb" > /dev/null; then
+            sudo cp -a "$HOME"/apt-debs/*.deb /var/cache/apt/archives/
+          fi
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 update
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y --download-only imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
+          mkdir -p "$HOME/apt-debs"
+          if compgen -G "/var/cache/apt/archives/*.deb" > /dev/null; then
+            cp /var/cache/apt/archives/*.deb "$HOME/apt-debs/"
+          fi
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15 install -y imagemagick fonts-dejavu-core tesseract-ocr tesseract-ocr-eng xvfb
       - name: Provision .env
         run: cp .env.example .env
