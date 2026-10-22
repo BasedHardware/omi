@@ -162,6 +162,53 @@ def test_sweep_rechecks_after_stale_evidence_before_giving_up(monkeypatch):
     assert len(pages) == 1
 
 
+def test_sweep_stops_rechecking_when_global_kill_switch_turns_off(monkeypatch):
+    monkeypatch.setattr(dream_agent, 'enabled', lambda: True)
+    monkeypatch.setattr(dream_agent, 'on_demand_enabled', lambda: False)
+    available = AsyncMock(return_value=None)
+    monkeypatch.setattr(dream_capacity, 'available_model', available)
+
+    async def switch_off(seconds):
+        monkeypatch.setattr(dream_agent, 'enabled', lambda: False)
+
+    monkeypatch.setattr(dream_agent.asyncio, 'sleep', switch_off)
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: pytest.fail('owner page read'))
+    assert asyncio.run(dream_agent.drain()) == []
+    available.assert_awaited_once()
+
+
+def test_late_pass_gets_only_the_remaining_drain_budget(monkeypatch):
+    # A pass admitted late in the sweep must end through its own deadline, not the drain's cancel.
+    monkeypatch.setattr(dream_agent, 'enabled', lambda: True)
+    monkeypatch.setattr(dream_agent, 'concurrency', lambda: 1)
+    monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=NEW))
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: ['owner-a'])
+    monkeypatch.setattr(dream_agent, 'DRAIN_TIMEOUT_SECONDS', 1000)
+    budgets = []
+
+    async def fake_pass(uid, *, timeout_seconds=None, **kwargs):
+        budgets.append(timeout_seconds)
+        return {'status': 'complete'}
+
+    monkeypatch.setattr(dream_agent, 'run_pass', fake_pass)
+    asyncio.run(dream_agent.drain())
+    assert len(budgets) == 1
+    assert budgets[0] <= 1000 - dream_agent.FINISH_MARGIN_SECONDS
+    assert budgets[0] < dream_agent.PASS_TIMEOUT_SECONDS
+
+
+def test_no_pass_starts_below_the_minimum_remaining_budget(monkeypatch):
+    monkeypatch.setattr(dream_agent, 'enabled', lambda: True)
+    monkeypatch.setattr(dream_agent, 'concurrency', lambda: 2)
+    monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=NEW))
+    monkeypatch.setattr(dream_agent.dream_scheduler, 'candidates', lambda **k: ['owner-a', 'owner-b'])
+    monkeypatch.setattr(
+        dream_agent, 'DRAIN_TIMEOUT_SECONDS', dream_agent.MIN_PASS_SECONDS + dream_agent.FINISH_MARGIN_SECONDS - 1
+    )
+    monkeypatch.setattr(dream_agent, 'run_pass', AsyncMock(side_effect=AssertionError('pass started')))
+    assert asyncio.run(dream_agent.drain()) == []
+
+
 def test_no_model_stops_before_gateway_access(monkeypatch):
     monkeypatch.setattr(dream_capacity, 'available_model', AsyncMock(return_value=None))
     monkeypatch.setattr(dream_transport, 'llm_gateway_headers', lambda **k: pytest.fail('gateway accessed'))
