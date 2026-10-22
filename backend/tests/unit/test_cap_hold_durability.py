@@ -62,6 +62,7 @@ def fragment_sink(monkeypatch, tmp_path):
             sealed.append((identity, list(staged[identity].values())))
         return True
 
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', Mock(return_value={'audio_size': 36}))
     monkeypatch.setattr(live_cap_staging, 'append', Mock(side_effect=append))
     monkeypatch.setattr(live_cap_staging, 'seal', Mock(side_effect=seal))
     yield sink, staged, sealed
@@ -427,16 +428,16 @@ async def test_shutdown_parked_executor_keeps_scratch_until_upload_completion(
     sink, _, _ = fragment_sink
     entered, release = threading.Event(), threading.Event()
     paths = []
-    original = live_cap_staging.append.side_effect
+    original = cap_hold.upload_held_audio
 
-    def parked(uid, path, *args):
+    def parked(uid, path, *args, **kwargs):
         paths.append(Path(path))
         entered.set()
         assert release.wait(5)
         assert Path(path).exists(), 'scratch was deleted while executor still owned it'
-        return original(uid, path, *args)
+        return original(uid, path, *args, **kwargs)
 
-    live_cap_staging.append.side_effect = parked
+    monkeypatch.setattr(cap_hold, 'upload_held_audio', parked)
     sink.append(b'\1\0' * 100, 100, 1000, 'conversation')
     shutdown = asyncio.create_task(cap_hold_lifecycle.flush_active(timeout=0.05))
     try:
@@ -466,7 +467,7 @@ async def test_shutdown_parked_executor_keeps_scratch_until_upload_completion(
     await sink.close()
     assert sink.seconds == 1
     assert live.live_cap_capacity.release.call_args.args[0].used == 1
-    assert len(paths) == (2 if cancel_publication else 1)
+    assert len(paths) == 1  # Cancellation adopts the completed upload; no fresh identity/put.
 
 
 async def test_shutdown_cancellation_resistant_close_cannot_extend_deadline(monkeypatch):

@@ -1,7 +1,11 @@
 """Read-only legacy job reconciliation against durable content receipts.
 
 The requested job remains the client handle even when a redrive completed the
-same content under a new handle. Unknown/failed/held work is never ACKed.
+same content under a new handle. A valid cap hold (``stt_cap_hold_v1``/``held``)
+is answered like its completion: the dark fence (contract h) ACKs held content
+with the ledger's job id and writes no Redis job, so its poll must reach a
+terminal answer after the job TTL (M1 review L10-2). Unknown/failed work is
+never ACKed.
 
 A completed receipt whose result names a conversation the user deleted is the
 one privacy denial answered terminally: the content was already processed, and
@@ -20,7 +24,11 @@ from google.cloud.firestore_v1.base_query import FieldFilter
 
 from database._client import get_firestore_client
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed
-from database.sync_ledger import is_valid_completed_sync_content_result, sync_content_reference
+from database.sync_ledger import (
+    is_valid_completed_sync_content_result,
+    is_valid_held_sync_content_result,
+    sync_content_reference,
+)
 from utils.sync.stage import collection_name
 from utils.observability.fallback import record_fallback
 from utils.sync.deleted_conversation import (
@@ -87,11 +95,13 @@ def get_completed_legacy_status(job_id: str, uid: str, job: dict[str, Any] | Non
         result = ledger.get('result')
         if exact_handle and ledger.get('job_id') != job_id:
             return None
-        if (
-            ledger.get('status') != 'completed'
-            or not isinstance(result, dict)
-            or not is_valid_completed_sync_content_result(result)
-        ):
+        completed = ledger.get('status') == 'completed' and is_valid_completed_sync_content_result(result)
+        held = (
+            ledger.get('dispatch_protocol') == 'stt_cap_hold_v1'
+            and ledger.get('status') == 'held'
+            and is_valid_held_sync_content_result(result)
+        )
+        if not isinstance(result, dict) or not (completed or held):
             return None
         # Preserve the batch status route's privacy boundary, including empty
         # completions, deleted accounts and redirected/deleted result targets.

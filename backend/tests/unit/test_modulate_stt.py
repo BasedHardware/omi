@@ -521,7 +521,7 @@ class TestModulatePrerecorded(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -963,7 +963,7 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -1014,7 +1014,7 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -1469,11 +1469,11 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_multi_language_falls_through_to_parakeet_capability(self):
+    def test_multi_language_without_audio_proof_uses_safe_multilingual_selection(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('multi')
-        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
         self.assertEqual(lang, 'multi')
 
 

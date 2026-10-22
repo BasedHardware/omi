@@ -71,14 +71,45 @@ The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
 - A read that finds an episode idle for `CLOSE_GAP_SECONDS` closes it lazily
   (`idle`). No scheduler is involved.
 
-## Kill switch and cohort
+## Kill switch, cohort and client capability
 
 `config/episodes.py`:
 - `EPISODES_ENABLED` defaults on and is the kill switch.
-- `EPISODES_PERCENT` (default 100) and `EPISODES_UID_ALLOWLIST` are for the ramp.
+- `EPISODES_PERCENT` (default 100) and `EPISODES_UID_ALLOWLIST`
+  select the admitted cohort. The allowlist bypasses the percentage.
 
 Off makes `/v1/episodes/*` report `enabled: false`. Apps keep today's
 per-conversation UI, and no episode read, write or model call happens anywhere.
+
+**Client channel (the cohort).** The app sends `X-Omi-App-Channel` on every
+request (`app/lib/utils/app_channel.dart`). It sends `beta` from an iOS
+TestFlight install (sandbox App Store receipt) or a non-production build
+profile, and `store` otherwise. That includes every Play install, since internal
+and production tracks look the same on device, and any install it can't
+classify. The episodes API admits a call only when its channel is in
+`EPISODES_CLIENT_CHANNELS` (default `beta`). Any other call answers
+`enabled: false` (404 for writes) and leaves no marker, so that client keeps
+today's UI. A missing or unrecognised header (old builds, desktop, web) is
+never admitted. Expanding to store users is the flip `beta,store`.
+
+Admission alone costs nothing. `client_gate.py` infers whether the user's app
+can show episodes, with no app change: a capable app calls `/v1/episodes/live`
+at startup and polls it while a live surface is on screen, and old mobile
+builds, the desktop app and web never call any `/v1/episodes` route.
+- Every admitted episodes API call (cohort and channel) leaves the Redis marker
+  `episodes:client_seen:{uid}` (`CLIENT_SEEN_TTL_SECONDS`, 14 days). It is
+  rewritten at most once per `CLIENT_SEEN_REFRESH_SECONDS` (an hour) per uid: an
+  in-process memo skips Redis between refreshes, and the marker's remaining TTL
+  tells a replica that another one already refreshed it.
+- Listen (`live._moment_if_client_seen`, one Redis read on `db_executor` per
+  ended moment), the finalizer (`service.on_conversation_finalized`, the absorb
+  hook) and the mentor state run only with admission and the marker. Without
+  the marker an ended moment is dropped and counted, and nothing is read from
+  or written to the episode store.
+- The API stays available to every admitted uid, since it is what sets the
+  marker. The allowlist does not bypass the marker, so an allowlisted user on
+  an old client also costs nothing.
+- Reads fail closed: a Redis fault means no capable client, so no spend.
 
 ## Telemetry
 
@@ -91,3 +122,10 @@ per-conversation UI, and no episode read, write or model call happens anywhere.
 - `omi_episode_provisional_items_total{outcome}`
 - `omi_episode_wrapup_latency_seconds`
 - `omi_episode_boundary_total`
+- `omi_episode_moments_skipped_no_client_total{trigger}`: admitted moments (and
+  finalization tails, `trigger=finalize`) skipped because no capable client was seen
+- `omi_episode_live_sessions_total{client_seen}`: admitted live conversations at
+  their first ended moment; `client_seen="true"` over the total is the share of
+  active listen sessions with the marker
+- `omi_episode_client_requests_total{channel,outcome}`: episodes API calls by
+  channel (`beta|store|unknown`) and outcome (`admitted|channel_closed|not_admitted`)

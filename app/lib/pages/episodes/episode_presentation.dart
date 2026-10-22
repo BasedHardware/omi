@@ -14,16 +14,20 @@ import 'package:omi/widgets/speaker_label.dart';
 
 /// Shared rules for how a live episode reads on Home, its page and the device page.
 abstract final class EpisodePresentation {
-  /// A running length in whole minutes once past a minute, so the label does not tick every second.
+  /// The shared localized live length keeps seconds as the episode grows.
   static String runningLength(Duration elapsed, AppLocalizations l10n) {
-    final seconds = elapsed.inSeconds < 60 ? elapsed.inSeconds : (elapsed.inSeconds ~/ 60) * 60;
-    return OmiDuration.compact(seconds, l10n);
+    return OmiDuration.live(elapsed.inSeconds, l10n);
   }
 
   /// How long the live episode has run: from its first moment, else from the capture's first line.
   static Duration elapsed(Episode? episode, CaptureProvider capture, DateTime now) {
     if (episode != null) {
       final span = now.difference(episode.startedAt);
+      if (!span.isNegative) return span;
+    }
+    final started = capture.liveCaptureStartedAt;
+    if (started != null) {
+      final span = now.difference(started);
       if (!span.isNegative) return span;
     }
     final last = capture.segments.lastOrNull;

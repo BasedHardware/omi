@@ -24,6 +24,7 @@ from config.prerecorded_stt import (
     get_prerecorded_models,
     require_provider_environment,
 )
+from config.prerecorded_language import language_class, language_guard_enabled
 from config.stt_provider_policy import (
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
@@ -130,7 +131,14 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
     the serving fallback. A language no capability map claims falls through to Velma
     rather than failing selection.
     """
-    base_lang = normalized_stt_language(language) or 'en'
+    from config.prerecorded_language import requires_multilingual
+
+    base_lang = normalized_stt_language(language.strip() if isinstance(language, str) else None)
+    if requires_multilingual(language) and base_lang in {'', 'und', 'multi', 'unknown'}:
+        if provider_is_enabled(MODULATE_PROVIDER, STTServingSurface.PRERECORDED):
+            return PrerecordedSTTService.MODULATE, 'multi', 'velma-2'
+        raise TranscriptionFailure(TranscriptionOutcome.CONFIG_ERROR, retryable=False)
+    base_lang = base_lang or 'en'
 
     def select(models: Sequence[str]) -> Optional[Tuple[str, Optional[str], str]]:
         for m in models:
@@ -591,8 +599,28 @@ def modulate_prerecorded_from_bytes(
         response.raise_for_status()
         result = response.json()
 
-        utterances = result.get('utterances', [])
+        # Velma's batch success shape carries utterances (a list, empty for silence)
+        # beside text ("" for silence) and duration_ms. A 2xx body without the list
+        # (a JSON error envelope, a null, a bare string) is not a no-speech verdict,
+        # and neither is {"utterances": []} alone, which any unrelated 2xx envelope
+        # could carry. Silence therefore also needs text as a str or duration_ms as a
+        # number — one of them, not both, so the older host this client targets is
+        # held to no more than the docs promise. A non-empty list is parsed as
+        # before. Raise so callers keep the audio as retry material and held-piece
+        # recovery never checkpoints the reply as a completed empty result. See #23081.
+        if not isinstance(result, dict) or not isinstance(result.get('utterances'), list):
+            raise RuntimeError('Modulate response must carry an utterances list')
+
+        utterances = result['utterances']
         if not utterances:
+            has_text = isinstance(result.get('text'), str)
+            duration_ms = result.get('duration_ms')
+            has_duration = isinstance(duration_ms, (int, float)) and not isinstance(duration_ms, bool)
+            if not (has_text or has_duration):
+                raise RuntimeError('Modulate response with empty utterances must carry text or duration_ms')
+            if has_text and result['text'].strip():
+                # Transcript text without utterances contradicts itself; never settle it as silence.
+                raise RuntimeError('Modulate response with empty utterances must not carry transcript text')
             if return_language:
                 return [], language or 'multi'
             return []
@@ -622,6 +650,11 @@ def modulate_prerecorded_from_bytes(
             if lang:
                 lang = lang.split('-')[0].split('_')[0].lower()
                 language_votes.append((lang, len(text.split()), max(0, duration_ms)))
+
+        top_text = result.get('text')
+        if not words and isinstance(top_text, str) and top_text.strip():
+            # Transcript text with only blank utterances is contradictory; never return it as silence.
+            raise RuntimeError('Modulate response with blank utterances must not carry transcript text')
 
         if return_language:
             # Tiny acknowledgments are noisy detection evidence. Only use them
@@ -868,17 +901,24 @@ def parakeet_prerecorded_from_bytes(
         payload: Any = response.json()
 
         # A Parakeet result always carries both keys, even for silence ({"text": "",
-        # "segments": []}). A 200 body with neither key is a degraded or foreign
-        # responder (misrouted ILB, proxy error shell), not a no-speech verdict. Raise
-        # so the sync job stays truthful and clients keep the audio as retry material
-        # instead of marking the WAL synced and discarding it. See #9586.
-        if not isinstance(payload, dict) or ('segments' not in payload and 'text' not in payload):
-            raise RuntimeError('Parakeet response contained neither segments nor text')
+        # "segments": []}). A 200 body missing either key, or carrying them with the
+        # wrong type, is a degraded or foreign responder (misrouted ILB, proxy error
+        # shell, partial envelope), not a no-speech verdict. Raise so the sync job
+        # stays truthful, clients keep the audio as retry material instead of
+        # marking the WAL synced and discarding it, and held-piece recovery never
+        # checkpoints the reply as a completed empty result. See #9586, #23081.
+        if not isinstance(payload, dict) or 'segments' not in payload or 'text' not in payload:
+            raise RuntimeError('Parakeet response must carry both segments and text')
 
         result: Dict[str, Any] = cast(Dict[str, Any], payload)
-        raw_segments = result.get('segments', [])
-        segments: List[Dict[str, Any]] = list(raw_segments) if isinstance(raw_segments, list) else []  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
-        full_text = (result.get('text') or '').strip()
+        raw_segments = result['segments']
+        if not isinstance(raw_segments, list):
+            raise RuntimeError('Parakeet response segments must be a list')
+        raw_text = result['text']
+        if raw_text is not None and not isinstance(raw_text, str):
+            raise RuntimeError('Parakeet response text must be a string')
+        segments: List[Dict[str, Any]] = list(raw_segments)  # type: ignore[reportUnknownArgumentType]  # untyped external JSON
+        full_text = (raw_text or '').strip()
 
         if not segments and not full_text:
             if return_language:
@@ -1120,6 +1160,10 @@ def prerecorded(
     selected_service: Optional[Tuple[str, Optional[str], str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded URL transcription through STT_PRERECORDED_MODEL."""
+    if selected_service is None and language_guard_enabled() and language_class(language) == 'unknown':
+        from utils.stt.batch_language import resolve_url
+
+        selected_service = resolve_url(language, audio_url, selector=get_prerecorded_service)
     provider = (
         get_prerecorded_provider(language, selected_service=selected_service)
         if selected_service is not None
@@ -1149,7 +1193,14 @@ def prerecorded_from_bytes(
     keywords: Optional[Sequence[str]] = None,
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """Route pre-recorded bytes transcription through STT_PRERECORDED_MODEL."""
-    provider = get_prerecorded_provider(language)
+    from utils.stt.batch_language import resolve_language, select_decision
+
+    decision = resolve_language(language, audio_bytes, sample_rate=sample_rate, channels=channels, encoding=encoding)
+    resolved = decision.language if decision.parakeet_safe else language
+    if not language_guard_enabled() or language_class(language) != 'unknown':
+        resolved = language
+    selected = select_decision(language, decision, get_prerecorded_service)
+    provider = get_prerecorded_provider(resolved, selected_service=selected)
     return provider.transcribe_bytes(
         audio_bytes,
         sample_rate=sample_rate,

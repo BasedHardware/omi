@@ -13421,9 +13421,6 @@ class AppLocalizationsLt extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Tęsti su nemokamu planu';
-
-  @override
   String get paywallTrialCancelNote => 'Atšaukti bet kada. Jokių mokesčių, jokių baudų.';
 
   @override

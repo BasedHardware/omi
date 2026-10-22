@@ -13,6 +13,8 @@ from utils.conversations.processing_trigger import ProcessingTrigger
 def _enabled(monkeypatch):
     monkeypatch.delenv(config.EPISODES_ENABLED_ENV, raising=False)
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
+    # A user whose app shows episodes (test_episodes_client_gate covers the marker).
+    monkeypatch.setattr(finalizer, 'episode_client_seen', lambda uid: True)
 
 
 def _run_blocking_recorder(calls, rows=None):

@@ -1,0 +1,3 @@
+{
+  "change": "Adding the same custom vocabulary word twice (or a blank entry) in one go no longer creates a duplicate chip"
+}

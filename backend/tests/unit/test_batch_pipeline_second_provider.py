@@ -14,6 +14,7 @@ from utils.batch_pipeline.quarantine_recovery import transcribe
 from utils.batch_pipeline.recovery_disposition import (
     RecoveryFailure,
     TWO_PROVIDER_EMPTY_EVIDENCE,
+    LANGUAGE_GUARD_EMPTY_EVIDENCE,
     result_outcome,
     terminal_empty_payload,
 )
@@ -118,6 +119,32 @@ def test_padded_empty_units_never_spend_a_second_call(setup, monkeypatch, legacy
     assert recovery.recover('bad', binding.owner_id) == 'recovered'
     assert row(client)['result']['outcome'] == 'no_recoverable_speech'
     second.assert_not_called()
+
+
+@pytest.mark.parametrize('guard_enabled', ['true', 'false'])
+@pytest.mark.parametrize('answer,outcome', [([], 'no_recoverable_speech'), (WORDS, 'success')])
+def test_language_guard_uses_two_multilingual_providers_without_fabricating_parakeet_empty(
+    setup, monkeypatch, legacy_dependencies, answer, outcome, guard_enabled
+):
+    client, binding, artifacts, alternate, second, recovery = second_setup(
+        setup, monkeypatch, legacy_dependencies, deepgram=Mock(return_value=(answer, 'vi')), speech=(0, 1)
+    )
+    job = row(client)
+    job.pop('worker_empty_evidence')
+    job['worker_failure'] = {'stage': 'vad_windows', 'reason': 'unsupported_language'}
+    # This is a language guard, independent of the older empty-only provider flag.
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', guard_enabled)
+    monkeypatch.setenv('BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED', 'false')
+    assert recovery.recover('bad', binding.owner_id) == 'recovered'
+    alternate.assert_called_once()
+    second.assert_called_once()
+    job = row(client)
+    assert job['recovery']['provider'] == 'modulate'
+    assert job['result']['outcome'] == outcome
+    if not answer:
+        payload = artifacts.persist_recovery_result.call_args.args[1]
+        assert payload['recognition_evidence'] == LANGUAGE_GUARD_EMPTY_EVIDENCE
+        assert result_outcome(payload) == outcome
 
 
 @pytest.mark.parametrize('answer,outcome', [([], 'no_recoverable_speech'), (WORDS, 'success')])

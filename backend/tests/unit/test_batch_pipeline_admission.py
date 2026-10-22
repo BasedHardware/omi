@@ -178,6 +178,25 @@ def test_ladder_rechecked_at_execution_after_queue_admission(monkeypatch, dispat
     reserve.assert_not_called()
 
 
+@pytest.mark.parametrize(
+    'policy, held',
+    [(None, True), ({}, True), ({'provider_reason': 'none'}, True), ({'provider_reason': 'byok'}, False)],
+)
+def test_byok_admission_is_not_re_held_at_dispatch(monkeypatch, policy, held):
+    store, _, lease, _ = setup(monkeypatch, fresh=True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    if policy is not None:
+        store.rows['jobs', 'segment']['policy'] = policy
+    gate = Mock(return_value=False)  # no funded consent or allowance for this owner
+    monkeypatch.setattr(admission, 'sync_allowed', gate)
+    receipt = admission.authorize(store, tokens(lease), now=1)
+    if held:
+        assert receipt == {'allowed': [], 'retry_after': {'segment': 60}}
+    else:
+        assert receipt['allowed'] == ['segment']
+        gate.assert_not_called()
+
+
 @pytest.mark.parametrize('ladder', [False, True])
 @pytest.mark.parametrize(
     'cohort,lanes,held',

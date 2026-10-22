@@ -317,12 +317,12 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _cancelRequested = false;
     _lastStallReason = FlashSyncStallReason.none;
-    final matches = _wals.where((w) => w == wal).toList();
-    // Transfer to Phone reports any normal return as complete. The list is
-    // rebuilt when the pendant connects and before each sync, so a recording
-    // opened before that must fail here, not return null.
-    if (matches.isEmpty) throw Exception('Device recording list changed; go back and try again');
-    final walToSync = matches.first;
+    // The list is rebuilt with new Wal objects when the pendant connects, on every
+    // discovery wake and after each sync pass, while a recording page keeps the Wal
+    // it was opened with. Match by id, as deleteWal does; the listing keeps the id.
+    final walToSync = _wals.where((w) => w.storage == wal.storage && w.id == wal.id).firstOrNull;
+    // Transfer to Phone reports any normal return as complete.
+    if (walToSync == null) throw Exception('Device recording list changed; go back and try again');
 
     walToSync.isSyncing = true;
     walToSync.syncStartedAt = DateTime.now();

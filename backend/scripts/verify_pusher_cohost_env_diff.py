@@ -200,6 +200,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",
             "VAD_GATE_MODE",
+            # Plan D D2 shadow: only listen's live sessions mirror frames to listen-edge
+            # (utils/stt/edge_shadow.py); pusher receives no live audio.
+            "EDGE_SHADOW_URL",
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }
@@ -308,6 +311,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",
             "VAD_GATE_MODE",
+            # Plan D D2 shadow: only listen's live sessions mirror frames to listen-edge
+            # (utils/stt/edge_shadow.py); pusher receives no live audio. The percent is
+            # the kill switch (0) and is declared in the prod values only.
+            "EDGE_SHADOW_PERCENT",
+            "EDGE_SHADOW_URL",
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }

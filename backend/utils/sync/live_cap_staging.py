@@ -53,12 +53,12 @@ class SourceSealed(RuntimeError):
 def append(uid: str, path: str, group: Publication, fragment: Publication, metadata: dict, seconds: float) -> dict:
     if group.uid != uid or fragment.uid != uid:
         raise ValueError('live staging owner changed')
-    size = Path(path).stat().st_size
+    size = fragment.fields.get('audio_size', 0) - 32 if fragment.fields.get('audio_size') else Path(path).stat().st_size
     if size > MAX_FRAGMENT_BYTES or not 0 < seconds <= FRAGMENT_SECONDS:
         raise ValueError('live fragment exceeds custody bound')
     client = get_firestore_client()
     ref = cap_hold.holds(uid).document(group.identity)
-    fields: dict[str, Any] = {}
+    fields: dict[str, Any] = fragment.fields
     staged_updates: dict[str, Any] | None = None
     attempted = fragment.is_retry(uid)
 
@@ -82,10 +82,12 @@ def append(uid: str, path: str, group: Publication, fragment: Publication, metad
                 raise SourceSealed('live staging source already sealed')
             if len(parts) >= MAX_FRAGMENTS:
                 raise ValueError('live staging group full')
-            fields = {}
-            fields = cap_hold.upload_held_audio(uid, path, fragment.identity, metadata, immutable=True)
+            fields = fragment.fields or cap_hold.upload_held_audio(
+                uid, path, fragment.identity, metadata, immutable=True
+            )
+            fragment.fields = dict(fields)
             encoded_bytes = size
-            if attempted:
+            if attempted and not fields.get('audio_size'):
                 # A previous immutable put can survive failed cleanup. Re-encode
                 # may change container length; the composed layout must describe
                 # the stored generation, never the new local file.

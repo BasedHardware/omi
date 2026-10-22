@@ -514,8 +514,10 @@ def test_backend_can_compose_dev_gateway_with_immutable_backend_image_but_prod_s
         'IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"'
         in workflow
     )
-    assert 'deploy-backend-stack-${{ github.event.inputs.environment }}' in workflow
-    assert 'deploy-backend-stack-${{ github.event.inputs.environment }}' in standalone
+    # Both share the backend-stack lock; in prod both take the B5 prod-train lock instead.
+    shared_lock = "format('deploy-backend-stack-{0}', github.event.inputs.environment)"
+    assert shared_lock in workflow and "&& 'prod-train' ||" in workflow
+    assert shared_lock in standalone and "&& 'prod-train' ||" in standalone
     assert 'IMAGE_TAG=$(git rev-parse --short=7 "$CHECKED_OUT_SHA")' in standalone
 
 

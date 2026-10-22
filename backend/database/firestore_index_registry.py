@@ -35,6 +35,15 @@ def _contains(field_path: str) -> FirestoreIndexField:
 INDEX_ONLY_REQUIREMENTS = (
     *(
         FirestoreIndexRequirement(
+            f'{stage}_batch_ramp_owner_load',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('owner_id'), _asc('enqueued_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
             f'{stage}_batch_ready_predecessor',
             f'batch_pipeline_{stage}_jobs',
             'COLLECTION',
@@ -2138,6 +2147,16 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
         ('ASCENDING',),
     ),
     FieldIndexRequirement('memory_outbox_status_group_ascending', 'memory_outbox', 'status', ('ASCENDING',)),
+    # Legacy dark zero-lost census (scripts/legacy_dark/lost_recordings.py, soak check 5).
+    FieldIndexRequirement(
+        'sync_content_ledger_created_at_group_ascending', 'sync_content_ledger', 'created_at', ('ASCENDING',)
+    ),
+    # Legacy dark final-pass re-home sweep (scripts/legacy_dark/final_pass_rehome.py,
+    # the legacy_final_pass_rehomed draining precondition): every conversation still
+    # routed to legacy_final_pass_v1, across users.
+    FieldIndexRequirement(
+        'conversations_record_lane_owner_group_ascending', 'conversations', 'record_lane_owner', ('ASCENDING',)
+    ),
     FieldIndexRequirement(
         'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
     ),

@@ -13302,9 +13302,6 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'המשך עם התוכנית החינמית';
-
-  @override
   String get paywallTrialCancelNote => 'בטל בכל עת. ללא עמלות, ללא קנסות.';
 
   @override

@@ -13407,9 +13407,6 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Lanjutkan dengan paket gratis';
-
-  @override
   String get paywallTrialCancelNote => 'Batalkan kapan saja. Tanpa biaya, tanpa penalti.';
 
   @override

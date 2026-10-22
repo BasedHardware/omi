@@ -60,6 +60,27 @@ def load_real_module(name: str, path: Path):
     return module
 
 
+_REASONS_MODULE = None
+
+
+def _real_reasons_module():
+    """Load utils/observability/reasons.py once per process: it registers omi_reason_total, and
+    cleanup() drops harness-loaded modules, so a re-exec would duplicate the Prometheus series."""
+    global _REASONS_MODULE
+    loaded = sys.modules.get('utils.observability.reasons')
+    if loaded is not None and hasattr(loaded, 'LiveSttReason'):
+        _REASONS_MODULE = loaded
+    if _REASONS_MODULE is None:
+        spec = importlib.util.spec_from_file_location(
+            'utils.observability.reasons', BACKEND_DIR / 'utils' / 'observability' / 'reasons.py'
+        )
+        module = importlib.util.module_from_spec(spec)
+        sys.modules['utils.observability.reasons'] = module
+        spec.loader.exec_module(module)
+        _REASONS_MODULE = module
+    return _REASONS_MODULE
+
+
 def cleanup(saved):
     for name in [k for k in sys.modules if k not in saved]:
         del sys.modules[name]
@@ -172,6 +193,12 @@ def wire_common_stubs(install) -> SimpleNamespace:
     fallback_observability = install('utils.observability.fallback', ModuleType('utils.observability.fallback'))
     fallback_observability.record_fallback = MagicMock()
     observability.record_fallback = fallback_observability.record_fallback
+    # routers.chat -> utils.stt.provider_resilience -> utils.stt.live_reason imports the pure reason
+    # enums from utils.observability.reasons; serve the real module (reused if already loaded,
+    # since it registers a Prometheus counter) under the stub package.
+    reasons = _real_reasons_module()
+    sys.modules['utils.observability.reasons'] = reasons
+    observability.reasons = reasons
 
     journey_observability = install('utils.observability.journeys', ModuleType('utils.observability.journeys'))
 

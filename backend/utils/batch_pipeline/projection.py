@@ -21,10 +21,12 @@ from config.batch_pipeline import (
     owner_drain_enabled,
     projection_index_deferred_enabled,
     projection_pending_page_enabled,
+    projection_predecessor_replay_enabled,
     projection_prefetch_depth,
     sweep_owner_chain_enabled,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
+from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
@@ -410,6 +412,8 @@ class Projector:
         self._persist_read(segment_id, job, entry, binding)
 
     def _persist_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):
+        if job.get('shadow'):
+            raise ProjectionBlocked('shadow publication forbidden')
         if claimed:
             # The walk holds this owner's claim for its whole step.
             self._assign(segment_id, job, entry, binding, finish=False, hint=hint)
@@ -433,6 +437,8 @@ class Projector:
         return self._project_read(segment_id, *self.store.read(segment_id))
 
     def _project_read(self, segment_id, job, entry, binding, *, hint=None, claimed=False):
+        if job.get('shadow'):
+            raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         if policy.async_projection:
             self._persist_read(segment_id, job, entry, binding, hint=hint, claimed=claimed)
@@ -462,6 +468,8 @@ class Projector:
         return self._finish(segment_id, job, entry, binding)
 
     def _assign(self, segment_id, job, entry, binding, *, finish=True, hint=None):
+        if job.get('shadow'):
+            raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         session = self.store.session(segment_id, binding, self.clock(), policy=policy)
@@ -549,6 +557,8 @@ class Projector:
         return candidate is not None, candidate
 
     def _finish(self, segment_id, job, entry, binding):
+        if job.get('shadow'):
+            raise ProjectionBlocked('shadow publication forbidden')
         policy = ProjectionPolicy.from_dict(job['policy_parts']['projection'])
         item = WorkItem(**{key: job[key] for key in WorkItem.__dataclass_fields__ if key in job})
         entry = self.store.ref('results', segment_id).get().to_dict() or {}
@@ -635,18 +645,31 @@ class Projector:
             '_batch_require_live_target': True,
             '_batch_replace_live': {'start': item.capture_at, 'end': item.capture_at + item.duration_seconds},
         }
-        conversations_db.assign_sync_conversation(
-            binding.owner_id,
-            incoming,
-            target_id=binding.target_conversation_id,
-            firestore_client=self.store.client,
-            before_assign=session.prepare,
-            validate_plan=session.validate_plan,
-            after_assign=lambda transaction, planned: session.persist(transaction, planned),
-            retry_contention=session.policy.projection_contention,
-            timing=session.policy.projection_timing,
-            **self._index_options(hint),
-        )
+        try:
+            conversations_db.assign_sync_conversation(
+                binding.owner_id,
+                incoming,
+                target_id=binding.target_conversation_id,
+                firestore_client=self.store.client,
+                before_assign=session.prepare,
+                validate_plan=session.validate_plan,
+                after_assign=lambda transaction, planned: session.persist(transaction, planned),
+                retry_contention=session.policy.projection_contention,
+                timing=session.policy.projection_timing,
+                **self._index_options(hint),
+            )
+        finally:
+            self._mirror_assignment(session)
+
+    def _mirror_assignment(self, session) -> None:
+        # A2 shadow: the assignment transaction writes the owner watermark and predecessor results outside
+        # Store.run. A strict no-op unless shadow mode; idempotent (re-copies current state); never raises.
+        try:
+            mirror = getattr(self.store, 'mirror_assignment', None)
+            if mirror is not None:
+                mirror(session)
+        except Exception:
+            logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
 
     def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None):
         policy = policy or self.store.policy(item.segment_id)
@@ -749,19 +772,22 @@ class Projector:
                             found, candidate = self._parallel_candidate(pending_candidate, span, deadline)
                             if not found:
                                 candidate = get_closest_conversation_to_timestamps(binding.owner_id, *span)
-                    assigned = conversations_db.assign_sync_conversation(
-                        binding.owner_id,
-                        incoming,
-                        target_id=context.target_id,
-                        candidate_id=candidate['id'] if candidate else None,
-                        firestore_client=self.store.client,
-                        before_assign=session.prepare,
-                        validate_plan=session.validate_plan,
-                        after_assign=persisted,
-                        retry_contention=policy.projection_contention,
-                        timing=policy.projection_timing,
-                        **self._index_options(hint),
-                    )
+                    try:
+                        assigned = conversations_db.assign_sync_conversation(
+                            binding.owner_id,
+                            incoming,
+                            target_id=context.target_id,
+                            candidate_id=candidate['id'] if candidate else None,
+                            firestore_client=self.store.client,
+                            before_assign=session.prepare,
+                            validate_plan=session.validate_plan,
+                            after_assign=persisted,
+                            retry_contention=policy.projection_contention,
+                            timing=policy.projection_timing,
+                            **self._index_options(hint),
+                        )
+                    finally:
+                        self._mirror_assignment(session)
                     receipt = receipt_box[0]
                     record_labels(assigned[2])
                     if assigned[0].pop('_sync_lineage_stamp_gap_refused', False):
@@ -1169,6 +1195,7 @@ class Projector:
         for segment_id in discovery.next(limit=size):
             if segment_id in chained:
                 continue
+            binding = None
             try:
                 job, entry, binding = self.store.read(segment_id)
                 if drain and (binding.owner_id in self.draining or binding.owner_id in handed):
@@ -1186,6 +1213,39 @@ class Projector:
                     result = self._project_read(segment_id, job, entry, binding)
                 counts['completed' if result is not None else 'waiting'] += 1
                 touched.add(segment_id)
+            except ProjectionPredecessorPending:
+                counts['blocked'] += 1
+                # Discovery may have paged past the unprojected head. Rebuild it
+                # from the watermark rather than waiting for the cursor to wrap.
+                # The walk still runs every transactional assignment fence.
+                if (
+                    binding is not None
+                    and chain
+                    and projection_predecessor_replay_enabled()
+                    and binding.owner_id not in walked
+                ):
+                    walked.add(binding.owner_id)
+                    if drain:
+                        handed.add(binding.owner_id)
+                        self.request_drain(binding.owner_id)
+                    else:
+                        if chain_deadline is None:
+                            chain_deadline = time.monotonic() + OWNER_CHAIN_SECONDS
+                        budget = max(0.0, chain_deadline - time.monotonic())
+                        try:
+                            followups, advanced = self._walk_owner(
+                                binding.owner_id, recovered=None, limit=OWNER_CHAIN_LIMIT, budget_seconds=budget
+                            )
+                            if followups:
+                                self.has_async_followups = True
+                                self.owe_followups(followups)
+                            chained.update(advanced)
+                        except Exception as error:
+                            logger.error(
+                                'event=batch_projection action=sweep_chain outcome=error exception_type=%s',
+                                error_type(error),
+                            )
+                continue
             except (ProjectionBlocked, BatchPrivacyBlocked):
                 counts['blocked'] += 1
                 continue

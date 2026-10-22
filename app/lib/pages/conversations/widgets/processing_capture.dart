@@ -59,10 +59,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     _offlineTicker = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
       final provider = context.read<CaptureProvider>();
-      if (provider.offlineRecordingStartedAt != null ||
-          provider.customSttBufferingDuration != null ||
-          provider.liveCaptureSource != null ||
-          (widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active)) {
+      final callActive = widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active;
+      // With the live episode row drawing the streaming capture, this card has no elapsed time.
+      final deferred = widget.deferStreamingToEpisode && EpisodePresentation.streamingSource(provider) != null;
+      if (callActive ||
+          (!deferred &&
+              (provider.offlineRecordingStartedAt != null ||
+                  provider.customSttBufferingDuration != null ||
+                  provider.liveCaptureSource != null))) {
         setState(() {}); // the elapsed time on the card
       }
       _offlineTick++;

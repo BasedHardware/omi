@@ -23,10 +23,13 @@ spec:
         # backend-sync lease holder as starvation (2026-10-20).
         # Held content (#22840): the cap-hold redrive sweep runs only on backend-sync
         # and publishes the fleet snapshot gauges the held-content ramp gates on.
+        # Legacy dark (contract (h)): drain_census and the 12h soak gates read
+        # omi_legacy_sync_mode / _admissions_total / _dark_ack_total / _mode_read_total.
+        # A2 job-store shadow (lane 12): parity_read.sh reads omi_jobstore_shadow_parity_total.
         - action: keep
           sourceLabels:
             - __name__
-          regex: 'omi_(sync_.*|journey_.*|client_journey_.*|owner_recognition_conversations_total|conversation_duration_seconds(_.*)?|conversation_summary_vector_upserts_total|firestore_documents_per_operation(_.*)?|capture_finalization_.*|queue_oldest_ready_.*|batch_pipeline_.*|accept_to_summary_seconds(_.*)?|summary_terminal_total|summary_debt_.*|live_session_transcript_outcome_total|fallback_total|parakeet_request_seconds(_.*)?|firestore_billed_reads_by_(caller|origin)_total|firestore_caller_label_overflow_total|fsr_leader_lease_total|held_content_.*|stt_cap_recovery_reconciliation_total)'
+          regex: 'omi_(sync_.*|journey_.*|client_journey_.*|owner_recognition_conversations_total|conversation_duration_seconds(_.*)?|conversation_summary_vector_upserts_total|firestore_documents_per_operation(_.*)?|capture_finalization_.*|queue_oldest_ready_.*|batch_pipeline_.*|batch_ramp_heavy_owner_excluded_total|batch_shadow_.*|accept_to_summary_seconds(_.*)?|summary_terminal_total|summary_debt_.*|live_session_transcript_outcome_total|fallback_total|parakeet_request_seconds(_.*)?|firestore_billed_reads_by_(caller|origin)_total|firestore_caller_label_overflow_total|fsr_leader_lease_total|held_content_.*|held_recovery_pacing_.*|stt_cap_recovery_reconciliation_total|stt_cap_recovery_cohort_narrowed|stt_cap_cohort_.*|stt_cap_launch_config_errors.*|legacy_sync_.*|legacy_dark_.*|jobstore_.*)'
         # These eagerly initialized live-STT combinations dominate empty series
         # on sync workers. Keep fallbacks from sync/summary/storage components.
         - action: drop

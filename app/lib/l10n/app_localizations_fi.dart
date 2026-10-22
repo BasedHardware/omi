@@ -13401,9 +13401,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Jatka ilmaisella suunnitelmalla';
-
-  @override
   String get paywallTrialCancelNote => 'Peruuta milloin tahansa. Ei maksuja, ei sakkoja.';
 
   @override

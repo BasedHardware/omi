@@ -55,6 +55,7 @@ import 'package:omi/services/capture/capture_continuity_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
+import 'package:omi/services/capture/manual_live_labels.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/registry/events.g.dart';
@@ -2376,7 +2377,7 @@ class CaptureController extends ChangeNotifier
         _capture.stagedReadModel.callActive) {
       return;
     }
-    await _wal.getSyncs().phone.onAudioCodecChanged(codec);
+    await _wal.getSyncs().phone.onAudioCodecChanged(codec, deviceInfo: (id: deviceId, model: device.modelNumber));
     await _saveNativeBleStreamConfig(device, codec);
     if (_deviceIdentityStale(deviceRevision) || !_capture.stagedReadModel.pendantOwns) return;
     await _setIngressAuthorized(!_preferences.capturePolicy.muted);
@@ -3594,6 +3595,8 @@ class CaptureController extends ChangeNotifier
     if (_conversation?.id != nextConversation?.id) {
       suggestionsBySegmentId.clear();
       _manualSpeakerDefaults.clear();
+    } else if (nextConversation != null) {
+      retainManualLiveLabels(segments, nextConversation.transcriptSegments, _manualSpeakerDefaults);
     }
     _conversation = nextConversation;
     if (_conversation != null) {
@@ -4126,6 +4129,7 @@ class CaptureController extends ChangeNotifier
       Logger.debug("Received ${translatedSegments.length} translated segments");
 
       // Update the segments with the translated ones
+      retainManualLiveLabels(segments, translatedSegments, _manualSpeakerDefaults);
       var remainSegments = TranscriptSegment.updateSegments(segments, translatedSegments);
       if (remainSegments.isNotEmpty) {
         Logger.debug("Adding ${remainSegments.length} new translated segments");
@@ -4223,6 +4227,7 @@ class CaptureController extends ChangeNotifier
         if (applyToSpeaker ? segment.speakerId == speakerId : targets.contains(segment.id)) {
           segment.isUser = finalPersonId == 'user';
           segment.personId = segment.isUser ? null : finalPersonId;
+          segment.speakerLabelSource = 'manual';
         }
       }
       _segmentsPhotosVersion++;
@@ -4281,14 +4286,8 @@ class CaptureController extends ChangeNotifier
       }
     }
 
+    retainManualLiveLabels(segments, newSegments, _manualSpeakerDefaults);
     final remainSegments = TranscriptSegment.updateSegments(segments, newSegments);
-    for (final segment in remainSegments) {
-      final assigned = _manualSpeakerDefaults[segment.speakerId];
-      if (assigned != null && segment.personId == null && !segment.isUser) {
-        segment.isUser = assigned == 'user';
-        segment.personId = segment.isUser ? null : assigned;
-      }
-    }
     segments.addAll(remainSegments);
 
     // Refresh people cache if we see unknown personIds (backend-created persons)

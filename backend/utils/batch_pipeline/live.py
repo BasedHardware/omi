@@ -16,11 +16,13 @@ import time
 
 from config.policy import resolve_batch_policy
 from database.batch_pipeline_policy import load_job_policy
+from database.batch_ramp import ramp_admission_policy
 from config.batch_pipeline import Priority, RecordOwnerContention, record_capture_eligible
 from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_intake import admit
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
@@ -45,9 +47,12 @@ def reserve_recording(uid: str, conversation: dict) -> str | None:
     owner = conversation.get('record_lane_owner')
     if owner:
         return owner
+    policy = resolve_batch_policy(uid)
     if conversation.get('status') not in {'in_progress', 'processing'} or not record_capture_eligible(
-        uid, conversation
+        uid, conversation, policy=policy
     ):
+        return None
+    if not ramp_admission_policy(uid, policy).live_record_enabled:
         return None
     revision = claim_record_lane_owner(uid, conversation['id'], OWNER, conversation.get('updated_at'))
     if revision is None:
@@ -63,7 +68,7 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
         return False
     if not conversation.get('private_cloud_sync_enabled'):
         return False
-    store = store or FirestoreStore(f'batch_pipeline_{current_stage()}')
+    store = store or shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
     now = time.time() if now is None else now
     content, segment = record_identity(uid, conversation['id'])
     # The immutable native owner is main's earlier admission receipt. A later
@@ -287,6 +292,11 @@ async def admit_recording(store, pending, *, now=None):
             'client_device_id': binding.client_device_id,
             'client_platform': binding.client_platform,
             'conversation_id': conversation_id,
+            # Native record admission already requires a fully supported
+            # declared language profile. Preserve that proof in its manifest.
+            'stt_language': binding.language or '',
+            'stt_language_evidence': 'declared',
+            'stt_language_confidence': 1.0,
         }
         manifest = {
             'owner_id': uid,

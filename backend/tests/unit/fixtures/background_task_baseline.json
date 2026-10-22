@@ -99,6 +99,20 @@
       "why": "pre-existing; unreviewed; LIVE RISK: startup supervisor (not request-backed) runs reconcile(recover_quarantine=True); QuarantineRecovery.dispatch falls back to inline paid recover() on enqueue failure, and BATCH_PIPELINE_RECOVERY_TASKS_ENABLED=false restores the pre-#22149 shape"
     },
     {
+      "path": "utils/batch_pipeline/shadow_intake.py",
+      "function": "offer_upload",
+      "kind": "start_background_task",
+      "count": 3,
+      "why": "reviewed safe (#23003): best-effort shadow reserve, late-reserve drop and staging of private copies; legacy keeps its own paths, ledger and processing, so a loss at SIGKILL drops one shadow sample. A stranded shadow job is settled as error by the worker reaper after 1h and its control rows carry TTLs; copies live in the dying container's temp directory"
+    },
+    {
+      "path": "utils/batch_pipeline/shadow_worker.py",
+      "function": "ShadowRunner._run_idle",
+      "kind": "start_background_task",
+      "count": 3,
+      "why": "reviewed safe (#23003): shadow idle take, late-take drop and at-most-once recovery RPC; shadow work never projects, publishes or charges a user, so a loss at SIGKILL drops one sample. The reaper settles stale shadow jobs by created_at (active recovery by recovery_started_at) and paid reservations are counted before the call, so the spend cap stays conservative"
+    },
+    {
       "path": "utils/conversations/action_item_refresh.py",
       "function": "preserve",
       "kind": "submit_with_context",
@@ -274,7 +288,7 @@
       "why": "reviewed safe: best-effort playback cache warming"
     },
     {
-      "path": "utils/sync/reprocess.py",
+      "path": "utils/enrichment/outbox.py",
       "function": "_heartbeat",
       "kind": "threading.Thread",
       "count": 1,

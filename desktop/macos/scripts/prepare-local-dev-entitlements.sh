@@ -7,7 +7,7 @@ set -euo pipefail
 # whose signature carries the *same Team ID*. A signing identity that carries no
 # Team ID — ad-hoc ("-"), or a self-signed certificate with no Organizational
 # Unit such as the local "Omi Local Dev Signing" identity — can never satisfy
-# that for the bundled Sparkle/Sentry/onnxruntime frameworks:
+# that for the bundled Sparkle/onnxruntime frameworks:
 #
 #   dyld: Library not loaded: @rpath/Sparkle.framework/Versions/B/Sparkle
 #     ... mapping process and mapped file (non-platform) have different Team IDs

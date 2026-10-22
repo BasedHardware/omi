@@ -11529,7 +11529,6 @@
     "paywallTrialBilledYearly": "ஆண்டுதோறும் கட்டணம்",
     "paywallTrialSaveAmount": "{amount} சேமிக்கவும்",
     "paywallTrialCta": "{price}க்குத் தொடங்கவும்",
-    "paywallTrialSecondary": "இலவச திட்டத்துடன் தொடரவும்",
     "paywallTrialCancelNote": "எந்த நேரத்திலும் ரத்து செய்யவும். கட்டணங்கள் இல்லை, அபராதங்கள் இல்லை.",
     "paywallTrialStarted": "Omi Pro-வின் உங்கள் {days}-நாள் இலவச சோதனை தொடங்கிவிட்டது.",
     "paywallCancelAnytime": "எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.",

@@ -16112,7 +16112,7 @@
             }
         }
     },
-    "paywallTrialCta": "Start for {price}",
+    "paywallTrialCta": "Try for {price}",
     "@paywallTrialCta": {
         "description": "Paywall primary button; price is a formatted zero price like $0.00",
         "placeholders": {
@@ -16120,10 +16120,6 @@
                 "type": "String"
             }
         }
-    },
-    "paywallTrialSecondary": "Continue with the free plan",
-    "@paywallTrialSecondary": {
-        "description": "Paywall secondary button"
     },
     "paywallTrialCancelNote": "Cancel anytime. No fees, no penalties.",
     "@paywallTrialCancelNote": {

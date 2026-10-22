@@ -13458,9 +13458,6 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Продолжете со бесплатниот план';
-
-  @override
   String get paywallTrialCancelNote => 'Откажете во секое време. Без надоместоци, без казни.';
 
   @override

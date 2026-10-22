@@ -720,7 +720,9 @@ def test_asgi_disabled_recovery_is_retryable_without_spending_intent(setup, monk
     response = TestClient(app).post(
         '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
     )
-    assert response.status_code == 503
+    # Contract (d): retryable means 409 retry (Cloud Tasks retries any non-2xx); 503 throttles the queue.
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'kill_switch_off'}
     assert row(client)['recovery_state'] == 'prepared'
     stt.assert_not_called()
     artifacts.fetch_audio.assert_not_called()

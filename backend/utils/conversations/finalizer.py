@@ -41,6 +41,7 @@ from utils.conversations.process_conversation import (
     save_structured_vector,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.episodes.client_gate import client_seen as episode_client_seen
 from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
@@ -150,6 +151,9 @@ async def _episode_after_absorb(uid: str, donor_id: str, trigger: ProcessingTrig
     if not episodes_enabled_for(uid):
         return
     try:
+        # No capable client, no episode to repoint: skip the donor read (utils/episodes/client_gate.py).
+        if not await run_blocking(db_executor, episode_client_seen, uid):
+            return
         donor = await run_blocking(db_executor, conversations_db.get_conversation, uid, donor_id)
         survivor_id = ((donor or {}).get('smart_merge') or {}).get('survivor_id')
         if not survivor_id:

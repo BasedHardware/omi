@@ -311,6 +311,13 @@ def sweep_owner_chain_enabled() -> bool:
     return kill_switch('BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED')
 
 
+def projection_predecessor_replay_enabled() -> bool:
+    """Kill switch: blocked page successors wake their owner's missing head."""
+    from config.policy import kill_switch
+
+    return kill_switch('BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED')
+
+
 def projection_pending_page_enabled() -> bool:
     """Kill switch: the assignment page holds only pending rows; finishing pages separately."""
     from config.policy import kill_switch

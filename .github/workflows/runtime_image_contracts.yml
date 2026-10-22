@@ -1,6 +1,14 @@
 name: Runtime Image Contracts
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     paths:
       - 'backend/**'
@@ -25,6 +33,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - name: Check final-image first-party source closures
         run: make runtime-image-source-closure
       - id: matrix
@@ -38,7 +48,7 @@ jobs:
     # PRs run source-closure only. The old PR matrix consumed runners merely
     # to print "Skipping" without credentials. Explicit dispatch retains the
     # authenticated private-base smoke when that credential is configured.
-    if: github.event_name == 'workflow_dispatch'
+    if: inputs.nightly_main_sha == '' && github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write
@@ -50,6 +60,8 @@ jobs:
       matrix: ${{ fromJSON(needs.source-closure.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - name: Skip image smoke when GCP credentials are unavailable
         if: env.GCP_CREDENTIALS_AVAILABLE != 'true'
         run: >-

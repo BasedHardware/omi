@@ -1,0 +1,169 @@
+name: Config Train (ops file)
+
+# B4 (named by David, 2026-10-19 fourth round #9). Applies backend/deploy/ops/<env>.yaml:
+# queue re-points, Cloud Tasks queue rates/retries and service-level Cloud Run scaling.
+# No image build. Every env change routes traffic to the new named revision and is
+# verified against the serving revision (backend/scripts/ops_train.py).
+# Rollback: revert the ops-file PR and run this workflow again (mode=apply).
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - prod
+      mode:
+        description: 'plan (read-only diff) or apply (plan, apply, verify)'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+      ref:
+        description: 'Source: main or a full SHA on main (prod); any branch or SHA (staging)'
+        required: true
+        default: 'main'
+      break_glass_lock:
+        description: 'Break-glass: skip the shared prod-train lock (still serialized per target; the actor is recorded)'
+        required: false
+        default: false
+        type: boolean
+
+# B5: every prod deploy writer shares one prod-train lock. Break-glass falls back to
+# this workflow's own target lock so an urgent ops fix never waits behind a train.
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890; main sync 15).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
+concurrency:
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  config-train:
+    # Prod parks on the `prod` environment approval gate before any credential is minted.
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      OPS_ENV: ${{ github.event.inputs.environment }}
+      OPS_MODE: ${{ github.event.inputs.mode }}
+      OPS_REF: ${{ github.event.inputs.ref }}
+      BREAK_GLASS: ${{ github.event.inputs.break_glass_lock }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Select reviewed ops source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$OPS_ENV" in staging|prod) ;; *) echo "invalid environment $OPS_ENV" >&2; exit 1 ;; esac
+          case "$OPS_MODE" in plan|apply) ;; *) echo "invalid mode $OPS_MODE" >&2; exit 1 ;; esac
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if [[ "$OPS_ENV" == prod ]]; then
+            source_sha="$(git rev-parse origin/main)"
+            if [[ "$OPS_REF" != main ]]; then
+              [[ "$OPS_REF" =~ ^[0-9a-f]{40}$ ]] || { echo "prod source must be main or a full SHA on main" >&2; exit 1; }
+              source_sha="$OPS_REF"
+            fi
+            git merge-base --is-ancestor "$source_sha" origin/main
+          else
+            # The requested ref or nothing: a failed fetch must not fall back to main's
+            # FETCH_HEAD and apply main's staging.yaml under the requested name (M1 L07-3).
+            if source_sha="$(git rev-parse --verify -q "${OPS_REF}^{commit}")"; then :
+            elif source_sha="$(git rev-parse --verify -q "refs/remotes/origin/${OPS_REF}^{commit}")"; then :
+            else
+              git fetch --no-tags origin "$OPS_REF"
+              source_sha="$(git rev-parse --verify "FETCH_HEAD^{commit}")"
+            fi
+            if [[ "$OPS_REF" =~ ^[0-9a-f]{7,40}$ && "$source_sha" != "$OPS_REF"* ]]; then
+              echo "requested $OPS_REF resolved to $source_sha" >&2; exit 1
+            fi
+          fi
+          git checkout --detach "$source_sha"
+          echo "sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "suffix=cfg-${source_sha:0:7}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Config train: $OPS_ENV $OPS_MODE"
+            echo "- source: \`$source_sha\`"
+            echo "- actor: \`$GITHUB_ACTOR\`"
+            echo "- ops sha256: \`$(sha256sum "backend/deploy/ops/$OPS_ENV.yaml" | cut -c1-12)\`"
+            if [[ "$OPS_ENV" == prod && "$BREAK_GLASS" == true ]]; then echo "- **break-glass: prod-train lock skipped**"; fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate ops files
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install -q PyYAML==6.0.1
+          python3 backend/scripts/ops_train.py validate
+
+      - name: Google Auth (prod WIF)
+        if: github.event.inputs.environment == 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth (staging WIF)
+        if: github.event.inputs.environment != 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Plan against live serving state
+        id: plan
+        shell: bash
+        run: |
+          set -uo pipefail
+          python3 backend/scripts/ops_train.py plan --env "$OPS_ENV" --report artifacts/config-train-plan.json
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          case "$rc" in
+            0) echo "- plan: no changes" >> "$GITHUB_STEP_SUMMARY" ;;
+            2) echo "- plan: changes pending (see log)" >> "$GITHUB_STEP_SUMMARY" ;;
+            3) echo "- plan: **blocked**" >> "$GITHUB_STEP_SUMMARY"; exit 1 ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Apply and verify
+        if: github.event.inputs.mode == 'apply' && steps.plan.outputs.rc == '2'
+        shell: bash
+        env:
+          REVISION_SUFFIX: ${{ steps.source.outputs.suffix }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/ops_train.py apply --env "$OPS_ENV" \
+            --revision-suffix "$REVISION_SUFFIX" --report artifacts/config-train-apply.json
+          echo "- applied and verified (revision suffix \`$REVISION_SUFFIX\`)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload config-train evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: config-train-${{ github.event.inputs.environment }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: artifacts/
+          if-no-files-found: ignore
+          retention-days: 30

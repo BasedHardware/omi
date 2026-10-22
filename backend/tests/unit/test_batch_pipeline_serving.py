@@ -507,6 +507,16 @@ async def test_expected_enrichment_retries_are_409_and_unexpected_stay_500(monke
     assert record.levelno == (logging.ERROR if code == 500 else logging.WARNING)
 
 
+def test_first_summary_callback_pending_from_its_defining_module_is_an_expected_retry():
+    # #22431 moved the class to utils.enrichment.outbox; a key on the old module path turned the
+    # expected retry back into a fast 500 (the Cloud Tasks stall pattern of 10-18 and 10-19).
+    from utils.enrichment.outbox import FirstSummaryCallbackPending
+    from utils.sync import reprocess
+
+    assert module.expected_retry_reason(FirstSummaryCallbackPending('x')) == 'callback_pending'
+    assert module.expected_retry_reason(reprocess.FirstSummaryCallbackPending('x')) == 'callback_pending'
+
+
 def test_expected_retry_classes_are_defined_where_the_router_matches_them():
     import ast
     from pathlib import Path

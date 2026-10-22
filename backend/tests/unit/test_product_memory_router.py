@@ -236,9 +236,24 @@ def test_main_registers_neutral_product_memory_router():
     main_py = os.path.join(os.path.dirname(__file__), "..", "..", "main.py")
     with open(main_py, encoding="utf-8") as handle:
         contents = handle.read()
+    role_map_py = os.path.join(os.path.dirname(__file__), "..", "..", "app_roles.py")
+    with open(role_map_py, encoding="utf-8") as handle:
+        role_map = handle.read()
 
-    assert "memory_product" in contents
-    assert "app.include_router(memory_product.router)" in contents
+    # main.py mounts through the B8 role map: the router must be a ROUTER_MOUNTS row (AST, not an
+    # import: importing app_roles loads every router, too slow for a fast unit test).
+    import ast
+
+    mounted = {
+        node.args[0].id
+        for node in ast.walk(ast.parse(role_map))
+        if isinstance(node, ast.Call)
+        and getattr(node.func, "id", None) == "Mount"
+        and node.args
+        and isinstance(node.args[0], ast.Name)
+    }
+    assert "memory_product" in mounted
+    assert "mount_routers(app" in contents
     legacy_router_import = "v" + "17_memory_product"
     assert legacy_router_import not in contents
 

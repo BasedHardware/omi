@@ -58,6 +58,50 @@ def nonwindow_emitted_text_accounting_enabled() -> bool:
     return _default_on(NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENV)
 
 
+REPLAY_PREFIX_MARGIN_ENV = 'LISTEN_REPLAY_PREFIX_MARGIN_SECONDS'
+DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS = 1.0
+MAX_REPLAY_PREFIX_MARGIN_SECONDS = 10.0
+
+
+def replay_prefix_margin_seconds() -> float:
+    """Audio seconds held back from the replay prefix so paced delivery at the
+    endpoint rate finishes inside the prefix wall with slack. ``0`` restores
+    the exact-wall prefix (kill switch); unparsable or out-of-range values use
+    the default."""
+    raw = os.getenv(REPLAY_PREFIX_MARGIN_ENV, '').strip()
+    if not raw:
+        return DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
+    try:
+        margin = float(raw)
+    except ValueError:
+        return DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
+    if not math.isfinite(margin) or not 0.0 <= margin <= MAX_REPLAY_PREFIX_MARGIN_SECONDS:
+        return DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
+    return margin
+
+
+LIVE_TAIL_CATCHUP_RATE_ENV = 'LISTEN_LIVE_TAIL_CATCHUP_RATE'
+DEFAULT_LIVE_TAIL_CATCHUP_RATE = 1.5
+MAX_LIVE_TAIL_CATCHUP_RATE = 4.0
+
+
+def live_tail_catchup_rate() -> float:
+    """Multiple of the endpoint's sustained rate at which the live tail pump
+    drains a held backlog. ``1`` keeps the tail at the sustained rate, so a
+    backlog is permanent until input pauses (kill switch); unparsable or
+    out-of-range values use the default. Per-family ceilings apply on top."""
+    raw = os.getenv(LIVE_TAIL_CATCHUP_RATE_ENV, '').strip()
+    if not raw:
+        return DEFAULT_LIVE_TAIL_CATCHUP_RATE
+    try:
+        rate = float(raw)
+    except ValueError:
+        return DEFAULT_LIVE_TAIL_CATCHUP_RATE
+    if not math.isfinite(rate) or not 1.0 <= rate <= MAX_LIVE_TAIL_CATCHUP_RATE:
+        return DEFAULT_LIVE_TAIL_CATCHUP_RATE
+    return rate
+
+
 def parse_replay_limits(value: Any) -> ReplayLimits:
     """Validate an optional registry ``replay`` mapping; unknown fields reject."""
     if value is None:

@@ -1,6 +1,14 @@
 name: Backend Hermetic E2E
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   pull_request:
     branches: main
   push:
@@ -16,7 +24,15 @@ permissions:
   issues: read
 
 concurrency:
-  group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  # PRs cancel their own older runs. Main pushes share one ref-keyed group
+  # with cancel-in-progress false: the running gauntlet finishes and only the
+  # newest pending main SHA runs next, so a burst of merges no longer queues
+  # a full superseded suite for every intermediate SHA. The daily cron,
+  # manual dispatches and merge-queue attempts keep per-run groups: sharing
+  # the push group would let a cron evict the newest pending push run (or a
+  # push evict the day's gauntlet), and a cancelled push check fails
+  # scripts/pre_push_ci_verified.py for that SHA.
+  group: backend-hermetic-e2e-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.ref) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -44,15 +60,16 @@ jobs:
     # diffs against the live base SHA.
     timeout-minutes: 10
     outputs:
-      applies: ${{ steps.scope.outputs.applies }}
-      full_ci: ${{ steps.scope.outputs.full_ci }}
-      run_listen: ${{ steps.scope.outputs.run_listen }}
-      run_sync: ${{ steps.scope.outputs.run_sync }}
+      applies: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.scope.outputs.applies) }}
+      full_ci: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.scope.outputs.full_ci) }}
+      run_listen: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.scope.outputs.run_listen) }}
+      run_sync: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.scope.outputs.run_sync) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         timeout-minutes: 5
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
           filter: blob:none
 
@@ -135,6 +152,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
         # Healthy checkout is ~25 s. The workflow-level GIT_HTTP_LOW_SPEED_*
         # env aborts a stalled fetch after 60 s so checkout's own retry runs;
         # this caps the worst case (3 stalled attempts plus backoff).
@@ -187,6 +206,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
         timeout-minutes: 5
 
       - name: Set up Python
@@ -279,6 +300,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
         timeout-minutes: 5
 
       - name: Set up Python
@@ -356,11 +379,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: scope
-    if: needs.scope.outputs.applies == 'true' && (github.event_name == 'push' || github.event_name == 'schedule')
+    if: needs.scope.outputs.applies == 'true' && (inputs.nightly_main_sha != '' || github.event_name == 'push' || github.event_name == 'schedule')
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
         timeout-minutes: 5
 
       - name: Set up Python
@@ -513,7 +538,7 @@ jobs:
   post-merge-failure-issues:
     name: Post-merge hermetic failure issues
     needs: [scope, hermetic-e2e, listen-pusher-stack-gauntlet, sync-cloud-tasks-stack-gauntlet, replay-harness-phase0a-gauntlet]
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    if: ${{ always() && inputs.nightly_main_sha == '' && (github.event_name == 'push' || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

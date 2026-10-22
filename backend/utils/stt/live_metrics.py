@@ -49,6 +49,11 @@ REPLAY_SKIPPED = Counter(
 REPLAY_CLOSED = Counter(
     'omi_stt_replay_successor_closed_total', 'Successor deaths during replay', ['source', 'successor']
 )
+TAIL_CATCHUP = Counter(
+    'omi_stt_live_tail_catchup_seconds_total',
+    'Live tail audio delivered above the endpoint sustained rate to drain a held backlog',
+    ['successor'],
+)
 RECOVERY_ATTEMPTS = Counter(
     'omi_stt_recovery_attempts_total',
     'Actual live recovery dials by dead provider family and attempted successor family',
@@ -352,6 +357,7 @@ if recovery_enabled():
             for _cohort in DEMAND_COHORTS:
                 initialize_metric(RECOVERY_ATTEMPTS, source=_source, successor=_successor, demand_cohort=_cohort)
     for _provider in PROVIDER_FAMILIES:
+        TAIL_CATCHUP.labels(successor=_provider)
         for _cohort in DEMAND_COHORTS:
             initialize_metric(LIVE_SESSION_TERMINAL_AFTER_TEXT, provider=_provider, demand_cohort=_cohort)
         for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):

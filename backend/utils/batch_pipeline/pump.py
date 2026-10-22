@@ -56,6 +56,7 @@ class Pump:
         leader: LeaderLease | None = None,
         inline_metrics: bool = True,
         flights: int = 1,
+        shadow=None,
     ):
         if publish_concurrency is None:
             publish_concurrency = configured_publish_concurrency()
@@ -94,6 +95,8 @@ class Pump:
         self.flights = flights
         self._gpu = asyncio.Lock()
         self._maintenance = asyncio.Lock()
+        self.shadow = shadow
+        self._normal_flights = 0
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """SIGTERM sets stop_event; in-flight chains drain with heartbeats intact."""
@@ -190,6 +193,11 @@ class Pump:
         return await self._flight(stop_event)
 
     async def _maintain(self) -> None:
+        if self.shadow is not None:
+            try:
+                await self.shadow.maintain()
+            except Exception:
+                pass
         sampled_at = time.monotonic()
         if sampled_at - self._last_recovery >= 5:
             # Expired-lease recovery and the global result_ready drain are
@@ -251,12 +259,25 @@ class Pump:
 
         leases = await run_blocking(db_executor, claim)
         if not leases:
+            if self.shadow is not None:
+                try:
+                    return await self.shadow.run_once(self, capacity=snapshot)
+                except FatalGpuError:
+                    raise
+                except Exception as error:
+                    logger.info('event=batch_shadow_worker outcome=error exception_type=%s', type(error).__name__)
             return 0
+        self._normal_flights += 1
         claimed = leases
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
         try:
+            if self.shadow is not None:
+                try:
+                    await self.shadow.close()
+                except Exception:
+                    pass  # Shadow control failure cannot interrupt ordinary work.
             required = [
                 v for v in leases if v.item.requires_compute_admission or cap_dispatch_enabled(v.item.owner_id, 'batch')
             ]
@@ -367,6 +388,7 @@ class Pump:
             await self._release(claimed)
             raise
         finally:
+            self._normal_flights -= 1
             done.set()
             await renew
 

@@ -45,6 +45,7 @@ from config.conversation_smart_merge import (
     QUESTION_VERSION,
     REFRESH_LEASE_SECONDS,
     SmartMergeMode,
+    smart_merge_flatten_chain_repair_enabled,
     smart_merge_flatten_enabled,
     smart_merge_mode,
 )
@@ -519,7 +520,11 @@ def _absorb(uid: str, conversation_id: str, plan: _MergePlan, *, mode: SmartMerg
         if not smart_merge_flatten_enabled():
             return None, survivor_update, donor_update, {}
         flat_reason, union, ancestor_updates = flatten_updates(
-            survivor, {str(donor['id']): donor}, ancestor_rows, user_managed=user_managed
+            survivor,
+            {str(donor['id']): donor},
+            ancestor_rows,
+            user_managed=user_managed,
+            chain_repair=smart_merge_flatten_chain_repair_enabled(),
         )
         if flat_reason is not None:
             return flat_reason, None, None, {}
