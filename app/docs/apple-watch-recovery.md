@@ -128,7 +128,7 @@ https://developer.apple.com/documentation/watchconnectivity/wcsessiondelegate/se
 ## Visible Stop and session presentation (#23275)
 
 The active Watch control is a labelled native Stop recording button. It stays
-visible while recovery transfers wait; Retry transfer remains a separate action.
+visible while recovery transfers wait; Retry transfer remains a separate action. At accessibility text sizes the Stop title uses the full button width so words remain readable.
 The 40 mm layout fits both controls; the stopped-state Record target is 44 pt when recovery status is present so Retry also fits. The stopped state offers Record and retains
 saved-audio status. Recovery status never gates the recording control.
 

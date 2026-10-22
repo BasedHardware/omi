@@ -3,6 +3,7 @@ import SwiftUI
 struct WatchRecorderView<Recorder: WatchRecorderControlling>: View {
     @ObservedObject var viewModel: Recorder
     @StateObject private var presentationController = RecordingPresentationController()
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         GeometryReader { geometry in
@@ -18,9 +19,15 @@ struct WatchRecorderView<Recorder: WatchRecorderControlling>: View {
 
                         if viewModel.isRecording {
                             Button(action: viewModel.stopRecording) {
-                                Label("watch.accessibility.stopRecording", systemImage: "stop.fill")
-                                    .font(.body.weight(.semibold))
-                                    .frame(maxWidth: .infinity, minHeight: 32)
+                                Group {
+                                    if dynamicTypeSize.isAccessibilitySize {
+                                        Text("watch.accessibility.stopRecording")
+                                    } else {
+                                        Label("watch.accessibility.stopRecording", systemImage: "stop.fill")
+                                    }
+                                }
+                                .font(.body.weight(.semibold))
+                                .frame(maxWidth: .infinity, minHeight: 32)
                             }
                             .buttonStyle(.borderedProminent)
                             .tint(.red)
