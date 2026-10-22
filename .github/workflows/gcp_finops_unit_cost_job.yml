@@ -148,7 +148,7 @@ jobs:
         run: |
           # Required mounts: a missing resource here must fail the deploy.
           secrets=/run/secrets/finops/OMI_PROMETHEUS_TOKEN/OMI_PROMETHEUS_TOKEN=OMI_PROMETHEUS_TOKEN:latest
-          secrets+=,/run/secrets/finops/STRIPE_API_KEY/STRIPE_API_KEY=STRIPE_API_KEY:latest
+          secrets+=,/run/secrets/finops/STRIPE_READ_API_KEY/STRIPE_READ_API_KEY=STRIPE_READ_API_KEY:latest
           secrets+=,/run/secrets/finops/OPENAI_ADMIN_KEY/OPENAI_ADMIN_KEY=WEB_ADMIN_OPENAI_COST_API_KEY:latest
           secrets+=,/run/secrets/finops/ANTHROPIC_ADMIN_API_KEY/ANTHROPIC_ADMIN_API_KEY=WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest
           secrets+=,/run/secrets/finops/MCP_POSTHOG_API_KEY/MCP_POSTHOG_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest

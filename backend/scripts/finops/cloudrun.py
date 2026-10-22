@@ -49,7 +49,7 @@ def secrets_dir() -> pathlib.Path:
 # calls a Modulate endpoint with it.
 SECRET_FILES = {
     "prometheus": "OMI_PROMETHEUS_TOKEN",
-    "stripe": "STRIPE_API_KEY",
+    "stripe": "STRIPE_READ_API_KEY",
     "openai": "OPENAI_ADMIN_KEY",
     "anthropic": "ANTHROPIC_ADMIN_API_KEY",
     "posthog": "MCP_POSTHOG_API_KEY",

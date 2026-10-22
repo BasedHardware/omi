@@ -200,7 +200,7 @@ export const defaultWallSources: WallSources = {
   vendorBalance: fetchVendorBalanceHistory,
   modulate: fetchModulateModelled,
   stripe: async () => {
-    const { getOptionalStripe } = await import("./stripe");
+    const { getOptionalStripeRead } = await import("./stripe");
     const { fetchWallSubscriptionBook, wallSubscriptionBook } = await import(
       "./stripe-subscriptions"
     );
@@ -222,8 +222,11 @@ export const defaultWallSources: WallSources = {
         sourceRefreshedAt: fixture.sourceRefreshedAt,
       };
     }
-    const stripe = getOptionalStripe();
-    if (!stripe) throw new Error("Stripe restricted read key unavailable");
+    const stripe = getOptionalStripeRead();
+    if (!stripe)
+      throw new Error(
+        "Stripe read key unavailable (STRIPE_READ_API_KEY or STRIPE_SECRET_KEY)"
+      );
     return fetchWallSubscriptionBook(stripe);
   },
   billing: async () => {

@@ -103,10 +103,10 @@ def auth_header() -> str:
         key = secret("stripe")
     else:
         for line in ENV.read_text().splitlines():
-            if line.startswith("STRIPE_API_KEY="):
+            if line.startswith("STRIPE_READ_API_KEY="):
                 key = line.split("=", 1)[1].strip().strip("\"'")
     if not key:
-        raise SystemExit("no STRIPE_API_KEY in %s" % ENV)
+        raise SystemExit("no STRIPE_READ_API_KEY in %s" % ENV)
     return "Basic " + base64.b64encode((key + ":").encode()).decode()
 
 

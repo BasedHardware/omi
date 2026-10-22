@@ -35,7 +35,10 @@ vi.mock("@/lib/auth", () => ({
   verifyAdmin: vi.fn(async () => ({ uid: "t" })),
 }));
 vi.mock("@/lib/posthog", () => ({ withRowLimit: (q: string) => q }));
-vi.mock("@/lib/stripe", () => ({ getOptionalStripe: () => null }));
+vi.mock("@/lib/stripe", () => ({
+  getOptionalStripe: () => null,
+  getOptionalStripeRead: () => null,
+}));
 vi.mock("@/lib/stripe-subscriptions", () => ({
   MRR_STATUSES: ["active"],
   fetchOmiSubscriptions: vi.fn(async () => ({ subscriptions: [] })),
