@@ -36,9 +36,8 @@ from config.summary_guarantee import (
 from config.policy import FirstSummaryPolicy, resolve_stage_policy
 from config.sync_reprocess import settle_seconds
 from config.repeat_work import revision_reuse
-from database._client import get_firestore_client, is_document_size_limit_error
+from database._client import get_firestore_client
 from database.summary_processing import record_empty_failure, EMPTY_BLOCKED_REASON
-from utils.observability.fallback import record_fallback
 
 Row: TypeAlias = dict[str, Any]
 ResultT = TypeVar('ResultT')
@@ -58,6 +57,13 @@ COALESCED = Counter('sync_reprocess_coalesced_total', 'Sync updates folded into 
 UNBOUND = Counter('sync_reprocess_unbound_total', 'Sync obligations awaiting a complete worker binding', ['action'])
 # A conversation row at Firestore's 1 MiB ceiling refuses every enrichment write (#23341).
 HELD_DOCUMENT_SIZE_LIMIT = 'document_size_limit'
+
+
+def _is_document_size_limit(error: BaseException) -> bool:
+    # Imported at the call: unit suites stub database._client without this predicate.
+    from database._client import is_document_size_limit_error
+
+    return is_document_size_limit_error(error)
 
 
 class FirstSummaryCallbackPending(RuntimeError):
@@ -180,6 +186,8 @@ def _dispatch_binding() -> dict[str, str] | None:
         binding = enrichment_config.dispatch_binding()
         if valid_dispatch_binding(binding):
             return binding
+        from utils.observability.fallback import record_fallback
+
         record_fallback(
             component='sync_dispatch',
             from_mode='enrichment_queue',
@@ -531,7 +539,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
         try:
             enrich_settled(row['uid'], row['conversation_id'], row['language'])
         except InvalidArgument as error:
-            if not is_document_size_limit_error(error):
+            if not _is_document_size_limit(error):
                 raise
             held_reason = HELD_DOCUMENT_SIZE_LIMIT
     else:
@@ -574,7 +582,7 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             superseded = True
             retry_revision = error.retry_revision
         except InvalidArgument as error:
-            if not is_document_size_limit_error(error):
+            if not _is_document_size_limit(error):
                 raise
             held_reason = HELD_DOCUMENT_SIZE_LIMIT
         except summary_delivery.SummaryOutputUnavailable:
@@ -609,6 +617,8 @@ def run(document_id: str, task_token: str, process: Callable[[str, str, str], An
             return parked, None
 
         _mutate(document_id, hold)
+        from utils.observability.fallback import record_fallback
+
         record_fallback(
             component='sync_dispatch',
             from_mode='enrichment_outbox',

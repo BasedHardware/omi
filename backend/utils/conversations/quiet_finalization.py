@@ -9,7 +9,6 @@ from google.api_core.exceptions import InvalidArgument
 
 from config.listen_quiet_finalization import enabled
 from database import conversation_quiet_checks as checks_db
-from database._client import is_document_size_limit_error
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
@@ -106,6 +105,9 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
             firestore_client=firestore_client,
         )
     except InvalidArgument as error:
+        # Imported at the call: unit suites stub database._client without this predicate.
+        from database._client import is_document_size_limit_error
+
         if not is_document_size_limit_error(error):
             raise
         # The conversation row sits at Firestore's 1 MiB ceiling, so the
