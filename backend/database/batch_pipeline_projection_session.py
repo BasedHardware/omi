@@ -7,8 +7,15 @@ from typing import TYPE_CHECKING, Any
 
 from google.cloud import firestore
 
-from database.batch_pipeline_privacy import assert_batch_write_allowed
-from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionReplay, normalized_binding
+from config.firestore_read_levers import lever_enabled
+from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
+from database.batch_pipeline_projection_protocol import (
+    ProjectionBlocked,
+    ProjectionPredecessorPending,
+    ProjectionReplay,
+    normalized_binding,
+)
+
 from database.sync_ledger import sync_content_ledger_ref, batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
@@ -69,15 +76,25 @@ class ProjectionSession:
         transaction.update(self.result_ref, changes)
 
     def guard(self, transaction, conversation_ids=()):
+        options = {}
+        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
+            options['memo'] = getattr(self, '_privacy_memo', None)
         return assert_batch_write_allowed(
             self.client,
             transaction,
             self.binding.owner_id,
             conversation_ids=conversation_ids,
             expected_generation=self.binding.privacy_generation,
+            **options,
         )
 
     def prepare(self, transaction, *, replay=True):
+        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
+            # A session may survive the pre-check and assignment retries. Only
+            # prepare and validate_plan within this attempt may share snapshots.
+            self._privacy_memo = BatchPrivacyMemo(self.client, transaction)
+        elif hasattr(self, '_privacy_memo'):
+            del self._privacy_memo
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
@@ -151,7 +168,7 @@ class ProjectionSession:
             owner.get('projection_watermark'),
         )
         if erased is None:
-            raise ProjectionBlocked('earlier committed projection must persist first')
+            raise ProjectionPredecessorPending('earlier committed projection must persist first')
         self.erased_predecessors = erased
 
     def validate_plan(self, transaction, planned):
@@ -238,4 +255,11 @@ class ProjectionSession:
             self.prepare(transaction)
             return self.persist(transaction, superseded=superseded)
 
-        return self.store.run(commit, policy=self.policy)
+        try:
+            return self.store.run(commit, policy=self.policy)
+        finally:
+            # A2 shadow: persist() wrote the owner watermark and erased predecessors outside Store.run.
+            # A strict no-op unless shadow mode; re-copies current state; never raises.
+            mirror = getattr(self.store, 'mirror_assignment', None)
+            if mirror is not None:
+                mirror(self)

@@ -116,11 +116,14 @@ OMI_JOURNEY_TERMINAL_TOTAL = Counter(
     ['journey', 'outcome'],
 )
 
+# 10 finite buckets, not 15: the 3x4 journey/outcome product is pre-created
+# below per pod/instance; no rule reads an explicit le= here (p50/p95 only).
+JOURNEY_LATENCY_BUCKETS = (0.5, 1, 2.5, 5, 10, 30, 60, 300, 3600, 21600)
 OMI_JOURNEY_LATENCY_SECONDS = Histogram(
     'omi_journey_latency_seconds',
     'Elapsed time from accepted real-traffic journey to terminal outcome',
     ['journey', 'outcome'],
-    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600, 21600, 86400),
+    buckets=JOURNEY_LATENCY_BUCKETS,
 )
 
 OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
@@ -510,6 +513,7 @@ JEV_DECISION_LABELS = {
             'capture_same_scene',
             'capture_resummary',
             'conversation_smart_merge',
+            'episode_boundary',
         }
     ),
     'outcome': frozenset(
@@ -946,6 +950,32 @@ OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
     ['outcome', 'reason'],
 )
 
+# Counted alongside omi_sync_transcription_*_total{outcome="internal_error"}:
+# the bounded internal cause (config.sync_telemetry.SyncFailureReason).
+OMI_SYNC_INTERNAL_FAILURES_TOTAL = Counter(
+    'omi_sync_internal_failures_total',
+    'Sync job/segment failures in persistence or finalize, by bounded internal cause; never STT vendor errors',
+    ['kind', 'lane', 'failure_reason'],
+)
+
+OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL = Counter(
+    'omi_sync_bridge_audio_copy_total',
+    (
+        'Per-object sync-bridge audio copies. outcome=copied|skipped (destination already held the '
+        'same bytes)|rate_limited (one GCS 429, retried with backoff)|raced (a concurrent copier won)'
+    ),
+    ['outcome'],
+)
+
+OMI_SYNC_FRESH_CONVERSATION_TURN_TOTAL = Counter(
+    'omi_sync_fresh_conversation_turn_total',
+    (
+        'Fresh-lane per-conversation persistence turns. outcome=acquired|waited (acquired after another '
+        'fresh job released it)|timeout|unavailable (both proceed unserialized; the transaction stays correct)'
+    ),
+    ['outcome'],
+)
+
 OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL = Counter(
     'omi_live_stt_terminal_failures_total',
     'Terminal live-STT failures by bounded provider, outcome, client platform, environment, and phase',
@@ -996,6 +1026,14 @@ OMI_VAD_GATE_SESSIONS_TOTAL = Counter(
     ['mode'],
 )
 
+# D2 edge shadow mirrors (utils/stt/edge_shadow.py). outcome: completed,
+# queue_full, connect_failed, send_failed, edge_closed.
+OMI_LISTEN_EDGE_SHADOW_SESSIONS_TOTAL = Counter(
+    'omi_listen_edge_shadow_sessions_total',
+    'Listen sessions mirrored to listen-edge by how the mirror ended',
+    ['outcome'],
+)
+
 OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     'omi_live_stt_terminal_total',
     'Terminal live-STT outcomes for accepted attempts by bounded labels',
@@ -1023,6 +1061,20 @@ OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
     'omi_stt_provider_circuit_open',
     'Whether the process-local STT provider breaker is currently refusing traffic (1) or not (0)',
     ['provider', 'kind'],
+)
+
+# Trips of the same breaker (closed/half-open -> open), counted once per
+# transition by the bounded cause that opened it: the serve-death reason
+# (connection_lost, send_failed, ...) or the connect-failure reason that
+# reached the threshold. error_class uses the shared live-reason vocabulary;
+# 'untyped' covers trips whose caller could not name a cause. Re-arming an
+# already-open breaker does not count. The gauge above shows state; this
+# counter answers WHY it tripped (P34 2026-10-21: Parakeet selection breakers
+# tripped on 2-10 of 40 listen pods per 10m with the cause unlogged).
+OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL = Counter(
+    'omi_stt_provider_circuit_trip_total',
+    'STT provider breaker transitions into open by bounded cause (serve-death or connect-failure reason)',
+    ['provider', 'kind', 'error_class'],
 )
 
 # Per-provider live-STT connection attempts on every connect path (legacy order
@@ -1146,7 +1198,7 @@ OMI_SYNC_LINEAGE_RESOLVE_TOTAL = Counter(
         'Sync lineage binding decisions. outcome is a closed set: bound|split_across_generations|stamp_overridden|'
         'stamp_fallback|no_rows|truncated|interval_miss|lookup_failed|disabled|not_allowlisted|s1_refused'
     ),
-    ['outcome'],
+    ['outcome', 'stage', 'claim_count_bucket', 'file_count_bucket'],
 )
 
 # Task identity is emitted by all processing hosts; event=action_item_identity logs cover unscraped hosts.
@@ -1177,25 +1229,21 @@ CONVERSATION_SHAPE_SOURCES = (
     'desktop',
     'unknown',
 )
+# 11 finite buckets, not 18: each source product is pre-created per emitter.
+# 10/15 back omi_conversation_shape's log; 120 backs the Core Features
+# le="120.0" panel; the rest only needs p10/p50/p90 resolution.
 CONVERSATION_DURATION_BUCKETS = (
     5,
     10,
     15,
-    20,
     30,
-    45,
     60,
-    90,
     120,
-    180,
     300,
     600,
-    1200,
     1800,
     3600,
-    7200,
     14400,
-    28800,
 )
 CONVERSATION_SEGMENT_BUCKETS = (1, 2, 3, 5, 10, 20, 50, 100, 200, 500, 1000, 5000)
 

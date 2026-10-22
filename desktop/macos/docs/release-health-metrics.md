@@ -9,19 +9,19 @@ lifecycle events and expected noise **cannot** be read as a customer-visible
 regression. It is the long form of the "Product analytics integrity" and "Fallback /
 resilience telemetry" sections of `desktop/macos/AGENTS.md`.
 
-Release identity is uniform across surfaces (Sentry + PostHog):
+Release identity is uniform across PostHog surfaces:
 
-| Dimension | PostHog key | Sentry | Source |
-|-----------|-------------|--------|--------|
-| App version | `app_version` | `release` (`v{ver}+{build}-macos`) | `CFBundleShortVersionString` |
-| App build | `app_build` | `release` (same tag) | `CFBundleVersion` |
-| Release channel | `update_channel` (`stable`/`beta`) | `dist` + `update_channel` tag | `AppBuild.currentUpdateChannel` |
-| Bundle id | — | `bundle_id` tag | `AppBuild.bundleIdentifier` |
+| Dimension | PostHog key | Source |
+|-----------|-------------|--------|
+| App version | `app_version` | `CFBundleShortVersionString` |
+| App build | `app_build` | `CFBundleVersion` |
+| Release channel | `update_channel` (`stable`/`beta`) | `AppBuild.currentUpdateChannel` |
 
 PostHog `app_version`/`app_build`/`update_channel` are registered as super-properties
 (`PostHogManager.register`) so **every** event — including `floating_bar_ptt_ended` —
-carries release identity. Sentry native crash/app-hang/watchdog events are
-build-attributable via `options.releaseName`/`options.dist` set at `SentrySDK.start`.
+carries release identity. Sentry was removed from the macOS client (2026-10); there is
+no native crash/app-hang telemetry source, so crash-free sessions has no authoritative
+signal until a replacement is deliberately chosen.
 
 ## Cross-cutting rules
 
@@ -39,7 +39,7 @@ build-attributable via `options.releaseName`/`options.dist` set at `SentrySDK.st
   minimum sample and the direction is adverse for the outcome of interest.
 - **Privacy.** Custom metric payloads use bounded dimensions only. No transcript,
   audio, prompt, custom device identifier, or free-form local error text is emitted
-  in PostHog properties or Sentry tags (enforced by `DesktopDiagnosticsManagerTests` /
+  in PostHog properties (enforced by `DesktopDiagnosticsManagerTests` /
   `TelemetryPrivacyBoundaryTests`).
 
 ## Metrics
@@ -132,16 +132,13 @@ the release-evidence layer (`#9523`) will consume.
   `ptt_cascade`, …) keep known paths out of `other`.
 - **Window:** PT24H. **Minimum cohort:** 50 fallback-emitting users per build.
 
-### Crash-free sessions — doctor metric `crash_free_sessions`
+### Crash-free sessions — doctor metric `crash_free_sessions` (RETIRED)
 
-- **Source:** Sentry release health (auto session tracking) keyed by
-  `releaseName`/`dist`.
-- **Numerator:** sessions with a hard crash. **Denominator:** total started sessions
-  for the release. Filter by `release` (version+build) and `update_channel`; native
-  crashes are now build-attributable via `options.releaseName`/`options.dist`.
-- **Window:** PT24H. **Minimum cohort:** 100 sessions per build.
-- **Privacy:** native events carry only `update_channel`/`bundle_id` tags +
-  `diagnostic_area`/`failure_class`; no user content.
+- **Status:** retired with the Sentry removal. The previous authoritative source was
+  Sentry release health (auto session tracking) keyed by `releaseName`/`dist`; no
+  current surface measures hard crashes. Do not read PostHog `App Crash Detected`
+  (also removed) or absence of crash events as a crash-free rate. Reinstate this
+  metric only together with a deliberately chosen replacement crash reporter.
 
 ### Proactive advice delivery — doctor metric `proactive_delivery`
 

@@ -311,7 +311,7 @@ async def test_repeated_modulate_rejections_open_its_own_circuit():
         )
 
     assert service == STTService.deepgram
-    circuit.record_failure.assert_called_once_with()
+    circuit.record_failure.assert_called_once_with(error_class='config_incomplete')
 
 
 @pytest.mark.anyio

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # LIFECYCLE: permanent
-# Run the canonical-memory Firestore emulator proofs.
+# Run the canonical-memory and task Firestore emulator proofs.
 #
 # These are the strongest correctness evidence the memory system has: they
 # exercise crash recovery, deletion races, account-generation contention, day
@@ -65,6 +65,15 @@ run_proof "ledger correction, revert, standalone reopen, privacy fence" \
 # and relies on backend/ staying the import root.
 run_proof "writer cutover / rollback / rollforward" \
   "$PYTHON" -m scripts.knowledge_ledger_writer_transition_emulator_test
+run_proof "summary task recovery, concurrency and expiry" \
+  "$PYTHON" -m pytest \
+  tests/integration/test_summary_task_promotion_emulator.py \
+  tests/integration/test_candidate_accept_expiry_emulator.py -q
+
+# Job-store conformance (legacy-retire lane 12): sim + Firestore emulator legs here; the Postgres leg
+# skips in CI (no Postgres service, decision S6) and is proven locally/staging.
+run_proof "job-store conformance (sim + emulator)" \
+  "$PYTHON" -m pytest -q -p no:cacheprovider tests/integration/test_store_conformance.py
 
 if (( ${#failures[@]} )); then
   echo

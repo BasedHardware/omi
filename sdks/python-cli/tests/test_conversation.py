@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -133,6 +134,128 @@ def test_conversation_from_segments_rejects_directory(config_path, respx_mock, m
     err = json.loads(output.err)
     assert "Expected a file, but found a directory" in err["error"]
     assert not respx_mock.calls
+
+
+def test_conversation_from_segments_missing_file_is_not_found(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    missing = tmp_path / "missing.json"
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(missing)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    err = json.loads(capsys.readouterr().err)
+    assert err["error"] == f"File not found: {missing}"
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_file_parent_is_not_a_directory(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """``Path.exists()`` swallows ``ENOTDIR`` and returns False, so a pre-check
+    reported ``regular_file/segments.json`` as a missing file. Opening the path
+    keeps the real ``NotADirectoryError``."""
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("file", encoding="utf-8")
+    segments = blocker / "segments.json"
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(segments)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    err = json.loads(capsys.readouterr().err)
+    assert err["error"] == f"Cannot read file {segments}"
+    assert "Not a directory" in err["detail"]
+    assert "File not found" not in err["error"]
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_windows_directory_error_is_still_a_directory(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """Windows opens a directory as ``PermissionError``, not ``IsADirectoryError``."""
+    test_dir = tmp_path / "somedir"
+    test_dir.mkdir()
+
+    def windows_read_bytes(self):
+        raise PermissionError(13, "Permission denied", str(self))
+
+    monkeypatch.setattr(type(test_dir), "read_bytes", windows_read_bytes)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(test_dir)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert "Expected a file, but found a directory" in json.loads(capsys.readouterr().err)["error"]
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_windows_file_parent_is_still_not_a_directory(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """Windows reports a path under a regular file as not found rather than ENOTDIR."""
+    blocker = tmp_path / "not_a_dir"
+    blocker.write_text("file", encoding="utf-8")
+    segments = blocker / "segments.json"
+
+    def windows_read_bytes(self):
+        raise FileNotFoundError(2, "The system cannot find the path specified", str(self))
+
+    monkeypatch.setattr(type(segments), "read_bytes", windows_read_bytes)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(segments)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    err = json.loads(capsys.readouterr().err)
+    assert err["error"] == f"Cannot read file {segments}"
+    assert "Not a directory" in err["detail"]
+    assert not respx_mock.calls
+
+
+def test_conversation_from_segments_dotdot_past_a_file_is_still_not_found(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """Win32 collapses ``notes.txt\\..`` before lookup, so the file is not the blocker."""
+    (tmp_path / "notes.txt").write_text("file", encoding="utf-8")
+    segments = tmp_path / "notes.txt" / ".." / "missing.json"
+
+    def windows_read_bytes(self):
+        raise FileNotFoundError(2, "The system cannot find the file specified", str(self))
+
+    monkeypatch.setattr(type(segments), "read_bytes", windows_read_bytes)
+    monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(segments)])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 1
+    assert json.loads(capsys.readouterr().err)["error"] == f"File not found: {segments}"
+    assert not respx_mock.calls
+
+
+@pytest.mark.skipif(
+    os.name == "nt" or (hasattr(os, "geteuid") and os.geteuid() == 0),
+    reason="POSIX non-root directory traversal permissions only",
+)
+def test_conversation_from_segments_unsearchable_parent_is_a_read_error(
+    config_path, respx_mock, monkeypatch, capsys, tmp_path
+) -> None:
+    """A mode ``0o000`` parent makes ``Path.exists()`` raise ``PermissionError``
+    before ``read_bytes()``. That used to escape as ``unexpected error`` instead
+    of the read failure this command already reports for an unreadable file."""
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    segments = locked / "segments.json"
+    segments.write_text("[]", encoding="utf-8")
+    locked.chmod(0o000)
+    try:
+        monkeypatch.setattr(sys, "argv", ["omi", "--json", "conversation", "from-segments", str(segments)])
+        with pytest.raises(SystemExit) as exc:
+            main()
+        assert exc.value.code == 1
+        err = json.loads(capsys.readouterr().err)
+        assert err["error"] == f"Cannot read file {segments}"
+        assert "Permission denied" in err["detail"]
+        assert "unexpected error" not in err["error"]
+        assert not respx_mock.calls
+    finally:
+        locked.chmod(0o700)
 
 
 def test_conversation_from_segments_rejects_unreadable_file(

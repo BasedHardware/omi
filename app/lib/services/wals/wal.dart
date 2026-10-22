@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -266,6 +268,12 @@ class Wal {
 
   bool keptForTranscriptRecovery;
 
+  /// Set only when [timerStart] is an app estimate (the device gave no
+  /// trustworthy recording time): names the one contiguous device recording
+  /// this audio belongs to. The upload filename carries it so the backend
+  /// never merges it with audio outside that run by invented adjacency.
+  String? clockRun;
+
   String get id => '${device}_$timerStart';
 
   /// Single source of truth for how this recording's sync state is shown to the
@@ -384,6 +392,7 @@ class Wal {
     this.uploadedAt = 0,
     this.syncedAt = 0,
     this.keptForTranscriptRecovery = false,
+    this.clockRun,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -429,6 +438,7 @@ class Wal {
       uploadedAt: json['uploaded_at'] ?? 0,
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
+      clockRun: json['clock_run'] as String?,
     )..repairLegacyImportedCustody();
   }
 
@@ -469,17 +479,27 @@ class Wal {
       'uploaded_at': uploadedAt,
       'synced_at': syncedAt,
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
+      if (clockRun != null) 'clock_run': clockRun,
     };
   }
 
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
+    return getFileNameByTimeStarts(timerStart, clockRun: clockRun);
   }
 
-  getFileNameByTimeStarts(int timestarts) {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timestarts}.bin";
+  /// `_clke<run>` sits directly before the timestamp: older backends read only
+  /// `_fs<n>` and the trailing part, so they ignore it.
+  getFileNameByTimeStarts(int timestarts, {String? clockRun}) {
+    final clock = clockRun == null ? '' : '_clke$clockRun';
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs$frameSize${clock}_$timestarts.bin";
+  }
+
+  /// A fresh run name for audio whose recording time the app had to estimate.
+  static String newClockRun() {
+    final random = Random.secure();
+    return List.generate(12, (_) => '0123456789abcdefghijklmnopqrstuvwxyz'[random.nextInt(36)]).join();
   }
 
   static Future<String?> getFilePath(String? pathOrName) async {

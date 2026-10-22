@@ -11,10 +11,9 @@ import logging
 import math
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 
-from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
-from config.sync_assignment_recovery import sync_assignment_recovery_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.observability.fallback import record_fallback
@@ -29,6 +28,7 @@ from utils.conversations.smart_merge_policy import user_managed as _policy_user_
 from utils.conversations.relevance_rules import deterministic_relevance
 from utils.batch_pipeline.live_projection import replace_record
 from utils.sync.capture_repeat_evidence import capture_covered_indices
+from utils.sync.clock_run import SYNC_CLOCK_RUN_FIELD
 from utils.sync.live_speech_dedupe import (
     MAX_LIVE_SEGMENTS,
     append_alignment_method,
@@ -40,7 +40,8 @@ from utils.sync.live_speech_dedupe import (
 from utils.sync.merge_dedupe import dedupe_segments_for_merge
 from utils.sync.assignment_index import AssignmentIndex
 from utils.sync.live_overlap import choose_live_overlap, compatible_capture, live_overlap_enabled
-from utils.sync.assignment_errors import SyncAssignmentSuperseded, SyncAssignmentConflict
+from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
+from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
 from utils.conversation_continuity import intervals_connect
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
@@ -64,7 +65,7 @@ SYNC_CONVERSATION_BYTE_BUDGET = FIRESTORE_MAX_DOCUMENT_BYTES - 124 * 1024  # 900
 
 
 def capture_mismatch(left: dict, right: dict) -> str:
-    """Which partition fields differ, as one of eight fixed tokens.
+    """Which partition fields differ, as one of sixteen fixed tokens.
 
     ``none`` exactly when ``compatible_capture`` holds: every field is compared
     for equality, so two locked captures match. Never exposes field values.
@@ -74,6 +75,8 @@ def capture_mismatch(left: dict, right: dict) -> str:
     ]
     if bool(left.get('is_locked')) != bool(right.get('is_locked')):
         fields.append('lock')
+    if left.get(SYNC_CLOCK_RUN_FIELD) != right.get(SYNC_CLOCK_RUN_FIELD):
+        fields.append('clock')
     return '_'.join(fields) or 'none'
 
 
@@ -166,6 +169,12 @@ def _lineage_span_delta_bucket(
     return 'gt_300'
 
 
+def _flatten_rejected(reason: str) -> SyncAssignmentConflict:
+    # ``reason`` is one of merge_ancestry's bounded constants, never row data.
+    logger.warning('event=sync_ancestry_flatten outcome=rejected reason=%s', reason)
+    return SyncAssignmentConflict('sync ancestry flatten rejected', subtype=Reason.ANCESTRY_FLATTEN_REJECTED)
+
+
 def _smart_merge_lineage(row: dict | None) -> bool:
     return bool(row and (row.get('smart_merge') or {}).get('role') in ('donor', 'survivor'))
 
@@ -202,8 +211,13 @@ def assign_in_transaction(
     invalidate: Callable[[dict], None],
     full_ids: frozenset[str] = frozenset(),
     live_candidate_ids: tuple[str, ...] = (),
+    absorbed: list[str] | None = None,
 ) -> tuple[dict, bool, list[dict]]:
     """Production transaction body; injected codecs preserve encryption in adapters.
+
+    ``absorbed`` (optional, filled in place) receives the conversations this
+    plan newly turns into redirect donors, unlike the cumulative
+    ``sync_merged_from`` lineage.
 
     The user-level index document is read AND written by every intake, including
     the empty-index case. Concurrent jobs cannot both commit an absent target.
@@ -214,6 +228,8 @@ def assign_in_transaction(
     write is estimated above ``SYNC_CONVERSATION_BYTE_BUDGET`` are left
     untouched: the chunk's new speech goes to another conversation instead.
     """
+    if absorbed is not None:
+        absorbed.clear()
     incoming = deepcopy(incoming)
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
@@ -226,6 +242,16 @@ def assign_in_transaction(
             read[cid] = collection.document(cid).get(transaction=transaction).to_dict()
         return read[cid]
 
+    tombstones: dict[str, bool] = {}
+
+    def tombstoned(cid: str) -> bool:
+        # Read only before creating a row, inside the same transaction.
+        if cid not in tombstones:
+            tombstones[cid] = (
+                user_ref.collection('deleted_conversations').document(cid).get(transaction=transaction).exists
+            )
+        return tombstones[cid]
+
     # Read the incoming key too: retries and deleted canonical anchors must never
     # overwrite a tombstone. Redirects are server-authored, not user deletions.
     flatten = smart_merge_flatten_enabled()
@@ -233,7 +259,9 @@ def assign_in_transaction(
     own = load(incoming['id'])
     if own and own.get('deleted') and not own.get('sync_merged_into'):
         if flatten and (own.get('smart_merge') or {}).get('role') == 'donor':
-            raise SyncAssignmentConflict('smart merge donor tombstone lacks a redirect', subtype='other')
+            raise SyncAssignmentConflict(
+                'smart merge donor tombstone lacks a redirect', subtype=Reason.DONOR_TOMBSTONE_NO_REDIRECT
+            )
         raise SyncAssignmentSuperseded('sync anchor was deleted')
 
     def resolve(cid: str | None, *, one_hop: bool = False) -> tuple[str | None, dict | None]:
@@ -242,14 +270,16 @@ def assign_in_transaction(
         has_smart_state = False
         while row and row.get('sync_merged_into'):
             if row['id'] in seen:
-                raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
+                raise SyncAssignmentConflict('sync redirect cycle', subtype=Reason.REDIRECT_CYCLE)
             has_smart_state = has_smart_state or (one_hop and _smart_merge_lineage(row))
             seen.add(row['id'])
             redirect_id: str = row['sync_merged_into']
             cid, row = redirect_id, load(redirect_id)
             has_smart_state = has_smart_state or (one_hop and _smart_merge_lineage(row))
             if has_smart_state and (len(seen) > 1 or (row and row.get('sync_merged_into') and row['id'] not in seen)):
-                raise SyncAssignmentConflict('sync redirect chain exceeds one hop', subtype='other')
+                raise SyncAssignmentConflict(
+                    'sync redirect chain exceeds one hop', subtype=Reason.REDIRECT_CHAIN_TOO_LONG
+                )
         if seen and (not row or row.get('deleted') or (has_smart_state and row.get('discarded'))):
             raise SyncAssignmentSuperseded('sync capture lineage was deleted')
         return cid, row
@@ -262,10 +292,10 @@ def assign_in_transaction(
         # WAL can finish before listen creates its explicitly named row. A new
         # timestamp anchor here becomes a twin when listen later persists. The
         # already-read target document fences concurrent create on replay.
-        raise SyncAssignmentConflict('batch live target not persisted', subtype='other')
+        raise SyncAssignmentConflict('batch live target not persisted', subtype=Reason.LIVE_TARGET_NOT_PERSISTED)
     if record_span is not None:
         if not target or not target_id:
-            raise SyncAssignmentConflict('record target missing', subtype='other')
+            raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
         result, survivors = replace_record(decode(target), incoming, record_span)
         invalidate(result)
         encoded = encode(result)
@@ -280,9 +310,11 @@ def assign_in_transaction(
             smart_lineage = _smart_merge_lineage(target) or _smart_merge_lineage(nxt)
             if smart_lineage:
                 if redirect_id == target_id:
-                    raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
+                    raise SyncAssignmentConflict('sync redirect cycle', subtype=Reason.REDIRECT_CYCLE)
                 if nxt and nxt.get('sync_merged_into'):
-                    raise SyncAssignmentConflict('sync redirect chain exceeds one hop', subtype='other')
+                    raise SyncAssignmentConflict(
+                        'sync redirect chain exceeds one hop', subtype=Reason.REDIRECT_CHAIN_TOO_LONG
+                    )
                 if not nxt or nxt.get('deleted') or nxt.get('discarded'):
                     raise SyncAssignmentSuperseded('sync target survivor was deleted')
                 target_id, target = redirect_id, nxt
@@ -290,7 +322,9 @@ def assign_in_transaction(
             else:
                 target_id, target = None, None
         elif target and target.get('deleted') and (target.get('smart_merge') or {}).get('role') == 'donor':
-            raise SyncAssignmentConflict('smart merge donor tombstone lacks a redirect', subtype='other')
+            raise SyncAssignmentConflict(
+                'smart merge donor tombstone lacks a redirect', subtype=Reason.DONOR_TOMBSTONE_NO_REDIRECT
+            )
     elif target and target.get('deleted') and (target.get('smart_merge') or {}).get('role') == 'donor':
         # A live conversation folded into its predecessor (database/smart_merge.py)
         # redirects its late repair audio to the survivor; temporal fallback would
@@ -312,15 +346,12 @@ def assign_in_transaction(
         mismatch = capture_mismatch(target, incoming)
         if mismatch != 'none':
             if redirected:
-                raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
-            recover = sync_assignment_recovery_enabled()
+                raise SyncAssignmentConflict('sync target provenance mismatch', subtype=Reason.PROVENANCE_MISMATCH)
             logger.warning(
                 'event=sync_assignment_target outcome=%s mismatch=%s',
-                'temporal_recovery' if recover else 'rejected',
+                'temporal_recovery',
                 mismatch,
             )
-            if not recover:
-                raise SyncAssignmentConflict('sync target provenance mismatch', subtype='provenance_mismatch')
             record_fallback(
                 component='sync_dispatch',
                 from_mode='explicit_target',
@@ -333,6 +364,9 @@ def assign_in_transaction(
     else:
         # Missing/tombstoned explicit targets fall back to temporal assignment.
         # The independent retry-lineage check above still fences user deletion.
+        # A hard-deleted target leaves no row; its tombstone is the user's word.
+        if target_id and target is None and tombstoned(target_id):
+            raise SyncAssignmentSuperseded('sync target was deleted')
         target_id, target = None, None
     stamp_fallback_live = bool(
         lineage_binding == 'stamp_fallback'
@@ -347,7 +381,7 @@ def assign_in_transaction(
         # was written. It can no longer match temporally, so continuing would
         # replace it with a new row. An unchanged anchor (locked or not) is a
         # plain retry and deduplicates below.
-        raise SyncAssignmentConflict('sync anchor provenance mismatch', subtype='provenance_mismatch')
+        raise SyncAssignmentConflict('sync anchor provenance mismatch', subtype=Reason.PROVENANCE_MISMATCH)
 
     live_stats: Optional[dict] = None
 
@@ -409,6 +443,11 @@ def assign_in_transaction(
         )
         current = matched.get(canonical)
         created = current is None
+        if created and tombstoned(canonical):
+            # User deletion hard-deletes the row, so `own` cannot fence it. A
+            # re-upload segmented like the original reproduces the deleted
+            # conversation's deterministic ID; never recreate it.
+            raise SyncAssignmentSuperseded('sync anchor was deleted')
         records = [decode(raw) for _, raw in sorted(matched.items())]
         result = deepcopy(next((row for row in records if row['id'] == canonical), records[0] if records else incoming))
         try:
@@ -598,13 +637,17 @@ def assign_in_transaction(
             survivor_row = dict(current or {}, id=canonical)
             reason, union_ids = merge_ancestry.ancestry_union(survivor_row, flatten_donors)
             if reason is not None:
-                raise SyncAssignmentConflict('sync ancestry flatten rejected', subtype='other')
+                raise _flatten_rejected(reason)
             ancestor_rows = {aid: load(aid) for aid in union_ids if aid not in flatten_donors}
             reason, union, ancestor_updates = merge_ancestry.flatten_updates(
-                survivor_row, flatten_donors, ancestor_rows, user_managed=_policy_user_managed
+                survivor_row,
+                flatten_donors,
+                ancestor_rows,
+                user_managed=_policy_user_managed,
+                chain_repair=smart_merge_flatten_chain_repair_enabled(),
             )
             if reason is not None:
-                raise SyncAssignmentConflict('sync ancestry flatten rejected', subtype='other')
+                raise _flatten_rejected(reason)
             ancestors = set(union)
         else:
             ancestors = {cid for row in records for cid in row.get('sync_merged_from', [])}
@@ -639,6 +682,40 @@ def assign_in_transaction(
     # new conversation from the finite set this transaction can read.
     excluded: frozenset[str] = frozenset()
     chosen = plan(excluded, tuple(range(len(incoming['transcript_segments']))))
+    stamp_gap_refused = False
+    if (
+        lineage_binding == 'stamp_fallback'
+        and target_id
+        and target is not None
+        and chosen.result.get('sync_live_target')
+        and _lineage_span_delta_bucket(True, target_id, chosen.matched.get(target_id), chosen.result) == 'gt_300'
+    ):
+        # A literal fallback stamp carries no interval proof. Do not widen a
+        # live extent across this gap. Re-run the ordinary unstamped rules,
+        # keeping only new speech; landed text and retry/deletion fences stay
+        # with their existing owners. Proven interval targets never enter here.
+        if not chosen.kept:
+            # The widened plan may contain landed donors even though all new
+            # lines were deduped. An empty temporal replan can still absorb or
+            # rebase those rows. Acknowledge against the existing retry owner
+            # (otherwise the live target), without committing any of the plan.
+            no_op = decode(own_anchor if own_anchor is not None else target)
+            no_op['id'] = own_id if own_anchor is not None else target_id
+            no_op.setdefault('sync_relevance', 'keep')
+            if no_op['id'] == target_id:
+                no_op['sync_live_target'] = True
+            no_op['_sync_lineage_repeat_only'] = True
+            no_op['_sync_lineage_stamp_gap_refused'] = True
+            if no_op['id'] == target_id and live_stats is not None and live_stats['sync_retry']:
+                no_op['_sync_lineage_completion_pending'] = True
+            return no_op, False, []
+        refused_id = target_id
+        target_id, target, target_hint = None, None, None
+        live_stats = None
+        stamp_fallback_live = False
+        excluded = frozenset({refused_id})
+        chosen = plan(excluded, chosen.kept)
+        stamp_gap_refused = True
     if (
         live_stats is not None
         and not chosen.survivors
@@ -692,7 +769,7 @@ def assign_in_transaction(
             trigger = 'unavailable'
             break
         excluded, chosen = excluded | drop, rollover
-    if trigger != 'unavailable' and excluded:
+    if trigger is not None and trigger != 'unavailable' and excluded:
         # One event per committed plan, however many full rows it stepped past.
         logger.warning(
             'event=sync_assignment_target outcome=size_rollover trigger=%s created=%s excluded=%d',
@@ -745,6 +822,8 @@ def assign_in_transaction(
     for ancestor_id, patch in chosen.ancestor_updates.items():
         transaction.update(collection.document(ancestor_id), patch)
     index.write(result, set(matched) | {canonical})
+    if absorbed is not None:
+        absorbed[:] = sorted(cid for cid in matched if cid != canonical)
     if live_stats is not None:
         # Transient telemetry only: the encoded plan already committed above.
         appended = bounded_span_seconds(survivors)
@@ -761,6 +840,8 @@ def assign_in_transaction(
         result['_sync_lineage_stamp_append'] = _lineage_span_delta_bucket(
             True, target_id, matched.get(canonical), result
         )
+    if stamp_gap_refused:
+        result['_sync_lineage_stamp_gap_refused'] = True
     if temporal_live:
         logger.info('event=sync_live_overlap outcome=%s', 'merged' if canonical == target_id else 'published')
     return result, created, survivors

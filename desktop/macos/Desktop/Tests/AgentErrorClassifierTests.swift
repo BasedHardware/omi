@@ -108,7 +108,7 @@ final class AgentErrorClassifierTests: XCTestCase {
   func testForbiddenAndPermissionDeniedRouteToAuthNotLeakSuspicion() {
     // 403 / permission errors are authorization failures, not credential leaks.
     // The leak bucket's copy ("AI service authentication error") is dropped by
-    // SentryBeforeSendPolicy, so mislabeling here misdirects the user AND hides
+    // the failure classifier, so mislabeling here misdirects the user AND hides
     // a real forbidden-class bug from triage.
     for raw in ["Provider returned 403 Forbidden", "permission denied by upstream"] {
       let classified = AgentErrorClassifier.classify(raw)
@@ -116,7 +116,7 @@ final class AgentErrorClassifierTests: XCTestCase {
       XCTAssertFalse(classified.retryable, raw)
       XCTAssertFalse(
         classified.userMessage.lowercased().contains("ai service authentication error"),
-        "must not carry the Sentry-dropped leak copy — \(raw)")
+        "must not carry the legacy leak copy — \(raw)")
     }
   }
 

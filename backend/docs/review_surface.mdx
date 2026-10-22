@@ -55,7 +55,22 @@ Task resolution delegates to `utils.task_intelligence.candidate_service`; option
 user description/due/project edits occur inside its existing accept transaction,
 including account generation and task-link checks.
 
-A known pre-application error releases its reserved attention slot. An interrupted
+Release is the default for a pre-application conflict: refund the reserved
+attention slot and leave the proposal pending. Settling is restricted to the
+explicit terminal allowlist: deleted, tombstoned or hidden evidence; a tombstoned
+or purged memory source; archived memory; explicit `user_review=false`; collapsed
+entity identities, incompatible entity types or invalid item shapes. `ReviewStale` atomically
+resolves only the matching proposal evidence version and refunds its slot.
+
+Chat removal with undo, restricted sensitivity, public/shared visibility, a set
+`valid_to`, processing delays, supersession, paywall/locks, vocabulary capacity,
+lease/fence races and generic snapshot mismatches all release. An incorrect
+request payload does not retire a valid question. If both identity references
+already resolve to the same entity, Yes succeeds with `applied=false`; No retires
+the stale question. Not sure retains its evidence-scoped suppression.
+Existing stuck proposals settle on the next answer after deployment; GET itself
+does not mutate them or require a migration. New evidence enqueued during an
+answer remains pending. An interrupted
 source application remains fenced rather than applying it twice; another answer
 returns 409 until its outcome is reconciled. Canonical memory journal intents can
 be retried using the same change id and provenance. No worker is introduced here.

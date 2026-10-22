@@ -62,6 +62,26 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: .github/actions/sync-backfill-lifecycle/action.yml
+      - name: enrichment-maintenance
+        lifecycle: planned
+        region: us-central1
+        schedule: "*/2 * * * *"
+        time_zone: UTC
+        state: PAUSED
+        target:
+          type: http
+          uri: https://backend-integration-dt5lrfkkoa-uc.a.run.app/v2/enrichment/sweep
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware-dev.iam.gserviceaccount.com
+            audience: https://backend-integration-dt5lrfkkoa-uc.a.run.app/v2/enrichment/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: backend/routers/enrichment.py
       - name: memory-maintenance-hourly
         region: us-central1
         schedule: "0 * * * *"
@@ -184,6 +204,26 @@ environments:
           min_backoff: 5s
         attempt_deadline: 180s
         owner: .github/actions/sync-backfill-lifecycle/action.yml
+      - name: enrichment-maintenance
+        lifecycle: planned
+        region: us-central1
+        schedule: "*/2 * * * *"
+        time_zone: UTC
+        state: ENABLED
+        target:
+          type: http
+          uri: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/sweep
+          method: POST
+          oidc:
+            service_account: sync-tasks-invoker@based-hardware.iam.gserviceaccount.com
+            audience: https://backend-integration-hhibjajaja-uc.a.run.app/v2/enrichment/run
+        retry:
+          max_backoff: 3600s
+          max_doublings: 5
+          max_retry: 0s
+          min_backoff: 5s
+        attempt_deadline: 180s
+        owner: backend/routers/enrichment.py
       - name: dream-agent-sweep-hourly
         region: us-central1
         schedule: "0 * * * *"
@@ -264,22 +304,6 @@ environments:
           min_backoff: 5s
         attempt_deadline: 1800s
         owner: .github/workflows/gcp_scheduler_reconcile.yml
-      - name: sentry-feedback-poll
-        region: us-central1
-        schedule: "*/5 * * * *"
-        time_zone: Etc/UTC
-        state: ENABLED
-        target:
-          type: http
-          uri: https://desktop-backend-208440318997.us-central1.run.app/v1/webhooks/sentry/poll
-          method: POST
-        retry:
-          max_backoff: 3600s
-          max_doublings: 5
-          max_retry: 0s
-          min_backoff: 5s
-        attempt_deadline: 60s
-        owner: unassigned; manually created; David decision required
       - name: finops-unit-cost-daily
         region: us-central1
         schedule: "30 10 * * *"

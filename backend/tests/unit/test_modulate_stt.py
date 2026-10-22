@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from config.stt_provider_policy import DEEPGRAM_CLOUD_PROVIDER, DEEPGRAM_SELF_HOSTED_PROVIDER
 from utils.stt.send_queue import AudioSendQueue
 from utils.stt.streaming import (
     STTService,
@@ -108,15 +109,23 @@ class TestLanguageRouting(unittest.TestCase):
         self.assertIsNone(lang)
         self.assertIsNone(model)
 
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_deepgram_config_uses_non_deepgram_default(self):
+    def test_disabled_deepgram_config_uses_non_deepgram_default(self):
         service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(model, 'velma-2')
 
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3', 'modulate-velma-2'])
-    def test_retired_deepgram_token_is_ignored_before_modulate(self):
+    def test_disabled_deepgram_token_is_ignored_before_modulate(self):
         service, lang, model = get_stt_service_for_language('en', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(model, 'velma-2')
@@ -132,6 +141,25 @@ class TestLanguageRouting(unittest.TestCase):
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'af')
         self.assertEqual(model, 'velma-2')
+
+
+@pytest.mark.parametrize('models', [['dg-nova-3'], ['dg-nova-3', 'modulate-velma-2']])
+@pytest.mark.parametrize('language', ['en', 'fr'])
+@pytest.mark.parametrize('multi_language', [False, True])
+def test_configured_cloud_deepgram_serves_available_streaming_languages(models, language, multi_language):
+    # Hosted Deepgram was restored for live streaming, not PTT or prerecorded
+    # audio. Preserve both its current enabled behavior and the refusal tests
+    # above when the policy explicitly disables a deployment.
+    with (
+        patch('utils.stt.streaming.stt_service_models', models),
+        patch('utils.stt.streaming.is_dg_self_hosted', False),
+        patch('utils.stt.streaming._deepgram_is_available', return_value=True),
+    ):
+        assert get_stt_service_for_language(language, multi_lang_enabled=multi_language) == (
+            STTService.deepgram,
+            'multi' if multi_language else language,
+            'nova-3',
+        )
 
 
 class TestWAVHeader(unittest.TestCase):
@@ -493,7 +521,7 @@ class TestModulatePrerecorded(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
         mock_client = MagicMock()
         mock_client.__enter__ = MagicMock(return_value=mock_client)
@@ -935,7 +963,7 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -986,7 +1014,7 @@ class TestPrerecordedRequestShape(unittest.TestCase):
         from utils.stt.pre_recorded import modulate_prerecorded_from_bytes
 
         mock_response = MagicMock()
-        mock_response.json.return_value = {'utterances': []}
+        mock_response.json.return_value = {'text': '', 'duration_ms': 120, 'utterances': []}
         mock_response.raise_for_status = MagicMock()
 
         mock_client = MagicMock()
@@ -1343,17 +1371,25 @@ class TestPassthroughSkipsRemap(unittest.TestCase):
 
 
 class TestLanguageRoutingExtended(unittest.TestCase):
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_falls_back_to_the_capable_single_language_provider(self):
+    def test_disabled_config_falls_back_to_the_capable_single_language_provider(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=False)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'fr')
         self.assertEqual(model, 'velma-2')
 
+    @patch.dict(
+        'config.stt_provider_policy.PROVIDER_SERVING_SURFACES',
+        {DEEPGRAM_CLOUD_PROVIDER: frozenset(), DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset()},
+    )
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'https://parakeet.test'})
     @patch('utils.stt.streaming.stt_service_models', ['dg-nova-3'])
-    def test_retired_config_falls_back_to_the_capable_multilingual_provider(self):
+    def test_disabled_config_falls_back_to_the_capable_multilingual_provider(self):
         service, lang, model = get_stt_service_for_language('fr', multi_lang_enabled=True)
         self.assertEqual(service, STTService.modulate)
         self.assertEqual(lang, 'multi')
@@ -1433,11 +1469,11 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
         self.assertEqual(model, 'parakeet')
 
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
-    def test_multi_language_falls_through_to_parakeet_capability(self):
+    def test_multi_language_without_audio_proof_uses_safe_multilingual_selection(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
 
         svc, lang, model = get_prerecorded_service('multi')
-        self.assertEqual(svc, PrerecordedSTTService.PARAKEET)
+        self.assertEqual(svc, PrerecordedSTTService.MODULATE)
         self.assertEqual(lang, 'multi')
 
 

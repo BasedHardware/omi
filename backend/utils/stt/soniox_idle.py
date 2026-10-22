@@ -24,10 +24,12 @@ from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
 from utils.stt.soniox_capture_axis import disable_socket_diagnostics
 from utils.stt.replay_delivery import abort_replay_socket
+from utils.stt.live_reason import LOCAL_DELIVERY_SEND_QUEUE_FULL
 from utils.stt.live_metrics import soniox_idle_metrics
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_reason import normalize_live_stt_reason
+from utils.stt.provider_stream_end import US_TIMEOUT, begin_stream_close, note_stream_close_intent
 
 IDLE_DRAIN_SECONDS = 2.0
 _sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
@@ -164,6 +166,7 @@ class IdleSonioxSocket(STTSocket):
         # alive while the paid transport finishes its last committed text.
         self._close_trigger = trigger
         self._transport._planned_close = True
+        note_stream_close_intent(self._transport, US_TIMEOUT)
         self._idle_since = now
         self._close_task = create_named_task(self._close_idle(), name='soniox_idle_close')
 
@@ -252,7 +255,9 @@ class IdleSonioxSocket(STTSocket):
             # The serving send boundary awaits complete_send before accepting
             # this frame. Retain at most ten seconds, including VAD pre-roll.
             if len(self._pending) + len(data) > self._rate * 2 * 10:
-                self._dead, self._reason = True, 'capacity_full'
+                # The idle wrapper's own pending buffer filled: a local bound,
+                # never vendor capacity.
+                self._dead, self._reason = True, LOCAL_DELIVERY_SEND_QUEUE_FULL
                 return False
             self._pending.extend(data)
             if self._wire_epoch is not None:
@@ -430,6 +435,7 @@ class IdleSonioxSocket(STTSocket):
             self._transport.finish()
 
     async def drain_and_close(self) -> None:
+        begin_stream_close(self._transport)  # The drain or idle close below records it after closing.
         self.finish()
         if self._watchdog is not None:
             await asyncio.gather(self._watchdog, return_exceptions=True)

@@ -65,6 +65,19 @@ notifications-job migration. Do not silently accept empty label values.
 AttemptFinished records, not application messages. Preserve `severity>=ERROR`,
 `jsonPayload."@type"`, job ID and resource predicates unchanged.
 
+## Adopted in text mode
+
+`main.py` (backend Cloud Run services and listen), `llm_gateway/main.py`,
+`pusher/main.py` and `utils/messaging/maintenance.py` call
+`configure_logging(..., default_format='text')` (plan B B2: the role images
+must pass this guard). Text mode keeps the INFO-stdout / WARNING-stderr split
+and `textPayload`, so the filters above keep matching; the visible change is
+the line prefix (`INFO logger: message` instead of `INFO:logger:message`) and
+Uvicorn's own records routing through the root handler. Pusher passes
+`access_policy='keep'`. The JSON switch for each of these services is
+`OMI_LOG_FORMAT=json` in its runtime env, after the consumer admission above;
+install `TraceContextMiddleware` in the same change so JSON lines carry traces.
+
 ## Per-service acceptance
 
 Migrate separately in this order: diarizer, nllb, llm-gateway, diarizer-batch,

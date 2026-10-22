@@ -468,9 +468,9 @@ def _serve_failure_spy(monkeypatch):
     circuit = st._parakeet_circuit
     real_record = circuit.record_serve_failure
 
-    def spy():
+    def spy(**kwargs):
         calls[0] += 1
-        real_record()
+        real_record(**kwargs)
 
     monkeypatch.setattr(circuit, 'record_serve_failure', spy)
     return calls

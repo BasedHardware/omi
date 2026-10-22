@@ -45,7 +45,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
-from database.sync_assignment import encode_sync_assignment_plan, run_sync_assignment
+from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
@@ -53,7 +53,6 @@ from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
     MCP_CONVERSATION_CARD_QUERY_SPECS,
-    STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
 )
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
@@ -2616,48 +2615,6 @@ def get_processing_conversations(uid: str):
     return conversations
 
 
-def select_stale_in_progress(conversations, cutoff: datetime, limit: int):
-    """Oldest-first bounded selection of orphaned in-progress conversations (#9809).
-
-    A conversation owned by any live session refreshes `finished_at` on every
-    segment and that session's lifecycle loop processes it within the
-    conversation timeout, so anything idle past the cutoff has no owner.
-    Missing or non-datetime `finished_at` is excluded: without a trustworthy
-    idle clock the row cannot be proven orphaned.
-    """
-    stale = []
-    for conversation in conversations:
-        if is_soft_deleted(conversation):
-            continue
-        finished_at = conversation.get('finished_at')
-        if isinstance(finished_at, datetime) and finished_at < cutoff:
-            stale.append(conversation)
-    stale.sort(key=lambda conversation: conversation['finished_at'])
-    return stale[:limit]
-
-
-def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, limit: int = 10, firestore_client=None):
-    """In-progress conversations whose last activity predates the cutoff (#9809).
-
-    The composite index orders by the last activity clock, so the bounded read
-    always reaches the oldest candidates. Without that ordering, an arbitrary
-    first page could keep old orphaned rows beyond it invisible forever.
-    """
-    client = firestore_client or get_firestore_client()
-    user_ref = client.collection('users').document(uid)
-    conversations_ref = (
-        STALE_IN_PROGRESS_CONVERSATIONS_QUERY.build(
-            user_ref.collection(conversations_collection),
-            {'status': ConversationStatus.in_progress.value},
-            field_filter_factory=FieldFilter,
-        )
-        .order_by('finished_at', direction=firestore.Query.ASCENDING)
-        .limit(limit)
-    )
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
-    return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
-
-
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_conversations_finished_after(
     uid: str,
@@ -2808,17 +2765,20 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     _sync_conversation_search_index(uid, conversation_id)
 
 
-def discard_by_relevance(
+def rule_discard_outcome(
     uid: str,
     conversation_id: str,
     relevance_decision: dict,
     *,
     expected_sync_content_revision: Optional[int] = None,
-) -> bool:
+) -> str:
     """Hide a row the relevance rules settled after the fact (backfill).
 
     Transactional so it never overrides what happened since the scan: a
-    deleted, already hidden, or user-restored row is left alone.
+    deleted, user-restored or revised row is ``refused``. A row that is already
+    stored hidden is ``already_discarded``: that state is what the caller wanted,
+    but nothing changed, so no cache or index side effect runs. Only a write
+    returns ``discarded``.
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -2827,24 +2787,47 @@ def discard_by_relevance(
     def _discard(transaction):
         snapshot = conversation_ref.get(transaction=transaction)
         if not getattr(snapshot, 'exists', False):
-            return False
+            return 'refused'
         current = snapshot.to_dict() or {}
+        if is_soft_deleted(current):
+            return 'refused'
+        if current.get('discarded'):
+            return 'already_discarded'
         status = getattr(current.get('status'), 'value', current.get('status'))
-        if is_soft_deleted(current) or current.get('discarded') or status != 'completed' or is_user_curated(current):
-            return False
+        if status != 'completed' or is_user_curated(current):
+            return 'refused'
         if (
             expected_sync_content_revision is not None
             and current.get('sync_content_revision') != expected_sync_content_revision
         ):
-            return False
+            return 'refused'
         transaction.update(conversation_ref, {'discarded': True, 'relevance_decision': relevance_decision})
-        return True
+        return 'discarded'
 
-    discarded = run_transactional(db, _discard)
-    if discarded:
+    outcome = run_transactional(db, _discard)
+    if outcome == 'discarded':
         invalidate_people_stats_cache(uid)
         _sync_conversation_search_index(uid, conversation_id)
-    return discarded
+    return outcome
+
+
+def discard_by_relevance(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict,
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> bool:
+    """True only when this call hid the row; see ``rule_discard_outcome``."""
+    return (
+        rule_discard_outcome(
+            uid,
+            conversation_id,
+            relevance_decision,
+            expected_sync_content_revision=expected_sync_content_revision,
+        )
+        == 'discarded'
+    )
 
 
 def restore_conversation_from_discarded(uid: str, conversation_id: str):
@@ -4195,16 +4178,23 @@ def assign_sync_conversation(
     validate_plan: Callable[[Any, dict], None] | None = None,
     after_assign: Callable[[Any, tuple], None] | None = None,
     retry_contention: bool = False,
+    timing: bool = False,
+    defer_index: Callable[[str, str, list[str]], None] | None = None,
 ):
-    """Atomically choose, create or append a sync conversation across workers."""
+    """Atomically choose, create or append a sync conversation; ``timing`` logs bounded sub-phases.
+
+    ``defer_index`` takes the post-commit search/people-stats step off this
+    call: it receives the canonical and its donor lineage, and the caller
+    converges each conversation once later (``index_sync_assignment``).
+    """
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
 
+    clock = SyncAssignmentClock(logger, enabled=timing)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
     live_candidate_ids: tuple[str, ...] = ()
-    if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
-        live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
+    absorbed: list[str] = []
 
     score_snapshots: dict = {}
 
@@ -4229,47 +4219,80 @@ def assign_sync_conversation(
 
     @firestore.transactional
     def assign(transaction, full_ids=frozenset()):
+        clock.attempt()
         score_snapshots.clear()
         # Optional batch projection hooks share the exact legacy transaction.
         # Guards/plan validation may only read; after_assign may only write.
         if before_assign is not None:
-            before_assign(transaction)
+            with clock.timed('fence'):
+                before_assign(transaction)
 
         def encode(payload):
-            if validate_plan is not None:
-                validate_plan(transaction, payload)
-            return encode_sync_assignment_plan(
-                uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
-            )
+            with clock.timed('encode'):
+                if validate_plan is not None:
+                    validate_plan(transaction, payload)
+                return encode_sync_assignment_plan(
+                    uid, client, transaction, payload, score_snapshots.get(payload.get('id'))
+                )
 
-        planned = assign_in_transaction(
-            transaction,
-            user_ref,
-            incoming,
-            candidate_id=candidate_id,
-            target_id=target_id,
-            decode=decode,
-            encode=encode,
-            invalidate=clear_client_processing,
-            full_ids=full_ids,
-            live_candidate_ids=live_candidate_ids,
-        )
+        with clock.timed('plan'):
+            planned = assign_in_transaction(
+                transaction,
+                user_ref,
+                incoming,
+                candidate_id=candidate_id,
+                target_id=target_id,
+                decode=decode,
+                encode=encode,
+                invalidate=clear_client_processing,
+                full_ids=full_ids,
+                live_candidate_ids=live_candidate_ids,
+                absorbed=absorbed,
+            )
         # The commit runs after this returns; remember which row it would grow.
         attempted['canonical'] = planned[0]['id']
         if after_assign is not None:
-            after_assign(transaction, planned)
+            with clock.timed('persist'):
+                after_assign(transaction, planned)
+        clock.body_done()
         return planned
 
-    result = run_with_size_limit_backstop(
-        lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
-        lambda: attempted.get('canonical'),
-    )
-    invalidate_people_stats_cache(uid)
-    conversation = result[0]
-    for donor_id in conversation.get('sync_merged_from') or []:
-        _delete_conversation_search_index(uid, str(donor_id))
-    _sync_conversation_search_index(uid, conversation['id'])
+    with clock.call():
+        if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
+            with clock.timed('live_overlap'):
+                live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
+        with clock.timed('transaction'):
+            result = run_with_size_limit_backstop(
+                lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
+                lambda: attempted.get('canonical'),
+            )
+        conversation = result[0]
+        if defer_index is not None:
+            # The caller coalesces per conversation, so the full lineage (which
+            # retries a failed or lost donor delete) is paid once per flush.
+            clock.donors = len(absorbed)
+            defer_index(uid, conversation['id'], sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
+        else:
+            with clock.timed('index'):
+                clock.donors = len(conversation.get('sync_merged_from') or [])
+                index_sync_assignment(uid, [conversation['id']], conversation.get('sync_merged_from') or [])
     return result
+
+
+def index_sync_assignment(uid: str, conversation_ids, donor_ids) -> None:
+    """Fail-open search and people-stats convergence after sync assignment commits.
+
+    Donors are redirect tombstones and are deleted directly. Every other id is
+    converged from its current durable state, so a late or coalesced call
+    cannot index stale content or resurrect a donor.
+    """
+    invalidate_people_stats_cache(uid)
+    donors = list(dict.fromkeys(str(donor_id) for donor_id in donor_ids))
+    for donor_id in donors:
+        _delete_conversation_search_index(uid, donor_id)
+    for conversation_id in dict.fromkeys(conversation_ids):
+        if conversation_id not in donors:
+            _sync_conversation_search_index(uid, conversation_id)
 
 
 def eligible_merge_target(conversation: Optional[dict]) -> bool:

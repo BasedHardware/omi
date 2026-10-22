@@ -147,8 +147,14 @@ def record_agent_change(
                 raise store.ReviewConflict('Entity changed while preparing merge')
             if data is None and edit.collection in {'entity_pages', 'dream_vocabulary'}:
                 data = {}
+            if (data is None or data.get('deleted')) and edit.collection in {
+                'conversations',
+                'memory_items',
+                'memories',
+            }:
+                raise store.ReviewStale('Edit target deleted')
             if data is None or data.get('deleted') or data.get('is_dismissed') or data.get('discarded'):
-                raise store.ReviewNotFound('Edit target not found')
+                raise store.ReviewConflict('Edit target unavailable')
             records.append(
                 {
                     'collection': edit.collection,
@@ -211,13 +217,15 @@ def merge_review_entities(
     # only their canonical identity, preserving stable person ids on undo.
     @firestore.transactional
     def ensure_nodes(tx):
-        store.validate_records(uid, tx, expected_records)
         rows = []
         nodes = {}
+        bootstrapped = set()
+        fences = dict(expected_records or {})
         for entity_id in (left, right):
             ref = store.user(uid).collection('knowledge_nodes').document(entity_id)
             node = ref.get(transaction=tx).to_dict()
-            if node is None and entity_id.startswith('person:'):
+            path = 'knowledge_nodes/' + entity_id
+            if entity_id.startswith('person:') and (node is None or (path in fences and fences[path] is None)):
                 person = (
                     store.user(uid)
                     .collection('people')
@@ -228,36 +236,41 @@ def merge_review_entities(
                 if not person or person.get('is_dismissed'):
                     raise store.ReviewNotFound('Person not found')
                 name = person.get('name') or entity_id
-                rows.append(
-                    (
-                        ref,
-                        {
-                            'id': entity_id,
-                            'label': name,
-                            'label_lower': name.lower(),
-                            'node_type': 'person',
-                            'aliases': [],
-                            'aliases_lower': [],
-                            'memory_ids': [],
-                        },
-                    )
-                )
+                bootstrap = {
+                    'id': entity_id,
+                    'label': name,
+                    'label_lower': name.lower(),
+                    'node_type': 'person',
+                    'aliases': [],
+                    'aliases_lower': [],
+                    'memory_ids': [],
+                }
+                if node is None:
+                    rows.append((ref, bootstrap))
+                elif node == bootstrap:
+                    # A gate retry may see exactly the canonical node the first
+                    # attempt minted. All other fields and witnesses stay fenced.
+                    fences[path] = bootstrap
+                    bootstrapped.add(entity_id)
             nodes[entity_id] = node
+        store.validate_records(uid, tx, fences)
         for ref, node in rows:
             tx.set(ref, node)
             nodes[ref.id] = node
-        return nodes, {ref.id for ref, _ in rows}
+            bootstrapped.add(ref.id)
+        return nodes, bootstrapped
 
     nodes, created = ensure_nodes(store.client().transaction())
     a, b = nodes.get(left), nodes.get(right)
     fences = dict(expected_records or {})
     for entity_id in created:
         path = 'knowledge_nodes/' + entity_id
-        # Only the node this transaction minted may replace its missing
-        # witness. Never bless a fresh reread or discard unrelated null fences.
+        # Only an exact canonical bootstrap may replace its missing witness.
         fences[path] = nodes[entity_id]
-    if left == right or not a or not b or a.get('redirect_entity_id') or b.get('redirect_entity_id'):
-        raise store.ReviewConflict('Two current distinct entity nodes are required')
+    if left == right:
+        raise store.ReviewStale('Two current distinct entity nodes are required')
+    if not a or not b or a.get('redirect_entity_id') or b.get('redirect_entity_id'):
+        raise store.ReviewConflict('Entity changed while preparing merge')
     merged = entities.apply_entity_mutations({left: a, right: b}, [memory_ledger.merge_entities(left, right)])[left]
     aliases = merged.get('aliases', [])
     return record_agent_change(

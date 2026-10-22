@@ -311,6 +311,21 @@ def _gather_prior_meetings(
     return tuple(notes)
 
 
+def gather_prior_meetings(
+    uid: str,
+    conversation: Any,
+    roster: MeetingRoster,
+    started_at: Optional[datetime],
+    timezone_name: Optional[str],
+) -> tuple[PriorMeetingNote, ...]:
+    """Public, best-effort form of the prior-meeting source (same series or participants)."""
+    try:
+        return _gather_prior_meetings(uid, conversation, roster, _as_utc(started_at), timezone_name)
+    except Exception as exc:  # noqa: BLE001 - best effort
+        _log_source_failure('prior_meetings', uid, exc)
+        return ()
+
+
 def _person_email_values(person: Mapping[str, Any]) -> set[str]:
     """Collect email-shaped strings from whichever email fields the doc carries."""
     emails: set[str] = set()
@@ -491,6 +506,7 @@ def gather_meeting_context_pack(
 
 __all__ = [
     'gather_meeting_context_pack',
+    'gather_prior_meetings',
     'load_people_documents',
     'resolve_owner_identity',
 ]

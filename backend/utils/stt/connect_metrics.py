@@ -64,6 +64,11 @@ _REASON_ERROR_CLASS = {
     'capability_mismatch': ERROR_CLASS_CAPABILITY,
     'capacity_full': ERROR_CLASS_CAPABILITY,
     'allocation_rejected': ERROR_CLASS_CAPABILITY,
+    # Local delivery bounds surfaced at the liveness grace keep the same class
+    # capacity_full had before the split.
+    'send_queue_full': ERROR_CLASS_CAPABILITY,
+    'replay_send_stalled': ERROR_CLASS_CAPABILITY,
+    'delivery_expired': ERROR_CLASS_CAPABILITY,
 }
 
 

@@ -193,6 +193,11 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.meetingNoteScreenshotsEnabled.rawValue)
   var meetingNoteScreenshotsEnabled: Bool = true
 
+  @AppStorage(DefaultsKey.meetingMemoryBriefsEnabled.rawValue)
+  var meetingMemoryBriefsEnabled: Bool = false
+  @State var meetingBriefAccessRequestGeneration = 0
+  @State var meetingBriefCalendarAccessUnavailable = false
+
   // Guards against the read-on-appear (`loadMeetingNoteScreenshotsSetting`) reconciling
   // `meetingNoteScreenshotsEnabled` with the server's value from also being mistaken for a user
   // edit and PATCHed straight back — see the toggle's `onChange` in SettingsContentView+Rewind.swift.
@@ -270,6 +275,10 @@ struct SettingsContentView: View {
 
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
+  /// The value the account last confirmed for `dailySummaryEnabled`, or `nil` until Settings has
+  /// read it. A failed save puts the toggle back; see `updateDailySummarySettings(enabled:)`.
+  @State var savedDailySummaryEnabled: Bool?
+  @State var dailySummaryEnabledError: String?
   @State var dailySummaryHour: Int = 22
   @State var dailySummaryDepth: DailySummaryDepth = .brief
   @State var savedDailySummaryDepth: DailySummaryDepth = .brief
@@ -290,7 +299,11 @@ struct SettingsContentView: View {
 
   // Privacy settings (from backend)
   @State var recordingPermissionEnabled: Bool = false
+  @State var savedRecordingPermissionEnabled: Bool?
+  @State var recordingPermissionError: String?
   @State var privateCloudSyncEnabled: Bool = true
+  @State var savedPrivateCloudSyncEnabled: Bool?
+  @State var privateCloudSyncError: String?
   @State var isTrackingExpanded: Bool = false
 
   // Transcription settings (from backend)

@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Test-only determinism fixes and a test-injected timeout seam in the recording transfer coordinator; no store-build behavior change"
+}

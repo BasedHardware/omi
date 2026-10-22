@@ -17,6 +17,7 @@ from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence
 from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
 from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
+from config.sync_telemetry import SyncFailureReason
 
 import asyncio
 import hashlib
@@ -1441,21 +1442,26 @@ def _load_sync_router_for_fast_path():
     journeys_mod.record_journey_accepted = MagicMock()
     shape_mod = types.ModuleType('utils.conversation_shape')
     shape_mod.observe_completed_conversation_shape = MagicMock()
-    saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
-    saved_modules['utils.observability.journeys'] = sys.modules.get('utils.observability.journeys')
     saved_modules['utils.conversation_shape'] = sys.modules.get('utils.conversation_shape')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
     saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
     saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
     sys.modules['utils.observability'] = obs_pkg
-    sys.modules['utils.observability.fallback'] = fallback_mod
-    sys.modules['utils.observability.transcription'] = transcription_mod
-    sys.modules['utils.observability.journeys'] = journeys_mod
+    # Empty __path__ hides new observability modules. Derive the rest from disk
+    # so held_content (and the next sibling) resolve; spies above stay in place.
+    from testing.import_isolation import install_package_submodule_stubs
+
+    install_package_submodule_stubs(
+        'utils.observability',
+        saved_modules,
+        overrides={
+            'utils.observability.fallback': fallback_mod,
+            'utils.observability.transcription': transcription_mod,
+            'utils.observability.journeys': journeys_mod,
+        },
+    )
     sys.modules['utils.conversation_shape'] = shape_mod
-    obs_pkg.fallback = fallback_mod
-    obs_pkg.transcription = transcription_mod
-    obs_pkg.journeys = journeys_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
     # Keep the decision policy real (pure, dependency-free): the sync pipeline now
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
@@ -2520,10 +2526,45 @@ async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
             model='nova-3',
             lane='fresh',
             run_lock_token='1:lock-token',
+            failure_phase=None,
+            failure_class='TimeoutError',
+            failure_reason=SyncFailureReason.NONE,
         )
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_final_attempt_keeps_the_pipeline_internal_cause():
+    """A storage 429 re-raised from task mode must not be published as upstream_error."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    error = RuntimeError('bridge copy rate limited')
+    setattr(error, 'sync_failure_reason', SyncFailureReason.STORAGE_RATE_LIMITED)
+    setattr(error, 'sync_failure_phase', 'finalize')
+    request = _configure_task_handler(
+        module,
+        pipeline_error=error,
+        latest_job={'job_id': 'job-1', 'status': 'processing', 'stt_provider': 'deepgram', 'stt_model': 'nova-3'},
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=2)
+
+        assert json.loads(response.body) == {'status': 'failed_final'}
+        kwargs = module._finalize_sync_job_failure.await_args.kwargs
+        assert kwargs['failure_reason'] is SyncFailureReason.STORAGE_RATE_LIMITED
+        assert kwargs['failure_phase'] == 'finalize'
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -4059,7 +4100,8 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
 
 
 @pytest.mark.asyncio
-async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monkeypatch):
+async def test_byok_upload_enters_batch_admission_like_any_upload(monkeypatch):
+    """David 10-19: no special BYOK path; the request keys are never needed by the batch stages."""
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
@@ -4070,6 +4112,8 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
     store.run.side_effect = lambda body: body(transaction)
     monkeypatch.setattr(_batch_intake, 'FirestoreStore', lambda *_: store)
     module.has_byok_keys = MagicMock(return_value=True)
+    authorize = MagicMock(side_effect=RuntimeError('synthetic staging stop'))
+    monkeypatch.setattr(_batch_intake, 'batch_artifact_authorize', authorize)
     accepted = AsyncMock(wraps=_batch_intake.accept_upload)
     module.accept_batch_upload = accepted
     try:
@@ -4078,12 +4122,12 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
             uid='test-uid',
             conversation_id='unowned-record',
         )
+        # The synthetic stop inside batch admission answers the ordinary batch retry, not a BYOK hold.
         assert response.status_code == 503
-        assert json.loads(response.body)['code'] == 'sync_batch_byok_unavailable'
-        assert response.headers['Retry-After'] == '30'
+        assert json.loads(response.body)['code'] == 'sync_batch_unavailable'
         accepted.assert_awaited_once()
         assert accepted.call_args.kwargs['byok_enabled'] is True
-        assert transaction.get.call_count == 1  # Existing content-ledger read only.
+        authorize.assert_called_once()
         transaction.put.assert_not_called()
         module.create_sync_job.assert_not_called()
         module.claim_sync_content.assert_not_called()
@@ -5833,6 +5877,38 @@ async def test_sync_task_budget_deferral_timeout_during_enqueue_keeps_deferred_m
                 sys.modules[name] = original
 
 
+def _pipeline_expiring_the_handler_budget(module):
+    """Pipeline stub that expires the attempt's handler budget from inside the
+    pipeline, then never returns.
+
+    A tiny real budget (0.05s) also races the attempt's pre-pipeline awaits
+    (thread-pool job reads, lock acquire): on a loaded runner it can expire
+    before the pipeline starts, so the recovery's job read lands on a
+    nonterminal read and the handler takes the preserved-lock branch instead.
+    Capturing the budget's timeout context and rescheduling it to now once the
+    pipeline runs places the expiry deterministically, independent of runner
+    speed; the budget itself keeps the module's production-sized default.
+    """
+    budgets = []
+
+    class _BudgetCapturingAsyncio:
+        def __getattr__(self, name):
+            return getattr(asyncio, name)
+
+        def timeout(self, delay):
+            budget = asyncio.timeout(delay)
+            budgets.append(budget)
+            return budget
+
+    module.asyncio = _BudgetCapturingAsyncio()
+
+    async def _pipeline(*args, **kwargs):
+        budgets[-1].reschedule(asyncio.get_running_loop().time())
+        await asyncio.Event().wait()
+
+    return _pipeline
+
+
 @pytest.mark.asyncio
 async def test_budget_expiry_after_terminal_transition_returns_terminal_cleanup_retry():
     """A pipeline that published a terminal result and then hit the budget
@@ -5855,11 +5931,9 @@ async def test_budget_expiry_after_terminal_transition_returns_terminal_cleanup_
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         reads = {'n': 0}
 
@@ -6268,8 +6342,7 @@ async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     strict_calls = []
 
@@ -6278,7 +6351,6 @@ async def test_terminal_cleanup_retry_requires_a_confirmed_lock_release():
         return 0  # EVAL: token no longer owns the key
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         reads = {'n': 0}
@@ -6337,11 +6409,9 @@ async def test_terminal_cleanup_retry_returns_500_only_after_confirmed_release()
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(return_value=1)
         reads = {'n': 0}
@@ -6404,8 +6474,7 @@ async def test_terminal_cleanup_retry_unconfirmed_release_skips_impossible_marke
         },
     )
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     strict_calls = []
 
@@ -6414,7 +6483,6 @@ async def test_terminal_cleanup_retry_unconfirmed_release_skips_impossible_marke
         return 0  # EVAL: token no longer owns the key — release unconfirmed
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         # Production contract: update_sync_job returns None for terminal
@@ -6488,14 +6556,12 @@ async def test_terminal_cleanup_replacement_survives_the_attempt_cap():
     base_payload = await request.json()
     request.json = AsyncMock(return_value={**base_payload, module.SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY: 2})
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     def _strict_release(job_id, token):
         return 0  # EVAL: token no longer owns the key — release unconfirmed
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)
         module.update_sync_job = MagicMock(return_value=None)
@@ -6641,8 +6707,7 @@ async def test_terminal_cleanup_deferral_inherits_the_recovery_deadline():
     base_payload = await request.json()
     request.json = AsyncMock(return_value={**base_payload, 'sequencer_epoch': 1})
 
-    async def _pipeline_never_returns_then_terminal(*args, **kwargs):
-        await asyncio.sleep(30)
+    _pipeline_never_returns_then_terminal = _pipeline_expiring_the_handler_budget(module)
 
     def _strict_release(job_id, token):
         return 0
@@ -6658,7 +6723,8 @@ async def test_terminal_cleanup_deferral_inherits_the_recovery_deadline():
         await asyncio.sleep(30)
 
     try:
-        module.SYNC_JOB_HANDLER_BUDGET_SECONDS = 0.05
+        # The recovery's deadline (now + cleanup timeout) is what the deferral inherits; the attempt's budget keeps
+        # its production size and expires inside the pipeline stub, so runner speed can't move the expiry.
         module.SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS = 0.2
         module._run_full_pipeline_background_async = _pipeline_never_returns_then_terminal
         module.release_job_run_lock_strict = MagicMock(side_effect=_strict_release)

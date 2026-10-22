@@ -154,6 +154,38 @@ class SyncTransferForegroundServiceTest {
     }
 
     @Test
+    fun `one hundred queued start-stop pairs cannot terminate the final accepted start`() {
+        // The emulator probe's burst case: every command below is sent on the
+        // main thread before any of them is delivered, so the final start()
+        // has already cleared cancellationRequested when the first one lands.
+        val context = RuntimeEnvironment.getApplication()
+        val queued = ArrayList<Intent>()
+        repeat(100) {
+            assertTrue(SyncTransferForegroundService.start(context))
+            queued.add(shadowOf(context).getNextStartedService())
+            SyncTransferForegroundService.stop(context)
+            queued.add(shadowOf(context).getNextStartedService())
+        }
+        assertTrue(SyncTransferForegroundService.start(context))
+        queued.add(shadowOf(context).getNextStartedService())
+        val controller = Robolectric.buildService(SyncTransferForegroundService::class.java).create()
+        val service = controller.get()
+        queued.forEachIndexed { index, intent ->
+            assertEquals(android.app.Service.START_NOT_STICKY, service.onStartCommand(intent, 0, index + 1))
+        }
+        assertEquals(0, shadowOf(service).stopSelfResultId)
+        assertFalse(shadowOf(service).isForegroundStopped)
+        assertNotNull(shadowOf(service).lastForegroundNotification)
+        assertTrue(ShadowPowerManager.getLatestWakeLock().isHeld)
+        // Only the transfer's own later stop ends it.
+        SyncTransferForegroundService.stop(context)
+        service.onStartCommand(shadowOf(context).getNextStartedService(), 0, queued.size + 1)
+        assertEquals(queued.size + 1, shadowOf(service).stopSelfResultId)
+        controller.destroy()
+        assertFalse(ShadowPowerManager.getLatestWakeLock().isHeld)
+    }
+
+    @Test
     fun `dataSync time limit stops the service and releases the wake lock`() {
         val context = RuntimeEnvironment.getApplication()
         assertTrue(SyncTransferForegroundService.start(context))

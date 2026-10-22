@@ -127,6 +127,12 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
     SONIOX_PROVIDER: frozenset({STTServingSurface.STREAMING}),
 }
 
+# Held batch recovery may spend one more multilingual call after Modulate returns
+# a validated empty response for long unknown-language speech
+# (utils/batch_pipeline/quarantine_recovery.py). Cloud Deepgram is the only other
+# provider with a batch client. This does not admit it to the pre-recorded route.
+HELD_RECOVERY_SECOND_PROVIDER: Final = DEEPGRAM_CLOUD_PROVIDER
+
 # Defaults are also policy-owned so a deployment fallback cannot drift from the
 # providers approved above. A deployment's literal ordering is checked against
 # these values by validate-backend-runtime-env.py.

@@ -140,6 +140,7 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
             'arguments': kwargs,
             'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
             'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
+            'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),
         },
     )
     row = _stored(uid, conversation) if getattr(conversation, 'id', None) else {}

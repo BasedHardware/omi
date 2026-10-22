@@ -279,6 +279,38 @@ def _preamble() -> list[str]:
         "`runtime_env` remain the live levers. This file is a catalog of *which* lever",
         "owns each gate, not the switch itself.",
         "",
+        "`terminal` records the reviewed end state: `on` graduates a feature, `off`",
+        "kills it, `keep` retains an ops kill or config switch, and `undecided` means",
+        "no terminal ruling is recorded yet.",
+        "",
+        "## Contributing registry rows",
+        "",
+        "Edit `config/feature-flags.yaml`, then regenerate this document with",
+        "`python3 scripts/render_feature_flag_registry.py`. A `ramp` object is optional",
+        "for existing rows. It is required for `lifecycle: rollout` rows that are",
+        "pending (`decision: pending` or `terminal: undecided`) and created on or after",
+        "2026-10-21. Include every field below; `done_by` must be on or before",
+        "`review_by`.",
+        "",
+        "- `cohorts`: ordered rollout steps, ending in the full intended cohort;",
+        "  a single-user step such as `David-only` cannot be terminal.",
+        "- `clean_metric`: the metric that must stay clean before expansion.",
+        "- `expander`: the session, role, or person responsible for each expansion.",
+        "- `done_by`: the date the ramp reaches its final cohort.",
+        "",
+        "Example:",
+        "",
+        "```yaml",
+        "ramp:",
+        '  cohorts: ["release-probe", "1%", "5% 3h", "25%", "100%"]',
+        '  clean_metric: "checkout_error_rate"',
+        '  expander: "release-owner session"',
+        '  done_by: "2026-11-15"',
+        "```",
+        "",
+        "Rows created before the cutoff stay grandfathered when `ramp` is absent;",
+        "the checker warns and reports their count. Do not backfill plans into them.",
+        "",
         "This is **not** a second classification of deployment wiring. Secret vs config",
         "vs `public_build` still lives only in",
         "[`config/deployment-setting-classification.json`](../../config/deployment-setting-classification.json)",
@@ -368,6 +400,27 @@ def _not_feature_flags(ignore: list[dict[str, Any]]) -> list[str]:
     return lines
 
 
+def _render_ramp_plans(flags: list[dict[str, Any]]) -> list[str]:
+    lines = ["## Rollout ramp plans", ""]
+    ramped = [entry for entry in flags if isinstance(entry.get("ramp"), dict)]
+    if ramped:
+        lines += [
+            "| key | cohorts | clean metric | expander | done_by |",
+            "| --- | --- | --- | --- | --- |",
+        ]
+        for entry in ramped:
+            ramp = entry["ramp"]
+            cohorts = " → ".join(str(step) for step in ramp.get("cohorts", []))
+            lines.append(
+                f"| `{entry['key']}` | {_md(cohorts)} | {_md(ramp.get('clean_metric', '—'))} | "
+                f"{_md(ramp.get('expander', '—'))} | {ramp.get('done_by', '—')} |"
+            )
+    else:
+        lines.append("(none)")
+    lines.append("")
+    return lines
+
+
 def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -> str:
     """Render the registry doc for ``root`` as of ``as_of`` (never wall clock)."""
     index = _deploy_index(root)
@@ -385,8 +438,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             "Every running experiment links its preregistration doc. `decision: kill`",
             "entries are exempt: they are queued for removal, not running.",
             "",
-            "| key | owner | prereg | review_by |",
-            "| --- | --- | --- | --- |",
+            "| key | terminal | owner | prereg | review_by |",
+            "| --- | --- | --- | --- | --- |",
         ]
         for entry in experiments:
             prereg = entry.get("prereg")
@@ -394,7 +447,9 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             review_by = entry.get("review_by", "—")
             if entry.get("review_by") and date.fromisoformat(entry["review_by"]) < as_of:
                 review_by += " OVERDUE"
-            lines.append(f"| `{entry['key']}` | {_md(entry['owner'])} | {prereg_cell} | {review_by} |")
+            lines.append(
+                f"| `{entry['key']}` | {entry['terminal']} | {_md(entry['owner'])} | {prereg_cell} | {review_by} |"
+            )
     else:
         lines.append("(none)")
     lines.append("")
@@ -409,8 +464,9 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
     ]
     if overdue:
         lines += [
-            "These rollout/experiment entries passed `review_by` without a recorded",
-            "decision. Overdue is a warning, not a failure.",
+            "These rollout/experiment entries passed `review_by`. The checker warns",
+            "during the seven-day grace, then fails unless a dated `review_overdue`",
+            "exception is recorded for David.",
             "",
         ]
         for entry in overdue:
@@ -438,8 +494,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
             lines += ["(none)", ""]
             continue
         lines += [
-            "| key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | review_by | owner |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | terminal | review_by | owner |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for entry in rows:
             surfaces = ", ".join(entry.get("surfaces", []))
@@ -459,6 +515,7 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
                         _md(prod),
                         _posthog_cell(entry),
                         entry["decision"],
+                        entry["terminal"],
                         review_by,
                         _md(entry["owner"]),
                     ]
@@ -466,6 +523,8 @@ def render(root: Path, registry: dict[str, list[dict[str, Any]]], as_of: date) -
                 + " |"
             )
         lines.append("")
+
+    lines += _render_ramp_plans(flags)
 
     lines += ["## Undeclared env flags", ""]
     undeclared = [

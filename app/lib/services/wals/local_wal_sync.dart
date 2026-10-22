@@ -50,8 +50,6 @@ const int maxRetainedCaptureWalCount = 720;
 
 const int minFreeDiskReserveBytes = 512 * 1024 * 1024;
 
-const _captureEvidenceV1DarkWrite = bool.fromEnvironment('CAPTURE_EVIDENCE_V1_DARK_WRITE');
-
 class WalRetentionRisk {
   const WalRetentionRisk({
     required this.engagedAt,
@@ -179,6 +177,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
 
   int _framesPerSecond = 100;
   BleAudioCodec _codec = BleAudioCodec.opus;
+  BleAudioCodec get currentCodec => _codec;
   String? _deviceId;
   String? _deviceModel;
   Geolocation? _sessionGeolocation;
@@ -437,7 +436,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     _initializeWals();
     _chunkingTimer = _periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
       final generation = _sessionGeneration;
-      await _enqueueBuffer(() => _chunk(generation));
+      await _enqueueBuffer(() async => _chunk(generation));
     });
     _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (t) async {
       final generation = _sessionGeneration;
@@ -601,7 +600,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     } catch (_) {}
 
     await _drainPendantTail(generation);
-    await _enqueueBuffer(() => _chunk(generation));
+    await _enqueueBuffer(() async => _chunk(generation));
     await _enqueueBuffer(() => _flush(generation));
 
     _frames = [];
@@ -610,23 +609,26 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   @override
-  Future onAudioCodecChanged(BleAudioCodec codec) async {
+  Future onAudioCodecChanged(BleAudioCodec codec, {({String id, String model})? deviceInfo}) async {
     final generation = _sessionGeneration;
-    // Always chunk+flush+clear to ensure clean session boundaries.
-    // This is safe when frames are empty (_chunk returns immediately).
-    await _drainPendantTail(generation);
-    await _enqueueBuffer(() => _chunk(generation));
-    await _enqueueBuffer(() => _flush(generation));
-    if (!_isCurrent(generation)) return;
-    _frames = [];
-    _pendingPhoneOnly = false;
-    _frameSynced = [];
-
-    _framesPerSecond = codec.getFramesPerSecond();
-    _codec = codec;
-    _sourceClockEpoch++;
-    _nextSourceFramePosition = 0;
-    _captureEvidenceGeneration++;
+    await _enqueueBuffer(() async {
+      if (!_isCurrent(generation)) return;
+      // Seal the old pendant tail and advance the boundary without yielding.
+      // Native BLE can deliver orphan frames during the fsync below, even on
+      // a same-codec reconnect. Those must stay in the new buffer.
+      _sealPendantTail(generation);
+      _chunk(generation);
+      _frames = [];
+      _pendingPhoneOnly = false;
+      _frameSynced = [];
+      if (deviceInfo != null) setDeviceInfo(deviceInfo.id, deviceInfo.model);
+      _framesPerSecond = codec.getFramesPerSecond();
+      _codec = codec;
+      _sourceClockEpoch++;
+      _nextSourceFramePosition = 0;
+      _captureEvidenceGeneration++;
+      await _flush(generation);
+    });
   }
 
   @override
@@ -644,7 +646,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Geolocation? _copyGeolocation(Geolocation? geolocation) =>
       geolocation == null ? null : Geolocation.fromJson(geolocation.toJson());
 
-  Future _chunk(int generation) async {
+  void _chunk(int generation) {
     if (!_isCurrent(generation)) return;
     if (_frames.isEmpty) {
       Logger.debug("Frames are empty");
@@ -666,7 +668,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     var timerStart = timerEnd - (high - low) ~/ _framesPerSecond;
     var chunkFrameCount = high - low;
 
-    if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, evidenceFrames)) {
+    if (partitionsEvidenceRuns(true, _codec, evidenceFrames)) {
       _storeSelectedRuns(
         evidenceFrames,
         _frameSynced.sublist(low, high),
@@ -888,70 +890,75 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   Future<void> _drainPendantTail(int generation) => _enqueueBuffer(() async {
-        if (!_isCurrent(generation)) return;
-        final indices = <int>[];
-        for (var i = 0; i < _frames.length; i++) {
-          if (_isPendantFrame(_frames[i])) indices.add(i);
-        }
-        if (indices.isEmpty) return;
-        final frames = indices.map((i) => _frames[i]).toList();
-        final synced = indices.map((i) => _frameSynced[i]).toList();
-
-        var shouldStore = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
-        if (!shouldStore) shouldStore = synced.any((s) => !s);
-        if (!shouldStore) {
-          _removeFrameIndices(indices);
-          return;
-        }
-        final syncedOffset = syncedPrefixCount(synced);
-
-        final frameCount = frames.length;
-        final now = _now();
-        var timerEnd = now.millisecondsSinceEpoch ~/ 1000;
-        var timerStart = timerEnd - frameCount ~/ _framesPerSecond;
-        final evidence = stableCaptureEvidence(frames);
-        final live = _liveEvidenceFor(frames);
-
-        if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, frames)) {
-          _storeSelectedRuns(
-            frames,
-            synced,
-            captureSelectionStartSeconds(now, frameCount, _framesPerSecond),
-            generation,
-            extendMemWal: false,
-            legacySelectionTimerStart: timerStart,
-          );
-        } else {
-          final wal = Wal(
-            codec: _codec,
-            timerStart: timerStart,
-            data: frames.map((f) => f.payload).toList(),
-            storage: WalStorage.mem,
-            onDeviceOnly: _pendingPhoneOnly,
-            capturedOnDeviceOnly: _pendingPhoneOnly,
-            status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
-            device: _deviceId ?? "omi",
-            deviceModel: _deviceModel ?? "Omi",
-            seconds: frameCount ~/ _framesPerSecond,
-            totalFrames: frameCount,
-            syncedFrameOffset: syncedOffset,
-            ownerUid: _currentWalOwnerUid(),
-            captureRoot: evidence.root,
-            sourceFrameStart: evidence.start,
-            sourceClockEpoch: evidence.epoch,
-            geolocation: _copyGeolocation(_sessionGeolocation),
-            recordingSessionId: _activeRecordingSessionId,
-            liveRingId: live.ringId,
-            liveOrdinalStart: live.start,
-            liveOrdinalEnd: live.end,
-          );
-          wal.liveConnectionEpoch = live.epoch;
-          _wals.add(wal);
-        }
-        _removeFrameIndices(indices);
-        _notifyUpdated(generation);
-        await _flush(generation);
+        if (_sealPendantTail(generation)) await _flush(generation);
       });
+
+  /// Move the complete pendant tail into WAL custody before any I/O yields.
+  bool _sealPendantTail(int generation) {
+    if (!_isCurrent(generation)) return false;
+    final indices = <int>[];
+    for (var i = 0; i < _frames.length; i++) {
+      if (_isPendantFrame(_frames[i])) indices.add(i);
+    }
+    if (indices.isEmpty) return false;
+    final frames = indices.map((i) => _frames[i]).toList();
+    final synced = indices.map((i) => _frameSynced[i]).toList();
+
+    var shouldStore = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
+    if (!shouldStore) shouldStore = synced.any((s) => !s);
+    if (!shouldStore) {
+      _removeFrameIndices(indices);
+      return false;
+    }
+    final syncedOffset = syncedPrefixCount(synced);
+
+    final frameCount = frames.length;
+    final now = _now();
+    var timerEnd = now.millisecondsSinceEpoch ~/ 1000;
+    var timerStart = timerEnd - frameCount ~/ _framesPerSecond;
+    final evidence = stableCaptureEvidence(frames);
+    final live = _liveEvidenceFor(frames);
+
+    if (partitionsEvidenceRuns(true, _codec, frames)) {
+      _storeSelectedRuns(
+        frames,
+        synced,
+        captureSelectionStartSeconds(now, frameCount, _framesPerSecond),
+        generation,
+        extendMemWal: false,
+        legacySelectionTimerStart: timerStart,
+      );
+    } else {
+      final wal = Wal(
+        codec: _codec,
+        timerStart: timerStart,
+        data: frames.map((f) => f.payload).toList(),
+        storage: WalStorage.mem,
+        onDeviceOnly: _pendingPhoneOnly,
+        capturedOnDeviceOnly: _pendingPhoneOnly,
+        status: syncedOffset == frameCount ? WalStatus.synced : WalStatus.miss,
+        device: _deviceId ?? "omi",
+        deviceModel: _deviceModel ?? "Omi",
+        seconds: frameCount ~/ _framesPerSecond,
+        totalFrames: frameCount,
+        syncedFrameOffset: syncedOffset,
+        ownerUid: _currentWalOwnerUid(),
+        captureRoot: evidence.root,
+        sourceFrameStart: evidence.start,
+        sourceClockEpoch: evidence.epoch,
+        geolocation: _copyGeolocation(_sessionGeolocation),
+        recordingSessionId: _activeRecordingSessionId,
+        liveRingId: live.ringId,
+        liveOrdinalStart: live.start,
+        liveOrdinalEnd: live.end,
+      );
+      wal.liveConnectionEpoch = live.epoch;
+      _wals.add(wal);
+    }
+    _removeFrameIndices(indices);
+    _notifyUpdated(generation);
+    return true;
+  }
 
   int _storageFileSeq = 0;
 
@@ -1564,7 +1571,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     }
 
     if (shouldStored) {
-      if (partitionsEvidenceRuns(_captureEvidenceV1DarkWrite, _codec, evidenceFrames)) {
+      if (partitionsEvidenceRuns(true, _codec, evidenceFrames)) {
         _storeSelectedRuns(
           evidenceFrames,
           _frameSynced.sublist(0, high),

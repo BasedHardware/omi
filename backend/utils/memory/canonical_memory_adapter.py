@@ -1463,13 +1463,15 @@ def _evidence_items_from_payload(data: Dict[str, Any]) -> List[MemoryEvidence]:
     return [_legacy_evidence_to_memory(evidence.model_dump(), conversation_id=conversation_id)]
 
 
-def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any) -> Optional[MemoryItem]:
+def _read_canonical_memory_item(
+    uid: str, memory_id: str, *, db_client: Any, include_inactive: bool = False
+) -> Optional[MemoryItem]:
     path = f"{MemoryCollections(uid=uid).memory_items}/{memory_id}"
     snapshot = db_client.document(path).get()
     if not getattr(snapshot, "exists", False):
         return None
     item = MemoryItem(**_snapshot_payload(snapshot))
-    if item.status != MemoryItemStatus.active:
+    if not include_inactive and item.status != MemoryItemStatus.active:
         return None
     if item.memory_id != memory_id:
         raise ValueError(f"canonical memory id mismatch: requested {memory_id}, found {item.memory_id}")
@@ -1478,10 +1480,12 @@ def _read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any) -> 
     return item
 
 
-def read_canonical_memory_item(uid: str, memory_id: str, *, db_client: Any = None) -> Optional[MemoryItem]:
-    """Read one active canonical memory item from the authoritative product store."""
+def read_canonical_memory_item(
+    uid: str, memory_id: str, *, db_client: Any = None, include_inactive: bool = False
+) -> Optional[MemoryItem]:
+    """Read an active owner item; Review may inspect inactive rows to classify exclusion."""
     client = db_client if db_client is not None else default_db_client
-    return _read_canonical_memory_item(uid, memory_id, db_client=client)
+    return _read_canonical_memory_item(uid, memory_id, db_client=client, include_inactive=include_inactive)
 
 
 def _canonical_extraction_apply_write(

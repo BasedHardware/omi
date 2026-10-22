@@ -44,7 +44,7 @@ from database.vector_db import (
     upsert_action_item_vectors_batch,
     delete_action_item_vectors_batch,
 )
-from database.apps import record_app_usage, get_omi_personas_by_uid_db, get_app_by_id_db
+from database.apps import record_app_usage, get_omi_personas_by_uid_db
 from database.vector_db import upsert_vector2, update_vector_metadata
 from models.app import App, UsageHistoryType
 from models.memories import MemoryCaptureContext, MemoryDB, Memory, MemoryCategory, SubjectAttribution
@@ -90,7 +90,11 @@ from utils.conversations.relevance import (
     final_relevance,
 )
 from utils.conversations.relevance_jev import jev_discard_probability, jev_tier_applies, relevance_transcript
-from utils.conversations.reprocess_contract import reprocess_result_contract_enabled
+from utils.conversations.reprocess_contract import (
+    DERIVED_EFFECTS_TRANSCRIPT_FIELD,
+    derived_effects_transcript_digest,
+    reprocess_result_contract_enabled,
+)
 from config.jev_decisions import relevance_arm, relevance_experiment_active
 from utils.conversations.relevance_io import (
     adjacent_conversation,
@@ -162,7 +166,6 @@ from utils.executors import llm_executor, postprocess_executor, submit_with_cont
 from utils.llm.conversation_processing import (
     get_app_result,
     should_discard_conversation,
-    get_suggested_apps_for_conversation,
     get_conversation_notes,
     validate_structured_source_segment_ids,
 )
@@ -209,7 +212,7 @@ from utils.task_sync import auto_sync_action_items_batch
 from utils.task_intelligence import conversation_capture
 from utils.conversations.action_item_refresh import preserve as preserve_refresh_tasks
 from utils.conversations.action_item_extraction import action_items_for_write, filter_extracted_items
-from utils.conversations.action_item_identity import plan_replacement, prior_read_kwargs
+from utils.conversations.action_item_identity import plan_replacement
 from utils.conversations.calendar_linking import get_overlapping_calendar_event
 from utils.conversations.meeting_treatment import (
     MIN_MEETING_DURATION_SECONDS,
@@ -231,6 +234,7 @@ from utils.conversations.meeting_context import (
     store_meeting_context as _store_meeting_context,
 )
 from utils.conversations.meeting_notes_wiring import (
+    notes_agent_inputs,
     rich_notes_inputs,
     rich_roster_inputs,
 )
@@ -301,11 +305,6 @@ APP_RESULT_FAILED_ERROR_DETAIL = {
     'code': APP_RESULT_FAILED_CODE,
     'message': 'The selected app could not finish this summary. Please try again.',
 }
-
-
-def conversation_apps_opt_in_only() -> bool:
-    """Summarization apps require explicit selection on the notes v2 path."""
-    return True
 
 
 def _stored_meeting_lookup_enabled() -> bool:
@@ -527,6 +526,7 @@ def _get_structured(
                 return (
                     build_deterministic_minimum_structured(
                         main_conv,
+                        uid=uid,
                         tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
                     ),
                     False,
@@ -579,8 +579,6 @@ def _get_structured(
         conv_started_at = cast(datetime, main_conv.started_at)
 
         roster: Optional[MeetingRoster] = None
-        meeting_context_block: Optional[str] = None
-        desktop_capture, screen_frames = False, ()
         roster, meeting_context_block, desktop_capture, screen_frames = rich_notes_inputs(
             uid,
             main_conv,
@@ -624,6 +622,7 @@ def _get_structured(
                 rich_context_enabled=roster is not None,
                 roster=roster,
                 screen_frames=screen_frames,
+                **notes_agent_inputs(main_conv, desktop_capture),
             )
         validate_structured_source_segment_ids(structured, transcript_segment_ids)
         return structured, False
@@ -705,38 +704,6 @@ def _get_conversation_obj(
         return main_conv
 
 
-# Function to get conversation summary apps from Redis
-def get_default_conversation_summarized_apps() -> List[App]:
-    """
-    Get conversation summary apps from Redis.
-    Falls back to environment variable if Redis is empty.
-    """
-    default_apps: List[App] = []
-
-    # Try to get from Redis first
-    redis_app_ids = redis_db.get_conversation_summary_app_ids()
-
-    if redis_app_ids:
-        # Use apps from Redis. A malformed/legacy stored app doc must be skipped, not fail the
-        # whole conversation's processing (same class as the chat/app fetch guards).
-        for app_id in redis_app_ids:
-            app = App.deserialize_safe(get_app_by_id_db(app_id.strip()))
-            if app:
-                default_apps.append(app)
-    else:
-        # Fallback to environment variable for backward compatibility
-        env_app_ids = os.getenv(
-            'CONVERSATION_SUMMARIZED_APP_IDS', 'summary_assistant,action_item_extractor,insight_analyzer'
-        ).split(',')
-
-        for app_id in env_app_ids:
-            app = App.deserialize_safe(get_app_by_id_db(app_id.strip()))
-            if app:
-                default_apps.append(app)
-
-    return default_apps
-
-
 @spelling_context_run
 def trigger_conversation_apps(
     uid: str,
@@ -752,27 +719,27 @@ def trigger_conversation_apps(
     resumable_result_commit: Optional[Callable[[str, Mapping[str, Any]], bool]] = None,
     resumable_usage_commit: Optional[Callable[[str, UsageHistoryType], bool]] = None,
     resumable_effect_authorizer: Optional[Callable[[], None]] = None,
+    first_party_only: bool = False,
 ) -> bool:
+    """Run the selected summary app for ``conversation``.
+
+    ``first_party_only`` is the user asking for Omi's own notes ("Summarize with
+    Omi"): no preferred app and no suggestion runs, so no template result is
+    produced or paid for.
+    """
+    if first_party_only and app_id:
+        raise ValueError('first_party_only excludes an explicit app selection')
     if usage_attribution is None:
         usage_attribution = (
             AppUsageAttribution.NON_USER_REPROCESS if is_reprocess else AppUsageAttribution.AUTOMATIC_PROCESSING
         )
 
-    # Get default apps for auto-selection
-    opt_in_only = conversation_apps_opt_in_only()
-    default_apps = [] if opt_in_only else get_default_conversation_summarized_apps()
-    default_apps_dict = {app.id: app for app in default_apps}
-
-    # Also get user's installed apps (only used for preferred app lookup and reprocessing)
+    # User's installed apps (only used for preferred app lookup and reprocessing)
     apps: List[App] = get_available_apps(uid)
     conversation_apps = [app for app in apps if app.works_with_memories() and app.enabled]
 
-    # Combined dict for looking up preferred apps or specific app_id requests
+    # Dict for looking up preferred apps or specific app_id requests
     all_apps_dict = {app.id: app for app in conversation_apps}
-    all_apps_dict.update(default_apps_dict)
-
-    # Combined list for suggestions: default apps + user's installed apps (no duplicates)
-    all_suggestion_apps = list(all_apps_dict.values())
 
     app_to_run: Optional[App] = None
 
@@ -781,8 +748,10 @@ def trigger_conversation_apps(
         if explicit_app is None or explicit_app.id != app_id:
             raise ValueError('explicit app selection must be validated before conversation processing')
         app_to_run = explicit_app
+    elif first_party_only:
+        logger.info('First-party summary requested; skipping preferred and suggested apps')
     else:
-        # Check preferred app first — skip the suggestion LLM call if user has one
+        # Summarization apps are opt-in: only a usable preferred app runs automatically.
         preferred_app_id = redis_db.get_user_preferred_app(uid)
         if preferred_app_id and preferred_app_id in all_apps_dict:
             app_to_run = cast(App, all_apps_dict.get(preferred_app_id))
@@ -803,26 +772,9 @@ def trigger_conversation_apps(
             else:
                 logger.warning(
                     f"Preferred app {preferred_app_id} is set but unusable "
-                    f"(missing={candidate is None}); falling back to suggestions {uid}"
+                    f"(missing={candidate is None}); skipping automatic app selection {uid}"
                 )
-        if app_to_run is None and not opt_in_only:
-            # Only run suggestion LLM call when no usable preferred app is set
-            if not conversation.suggested_summarization_apps:
-                if resumable_effect_authorizer is not None:
-                    resumable_effect_authorizer()
-                with track_usage(uid, Features.CONVERSATION_APPS):
-                    suggested_apps, _reasoning = get_suggested_apps_for_conversation(conversation, all_suggestion_apps)
-                conversation.suggested_summarization_apps = suggested_apps
-                logger.info(f"Generated suggested apps for conversation {conversation.id}: {suggested_apps}")
-
-            if conversation.suggested_summarization_apps:
-                first_suggested_app_id = conversation.suggested_summarization_apps[0]
-                app_to_run = all_apps_dict.get(first_suggested_app_id)
-                if app_to_run:
-                    logger.info(f"Using first suggested app: {app_to_run.name}")
-                else:
-                    logger.warning(f"First suggested app '{first_suggested_app_id}' not found in apps.")
-        elif app_to_run is None:
+        if app_to_run is None:
             logger.info('Summarization apps are opt-in only; skipping automatic app selection')
 
     completed_app_ids = {result.app_id for result in conversation.apps_results} if preserve_existing_results else set()
@@ -831,8 +783,8 @@ def trigger_conversation_apps(
     if not filtered_apps:
         logger.info(f"No summarization app selected for conversation {conversation.id} {uid}")
 
-    # ``replace_selected_result`` (user reprocess under the result contract):
-    # the run replaces only its own app's result and keeps every other app's
+    # ``replace_selected_result`` (every user reprocess): the run replaces
+    # only its own app's result and keeps every other app's
     # result. Released clients display the first non-empty entry, so the fresh
     # result is placed first. When no app runs (a plain "regenerate" with no
     # preferred app) the user asked for the Omi summary; clearing keeps that
@@ -1919,7 +1871,7 @@ def _write_action_items(uid: str, conversation: Conversation, trigger: Optional[
     if not action_items_data:
         return
 
-    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id, **prior_read_kwargs())
+    old_items = action_items_db.get_action_items_by_conversation(uid, conversation.id)
     # A task that survives re-extraction keeps its id and export marker (no re-send).
     identity = plan_replacement(conversation.id, action_items_data, old_items, trigger)
     old_ids = [item['id'] for item in old_items]
@@ -2476,12 +2428,19 @@ def process_conversation(
     recovery_transcript_decoded: bool = True,
     prior_relevance_decision: Mapping[str, Any] | None = None,
     created_webhook_observer: Callable[[Callable[[], None]], None] | None = None,
+    first_party_only: bool = False,
+    derived_effects_transcript_sha256: str | None = None,
 ) -> Conversation:
     """Process ``conversation``; ``trigger`` says why, and its ``ProcessingMode``
     fixes run-now, reprocess, bypass, and relevance policy together.
 
     ``user_kept`` is the stored ``sync_relevance_user_kept`` restore marker,
     which the wire model does not carry; it outranks every relevance tier.
+
+    ``first_party_only`` runs no summary app at all (the user asked for Omi's
+    own notes). ``derived_effects_transcript_sha256`` is the stored
+    ``DERIVED_EFFECTS_TRANSCRIPT_FIELD`` digest: the transcript the stored
+    memories, tasks and goal progress were last derived from.
     """
     backlog_authorized = trigger is ProcessingTrigger.BACKLOG_CHOICE
     mode = PROCESSING_MODES[trigger]
@@ -2837,7 +2796,11 @@ def process_conversation(
     # instead of stranding it mid-way. Only reachable when `app_id` was set; automatic
     # app selection stays fail-open (SCA-359).
     explicit_selection_failures: list[ExplicitAppSelectionFailedError] = []
-    result_contract = trigger is ProcessingTrigger.USER_REPROCESS and reprocess_result_contract_enabled()
+    user_reprocess = trigger is ProcessingTrigger.USER_REPROCESS
+    # Keep-until-replaced is unconditional for user reprocess: a failed or empty
+    # app run must never wipe the template results already stored. The flag
+    # now only selects the 502 error code below.
+    result_contract = user_reprocess and reprocess_result_contract_enabled()
 
     def _emit_derived_effects() -> None:
         # AI-based folder assignment
@@ -2906,7 +2869,8 @@ def process_conversation(
                     usage_attribution=app_usage_attribution,
                     language_code=language_code,
                     people=people,
-                    replace_selected_result=result_contract,
+                    replace_selected_result=user_reprocess,
+                    first_party_only=first_party_only and not app_id,
                 )
             except ExplicitAppSelectionFailedError as error:
                 # Fail closed without stranding the bundle: the write-back below still
@@ -2928,21 +2892,51 @@ def process_conversation(
             # including completed replays and terminal intelligence suppression.
             if not lazy_effects and not defer_derived_effects and not is_reprocess:
                 submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
-            if not lazy_effects and not defer_memory_extraction:
+            effects_transcript = (
+                derived_effects_transcript_digest(conversation.transcript_segments) if is_reprocess else None
+            )
+            # A user trying another template on an unchanged transcript asked for a
+            # different summary, not for new memories, a task rewrite or goal
+            # progress: those already stand for this exact transcript.
+            template_only = (
+                user_reprocess
+                and bool(app_id)
+                and derived_effects_transcript_sha256 is not None
+                and derived_effects_transcript_sha256 == effects_transcript
+            )
+            # A selected template that failed must never rewrite the user's tasks
+            # or count goal progress again; the user will retry the template.
+            app_failed = bool(explicit_selection_failures)
+            if template_only:
+                logger.info(
+                    'template-only reprocess: keeping derived effects uid=%s conversation=%s', uid, conversation.id
+                )
+            memories_ran = False
+            if not lazy_effects and not defer_memory_extraction and not template_only:
                 # Canonical source replacement is universal and intentionally
                 # fail-closed. Do not hide a retryable apply/store failure in an
                 # unobserved future while reporting finalization as successful.
                 _extract_memories(uid, conversation)
+                memories_ran = True
             if lazy_effects:
                 pass  # Coalesced memory, vector and task work is durably owned above.
+            elif template_only or app_failed:
+                pass
             elif is_reprocess:
                 # Same fail-closed idea as memory source replacement: a transient
                 # destructive-op fence must be observable on the sync reprocess
                 # path instead of disappearing into postprocess_executor.
                 _save_action_items(uid, conversation, people, trigger)
+                if memories_ran and effects_transcript is not None:
+                    # Both sources were re-derived from this transcript: a later
+                    # template-only reprocess can keep them.
+                    conversations_db.update_conversation(
+                        uid, conversation.id, {DERIVED_EFFECTS_TRANSCRIPT_FIELD: effects_transcript}
+                    )
             else:
                 submit_with_context(postprocess_executor, _save_action_items, uid, conversation, people, trigger)
-            submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
+            if not (template_only or app_failed):
+                submit_with_context(postprocess_executor, update_goal_progress, uid, conversation)
         # Recovery preserves admitted audio ids instead of rebuilding old chunks.
         capture_audio = trigger is not ProcessingTrigger.SERVER_RECOVERY
         if not is_reprocess and conversation.private_cloud_sync_enabled and capture_audio:

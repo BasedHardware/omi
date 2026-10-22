@@ -66,10 +66,11 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-enabled-state-unknown",
     "omi-stt-capacity-full-exhausted",
     "omi-stt-provider-terminal-failure-ratio",
+    "omi-stt-chain-exhausted-ratio",
+    "omi-stt-no-full-stage-target",
 )
 DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-monitoring")
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")
-LIVE_STT_PENDING_UIDS = ("omi-soniox-runway-70", "omi-soniox-runway-90")
 TELEGRAM_RECEIVER = "Omi - Services Alerting (Telegram)"
 REQUIRED_METRICS = {
     "omi_capture_finalization_failures_total",
@@ -196,8 +197,8 @@ def load_live_stt_import_rules(*, production: bool = True) -> dict[str, dict[str
         if not isinstance(uid, str) or not uid or uid in by_uid:
             raise AlertRouteError("committed live-STT alert file contains a missing or duplicate uid")
         by_uid[uid] = item
-    if set(by_uid) != set(LIVE_STT_IMPORT_UIDS) | set(LIVE_STT_PENDING_UIDS):
-        raise AlertRouteError("committed live-STT rules do not match the import allowlist and pending set")
+    if set(by_uid) != set(LIVE_STT_IMPORT_UIDS):
+        raise AlertRouteError("committed live-STT rules do not match the import allowlist")
     rules = {uid: by_uid[uid] for uid in LIVE_STT_IMPORT_UIDS}
     committed = load_all_committed_rules()
     canary_uids = DATASOURCE_CANARY_UIDS if production else ()

@@ -13,6 +13,7 @@ from utils.stt import resilient_stream as owner
 
 from utils.stt.provider_resilience import close_rejected_socket
 from utils.stt.live_failure import live_stt_terminal_reason
+from utils.stt.provider_stream_end import US_FAILOVER, note_stream_close_intent
 from utils.stt.resilient_stream import ResilientAudio
 
 
@@ -140,6 +141,7 @@ async def retry_failed_replacement(receiver: Any, raw: Any, epoch: Any, hop: Any
         raise
     finally:
         if previous is not None:
+            note_stream_close_intent(previous, US_FAILOVER)
             try:
                 previous.finish()
             finally:

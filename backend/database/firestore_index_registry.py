@@ -35,6 +35,15 @@ def _contains(field_path: str) -> FirestoreIndexField:
 INDEX_ONLY_REQUIREMENTS = (
     *(
         FirestoreIndexRequirement(
+            f'{stage}_batch_ramp_owner_load',
+            f'batch_pipeline_{stage}_jobs',
+            'COLLECTION',
+            (_asc('owner_id'), _asc('enqueued_at'), _asc('__name__')),
+        )
+        for stage in ('prod', 'dev')
+    ),
+    *(
+        FirestoreIndexRequirement(
             f'{stage}_batch_ready_predecessor',
             f'batch_pipeline_{stage}_jobs',
             'COLLECTION',
@@ -806,6 +815,26 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('state'), _desc('listed_at'), _desc('__name__')),
     ),
+    # Redrive fleet snapshot. Collection-group count+sum of pending holds, the
+    # dated count plus oldest listed_at on one index, and the backlog item sum.
+    FirestoreIndexRequirement(
+        'stt_cap_holds_group_state_asc_seconds_asc',
+        'stt_cap_holds',
+        'COLLECTION_GROUP',
+        (_asc('state'), _asc('seconds'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'stt_cap_holds_group_state_asc_listed_at_asc',
+        'stt_cap_holds',
+        'COLLECTION_GROUP',
+        (_asc('state'), _asc('listed_at'), _asc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'processing_backlog_group_state_asc_count_asc',
+        'processing_backlog',
+        'COLLECTION_GROUP',
+        (_asc('state'), _asc('count'), _asc('__name__')),
+    ),
 )
 
 
@@ -1362,6 +1391,18 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
         _asc('status'),
         _asc('finished_at'),
         _asc('__name__'),
+    ),
+)
+
+STALE_RECOVERY_PAGE_QUERY = FirestoreQuerySpec(
+    identifier='conversations_stale_recovery_newest_page',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(FirestoreQueryFilter('status', '==', 'status'), FirestoreQueryFilter('finished_at', '<', 'cutoff')),
+    index_fields=(
+        _asc('status'),
+        _desc('finished_at'),
+        _desc('__name__'),
     ),
 )
 
@@ -1931,6 +1972,7 @@ QUERY_SPECS = (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    STALE_RECOVERY_PAGE_QUERY,
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
     SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
@@ -2118,6 +2160,16 @@ FIELD_INDEX_REQUIREMENTS: tuple[FieldIndexRequirement, ...] = MESSAGING_FIELD_RE
         ('ASCENDING',),
     ),
     FieldIndexRequirement('memory_outbox_status_group_ascending', 'memory_outbox', 'status', ('ASCENDING',)),
+    # Legacy dark zero-lost census (scripts/legacy_dark/lost_recordings.py, soak check 5).
+    FieldIndexRequirement(
+        'sync_content_ledger_created_at_group_ascending', 'sync_content_ledger', 'created_at', ('ASCENDING',)
+    ),
+    # Legacy dark final-pass re-home sweep (scripts/legacy_dark/final_pass_rehome.py,
+    # the legacy_final_pass_rehomed draining precondition): every conversation still
+    # routed to legacy_final_pass_v1, across users.
+    FieldIndexRequirement(
+        'conversations_record_lane_owner_group_ascending', 'conversations', 'record_lane_owner', ('ASCENDING',)
+    ),
     FieldIndexRequirement(
         'task_recurrence_inbox_status_group_ascending', 'task_recurrence_inbox', 'status', ('ASCENDING',)
     ),

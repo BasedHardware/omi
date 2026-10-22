@@ -984,5 +984,321 @@
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-sync-failure-reason-step",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync jobs - a failure reason is running above 3x its 7-day rate",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "(sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))) / clamp_min((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[7d] offset 60m))) or ((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))) * 0), 0.0001)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "G",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "gmp-cloud-run",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "gmp-cloud-run"
+          },
+          "expr": "((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m])))) / on (namespace) clamp_min((min by (namespace) (label_replace((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[7d] offset 60m))), \"baseline\", \"rolling\", \"\", \"\") or label_replace(label_replace(vector(0.0064), \"namespace\", \"backend-sync-backfill\", \"\", \"\"), \"baseline\", \"pinned\", \"\", \"\"))) or (((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m])))) * 0), 0.0001)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "G"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50 && $B > 3 && $G > 1.5",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-workspace:data/run-2026-10-13-two-lane-nemotron/sync-upstream-error-2026-10-21.md",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "summary": "A sync job failure reason (outcome) on one sync service is more than 3x its 7-day share of jobs, with at least 50 such jobs in the last 60m",
+      "threshold": "per (service, outcome != success|expected_silence): 60m share of jobs > 3x the 7-day share (the 7 days before the window), with >= 50 jobs of that outcome in 60m, AND the service's total failure share in 60m > 1.5x its baseline, for 15m. Total-failure baseline = the lower of the rolling 7 days before the window and backfill's pinned pre-regression share 0.64% (the 7 days ending 2026-10-16T16:00Z, as a constant so evaluation stays under the 30s limit); the pin keeps backfill's post-#22977 leftover visible until the backfill assignment_conflict fix lands, then is removed. A reason or service with no baseline counts as new (floor 0.01%). The guard means a relabel or split of failures between reasons (no rise in total failures) does not page.",
+      "user_impact": "Uploaded recordings on that service are failing to finalize at a new, higher rate; users see missing or late conversations from offline sync.",
+      "scope": "omi_sync_transcription_job_total from Managed Prometheus (datasource gmp-cloud-run, job omi-cloud-run-application-metrics; the in-cluster Prometheus could not scan 7 days of raw samples within the 30s evaluation limit), namespaces backend-sync and backend-sync-backfill (backend-integration emits no omi_sync_transcription_job_total series and is out of scope until it does), keyed by the outcome label so new reasons (the sync-fresh-fix split of upstream_error) are covered automatically. The counter records terminal attempt outcomes, not finalized jobs, so it is compared only with its own baseline; the finalized-job count is event=sync_transcription_job_finalized in Cloud Logging.",
+      "verification": "Backtest 2026-10-14..10-21 (15m steps, prod Prometheus via the Grafana proxy). Without the total-failure guard: 24 sustained episodes, including backend-sync internal_error at 09:00Z right after #22977 split internal failures out of upstream_error (a relabel: backend-sync total failures fell 7.35% -> 1.19%). With the guard: 22 episodes; every 10-16..10-21 regression episode is kept, backend-sync internal_error is dropped, and backfill internal_error (total 4.76% vs pinned 0.64%) still fires. Rolling-only baseline would have hidden backfill after 60m (23 episodes). Re-run on Managed Prometheus after moving off the in-cluster Prometheus (2026-10-21 11Z, which timed out at 30s): 25 episodes, same shape (10-16..10-21 regression kept; backend-sync internal_error quiet; backfill internal_error fires). Instant evaluation 4.6s.",
+      "evaluated_bad": "backend-sync upstream_error onset 2026-10-16 (episodes from 14:38Z)",
+      "evaluated_good": "backend-sync upstream_error 2.44x (2026-10-21 05Z)",
+      "safe_next_action": "Run the two-lane sentinel scripts/sync_failure_reasons.sh for the failure_phase / failure_class split of finalized jobs, then check the sync_finalize_exception and sync_persistence_exception site fields before changing lanes or flags.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "critical",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-failure-reason-step"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "30s",
+      "group_interval": "5m",
+      "repeat_interval": "4h"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-sync-total-failure-share-ceiling",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Backend-sync",
+    "title": "Sync jobs - a sync service is failing more than 8% of jobs",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 3600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A > 0.08 && $B >= 200",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "30m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-workspace:data/run-2026-10-13-two-lane-nemotron/sync-upstream-error-2026-10-21.md",
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "summary": "A sync service is failing more than 8% of sync job attempts over 60m, regardless of its baseline",
+      "threshold": "per service: (attempts with outcome != success|expected_silence) / all attempts over 60m > 8%, with >= 200 attempts in 60m, for 30m. Absolute ceiling: it does not move with the 7-day baseline, so a regression that has become the baseline still warns.",
+      "user_impact": "More than 1 in 12 sync attempts on that service fail; offline recordings finalize late or not at all.",
+      "scope": "omi_sync_transcription_job_total via the cloud-run-application-metrics bridge, namespaces backend-sync and backend-sync-backfill (backend-integration emits no series). Counts terminal attempt outcomes, not finalized jobs. Pairs with omi-sync-failure-reason-step, which catches relative steps per reason; this rule catches a level that stays high.",
+      "verification": "2026-10-21 (Grafana proxy, attempt counter): backfill total failure share 0.58-0.87% before 10-16, 7.1% over 10-17..10-20, 8.92% in the 6h to 08:25Z, 4.76% after #22977; backend-sync 3.6% (10-17..20), 7.35% (6h to 08:25Z), 1.19% after #22977. Set at 8% with the two-lane lead while backfill internal_error (assignment_conflict) is silenced as known and owned by the backfill-conflict lane: a rise past 8% still warns. Backtest 10-14..10-21 (15m steps): 10 sustained episodes, all in the 10-17..10-21 regression (backfill 9x, backend-sync 1x), none after #22977.",
+      "evaluated_bad": "backend-sync upstream_error onset 2026-10-16 (episodes from 14:38Z)",
+      "evaluated_good": "backend-sync upstream_error 2.44x (2026-10-21 05Z)",
+      "safe_next_action": "Run the two-lane sentinel scripts/sync_failure_reasons.sh for the failure_phase / failure_class split of finalized jobs, then check the sync_finalize_exception and sync_persistence_exception site fields before changing lanes or flags.",
+      "runbook": "backend/docs/runbooks/real-traffic-journeys.md"
+    },
+    "labels": {
+      "component": "sync",
+      "impact": "user-experience",
+      "severity": "warning",
+      "instatus_component": "api",
+      "alert_identity": "omi-sync-total-failure-share-ceiling"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

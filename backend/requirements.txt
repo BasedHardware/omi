@@ -137,6 +137,7 @@ optuna==3.6.1
 opuslib==3.0.1
 orjson==3.11.6
 prometheus-client==0.21.1
+psycopg[binary]==3.2.10
 packaging==24.2
 parso==0.8.4
 pexpect==4.9.0

@@ -111,6 +111,7 @@ final class QuickActionsIconPatcher: NSObject {
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
   private var deviceToolsChannel: FlutterMethodChannel?
+  private var chatVideoSampler: ChatVideoSampler?
   private let deviceToolsService = DeviceToolsService()
   private var phoneMicController: PhoneMicController?
   private var notificationTitleOnKill: String?
@@ -118,6 +119,7 @@ final class QuickActionsIconPatcher: NSObject {
 
   var session: WCSession?
     var flutterWatchAPI: WatchRecorderFlutterAPI?
+    private var watchRecoveryFlutterAPI: BleFlutterApi?
     var rayBanMetaHostApi: RayBanMetaHostApiImpl?
   private var isRecordingActive: Bool = false // Track recording state to handle app restarts
 
@@ -309,7 +311,8 @@ final class QuickActionsIconPatcher: NSObject {
           watchSession.activate()
 
             flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: messenger)
-            let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: watchSession, flutterWatchAPI: flutterWatchAPI)
+            let api = RecorderHostApiImpl(session: watchSession, flutterWatchAPI: flutterWatchAPI)
+            api.refreshWatchAccountContext()
 
             WatchRecorderHostAPISetup.setUp(binaryMessenger: messenger, api: api)
       }
@@ -319,6 +322,7 @@ final class QuickActionsIconPatcher: NSObject {
       do {
           let messenger = messenger
           let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
+          watchRecoveryFlutterAPI = bleFlutterApi
           OmiBleManager.shared.setFlutterApi(bleFlutterApi)
           let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
           BleHostApiSetup.setUp(binaryMessenger: messenger, api: bleHostApi)
@@ -447,6 +451,9 @@ final class QuickActionsIconPatcher: NSObject {
     deviceToolsChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.deviceToolsService.handleMethodCall(call, result: result)
     }
+
+    // Chat video attachments: sample frames + audio on device instead of uploading the clip
+    chatVideoSampler = ChatVideoSampler(messenger: messenger)
 
     // Create Speech Recognition method channel
     _ = OnDeviceOverflowPlugin(messenger: messenger)
@@ -801,7 +808,9 @@ func registerPlugins(registry: FlutterPluginRegistry) {
 
 extension AppDelegate: WCSessionDelegate {
     
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) { }
+    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        if activationState == .activated { RecorderHostApiImpl(session: session).refreshWatchAccountContext() }
+    }
     
     func sessionDidBecomeInactive(_ session: WCSession) {
         print("Session Watch Become Inactive")
@@ -811,6 +820,28 @@ extension AppDelegate: WCSessionDelegate {
         print("Session Watch Deactivate")
     }
     
+    func session(_ session: WCSession, didReceive file: WCSessionFile) {
+        guard file.metadata?["method"] as? String == "watchRecordingFile",
+              let encoded = file.metadata?["recording"] as? Data,
+              let metadata = try? JSONDecoder().decode(WatchRecordingMetadata.self, from: encoded),
+              let owner = UserDefaults.standard.string(forKey: "flutter.uid"), !owner.isEmpty else { return }
+        let configuredDirectory = UserDefaults.standard.string(forKey: "flutter.batchAudioDir") ?? ""
+        let directory = configuredDirectory.isEmpty
+            ? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].path : configuredDirectory
+        do {
+            // Must finish synchronously: WCSession removes file.fileURL on return.
+            let digest = try WatchRecordingInbox.receive(file.fileURL, metadata: metadata,
+                directory: URL(fileURLWithPath: directory, isDirectory: true), ownerUID: owner)
+            session.transferUserInfo(["method": "watchRecordingReceipt", "fileName": metadata.fileName, "digest": digest])
+            DispatchQueue.main.async {
+                self.watchRecoveryFlutterAPI?.onBatchRecordingFinalized(fileName: metadata.fileName) { _ in }
+            }
+        } catch {
+            // No receipt: the Watch retains its source and retries. Never log audio or account IDs.
+            NSLog("[WatchRecovery] File not accepted; retained on Watch")
+        }
+    }
+
     // Receive a message from watch (foreground/active)
     func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
         Task {
@@ -1138,6 +1169,10 @@ enum SpeechAnalyzerTranscription {
     }
 }
 
+private enum SpeechRecognitionFailure: Error {
+    case timedOut
+}
+
 class SpeechRecognitionHandler: NSObject {
     
     func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
@@ -1164,8 +1199,14 @@ class SpeechRecognitionHandler: NSObject {
                 catch let error as LocalSpeechUnavailable {
                     let status = error.readiness.status
                     result(FlutterError(code: status == "permission_required" || status == "permission_denied" ? "UNAUTHORIZED" : "UNAVAILABLE",
-                        message: "Selected local speech engine needs setup", details: error.readiness.wire))
-                } catch { result(FlutterError(code: "RECOGNITION_ERROR", message: error.localizedDescription, details: nil)) }
+                        message: "Selected local speech engine needs setup", details: error.wire))
+                } catch SpeechRecognitionFailure.timedOut {
+                    result(FlutterError(code: "RECOGNITION_TIMEOUT", message: "On-device recognition timed out", details: nil))
+                } catch {
+                    let native = error as NSError
+                    result(FlutterError(code: "RECOGNITION_ERROR", message: native.localizedDescription,
+                        details: ["nativeErrorDomain": native.domain, "nativeErrorCode": native.code]))
+                }
             default: result(FlutterMethodNotImplemented)
             }
         }
@@ -1195,14 +1236,7 @@ class SpeechRecognitionHandler: NSObject {
         }, legacy: {
             guard let path else { throw LocalSpeechUnavailable(readiness: LocalSpeechReadiness(engine: "sfspeech", status: "unavailable")) }
             return try await withCheckedThrowingContinuation { continuation in
-                self.transcribe(filePath: path, language: language) { value in
-                    if let error = value as? FlutterError {
-                        if error.code == "UNAUTHORIZED" || error.code == "UNAVAILABLE" {
-                            continuation.resume(throwing: LocalSpeechUnavailable(readiness:
-                                LocalSpeechReadiness(engine: "sfspeech", status: error.code == "UNAUTHORIZED" ? "permission_denied" : "unavailable")))
-                        } else { continuation.resume(throwing: NSError(domain: error.code, code: 1)) }
-                    } else { continuation.resume(returning: value as? String ?? "") }
-                }
+                self.transcribe(filePath: path, language: language) { continuation.resume(with: $0) }
             }
         })
     }
@@ -1319,19 +1353,21 @@ class SpeechRecognitionHandler: NSObject {
         }
     }
 
-    private func transcribe(filePath: String, language: String, result: @escaping FlutterResult) {
+    private func transcribe(filePath: String, language: String, result: @escaping (Result<String, Error>) -> Void) {
         // Request authorization first
         SFSpeechRecognizer.requestAuthorization { authStatus in
             DispatchQueue.main.async {
                 if authStatus != .authorized {
-                    result(FlutterError(code: "UNAUTHORIZED", message: "Speech recognition not authorized", details: nil))
+                    result(.failure(LocalSpeechUnavailable(readiness:
+                        LocalSpeechReadiness(engine: "sfspeech", status: "permission_denied"))))
                     return
                 }
 
                 let fileUrl = URL(fileURLWithPath: filePath)
 
                 guard let recognizer = SpeechRecognitionHandler.onDeviceRecognizer(for: language) else {
-                    result(FlutterError(code: "UNAVAILABLE", message: "No on-device speech recognizer available for language \(language)", details: nil))
+                    result(.failure(LocalSpeechUnavailable(readiness:
+                        LocalSpeechReadiness(engine: "sfspeech", status: "unavailable"))))
                     return
                 }
 
@@ -1353,7 +1389,7 @@ class SpeechRecognitionHandler: NSObject {
                 var finished = false
                 var latestText = ""
                 var task: SFSpeechRecognitionTask?
-                let finish: (Any?) -> Void = { value in
+                let finish: (Result<String, Error>) -> Void = { value in
                     guard !finished else { return }
                     finished = true
                     task?.cancel()
@@ -1365,7 +1401,7 @@ class SpeechRecognitionHandler: NSObject {
                         if let recognitionResult = recognitionResult {
                             latestText = recognitionResult.bestTranscription.formattedString
                             if recognitionResult.isFinal {
-                                finish(latestText)
+                                finish(.success(latestText))
                                 return
                             }
                         }
@@ -1375,12 +1411,9 @@ class SpeechRecognitionHandler: NSObject {
                             // error is still the best answer for that clip. Only a failure that
                             // produced nothing is reported as an error.
                             if !latestText.isEmpty || (nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 1110) {
-                                finish(latestText)
+                                finish(.success(latestText))
                             } else {
-                                finish(FlutterError(
-                                    code: "RECOGNITION_ERROR",
-                                    message: "\(nsError.domain) \(nsError.code): \(error.localizedDescription) (locale \(recognizer.locale.identifier))",
-                                    details: nil))
+                                finish(.failure(nsError))
                             }
                         }
                     }
@@ -1389,9 +1422,9 @@ class SpeechRecognitionHandler: NSObject {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 20) {
                     guard !finished else { return }
                     if latestText.isEmpty {
-                        finish(FlutterError(code: "RECOGNITION_TIMEOUT", message: "On-device recognition timed out", details: nil))
+                        finish(.failure(SpeechRecognitionFailure.timedOut))
                     } else {
-                        finish(latestText)
+                        finish(.success(latestText))
                     }
                 }
             }

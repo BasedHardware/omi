@@ -1,6 +1,7 @@
 """Bounded provider queue with replay-only back-pressure; normal sends stay synchronous."""
 
 import asyncio
+import time
 from collections import deque
 from contextvars import ContextVar
 from typing import TypeVar, Generic
@@ -18,6 +19,9 @@ class AudioSendQueue(asyncio.Queue[T], Generic[T]):
         super().__init__(maxsize=maxsize)
         self._space = asyncio.Event()
         self._deadlines: deque[float | None] = deque()
+        # Death diagnostics only: when each still-queued item was enqueued,
+        # oldest first; popped as items are taken, so [0] is the oldest wait.
+        self._enqueued_at: deque[float] = deque()
         self.inflight_deadline: float | None = None
         self.high_water = 0
         self.inflight = 0
@@ -29,13 +33,20 @@ class AudioSendQueue(asyncio.Queue[T], Generic[T]):
         self._deadlines.append(
             audio_send_deadline.get() if isinstance(item, (bytes, bytearray)) and len(item) > 0 else None
         )
+        self._enqueued_at.append(time.monotonic())
         self.high_water = max(self.high_water, self.qsize() + self.inflight)
         if isinstance(item, (bytes, bytearray)) and len(item) > 0:
             self.enqueued_audio += 1
 
     def _get(self) -> T:
         self.inflight_deadline = self._deadlines.popleft()
+        if self._enqueued_at:
+            self._enqueued_at.popleft()
         return super()._get()
+
+    def oldest_queued_age(self, now: float) -> float:
+        """Seconds the oldest still-queued item has waited; -1 when nothing is queued."""
+        return now - self._enqueued_at[0] if self._enqueued_at else -1.0
 
     async def get(self) -> T:
         item = await super().get()

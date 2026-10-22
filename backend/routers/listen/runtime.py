@@ -57,6 +57,7 @@ from utils.metrics import BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
 from utils.notifications import send_credit_limit_notification, send_silent_user_notification
 from utils.onboarding import OnboardingHandler
 from utils.observability.journeys import ClientJourneyAttempt
+from utils.observability.listen_close import CLOSE_FRAME_DRAIN_SECONDS, note_ws_close, record_listen_ws_close
 from utils.observability.listen_loop import ensure_loop_lag_probe
 from utils.observability.routing_cohort import RoutingCohort, current_routing_cohort
 from utils.observability.transcription import (
@@ -123,6 +124,7 @@ from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
 from utils.observability.transcription import record_listen_no_audio_teardown, record_listen_session_accepted
+from utils.product_metrics import sanitize_app_build
 
 logger = logging.getLogger(__name__)
 
@@ -941,11 +943,15 @@ class ListenSessionRuntime:
             if FAIR_USE_ENABLED and speech_ms:
                 await self.persistence.call(record_speech_ms, self.request.uid, speech_ms)
         now = time.time()
+        # STT cap held (untranscribed) receipt spans are metered once, by recovery.
+        # Without a cap admission, or with no held spans, billing is unchanged.
+        admission = getattr(self.receiver, 'cap_admission', None)
         seconds = billable_transcription_seconds(
             self.state.last_usage_record_timestamp,
             self.state.last_audio_received_time,
             now,
             getattr(self.state, 'last_audio_resume_time', None),
+            held_seconds=admission.held_seconds_between if admission is not None else None,
         )
         words = self.state.words_transcribed_since_last_record
         self.state.words_transcribed_since_last_record = 0
@@ -1151,7 +1157,11 @@ class ListenSessionRuntime:
             demand = getattr(self.receiver, 'live_demand', None)
             if demand is not None:
                 background.append(self.task_supervisor.create_lifetime_task(demand.run(), name='live_demand_routing'))
-            record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
+            record_listen_session_accepted(
+                source=self.request.source,
+                platform=self.client_device_context.platform,
+                app_build=sanitize_app_build(getattr(self.client_device_context, 'app_version', None)),
+            )
             if not self.use_custom_stt:
                 self._no_audio_observation = ListenNoAudioObservation()
             await self._start_pusher()
@@ -1265,13 +1275,43 @@ class ListenSessionRuntime:
             if error is not None:
                 raise error
 
+    async def _observe_pending_client_close(self) -> None:
+        # A sender's WebSocketDisconnect carries a synthetic 1006 whatever the peer
+        # sent, so read the queued disconnect frame for the client's real code. Data
+        # frames queue ahead of it; the receive loop has left, so they are discarded.
+        websocket = self.request.websocket
+        if (
+            getattr(self.state, 'ws_close_initiator', None) is not None
+            or getattr(self.receiver, '_receiving', False)
+            or websocket.client_state != WebSocketState.CONNECTED
+        ):
+            return
+        deadline = time.monotonic() + CLOSE_FRAME_DRAIN_SECONDS
+        while (remaining := deadline - time.monotonic()) > 0:
+            try:
+                message = await asyncio.wait_for(websocket.receive(), timeout=remaining)
+            except Exception:
+                return
+            if message.get('type') == 'websocket.disconnect':
+                note_ws_close(self.state, 'client', message.get('code', 1000))
+                return
+
+    def _cap_held_at_close(self) -> bool:
+        # Paused at onset (cap_paused) or holding denied audio mid-session (live_hold.paused).
+        receiver = getattr(self, 'receiver', None)
+        hold = getattr(receiver, 'live_hold', None)
+        return getattr(receiver, 'cap_paused', False) is True or getattr(hold, 'paused', False) is True
+
     async def _teardown(self) -> None:
         observation = getattr(self, '_no_audio_observation', None)
         if observation is not None:
             observation.close()
+        teardown_started_at = time.monotonic()
+        held_at_close = self._cap_held_at_close()
         try:
             await self._teardown_components()
         finally:
+            record_listen_ws_close(self.state, held=held_at_close, teardown_started_at=teardown_started_at)
             # Receiver finish/drain can settle an exhausted leg or admit a
             # pending paid onset. Count the complete socket after those seams.
             cohort = getattr(self, '_routing_cohort', None)
@@ -1319,9 +1359,11 @@ class ListenSessionRuntime:
             logger.error('STT finish failed type=%s', type(error).__name__)
         if not owner_persistence_blocked:
             await self._flush_usage(final=True)
+        await self._observe_pending_client_close()
         if self.request.websocket.client_state == WebSocketState.CONNECTED and not self.state.stt_terminal_failure:
             try:
                 await self.request.websocket.close(code=self.state.close_code)
+                note_ws_close(self.state, 'server', self.state.close_code)
             except Exception:
                 pass
         conversation_id = self.state.current_conversation_id

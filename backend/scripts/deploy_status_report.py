@@ -601,7 +601,7 @@ def fetch_cloud_run_state(*, project: str, region: str, services: list[str]) -> 
 
 def kubectl_json(namespace: str, resource: str) -> dict[str, Any]:
     result = subprocess.run(
-        ['kubectl', '-n', namespace, 'get', resource, '-o', 'json'],
+        ['kubectl', '-n', namespace, 'get', resource, '--request-timeout=30s', '-o', 'json'],
         check=True,
         capture_output=True,
         text=True,

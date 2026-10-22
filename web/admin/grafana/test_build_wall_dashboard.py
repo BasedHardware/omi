@@ -204,7 +204,7 @@ class WallV2Contract(unittest.TestCase):
         board = load("omi-tv-v2")
         panel = next(p for p in board["panels"] if p["title"] == "Unit economics")
         custom = panel["fieldConfig"]["defaults"]["custom"]
-        self.assertEqual(custom["insertNulls"], 2 * 86_400_000)
+        self.assertLess(custom["insertNulls"], 2 * 86_400_000)  # a one-day hole is a gap
         self.assertFalse(custom["spanNulls"])  # a gap is drawn as a gap
         self.assertEqual(panel["timeFrom"], "35d")  # the FinOps book's daily history
         self.assertIn("one point per day", panel["description"])

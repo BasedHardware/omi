@@ -350,8 +350,6 @@ class ReservationState:
                 return 'no_active_model' if fresh else 'no_states'
             if await client.get(self.key() + ':saturated:' + model):
                 return 'saturated'
-            if await client.get(self.key() + ':dream-probe-failed:' + model):
-                return 'probe_failed'
             sample = await client.get(self.key() + ':dedicated-utilization:' + model)
             if sample is not None:
                 value = json.loads(sample)
@@ -411,7 +409,9 @@ class ReservationState:
                 client = self.client()
                 if client is not None:
                     async with asyncio.timeout(0.3):
-                        await client.set(self.key() + ':saturated:' + model, '1', ex=120)
+                        await client.set(
+                            self.key() + ':saturated:' + model, '1', ex=RESERVATIONS[model].saturation_seconds
+                        )
             except Exception:
                 logger.warning('vertex_reservation_saturation_publish_failed model=%s', model)
         if (

@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import logging
 from _thread import LockType
-from typing import NotRequired, TypedDict
+from typing import Callable, NotRequired, TypedDict
 
-from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
+from config import merge_ancestry
 from config.sync_finalize import sync_finalize_target_recovery_enabled
+from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from database.action_item_refresh import RefreshConversationUnavailable
 from database import conversations as conversations_db
 from database.legal_holds import (
@@ -27,7 +29,11 @@ from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.merge_conversations import copy_sync_bridge_audio, retract_sync_bridge_source
 from utils.metrics import OMI_SYNC_BRIDGE_RETRACTION_TOTAL
 from utils.observability.fallback import record_fallback
-from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
+from utils.sync.assignment_errors import (
+    SyncAssignmentConflict,
+    SyncAssignmentConflictReason,
+    SyncAssignmentSuperseded,
+)
 from utils.sync.telemetry import bounded_exception_reason, bounded_exception_type
 from utils.sync.fsr_metadata import read_metadata
 
@@ -84,12 +90,51 @@ def _record_refresh_deferred(reason: str, error: BaseException | None = None) ->
     )
 
 
+def _bridge_source_defect(
+    source: dict | None, survivor_id: str, lineage: list[str], load: Callable[[str], dict | None]
+) -> str | None:
+    """Bounded reason a smart survivor's bridge source does not redirect at it, else ``None``.
+
+    Ordinary sync absorbs leave ancestors redirecting at an intermediate hop of
+    the same lineage. With chain repair on, a chain of tombstones that stays in
+    the survivor's ``sync_merged_from`` and ends at the survivor is accepted:
+    every hop's content already belongs to the survivor, and the next flatten
+    re-points the hops. Anything leaving the lineage still conflicts.
+    """
+    if not source or not source.get('deleted') or not source.get('sync_merged_into'):
+        return None
+    target = source['sync_merged_into']
+    if target == survivor_id:
+        return None
+    if target not in lineage:
+        return 'redirect_elsewhere'
+    if not smart_merge_flatten_chain_repair_enabled():
+        return 'chain'
+    # Same hop shape the flatten planner accepts: a plain sync tombstone that is
+    # not user-managed. A hop that is not discarded, has no revision, carries
+    # smart-merge state, or is starred or otherwise user-managed stays a
+    # conflict, so finalize never cleans up a row the planner would refuse.
+    if not merge_ancestry.plain_chain_hop(source) or _policy_user_managed(source):
+        return 'chain_broken'
+    members = set(lineage)
+    for _ in range(len(members)):
+        hop = load(target)
+        if not hop or not merge_ancestry.plain_chain_hop(hop) or _policy_user_managed(hop):
+            return 'chain_broken'
+        target = hop['sync_merged_into']
+        if target == survivor_id:
+            return None
+        if target not in members:
+            return 'chain_broken'
+    return 'chain_broken'
+
+
 def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str | None = None) -> str:
     recovery = sync_finalize_target_recovery_enabled()
     visited: set[str] = set()
     while True:
         if conversation_id in visited or len(visited) >= 16:
-            raise SyncAssignmentConflict('sync redirect cycle', subtype='redirect_cycle')
+            raise SyncAssignmentConflict('sync redirect cycle', subtype=SyncAssignmentConflictReason.REDIRECT_CYCLE)
         visited.add(conversation_id)
         row = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if not row or (row.get('deleted') and not row.get('sync_merged_into')):
@@ -98,16 +143,27 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
             conversation_id = row['sync_merged_into']
             continue
         flatten = smart_merge_flatten_enabled() and (row.get('smart_merge') or {}).get('role') == 'survivor'
+        lineage = row.get('sync_merged_from', [])
+        sources: dict[str, dict | None] = {}
+
+        def load(source_id: str) -> dict | None:
+            if source_id not in sources:
+                sources[source_id] = read_metadata(conversations_db, uid, source_id, operation='bridge')
+            return sources[source_id]
+
         redirected = False
-        for source_id in row.get('sync_merged_from', []):
-            source = read_metadata(conversations_db, uid, source_id, operation='bridge')
-            if (
-                not source
-                or not source.get('deleted')
-                or not source.get('sync_merged_into')
-                or (flatten and source['sync_merged_into'] != conversation_id)
-            ):
-                raise SyncAssignmentConflict('sync bridge source missing or not a tombstone', subtype='other')
+        for source_id in lineage:
+            source = load(source_id)
+            kind = _bridge_source_defect(source, conversation_id, lineage, load) if flatten else None
+            if not source or not source.get('deleted') or not source.get('sync_merged_into') or kind:
+                logger.warning(
+                    'event=sync_bridge outcome=source_rejected kind=%s',
+                    kind or ('missing' if not source else 'not_tombstone'),
+                )
+                raise SyncAssignmentConflict(
+                    'sync bridge source missing or not a tombstone',
+                    subtype=SyncAssignmentConflictReason.BRIDGE_SOURCE_NOT_TOMBSTONE,
+                )
             revision = source['sync_content_revision']
             needs_cleanup = source.get('sync_bridge_cleaned_revision') != revision
             audio_target = conversation_id if row.get('private_cloud_sync_enabled') else None

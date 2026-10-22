@@ -5,6 +5,12 @@ public shared chat, file completions, stateless reply generation, memory
 extraction, app processing, and all
 other LLM flows retain their existing implementations. Classifiers remain
 decision models. This module owns no provider, tool catalog, or skill catalog.
+
+It does own the tool design rules every agent on the loop gets (see ARCHITECTURE.md,
+"Tool design rules"): a run's :class:`~utils.model_text.ContextWindow` on the Mount, UTC
+``Z`` times in everything shown to the model (:func:`model_json`), declarative near-miss key
+normalization before output validation (:func:`normalize_output`), and send-back budgets per
+failure class (:class:`SendBackBudget`).
 """
 
 from __future__ import annotations
@@ -15,18 +21,33 @@ import hashlib
 import json
 import logging
 import os
-from dataclasses import dataclass, replace
-from typing import Any, Awaitable, Callable
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field, replace
+from datetime import date, datetime
+import re
+import types
+import typing
+from typing import Any, Awaitable, Callable, Optional, Union
+
+from pydantic import BaseModel
 
 from prometheus_client import Counter
 
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
+from utils.model_text import ContextWindow, utc_z
 
 logger = logging.getLogger(__name__)
 PREFIX_VIOLATIONS = Counter(
     'omi_shaped_agent_cache_prefix_violations_total',
     'Append-only request prefix changed between harness turns',
     ['reason'],
+)
+# Cached share of input per shaped feature: cached / (cached + uncached). Turns
+# that report no usage (streamed chat) are not counted.
+INPUT_TOKENS = Counter(
+    'omi_shaped_agent_input_tokens_total',
+    'Input tokens reported by shaped-agent turns, split by provider cache reads',
+    ['feature', 'kind'],
 )
 FLAG = 'OMI_SHAPED_AGENT_MODE'
 COHORT_UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
@@ -62,6 +83,10 @@ class Mount:
     cache_breakpoint: bool = True
     cache_initial_evidence: bool = True
     stable_context: tuple[Any, ...] = ()
+    # Low-cardinality label for harness metrics; never user or request data.
+    feature: str = 'unlabeled'
+    # The span this run is about. Time-range tools default to it (tool design rule 1).
+    context_window: Optional[ContextWindow] = None
 
     def prefix(self) -> str:
         return '\n\n'.join(part for part in (SHARED_CONTRACT, self.instructions, *self.skills) if part)
@@ -191,6 +216,10 @@ async def run_loop(
             if type(budget_charge) is not int or budget_charge < 0:
                 raise ValueError('Invalid price-weighted token usage')
             budget_used += budget_charge
+            if turn.prompt_tokens > 0:
+                cached = min(turn.cached_tokens or 0, turn.prompt_tokens)
+                INPUT_TOKENS.labels(feature=mount.feature, kind='cached').inc(cached)
+                INPUT_TOKENS.labels(feature=mount.feature, kind='uncached').inc(turn.prompt_tokens - cached)
             if observe_turn is not None:
                 await observe_turn(turn)
             if budget.tokens is not None and budget_used > budget.tokens:
@@ -233,3 +262,170 @@ def serve_notes(uid: str | None, old: Callable[[], Any], new: Callable[[], Any])
         except Exception as error:
             logger.warning('Shaped notes shadow failed error_type=%s', type(error).__name__)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Tool design rules shared by every agent on the loop
+# ---------------------------------------------------------------------------
+
+# A whole-string ISO-8601 instant with an explicit offset, as stored data often carries.
+_OFFSET_INSTANT = re.compile(r'^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:[+-]\d{2}:\d{2})$')
+
+
+def model_view(value: Any) -> Any:
+    """Rule 2: every instant the model reads is UTC ending in ``Z``.
+
+    Datetimes anywhere in a tool result or seed render as ``...Z``; a string that is wholly an
+    ISO instant with an offset is converted too. Other values are unchanged.
+    """
+    if isinstance(value, datetime):
+        return utc_z(value)
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, str):
+        return utc_z(value) if _OFFSET_INSTANT.match(value) else value
+    if isinstance(value, BaseModel):
+        return model_view(value.model_dump(mode='python'))
+    if isinstance(value, Mapping):
+        return {key: model_view(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [model_view(item) for item in value]
+    return value
+
+
+def model_json(value: Any, **kwargs: Any) -> str:
+    """``json.dumps`` for model-facing payloads, with :func:`model_view` applied first."""
+    kwargs.setdefault('ensure_ascii', False)
+    kwargs.setdefault('default', str)
+    return json.dumps(model_view(value), **kwargs)
+
+
+# Rule 3. A schema declares near-miss keys as plain data on the model class:
+#     output_aliases: ClassVar[dict[str, tuple[str, ...]]] = {'body_markdown': ('body', 'content')}
+# normalize_output moves the first non-empty alias into a missing or empty canonical field before
+# validation, recursing through nested models and lists of models.
+OUTPUT_ALIASES = 'output_aliases'
+
+
+def _model_types(annotation: Any) -> tuple[Optional[type[BaseModel]], bool]:
+    """``(model, is_list)`` when a field holds a model or a list of models."""
+    origin = typing.get_origin(annotation)
+    if origin in (Union, types.UnionType):
+        for arg in typing.get_args(annotation):
+            found = _model_types(arg)
+            if found[0] is not None:
+                return found
+        return None, False
+    if origin in (list, tuple, Sequence, set, frozenset):
+        args = typing.get_args(annotation)
+        inner = _model_types(args[0])[0] if args else None
+        return inner, inner is not None
+    if isinstance(annotation, type) and issubclass(annotation, BaseModel):
+        return annotation, False
+    return None, False
+
+
+def _is_str_field(annotation: Any) -> bool:
+    if annotation is str:
+        return True
+    if typing.get_origin(annotation) in (Union, types.UnionType):
+        return str in typing.get_args(annotation)
+    return False
+
+
+def _empty(value: Any) -> bool:
+    return value is None or value == '' or value == []
+
+
+def normalize_output(schema: Any, data: Any) -> Any:
+    """Apply ``schema``'s declared ``output_aliases`` (recursively) to raw model output.
+
+    A list of strings moved into a string field becomes a markdown bullet list. Returns a new
+    object; non-mapping input and schemas without aliases pass through unchanged.
+    """
+    if not (isinstance(schema, type) and issubclass(schema, BaseModel)) or not isinstance(data, Mapping):
+        return data
+    out = dict(data)
+    fields = schema.model_fields
+    for name, keys in (getattr(schema, OUTPUT_ALIASES, None) or {}).items():
+        if not _empty(out.get(name)):
+            continue
+        for key in keys:
+            if key == name or _empty(out.get(key)):
+                continue
+            value = out.pop(key)
+            info = fields.get(name)
+            if info is not None and _is_str_field(info.annotation) and isinstance(value, list):
+                value = '\n'.join(f'- {item}' for item in value if isinstance(item, str))
+            out[name] = value
+            break
+    for name, info in fields.items():
+        if name not in out:
+            continue
+        model, is_list = _model_types(info.annotation)
+        if model is None:
+            continue
+        if is_list and isinstance(out[name], list):
+            out[name] = [normalize_output(model, item) for item in out[name]]
+        elif not is_list:
+            out[name] = normalize_output(model, out[name])
+    return out
+
+
+def validate_output(schema: type[BaseModel], raw: Any, *, strict: Optional[bool] = None) -> Any:
+    """Normalize, then validate: the only way a harness output schema should be checked.
+
+    ``raw`` is a JSON string or an already-decoded object. JSON input keeps JSON-mode validation
+    (so ``strict`` behaves as ``model_validate_json`` does).
+    """
+    if isinstance(raw, (str, bytes)):
+        try:
+            decoded = json.loads(raw)
+        except ValueError:
+            return schema.model_validate_json(raw, strict=strict)
+        return schema.model_validate_json(json.dumps(normalize_output(schema, decoded)), strict=strict)
+    return schema.model_validate(normalize_output(schema, raw), strict=strict)
+
+
+@dataclass(frozen=True)
+class Problem:
+    """One reason to send an output back, tagged with its failure class."""
+
+    kind: str
+    message: str
+
+
+@dataclass
+class SendBackBudget:
+    """Rule 4: separate send-back budgets per failure class.
+
+    ``budgets`` maps a class (``format``, ``content``, ``evidence``...) to how many send-backs it
+    may cause; a class with no budget left never causes one. ``blocking`` classes go back alone:
+    checks of the other classes may be judging a malformed output (an empty section reads as
+    "0 words"), so they wait for the resubmission. Each send-back charges every class it carries
+    once, so a format complaint can never spend the evidence retry.
+    """
+
+    budgets: Mapping[str, int]
+    blocking: tuple[str, ...] = ('format',)
+    used: dict[str, int] = field(default_factory=dict[str, int])
+
+    def __post_init__(self):
+        if any(n < 0 for n in self.budgets.values()):
+            raise ValueError('Invalid send-back budget')
+
+    def remaining(self, kind: str) -> int:
+        return self.budgets[kind] - self.used.get(kind, 0)
+
+    def review(self, problems: Sequence[Problem], *, may_send_back: bool = True) -> list[Problem]:
+        """The problems to send back now (and charge), or ``[]`` to accept the output as it is."""
+        for problem in problems:
+            if problem.kind not in self.budgets:
+                raise ValueError(f'Undeclared failure class {problem.kind!r}')
+        if not may_send_back:
+            return []
+        open_problems = [problem for problem in problems if self.remaining(problem.kind) > 0]
+        chosen = [problem for problem in open_problems if problem.kind in self.blocking] or open_problems
+        for kind in dict.fromkeys(problem.kind for problem in chosen):
+            self.used[kind] = self.used.get(kind, 0) + 1
+        return chosen

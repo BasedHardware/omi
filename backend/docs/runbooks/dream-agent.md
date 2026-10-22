@@ -145,6 +145,19 @@ because its HTTP caller timed out.
 Pass 1620s < drain 1680s < HTTP 1710s < Scheduler 1740s. Reasoning turns have a
 480s ceiling; verifier calls have 120s. Budget exhaustion ends planning gracefully.
 
+Burst reservation 429s pause the pending call inside its existing session. History,
+tool results and staged proposals remain in memory; the retry does not acquire a
+new owner pass. Each call has at most five capacity retries. Capacity rechecks use
+exponential equal jitter (5–10s initially, capped at 15–30s), at most six checks per
+wait, and require 20s of pass headroom. The planner/verifier's own timeout and the
+outer pass deadline still cancel waits. Every attempt rechecks the kill switch,
+owner lease and capacity policy, then reserves minute/daily headroom again.
+Known-zero rejections release their minute hold; billed or unknown usage remains
+charged before retry. Exhausted waits return the existing capacity-wait outcome.
+The 3.8 local and shared saturation cooldown is 10s; new-admission worker parking
+uses the same interval instead of 60s. Legacy 2.5 retains 120s.
+No retry changes the reserved-only route or enables on-demand/shared spillover.
+
 ## Gateway and cache
 
 Reasoning uses `omi:auto:dream-reasoning`; verification uses
@@ -152,6 +165,14 @@ Reasoning uses `omi:auto:dream-reasoning`; verification uses
 and tool results pass through the gateway's Vertex translation and accounting.
 Gemini routes are reserved capacity only, with no shared/pay-as-you-go Gemini
 fallback. The configured non-Gemini fallback policy is preserved.
+
+The synthetic 3.8 reservation probe uses the same reserved verifier route with
+service auth and no owner identity, rather than the backend's Vertex ADC. The
+gateway publishes strict completed PT evidence to shared Redis; HTTP success
+alone cannot create evidence. Auth and transport failures are inconclusive and
+do not create a failed-probe admission veto. Fresh shared evidence, readable
+headroom and shared concurrency slots remain required. Legacy 2.5 discovery
+keeps its direct dedicated probe.
 
 The stable contract, instructions, tool schemas and seed prefix are repeated
 unchanged across turns for Vertex implicit caching on provisioned throughput.

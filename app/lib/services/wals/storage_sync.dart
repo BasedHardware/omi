@@ -700,19 +700,21 @@ class StorageSyncImpl implements StorageSync {
     int accurateDuration = totalFrames ~/ wal.codec.getFramesPerSecond();
     int timerStart =
         wal.timerStart > 0 ? wal.timerStart : DateTime.now().millisecondsSinceEpoch ~/ 1000 - accurateDuration;
+    // A file without a device timestamp gets an estimated start: one run per file.
+    final clockRun = wal.timerStart > 0 ? null : (wal.clockRun ?? Wal.newClockRun());
     int bytesLeft = 0;
 
     try {
       while (bytesData.length - bytesLeft >= chunkSize) {
         var chunk = bytesData.sublist(bytesLeft, bytesLeft + chunkSize);
         bytesLeft += chunkSize;
-        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration);
+        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration, clockRun: clockRun);
         timerStart += chunk.length ~/ wal.codec.getFramesPerSecond();
       }
 
       if (bytesLeft < bytesData.length) {
         var chunk = bytesData.sublist(bytesLeft);
-        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration);
+        await _writeChunkDurably(wal, chunk, timerStart, admittedGeneration, clockRun: clockRun);
       }
     } catch (e) {
       Logger.debug('StorageSync: durable write failed for file ${wal.fileNum}: $e');
@@ -730,9 +732,9 @@ class StorageSyncImpl implements StorageSync {
   /// Uses same ByteData conversion as SDCardWalSync._flushToDisk for consistency.
   int _storageFileSeq = 0;
 
-  Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart) async {
+  Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart, {String? clockRun}) async {
     final directory = await getApplicationDocumentsDirectory();
-    var fileName = wal.getFileNameByTimeStarts(timerStart);
+    var fileName = wal.getFileNameByTimeStarts(timerStart, clockRun: clockRun);
     if (await File('${directory.path}/$fileName').exists()) {
       final dot = fileName.lastIndexOf('.');
       final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
@@ -763,7 +765,13 @@ class StorageSyncImpl implements StorageSync {
   }
 
   /// Register a downloaded chunk with LocalWalSync so it gets uploaded to backend.
-  Future<void> _writeChunkDurably(Wal wal, List<List<int>> chunk, int timerStart, int admittedGeneration) async {
+  Future<void> _writeChunkDurably(
+    Wal wal,
+    List<List<int>> chunk,
+    int timerStart,
+    int admittedGeneration, {
+    String? clockRun,
+  }) async {
     final localSync = _localSync;
     if (localSync == null) {
       throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
@@ -776,8 +784,8 @@ class StorageSyncImpl implements StorageSync {
       throw StateError('storage admission refused (cap/disk reserve)');
     }
     try {
-      var file = await _flushToDisk(wal, chunk, timerStart);
-      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration);
+      var file = await _flushToDisk(wal, chunk, timerStart, clockRun: clockRun);
+      await _registerWithLocalSync(wal, file, timerStart, chunk.length, admittedGeneration, clockRun: clockRun);
     } catch (e) {
       localSync.releaseStorageAdmission(bytes);
       rethrow;
@@ -789,8 +797,9 @@ class StorageSyncImpl implements StorageSync {
     File file,
     int timerStart,
     int frameCount,
-    int admittedGeneration,
-  ) async {
+    int admittedGeneration, {
+    String? clockRun,
+  }) async {
     final localSync = _localSync;
     if (localSync == null) {
       throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
@@ -813,6 +822,7 @@ class StorageSyncImpl implements StorageSync {
       totalFrames: frameCount,
       syncedFrameOffset: 0,
       originalStorage: WalStorage.sdcard,
+      clockRun: clockRun,
     );
 
     await localSync.addExternalWal(localWal, admittedGeneration: admittedGeneration);

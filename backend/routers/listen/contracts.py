@@ -101,6 +101,11 @@ class ListenRequest:
 class ListenSessionState:
     active: bool = True
     close_code: int = 1001
+    # First close the server observed (utils.observability.listen_close.note_ws_close):
+    # who initiated it, its code and when (monotonic). Read once at teardown.
+    ws_close_initiator: Optional[str] = None
+    ws_close_code: Optional[int] = None
+    ws_close_observed_at: Optional[float] = None
     stt_terminal_failure: bool = False
     stt_cap_admission: Any = None
     shutdown_event: asyncio.Event = field(default_factory=asyncio.Event)

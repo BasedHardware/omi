@@ -1,0 +1,105 @@
+# Staging ops values (B4), contract (i). Mirrors prod.yaml; the differences are
+# names (the `-staging` services and `staging-` queues in based-hardware-dev)
+# and the bounded backfill controller, which staging does not run.
+# test_config_train.py asserts every prod key has a staging counterpart.
+schema: omi.ops/v1
+environment: staging
+project: based-hardware-dev
+region: us-central1
+
+cloud_run:
+  backend-staging:
+    env:
+      # live-only on prod, 2026-10-20 inventory (see prod.yaml)
+      AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
+      FAIR_USE_ENABLED: 'true'
+      HTTP_AUDIO_MERGE_RUN_TIMEOUT: '600'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_GET_TIMEOUT: '30'
+      HTTP_POST_TIMEOUT: '600'
+      LANGCHAIN_TRACING_V2: 'false'
+      LANGSMITH_TRACING: 'false'
+      MEMORY_MODE: 'false'
+      OMI_LANGSMITH_AGENTIC_PROMPT_NAME: agentic-chat-main
+      OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
+      TYPESENSE_HOST_PORT: '443'
+  backend-sync-staging:
+    env:
+      SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
+      SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
+      # live-only on prod, 2026-10-20 inventory (see prod.yaml)
+      AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
+      FAIR_USE_ENABLED: 'true'
+      HTTP_AUDIO_MERGE_RUN_TIMEOUT: '600'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_POST_TIMEOUT: '600'
+      HTTP_SYNC_JOBS_RUN_TIMEOUT: '1500'
+      LANGCHAIN_TRACING_V2: 'false'
+      MEMORY_MODE: 'off'
+    # Replica counts are on contract (i)'s staging allowlist: lane 2's deploy.sh sizes staging.
+    max_instances: 20
+  backend-sync-backfill-staging:
+    env:
+      SYNC_TASKS_QUEUE: staging-sync-backfill-fresh
+      SYNC_BACKFILL_TASKS_QUEUE: staging-sync-backfill-fresh
+      # live-only on prod, 2026-10-20 inventory (see prod.yaml)
+      AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
+      DREAM_AGENT_HUNT_INTERVAL_HOURS: '2'
+      DREAM_AGENT_MANUAL_RUNS_PER_DAY: '3'
+      DREAM_AGENT_PASSES_PER_DAY: '48'  # main #23016 (6 -> 48 on the 3.8 reservation)
+      FAIR_USE_ENABLED: 'true'
+      HTTP_AUDIO_MERGE_RUN_TIMEOUT: '600'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_POST_TIMEOUT: '600'
+      HTTP_SYNC_JOBS_RUN_TIMEOUT: '1500'
+      LANGCHAIN_TRACING_V2: 'false'
+      LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: 'true'
+      LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: 'true'
+      MEETING_NOTES_EVIDENCE_WAIT_SECONDS: '25'
+      MEMORY_MODE: 'off'
+      TYPESENSE_HOST_PORT: '443'
+    max_instances: {owner: none, floor: 8, ceiling: 40}
+  backend-integration-staging:
+    env:
+      SYNC_TASKS_QUEUE: staging-sync-jobs-fresh
+      SUMMARY_DEBT_REPAIR_ENABLED: 'true'
+      # live-only on prod, 2026-10-20 inventory (see prod.yaml)
+      FAIR_USE_ENABLED: 'true'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_GET_TIMEOUT: '30'
+      LANGCHAIN_TRACING_V2: 'false'
+      MEMORY_MODE: 'off'
+      TYPESENSE_HOST_PORT: '443'
+
+cloud_tasks:
+  staging-batch-quarantine-recovery:
+    max_concurrent_dispatches: 16
+    max_dispatches_per_second: 8
+    max_attempts: 5
+    min_backoff: 5s
+    max_backoff: 60s
+  staging-sync-jobs-fresh:
+    # Five attempts: sync's 409 leaves the retry to the queue (routers/sync.py), and
+    # utils/cloud_tasks.py get_sync_tasks_max_attempts mirrors it. The config-train is
+    # the only writer of this cap now that trains skip the ops-owned queues.
+    max_concurrent_dispatches: 160
+    max_dispatches_per_second: 25
+    max_attempts: 5
+    min_backoff: 60s
+    max_backoff: 300s
+    log_sampling_ratio: 1.0
+  staging-sync-backfill-fresh:
+    max_concurrent_dispatches: 90
+    max_dispatches_per_second: 15
+    max_attempts: 5
+    min_backoff: 5s
+    max_backoff: 60s
+    log_sampling_ratio: 1.0
+  staging-enrichment:
+    # Off until prod's enrichment queue turns on at M3 (mirror test enforces it).
+    enabled: false
+    max_concurrent_dispatches: 50
+    max_dispatches_per_second: 25
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s

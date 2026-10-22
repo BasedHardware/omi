@@ -39,6 +39,8 @@
     "omi-stt-enabled-state-unknown",
     "omi-stt-capacity-full-exhausted",
     "omi-stt-provider-terminal-failure-ratio",
+    "omi-stt-chain-exhausted-ratio",
+    "omi-stt-no-full-stage-target",
     "omi-redis-cache-conn-warn",
     "omi-redis-cache-conn-page"
   ]
