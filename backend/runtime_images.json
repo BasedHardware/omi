@@ -593,7 +593,8 @@
       "image_import_smoke": false,
       "dependency_probe_smoke": true,
       "dependency_probe_exclusions": {
-        "utils.logging_config": "The parakeet checkout shim omi_logging_config.py re-exports this module. The image overwrites that shim with logging_config.py because the NeMo image already binds the name utils, and the -I probe cannot see /app."
+        "utils.logging_config": "The parakeet checkout shim omi_logging_config.py re-exports this module. The image overwrites that shim with logging_config.py because the NeMo image already binds the name utils, and the -I probe cannot see /app.",
+        "utils.speakers.policy": "The parakeet checkout shim omi_speaker_policy.py re-exports this module. The image overwrites that shim with utils/speakers/policy.py (Dockerfile COPY) because the NeMo image already binds the name utils, and the -I probe cannot see /app."
       },
       "pull_request_smoke": false
     },
