@@ -14,7 +14,7 @@ import 'package:omi/pages/conversation_detail/widgets/ask_agent_sheet.dart';
 import 'package:omi/pages/settings/connect_agent/connect_agent_page.dart';
 import 'package:omi/ui/ui.dart';
 
-import '../../helpers/sfpro_font_fixtures.dart';
+import '../../../helpers/sfpro_font_fixtures.dart';
 import 'connect_agent_fixture.dart';
 
 /// Renders every Connect an Agent state on an iPhone-sized screen with the app's real fonts and
