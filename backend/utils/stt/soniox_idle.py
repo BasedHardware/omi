@@ -15,7 +15,9 @@ from typing import Any, Awaitable, Callable
 
 from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
 from config.soniox_idle import (
+    IdleCohortSettings,
     VAD_HANGOVER_SECONDS,
+    cohort_armed,
     idle_no_frames_seconds,
     idle_settings_for,
 )
@@ -35,16 +37,48 @@ _sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
 
 
 class SonioxIdleBudget:
-    """Session-owned churn limits, retained through leg rotation/recovery."""
+    """Session-owned churn limits, retained through leg rotation/recovery.
 
-    def __init__(self, uid: str | None = None):
-        settings = idle_settings_for(uid)
-        self.arm = settings.arm
-        self.close_seconds = settings.close_seconds
-        self.rearm_seconds = settings.rearm_seconds
-        self.max_closes_per_hour = settings.max_closes_per_hour
+    The arm and effective values resolve once, on first use, so the live
+    receiver can hand identity over lazily (``uid_provider``): the provider is
+    consulted at most once and only while the cohort knobs can assign an arm
+    (``cohort_armed``), so identity-bypass and unauthenticated paths never
+    touch ``request.uid`` and a provider-less budget is plain control.
+    """
+
+    def __init__(self, uid: str | None = None, uid_provider: Callable[[], str | None] | None = None):
+        self._uid = uid
+        self._uid_provider = uid_provider
+        self._settings: IdleCohortSettings | None = None
         self.rearm_at = 0.0
         self.close_times: deque[float] = deque()
+
+    def _resolve(self) -> IdleCohortSettings:
+        if self._settings is None:
+            uid = self._uid
+            if uid is None and self._uid_provider is not None and cohort_armed():
+                try:
+                    uid = self._uid_provider()
+                except AttributeError:
+                    uid = None  # host without identity: control, no arm requirement
+            self._settings = idle_settings_for(uid)
+        return self._settings
+
+    @property
+    def arm(self) -> str:
+        return self._resolve().arm
+
+    @property
+    def close_seconds(self) -> float:
+        return self._resolve().close_seconds
+
+    @property
+    def rearm_seconds(self) -> float:
+        return self._resolve().rearm_seconds
+
+    @property
+    def max_closes_per_hour(self) -> int:
+        return self._resolve().max_closes_per_hour
 
     def reserve_close(self, now: float) -> bool:
         """Spend one rolling-hour slot shared by every planned-close trigger.

@@ -130,6 +130,35 @@ def _cohort_override(name: str, floor: float | None) -> float | None:
     return max(floor, value) if floor is not None else value
 
 
+def _cohort_cap_override() -> int | None:
+    """``SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR``: unset/invalid/<=0 -> None."""
+    raw = os.getenv('SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR', '').strip()
+    if not raw:
+        return None
+    try:
+        cap = int(raw)
+    except ValueError:
+        _warn_invalid('SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR')
+        return None
+    return cap if cap > 0 else None
+
+
+def cohort_armed() -> bool:
+    """True when the cohort knobs could assign a treatment arm to a known uid.
+
+    ``SONIOX_IDLE_COHORT_PERCENT`` at its default 0 (the cohort kill switch)
+    leaves this false: callers holding lazy identity must not consult it, and a
+    uid-less resolution is plain control.
+    """
+    if cohort_percent() <= 0:
+        return False
+    return (
+        _cohort_override('SONIOX_IDLE_COHORT_CLOSE_SECONDS', MIN_IDLE_CLOSE_SECONDS) is not None
+        or _cohort_override('SONIOX_IDLE_COHORT_REARM_SECONDS', MIN_REARM_SECONDS) is not None
+        or _cohort_cap_override() is not None
+    )
+
+
 @dataclass(frozen=True)
 class IdleCohortSettings:
     """Per-session resolution of the idle policy against the treatment cohort."""
@@ -152,16 +181,7 @@ def idle_settings_for(uid: str | None) -> IdleCohortSettings:
     global_close = idle_close_seconds()
     close_override = _cohort_override('SONIOX_IDLE_COHORT_CLOSE_SECONDS', MIN_IDLE_CLOSE_SECONDS)
     rearm_override = _cohort_override('SONIOX_IDLE_COHORT_REARM_SECONDS', MIN_REARM_SECONDS)
-    raw_cap = os.getenv('SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR', '').strip()
-    cap_override: int | None = None
-    if raw_cap:
-        try:
-            cap = int(raw_cap)
-        except ValueError:
-            _warn_invalid('SONIOX_IDLE_COHORT_MAX_CLOSES_PER_HOUR')
-        else:
-            if cap > 0:
-                cap_override = cap
+    cap_override = _cohort_cap_override()
     percent = cohort_percent()
     in_cohort = False
     if percent > 0 and uid and (close_override is not None or cap_override is not None or rearm_override is not None):

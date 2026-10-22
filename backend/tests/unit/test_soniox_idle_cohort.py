@@ -125,6 +125,49 @@ def test_budget_resolves_cohort_once(monkeypatch):
     assert not budget.reserve_close(2.0)
 
 
+def test_budget_never_consults_identity_while_cohort_off(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '30')  # overrides alone: not armed
+    calls = []
+
+    def provider():
+        calls.append('user-1')
+        return 'user-1'
+
+    budget = SonioxIdleBudget(uid_provider=provider)
+    assert budget.arm == 'control'
+    assert budget.close_seconds == idle_config.DEFAULT_IDLE_CLOSE_SECONDS
+    assert budget.reserve_close(0.0)
+    assert calls == []
+
+
+def test_budget_consults_identity_lazily_once_armed(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '30')
+    calls = []
+
+    def provider():
+        calls.append('user-1')
+        return 'user-1'
+
+    budget = SonioxIdleBudget(uid_provider=provider)
+    assert budget.arm == 'treatment'
+    assert budget.close_seconds == 30.0
+    assert budget.arm == 'treatment'  # resolved once, provider not re-consulted
+    assert calls == ['user-1']
+
+
+def test_budget_without_identity_resolves_control(monkeypatch):
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_PERCENT', '100')
+    monkeypatch.setenv('SONIOX_IDLE_COHORT_CLOSE_SECONDS', '30')
+
+    def provider():
+        raise AttributeError('uid')
+
+    budget = SonioxIdleBudget(uid_provider=provider)
+    assert budget.arm == 'control'
+    assert budget.close_seconds == idle_config.DEFAULT_IDLE_CLOSE_SECONDS
+
+
 def test_cohort_metrics_pin_both_arms():
     from utils.stt.live_metrics import SONIOX_IDLE_COHORT_ARMS, soniox_idle_metrics
 
