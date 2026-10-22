@@ -15,11 +15,16 @@ LOCAL_SEND_FAILURES = Counter(
 )
 
 
+def bounded_local_send_provider(provider) -> str:
+    """Stable provider label: PROVIDERS member (or enum value) else 'other'."""
+    provider = getattr(provider, 'value', provider)
+    return provider if provider in PROVIDERS else 'other'
+
+
 def record_local_send_failure(provider, phase, raw, error=None):
     """Never retain exception text, PCM, user/session IDs or endpoints."""
     try:
-        provider = getattr(provider, 'value', provider)
-        provider = provider if provider in PROVIDERS else 'other'
+        provider = bounded_local_send_provider(provider)
         phase = phase if phase in PHASES else 'other'
         name = type(error).__name__ if error is not None else 'none'
         name = name if name in ERROR_CLASSES or name == 'none' else 'other'
@@ -29,7 +34,9 @@ def record_local_send_failure(provider, phase, raw, error=None):
             dead = 'unknown'
         closed = 'true' if getattr(raw, '_closed', False) is True else 'false'
         proxy = 'cap' if getattr(raw, 'cap_dispatch_socket', False) is True else 'direct'
-        LOCAL_SEND_FAILURES.labels(provider=provider, phase=phase, exception_class=name).inc()
+        LOCAL_SEND_FAILURES.labels(
+            provider=bounded_local_send_provider(provider), phase=phase, exception_class=name
+        ).inc()
         logger.warning(
             'event=live_stt_local_send_failure provider=%s phase=%s exception_class=%s '
             'raw_dead=%s raw_closed=%s proxy=%s',
