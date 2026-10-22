@@ -262,6 +262,33 @@ class UtilityTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_utc_datetime("not-a-date")
 
+    def test_end_of_day_applies_to_every_date_only_form(self):
+        # Compact and week-date day forms parse as dates but are not 10
+        # characters long; they must still cover the whole day.
+        for value in ("2026-09-30", "20260930", "2026-W40-3", " 2026-09-30 "):
+            with self.subTest(value=value):
+                self.assertEqual(
+                    normalize_utc_datetime(value, end_of_day=True),
+                    "2026-09-30T23:59:59Z",
+                )
+
+    def test_end_of_day_keeps_an_explicit_time(self):
+        self.assertEqual(
+            normalize_utc_datetime("2026-09-30T10:15:00Z", end_of_day=True),
+            "2026-09-30T10:15:00Z",
+        )
+        # A normalized timestamp that happens to be at midnight is not a date.
+        self.assertEqual(
+            normalize_utc_datetime("2026-09-30T00:00:00Z", end_of_day=True),
+            "2026-09-30T00:00:00Z",
+        )
+
+    def test_non_string_dates_raise_value_error(self):
+        for value in (20260930, ["2026-09-30"], {"date": "2026-09-30"}):
+            with self.subTest(value=value):
+                with self.assertRaises(ValueError):
+                    normalize_utc_datetime(value, end_of_day=True)
+
 
 @unittest.skipUnless(_HAS_REAL_PYDANTIC, "requires the real pydantic package")
 class ModelTests(unittest.TestCase):
@@ -280,6 +307,24 @@ class ModelTests(unittest.TestCase):
             ChatToolResponse()
         with self.assertRaises(ValueError):
             ChatToolResponse(result="ok", error="bad")
+
+    def test_non_string_dates_are_validation_errors(self):
+        # pydantic only converts ValueError/AssertionError; an AttributeError
+        # from a before-validator escapes model construction entirely.
+        for field in ("start_date", "end_date"):
+            for value in (20260930, ["2026-09-30"], {"date": "2026-09-30"}):
+                with self.subTest(field=field, value=value):
+                    with self.assertRaises(ValueError):
+                        SearchLaunchesRequest(query="Starlink", **{field: value})
+
+    def test_compact_end_date_covers_the_whole_day(self):
+        request = SearchLaunchesRequest(start_date="20260930", end_date="20260930")
+        self.assertEqual(request.start_date, "2026-09-30T00:00:00Z")
+        self.assertEqual(request.end_date, "2026-09-30T23:59:59Z")
+        self.assertEqual(
+            launchlibrary._search_params(request)["net__lte"],
+            "2026-09-30T23:59:59Z",
+        )
 
 
 class ServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -496,6 +541,21 @@ class EndpointTests(unittest.TestCase):
         payload = response.json()
         self.assertIsNone(payload["result"])
         self.assertIn("invalid launch request", payload["error"])
+
+    def test_non_string_end_date_returns_tool_error_not_500(self):
+        test_client = TestClient(main.app, raise_server_exceptions=False)
+        with test_client:
+            main.app.state.http_client = self.client
+            for value in (20261031, ["2026-10-31"], {"date": "2026-10-31"}):
+                with self.subTest(value=value):
+                    response = test_client.post(
+                        "/tools/search_launches",
+                        json={"query": "Starlink", "end_date": value},
+                    )
+                    self.assertEqual(response.status_code, 200)
+                    payload = response.json()
+                    self.assertIsNone(payload["result"])
+                    self.assertIn("date values must be strings", payload["error"])
 
     def test_endpoint_ignores_uid(self):
         response = self.test_client.post(

@@ -1,5 +1,5 @@
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Optional
 
 from pydantic import (
@@ -17,8 +17,26 @@ UUID_PATTERN = re.compile(
 )
 
 
+def _is_date_only(value: str) -> bool:
+    """Return True when an ISO 8601 value names a calendar day without a time.
+
+    ``datetime.fromisoformat`` also accepts the compact (``20260930``) and
+    week-date (``2026-W40-3``) day forms, so string length cannot tell a
+    date-only value from a timestamp.
+    """
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
 def normalize_utc_datetime(value: str, *, end_of_day: bool = False) -> str:
-    """Validate an ISO date/time and return an API-safe UTC timestamp."""
+    """Validate an ISO date/time and return an API-safe UTC timestamp.
+
+    With ``end_of_day`` a date-only value covers the whole day (23:59:59 UTC);
+    a value that already carries a time is left at that time.
+    """
     if not isinstance(value, str):
         raise ValueError("date values must be strings")
 
@@ -36,7 +54,7 @@ def normalize_utc_datetime(value: str, *, end_of_day: bool = False) -> str:
     else:
         parsed = parsed.astimezone(timezone.utc)
 
-    if end_of_day and len(cleaned) == 10:
+    if end_of_day and _is_date_only(cleaned):
         parsed = parsed.replace(hour=23, minute=59, second=59)
 
     return parsed.replace(microsecond=0).isoformat().replace("+00:00", "Z")
@@ -79,9 +97,12 @@ class SearchLaunchesRequest(BaseModel):
     def validate_dates(cls, value, info: ValidationInfo):
         if value is None:
             return None
+        # normalize_utc_datetime rejects non-strings with ValueError, which
+        # pydantic reports as a validation error. Calling value.strip() here
+        # first raised AttributeError and escaped as HTTP 500.
         return normalize_utc_datetime(
             value,
-            end_of_day=info.field_name == "end_date" and len(value.strip()) == 10,
+            end_of_day=info.field_name == "end_date",
         )
 
     @model_validator(mode="after")

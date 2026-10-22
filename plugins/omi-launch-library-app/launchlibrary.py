@@ -125,10 +125,7 @@ def _search_params(request: SearchLaunchesRequest) -> dict[str, Any]:
     if request.start_date:
         params["net__gte"] = normalize_utc_datetime(request.start_date)
     if request.end_date:
-        params["net__lte"] = normalize_utc_datetime(
-            request.end_date,
-            end_of_day=len(request.end_date.strip()) == 10,
-        )
+        params["net__lte"] = normalize_utc_datetime(request.end_date, end_of_day=True)
     return params
 
 
