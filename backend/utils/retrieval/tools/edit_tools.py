@@ -28,7 +28,7 @@ def _extract_configurable(config: Any) -> Dict[str, Any]:
 def owner(config):
     config = config or {}
     configurable = _extract_configurable(config)
-    uid = configurable.get('user_id') or (config.get('user_id') if isinstance(config, dict) else None)
+    uid = configurable.get('user_id')
     if not uid:
         raise PermissionError('Authenticated owner required')
     return uid
