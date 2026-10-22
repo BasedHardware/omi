@@ -803,8 +803,12 @@ async def create_calendar_event_tool(
     Returns:
         Confirmation message with event details if successful, or error message if failed.
     """
+    clean_title = str(title or "").strip()
+    if not clean_title:
+        return "Error: Event title cannot be empty."
+
     logger.info(
-        f"🔧 create_calendar_event_tool called - title: {title}, "
+        f"🔧 create_calendar_event_tool called - title: {clean_title}, "
         f"start_time: {start_time}, end_time: {end_time}, location: {location}"
     )
 
@@ -873,7 +877,7 @@ async def create_calendar_event_tool(
         try:
             event = await create_google_calendar_event(
                 access_token=access_token,
-                summary=title,
+                summary=clean_title,
                 start_time=start_dt,
                 end_time=end_dt,
                 description=description,
@@ -907,7 +911,7 @@ async def create_calendar_event_tool(
                     try:
                         event = await create_google_calendar_event(
                             access_token=new_token,
-                            summary=title,
+                            summary=clean_title,
                             start_time=start_dt,
                             end_time=end_dt,
                             description=description,

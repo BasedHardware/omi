@@ -19,16 +19,17 @@ def resolve_config_uid(config: Optional[Dict[str, Any]]) -> Tuple[Optional[str],
             config = agent_config_context.get()
         except LookupError:
             config = None
-    if config is None:
+    if config is None or not isinstance(config, dict):
         return None, "Error: Configuration not available"
     try:
-        configurable: Any = config.get('configurable', {})
-        uid = configurable.get('user_id')
+        configurable_raw = config.get('configurable')
+        configurable = configurable_raw if isinstance(configurable_raw, dict) else {}
+        uid = configurable.get('user_id') or config.get('user_id')
     except Exception:
         return None, "Error: Configuration not available"
     if not uid:
         return None, "Error: User ID not found in configuration"
-    return uid, None
+    return str(uid), None
 
 
 def get_integration_checked(
@@ -57,18 +58,30 @@ def get_access_token_checked(
     return token, None
 
 
-def cap_limit(value: int, cap: int) -> int:
-    return value if value <= cap else cap
+def cap_limit(value: Any, cap: int, min_val: int = 1) -> int:
+    try:
+        val = int(value)
+    except (ValueError, TypeError):
+        return min_val
+    if val < min_val:
+        return min_val
+    return val if val <= cap else cap
 
 
-def ensure_capped(value: int, cap: int, warn_msg: str) -> int:
-    if value > cap:
+def ensure_capped(value: Any, cap: int, warn_msg: str, min_val: int = 1) -> int:
+    try:
+        val = int(value)
+    except (ValueError, TypeError):
+        return min_val
+    if val < min_val:
+        return min_val
+    if val > cap:
         try:
-            logger.info(warn_msg.format(value, cap))
+            logger.info(warn_msg.format(val, cap))
         except Exception:
             logger.info(warn_msg)
         return cap
-    return value
+    return val
 
 
 def parse_iso_with_tz(
