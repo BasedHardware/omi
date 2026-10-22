@@ -41,6 +41,7 @@ from utils.app_integrations import (
     trigger_realtime_audio_bytes,
 )
 from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
+from utils.episodes.live import on_session_end as flush_episode_moment
 from utils.async_tasks import (
     supervise_tasks,
     drain_tasks,
@@ -1109,6 +1110,8 @@ async def _websocket_util_trigger(
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
+        # Live episode moments buffer in this process; a pod move or reconnect must not strand them.
+        await flush_episode_moment(uid)
 
         journey_attempt.finish(pusher_session_outcome(websocket_close_code, application_failed=application_failed))
 

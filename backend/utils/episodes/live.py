@@ -6,17 +6,27 @@
 - a pause: the next batch arrives at least ``MOMENT_PAUSE_SECONDS`` after the
   previous one;
 - a rollover: the buffer reaches ``MOMENT_MAX_WORDS``, or the stream moves to
-  another conversation.
+  another conversation;
+- an interval: the buffer has spanned ``MOMENT_MAX_SECONDS`` of steady speech;
+- a session end: the pusher session closes (``on_session_end``), so a pod move or
+  a reconnect does not strand what was buffered.
 
 A moment shorter than ``MOMENT_MIN_WORDS``, or one inside
 ``MOMENT_MIN_INTERVAL_SECONDS`` of the last flush, keeps accumulating instead
 of costing a call. The buffer is in-process and bounded (TTL plus a size cap):
-losing it on a restart loses nothing durable, because finalization applies
+losing it on a crash loses nothing durable, because finalization applies
 every segment the live stream did not (``service.on_conversation_finalized``).
 
-Only users whose app can show episodes cost anything: an ended moment first
-checks the client-capability marker (``client_gate.client_seen``, one Redis read
-on ``db_executor``) and is dropped, counted, when no capable client was seen.
+Structure does not wait for a moment. The first speech of each conversation
+attaches it to the live episode (``service.attach_conversation``, no model
+call), so the app shows the episode, its start time and its member
+conversations from the first words; the moments only fill in the notes.
+
+Only users whose app can show episodes cost anything: attaching and ended
+moments first check the client-capability marker
+(``client_gate.client_seen_cached``, at most one Redis read per user per
+process every couple of minutes, on ``db_executor``) and are dropped, counted,
+when no capable client was seen.
 """
 
 from __future__ import annotations
@@ -29,6 +39,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
 from config.episodes import (
+    MOMENT_MAX_SECONDS,
     MOMENT_MAX_WORDS,
     MOMENT_MIN_INTERVAL_SECONDS,
     MOMENT_MIN_WORDS,
@@ -122,7 +133,22 @@ class MomentTracker:
                 if buf.words >= MOMENT_MAX_WORDS:
                     ended.append(self._moment(buf, 'rollover'))
                     self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
+                elif (
+                    wall - buf.first_wall >= MOMENT_MAX_SECONDS
+                    and buf.words >= MOMENT_MIN_WORDS
+                    and wall - buf.last_flush_wall >= MOMENT_MIN_INTERVAL_SECONDS
+                ):
+                    ended.append(self._moment(buf, 'interval'))
+                    self._buffers[uid] = _Buffer(conversation_id, source, wall, wall, last_flush_wall=wall)
         return ended
+
+    def flush(self, uid: str) -> Optional[MomentInput]:
+        """The session ended: hand over whatever is buffered (the service drops it when too short)."""
+        with self._lock:
+            buf = self._buffers.pop(uid, None)
+        if buf is None or not buf.segments:
+            return None
+        return self._moment(buf, 'session_end')
 
     def clear(self) -> None:
         with self._lock:
@@ -133,7 +159,7 @@ tracker = MomentTracker()
 
 
 class _SessionCounter:
-    """Counts each admitted live conversation once, at its first ended moment, by client capability."""
+    """Remembers the last conversation seen per user, so each one is attached and counted once."""
 
     def __init__(self, cap: int = MAX_BUFFERS) -> None:
         self._last: dict[str, str] = {}
@@ -158,11 +184,23 @@ class _SessionCounter:
 sessions = _SessionCounter()
 
 
+async def _attach_if_client_seen(uid: str, conversation_id: str, source: Optional[str], started_at: datetime) -> str:
+    """A conversation's first speech: open or join the live episode, with no model call."""
+    seen = await executors.run_blocking(executors.db_executor, client_gate.client_seen_cached, uid)
+    metrics.record_live_session(seen)
+    if not seen:
+        metrics.record_moment_skipped_no_client('attach')
+        return 'skipped_no_client'
+    from utils.episodes.service import attach_conversation
+
+    return await executors.run_blocking(
+        executors.db_executor, attach_conversation, uid, conversation_id, source, started_at=started_at
+    )
+
+
 async def _moment_if_client_seen(uid: str, moment: MomentInput) -> str:
     """One ended moment: spend only when the user's app can show episodes."""
-    seen = await executors.run_blocking(executors.db_executor, client_gate.client_seen, uid)
-    if sessions.first_moment(uid, moment.conversation_id):
-        metrics.record_live_session(seen)
+    seen = await executors.run_blocking(executors.db_executor, client_gate.client_seen_cached, uid)
     if not seen:
         metrics.record_moment_skipped_no_client(moment.trigger)
         return 'skipped_no_client'
@@ -180,6 +218,12 @@ async def on_realtime_segments(
     try:
         if not episodes_enabled_for(uid):
             return
+        spoken = conversation_id and any(str(s.get('text') or '').strip() for s in segments)
+        if spoken and sessions.first_moment(uid, conversation_id):
+            executors.start_background_task(
+                _attach_if_client_seen(uid, conversation_id, source, datetime.now(timezone.utc)),
+                name='episode_attach',
+            )
         moments = tracker.observe(uid, segments, conversation_id, source)
         if not moments:
             return
@@ -187,3 +231,15 @@ async def on_realtime_segments(
             executors.start_background_task(_moment_if_client_seen(uid, moment), name='episode_moment')
     except Exception as error:
         logger.warning('event=episode_live outcome=error exception_type=%s', type(error).__name__)
+
+
+async def on_session_end(uid: str) -> None:
+    """The pusher session closed: flush the buffered moment instead of stranding it. Never raises."""
+    try:
+        if not episodes_enabled_for(uid):
+            return
+        moment = tracker.flush(uid)
+        if moment is not None:
+            executors.start_background_task(_moment_if_client_seen(uid, moment), name='episode_moment')
+    except Exception as error:
+        logger.warning('event=episode_live outcome=session_end_error exception_type=%s', type(error).__name__)
