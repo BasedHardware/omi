@@ -38,6 +38,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
 from utils.log_sanitizer import sanitize_provider_error
 from utils.observability.fallback import record_fallback
+from utils.stt.stream_close import MODULATE_BUDGET_MARKERS
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
 from utils.stt.parakeet_request_metrics import observe_parakeet_request
@@ -574,6 +575,21 @@ def deepgram_prerecorded_from_bytes(
         raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts') from e
 
 
+def _modulate_budget_refusal(status_code: int, body: str) -> bool:
+    """True when Velma's batch answer is account-budget, not a transient error.
+
+    402 is credits regardless of wording; 429 is budget only when the body
+    carries a budget marker such as "insufficient credits" — the answer
+    Velma-2 gives when the account is out of credits (2026-10-22 outage: sync
+    jobs recorded it as a retryable upstream_error under provider=unknown).
+    The body is matched, never logged or labeled.
+    """
+
+    if status_code == 402:
+        return True
+    return status_code == 429 and any(marker in body.lower() for marker in MODULATE_BUDGET_MARKERS)
+
+
 @timeit
 def modulate_prerecorded_from_bytes(
     audio_bytes: bytes,
@@ -596,7 +612,20 @@ def modulate_prerecorded_from_bytes(
 
         with httpx.Client(timeout=_verification_timeout(300)) as client:
             response = client.post(url, headers=headers, files=files, data=data)
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError as error:
+            if _modulate_budget_refusal(response.status_code, response.text):
+                # Out-of-credits is deterministic until the account is funded:
+                # terminal and typed, so the sync job counts
+                # outcome=provider_budget_exhausted provider=modulate instead
+                # of retrying a dead account into upstream_error.
+                raise TranscriptionFailure(
+                    TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED,
+                    provider=PrerecordedSTTService.MODULATE,
+                    retryable=False,
+                ) from error
+            raise
         result = response.json()
 
         # Velma's batch success shape carries utterances (a list, empty for silence)
@@ -671,6 +700,10 @@ def modulate_prerecorded_from_bytes(
 
         return words
 
+    except TranscriptionFailure:
+        # Typed terminal failures never retry and never re-wrap into the
+        # generic RuntimeError (which erases the outcome the sync job counts).
+        raise
     except Exception as e:
         logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 2 and _verification_deadline.get() is None and not _held_single_attempt.get():
@@ -700,6 +733,8 @@ def modulate_prerecorded(
         return modulate_prerecorded_from_bytes(
             audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
         )
+    except TranscriptionFailure:
+        raise
     except Exception as e:
         logger.error(
             'Modulate prerecorded (url) error exception_type=%s attempt=%s',

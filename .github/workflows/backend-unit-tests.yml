@@ -200,11 +200,35 @@ jobs:
           uv pip sync pylock.toml --python .venv/bin/python
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
+      - name: Identify native audio package cache
+        id: native-audio-image
+        run: echo "image=${ImageOS:?}-${ImageVersion:?}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore native audio replay packages
+        id: native-audio-apt
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/.cache/native-audio-apt/*.deb
+          key: native-audio-apt-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.native-audio-image.outputs.image }}-ffmpeg-libopus0
+
       - name: Install native audio replay dependencies
-        timeout-minutes: 3
+        # Cold downloads hit the old 3m ceiling in runs 39737797248,
+        # 39741657961 and 39741511929. Keep a bounded cold-cache allowance;
+        # warm runs reuse .debs while apt still resolves current dependencies.
+        timeout-minutes: 5
         run: |
+          sudo install -d -m 0755 "$HOME/.cache/native-audio-apt/partial"
           sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 update -qq
-          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 install -y --no-install-recommends ffmpeg libopus0
+          sudo apt-get -o Acquire::Retries=3 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30 -o Dir::Cache::archives="$HOME/.cache/native-audio-apt" -o APT::Keep-Downloaded-Packages=true install -y --no-install-recommends ffmpeg libopus0
+
+      # Seed the cache before tests, so an unrelated test failure cannot force
+      # another cold download. Cache archives only; apt performs the install.
+      - name: Save native audio replay packages
+        if: steps.native-audio-apt.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/.cache/native-audio-apt/*.deb
+          key: ${{ steps.native-audio-apt.outputs.cache-primary-key }}
 
       - name: Run authoritative backend unit contract
         working-directory: backend

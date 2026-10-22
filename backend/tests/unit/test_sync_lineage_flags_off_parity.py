@@ -44,6 +44,8 @@ def _load(name, source, monkeypatch, namespace=None):
     # The immutable snapshot predates graduation. Pin its removed recovery
     # switch to the shipped ON behavior without restoring a production API.
     source = source.replace('from config.sync_assignment_recovery import sync_assignment_recovery_enabled\n', '')
+    # Adapt only the import path after verifying the immutable snapshot hash.
+    source = source.replace('from utils.conversation_continuity import', 'from models.conversation_continuity import')
     module.sync_assignment_recovery_enabled = lambda: True
     module.capture_evidence_dark_write_enabled = lambda: True
     exec(compile(source, name, 'exec', flags=0x1000000), module.__dict__)

@@ -1542,12 +1542,19 @@ PINNED_INTENT_TXN_CALLEES: FrozenSet[str] = frozenset(
     {
         'conversation_ref.get',
         '_conversation_has_finalization_content',
-        '_has_active_recording_session_lease',
+        'recording_session_lease_expiry',
+        'account_deletion_ref.get',
         'existing_ref.get',
         'job_ref.get',
         'transaction.set',
         '_record_projection_delta',
         '_apply_snapshot_bound_projection',
+        # Silent-backfill admission fences (read-only: owner inflight state,
+        # user privacy/byok doc, recording-session revision snapshot). Their
+        # only writes stay in this txn's direct transaction.set sites.
+        'backfill_owner_available',
+        'user_ref.get',
+        '<dynamic>.get',
     }
 )
 

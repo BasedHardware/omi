@@ -60,7 +60,10 @@ def _fences(
         raise BackfillConflict('refused_' + reason)
     if session_revision(transaction, user, row) != expected_session_revision:
         raise BackfillConflict('session_changed')
-    if jobs.has_active_recording_session_lease(transaction, user.collection('recording_sessions'), uid, cid, row, now):
+    lease_expiry = jobs.recording_session_lease_expiry(
+        transaction, user.collection('recording_sessions'), uid, cid, row, now
+    )
+    if lease_expiry is not None and lease_expiry > now:
         raise BackfillConflict('active_session')
     # An orphan deterministic generation must not be hidden by noise close.
     if jobs.has_finalization_job_for_revision(

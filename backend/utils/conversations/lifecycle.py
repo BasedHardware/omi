@@ -914,6 +914,7 @@ def request_finalization(
     client_kind: object = 'unknown',
     app_build: object = 'unknown',
     recovery_cutoff: datetime | None = None,
+    require_expired_recording_lease: bool = False,
     firestore_client: Any = None,
     expected_update_time: datetime | None = None,
     backfill_run_id: str | None = None,
@@ -948,6 +949,7 @@ def request_finalization(
             recovery_cutoff=recovery_cutoff if is_recovery_trigger(trigger) else None,
             firestore_client=firestore_client,
             **backfill_fence,
+            require_expired_recording_lease=require_expired_recording_lease,
         )
     except FirestoreContentionExhausted as error:
         # An exhausted contention budget is a clean retry boundary: no outbox

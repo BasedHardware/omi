@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -102,6 +103,7 @@ class DeviceRightNowGroup extends StatelessWidget {
     super.key,
     this.liveTitle,
     this.liveLength,
+    this.liveLengthNow,
     this.onOpenLive,
     this.catchingUp,
     this.onOpenCatchingUp,
@@ -109,12 +111,23 @@ class DeviceRightNowGroup extends StatelessWidget {
 
   final String? liveTitle;
   final String? liveLength;
+
+  /// The running length read fresh each second; only the live row re-renders, not the page.
+  final String Function(DateTime now)? liveLengthNow;
   final VoidCallback? onOpenLive;
 
   final DeviceCatchUpSummary? catchingUp;
   final VoidCallback? onOpenCatchingUp;
 
   bool get hasContent => liveTitle != null || catchingUp != null;
+
+  Widget _liveRow(String subtitle) => OmiSettingsRow(
+        key: const Key('device_right_now_live'),
+        leading: const OmiLiveDot(size: 8),
+        title: liveTitle!,
+        subtitle: subtitle,
+        onTap: onOpenLive,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -124,13 +137,12 @@ class DeviceRightNowGroup extends StatelessWidget {
       header: l10n.deviceRightNow,
       children: [
         if (liveTitle != null)
-          OmiSettingsRow(
-            key: const Key('device_right_now_live'),
-            leading: const OmiLiveDot(size: 8),
-            title: liveTitle!,
-            subtitle: l10n.deviceLiveEpisode(liveLength ?? ''),
-            onTap: onOpenLive,
-          ),
+          liveLengthNow == null
+              ? _liveRow(l10n.deviceLiveEpisode(liveLength ?? ''))
+              : LiveEpisodeClock(
+                  clock: DateTime.now,
+                  builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
+                ),
         if (catchingUp != null)
           DeviceCatchingUpCard(
             key: const Key('device_right_now_catching_up'),

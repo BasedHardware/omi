@@ -129,7 +129,9 @@ def _bridge_source_defect(
     return 'chain_broken'
 
 
-def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str | None = None) -> str:
+def finish_sync_bridges(
+    uid: str, conversation_id: str, *, audio_source_id: str | None = None, silent: bool = False
+) -> str:
     recovery = sync_finalize_target_recovery_enabled()
     visited: set[str] = set()
     while True:
@@ -170,8 +172,10 @@ def finish_sync_bridges(uid: str, conversation_id: str, *, audio_source_id: str 
             needs_copy = audio_target and (
                 needs_cleanup or source.get('sync_bridge_audio_target') != audio_target or source_id == audio_source_id
             )
-            cleanup_deferred = False
-            if needs_cleanup:
+            # Donor task retraction can cancel client reminders. A silent repair
+            # preserves that durable cleanup debt for a later normal append.
+            cleanup_deferred = bool(silent and needs_cleanup)
+            if needs_cleanup and not silent:
                 _record_bridge_retraction('attempted')
                 logger.info('event=sync_bridge outcome=attempted uid=%s source_id=%s', uid, source_id)
                 try:

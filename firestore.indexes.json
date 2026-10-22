@@ -4134,6 +4134,28 @@
     },
     {
       "collectionGroup": "conversations",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "has_content",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "finished_at",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "conversations",
       "queryScope": "COLLECTION",
       "fields": [
         {
