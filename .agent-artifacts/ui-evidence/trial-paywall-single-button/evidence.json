@@ -4,14 +4,14 @@
     {
       "file": "001-mobile-ios-trial-paywall-single-cta.png",
       "platform": "mobile-ios",
-      "description": "Trial paywall right after sign-up on the prod flavor against api.omiapi.com with OMI_PAYWALL_VARIANT=trial: one Try for $0.00 button, no free-plan button below it, cancel note unchanged",
+      "description": "Trial paywall page opened through a debug VM-service hook on the prod-flavor simulator build with a fixed offer (not the post-sign-up placement): one Try for $0.00 button, no free-plan button below it, cancel note unchanged",
       "captured_by": "agent",
       "source": "screencapture"
     },
     {
       "file": "002-mobile-ios-trial-paywall-close-continues.png",
       "platform": "mobile-ios",
-      "description": "Closing the paywall with the X dismisses it and returns to the page beneath (sign-in step in this debug walk; in the real flow the same dismiss continues onboarding on the free plan, code unchanged)",
+      "description": "X dismisses the hook-opened paywall back to the page beneath (sign-in step). UNVERIFIED on the simulator: the real sign-up -> trial paywall -> X -> next onboarding step; the unsigned build cannot complete Firebase sign-in. Dismiss handling is unchanged by this PR.",
       "captured_by": "agent",
       "source": "screencapture"
     }
