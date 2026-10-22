@@ -10,14 +10,16 @@ Ensures that:
    immediately before executing external network requests.
 """
 
+import asyncio
 import unittest
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from utils.retrieval.tools.integration_base import (
     resolve_config_uid,
     ensure_capped,
     cap_limit,
 )
+from utils.retrieval.tools.calendar_tools import create_calendar_event_tool
 
 
 class TestCalendarToolsHardening(unittest.TestCase):
@@ -71,6 +73,20 @@ class TestCalendarToolsHardening(unittest.TestCase):
     def test_cap_limit_handles_invalid_types(self):
         self.assertEqual(cap_limit("invalid", 20), 1)
         self.assertEqual(cap_limit(None, 20), 1)
+
+    def test_create_calendar_event_empty_title_short_circuits(self):
+        with patch("utils.retrieval.tools.calendar_tools.create_google_calendar_event", new_callable=AsyncMock) as mock_create:
+            for bad_title in ["", "   ", None]:
+                res = asyncio.run(
+                    create_calendar_event_tool.func(
+                        title=bad_title,
+                        start_time="2026-10-22T10:00:00Z",
+                        end_time="2026-10-22T11:00:00Z",
+                        config={"configurable": {"user_id": "test_user"}},
+                    )
+                )
+                self.assertEqual(res, "Error: Event title cannot be empty.")
+                mock_create.assert_not_called()
 
 
 if __name__ == "__main__":
