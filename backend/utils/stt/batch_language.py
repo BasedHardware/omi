@@ -20,6 +20,15 @@ from config.prerecorded_language import (
     language_guard_enabled,
 )
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, normalized_stt_language
+from utils.stt.vendor_guard import (
+    ENDPOINT_LID,
+    breaker_allows,
+    is_quota_error,
+    record_breaker_other_failure,
+    record_breaker_quota_error,
+    record_breaker_success,
+    record_vendor_burn,
+)
 
 MAX_PROBE_SECONDS = 30
 MAX_DOWNLOAD_BYTES = 2 * 1024 * 1024
@@ -31,6 +40,7 @@ DETECTIONS = Counter(
 PROBE_SECONDS = Counter(
     'omi_batch_pipeline_language_probe_audio_seconds_total', 'Bounded paid audio LID samples', ['outcome']
 )
+PROBE_OUTCOMES = Counter('omi_batch_pipeline_language_probe_total', 'One outcome per LID probe call', ['outcome'])
 
 
 @dataclass(frozen=True)
@@ -71,14 +81,38 @@ def probe_wav(audio: bytes, *, sample_rate=16000, channels=1, encoding=None) -> 
     return output.getvalue(), duration
 
 
+def _probe_failure_outcome(exc: BaseException) -> str:
+    if is_quota_error(exc):
+        return 'quota'
+    if isinstance(exc, httpx.TimeoutException):
+        return 'timeout'
+    if isinstance(exc, httpx.TransportError):
+        return 'transport'
+    if isinstance(exc, httpx.HTTPStatusError):
+        status = getattr(getattr(exc, 'response', None), 'status_code', 0) or 0
+        return 'http_5xx' if 500 <= status <= 599 else 'http_4xx'
+    return 'error'
+
+
 def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecision:
     """One cheap classification request; no client retries or content logging."""
     outcome, seconds, sent = 'error', 0.0, False
     decision = LanguageDecision('und', 0.0, 'unavailable')
     try:
-        body, seconds = probe_wav(audio, **audio_options)
+        try:
+            body, seconds = probe_wav(audio, **audio_options)
+        except ValueError:
+            outcome = 'unsupported_format'
+            return decision
         key = os.getenv('MODULATE_API_KEY', '')
-        if not key or before_probe is not None and not before_probe():
+        if not key:
+            outcome = 'no_key'
+            return decision
+        if before_probe is not None and not before_probe():
+            outcome = 'skipped'
+            return decision
+        if not breaker_allows(ENDPOINT_LID):
+            outcome = 'breaker_open'
             return decision
         with httpx.Client(timeout=httpx.Timeout(8, connect=2)) as client:
             sent = True
@@ -86,6 +120,7 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
                 LID_URL, headers={'X-API-Key': key}, files={'upload_file': ('language.wav', body, 'audio/wav')}
             )
         response.raise_for_status()
+        record_breaker_success(ENDPOINT_LID)
         outcome = 'accepted'
         data = response.json()
         code = data.get('predicted_language_code')
@@ -100,17 +135,28 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             or not math.isfinite(confidence)
             or not 0 <= confidence <= 1
         ):
+            outcome = 'invalid_response'
             return decision
         decision = LanguageDecision(code.lower(), float(confidence), 'audio_lid', seconds)
         return decision
-    except Exception:
+    except Exception as e:
+        outcome = _probe_failure_outcome(e)
+        if outcome == 'quota':
+            record_breaker_quota_error(ENDPOINT_LID)
+        elif sent:
+            record_breaker_other_failure(ENDPOINT_LID)
         return decision
     finally:
+        try:
+            PROBE_OUTCOMES.labels(outcome).inc()
+        except Exception:
+            pass
         if seconds and sent:
             try:
                 PROBE_SECONDS.labels(outcome).inc(seconds)
             except Exception:
                 pass
+            record_vendor_burn(ENDPOINT_LID, 'ok' if outcome == 'accepted' else 'error', seconds)
 
 
 def resolve_language(language, audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecision:
