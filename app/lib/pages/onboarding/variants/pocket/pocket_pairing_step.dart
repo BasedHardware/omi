@@ -65,10 +65,11 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
 
   /// Connects the first Omi the scan found, exactly once per device, through the pairing page's
   /// own path. Runs after the frame so the provider is never mutated during build.
-  /// Connected for real: this step's own attempt ([OnboardingProvider.isConnected]) or the
-  /// saved pendant reconnecting on its own, which only updates [DeviceProvider].
+  /// Live connection: [DeviceProvider] is the source of truth (handleTap and a native reconnect
+  /// both land there). [OnboardingProvider.isConnected] is not cleared on an ordinary disconnect,
+  /// so it is never trusted on its own.
   static bool _isConnected(OnboardingProvider provider, DeviceProvider devices) =>
-      provider.isConnected || devices.isConnected;
+      devices.isConnected && devices.connectedDevice != null;
 
   void _maybeConnect(OnboardingProvider provider, DeviceProvider devices) {
     if (_done) return;
@@ -80,7 +81,15 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
       // complete pairing once as connected so the walkthrough check still runs.
       if (_completingConnected) return;
       _completingConnected = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _finish(true));
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        // Re-check right before completing: the pendant may have dropped since the build.
+        if (_isConnected(context.read<OnboardingProvider>(), context.read<DeviceProvider>()) && !_attemptInFlight) {
+          _finish(true);
+        } else {
+          _completingConnected = false;
+        }
+      });
       return;
     }
     if (_failed || provider.isClicked) return;
