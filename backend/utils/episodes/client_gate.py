@@ -99,6 +99,16 @@ def client_seen_cached(uid: str, *, now: Optional[float] = None) -> bool:
     return seen
 
 
+def occasion_mode(uid: str) -> bool:
+    """Occasion conversations (config/occasion_conversations.py) for this user. Blocking (Redis), fails closed."""
+    from config.occasion_conversations import occasion_conversations_enabled
+
+    try:
+        return occasion_conversations_enabled() and episodes_enabled_for(uid) and client_seen_cached(uid)
+    except Exception:
+        return False
+
+
 def episode_work_enabled(uid: str) -> bool:
     """Admission and a capable client. Blocking (Redis): call from a worker thread."""
     return episodes_enabled_for(uid) and client_seen(uid)
