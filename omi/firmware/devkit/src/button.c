@@ -323,20 +323,9 @@ void check_button_level(struct k_work *work_item)
 //                //play_haptic_milli(10);
 //                //Fire the long mode notify and enter a grace period
 //                //turn off herre
-//                // TODO: FIXME
-//                //if(!from_wakeup)
-//                //{
-//                //    is_off = !is_off;
-//                //}
-//                //else
-//                //{
-//                //    from_wakeup = false;
-//                //}
-//                //if (is_off)
-//                //{
-//                //    bt_off();
-//                //    turnoff_all();
-//                //}
+//                is_off = true;
+//                bt_off();
+//                turnoff_all();
 //                current_button_state = GRACE;
 //                reset_count();
 //            }
@@ -395,21 +384,9 @@ void check_button_level(struct k_work *work_item)
 //            {
 //                notify_long_tap();
 //                //play_haptic_milli(10);
-//                // TODO: FIXME
-//                //if(!from_wakeup)
-//                //{
-//                //    is_off = !is_off;
-//                //}
-//                //else
-//                //{
-//                //    from_wakeup = false;
-//                //}
-//                ////Fire the notify and enter a grace period
-//                //if (is_off)
-//                //{
-//                //    bt_off();
-//                //    turnoff_all();
-//                //}
+//                is_off = true;
+//                bt_off();
+//                turnoff_all();
 //                current_button_state = GRACE;
 //                reset_count();
 //            }
