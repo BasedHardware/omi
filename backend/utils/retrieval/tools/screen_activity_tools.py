@@ -112,7 +112,9 @@ def _chat_context_window(config: Any, clock: DisplayClock) -> ContextWindow:
     Harness tool rule 1: a time-range tool defaults to the run's context window. Chat shows the
     model local times labelled with their zone, so naive scope bounds are read in that zone.
     """
-    cfg: Dict[str, Any] = cast(Optional[Dict[str, Any]], config) or _agent_config() or {}
+    cfg: Dict[str, Any] = cast(Optional[Dict[str, Any]], config) if isinstance(config, dict) else (_agent_config() or {})
+    if not isinstance(cfg, dict):
+        cfg = {}
     configurable: Any = cfg.get('configurable')
     scope: Any = cast(Dict[str, Any], configurable).get('chat_scope') if isinstance(configurable, dict) else None
     if isinstance(scope, dict):
@@ -130,16 +132,19 @@ def _chat_context_window(config: Any, clock: DisplayClock) -> ContextWindow:
 
 def _get_uid(config: RunnableConfig) -> Optional[str]:
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
-    if cfg is None:
+    if not isinstance(cfg, dict):
         cfg = _agent_config()
-    if cfg is None:
+    if not isinstance(cfg, dict):
         return None
     try:
         configurable = cfg.get('configurable')
         if isinstance(configurable, dict):
             conf: Dict[str, Any] = cast(Dict[str, Any], configurable)
-            return conf.get('user_id')
-        return None
+            uid = conf.get('user_id') or conf.get('uid')
+            if uid:
+                return str(uid)
+        uid = cfg.get('user_id') or cfg.get('uid')
+        return str(uid) if uid else None
     except (KeyError, TypeError):
         return None
 
@@ -461,15 +466,21 @@ def get_screen_activity_tool(
         logger.error("get_screen_activity_tool - summary query failed uid=%s", uid, exc_info=True)
         return "Error retrieving screen activity summary. Please try again."
 
-    apps_dict: Dict[str, Dict[str, Any]] = cast(Dict[str, Dict[str, Any]], summary['apps'])
-    if not apps_dict:
+    if not isinstance(summary, dict):
+        return (
+            "No synced screen observations are available for this date range. "
+            "Capture and sync completeness are unknown; this does not establish that the user was inactive."
+        )
+
+    apps_dict = summary.get('apps')
+    if not isinstance(apps_dict, dict) or not apps_dict:
         return (
             "No synced screen observations are available for this date range. "
             "Capture and sync completeness are unknown; this does not establish that the user was inactive."
         )
 
     # Format output
-    total = summary['total_screenshots']
+    total = summary.get('total_screenshots', 0)
     coverage = summary.get('coverage') or {}
     rows_truncated = coverage.get('truncated') is True
     result = (
@@ -497,12 +508,24 @@ def get_screen_activity_tool(
     result += "\n"
 
     # Sort apps by count descending
-    sorted_apps: List[Tuple[str, Dict[str, Any]]] = sorted(apps_dict.items(), key=lambda x: x[1]['count'], reverse=True)
+    sorted_apps: List[Tuple[str, Dict[str, Any]]] = sorted(
+        [
+            (k, v) for k, v in apps_dict.items()
+            if isinstance(v, dict) and isinstance(v.get('count'), (int, float))
+        ],
+        key=lambda x: x[1]['count'],
+        reverse=True,
+    )
 
-    if app_filter:
-        sorted_apps = [(name, data) for name, data in sorted_apps if name.lower() == app_filter.lower()]
-        if not sorted_apps:
-            return result + f"No observations for app '{app_filter}' in the summarized rows."
+    if app_filter is not None:
+        clean_filter = str(app_filter).strip()
+        if clean_filter:
+            sorted_apps = [
+                (name, data) for name, data in sorted_apps
+                if isinstance(name, str) and name.lower() == clean_filter.lower()
+            ]
+            if not sorted_apps:
+                return result + f"No observations for app '{clean_filter}' in the summarized rows."
 
     # Bound how many apps go to the chat model so a wide date range on a busy machine cannot
     # overflow its context (issue #4927). Apps are sorted by observation count.
@@ -706,7 +729,15 @@ def search_screen_activity_tool(
     if not uid:
         return "Error: User ID not found in configuration"
 
-    limit = max(1, min(limit, 20))
+    clean_query = (query or "").strip() if isinstance(query, str) else str(query or "").strip()
+    if not clean_query:
+        return "Error: Search query cannot be empty"
+
+    try:
+        int_limit = int(limit)
+    except (TypeError, ValueError):
+        int_limit = 10
+    limit = max(1, min(int_limit, 20))
 
     # Parse optional date filters to unix timestamps. An unreadable date is an error, never a
     # silently unfiltered search.
@@ -726,7 +757,7 @@ def search_screen_activity_tool(
         reason = 'dispatch_disabled'
     else:
         try:
-            query_vector = gemini_embed_query(query)
+            query_vector = gemini_embed_query(clean_query)
         except Exception:
             reason = 'capability_mismatch'
         else:
@@ -747,7 +778,7 @@ def search_screen_activity_tool(
     if not valid_matches:
         if not fallback_enabled:
             return 'Screen vector search unavailable or no matches; keyword fallback is disabled.'
-        valid_matches, scanned = _keyword_fallback(uid, query, start_ts, end_ts, limit, reason or 'none')
+        valid_matches, scanned = _keyword_fallback(uid, clean_query, start_ts, end_ts, limit, reason or 'none')
         if valid_matches is None:
             return 'Screen search unavailable: keyword search could not read screens in the requested window.'
         if not valid_matches:
@@ -763,7 +794,7 @@ def search_screen_activity_tool(
     evidence_references = _evidence_references(config)
     result = (
         count_header(
-            f"Screen activity matches for '{query}'",
+            f"Screen activity matches for '{clean_query}'",
             shown=len(valid_matches),
             order="screen search rank order",
             more_may_exist=len(valid_matches) >= limit,
