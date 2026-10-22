@@ -20,6 +20,9 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 from database import conversations as conversations_db
 from routers import developer as dev_routes
 from routers.developer import UpdateConversationRequest
+from services import conversation_frame_evidence
+from utils.other import storage as storage_utils
+from utils.screen_frames import store as screen_frame_store
 
 
 def _make_conversation(deleted: bool = False, locked: bool = False, conversation_id: str = 'conv-1') -> dict:
@@ -117,18 +120,23 @@ class TestDevApiDeletedConversationGuard:
 
         mock_record_deletion = MagicMock()
         monkeypatch.setattr(dev_routes.conversation_tombstones, 'record_deletion', mock_record_deletion)
-        mock_delete_embedding = MagicMock()
-        monkeypatch.setattr(dev_routes, 'delete_owner_prompt_embedding_cache', mock_delete_embedding)
-        mock_delete_sources = MagicMock()
-        monkeypatch.setattr(
-            'utils.conversations.merge_conversations.delete_conversation_with_sync_sources', mock_delete_sources
-        )
+        cleanup_calls = []
+        for owner, name in (
+            (storage_utils, 'delete_owner_prompt_embedding_cache'),
+            (screen_frame_store, 'delete_conversation_screen_frames'),
+            (conversation_frame_evidence, 'delete_conversation_and_frame_evidence'),
+            (dev_routes.vector_db, 'delete_vector'),
+            (dev_routes.vector_db, 'delete_transcript_chunk_vectors'),
+        ):
+            cleanup = MagicMock()
+            monkeypatch.setattr(owner, name, cleanup)
+            cleanup_calls.append(cleanup)
 
         result = dev_routes.delete_conversation_endpoint(conversation_id='conv-1', uid='test-uid')
         assert result == {"success": True}
         mock_record_deletion.assert_called_once_with('test-uid', 'conv-1')
-        mock_delete_embedding.assert_called_once_with('test-uid', 'conv-1')
-        mock_delete_sources.assert_called_once_with('test-uid', 'conv-1')
+        for cleanup in cleanup_calls:
+            cleanup.assert_called_once_with('test-uid', 'conv-1')
 
     def test_patch_conversation_rejects_deleted(self, monkeypatch):
         """PATCH /v1/dev/user/conversations/{id} must raise 404 when deleted=True."""
