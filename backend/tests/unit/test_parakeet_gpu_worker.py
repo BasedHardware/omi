@@ -1100,3 +1100,42 @@ class TestDurationPassthroughInGPUWorker:
 
             worker._get_audio_duration_sec.assert_called()
             worker.stop()
+
+
+class TestLanguageGate:
+    def test_language_id_runs_on_the_worker_thread(self):
+        w = _start_worker_with_mock()
+        try:
+            with pytest.raises(RuntimeError, match="Language gate not ready"):
+                w.submit_language_sync([0.0])
+            gate = MagicMock()
+            gate.model_key = "mms-lid-126"
+            gate.probabilities.side_effect = lambda samples: {"en": 0.99, "thread": threading.current_thread().name}
+            w._language_id = gate
+            assert w.language_id_model == "mms-lid-126"
+            result = w.submit_language_sync([0.0, 0.1])
+            assert result["en"] == 0.99
+            assert result["thread"] == "gpu-worker"
+        finally:
+            w.stop()
+
+    def test_gate_load_failure_keeps_transcription_serving(self):
+        import gpu_worker as gw_mod
+
+        w = GPUWorker()
+        with patch.object(gw_mod.language_gate, "load", side_effect=OSError("hub unreachable")):
+            w._load_language_id()
+        assert w._language_id is None
+        assert w.language_id_model is None
+        assert w.fatal_cuda_reason is None
+
+    def test_fatal_cuda_during_gate_load_fails_closed(self):
+        import gpu_worker as gw_mod
+
+        w = GPUWorker()
+        with patch.object(
+            gw_mod.language_gate, "load", side_effect=RuntimeError("an illegal memory access was encountered")
+        ):
+            with pytest.raises(RuntimeError):
+                w._load_language_id()
+        assert w.fatal_cuda_reason == "illegal_memory_access"
