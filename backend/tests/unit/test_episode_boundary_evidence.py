@@ -102,6 +102,18 @@ def test_calendar_and_screen_context_produce_signals():
     assert boundaries.context_signal({**context, 'calendar_source': 'screen_activity'}).kind == 'screen_meeting'
 
 
+def test_distinct_screen_windows_get_distinct_identities():
+    first = {'start_time': NOW.isoformat(), 'duration_minutes': 30, 'calendar_event_id': 'screen-activity'}
+    later = {**first, 'start_time': (NOW + timedelta(hours=3)).isoformat()}
+    for extra in ({}, {'calendar_source': 'screen_activity'}):
+        a = boundaries.context_signal({**first, **extra})
+        b = boundaries.context_signal({**later, **extra})
+        assert a.external_id is None and b.external_id is None
+        assert boundary_store.signal_id(a) != boundary_store.signal_id(b)
+    calendar = boundaries.context_signal({**first, 'calendar_event_id': 'event-test'})
+    assert calendar.external_id == 'event-test'
+
+
 def test_account_erasure_fences_new_evidence(store):
     store.rows[('account_deletions', ACCOUNT)] = {'wipe_status': 'pending'}
     assert boundary_store.record(ACCOUNT, [signal()], firestore_client=store) == 0
