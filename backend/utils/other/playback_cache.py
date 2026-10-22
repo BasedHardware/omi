@@ -1,13 +1,14 @@
 """Immutable derived audio writes. GCS preconditions arbitrate cross-worker races."""
 
 import json
+from typing import Any
 
 from google.api_core.exceptions import NotFound, PreconditionFailed
 
 from utils.sync.repeat_work_metrics import PLAYBACK_WRITES
 
 
-def write_once(blob, data: bytes, *, spans=None) -> bool:
+def write_once(blob: Any, data: bytes, *, spans: list[dict[str, Any]] | None = None) -> bool:
     if blob.exists():
         PLAYBACK_WRITES.labels('cache_hit').inc()
         return False
@@ -30,7 +31,7 @@ def write_once(blob, data: bytes, *, spans=None) -> bool:
     return True
 
 
-def cached_manifest(blob):
+def cached_manifest(blob: Any) -> tuple[int, list[dict[str, Any]]] | None:
     try:
         blob.reload()
         if (blob.metadata or {}).get('playback_manifest') != 'v1':
