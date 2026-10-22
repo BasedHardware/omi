@@ -643,6 +643,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'plugins_results',
         'external_data',
         'app_id',
+        # Server-authored media/noise eligibility metadata, not a display projection.
+        'content_kind',
         'discarded',
         'imported',
         'visibility',
