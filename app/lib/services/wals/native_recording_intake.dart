@@ -21,9 +21,10 @@ Future<Directory> nativeRecordingDirectory() async {
   final configured = SharedPreferencesUtil().getString('batchAudioDir');
   final documents = await getApplicationDocumentsDirectory();
   if (configured.isNotEmpty && path.normalize(path.absolute(configured)) != path.normalize(documents.absolute.path)) {
+    // A stale absolute path, e.g. after an iOS update moved the app container. Ledger paths resolve
+    // against documents, so scan there and repoint native capture at it rather than halting intake.
     nativeCustodyObserved(NativeCustodyObservedOutcome.directoryMismatch);
-    // Ledger paths resolve against documents: defer rather than index inaccessible audio.
-    throw StateError('Native batch directory differs from WAL documents directory');
+    await SharedPreferencesUtil().saveString('batchAudioDir', documents.path);
   }
   return documents;
 }

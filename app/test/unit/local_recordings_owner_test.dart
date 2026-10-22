@@ -75,11 +75,6 @@ void main() {
     expect(await owners.readAsString(), '{broken');
   });
 
-  test('a differing batch directory is diagnosed before indexing inaccessible files', () async {
-    await SharedPreferencesUtil().saveString('batchAudioDir', '${dir.path}/elsewhere');
-    await expectLater(nativeRecordingDirectory(), throwsStateError);
-  });
-
   test('Watch takes only its committed receipt owner; missing receipts stay untouched', () async {
     const session = '0123456789abcdef0123456789abcdef';
     const watch = 'audio_omibatchwatch${session}s0_pcm16_16000_1_fs160_1720000000.bin';

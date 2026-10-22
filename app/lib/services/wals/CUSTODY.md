@@ -88,8 +88,9 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
    for another explicit retry. Acceptance wakes the shared coordinator to reconcile even when
    automatic uploading is disabled. This replaces acceptance-time release to preserve Home recovery. Everything else is visible on the Sync page, as every other custody WAL already is.
 
-Native batch directory and WAL documents directory must match. A mismatch emits
-`Native Custody Observed / directory_mismatch` and defers intake before inaccessible files are indexed.
+Native batch directory and WAL documents directory must match. A mismatch (for example a stale
+absolute path after an iOS update moves the app container) emits `Native Custody Observed /
+directory_mismatch`, repoints `batchAudioDir` at the documents directory, and scans there.
 
 ## Server contract used
 
