@@ -40,6 +40,20 @@ def _format_hour(hour: int) -> str:
         return f"{hour - 12}:00 PM"
 
 
+def _safe_int(val: Any) -> Optional[int]:
+    """Coerce value to int if possible, rejecting booleans, floats, and non-numeric strings."""
+    if val is None or isinstance(val, bool):
+        return None
+    if isinstance(val, int):
+        return val
+    if isinstance(val, str):
+        try:
+            return int(val.strip())
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
 @tool
 def manage_daily_summary_tool(
     action: str,
@@ -89,14 +103,19 @@ def manage_daily_summary_tool(
         raw_configurable = cfg.get('configurable')
         if isinstance(raw_configurable, dict):
             configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
-            uid = configurable.get('user_id')
+            uid = configurable.get('user_id') or configurable.get('uid')
         else:
             uid = None
-    except (KeyError, TypeError):
+        if not uid:
+            uid = cfg.get('user_id') or cfg.get('uid')
+    except (KeyError, TypeError, AttributeError):
         return "Error: Configuration not available"
 
     if not uid:
         return "Error: User ID not found"
+
+    if not isinstance(action, str) or not action.strip():
+        return f"Unknown action: {action}. Use 'enable', 'disable', 'set_time', or 'get_settings'."
 
     action = action.lower().strip()
 
@@ -115,8 +134,14 @@ def manage_daily_summary_tool(
         if hour is None:
             return "Error: Please specify the hour (0-23). Example: 22 for 10 PM, 9 for 9 AM."
 
-        if not (0 <= hour <= 23):
-            return f"Error: Hour must be between 0 and 23. You provided {hour}."
+        parsed_hour = _safe_int(hour)
+        if parsed_hour is None:
+            return f"Error: Hour must be a valid integer between 0 and 23. You provided {hour!r}."
+
+        if not (0 <= parsed_hour <= 23):
+            return f"Error: Hour must be between 0 and 23. You provided {parsed_hour}."
+
+        hour = parsed_hour
 
         notification_db.set_daily_summary_hour_local(uid, hour)
         hour_str = _format_hour(hour)
