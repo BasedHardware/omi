@@ -2,15 +2,24 @@
 Tools for answering questions about the Omi/Friend product.
 """
 
+from __future__ import annotations
+
+import logging
+from typing import Optional
+
+from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from utils.app_integrations import get_github_docs_content
-import logging
+from utils.log_sanitizer import sanitize
 
 logger = logging.getLogger(__name__)
 
 
 @tool
-def get_omi_product_info_tool(query: str) -> str:
+def get_omi_product_info_tool(
+    query: Optional[str] = "",
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
+) -> str:
     """
     Get information about the Omi/Friend product to answer questions about features, functionality, setup, or purchasing.
 
@@ -40,19 +49,22 @@ def get_omi_product_info_tool(query: str) -> str:
         query="How do I update the firmware on my Omi device?"
         Returns documentation about firmware updates and device management
     """
+    clean_query = str(query).strip() if query is not None else ""
+    logger.info("get_omi_product_info_tool called query=%s", sanitize(clean_query))
+
     # Fetch the product docs. A network or GitHub API failure must not break the chat turn, so fail
     # soft with an "Error: ..." string like the other retrieval tools instead of letting the
     # exception escape into the agent loop.
     try:
         context = get_github_docs_content()
     except Exception as e:
-        logger.warning(f"get_omi_product_info_tool - failed to fetch product docs: {e}")
+        logger.warning("get_omi_product_info_tool - failed to fetch product docs: %s", sanitize(str(e)))
         return (
             "Error: the Omi product documentation could not be retrieved right now. Tell the user "
             "that product information is temporarily unavailable and to try again in a little while."
         )
 
-    if not context:
+    if not context or not isinstance(context, dict):
         # An empty result (e.g. the GitHub API returned non-200) would otherwise produce a docs
         # string with no real content, which misleads the model into answering from nothing. Log it
         # so a silent "no docs" state is diagnosable in prod, not only visible to the user.
@@ -63,12 +75,13 @@ def get_omi_product_info_tool(query: str) -> str:
         )
 
     # Format context as a comprehensive documentation string
-    context_str = 'Omi/Friend Product Documentation:\n\n'
+    lines = ['Omi/Friend Product Documentation:\n\n']
     for section, content in context.items():
-        context_str += f'## {section}\n\n{content}\n\n'
+        if content:
+            lines.append(f'## {section}\n\n{content}\n\n')
 
-    context_str += (
+    lines.append(
         '\n\nUse this documentation to answer questions about the Omi/Friend product, its features, setup, and usage.'
     )
 
-    return context_str
+    return ''.join(lines)
