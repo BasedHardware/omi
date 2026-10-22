@@ -1074,8 +1074,13 @@ class TestScreenActivity:
         with TestClient(app) as client:
             response = client.get('/v1/mcp/screen-activity?summary=true')
         assert response.status_code == 200
-        assert response.json()['coverage'] == coverage
-        assert sse.execute_tool(UID, 'get_screen_activity', {'summary': True})['coverage'] == coverage
+        expected = {
+            **coverage,
+            'first_observed_at': '2026-07-03T01:00:00+00:00',
+            'last_observed_at': '2026-07-03T12:00:00+00:00',
+        }
+        assert response.json()['coverage'] == expected
+        assert sse.execute_tool(UID, 'get_screen_activity', {'summary': True})['coverage'] == expected
 
     def _row(self):
         return {
