@@ -1874,7 +1874,7 @@ def test_local_delivery_and_sync_budget_siblings_cover_reasons_the_capacity_rule
         assert (
             'reason=~"send_queue_full|replay_send_stalled|delivery_expired",outcome="exhausted"' in nodes["B"]["expr"]
         ), export_name
-        assert nodes["C"]["expression"] == "$A >= 100 && $B > 0.03", export_name
+        assert nodes["C"]["expression"] == "$A >= 100 && $B > 0.02", export_name
         budget = rules["omi-sync-provider-budget-exhausted"]
         assert budget["labels"]["severity"] == "critical", export_name
         assert budget["for"] == "5m", export_name

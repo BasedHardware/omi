@@ -1109,6 +1109,14 @@ export interface CaptureGroupMember {
   started_at?: string | null;
 }
 
+export interface CaptureKey {
+  capture_root: string;
+  channel?: string;
+  clock_epoch?: string;
+  device_id?: string | null;
+  recording_session_id?: string | null;
+}
+
 export interface CaptureLinkSpec {
   conversation_id: string;
   moment_timestamp_ms?: number | null;
@@ -1765,6 +1773,10 @@ export interface CreateConversationCalendarMeeting {
 export interface CreateConversationFromTranscriptRequest {
   calendar_meeting_context?: CreateConversationCalendarMeeting | null;
   capture_evidence?: CaptureEvidenceLineage | null;
+  capture_key?: CaptureKey | null;
+  capture_segment_ranges?: Array<FrameRange> | null;
+  chunk_count?: number | null;
+  chunk_index?: number | null;
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: unknown | null;
@@ -2701,6 +2713,11 @@ export interface Folder {
 
 export interface FolderMutationResponse {
   status: string;
+}
+
+export interface FrameRange {
+  end: number;
+  start: number;
 }
 
 export interface FrameRequest {
@@ -6342,6 +6359,7 @@ export interface OmiApiSchemas {
   "CaptureEvidenceMetadata": CaptureEvidenceMetadata;
   "CaptureGroup": CaptureGroup;
   "CaptureGroupMember": CaptureGroupMember;
+  "CaptureKey": CaptureKey;
   "CaptureLinkSpec": CaptureLinkSpec;
   "CategoryEnum": CategoryEnum;
   "ChangeRef": ChangeRef;
@@ -6542,6 +6560,7 @@ export interface OmiApiSchemas {
   "FocusAssistantSettings": FocusAssistantSettings;
   "Folder": Folder;
   "FolderMutationResponse": FolderMutationResponse;
+  "FrameRange": FrameRange;
   "FrameRequest": FrameRequest;
   "FrameRequestBatch": FrameRequestBatch;
   "FrameRequestCleanupState": FrameRequestCleanupState;
