@@ -104,7 +104,7 @@ backend (main.py)
   ├── ──────► vad (modal/)
   ├── ──────► parakeet (parakeet/)
   ├── ──────► modulate (managed API)
-  ├── ──────► (Deepgram retired 2026-08-27: no contract, provider absent from stt_provider_policy)
+  ├── ──────► (Deepgram retired 2026-08-27; absent from stt_provider_policy)
   ├── ──────► nllb-translation (nllb_translation/)
   └── ──────► llm-gateway (llm_gateway/main.py)
 
@@ -128,7 +128,7 @@ Helm charts: `backend/charts/`.
 
 STT policy: `config/stt_provider_policy.py`. Windowed live rollout: `docs/operational/windowed-live-stt.md`.
 
-- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection (`utils/stt/vad.py`). Live STT serves Parakeet/Modulate/Soniox per `STT_SERVICE_MODELS` and `config/stt_provider_policy.py` (`utils/stt/streaming.py`). Deepgram retired 2026-08-27 (no contract): it is absent from the provider policy, `dg-*` slots in `STT_SERVICE_MODELS` are refused at selection, and the batch client raises. Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
+- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection (`utils/stt/vad.py`). Live STT serves Parakeet/Modulate/Soniox per `STT_SERVICE_MODELS` and `config/stt_provider_policy.py` (`utils/stt/streaming.py`). Deepgram retired 2026-08-27: no policy admission, `dg-*` slots refused, batch client raises. Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
 - **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.
 - **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients. Public shared-conversation chat uses only the dedicated `omi:auto:public-shared-conversation-chat` lane and returns unavailable on every gateway fault. Also owns the `/v1/embeddings` surface and the company-paid desktop-Vertex lanes (see `docs/llm/model_endpoint_inventory.yaml`).
 - Conversation notes v2 is on for every processing host; the legacy branch still hosts the gateway shadow gates. Calendar/OCR context reads are dev-on/prod-off. Generated `docs/feature-flag-registry.md` catalogs declarations, not an enablement lever.
@@ -138,7 +138,7 @@ STT policy: `config/stt_provider_policy.py`. Windowed live rollout: `docs/operat
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and the configured Parakeet/Modulate STT provider for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
 - **diarizer** (`diarizer/main.py`) — `/v2/embedding`, `/v2/diarization`. Batch seam: `utils/stt/diarization.py`; naming: `utils/stt/speaker_match.py`. Backend/pusher use `HOSTED_SPEAKER_EMBEDDING_API_URL`.
 - **vad** (`modal/main.py`) — GPU. `/v1/vad`. Called by backend only.
-- **Deepgram** — Retired 2026-08-27 (no contract; last payment that day). Not a vendor: absent from `config/stt_provider_policy.py`, no `DEEPGRAM_*` env in serving manifests, self-hosted chart deleted after a clean post-deploy caller audit (30d zero traffic, [fleet retirement](docs/runbooks/audio-fleet.md#self-hosted-deepgram-retirement)). Do not route to it or add keys.
+- **Deepgram** — Retired 2026-08-27. Absent from `config/stt_provider_policy.py`, no `DEEPGRAM_*` env in serving manifests, self-hosted chart deleted ([fleet retirement](docs/runbooks/audio-fleet.md#self-hosted-deepgram-retirement)). Do not route or add keys.
 - **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and Parakeet is selected. Clients must not call it directly — they go through the authed backend proxy `POST /v1/stt/transcribe` (`routers/stt.py`).
 - **modulate** — Managed STT provider for configured languages. Called by backend when `MODULATE_API_KEY` is configured and Modulate is selected.
 - **nllb-translation** (`nllb_translation/`) — GPU translation service. Called by backend when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected.
