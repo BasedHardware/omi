@@ -14,10 +14,11 @@ from utils.capture.media import media_playback_signals, screen_time
 from utils.conversations.relevance_rules import EXPLICIT_REMINDER_RE, transcript_word_count
 from utils.conversations.relevance_media_metrics import observe
 
-FLAG = 'MEDIA_NOISE_MODE'
+MEDIA_NOISE_MODE_ENV = 'MEDIA_NOISE_MODE'
+FLAG = MEDIA_NOISE_MODE_ENV
 # Declare derived cohort names for registry tooling, read only through refactor_modes.
-COHORT_PERCENT = 'MEDIA_NOISE_MODE_SERVE_PERCENT'
-COHORT_DIGESTS = 'MEDIA_NOISE_MODE_SERVE_UID_SHA256S'
+MEDIA_SERVE_PERCENT_ENV = 'MEDIA_NOISE_MODE_SERVE_PERCENT'
+MEDIA_SERVE_DIGESTS_ENV = 'MEDIA_NOISE_MODE_SERVE_UID_SHA256S'
 ContentKind = Literal['conversation', 'media', 'noise']
 OWNER_FLOOR_SECONDS = 2.0
 WORD_FLOOR = 12
