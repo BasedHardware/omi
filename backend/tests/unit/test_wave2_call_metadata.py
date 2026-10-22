@@ -173,3 +173,21 @@ def test_ambiguous_calendar_id_is_not_arbitrarily_linked():
     second.external_id = 'event-2'
     fields = calls.call_fields([first, second])
     assert fields['is_call'] and fields['calendar_event_id'] is None
+
+
+def test_call_metadata_cannot_be_written_through_client_create_or_update_models():
+    from models.conversation import CreateConversation, UpdateConversation
+
+    fields = {
+        'is_call': True,
+        'call_platform': 'teams',
+        'calendar_event_id': 'event-1',
+        'geolocation_scope': 'owner',
+        'other_participants_location': 'remote',
+    }
+    created = CreateConversation.model_validate(
+        {'started_at': NOW, 'finished_at': NOW, 'transcript_segments': [], **fields}
+    )
+    updated = UpdateConversation.model_validate(fields)
+    assert not set(fields) & set(created.model_dump())
+    assert not set(fields) & set(updated.model_dump())
