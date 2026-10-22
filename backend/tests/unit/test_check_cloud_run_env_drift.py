@@ -2866,3 +2866,249 @@ def test_values_render_rejects_override_tokens_as_operational_error(checker, tmp
         ],
     )
     assert rc in (0, 1)
+
+
+# ── review round 7 (Codex r4342784015/4021/4028/4033/4039) ───────────────────
+
+
+def _helm_render_runner(deployment: str, container: str, env: list[dict], envfrom: list[dict]):
+    rendered = yaml.safe_dump_all(
+        [
+            {
+                'kind': 'Deployment',
+                'metadata': {'name': deployment},
+                'spec': {'template': {'spec': {'containers': [{'name': container, 'env': env, 'envFrom': envfrom}]}}},
+            }
+        ]
+    )
+
+    def runner(argv, **_kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+    return runner
+
+
+def _literal_configmap_key(checker) -> tuple[str, str, str, dict[str, str]]:
+    """(cm name, literal key, literal value, snapshot data) for the shared ConfigMap."""
+    name, cm_entries = checker.manifest_config_map('prod', PROD_MANIFEST)
+    literals = sorted(
+        k
+        for k, v in cm_entries.items()
+        if isinstance(v, dict) and v.get('source') == 'literal' and isinstance(v.get('value'), str)
+    )
+    assert literals, 'manifest ConfigMap has no literal entries'
+    data = {
+        key: (
+            str(raw['value'])
+            if isinstance(raw, dict) and raw.get('source') == 'literal' and isinstance(raw.get('value'), str)
+            else ''
+        )
+        for key, raw in cm_entries.items()
+    }
+    return name, literals[0], str(cm_entries[literals[0]]['value']), data
+
+
+def test_gke_later_secret_envfrom_source_shadows_configmap_keys(checker) -> None:
+    # K8s last-source-wins: with sources [ConfigMap A, Secret S], a key both
+    # export resolves to the Secret value, which the checker never reads. The
+    # earlier ConfigMap's snapshot value must not be asserted against the
+    # expected manifest literal (false DRIFT, --strict exit 1); the keys stay
+    # value-unproven and the workload reports INVENTORY through the Secret
+    # identity that both the chart and the serving spec declare.
+    cm_name, shared, literal_value, cm_data = _literal_configmap_key(checker)
+    # The snapshot's value for the shared key differs from the manifest
+    # literal: without the shadow exclusion this is a false value mismatch.
+    cm_data[shared] = f'{literal_value}-secret-overrode-this'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [
+        {'configMapRef': {'name': cm_name}},
+        {'secretRef': {'name': 'fixture-shadowing-secret'}},
+    ]
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        render='helm',
+        gke_state=gke_state,
+        runner=_helm_render_runner(deployment, 'pusher', serving_env, envfrom),
+    )
+    assert result.error is None, result.error
+    assert 'secret:fixture-shadowing-secret' in result.envfrom_unresolved
+    assert shared not in {m.key for m in result.value_mismatches}
+    assert result.status == 'INVENTORY', result
+    assert checker.exit_code((result,), strict=True) == 0
+
+
+def test_gke_later_configmap_reexports_shadowed_key(checker) -> None:
+    # [A, Secret, A] where the trailing ConfigMap re-exports the shared key:
+    # the last known source wins over the opaque one, so the key is
+    # value-comparable again and a real mismatch is reported.
+    cm_name, shared, literal_value, cm_data = _literal_configmap_key(checker)
+    cm_data[shared] = f'{literal_value}-tampered'
+    deployment = 'prod-omi-pusher'
+    serving_env = [{'name': 'X', 'value': 'x'}]
+    envfrom = [
+        {'configMapRef': {'name': cm_name}},
+        {'secretRef': {'name': 'fixture-shadowing-secret'}},
+        {'configMapRef': {'name': cm_name}},
+    ]
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {},
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('pusher',),
+        render='helm',
+        gke_state=gke_state,
+        runner=_helm_render_runner(deployment, 'pusher', serving_env, envfrom),
+    )
+    assert result.error is None, result.error
+    assert shared in {m.key for m in result.value_mismatches}
+    assert result.status == 'DRIFT'
+
+
+def test_rendered_state_rejects_entries_absent_from_the_manifest(checker, tmp_path: Path) -> None:
+    # The renderer can only emit manifest env/secrets bindings; a well-formed
+    # extra entry is a stale or hand-edited state, and merging it would hide
+    # the live-only drift this command exists to detect.
+    manifest_path = _two_service_manifest(tmp_path)
+    rendered = tmp_path / 'extra.json'
+    rendered.write_text(
+        json.dumps(
+            {
+                'services': {
+                    'backend': {'env': []},
+                    'backend-sync': {
+                        'env': [
+                            *(
+                                {'name': name, 'value': 'rendered'}
+                                for name in (
+                                    'SYNC_TASKS_QUEUE',
+                                    'SUMMARY_DEBT_REPAIR_ENABLED',
+                                    'DEMAND_PROCESSING_UID_ALLOWLIST',
+                                    'SYNC_TASKS_HANDLER_URL',
+                                )
+                            ),
+                            {
+                                'name': 'TYPESENSE_HOST',
+                                'valueFrom': {'secretKeyRef': {'name': 'TYPESENSE_HOST', 'key': 'latest'}},
+                            },
+                            {'name': 'STALE_LEGACY_FLAG', 'value': 'leftover'},
+                        ]
+                    },
+                }
+            }
+        ),
+        encoding='utf-8',
+    )
+    with pytest.raises(ValueError, match='STALE_LEGACY_FLAG'):
+        checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=rendered)
+
+
+def test_rendered_state_rejects_unsupported_valuefrom_shape(checker, tmp_path: Path) -> None:
+    # The renderer emits only valueFrom.secretKeyRef with name/key; any other
+    # nested source is corruption and must produce the operational error,
+    # not a hash-domain comparison.
+    manifest_path = _two_service_manifest(tmp_path)
+    for bad_value_from in (
+        {},
+        {'fieldRef': {'fieldPath': 'metadata.name'}},
+        {'configMapKeyRef': {'name': 'cm', 'key': 'k'}},
+        {'secretKeyRef': {'name': '', 'key': 'latest'}},
+        {'secretKeyRef': {'key': 'latest'}},
+    ):
+        rendered = tmp_path / 'nested.json'
+        rendered.write_text(
+            json.dumps(
+                {
+                    'services': {
+                        'backend': {'env': []},
+                        'backend-sync': {
+                            'env': [
+                                {'name': 'TYPESENSE_HOST', 'valueFrom': bad_value_from},
+                            ]
+                        },
+                    }
+                }
+            ),
+            encoding='utf-8',
+        )
+        with pytest.raises(ValueError, match='valueFrom must be secretKeyRef with name and key'):
+            checker.expected_cloud_run_env(env='prod', manifest_path=manifest_path, rendered_state_path=rendered)
+
+
+def test_pusher_expected_envfrom_reads_runtime_config_map_name(checker, tmp_path: Path) -> None:
+    # The pusher deployment template ignores .Values.envFrom and builds envFrom
+    # from runtimeConfigMapName alone; the values-mode expected reference must
+    # read the same field or a renamed runtime ConfigMap with a stale envFrom
+    # value flags a correct rollout as reference drift.
+    values = {
+        'envFrom': [{'configMapRef': {'name': 'stale-leftover-config'}}],
+        'runtimeConfigMapName': 'prod-omi-backend-config',
+    }
+    pusher_dir = tmp_path / 'backend' / 'charts' / 'pusher'
+    pusher_dir.mkdir(parents=True)
+    (pusher_dir / 'prod_omi_pusher_values.yaml').write_text(yaml.safe_dump(values), encoding='utf-8')
+    refs = checker.expected_gke_envfrom_refs('pusher', env='prod', root=tmp_path)
+    assert refs == ('prod-omi-backend-config',)
+
+    # backend-listen's template renders .Values.envFrom directly, so its
+    # values-mode expectation keeps reading envFrom when the two diverge.
+    listen_dir = tmp_path / 'backend' / 'charts' / 'backend-listen'
+    listen_dir.mkdir(parents=True)
+    (listen_dir / 'prod_omi_backend_listen_values.yaml').write_text(yaml.safe_dump(values), encoding='utf-8')
+    refs = checker.expected_gke_envfrom_refs('backend-listen', env='prod', root=tmp_path)
+    assert refs == ('stale-leftover-config',)
+
+
+def test_cloud_run_secret_alias_resolves_through_annotation(checker, tmp_path: Path) -> None:
+    # A project-qualified secret binding renders as an alias in
+    # secretKeyRef.name plus the run.googleapis.com/secrets annotation; the
+    # live hash must resolve the alias to the declared resource or a correct
+    # cross-project deployment reports a value mismatch.
+    resource = 'projects/123456789/secrets/SHARED_TOKEN'
+    serving_env = [
+        {'name': 'SYNC_TASKS_QUEUE', 'value': 'sync-jobs'},
+        {'name': 'SUMMARY_DEBT_REPAIR_ENABLED', 'value': 'true'},
+        {'name': 'DEMAND_PROCESSING_UID_ALLOWLIST', 'value': ''},
+        {'name': 'SYNC_TASKS_HANDLER_URL', 'value': 'https://handler.example/run'},
+        {'name': 'TYPESENSE_HOST', 'valueFrom': {'secretKeyRef': {'name': 'SHARED_TOKEN', 'key': 'latest'}}},
+        {'name': 'FIRST_SUMMARY_UID_ALLOWLIST', 'value': SENSITIVE_UID},
+    ]
+    state = _replay_state(serving_env=serving_env)
+    # Annotate both serving revision and template so fingerprints stay comparable.
+    for revision_doc in state['revisions'].values():
+        revision_doc['metadata'] = {'annotations': {checker.SECRET_ALIAS_ANNOTATION: f'SHARED_TOKEN:{resource}'}}
+    state['services']['backend-sync']['spec']['template']['metadata']['annotations'] = {
+        checker.SECRET_ALIAS_ANNOTATION: f'SHARED_TOKEN:{resource}'
+    }
+    manifest_path = _two_service_manifest(tmp_path)
+    manifest = yaml.safe_load(manifest_path.read_text(encoding='utf-8'))
+    # The manifest binds the project-qualified resource: the rendered state
+    # hashes the resource path while the live revision carries the alias.
+    manifest['environments']['prod']['cloud_run']['services']['backend-sync']['secrets']['TYPESENSE_HOST'] = {
+        'secret': resource,
+        'version': 'latest',
+    }
+    manifest_path = tmp_path / 'runtime_env_qualified.yaml'
+    manifest_path.write_text(yaml.safe_dump(manifest), encoding='utf-8')
+    _, _, (sync,) = checker.inspect_services_drift(
+        env='prod',
+        services=('backend-sync',),
+        manifest_path=manifest_path,
+        cloud_run_state=state,
+    )
+    assert sync.error is None, sync.error
+    assert 'TYPESENSE_HOST' not in {m.key for m in sync.value_mismatches}, sync.value_mismatches
+    assert sync.status != 'DRIFT', sync

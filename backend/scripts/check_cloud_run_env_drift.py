@@ -137,6 +137,12 @@ class GkeWorkload:
     container: str
     # Image pins only satisfy the chart's render-time guards; they never reach the env.
     helm_image_args: tuple[str, ...] = ('image.tag=drift-check', 'image.digest=')
+    # True when the chart template builds envFrom solely from
+    # ``runtimeConfigMapName`` and ignores ``.Values.envFrom`` (the pusher
+    # template). Values mode must then read the same field the template reads,
+    # or a renamed runtime ConfigMap with a stale leftover ``envFrom`` value
+    # would flag a correctly rendered rollout as reference drift.
+    envfrom_from_runtime_config_map: bool = False
 
 
 GKE_WORKLOADS: dict[str, GkeWorkload] = {
@@ -151,6 +157,9 @@ GKE_WORKLOADS: dict[str, GkeWorkload] = {
         values_file='backend/charts/pusher/{env}_omi_pusher_values.yaml',
         deployment='{env}-omi-pusher',
         container='pusher',
+        # The pusher deployment template ignores .Values.envFrom and always
+        # constructs envFrom from runtimeConfigMapName.
+        envfrom_from_runtime_config_map=True,
     ),
     'batch-pipeline-worker': GkeWorkload(
         chart='backend/charts/batch-pipeline-worker',
@@ -212,6 +221,11 @@ class ServingTarget:
     # data was readable. Used to excuse keys of expected sources the repository
     # cannot enumerate when the serving target holds the same reference.
     envfrom_key_contributions: tuple[tuple[str, frozenset[str]], ...] = ()
+    # envFrom-only keys whose effective value a later opaque Secret source may
+    # override (K8s last-source-wins; Secret contents are never read). They
+    # cannot be value-proven from the earlier known source's data, so they
+    # degrade to INVENTORY instead of asserting the snapshot value.
+    opaque_shadowed_keys: frozenset[str] = frozenset()
     # Explicit env keys bound through ``valueFrom.configMapKeyRef`` (live reads
     # only). The immutable pod spec proves the binding, but the value the
     # container resolved at start cannot be re-read: K8s requires a pod restart
@@ -478,6 +492,23 @@ def _manifest_entry_hash(name: str, entry: object, *, secret: bool, environ: Map
     return None
 
 
+def _is_renderer_secret_entry(entry: Mapping[str, Any]) -> bool:
+    """True when a rendered ``valueFrom`` entry matches the renderer's only nested shape.
+
+    ``render_backend_runtime_env.py`` emits exactly ``valueFrom.secretKeyRef``
+    with non-empty ``name`` and ``key`` strings (see ``_render_secret_entries``);
+    every other nested source is not renderer output.
+    """
+    secret = (entry.get('valueFrom') or {}).get('secretKeyRef')
+    return (
+        isinstance(secret, Mapping)
+        and isinstance(secret.get('name'), str)
+        and bool(secret.get('name'))
+        and isinstance(secret.get('key'), str)
+        and bool(secret.get('key'))
+    )
+
+
 def expected_cloud_run_env(
     *,
     env: str,
@@ -552,6 +583,18 @@ def expected_cloud_run_env(
                 f'Rendered state {rendered_state_path} entry for service {service_name!r} '
                 'has a malformed env entry (each must carry exactly one of value or valueFrom)'
             )
+        if rendered_state_path is not None and not all(
+            _is_renderer_secret_entry(entry) for entry in rendered_env if isinstance(entry.get('valueFrom'), Mapping)
+        ):
+            # The renderer emits only ``valueFrom.secretKeyRef`` with valid
+            # name/key fields; any other nested source (``{}``, ``fieldRef``,
+            # ``configMapKeyRef``, a missing name/key) is not renderer output
+            # and would hash into a domain where a matching fixture can report
+            # OK. Validate the supported nested shape, not just its container.
+            raise ValueError(
+                f'Rendered state {rendered_state_path} entry for service {service_name!r} '
+                'has a malformed env entry (valueFrom must be secretKeyRef with name and key)'
+            )
         if rendered_service:
             # The rendered state is the exact deploy contract. The renderer
             # omits an env_var binding only when it is explicitly provisional
@@ -566,6 +609,20 @@ def expected_cloud_run_env(
                 for entry in rendered_service.get('env', []) or []
                 if isinstance(entry, dict) and isinstance(entry.get('name'), str) and entry['name']
             }
+            # The renderer can only emit manifest ``env`` and ``secrets``
+            # bindings: a well-formed rendered name with no such binding is
+            # not renderer output for this service (stale file, wrong service,
+            # hand edit). Merging it would declare a key the manifest never
+            # authorized, so a serving revision that still carries that stale
+            # key would compare OK — hiding exactly the live-only drift this
+            # command exists to detect. Reject instead of merge.
+            extra = sorted(rendered_names - set(env_map) - set(secrets_map))
+            if extra:
+                raise ValueError(
+                    f'Rendered state {rendered_state_path} declares {extra[0]!r} for service '
+                    f'{service_name!r}, which the manifest does not bind; the renderer emits '
+                    'only manifest env and secrets bindings'
+                )
             bindings: dict[str, Any] = {**env_map, **secrets_map}
             provisional_omitted: set[str] = set()
             for key in service_expected:
@@ -632,6 +689,14 @@ def expected_gke_envfrom_refs(workload: str, *, env: str, root: Path = ROOT) -> 
     """
     spec = GKE_WORKLOADS[workload]
     values = _load_values(root / spec.values_file.format(env=env))
+    if spec.envfrom_from_runtime_config_map:
+        # Mirror the pusher template: envFrom comes from
+        # runtimeConfigMapName alone; .Values.envFrom is dead config there
+        # and must not become the expected reference.
+        name = values.get('runtimeConfigMapName')
+        if isinstance(name, str) and name:
+            return (_envfrom_ref_identity(name, '', False),)
+        return ()
     descriptors = _envfrom_source_descriptors({'envFrom': values.get('envFrom')})
     if not descriptors:
         name = values.get('runtimeConfigMapName')
@@ -833,13 +898,72 @@ def _template_env(service_doc: Mapping[str, Any], *, service: str) -> tuple[str 
         return None, None
     container = _application_container(containers, scope=f'Cloud Run service {service} template')
     name = (template.get('metadata') or {}).get('name')
-    return (name if isinstance(name, str) else None), _env_list_to_live(container.get('env', []), scope=service)
+    # Alias resolution matches _revision_env so template and serving
+    # fingerprints stay comparable when cross-project secrets are declared.
+    env = _resolve_secret_aliases(container.get('env', []), _secret_alias_map(template.get('metadata')))
+    return (name if isinstance(name, str) else None), _env_list_to_live(env, scope=service)
+
+
+# Cloud Run represents cross-project secrets (projects/p/secrets/s) through
+# this annotation while the container env carries only a lookup alias in
+# secretKeyRef.name; the annotation maps the declared name to the resource.
+SECRET_ALIAS_ANNOTATION = 'run.googleapis.com/secrets'
+
+
+def _secret_alias_map(metadata: Mapping[str, Any] | None) -> dict[str, str]:
+    """``declared name -> secret resource`` from a revision/template annotation.
+
+    The grammar matches ``attach_cloud_run_gmp_sidecar.py``:
+    ``name:projects/<number>/secrets/<secret>,name2:...``. Malformed entries
+    are skipped: the checker must not guess a rewrite, only apply one the
+    platform itself declared.
+    """
+    annotations = (metadata or {}).get('annotations') or {}
+    raw = annotations.get(SECRET_ALIAS_ANNOTATION)
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    aliases: dict[str, str] = {}
+    for candidate in raw.split(','):
+        entry = candidate.strip()
+        if not entry:
+            continue
+        name, separator, resource = entry.partition(':')
+        if name and separator and resource:
+            aliases[name] = resource
+    return aliases
+
+
+def _resolve_secret_aliases(entries: object, aliases: Mapping[str, str]) -> list[Any]:
+    """Rewrite ``secretKeyRef.name`` aliases to their declared secret resources.
+
+    Expected hashes keep a project-qualified reference intact (see
+    ``_secret_ref_hash``), so a live alias must resolve through the annotation
+    before hashing or a correctly deployed cross-project secret reports a value
+    mismatch. Only names the annotation explicitly declares are rewritten.
+    """
+    if not isinstance(entries, list) or not aliases:
+        return entries if isinstance(entries, list) else []
+    resolved: list[Any] = []
+    for entry in entries:
+        if isinstance(entry, dict):
+            value_from = entry.get('valueFrom')
+            secret = value_from.get('secretKeyRef') if isinstance(value_from, dict) else None
+            if isinstance(secret, dict):
+                resource = aliases.get(str(secret.get('name', ''))) or aliases.get(str(entry.get('name', '')))
+                if resource:
+                    entry = {
+                        **entry,
+                        'valueFrom': {'secretKeyRef': {**secret, 'name': resource}},
+                    }
+        resolved.append(entry)
+    return resolved
 
 
 def _revision_env(revision_doc: Mapping[str, Any], *, revision: str) -> LiveEnv:
     containers = (revision_doc.get('spec') or {}).get('containers')
     container = _application_container(containers, scope=f'Cloud Run revision {revision}')
-    return _env_list_to_live(container.get('env', []), scope=f'revision {revision}')
+    env = _resolve_secret_aliases(container.get('env', []), _secret_alias_map(revision_doc.get('metadata')))
+    return _env_list_to_live(env, scope=f'revision {revision}')
 
 
 def read_cloud_run_service(
@@ -1083,11 +1207,20 @@ def read_gke_workload(
         target_unproven_keys: set[str] = set()
         target_degraded_refs: set[str] = set()
         target_contributions: list[tuple[str, frozenset[str]]] = []
+        # Keys an earlier known (ConfigMap) source contributed that a later
+        # opaque Secret source may override (K8s last-source-wins). Secret
+        # contents are never read, so those keys' effective values are
+        # unproven until a later known source or an explicit env entry
+        # re-binds them; comparing the ConfigMap's snapshot value would
+        # report false drift for a correct rollout.
+        target_shadowed_keys: set[str] = set()
+        contributed_keys: set[str] = set()
         for identity, is_secret, source_name, source_prefix, optional in descriptors:
             if is_secret:
                 # Secrets stay opaque: identity comparison only, keys unresolved.
                 refs_unresolved.add(identity)
                 target_degraded_refs.add(identity)
+                target_shadowed_keys |= contributed_keys
                 continue
             data = resolve_configmap(source_name, optional=optional)
             if data is None:
@@ -1097,6 +1230,10 @@ def read_gke_workload(
             contributed = frozenset(f'{source_prefix}{key}' for key in data)
             if contributed:
                 target_contributions.append((identity, contributed))
+            # A later known source that exports a key re-proves it: the last
+            # contributing source is the effective one.
+            contributed_keys |= contributed
+            target_shadowed_keys -= contributed
             if not configmap_is_proven(source_name):
                 refs_unproven.add(identity)
                 target_degraded_refs.add(identity)
@@ -1119,6 +1256,7 @@ def read_gke_workload(
                     envfrom_degraded_refs=frozenset(target_degraded_refs),
                     unproven_envfrom_keys=frozenset(target_unproven_keys - explicit_keys),
                     envfrom_key_contributions=tuple(target_contributions),
+                    opaque_shadowed_keys=frozenset(target_shadowed_keys - explicit_keys),
                     explicit_unproven_keys=explicit_unproven,
                     explicit_keyref_hashes=keyref_hashes,
                 ),
@@ -1273,6 +1411,12 @@ def compare_service(
                 if effective_source.get(key) in expected_unresolved_refs:
                     value_excluded.add(key)
         explicit_unproven |= target.explicit_unproven_keys - target.unproven_envfrom_keys
+        # Keys a later opaque Secret source may override are excluded from the
+        # value comparison for the same reason unresolved-source keys are: the
+        # effective value is unknowable (Secret contents are never read), so
+        # asserting the earlier ConfigMap source's value would report false
+        # drift. The Secret source's own identity already reports INVENTORY.
+        value_excluded |= target.opaque_shadowed_keys
         for key in sorted(
             (declared & set(env_map)) - target.unproven_envfrom_keys - target.explicit_unproven_keys - value_excluded
         ):
