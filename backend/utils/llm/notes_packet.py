@@ -23,6 +23,7 @@ from utils.observability.fallback import record_fallback
 from utils.llm.output_language import resolve_output_language
 from utils.llm.speaker_evidence_prompt import render_speaker_evidence, SPEAKER_RULES
 
+PACKET_VERSION = 2
 FLAG = 'NOTES_PACKET_V2_MODE'
 # Explicit declarations for the registry; only config.refactor_modes reads their values.
 NOTES_SERVE_PERCENT_ENV = 'NOTES_PACKET_V2_MODE_SERVE_PERCENT'
@@ -90,7 +91,7 @@ def build_notes_packet(
     packet = dict(supplemental or {})
     packet.update(
         {
-            'version': 2,
+            'version': PACKET_VERSION,
             'output_language': language,
             'response_language': language,
             'started_local_iso': _local_started_at_iso(inputs['started_at'], inputs.get('tz')),

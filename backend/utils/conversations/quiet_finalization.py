@@ -66,7 +66,7 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
     if not is_listen_finalization_dispatch_enabled() or not is_listen_finalization_dispatch_configured():
         raise lifecycle.FinalizationDispatchUnavailable('quiet finalization dispatch is unavailable')
     check = checks_db.evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
-    if check['status'] not in {'ready', 'deferred'}:
+    if check['status'] not in {'ready', 'empty_ready', 'deferred'}:
         return check['status']
     if should_skip_background_account_mutation(check['uid'], firestore_client=firestore_client):
         checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
@@ -76,6 +76,18 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
     _dispatch(check)
     if check['status'] == 'deferred':
         return 'deferred'
+    if check['status'] == 'empty_ready':
+        deleted = lifecycle.delete_empty_recording_conversation(
+            check['uid'],
+            check['conversation_id'],
+            check.get('recording_session_id'),
+            recovery_cutoff=check['recovery_cutoff'],
+            require_expired_recording_lease=True,
+            firestore_client=firestore_client,
+        )
+        if deleted:
+            checks_db.stop_quiet_check(job_id, check['dispatch_generation'], firestore_client=firestore_client)
+        return 'empty_deleted' if deleted else 'deferred'
     CONVERSATION_ORPHANED_UNFINALIZED.inc()
     result = lifecycle.request_finalization(
         check['uid'],

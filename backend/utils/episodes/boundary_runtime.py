@@ -62,14 +62,14 @@ def apply_signal_edges(
     observe('episode_signal', not changed)
     if not serving_for(EPISODE_BOUNDARIES_MODE_ENV, uid):
         return 'shadow'
-    if changed or (quiet and episode):
+    if episode is not None and (changed or quiet):
         episodes_db.close_episode(uid, str(episode['id']), 'boundary', closed_at=now, firestore_client=firestore_client)
         episode = None
     if episode is None and current and not quiet:
-        from utils.episodes.service import _new_episode
+        from utils.episodes.service import new_episode
 
-        start = max(policy.utc(known[key]['started_at']) for key in current)
-        base = _new_episode(conversation_id='', started_at=start, last_activity_at=now, calendar_identity=None, now=now)
+        start = max(start for key in current if (start := policy.utc(known[key]['started_at'])) is not None)
+        base = new_episode(conversation_id='', started_at=start, last_activity_at=now, calendar_identity=None, now=now)
         episodes_db.commit_moment(
             uid,
             expected_episode_id=None,

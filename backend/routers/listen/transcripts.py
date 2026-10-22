@@ -17,7 +17,6 @@ from config.translation import resolve_ondemand_config
 from routers.listen.capture_merges import snapshot_proofs, acknowledge_proofs
 from models.capture_window_proof import CaptureWindowProof
 from config.live_capture import capture_window_reason
-from utils.capture_evidence import unknown_envelope
 from routers.listen.coverage import publish_committed, committed_snapshot
 from config.refactor_modes import serving_for
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL

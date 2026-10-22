@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from config import refactor_modes
-from models.capture_coverage import CaptureKey, CoverageRecord, FrameRange
+from models.capture_coverage import CaptureKey, CoverageRecord, CoverageOrigin, FrameRange
 from utils.capture import coverage
 from utils.capture.coverage_metrics import SECONDS
 from utils.capture_evidence import source_coordinate
@@ -38,7 +38,7 @@ def failed(check: str, error: Exception) -> None:
     )
 
 
-def trim_maps(uid, paths, maps, *, device_id=None, recording_session_id=None, origin='sync'):
+def trim_maps(uid, paths, maps, *, device_id=None, recording_session_id=None, origin: CoverageOrigin = 'sync'):
     """Uses the S1 materializer without decoding, joining or inferring frames."""
     from utils.sync.wal_audio_coverage import apply_wal_audio_coverage
     from utils.sync.audio_coverage import plan_unreceived_frames

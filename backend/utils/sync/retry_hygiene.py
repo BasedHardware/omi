@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import logging
+from typing import Any, Callable
 
 from prometheus_client import Counter
 
@@ -52,7 +53,16 @@ def dispatch_cap(uid: str, owner: dict) -> RetryCap | None:
     return retry_cap(uid, int(owner.get('dispatch_attempt') or 0) + 1, get_sync_tasks_max_attempts())
 
 
-def reconcile_dispatch_cap(uid, owner, epoch, current, *, registry, finalize, kick) -> str | None:
+def reconcile_dispatch_cap(
+    uid: str,
+    owner: dict[str, Any],
+    epoch: int,
+    current: Any,
+    *,
+    registry: Any,
+    finalize: Callable[..., bool],
+    kick: Callable[[], Any]
+) -> str | None:
     if owner.get('active_state') != 'dispatching':
         return None
     decision = dispatch_cap(uid, owner)

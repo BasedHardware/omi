@@ -29,7 +29,7 @@ CROSS_SCOPE_CLUSTER = OperatingPoint(0.60)
 CROSS_EPOCH = FINALIZE  # historically shares the finalize env override
 ONLINE_CLUSTER = OperatingPoint(float(os.getenv('SPEAKER_CLUSTERING_THRESHOLD', '0.60')))
 PARAKEET_CLUSTER = OperatingPoint(float(os.getenv('PARAKEET_SPEAKER_CLUSTERING_THRESHOLD', '0.60')))
-BATCH_CLUSTER = OperatingPoint(0.55, inclusive=True)
+BATCH_CLUSTER = OperatingPoint(float(os.getenv('PARAKEET_SPEAKER_AHC_THRESHOLD', '0.55')), inclusive=True)
 CONVERSATION_CLUSTER = OperatingPoint(float(os.getenv('CONVERSATION_SPEAKER_AHC_THRESHOLD', '0.70')), inclusive=True)
 ABSORB = OperatingPoint(float(os.getenv('CONVERSATION_SPEAKER_ABSORB_DISTANCE', '0.60')))
 OWNER_NEAR_MISS_DISTANCE = 0.70

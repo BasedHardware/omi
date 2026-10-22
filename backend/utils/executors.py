@@ -69,7 +69,7 @@ _TASKS = frozenset(
 def _gauge(name: str, description: str):
     existing = getattr(REGISTRY, '_names_to_collectors', {}).get(name)
     if existing is not None:
-        if not isinstance(existing, Gauge) or existing._labelnames != ('executor', 'task'):
+        if not isinstance(existing, Gauge) or getattr(existing, '_labelnames', None) != ('executor', 'task'):
             raise ValueError(f'executor metric {name} already has a different shape')
         return existing
     return Gauge(name, description, ['executor', 'task'])
@@ -103,10 +103,11 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
         self._active_count = 0
         self._active_lock = threading.Lock()
         self.max_queue_size = max_queue_size
-        if max_queue_size is not None:
+        self._bounded_queue: queue.Queue[Any] | None = queue.Queue() if max_queue_size is not None else None
+        if self._bounded_queue is not None:
             # A cancelled Future must not leave its payload in SimpleQueue
             # while its semaphore slot is reused by a later submission.
-            self._work_queue = queue.Queue()
+            setattr(self, "_work_queue", self._bounded_queue)
         self.wait_on_saturation = wait_on_saturation
         max_workers = self._max_workers
         self._submission_slots = (
@@ -148,8 +149,11 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
                 if slots is not None:
                     # Queue's mutex serializes removal against the worker get.
                     # A worker that already dequeued it will observe cancellation.
-                    with self._work_queue.mutex:
-                        pending = self._work_queue.queue
+                    bounded = self._bounded_queue
+                    if bounded is None:
+                        raise RuntimeError('bounded executor has no queue')
+                    with bounded.mutex:
+                        pending = bounded.queue
                         for item in pending:
                             if getattr(item, 'future', None) is future:
                                 pending.remove(item)

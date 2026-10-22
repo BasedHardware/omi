@@ -53,6 +53,32 @@ def window_abstentions(placements, abstained):
         current.abstentions.update(p.reason for sid, p in placements.items() if sid in abstained)
 
 
+def _roster(uid: str, conversation: Any) -> list[dict]:
+    candidates = roster_candidates(
+        getattr(conversation, 'calendar_meeting_context', None)
+        or (getattr(conversation, 'external_data', None) or {}).get('calendar_meeting_context')
+    )
+    try:
+        from utils.episodes.boundaries import boundary_roster
+
+        candidates.extend({'name': person.name} for person in boundary_roster(uid, conversation.id))
+    except Exception as error:
+        logger.warning(
+            'event=refactor_shadow lane=L2 check=boundary_roster outcome=error exception_type=%s', type(error).__name__
+        )
+        AGREEMENT.labels(outcome='error').inc()
+        record_fallback(
+            component='other',
+            from_mode='boundary_roster',
+            to_mode='calendar_roster',
+            reason='dependency_unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+    unique = {str(person.get('name')): person for person in candidates if person.get('name')}
+    return list(unique.values())
+
+
 def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
     current = _current.get()
     _current.reset(token)
@@ -63,10 +89,7 @@ def finish(token, uid: str, conversation: Any, receipt: Any) -> None:
             conversation.transcript_segments,
             current.resolution,
             receipt=receipt,
-            roster=roster_candidates(
-                getattr(conversation, 'calendar_meeting_context', None)
-                or (getattr(conversation, 'external_data', None) or {}).get('calendar_meeting_context')
-            ),
+            roster=_roster(uid, conversation),
             abstentions=sorted(
                 current.abstentions
                 | (set() if current.reason == 'resolved' else {current.reason})

@@ -206,3 +206,16 @@ def test_ambiguous_provider_scope_cannot_revive_stale_carried_receipt():
     receipt = {'speakers': {'5': {'is_user': True, 'source': 'carried', 'speaker_id_scope': 'sync:old'}}}
     record = evidence.build_evidence([item], receipt=receipt)
     assert evidence.project_labels(record, receipt)['s'] == (False, None)
+
+
+def test_boundary_roster_reaches_evidence_as_prior_and_never_a_voice_label(monkeypatch):
+    from models.boundary_evidence import BoundaryParticipant
+    from utils.episodes import boundaries
+
+    monkeypatch.setattr(boundaries, 'boundary_roster', lambda *args: [BoundaryParticipant(name='Fixture Attendee')])
+    candidates = processing._roster(uuid.uuid4().hex, SimpleNamespace(id='fixture', external_data={}))
+    record = evidence.build_evidence([segment('a')], roster=candidates)
+    roster = [candidate for voice in record.clusters for candidate in voice.candidates if candidate.source == 'roster']
+    assert [candidate.name for candidate in roster] == ['Fixture Attendee']
+    assert all(candidate.probability == policy.ROSTER_PRIOR and not candidate.label_eligible for candidate in roster)
+    assert evidence.project_labels(record, {}) == {'a': (False, None)}

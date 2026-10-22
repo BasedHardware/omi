@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from functools import wraps
 from typing import Any, Mapping
 
@@ -64,7 +64,7 @@ def active(windows: Mapping[str, Mapping], at: datetime) -> list[str]:
         for key, w in windows.items()
         if (start := utc(w.get('started_at'))) is not None
         and start <= at
-        and (utc(w.get('ended_at')) is None or at < utc(w['ended_at']))
+        and ((end := utc(w.get('ended_at'))) is None or at < end)
     )
 
 

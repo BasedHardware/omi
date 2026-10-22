@@ -1,6 +1,6 @@
 from database import conversation_visibility_counts, processing_backlog
 from utils.conversations import summary_delivery, lifecycle_clocks
-from config.refactor_modes import serving_for
+from config.refactor_modes import serving_for, shadow_or_serve
 import copy
 import hashlib
 import json
@@ -4221,8 +4221,7 @@ def assign_sync_conversation(
     def assign(transaction, full_ids=frozenset()):
         clock.attempt()
         score_snapshots.clear()
-        # Optional batch projection hooks share the exact legacy transaction.
-        # Guards/plan validation may only read; after_assign may only write.
+        # Projection guards only read; after_assign only writes in this transaction.
         if before_assign is not None:
             with clock.timed('fence'):
                 before_assign(transaction)
@@ -4249,7 +4248,7 @@ def assign_sync_conversation(
                 live_candidate_ids=live_candidate_ids,
                 absorbed=absorbed,
             )
-        # The commit runs after this returns; remember which row it would grow.
+        # Remember the candidate before the transaction commits.
         attempted['canonical'] = planned[0]['id']
         if after_assign is not None:
             with clock.timed('persist'):
@@ -4258,7 +4257,9 @@ def assign_sync_conversation(
         return planned
 
     with clock.call():
-        if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
+        if not target_id and (
+            (incoming.get('client_device_id') and live_overlap_enabled()) or shadow_or_serve('CAPTURE_COVERAGE_MODE')
+        ):
             with clock.timed('live_overlap'):
                 live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
         with clock.timed('transaction'):
@@ -4268,8 +4269,7 @@ def assign_sync_conversation(
             )
         conversation = result[0]
         if defer_index is not None:
-            # The caller coalesces per conversation, so the full lineage (which
-            # retries a failed or lost donor delete) is paid once per flush.
+            # Coalesce the lineage's retryable donor deletes once per flush.
             clock.donors = len(absorbed)
             defer_index(uid, conversation['id'], sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
         else:

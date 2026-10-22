@@ -4,10 +4,11 @@ from bisect import bisect_left, bisect_right
 import hashlib
 import json
 import wave
+from typing import Any, Awaitable, Callable
 
 from utils.capture.sync_coverage import failed
 from utils.executors import run_blocking, storage_executor
-from utils.sync.held_coverage import covered_receipt, observe
+from utils.sync.held_coverage import HeldProof, covered_receipt, observe
 from utils.sync.files import get_timestamp_from_path
 
 MAX_CHILDREN = 32
@@ -15,12 +16,21 @@ MAX_PLAN_PIECES = 256
 MAX_CHECKPOINT_BYTES = 600_000
 
 
-def attempt_floor(entry):
+def attempt_floor(entry: dict[str, Any]) -> int:
     value = entry.get('coverage_attempt_floor', 1)
     return value if type(value) is int and value in (1, 2) else 1
 
 
-def children(uid, hold_id, name, path, context, entry, decision, attempt):
+def children(
+    uid: str,
+    hold_id: str,
+    name: str,
+    path: str,
+    context: dict[str, Any],
+    entry: dict[str, Any],
+    decision: HeldProof,
+    attempt: int,
+) -> dict[str, Any]:
     from utils.encryption import encrypt
 
     if not 0 < len(decision.uncovered) <= MAX_CHILDREN or not entry.get('audio_path'):
@@ -71,7 +81,17 @@ def children(uid, hold_id, name, path, context, entry, decision, attempt):
     return result
 
 
-async def delegate(uid, snapshot, row, piece, plan, receipts, processed, *, save):
+async def delegate(
+    uid: str,
+    snapshot: Any,
+    row: dict[str, Any],
+    piece: tuple[str, str, dict[str, Any], HeldProof, int],
+    plan: dict[str, Any],
+    receipts: dict[str, Any],
+    processed: set[str],
+    *,
+    save: Callable[..., Awaitable[bool]],
+) -> bool:
     """No parent ACK exists until every child pointer commits in the same fence."""
     name, path, context, decision, attempt = piece
     try:

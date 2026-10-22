@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 import wave
+from typing import Any
 
 from config import refactor_modes
 from models.capture_coverage import FrameRange
@@ -19,7 +20,7 @@ class HeldProof:
     state: str
 
 
-def proof(uid, path, meta) -> HeldProof | None:
+def proof(uid: str, path: str, meta: dict[str, Any]) -> HeldProof | None:
     if not refactor_modes.shadow_or_serve(coverage.FLAG):
         return None
     try:
@@ -74,7 +75,7 @@ def observe(decision: HeldProof, origin: str, outcome: str) -> None:
             pass
 
 
-def piece_state(uid, path, meta, context) -> HeldProof | None:
+def piece_state(uid: str, path: str, meta: dict[str, Any], context: dict[str, Any]) -> HeldProof | None:
     decision = proof(uid, path, {**meta, **context})
     if decision is None:
         return None
@@ -88,7 +89,7 @@ def piece_state(uid, path, meta, context) -> HeldProof | None:
     return decision
 
 
-def covered_receipt(previous=None):
+def covered_receipt(previous: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         **(previous or {}),
         'state': 'transcribed',

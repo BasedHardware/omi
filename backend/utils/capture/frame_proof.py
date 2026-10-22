@@ -10,7 +10,7 @@ from collections.abc import Mapping, Sequence
 
 from utils.capture.identity import compatible_keys
 from utils.capture_evidence import Span, novel_coverage
-from utils.sync.capture_repeat_evidence import _incoming_receipts, _offsets_fit, _receipt_span
+from utils.sync.capture_repeat_evidence import incoming_receipts, offsets_fit, receipt_span
 from utils.sync.committed_coverage import validated_committed_runs
 from utils.sync.live_overlap import compatible_capture
 
@@ -22,7 +22,7 @@ def _same_track(left: Mapping, right: Mapping) -> bool:
 
 
 def _stored_receipt_ranges(row: Mapping, incoming: Mapping, claim: Mapping) -> tuple[list[Span], bool]:
-    receipts = _incoming_receipts(row.get('capture_evidence'))
+    receipts = incoming_receipts(row.get('capture_evidence'))
     if receipts is None:
         return [], False
     ids = Counter(segment.get('id') for segment in row.get('transcript_segments') or [] if segment.get('id'))
@@ -34,7 +34,7 @@ def _stored_receipt_ranges(row: Mapping, incoming: Mapping, claim: Mapping) -> t
         segment_id = receipt.get('segment_id')
         if not segment_id or ids[segment_id] != 1 or receipt_ids[segment_id] != 1:
             continue
-        parsed = _receipt_span(receipt)
+        parsed = receipt_span(receipt)
         if parsed is None or not _same_track(parsed[0], claim):
             continue
         positioned = True
@@ -61,7 +61,7 @@ def _stored_receipt_ranges(row: Mapping, incoming: Mapping, claim: Mapping) -> t
 def evaluate(
     incoming: list[dict], incoming_row: dict, reference_rows: Sequence[dict]
 ) -> tuple[frozenset[int], frozenset[int]]:
-    receipts = _incoming_receipts(incoming_row.get('capture_evidence'))
+    receipts = incoming_receipts(incoming_row.get('capture_evidence'))
     if receipts is None or len(reference_rows) > MAX_ROWS:
         return frozenset(), frozenset()
     ids = Counter(segment.get('id') for segment in incoming if segment.get('id'))
@@ -72,7 +72,7 @@ def evaluate(
         if not segment_id or ids[segment_id] != 1 or matches[segment_id] != 1:
             continue
         receipt = next(r for r in receipts if isinstance(r, Mapping) and r.get('segment_id') == segment_id)
-        parsed = _receipt_span(receipt)
+        parsed = receipt_span(receipt)
         if parsed is None:
             continue
         claim, start, end, end_offset = parsed
@@ -84,7 +84,7 @@ def evaluate(
             runs = validated_committed_runs(claim, [evidence])
             if runs:
                 positioned.add(index)
-            if runs and _offsets_fit(receipt, evidence, claim, receipt['source_end_frame'], end_offset):
+            if runs and offsets_fit(receipt, evidence, claim, receipt['source_end_frame'], end_offset):
                 ranges.extend(Span(run['source_frame_start'], run['source_frame_end']) for run in runs)
             receipt_ranges, has_positions = _stored_receipt_ranges(row, receipt, claim)
             if has_positions:

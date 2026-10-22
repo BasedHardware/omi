@@ -68,7 +68,7 @@ def test_no_split_inside_a_signal_but_end_and_quiet_are_hard(store):
 
 def test_episode_start_closes_previous_and_opens_meeting_without_model_call(store, monkeypatch):
     boundary_store.record(ACCOUNT, [signal()], firestore_client=store)
-    assert callable(service._new_episode)  # Warm the existing model stack during collection, outside the call budget.
+    assert callable(service.new_episode)  # Warm the existing model stack during collection, outside the call budget.
     previous = {'id': 'episode-test', 'started_at': NOW - timedelta(minutes=10)}
     changes = []
     monkeypatch.setattr(boundary_runtime.episodes_db, 'get_current_episode', lambda *a, **k: previous)

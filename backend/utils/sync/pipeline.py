@@ -192,7 +192,7 @@ from utils.capture.sync_coverage import (
     covering_target,
     legacy_audio_trim,
 )
-from utils.sync.word_timing import _first_word_offset, _shift_to_vad_file_clock
+from utils.sync.word_timing import first_word_offset, shift_to_vad_file_clock
 from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
 from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.sync.safety_wal_metrics import AUDIO_BYTES_NOT_STORED, SEGMENTS_DEDUPED, suppressed_pcm_bytes
@@ -1328,7 +1328,7 @@ def _recover_empty_segment(
         outcome='recovered',
         log=logger,
     )
-    return transcript_segments, recovered_language, _first_word_offset(words)
+    return transcript_segments, recovered_language, first_word_offset(words)
 
 
 def _assign_segment_speakers(
@@ -1576,7 +1576,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             language = user_language if (single_language_mode and user_language) else detected_language
             phase = 'parse'
             transcript_segments = postprocess_words(words, 0) if words else []
-            speech_offset = _first_word_offset(words)
+            speech_offset = first_word_offset(words)
             if sync_safety_wal_enabled():
                 for segment in transcript_segments:
                     segment.stt_provider = model
@@ -1685,7 +1685,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         finally:
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
-        _shift_to_vad_file_clock(transcript_segments, speech_offset)
+        shift_to_vad_file_clock(transcript_segments, speech_offset)
         started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,

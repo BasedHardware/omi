@@ -54,7 +54,7 @@ def _span(segment: dict) -> tuple[float, float] | None:
 
 def _windows(segments: list[dict]) -> list[dict]:
     ordered = sorted(
-        [(i, segment, _span(segment)) for i, segment in enumerate(segments) if _span(segment)],
+        [(i, segment, span) for i, segment in enumerate(segments) if (span := _span(segment)) is not None],
         key=lambda item: item[2][0],
     )
     windows = []

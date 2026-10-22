@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from config.refactor_modes import serving_for, shadow_or_serve
 from database.account_deletion_marker import account_deletion_firestore_client as get_firestore_client
+from database.from_segments_chunks import purge_chunks
 from models.capture_coverage import AdmitResult, CaptureKey, FrameRange
 from utils import encryption
 
@@ -28,6 +29,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 CONTINUATION_FLAG_KEY = 'CLIENTS_FROM_SEGMENTS_CHUNKS_MODE'
+STAGING_TTL = timedelta(days=7)
 SHADOW = Counter('omi_clients_refactor_shadow_total', 'L5 bounded shadow comparisons', ['check', 'outcome'])
 
 
@@ -105,21 +107,31 @@ def stage_chunk(
         prior = ref.get(transaction=transaction)
         if deleting.exists or deleted.exists or session_deleted.exists:
             raise HTTPException(status_code=409, detail='Capture owner or conversation is deleted')
-        if prior.exists:
-            if (prior.to_dict() or {}).get('digest') != digest:
+        previous = prior.to_dict() or {}
+        expiry = previous.get('expires_at')
+        expired = isinstance(expiry, datetime) and expiry <= datetime.now(timezone.utc)
+        if prior.exists and not expired:
+            if previous.get('digest') != digest:
                 raise HTTPException(status_code=409, detail='Chunk index already contains different content')
             return
-        transaction.create(
-            ref, {'digest': digest, 'payload': ciphertext, 'expires_at': datetime.now(timezone.utc) + timedelta(days=7)}
-        )
+        payload_row = {'digest': digest, 'payload': ciphertext, 'expires_at': datetime.now(timezone.utc) + STAGING_TTL}
+        if expired:
+            transaction.set(ref, payload_row)
+        else:
+            transaction.create(ref, payload_row)
 
     commit(client.transaction())
     parts: list[dict[str, Any]] = []
     for index in range(request.chunk_count):
         snapshot = chunks.document(f'{conversation_id}-{index:03d}').get()
-        if not snapshot.exists:
+        stored = snapshot.to_dict() or {}
+        if (
+            not snapshot.exists
+            or not isinstance(stored.get('expires_at'), datetime)
+            or stored['expires_at'] <= datetime.now(timezone.utc)
+        ):
             return None
-        parts.append(json.loads(encryption.decrypt(snapshot.to_dict()['payload'], uid)))
+        parts.append(json.loads(encryption.decrypt(stored['payload'], uid)))
 
     def common(part: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -176,13 +188,6 @@ def continuation(
         except Exception:
             observe('chunk_cleanup', 'error')
     return result
-
-
-def purge_chunks(uid: str, conversation_id: str, count: int = 128, *, firestore_client: Any = None) -> None:
-    client: Any = firestore_client if firestore_client is not None else get_firestore_client()
-    chunks = client.collection('users').document(uid).collection('from_segments_chunks')
-    for index in range(min(count, 128)):
-        chunks.document(f'{conversation_id}-{index:03d}').delete()
 
 
 def admit_segments(

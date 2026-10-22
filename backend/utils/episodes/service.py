@@ -112,7 +112,7 @@ def _named_segments(uid: str, segments: Sequence[Mapping[str, Any]], c: Collabor
 
 
 def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
-    return _new_episode(
+    return new_episode(
         conversation_id=moment.conversation_id,
         started_at=moment.started_at,
         last_activity_at=moment.ended_at,
@@ -121,7 +121,7 @@ def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
     )
 
 
-def _new_episode(
+def new_episode(
     *,
     conversation_id: str,
     started_at: datetime,
@@ -285,7 +285,7 @@ def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_
         episode = None
     if episode is None:
         metrics.record_boundary('new')
-        base = _new_episode(
+        base = new_episode(
             conversation_id=conversation_id,
             started_at=started_at,
             last_activity_at=started_at,
@@ -358,7 +358,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         applied_until = float((episode.get('applied') or {}).get(moment.conversation_id, -1.0))
     segments = [s for s in moment.segments if _segment_end(s) > applied_until and str(s.get('text') or '').strip()]
     named = _named_segments(uid, segments, c)
-    text = incremental.render_moment(named)
+    text = incremental.render_moment(named, uid=uid, conversation_id=moment.conversation_id)
     if text.words == 0:
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_applied')
         return 'skipped_applied'
@@ -444,6 +444,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
             now=now,
             tz_name=_tz(uid, c),
             invoke=resolved_invoke(uid, moment.language, c.invoke),
+            conversation_language=moment.language,
         )
     except incremental.ModelCallFailed as failure:
         metrics.record_moment_update(

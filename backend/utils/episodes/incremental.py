@@ -193,7 +193,7 @@ def _usage(reply: Any) -> tuple[int, int]:
     return 0, 0
 
 
-def _invoke(uid: str, messages: list[tuple[str, str]]) -> Any:
+def invoke_model(uid: str, messages: list[tuple[str, str]]) -> Any:
     with track_usage(uid, INCREMENTAL_FEATURE):
         llm = get_llm('episode_incremental', uid=uid, request_timeout=INCREMENTAL_TIMEOUT_SECONDS, max_retries=0)
         return llm.invoke(messages)
@@ -218,7 +218,7 @@ def run_incremental_update(
     messages = build_messages(state_json, moment, now=now, tz_name=tz_name, output_language=language)
     started = time.monotonic()
     try:
-        reply = (invoke or _invoke)(uid, messages)
+        reply = (invoke or invoke_model)(uid, messages)
     except Exception as error:
         logger.warning('event=episode_moment outcome=llm_error exception_type=%s', type(error).__name__)
         raise ModelCallFailed('llm_error', time.monotonic() - started) from error

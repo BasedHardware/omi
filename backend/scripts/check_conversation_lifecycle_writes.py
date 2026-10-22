@@ -18,6 +18,8 @@ LIFECYCLE_SERVICE = 'backend/utils/conversations/lifecycle.py'
 RAW_STORAGE_ALLOWLIST = {
     'backend/database/conversations.py',
     'backend/database/conversation_finalization_jobs.py',
+    # Atomic merge storage shares the finalization outbox; lifecycle.merge_jobs owns callers.
+    'backend/database/conversation_merge_jobs.py',
     # Storage primitive for the 1 MiB-ceiling in_progress terminal; its only
     # caller is lifecycle.close_oversized_in_progress_conversation.
     'backend/database/oversized_conversation_terminal.py',

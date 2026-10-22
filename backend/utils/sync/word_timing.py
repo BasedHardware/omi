@@ -4,7 +4,7 @@ from typing import Any
 from models.transcript_segment import TranscriptSegment
 
 
-def _first_word_offset(words: list[Any]) -> float:
+def first_word_offset(words: list[Any]) -> float:
     """Seconds from the start of a VAD file to its first word.
 
     postprocess_words starts the transcript clock at this word, while the file's
@@ -16,7 +16,7 @@ def _first_word_offset(words: list[Any]) -> float:
     return round(float(timing[0]), 2) if timing else 0.0
 
 
-def _shift_to_vad_file_clock(segments: list[TranscriptSegment], offset: float) -> None:
+def shift_to_vad_file_clock(segments: list[TranscriptSegment], offset: float) -> None:
     """Put lines timed from the first word back on the VAD file clock.
 
     started_at, the stored audio chunk and capture evidence share that clock. The

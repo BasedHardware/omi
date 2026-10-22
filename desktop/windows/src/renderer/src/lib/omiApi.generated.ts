@@ -177,6 +177,13 @@ export interface AddTesterRequest {
   [key: string]: unknown;
 }
 
+export interface AdmitResult {
+  basis?: "frames" | "text_fallback" | "unknown";
+  covered?: Array<FrameRange>;
+  covering_conversation_id?: string | null;
+  uncovered: Array<FrameRange>;
+}
+
 export interface AdviceAssistantSettings {
   analysis_prompt?: string | null;
   enabled?: boolean | null;
@@ -841,6 +848,22 @@ export interface Body_upload_video_frames_chat_v2_files_video_post {
   frame_times: string;
   frames: Array<string>;
   name?: string;
+}
+
+export interface BoundaryParticipant {
+  email?: string | null;
+  name?: string | null;
+}
+
+export interface BoundarySignal {
+  confidence?: number;
+  ended_at?: string | null;
+  external_id?: string | null;
+  kind: "calendar_event" | "desktop_meeting" | "screen_meeting" | "phone_call";
+  participants?: Array<BoundaryParticipant>;
+  source_device?: string | null;
+  started_at: string;
+  title?: string | null;
 }
 
 export interface BudgetChoiceRecord {
@@ -6231,6 +6254,7 @@ export interface OmiApiSchemas {
   "ActionItemsSearchResponse": ActionItemsSearchResponse;
   "ActionType": ActionType;
   "AddTesterRequest": AddTesterRequest;
+  "AdmitResult": AdmitResult;
   "AdviceAssistantSettings": AdviceAssistantSettings;
   "AdviceResponse": AdviceResponse;
   "AgentProposalAnswer": AgentProposalAnswer;
@@ -6325,6 +6349,8 @@ export interface OmiApiSchemas {
   "Body_upload_frame_request_v1_frame_requests__request_id__upload_post": Body_upload_frame_request_v1_frame_requests__request_id__upload_post;
   "Body_upload_profile_v3_upload_audio_post": Body_upload_profile_v3_upload_audio_post;
   "Body_upload_video_frames_chat_v2_files_video_post": Body_upload_video_frames_chat_v2_files_video_post;
+  "BoundaryParticipant": BoundaryParticipant;
+  "BoundarySignal": BoundarySignal;
   "BudgetChoiceRecord": BudgetChoiceRecord;
   "BudgetChoiceRequest": BudgetChoiceRequest;
   "BudgetChoiceResponse": BudgetChoiceResponse;
@@ -7991,6 +8017,16 @@ export interface OmiApiPaths {
       operationId: "reject_candidate_v1_candidates__candidate_id__reject_post";
       responses: {
         "200": CandidateResolutionReceipt;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/capture/boundary-evidence": {
+    post: {
+      operationId: "store_boundary_evidence_v1_capture_boundary_evidence_post";
+      responses: {
+        "200": Record<string, number>;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -11754,6 +11790,16 @@ export interface OmiApiPaths {
       };
     };
   };
+  "/v2/capture-coverage": {
+    get: {
+      operationId: "get_capture_coverage_v2_capture_coverage_get";
+      responses: {
+        "200": AdmitResult;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
   "/v2/chat-sessions": {
     get: {
       operationId: "get_chat_sessions_v2_chat_sessions_get";
@@ -14200,6 +14246,27 @@ export async function reject_candidate_v1_candidates__candidate_id__reject_post(
       ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
       ...init?.headers,
       "X-Account-Generation": String(header.X_Account_Generation),
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function store_boundary_evidence_v1_capture_boundary_evidence_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: Array<BoundarySignal>, init?: OmiApiClientInit): Promise<Record<string, number>> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/capture/boundary-evidence`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
       ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
       ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
       ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
@@ -21586,6 +21653,28 @@ export async function search_apps_v2_apps_search_get(query: { q?: string | null,
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_capture_coverage_v2_capture_coverage_get(query: { capture_root: string, start: Array<number>, end: Array<number>, channel?: string, clock_epoch?: string, device_id?: string | null, recording_session_id?: string | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<AdmitResult> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v2/capture-coverage`;
+  const _params = query ? Object.entries(query)
+    .filter(([, v]) => v !== undefined && v !== null)
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`).join('&') : '';
+  const _search = _params ? `?${_params}` : "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_chat_sessions_v2_chat_sessions_get(query: { app_id?: string | null, limit?: number, offset?: number, starred?: boolean | null }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<Array<ChatSessionResponse>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v2/chat-sessions`;
@@ -22649,4 +22738,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 521 client methods generated.
+// Total: 523 client methods generated.

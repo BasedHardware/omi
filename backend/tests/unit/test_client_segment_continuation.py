@@ -170,3 +170,17 @@ def test_shadow_metric_outcomes_are_closed():
     samples = [sample for metric in intake.SHADOW.collect() for sample in metric.samples]
     outcomes = {sample.labels['outcome'] for sample in samples if sample.labels.get('check') == 'bounded_test'}
     assert outcomes == {'error'}
+
+
+def test_staging_ttl_is_seven_days_and_expired_parts_cannot_complete_assembly(store):
+    from datetime import datetime, timedelta, timezone
+
+    owner = uuid4().hex
+    before = datetime.now(timezone.utc)
+    assert intake.stage_chunk(owner, 'c', chunk(0)) is None
+    first = store.rows[('users', owner, 'from_segments_chunks', 'c-000')]
+    assert before + timedelta(days=7) <= first['expires_at'] <= datetime.now(timezone.utc) + timedelta(days=7)
+    first['expires_at'] = before - timedelta(seconds=1)
+    assert intake.stage_chunk(owner, 'c', chunk(1)) is None
+    assert intake.stage_chunk(owner, 'c', chunk(0)) is not None
+    assert first is not store.rows[('users', owner, 'from_segments_chunks', 'c-000')]

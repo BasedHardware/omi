@@ -22,6 +22,8 @@ from typing import Any, Mapping, Optional
 
 from database.helpers import set_data_protection_level
 from database import conversation_finalization_jobs as jobs_db
+from utils.conversations import merge_conversations_job
+
 from database import conversations as conversations_db
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
@@ -52,6 +54,7 @@ from utils.conversation_shape import observe_completed_conversation_shape
 from utils.product_metrics import record_product_event
 
 logger = logging.getLogger(__name__)
+merge_jobs = merge_conversations_job
 
 _STATUS_TRANSITIONS = {
     ConversationStatus.in_progress.value: {
@@ -719,14 +722,24 @@ def delete_empty_recording_conversation(
     uid: str,
     conversation_id: str,
     recording_session_id: str | None,
+    *,
+    recovery_cutoff: datetime | None = None,
+    require_expired_recording_lease: bool = False,
+    firestore_client: Any = None,
 ) -> bool:
     """Delete only a still-empty listen generation and tombstone it atomically."""
     deleted_conversation: dict[str, Any] = {}
+    recovery_guards: dict[str, Any] = {}
+    if require_expired_recording_lease:
+        recovery_guards = dict(recovery_cutoff=recovery_cutoff, require_expired_recording_lease=True)
+    if firestore_client is not None:
+        recovery_guards['firestore_client'] = firestore_client
     deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
         uid,
         conversation_id,
         recording_session_id,
         deleted_conversation=deleted_conversation,
+        **recovery_guards,
     )
     if deleted:
         # Remove the search projection before photo/audio cleanup: a later

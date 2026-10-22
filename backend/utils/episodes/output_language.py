@@ -17,9 +17,9 @@ def resolved_invoke(uid, conversation_language, invoke):
         return invoke
     language = resolve_output_language(uid, conversation_language)
     if invoke is None:
-        from utils.episodes.incremental import _invoke
+        from utils.episodes.incremental import invoke_model
 
-        invoke = _invoke
+        invoke = invoke_model
 
     def with_language(account, messages):
         return invoke(account, [*messages, ('system', f'Write all episode output in {language}.')])
