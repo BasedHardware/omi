@@ -42,9 +42,10 @@ from utils.conversations.process_conversation import (
     save_structured_vector,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.lifecycle_clocks import overlap_snapshot
 from utils.episodes.client_gate import client_seen as episode_client_seen
 from utils.conversations.summary_delivery import finalization_pending
-from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
 from utils.llm.gateway_error_contract import GENERIC_CONVERSATION_PROCESSING_ERROR_DETAIL
 from utils.observability.finalization import (
@@ -134,7 +135,7 @@ async def _episode_after_finalization(
     try:
         await asyncio.wait_for(
             run_blocking(
-                postprocess_executor,
+                lifecycle_executor(uid, episode=True),
                 record_episode_finalized,
                 uid,
                 conversation_id,
@@ -310,7 +311,7 @@ async def finalize_persisted_conversation(
             conversation_data, uid, finalization_job_id
         ):
             conversation = await run_blocking(
-                postprocess_executor,
+                lifecycle_executor(uid),
                 process_with_episode_budget,
                 process_conversation,
                 uid,
@@ -399,7 +400,9 @@ async def finalize_persisted_conversation(
                 return ConversationFinalizationDisposition.completed
         stage = 'duplicate_capture'
         if fanout['status'] in {'claimed', 'completed'}:
-            await run_blocking(db_executor, link_duplicate_captures, uid, conversation)
+            await run_blocking(
+                db_executor, link_duplicate_captures, uid, overlap_snapshot(uid, conversation, conversation_data)
+            )
         if fanout['status'] == 'completed':
             schedule_person_voice_learning_retry(uid, conversation_id)
             # Re-finalization of a row whose fanout already completed (e.g.
@@ -418,7 +421,7 @@ async def finalize_persisted_conversation(
                     and getattr(latest, 'structured', None)
                     and latest.structured == getattr(conversation, 'structured', None)
                 ):
-                    await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
+                    await run_blocking(lifecycle_executor(uid), _save_summary_vector_fail_soft, uid, latest)
                 else:
                     OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_no_structured').inc()
             except Exception as error:
@@ -481,7 +484,7 @@ async def finalize_persisted_conversation(
                 ) != conversation_data.get('smart_merge'):
                     OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='skipped_stale').inc()
                 elif not lazy_effects:
-                    await run_blocking(postprocess_executor, _save_summary_vector_fail_soft, uid, latest)
+                    await run_blocking(lifecycle_executor(uid), _save_summary_vector_fail_soft, uid, latest)
         except Exception as error:
             OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL.labels(outcome='error').inc()
             logger.warning('summary_vector outcome=error exception_type=%s', type(error).__name__)
@@ -500,13 +503,13 @@ async def finalize_persisted_conversation(
                 conversation_id,
             )
         elif derived_effects:
-            await run_blocking(postprocess_executor, derived_effects[0])
+            await run_blocking(lifecycle_executor(uid), derived_effects[0])
         elif not lazy_effects and not getattr(conversation, 'discarded', False):
             # A finalization job owns a durable lease. Keep canonical memory
             # extraction inside that lease so a temporary fail-closed gate
             # leaves the job retryable instead of dropping the source.
             stage = 'memory_extraction'
-            await run_blocking(postprocess_executor, extract_memories, uid, conversation)
+            await run_blocking(lifecycle_executor(uid), extract_memories, uid, conversation)
         stage = 'integrations'
         if not skip_derived_effects:
             await trigger_external_integrations(

@@ -41,6 +41,12 @@ import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/wal_file_manager.dart';
 
+import 'capture_committed_journal.dart';
+import 'package:omi/backend/schema/capture_committed_event.dart';
+import 'package:omi/services/experiments/client_refactor_flags.dart';
+
+part 'capture_committed_custody.dart';
+part 'on_device_prepared_upload.dart';
 part 'wal_policy.dart';
 part 'wal_job_reconciliation.dart';
 part 'device_chunk_persistence.dart';
@@ -57,6 +63,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   }
 
   DeviceType? _bufferDeviceType;
+  late final CaptureCommittedJournal captureCommits = CaptureCommittedJournal(getApplicationDocumentsDirectory);
   late final WatchLiveCoverage watchCoverage = WatchLiveCoverage(getApplicationDocumentsDirectory, now: _now);
   late final NativeRecordingIntake nativeIntake = NativeRecordingIntake(this, coverage: watchCoverage);
   Future<void> intakeNativeRecordings() async {
@@ -994,6 +1001,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
       DebugLogManager.logInfo('Flushed WALs from memory to disk', {'count': flushedCount});
     }
 
+    await _persistCaptureCommits(generation, onlyIfReleased: true);
     await _evaluateRetentionPressure();
     final indexSaved = await _saveWalsToFile(generation);
     if (indexSaved && flushedCount > 0) _pendantBlockedByStorage = false;
@@ -1670,71 +1678,6 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     return reset;
   }
 
-  /// Judges each stamped WAL of [conversationId] against the saved transcript: a covered WAL moves
-  /// into synced retention (the `autoRemoveSyncedCopies` lifecycle) and is not uploaded — the saved
-  /// text suppresses the repair upload, never deletes the copy; an uncovered WAL stays `miss`,
-  /// marked `keptForTranscriptRecovery`, and uploads for repair. Without [transcriptSpans], or with
-  /// an explicit [failClosedReason], every eligible stamped WAL fails closed into repair.
-  Future<({int released, int kept})> confirmSessionTranscription(
-    int sessionStartSeconds,
-    String conversationId, {
-    List<(int, int)>? transcriptSpans,
-    int? conversationStartSeconds,
-    String? failClosedReason,
-  }) async {
-    final generation = _sessionGeneration;
-    // A stamped WAL can start before the session window — its timerStart is backdated from its
-    // frame count — so the transcript evidence judges every stamped copy instead.
-    final stamped = _wals.where((wal) => wal.conversationId == conversationId).toList();
-    if (stamped.isEmpty) return (released: 0, kept: 0);
-
-    final spans =
-        failClosedReason == null && transcriptSpans != null && transcriptSpans.isNotEmpty ? transcriptSpans : null;
-    final reason = failClosedReason ?? (spans != null ? null : 'no_spans');
-    final nowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
-    final covered = <Wal>[], kept = <Wal>[];
-    for (final wal in stamped) {
-      // Only phone-side pending copies and transport-only synced ones (socket sends, never
-      // server-confirmed) are judged; in-flight, durable and terminal copies never regress.
-      final eligible = !wal.holdForUser &&
-          !wal.isSyncing &&
-          (wal.storage == WalStorage.disk || wal.storage == WalStorage.mem) &&
-          (wal.status == WalStatus.miss || wal.status == WalStatus.synced && wal.syncedAt == 0);
-      if (!eligible) continue;
-      if (spans != null && walCoveredByTranscript(wal, spans, conversationStartSeconds ?? sessionStartSeconds)) {
-        wal.status = WalStatus.synced;
-        wal.syncedAt = nowSeconds;
-        wal.keptForTranscriptRecovery = false;
-        covered.add(wal);
-      } else {
-        // An uncovered transport-only synced copy reclassifies to miss so
-        // fail-closed recovery uploads it instead of status-skipping it.
-        _keepForTranscriptRepair(wal);
-        kept.add(wal);
-      }
-    }
-    if (covered.isNotEmpty || kept.isNotEmpty) {
-      try {
-        await _saveWalsToFile(generation);
-      } catch (_) {
-        // The durable index never recorded the coverage, so covered copies fail closed too.
-        if (_isCurrent(generation)) {
-          covered.where((wal) => _wals.any((tracked) => identical(tracked, wal))).forEach(_keepForTranscriptRepair);
-        }
-        rethrow;
-      }
-    }
-    if (_isCurrent(generation) && covered.isNotEmpty) _notifyUpdated(generation);
-    _emitWalTranscriptCoverage(
-      generation: generation,
-      phase: 'confirmation',
-      covered: covered,
-      kept: kept,
-      failClosedReason: reason,
-    );
-    return (released: 0, kept: kept.length);
-  }
-
   void _keepForTranscriptRepair(Wal wal) {
     wal.status = WalStatus.miss;
     wal.syncedAt = 0;
@@ -1757,6 +1700,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
   Future<bool> persistOnDeviceConversation(Wal wal, Map<String, dynamic> conversation, int generation) async {
     if (!_isCurrent(generation) || !_wals.contains(wal) || !wal.onDeviceOnly) return false;
     wal.onDeviceConversation = conversation;
+    wal.onDevicePreparedUpload = null;
     wal.conversationId = conversation['id'] as String?;
     await _saveWalsToFile(generation);
     _notifyUpdated(generation);

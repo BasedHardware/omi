@@ -321,8 +321,7 @@ def _conversation_has_finalization_content(
     """Read current and pre-marker photo content within the admission transaction."""
     if conversations_db.raw_conversation_has_content(uid, dict(conversation)):
         return True
-    # `has_content` was added after photo-only listen recordings already
-    # existed. Keep their durable child documents admissible until all legacy
+    # Pre-marker photo-only recordings keep their durable children admissible until legacy
     # rows have naturally finalized, without moving the read outside this
     # transaction's authoritative snapshot.
     return next(iter(conversation_ref.collection('photos').limit(1).stream(transaction=transaction)), None) is not None
@@ -335,9 +334,8 @@ def recovery_admission_refusal(
 ) -> str | None:
     """Bounded refusal reason for one SERVER_RECOVERY admission, or ``None``.
 
-    Evaluated inside the outbox transaction against its authoritative snapshot,
-    before any write, and again by the sweep for action-log reasons. Every
-    reason is a closed vocabulary safe for structured logs.
+    Checked against the outbox transaction's authoritative snapshot before writes,
+    and by the sweep for bounded, content-free action logs.
 
     The one-attempt policy is structural: a row carrying any
     ``finalization_job_id`` (including a dead-lettered one) is refused rather
@@ -368,7 +366,9 @@ def recovery_admission_refusal(
         return 'protected_content'
     if conversation.get('finalization_job_id'):
         return 'has_job'
-    finished_at = conversation.get('finished_at')
+    from utils.conversations.lifecycle_clocks import speech_clock
+
+    finished_at = speech_clock(uid, conversation)
     if not isinstance(finished_at, datetime):
         return 'no_finished_at'
     cut = recovery_cutoff if recovery_cutoff.tzinfo else recovery_cutoff.replace(tzinfo=timezone.utc)

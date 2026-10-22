@@ -217,7 +217,9 @@ MIN_SEGMENT_DURATION = 0.6
 # centroid, so its value does not transfer. Measured on the VoxConverse test subset
 # (backend/tests/container/voxconverse): 0.55 cuts 3+ speaker DER from 0.174 to 0.130
 # while leaving 1-2 speaker DER unchanged, and every value in 0.40-0.55 beats 0.60.
-SPEAKER_AHC_THRESHOLD = float(os.getenv("PARAKEET_SPEAKER_AHC_THRESHOLD", "0.55"))
+from omi_speaker_policy import BATCH_CLUSTER
+
+SPEAKER_AHC_THRESHOLD = BATCH_CLUSTER.distance
 
 
 def detect_language_from_text(text: str) -> str:

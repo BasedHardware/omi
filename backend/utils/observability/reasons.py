@@ -145,6 +145,26 @@ class QuarantineReason(StrEnum):
     WORKER_FAILED = 'worker_failed'
 
 
+class RefactorShadowOutcome(StrEnum):
+    """Shared capture/speaker/lifecycle comparison vocabulary."""
+
+    UNKNOWN = 'unknown'
+    AGREE = 'agree'
+    DISAGREE = 'disagree'
+    ERROR = 'error'
+
+
+class CaptureCoverageOutcome(StrEnum):
+    """Exact frame admission and skipped-seconds dispositions."""
+
+    UNKNOWN = 'unknown'
+    COVERED = 'covered'
+    PARTIAL = 'partial'
+    UNCOVERED = 'uncovered'
+    SKIPPED = 'skipped'
+    WOULD_SKIP = 'would_skip'
+
+
 class ShadowParityOutcome(StrEnum):
     """`omi_jobstore_shadow_parity_total{outcome}` (lane 12, Postgres shadow-write parity)."""
 

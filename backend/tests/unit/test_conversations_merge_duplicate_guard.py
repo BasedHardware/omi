@@ -163,3 +163,26 @@ def test_merge_rejects_duplicate_ids_in_mixed_list(conv):
         )
     assert exc_info.value.status_code == 400
     assert "duplicate" in exc_info.value.detail.lower()
+
+
+def test_merge_cas_loss_restores_prior_claims_without_scheduling_work(conv, monkeypatch):
+    from models.conversation import MergeConversationsRequest
+    from starlette.background import BackgroundTasks
+    from unittest.mock import Mock
+
+    conv.conversations_db.get_conversation.side_effect = [
+        {'id': 'c1', 'status': 'completed'},
+        {'id': 'c2', 'status': 'completed'},
+    ]
+    begin = Mock(side_effect=[True, False])
+    restore = Mock(return_value=True)
+    monkeypatch.setattr(conv.lifecycle_service, 'begin_merge', begin)
+    monkeypatch.setattr(conv.lifecycle_service, 'complete', restore)
+    tasks = BackgroundTasks()
+    with pytest.raises(HTTPException) as error:
+        conv.merge_conversations(
+            request=MergeConversationsRequest(conversation_ids=['c1', 'c2']), background_tasks=tasks, uid='test-account'
+        )
+    assert error.value.status_code == 409
+    restore.assert_called_once_with('test-account', 'c1')
+    assert tasks.tasks == []
