@@ -30,14 +30,19 @@ def _agent_config() -> Optional[Dict[str, Any]]:
 
 def _format_hour(hour: int) -> str:
     """Convert 24-hour format to friendly 12-hour format."""
-    if hour == 0:
+    try:
+        h = int(hour)
+    except (TypeError, ValueError):
         return "12:00 AM (midnight)"
-    elif hour == 12:
+    h = h % 24
+    if h == 0:
+        return "12:00 AM (midnight)"
+    elif h == 12:
         return "12:00 PM (noon)"
-    elif hour < 12:
-        return f"{hour}:00 AM"
+    elif h < 12:
+        return f"{h}:00 AM"
     else:
-        return f"{hour - 12}:00 PM"
+        return f"{h - 12}:00 PM"
 
 
 @tool
@@ -78,6 +83,9 @@ def manage_daily_summary_tool(
     """
     logger.info(f"🔧 manage_daily_summary_tool called - action: {action}, hour: {hour}")
 
+    if not isinstance(action, str) or not action.strip():
+        return "Error: Action must be a valid non-empty string. Use 'enable', 'disable', 'set_time', or 'get_settings'."
+
     # config may be None when called directly (not via langchain injection)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
@@ -92,6 +100,8 @@ def manage_daily_summary_tool(
             uid = configurable.get('user_id')
         else:
             uid = None
+        if not uid and isinstance(cfg, dict):
+            uid = cfg.get('user_id')
     except (KeyError, TypeError):
         return "Error: Configuration not available"
 
@@ -115,11 +125,16 @@ def manage_daily_summary_tool(
         if hour is None:
             return "Error: Please specify the hour (0-23). Example: 22 for 10 PM, 9 for 9 AM."
 
-        if not (0 <= hour <= 23):
-            return f"Error: Hour must be between 0 and 23. You provided {hour}."
+        try:
+            int_hour = int(hour)
+        except (TypeError, ValueError):
+            return f"Error: Hour must be an integer between 0 and 23. You provided {hour}."
 
-        notification_db.set_daily_summary_hour_local(uid, hour)
-        hour_str = _format_hour(hour)
+        if not (0 <= int_hour <= 23):
+            return f"Error: Hour must be between 0 and 23. You provided {int_hour}."
+
+        notification_db.set_daily_summary_hour_local(uid, int_hour)
+        hour_str = _format_hour(int_hour)
 
         # Also enable if currently disabled
         if not notification_db.get_daily_summary_enabled(uid):
