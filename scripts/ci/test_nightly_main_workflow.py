@@ -41,6 +41,15 @@ INTENTIONAL_BUDGET_CHANGES = {
     # worst-plausible setup; the step budget stays the regression gate, so
     # budget_p50 stays 8.
     ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "20",
+    # Linux package smoke: the apt runtime-deps step budget is 20m (cold
+    # cache on a degraded mirror measured ~40-45 KB/s pool throughput in
+    # jobs 120062237675 and 120074210159 — ~14.4 min of pure download), and
+    # a cold run also pays ~70s setup plus ~5m packaging/smoke. At the old
+    # 20m ceiling the cold path was cancelled mid-packaging, and a cancelled
+    # job never saves the apt cache (save-always: false), so every retry
+    # stayed cold. 30m fits the cold path; warm runs still finish in ~7m,
+    # so budget_p50 stays 7.
+    ("desktop-windows-ci.yml", "build-linux", "timeout-minutes"): "30",
 }
 
 
