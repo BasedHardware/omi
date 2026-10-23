@@ -65,10 +65,10 @@ def _member(conversation_id: str, row: Mapping[str, Any], evidence: Optional[dic
     return member
 
 
-def _primary_rank(member: Mapping[str, Any]) -> tuple[float, str]:
+def _primary_rank(member: Mapping[str, Any]) -> tuple:
     start, finish = member.get('started_at'), member.get('finished_at')
     duration = (finish - start).total_seconds() if start and finish else 0.0
-    return (-duration, member['id'])
+    return tuple(member['quality_rank']) if member.get('quality_rank') else (-duration, member['id'])
 
 
 def _record(group_id: str, members: list[dict], revision: int) -> dict:
@@ -132,6 +132,7 @@ def join_capture_group(
     expected_fingerprints: Optional[Mapping[str, Optional[str]]] = None,
     expected_group_revision: Optional[int] = None,
     join_guard: Optional[Callable[[Mapping[str, Any], Any, Any], bool]] = None,
+    quality_ranker: Optional[Callable[[Mapping[str, Any]], tuple]] = None,
     firestore_client=None,
 ) -> Optional[str]:
     """Put two confirmed captures in one group; return the group id.
@@ -187,6 +188,8 @@ def join_capture_group(
         # Deleted, closed, or departed members (e.g. absorbed by sync, or regrouped
         # by a race with deletion) are pruned rather than advertised.
         existing_id = (existing or {}).get('id')
+        if existing and existing.get('primary_policy') == 'cross_device_v1' and not quality_ranker:
+            return None
         if existing and existing.get('kind') == _LEGACY_CALL_GROUP_KIND:
             # Keep already-written call groups readable and isolated from new
             # shared-speech membership decisions.
@@ -205,7 +208,7 @@ def join_capture_group(
             return None
         if len(live) > MAX_GROUP_MEMBERS:
             return None
-        if existing and set(live) == {m.get('id') for m in existing.get('members', [])}:
+        if not quality_ranker and existing and set(live) == {m.get('id') for m in existing.get('members', [])}:
             return existing['id']  # already grouped; exclusions checked first
 
         group_id = existing['id'] if existing else str(uuid.uuid4())
@@ -217,7 +220,14 @@ def join_capture_group(
             else:
                 partner = second_id if cid == first_id else first_id
                 members.append(_member(cid, row, {**evidence, 'matched_conversation_id': partner}))
+        if quality_ranker:
+            for member in members:
+                member['quality_rank'] = list(quality_ranker({**live[member['id']], 'id': member['id']}))
         record = _record(group_id, members, int((existing or {}).get('revision') or 0) + 1)
+        if quality_ranker:
+            record['primary_policy'] = 'cross_device_v1'
+            if existing and all(existing.get(k) == record.get(k) for k in ('members', 'primary_id', 'primary_policy')):
+                return existing['id']
         for cid in live:
             transaction.update(collection.document(cid), {CAPTURE_GROUP_FIELD: record})
         return group_id
@@ -272,6 +282,11 @@ def leave_capture_group(
             [_member(cid, r, (prior.get(cid) or {}).get('evidence')) for cid, r in remaining.items()],
             int(group.get('revision') or 0) + 1,
         )
+        if group.get('primary_policy') == 'cross_device_v1':
+            for member in record['members']:
+                member['quality_rank'] = prior[member['id']]['quality_rank']
+            record['primary_id'] = min(record['members'], key=_primary_rank)['id']
+            record['primary_policy'] = 'cross_device_v1'
         if group.get('kind') == _LEGACY_CALL_GROUP_KIND and group.get('primary_id') in remaining:
             record.update(kind=_LEGACY_CALL_GROUP_KIND, primary_id=group['primary_id'])
         for cid in remaining:

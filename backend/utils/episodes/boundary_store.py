@@ -16,7 +16,7 @@ from typing import Any
 from google.cloud import firestore
 
 from config.occasion_conversations import EPISODE_BOUNDARIES_MODE_ENV
-from config.refactor_modes import shadow_or_serve, serving_for
+from config.refactor_modes import shadow_or_serve, serving_for, shadow_sampled
 from database._client import get_firestore_client
 from database.account_deletion_marker import account_deletion_document
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -25,6 +25,7 @@ from utils.encryption import encrypt, decrypt
 
 MAX_SIGNALS = 128
 RETENTION = timedelta(days=7)
+SHADOW_SAMPLE_PERCENT = 5.0
 # Shadow observations may lag one calendar-poll period; serving always reads fresh.
 _shadow_windows: TTLCache = TTLCache(maxsize=1024, ttl=60)
 _seen_contexts: TTLCache = TTLCache(maxsize=2048, ttl=60)
@@ -48,7 +49,7 @@ def _refs(uid: str, client: Any):
 def record(
     uid: str, signals: list[BoundarySignal], *, firestore_client: Any = None, allow_reschedule: bool = True
 ) -> int:
-    if not shadow_or_serve(EPISODE_BOUNDARIES_MODE_ENV):
+    if not shadow_sampled(EPISODE_BOUNDARIES_MODE_ENV, uid, SHADOW_SAMPLE_PERCENT):
         return 0
     client = firestore_client if firestore_client is not None else get_firestore_client()
     records, state_ref = _refs(uid, client)
@@ -120,6 +121,8 @@ def record_context(
     uid: str, signal: BoundarySignal, *, firestore_client: Any = None, allow_reschedule: bool = False
 ) -> None:
     """In shadow, ingest an unchanged row context at most once per minute."""
+    if not shadow_sampled(EPISODE_BOUNDARIES_MODE_ENV, uid, SHADOW_SAMPLE_PERCENT):
+        return
     client = firestore_client if firestore_client is not None else get_firestore_client()
     shadow = not serving_for(EPISODE_BOUNDARIES_MODE_ENV, uid)
     key = (uid, id(client), hashlib.sha256(signal.model_dump_json().encode()).hexdigest(), allow_reschedule)

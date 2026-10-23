@@ -43,6 +43,7 @@ class ReasonFamily(StrEnum):
     PARITY = 'parity'
     STAGING_FENCE = 'staging_fence'
     HELD_CONTENT = 'held_content'
+    SPEAKER_EVIDENCE = 'speaker_evidence'
 
 
 REASON_UNKNOWN_TOTAL = Counter(
@@ -60,6 +61,13 @@ OMI_REASON_TOTAL = Counter(
 for _family in ReasonFamily:  # pre-initialise children so rate() sees them from the first scrape
     REASON_UNKNOWN_TOTAL.labels(family=_family.value)
     OMI_REASON_TOTAL.labels(family=_family.value)
+
+
+class PersonVoiceQualityReason(StrEnum):
+    UNKNOWN = 'unknown'
+    INVALID_PERSON_VOICEPRINT = 'invalid_person_voiceprint'
+    INSUFFICIENT_PERSON_VOICE_AUDIO = 'insufficient_person_voice_audio'
+    INCOMPATIBLE_PERSON_VOICEPRINT = 'incompatible_person_voiceprint'
 
 
 class StaleRecoveryOutcome(StrEnum):

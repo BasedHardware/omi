@@ -22,6 +22,7 @@ from models.notification_message import NotificationMessage
 from utils.conversations.factory import deserialize_conversations
 from utils.conversations.summary_selection import select_primary_summary
 from utils.executors import db_executor, postprocess_executor, run_blocking
+from utils.conversations.relevance_content import exclude_from_derived
 from utils.llm.external_integrations import generate_comprehensive_daily_summary
 from config.refactor_modes import serving_for
 from utils.llm.daily_recap_fingerprint import input_fingerprint, FINGERPRINT_FIELD
@@ -92,6 +93,8 @@ _DECLINE_NO_CONVERSATIONS = 'no_conversations'
 _DECLINE_NOTHING_TO_SUMMARIZE = 'nothing_to_summarize'
 # Public name for the one decline a caller outside this module has to act on differently.
 DAILY_SUMMARY_DECLINE_LOCKED = _DECLINE_LOCKED
+DAILY_SUMMARY_DECLINE_NO_CONVERSATIONS = _DECLINE_NO_CONVERSATIONS
+DAILY_SUMMARY_DECLINE_NOTHING_TO_SUMMARIZE = _DECLINE_NOTHING_TO_SUMMARIZE
 
 
 def _conversation_has_summary_content(conversation: Any) -> bool:
@@ -115,10 +118,13 @@ def _conversation_has_summary_content(conversation: Any) -> bool:
     return bool(getattr(structured, 'events', None))
 
 
+conversation_has_summary_content = _conversation_has_summary_content
+
+
 def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc) -> Optional[dict]:
     """Generate one day's summary, or return the one already stored.
 
-    Guard order is the existing contract and must not be reordered:
+    Legacy guard order is the existing contract and must not be reordered:
 
     1. best-effort Redis lock
     2. durable by-date idempotency (existing record → return it, no LLM)
@@ -129,6 +135,9 @@ def generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc
        result, action items, or events — the body fields the recap renderer
        shows
     6. LLM generate → persist
+
+    Serving recap revisions/states live in daily_recap. User-initiated partial-day
+    generation is explicit through generate_daily_summary_on_demand.
 
     Returns the stored record (or the pre-existing one), or ``None`` when a guard declined.
     """
@@ -146,11 +155,30 @@ def generate_daily_summary_on_demand(
     second is a retry.
     """
     require_generated_compute(uid, 'daily_summary')
-    record, _created, declined = _generate_and_store_daily_summary(uid, date_str, start_date_utc, end_date_utc)
+    record, _created, declined = _generate_and_store_daily_summary(
+        uid, date_str, start_date_utc, end_date_utc, user_initiated=True
+    )
     return record, declined
 
 
 def _generate_and_store_daily_summary(
+    uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery=None, user_initiated=False
+):
+    from utils.other.daily_recap import generate
+
+    return generate(
+        uid,
+        date_str,
+        start_date_utc,
+        end_date_utc,
+        legacy=_legacy_generate_and_store_daily_summary,
+        prepare_delivery=prepare_delivery,
+        user_initiated=user_initiated,
+    )
+
+
+# refactor: superseded by utils.other.daily_recap when CALLS_RECAP_MODE=serve
+def _legacy_generate_and_store_daily_summary(
     uid, date_str, start_date_utc, end_date_utc, *, prepare_delivery: Optional[Callable[[], None]] = None
 ) -> Tuple[Optional[dict], bool, Optional[str]]:
     """Like ``generate_and_store_daily_summary``, plus whether this call persisted a new record
@@ -166,6 +194,8 @@ def _generate_and_store_daily_summary(
     pressed on — press it at 21:30 on a quiet day and the 22:00 cron tick lost the lock and
     the day never got a recap at all.
     """
+    from utils.other.daily_recap import delivery_allowed, finish_legacy_stub
+
     if not generated_compute_allowed(uid, 'daily_summary'):
         return None, False, 'usage_budget_exhausted'
     if not try_acquire_daily_summary_lock(uid, date_str):
@@ -177,7 +207,8 @@ def _generate_and_store_daily_summary(
         # tick can persist a SECOND summary for the same date. If one already exists, skip before spending
         # any LLM tokens. The regenerate flow stays in-place via update_daily_summary.
         existing_summary = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-        if existing_summary and not serving_for('NOTES_PACKET_V2_MODE', uid):
+        existing_complete = bool(existing_summary and delivery_allowed(uid, existing_summary))
+        if existing_summary and existing_complete and not serving_for('NOTES_PACKET_V2_MODE', uid):
             logger.info(
                 f"Daily summary already exists for uid={uid} date={date_str} "
                 f"id={existing_summary.get('id')}; skipping duplicate generation"
@@ -190,7 +221,7 @@ def _generate_and_store_daily_summary(
         fingerprint = None
         if serving_for('NOTES_PACKET_V2_MODE', uid):
             fingerprint = input_fingerprint(conversations_data or [])
-            if existing_summary and existing_summary.get(FINGERPRINT_FIELD) == fingerprint:
+            if existing_summary and existing_complete and existing_summary.get(FINGERPRINT_FIELD) == fingerprint:
                 release_daily_summary_lock(uid, date_str)
                 record_notes_shadow('daily_recap_inputs', 'agree')
                 return existing_summary, False, None
@@ -202,6 +233,7 @@ def _generate_and_store_daily_summary(
         conversations = deserialize_conversations(
             [convo_data for convo_data in conversations_data if not convo_data.get('is_locked')]
         )
+        conversations = [c for c in conversations if not exclude_from_derived(uid, c, consumer='daily_summary')]
         if not conversations:
             release_daily_summary_lock(uid, date_str)
             return None, False, _DECLINE_NOTHING_TO_SUMMARIZE
@@ -234,6 +266,7 @@ def _generate_and_store_daily_summary(
         if prepare_delivery is not None:
             prepare_delivery()
 
+        _record_summary_generation_status(uid, date_str, 'pending')
         summary_data = generate_comprehensive_daily_summary(
             uid,
             conversations,
@@ -242,6 +275,7 @@ def _generate_and_store_daily_summary(
             end_date_utc,
             memories_learned=memories_learned_payload(uid, conversations, start_date_utc, end_date_utc),
         )
+        summary_data = finish_legacy_stub(existing_summary, summary_data)
         if fingerprint is not None:
             summary_data[FINGERPRINT_FIELD] = fingerprint
         if existing_summary:
@@ -265,8 +299,16 @@ def _generate_and_store_daily_summary(
     except Exception:
         # We own this day lock. Failed reads/generation/persistence must permit
         # the saved cohort to retry on the next tick, even after the due hour.
+        _record_summary_generation_status(uid, date_str, 'failed')
         release_daily_summary_lock(uid, date_str)
         raise
+
+
+def _record_summary_generation_status(uid: str, date: str, status: str) -> None:
+    try:
+        daily_summaries_db.set_daily_summary_generation_status(uid, date, status)
+    except Exception:
+        _record_daily_summary_fallback(from_mode='status_marker', to_mode='none', reason='other', outcome='degraded')
 
 
 def _env_float(name: str, default: float) -> float:
@@ -745,7 +787,14 @@ def _reduce_daily_summary_chunks(
     return users, chunk_errors[0] if chunk_errors else None, every_chunk_read
 
 
-async def _get_users_for_daily_summary(
+async def _get_users_for_daily_summary(timezones, target_hour):
+    from utils.other.daily_recap import select_recipients
+
+    return await select_recipients(timezones, target_hour, _legacy_get_users_for_daily_summary)
+
+
+# refactor: superseded by utils.other.daily_recap when CALLS_RECAP_MODE=serve
+async def _legacy_get_users_for_daily_summary(
     timezones: List[str], target_hour: int
 ) -> Tuple[List[Tuple[str, Any, Any]], Optional[BaseException], bool]:
     """Read one hour group's users.
@@ -879,7 +928,9 @@ def _backfill_recent_daily_summaries(uid, display_date, tz_name: Optional[str]) 
 
 
 def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
-    if not generated_compute_allowed(user_data[0], 'daily_summary'):
+    if not serving_for('CALLS_RECAP_MODE', user_data[0]) and not generated_compute_allowed(
+        user_data[0], 'daily_summary'
+    ):
         return
     uid = user_data[0]
     user_tz_name = user_data[2] if len(user_data) > 2 else None
@@ -892,6 +943,9 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
     # trial only gates desktop features, not the recap the mobile app renders.
 
     display_date = _display_date_for_now(user_tz_name, user_data[3] if len(user_data) > 3 else None)
+    from utils.other.daily_recap import scheduled_date, delivery_allowed
+
+    display_date = scheduled_date(uid, user_tz_name, user_data[3] if len(user_data) > 3 else None, display_date)
     start_date_utc, end_date_utc = local_day_bounds_utc(display_date, user_tz_name)
     date_str = display_date.strftime('%Y-%m-%d')
 
@@ -930,9 +984,11 @@ def _send_summary_notification(user_data: Tuple[Any, ...]) -> None:
         # this read the recipient stayed "locked" for 2h and pinned the whole saved
         # cohort, starving every current cohort behind it (2026-10-12).
         summary_data = daily_summaries_db.get_daily_summary_by_date(uid, date_str)
-        if not summary_data:
+        if not summary_data or not delivery_allowed(uid, summary_data):
             raise RuntimeError('daily summary retry still locked')
         declined = None
+    if summary_data and not delivery_allowed(uid, summary_data):
+        raise RuntimeError('daily summary not generated')
     if summary_data and summary_data.get('notification_delivery_completed'):
         # An abandoned worker may have delivered after wait_for timed out and
         # after its coordinator saved an uncertain outcome. The receipt wins.

@@ -1,5 +1,11 @@
 from config.refactor_modes import serving_for
-from utils.speakers.person_pool import pool_profile, retract_profile, remove_sample
+from utils.speakers.person_pool import (
+    pool_profile,
+    retract_profile,
+    remove_sample,
+    PersonVoiceQualityError,
+    shadow_profile,
+)
 from config.firestore_read_levers import lever_enabled
 import uuid
 from database.fsr_read_cache import cache_writer, cached_read, memo, plane_id, ttl, user_snapshot, writing
@@ -1126,9 +1132,14 @@ def _replace_speech_profile_transaction(
     if person.get('updated_at') != expected_updated_at:
         return None  # Deleted, corrected or replaced while audio work was in flight.
     old_samples = person.get('speech_samples', [])
+    if source:
+        shadow_profile(source[0], person, profile)
     # refactor: superseded by utils.speakers.person_pool when SPEAKER_EVIDENCE_MODE=serve
     if source and serving_for('SPEAKER_EVIDENCE_MODE', source[0]):
-        profile, old_samples = pool_profile(person, profile)
+        try:
+            profile, old_samples = pool_profile(person, profile)
+        except PersonVoiceQualityError:
+            return None  # Caller retires the unpublished blob; existing enrollment is untouched.
     elif person.get('person_voice_confirmations') is not None:
         profile = {**profile, 'person_voice_confirmations': None, 'person_voice_base': None}
     transaction.update(person_ref, {**profile, 'updated_at': datetime.now(timezone.utc)})

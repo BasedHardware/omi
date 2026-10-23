@@ -115,6 +115,7 @@ def test_no_centroid_batch_abstains_without_poisoning_other_scope():
     ],
 )
 def test_processing_modes_preserve_shadow_and_persist_before_serving(monkeypatch, mode, cohort, changed, runs):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT', '100')
     account = str(uuid.uuid4())
     monkeypatch.setenv(evidence.FLAG, mode)
     monkeypatch.setenv(evidence.FLAG + '_SERVE_PERCENT', '100' if cohort else '0')

@@ -12,7 +12,7 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 Band = Literal['confident', 'likely', 'unknown']
-CandidateSource = Literal['voice', 'manual', 'roster', 'introduction', 'channel']
+CandidateSource = Literal['voice', 'manual', 'roster', 'introduction', 'channel', 'near_field']
 EvidenceStatus = Literal['resolved', 'partial', 'unavailable']
 
 OWNER = 'owner'
@@ -62,6 +62,8 @@ class SpeakerEvidence(BaseModel):
     version: Literal[1] = 1
     status: EvidenceStatus
     policy_version: str
+    participant_count_hint: Optional[int] = Field(default=None, ge=1, le=256)
+    owner_anchor: Optional[Literal['voiceprint', 'near_field', 'channel', 'none']] = None
     clusters: List[VoiceCluster] = []
     similarities: List[ClusterSimilarity] = []  # only pairs worth showing (above a policy floor)
     segments: List[EvidenceSegment] = []

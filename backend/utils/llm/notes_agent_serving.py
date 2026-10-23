@@ -153,6 +153,7 @@ def agentic_notes_payload(
                     cache_key=cache_key,
                 )
                 return await run_notes_agent(
+                    uid=uid,
                     owner=owner,
                     seed=seed,
                     complete=complete,

@@ -45,6 +45,7 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
+from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
@@ -53,7 +54,6 @@ from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
-    MCP_CONVERSATION_CARD_QUERY_SPECS,
 )
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
@@ -97,34 +97,6 @@ _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
 _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
 _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
 _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
-MCP_CONVERSATION_CARD_FIELD_PATHS = (
-    'id',
-    'status',
-    'discarded',
-    'deleted',
-    'dream_duplicate_of',
-    'relevance_decision',
-    'sync_relevance_user_kept',
-    'has_photos',
-    'starred',
-    'folder_user_set',
-    'created_at',
-    'started_at',
-    'finished_at',
-    'language',
-    'is_locked',
-    'data_protection_level',
-    'user_title',
-    'structured.title',
-    'structured.overview',
-    'structured.category',
-    'structured.emoji',
-)
-_MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = MCP_CONVERSATION_CARD_FIELD_PATHS + (
-    'transcript_segments',
-    'transcript_segments_compressed',
-    'has_transcript_corrections',
-)
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -1923,7 +1895,7 @@ def get_mcp_conversations_by_id(
     conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     field_paths = list(
-        _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else MCP_CONVERSATION_CARD_FIELD_PATHS
+        MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else MCP_CONVERSATION_CARD_FIELD_PATHS
     )
     if extra_field_paths:
         field_paths.extend(extra_field_paths)

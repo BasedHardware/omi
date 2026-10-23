@@ -1023,6 +1023,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self.host.stt_language,
                     profile=self.host.language_profile,
                     idle_budget=self.soniox_idle_budget,
+                    uid=self.host.request.uid,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
             # they inherit the same chain a Modulate primary uses.
@@ -1048,6 +1049,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self.host.stt_language,
                     profile=self.host.language_profile,
                     idle_budget=self.soniox_idle_budget,
+                    uid=self.host.request.uid,
                 ),
                 connect_modulate=(
                     (

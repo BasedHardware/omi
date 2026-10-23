@@ -6,6 +6,8 @@ objects fail closed instead of silently stringifying two distinct inputs alike.
 
 from __future__ import annotations
 
+from config.refactor_modes import serving_for
+
 import dataclasses
 import hashlib
 import json
@@ -79,6 +81,7 @@ def implementation_digest(feature: str) -> str:
         'llm/conversation_processing.py',
         'llm/conversation_notes_prompts.py',
         'llm/notes_packet.py',
+        'llm/action_item_v2.py',
         'llm/notes_output.py',
         'llm/notes_lengths.py',
         'llm/notes_effort.py',
@@ -156,6 +159,7 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
             **({'content_revision': getattr(conversation, 'sync_content_revision', None)} if revision_reuse() else {}),
             'arguments': kwargs,
             'notes_packet': _notes_packet_identity(uid),
+            'action_items_v2': serving_for('ACTION_ITEMS_V2_MODE', uid),
             'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
             'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
             'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),

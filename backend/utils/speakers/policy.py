@@ -10,7 +10,7 @@ from math import isfinite
 from typing import Literal
 import os
 
-POLICY_VERSION = 'wespeaker-operating-points-v1'
+POLICY_VERSION = 'wespeaker-operating-points-v2'
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,15 @@ MIN_EVIDENCE_SECONDS = 5.0
 MAX_CLIPS = 3
 SIMILARITY_FLOOR = 0.30
 ROSTER_PRIOR = 0.10
+# V2 reuses the measured live acceptance point for enrolled people at finalize.
+# Owner arbitration keeps its stricter finalize point. These are operating points,
+# not claimed empirical posterior probabilities.
+ENROLLED_PERSON = LIVE
+SURPLUS_MERGE = CROSS_SCOPE_CLUSTER
+SURPLUS_RATIO = 2
+NEAR_FIELD_GAP_DB = 10.0
+NEAR_FIELD_MIN_CLIPS = 3
+NEAR_FIELD_MIN_DBFS = -40.0
 CALIBRATION = (
     (0.0, 1.0),
     (0.35, 0.98),
