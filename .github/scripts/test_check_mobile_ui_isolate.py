@@ -159,6 +159,83 @@ class RuleTests(unittest.TestCase):
         self.assertFalse(is_contract_source("app/test/foo_test.dart"))
 
 
+class ReviewRegressionTests(unittest.TestCase):
+    def test_selected_guard_must_compare_selected_and_stored_value(self):
+        template = """CaptureProvider capture;
+void initState() { capture.addListener(onCapture); }
+void onCapture() {
+ final next = capture.version;
+ if (CONDITION) return;
+ _version = next;
+ work();
+}"""
+        for condition in ("next > 0 && _version == 0", "!identical(next, _version)", "!(next == _version)", "identical(next, _version) == false"):
+            self.assertEqual(count_hits(template.replace("CONDITION", condition))["unselected-provider-listener"], 1, condition)
+        for condition in ("next == _version", "identical(next, _version)", "_version == next"):
+            self.assertEqual(count_hits(template.replace("CONDITION", condition))["unselected-provider-listener"], 0, condition)
+
+    def test_positional_sliver_rows_inline_and_named(self):
+        for body in ("Opacity(opacity: .5, child: row)", "CustomPaint(painter: canvas..saveLayer(bounds, paint))"):
+            self.assertEqual(count_hits(f"SliverChildBuilderDelegate((c, i) => {body})")["list-item-layer"], 1)
+        text = """SliverChildBuilderDelegate(buildRow);
+Widget buildRow(BuildContext c, int i) => Opacity(opacity: .5, child: row);"""
+        self.assertEqual(count_hits(text)["list-item-layer"], 1)
+
+    def test_all_scroll_notification_subclasses_are_input(self):
+        for kind in ("OverscrollNotification", "UserScrollNotification", "ScrollStartNotification", "ScrollUpdateNotification", "ScrollEndNotification", "ScrollMetricsNotification"):
+            self.assertEqual(count_hits(f"NotificationListener<{kind}>(onNotification: work, child: child)")["global-input-listener"], 1, kind)
+
+    def test_named_listener_cannot_borrow_another_class_guard(self):
+        text = """class A {
+ CaptureProvider capture;
+ void initState() { capture.addListener(onCapture); }
+ void onCapture() {
+  final next = capture.version;
+  if (next == _version) return;
+  _version = next;
+  work();
+ }
+}
+class B {
+ CaptureProvider capture;
+ void initState() { capture.addListener(onCapture); }
+ void onCapture() { work(); }
+}"""
+        self.assertEqual(count_hits(text)["unselected-provider-listener"], 1)
+
+    def test_build_helpers_do_not_visit_other_class_data_methods(self):
+        text = """class A {
+ Widget build(BuildContext c) => helper();
+ Widget helper() => Text('x');
+}
+class B {
+ void load() { helper(); }
+ void helper() { jsonDecode(raw); items..sort(compare); }
+}"""
+        self.assertEqual(count_hits(text)["json-in-build"], 0)
+        self.assertEqual(count_hits(text)["sort-in-build"], 0)
+        self.assertEqual(count_hits(text.replace("Text('x')", "Text(jsonDecode(raw))"))["json-in-build"], 1)
+
+    def test_forwarded_widget_fields_and_aliases_are_not_name_dependent(self):
+        for name in ("content", "body", "page"):
+            template = f"""class Wrapper extends StatelessWidget {{
+ final Widget {name};
+ Widget build(BuildContext c) => Listener(onPointerMove: work, child: CHILD);
+}}"""
+            for child in (name, f"widget.{name}"):
+                self.assertEqual(count_hits(template.replace("CHILD", child))["global-input-listener"], 1)
+        alias = """class Wrapper {
+ final Widget content;
+ Widget build(BuildContext c) {
+  final forwarded = content;
+  return Listener(onPointerMove: work, child: forwarded);
+ }
+}"""
+        self.assertEqual(count_hits(alias)["global-input-listener"], 1)
+        local = "Widget build(BuildContext c) { final Widget content = Slider(); return Listener(onPointerMove: work, child: content); }"
+        self.assertEqual(count_hits(local)["global-input-listener"], 0)
+
+
 class ScopedRatchetTests(unittest.TestCase):
     def test_all_new_mutations_fail_on_new_and_existing_files(self) -> None:
         for rule in ("global-input-listener", "unselected-provider-listener", "json-in-build", "sort-in-build", "list-item-layer"):

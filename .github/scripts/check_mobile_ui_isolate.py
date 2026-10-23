@@ -418,6 +418,41 @@ def _declarations(masked: str) -> tuple[tuple[str, int, int], ...]:
     return tuple(sorted(found))
 
 
+@lru_cache(maxsize=32)
+def _classes(masked: str) -> tuple[tuple[str, int, int], ...]:
+    return tuple((m.group(1), m.end(), _matching(masked, m.end() - 1, "{", "}"))
+                 for m in re.finditer(r"\b(?:class|mixin|extension(?:\s+type)?)\s+(\w+)\b[^{}]*\{", masked))
+
+
+def _owner(masked: str, position: int) -> tuple[int, int] | None:
+    enclosing = [(start, end) for _, start, end in _classes(masked) if start <= position < end]
+    return min(enclosing, key=lambda span: span[1] - span[0], default=None)
+
+
+def _resolve_declarations(masked: str, name: str, position: int) -> list[tuple[int, int]]:
+    owner = _owner(masked, position)
+    candidates = [(a, b) for declared, a, b in _declarations(masked) if declared == name]
+    local = [span for span in candidates if _owner(masked, span[0]) == owner]
+    # An unqualified call may use a top-level helper, never another class's method.
+    return local or [span for span in candidates if _owner(masked, span[0]) is None]
+
+
+def _positional_row_callbacks(masked: str) -> list[tuple[int, int]]:
+    spans = []
+    for match in re.finditer(r"\bSliverChildBuilderDelegate\s*\(\s*", masked):
+        start = match.end()
+        if masked[start:start + 1] == "(":
+            close = _matching(masked, start, "(", ")")
+            span = _body_span(masked, close + 1)
+            if span:
+                spans.append(span)
+        else:
+            ref = re.match(r"(?:this\.)?(\w+)\b", masked[start:])
+            if ref:
+                spans.extend(_resolve_declarations(masked, ref.group(1), start))
+    return spans
+
+
 def _callback_spans(masked: str, names: str) -> list[tuple[int, int]]:
     spans = []
     for match in re.finditer(rf"\b(?:{names})\s*:\s*", masked):
@@ -430,7 +465,7 @@ def _callback_spans(masked: str, names: str) -> list[tuple[int, int]]:
         else:
             ref = re.match(r"(?:this\.)?(\w+)\b", masked[start:])
             if ref:
-                spans.extend((a, b) for name, a, b in _declarations(masked) if name == ref.group(1))
+                spans.extend(_resolve_declarations(masked, ref.group(1), start))
     return spans
 
 
@@ -448,8 +483,7 @@ def _deferred_spans(masked: str) -> tuple[tuple[int, int], ...]:
 def _ui_scopes(text: str, kind: str) -> tuple[tuple[int, int], ...]:
     masked = _mask(text)
     declarations = _declarations(masked)
-    classes = [(m.group(1), m.end(), _matching(masked, m.end() - 1, "{", "}"))
-               for m in re.finditer(r"\bclass\s+(\w+)\b[^{}]*\{", masked)]
+    classes = _classes(masked)
     if kind == "build":
         spans = [(a, b) for name, a, b in declarations if name == "build"]
         spans += _callback_spans(masked, r"builder|itemBuilder|separatorBuilder")
@@ -463,6 +497,7 @@ def _ui_scopes(text: str, kind: str) -> tuple[tuple[int, int], ...]:
         for class_name, start, end in classes:
             if class_name.endswith(("ListItem", "Row", "Tile")):
                 spans += [(a, b) for name, a, b in declarations if name == "build" and start <= a < end]
+    spans += _positional_row_callbacks(masked)
     # Follow same-file helper calls and tear-offs, including row builders.
     # Cycles terminate; external helpers/types are outside this lexical guard.
     selected = set(spans)
@@ -473,11 +508,17 @@ def _ui_scopes(text: str, kind: str) -> tuple[tuple[int, int], ...]:
                    for start, end in selected for ref in re.finditer(pattern, masked[start:end]))
 
     while True:
-        added = {
-            (a, b)
-            for name, a, b in declarations
-            if referenced(rf"\b{re.escape(name)}\b")
-        }
+        added = set()
+        declared_names = {name for name, _, _ in declarations}
+        for start, end in selected:
+            for ref in re.finditer(r"\b[A-Za-z_]\w*\b", masked[start:end]):
+                position = start + ref.start()
+                if ref.group() not in declared_names or any(a <= position < b for a, b in deferred):
+                    continue
+                prefix = masked[max(0, position - 6):position].rstrip()
+                if prefix.endswith(".") and not prefix.endswith("this."):
+                    continue
+                added.update(_resolve_declarations(masked, ref.group(), position))
         if kind == "list":
             # List rows often construct a same-file widget/painter; only its
             # build/paint methods are row work, not initState or tap handlers.
@@ -509,10 +550,23 @@ def _global_input_hits(text: str, match: re.Match[str], path: str) -> list[int]:
             named[argument.group(1)] = (args[index + argument.end() : end], match.end() + index + argument.start(1))
         index = end + 1
     # Root entry points or arbitrary-child wrappers, not a local gesture surface.
-    if path != MAIN_DART and not re.match(r"(?:widget\.child\b|child\b|MaterialApp\s*\(|Navigator\s*\(|Router\s*\()", named.get("child", ("", 0))[0]):
+    owner = _owner(masked, match.start())
+    forwarded = {"child"}
+    for declaration in re.finditer(r"\bWidget\??\s+(\w+)\s*(?=[;,)\]])", masked):
+        if _owner(masked, declaration.start()) == owner:
+            forwarded.add(declaration.group(1))
+    while True:
+        aliases = {m.group(1) for m in re.finditer(r"\b(?:final|var)\s+(\w+)\s*=\s*(?:widget\.)?(\w+)\s*;", masked)
+                   if m.group(2) in forwarded and _owner(masked, m.start()) == owner} - forwarded
+        if not aliases:
+            break
+        forwarded.update(aliases)
+    forwarded_pattern = "|".join(re.escape(name) for name in sorted(forwarded))
+    root_child = rf"(?:(?:widget\.)?(?:{forwarded_pattern})\b|MaterialApp\s*\(|Navigator\s*\(|Router\s*\()"
+    if path != MAIN_DART and not re.match(root_child, named.get("child", ("", 0))[0]):
         return []
     if masked[match.start() : match.end()].startswith("NotificationListener"):
-        if "<" in match.group() and not re.search(r"\b(?:Scroll\w*Notification|Notification|dynamic)\b", match.group()):
+        if "<" in match.group() and not re.search(r"\b(?:Scroll\w*Notification|OverscrollNotification|UserScrollNotification|Notification|dynamic)\b", match.group()):
             return []  # domain events are not per-scroll/frame observation
         callback = r"onNotification"
     else:
@@ -560,7 +614,7 @@ def _unselected_provider_listener(text: str, match: re.Match[str]) -> bool:
     else:
         callback = re.match(r"\s*(?:this\.)?(\w+)\b", masked[start:])
         if callback:
-            span = next(((a, b) for name, a, b in _declarations(masked) if name == callback.group(1)), None)
+            span = next(iter(_resolve_declarations(masked, callback.group(1), match.start())), None)
     if span:
         body = masked[span[0] : span[1]]
         # Selection reads fields/records before comparing. An arbitrary helper
@@ -672,10 +726,19 @@ def _guarded_before(body: str, limit: int, params: set[str]) -> bool:
         condition = prefix[open_paren + 1 : close] if close < len(prefix) else ""
         if not UNCHANGED_TEST.search(condition):
             continue
+        if re.search(r"!\s*(?:identical\b|\()|\)\s*(?:==\s*false\b|!=\s*true\b)|\bfalse\s*==\s*(?:identical\b|\()", condition):
+            continue  # inverted equality returns on changes, not unchanged input
         if not any(re.search(rf"\b{re.escape(name)}\b", condition) for name in injected):
             continue
-        # ...and compare it with the backing reference the hook stores (a field it assigns).
-        if not any(re.search(rf"\b{re.escape(name)}\b", condition) for name in stored):
+        # Compare the selected value and backing field in the SAME equality.
+        # Merely mentioning both elsewhere in a condition can hide an unrelated test.
+        atom = r"(?:this\.)?[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*"
+        pairs = [(m.group(1), m.group(2)) for m in re.finditer(rf"({atom})\s*==\s*({atom})", condition)]
+        pairs += [(m.group(1), m.group(2)) for m in re.finditer(rf"\bidentical\s*\(\s*({atom})\s*,\s*({atom})\s*\)", condition)]
+        def root(value):
+            return value.removeprefix("this.").split(".")[0]
+        if not any((root(a) in injected and root(b) in stored) or (root(b) in injected and root(a) in stored)
+                   for a, b in pairs):
             continue
         if re.match(r"\s*(?:\{\s*)?return\b", prefix[close + 1 :]):
             return True
