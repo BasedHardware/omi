@@ -183,12 +183,15 @@ jobs:
         # hangs with no output and no built-in timeout, burning the full 6h
         # job ceiling instead of failing fast. DEBIAN_FRONTEND=noninteractive
         # avoids any possibility of a debconf prompt blocking on stdin.
-        # 10 minutes, not the previous 5: a cold cache must download the full
-        # ~35 MB, which needs ~9 minutes at the worst observed degraded
-        # throughput; 5 minutes cut two runs off mid-download (120062237675
-        # on PR #23335, 113037996050 on a main push). Warm-cache runs
-        # download nothing and finish in seconds.
-        timeout-minutes: 10
+        # 20 minutes, not the previous 5: a cold cache must download the full
+        # ~35 MB, and the degraded mirror throughput is worse than first
+        # sized: job 120074210159 (this PR's own first run, 2026-10-22)
+        # streamed the deb pool at ~40-45 KB/s (fonts-urw-base35 alone took
+        # 4m27s for 11 MB) and blew the 10-minute budget mid-download at
+        # Get:30 of 30 — ~14.4 min of pure download at that pacing. 20 min
+        # covers ~32 KB/s effective while reserving 2 min for indexes and
+        # unpack; warm-cache runs download nothing and finish in seconds.
+        timeout-minutes: 20
         env:
           DEBIAN_FRONTEND: noninteractive
         run: |
