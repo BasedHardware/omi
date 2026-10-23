@@ -19,6 +19,7 @@ from typing import Any
 
 from config.episodes import episodes_enabled_for
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.episodes import client_gate
 from utils.executors import lifecycle_executor, submit_with_context
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,9 @@ def close_now(uid: str, conversation_id: str, trigger: ProcessingTrigger, source
     if not episodes_enabled_for(uid):
         return 'disabled'
     try:
+        if not client_gate.client_seen_cached(uid):
+            # No app of this user shows episodes: nothing to close, and the service is never loaded.
+            return 'skipped_no_client'
         from utils.episodes.service import close_on_finalize
 
         return close_on_finalize(uid, conversation_id, trigger=trigger.value, source=source)

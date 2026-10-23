@@ -219,6 +219,7 @@ def test_close_now_passes_the_trigger_and_never_raises(monkeypatch):
     from utils.episodes import service
 
     calls = []
+    monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda uid: True)
     monkeypatch.setattr(service, 'close_on_finalize', lambda uid, cid, **kw: calls.append((cid, kw)) or 'closed')
     assert episode_finalize.close_now(_UID, 'c1', ProcessingTrigger.CLIENT_FINALIZE) == 'closed'
     assert calls == [('c1', {'trigger': 'client_finalize', 'source': None})]
@@ -228,6 +229,8 @@ def test_close_now_passes_the_trigger_and_never_raises(monkeypatch):
 
     monkeypatch.setattr(service, 'close_on_finalize', boom)
     assert episode_finalize.close_now(_UID, 'c1', ProcessingTrigger.CLIENT_FINALIZE) == 'error'
+    monkeypatch.setattr(episode_finalize.client_gate, 'client_seen_cached', lambda uid: False)
+    assert episode_finalize.close_now(_UID, 'c1', ProcessingTrigger.CLIENT_FINALIZE) == 'skipped_no_client'
     monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
     assert episode_finalize.close_now(_UID, 'c1', ProcessingTrigger.CLIENT_FINALIZE) == 'disabled'
 
