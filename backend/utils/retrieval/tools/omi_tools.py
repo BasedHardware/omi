@@ -4,13 +4,14 @@ Tools for answering questions about the Omi/Friend product.
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
 from utils.app_integrations import get_github_docs_content
+from utils.retrieval.tools.result_bounds import bounded_result
 import logging
 
 logger = logging.getLogger(__name__)
 
 
 @tool
-def get_omi_product_info_tool(query: str) -> str:
+def get_omi_product_info_tool(query: str | None = None) -> str:
     """
     Get information about the Omi/Friend product to answer questions about features, functionality, setup, or purchasing.
 
@@ -40,6 +41,9 @@ def get_omi_product_info_tool(query: str) -> str:
         query="How do I update the firmware on my Omi device?"
         Returns documentation about firmware updates and device management
     """
+    if not query or not isinstance(query, str) or not query.strip():
+        return "Error: A specific query string about the Omi product must be provided."
+
     # Fetch the product docs. A network or GitHub API failure must not break the chat turn, so fail
     # soft with an "Error: ..." string like the other retrieval tools instead of letting the
     # exception escape into the agent loop.
@@ -52,7 +56,7 @@ def get_omi_product_info_tool(query: str) -> str:
             "that product information is temporarily unavailable and to try again in a little while."
         )
 
-    if not context:
+    if not context or not isinstance(context, dict):
         # An empty result (e.g. the GitHub API returned non-200) would otherwise produce a docs
         # string with no real content, which misleads the model into answering from nothing. Log it
         # so a silent "no docs" state is diagnosable in prod, not only visible to the user.
@@ -65,10 +69,16 @@ def get_omi_product_info_tool(query: str) -> str:
     # Format context as a comprehensive documentation string
     context_str = 'Omi/Friend Product Documentation:\n\n'
     for section, content in context.items():
-        context_str += f'## {section}\n\n{content}\n\n'
+        if content is None:
+            continue
+        sec_title = str(section).strip()
+        sec_body = str(content).strip()
+        if not sec_body:
+            continue
+        context_str += f'## {sec_title}\n\n{sec_body}\n\n'
 
     context_str += (
         '\n\nUse this documentation to answer questions about the Omi/Friend product, its features, setup, and usage.'
     )
 
-    return context_str
+    return bounded_result(context_str, truncated=False, noun="documentation sections")

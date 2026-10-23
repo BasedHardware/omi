@@ -52,6 +52,21 @@ class TestCapItemsForLlm:
     def test_empty_list(self):
         assert rb.cap_items_for_llm([], 300) == ([], 0, False)
 
+    def test_negative_max_items_returns_empty_and_flags_truncation(self):
+        capped, total, truncated = rb.cap_items_for_llm(["a", "b", "c"], -1)
+        assert capped == []
+        assert total == 3
+        assert truncated is True
+
+    def test_zero_max_items_returns_empty_and_flags_truncation(self):
+        capped, total, truncated = rb.cap_items_for_llm(["a", "b"], 0)
+        assert capped == []
+        assert total == 2
+        assert truncated is True
+
+    def test_none_items_returns_empty_safely(self):
+        assert rb.cap_items_for_llm(None, 300) == ([], 0, False)
+
 
 class TestBoundedResult:
     def test_truncated_note_does_not_claim_relevance_or_absence(self):
@@ -76,3 +91,16 @@ class TestBoundedResult:
         out = rb.bounded_result("body", True)
         assert "more may exist" in out
         assert "most relevant" not in out
+
+    def test_none_result_handled_safely(self):
+        assert rb.bounded_result(None, False) == ""
+        out = rb.bounded_result(None, True)
+        assert "more may exist" in out
+
+    def test_non_string_result_coerced_safely(self):
+        out = rb.bounded_result(12345, False)
+        assert out == "12345"
+
+    def test_negative_shown_count_normalized(self):
+        out = rb.bounded_result("test data", True, shown=-5)
+        assert "0 result lines shown" in out or "more may exist" in out
