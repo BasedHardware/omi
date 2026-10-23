@@ -11847,5 +11847,8 @@
     "pairingPowerOnSubtitle": "Enkrat pritisni gumb in ga imej blizu telefona.",
     "walkthroughBackgroundRecordingNote": "To je to. Omi bo še naprej snemal tvoje pogovore v ozadju.",
     "noThanks": "Ne, hvala",
-    "recapInTheBackground": "V ozadju"
+    "recapInTheBackground": "V ozadju",
+    "retentionOfferAccept": "Ostani s {percent} % popustom",
+    "retentionOfferBody": "Ostanite in plačujte {price} na mesec naslednje {months} mesece.",
+    "retentionOfferApplied": "Končano. {percent} % popusta naslednje {months} mesece."
 }

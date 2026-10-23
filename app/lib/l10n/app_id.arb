@@ -4456,5 +4456,8 @@
     "pairingPowerOnSubtitle": "Tekan tombol sekali dan dekatkan ke ponsel.",
     "walkthroughBackgroundRecordingNote": "Selesai. Omi akan terus merekam percakapanmu di latar belakang.",
     "noThanks": "Tidak, terima kasih",
-    "recapInTheBackground": "Di latar belakang"
+    "recapInTheBackground": "Di latar belakang",
+    "retentionOfferAccept": "Tetap dengan diskon {percent}%",
+    "retentionOfferBody": "Tetap dan bayar {price} per bulan selama {months} bulan ke depan.",
+    "retentionOfferApplied": "Selesai. Diskon {percent}% untuk {months} bulan ke depan."
 }

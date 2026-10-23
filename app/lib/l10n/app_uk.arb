@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Натисніть кнопку один раз і тримайте поруч із телефоном.",
     "walkthroughBackgroundRecordingNote": "Готово. Omi продовжить записувати ваші розмови у фоні.",
     "noThanks": "Ні, дякую",
-    "recapInTheBackground": "У фоні"
+    "recapInTheBackground": "У фоні",
+    "retentionOfferAccept": "Залишитися зі знижкою {percent}%",
+    "retentionOfferBody": "Залишайтеся і платіть {price} на місяць наступні {months} місяці.",
+    "retentionOfferApplied": "Готово. Знижка {percent}% на наступні {months} місяці."
 }

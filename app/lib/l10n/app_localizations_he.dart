@@ -14435,4 +14435,19 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'ברקע';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'הישארו עם $percent% הנחה';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'הישארו ושלמו $price לחודש ב-$months החודשים הבאים.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'בוצע. $percent% הנחה ב-$months החודשים הבאים.';
+  }
 }

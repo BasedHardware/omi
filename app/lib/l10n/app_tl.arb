@@ -11847,5 +11847,8 @@
     "pairingPowerOnSubtitle": "Pindutin nang isang beses ang button at ilapit sa iyong phone.",
     "walkthroughBackgroundRecordingNote": "Ayan na. Patuloy na irerekord ni Omi ang iyong mga usapan sa background.",
     "noThanks": "Hindi, salamat",
-    "recapInTheBackground": "Sa background"
+    "recapInTheBackground": "Sa background",
+    "retentionOfferAccept": "Manatili nang may {percent}% diskwento",
+    "retentionOfferBody": "Manatili at magbayad ng {price} kada buwan sa susunod na {months} buwan.",
+    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan."
 }

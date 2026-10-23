@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "กดปุ่มหนึ่งครั้งและวางไว้ใกล้โทรศัพท์",
     "walkthroughBackgroundRecordingNote": "เรียบร้อย Omi จะบันทึกบทสนทนาของคุณต่อไปในพื้นหลัง",
     "noThanks": "ไม่เป็นไร ขอบคุณ",
-    "recapInTheBackground": "ในเบื้องหลัง"
+    "recapInTheBackground": "ในเบื้องหลัง",
+    "retentionOfferAccept": "อยู่ต่อพร้อมส่วนลด {percent}%",
+    "retentionOfferBody": "อยู่ต่อและจ่ายเดือนละ {price} ใน {months} เดือนถัดไป",
+    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป"
 }

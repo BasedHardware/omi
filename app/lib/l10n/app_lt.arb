@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Paspauskite mygtuką vieną kartą ir laikykite prie telefono.",
     "walkthroughBackgroundRecordingNote": "Tiek. Omi toliau įrašinės jūsų pokalbius fone.",
     "noThanks": "Ne, ačiū",
-    "recapInTheBackground": "Fone"
+    "recapInTheBackground": "Fone",
+    "retentionOfferAccept": "Likti su {percent}% nuolaida",
+    "retentionOfferBody": "Likite ir mokėkite {price} per mėnesį ateinančius {months} mėnesius.",
+    "retentionOfferApplied": "Atlikta. {percent}% nuolaida ateinančius {months} mėnesius."
 }

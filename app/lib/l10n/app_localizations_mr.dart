@@ -14548,4 +14548,19 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'पार्श्वभूमीवर';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% सवलतीसह सुरू ठेवा';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'सुरू ठेवा आणि दरमहा $price भरा, पुढील $months महिने.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'झाले. $percent% सवलत, पुढील $months महिने.';
+  }
 }

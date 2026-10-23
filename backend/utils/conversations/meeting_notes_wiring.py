@@ -153,8 +153,14 @@ def rich_notes_inputs(
     *,
     include_background: bool,
     include_screen_text: bool,
-) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...]]:
-    """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, and frame images for notes."""
+) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...], int]:
+    """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, frame
+    images for notes, and the approved-frame count.
+
+    The count is the screen-volume signal the notes tier gate escalates on; the
+    images are capped far below it (``MAX_NOTES_FRAME_IMAGES``), so they alone
+    can never say how screen-heavy the meeting was.
+    """
     roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(
         uid,
         conversation,
@@ -162,7 +168,7 @@ def rich_notes_inputs(
     )
     corrections = confirmed_corrections_context(conversation)
     if roster is None or not include_background:
-        return roster, corrections or None, desktop_capture, ()
+        return roster, corrections or None, desktop_capture, (), len(evidence)
     started_at = frame_evidence_started_at(conversation)
     block = _rich_meeting_context_block(
         uid,
@@ -180,7 +186,7 @@ def rich_notes_inputs(
         logger.warning('rich meeting frame images failed uid=%s: %s', uid, type(exc).__name__)
     if corrections:
         block = (block or '') + corrections
-    return roster, block, desktop_capture, images
+    return roster, block, desktop_capture, images, len(evidence)
 
 
 def confirmed_corrections_context(conversation):

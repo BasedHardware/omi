@@ -17753,5 +17753,38 @@
     "recapInTheBackground": "In the background",
     "@recapInTheBackground": {
         "description": "Daily recap section listing the day's background conversations, which Home no longer shows"
+    },
+    "retentionOfferAccept": "Stay for {percent}% off",
+    "@retentionOfferAccept": {
+        "description": "Primary button on the last cancel step: keep the subscription with a discount",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "retentionOfferBody": "Stay and pay {price} a month for the next {months} months.",
+    "@retentionOfferBody": {
+        "description": "Offer shown on the last cancel step; price is the discounted monthly price",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            },
+            "months": {
+                "type": "int"
+            }
+        }
+    },
+    "retentionOfferApplied": "Done. {percent}% off your next {months} months.",
+    "@retentionOfferApplied": {
+        "description": "Toast after accepting the stay offer",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "months": {
+                "type": "int"
+            }
+        }
     }
 }

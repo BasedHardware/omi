@@ -11847,5 +11847,8 @@
     "pairingPowerOnSubtitle": "بٹن ایک بار دبائیں اور فون کے قریب رکھیں۔",
     "walkthroughBackgroundRecordingNote": "بس اتنا ہی۔ Omi پس منظر میں آپ کی گفتگو ریکارڈ کرتا رہے گا۔",
     "noThanks": "نہیں، شکریہ",
-    "recapInTheBackground": "پس منظر میں"
+    "recapInTheBackground": "پس منظر میں",
+    "retentionOfferAccept": "{percent}% رعایت کے ساتھ رہیں",
+    "retentionOfferBody": "رہیں اور ہر ماہ {price} ادا کریں، اگلے {months} مہینے۔",
+    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔"
 }

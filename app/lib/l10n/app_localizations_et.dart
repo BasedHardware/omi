@@ -14530,4 +14530,19 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Taustal';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Jää $percent% allahindlusega';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Jää ja maksa $price kuus järgmised $months kuud.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Valmis. $percent% allahindlust järgmised $months kuud.';
+  }
 }

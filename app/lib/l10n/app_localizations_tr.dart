@@ -14550,4 +14550,19 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Arka planda';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '%$percent indirimle kal';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Kal ve ayda $price öde, önümüzdeki $months ay boyunca.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Tamam. %$percent indirim, önümüzdeki $months ay.';
+  }
 }

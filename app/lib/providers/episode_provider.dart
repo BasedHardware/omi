@@ -64,6 +64,10 @@ class EpisodeProvider extends ChangeNotifier {
   bool _wrappingUp = false;
   bool get wrappingUp => _wrappingUp;
 
+  /// Episodes the person ended. Until the server closes one at once, it can still read as live for
+  /// a few minutes; it must never come back as the live row.
+  final Set<String> _ended = {};
+
   DateTime now() => _clock();
 
   /// Re-reads the live episode. A failed read keeps what was shown; a 404 means no episodes here.
@@ -74,7 +78,8 @@ class EpisodeProvider extends ChangeNotifier {
     switch (result) {
       case ApiSuccess(:final data):
         _enabled = data.enabled;
-        _live = data.episode;
+        final episode = data.episode;
+        _live = episode != null && _ended.contains(episode.id) ? null : episode;
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         _enabled = false;
         _live = null;
@@ -166,6 +171,24 @@ class EpisodeProvider extends ChangeNotifier {
       _wrappingUp = false;
       notifyListeners();
     }
+  }
+
+  /// The person ended the live conversation (Wrap up, a pendant double-tap, Finish): the live
+  /// episode closes at once and the next one counts from now. The ended conversation shows as a
+  /// processing row; its notes and items still reach the closed episode on the server.
+  void onLiveFinalized() {
+    final now = _clock();
+    liveAnchor.restart(now);
+    final episode = _live;
+    if (episode != null) {
+      _ended.add(episode.id);
+      _live = null;
+      // Without a conversation id the server closes the episode immediately; a repeat is a no-op.
+      unawaited(_wrapUp(episode.id));
+    }
+    _pendingSince = null;
+    _reschedule();
+    notifyListeners();
   }
 
   /// Undo on a captured item: hidden at once, dismissed on the server; restored if that fails.

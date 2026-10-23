@@ -11847,5 +11847,8 @@
     "pairingPowerOnSubtitle": "לחץ פעם אחת על הכפתור והשאר אותו קרוב לטלפון.",
     "walkthroughBackgroundRecordingNote": "זהו. Omi ימשיך להקליט את השיחות שלך ברקע.",
     "noThanks": "לא, תודה",
-    "recapInTheBackground": "ברקע"
+    "recapInTheBackground": "ברקע",
+    "retentionOfferAccept": "הישארו עם {percent}% הנחה",
+    "retentionOfferBody": "הישארו ושלמו {price} לחודש ב-{months} החודשים הבאים.",
+    "retentionOfferApplied": "בוצע. {percent}% הנחה ב-{months} החודשים הבאים."
 }

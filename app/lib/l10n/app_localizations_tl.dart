@@ -14652,4 +14652,19 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Sa background';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Manatili nang may $percent% diskwento';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Manatili at magbayad ng $price kada buwan sa susunod na $months buwan.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Tapos na. $percent% diskwento sa susunod na $months buwan.';
+  }
 }

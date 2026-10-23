@@ -14599,4 +14599,19 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'În fundal';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Rămâi cu $percent% reducere';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Rămâi și plătești $price pe lună în următoarele $months luni.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Gata. $percent% reducere în următoarele $months luni.';
+  }
 }

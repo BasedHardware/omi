@@ -14585,4 +14585,19 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'ಹಿನ್ನೆಲೆಯಲ್ಲಿ';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% ರಿಯಾಯಿತಿಯೊಂದಿಗೆ ಮುಂದುವರಿಸಿ';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'ಮುಂದುವರಿಸಿ ಮತ್ತು ತಿಂಗಳಿಗೆ $price ಪಾವತಿಸಿ, ಮುಂದಿನ $months ತಿಂಗಳು.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'ಆಯಿತು. $percent% ರಿಯಾಯಿತಿ, ಮುಂದಿನ $months ತಿಂಗಳು.';
+  }
 }

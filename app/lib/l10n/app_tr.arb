@@ -4456,5 +4456,8 @@
     "pairingPowerOnSubtitle": "Düğmeye bir kez bas ve telefonunun yanında tut.",
     "walkthroughBackgroundRecordingNote": "Bu kadar. Omi konuşmalarını arka planda kaydetmeye devam edecek.",
     "noThanks": "Hayır, teşekkürler",
-    "recapInTheBackground": "Arka planda"
+    "recapInTheBackground": "Arka planda",
+    "retentionOfferAccept": "%{percent} indirimle kal",
+    "retentionOfferBody": "Kal ve ayda {price} öde, önümüzdeki {months} ay boyunca.",
+    "retentionOfferApplied": "Tamam. %{percent} indirim, önümüzdeki {months} ay."
 }

@@ -160,6 +160,25 @@ Episode _liveEpisode({List<EpisodeItem>? items}) => Episode(
       stateUpdatedAt: _now.subtract(const Duration(minutes: 2)),
     );
 
+class _PausableCapture extends _LiveCapture {
+  bool paused = false;
+  int pauses = 0;
+  int resumes = 0;
+
+  @override
+  bool get isPaused => paused;
+
+  @override
+  Future<void> pauseCapture() async => pauses++;
+
+  @override
+  Future<void> resumeCapture() async {
+    resumes++;
+    paused = false;
+    notifyListeners();
+  }
+}
+
 EpisodeProvider _episodes({Episode? live, bool enabled = true, List<String>? dismissed, DateTime Function()? clock}) {
   final provider = EpisodeProvider(
     fetchLive: () async => ApiSuccess(EpisodeRead(enabled: enabled, episode: live)),
@@ -314,6 +333,40 @@ void main() {
       await _unmount(tester);
     });
 
+    testWidgets('Wrap up with nothing new never pauses the pendant: the episode closes and the clock restarts',
+        (tester) async {
+      final capture = _PausableCapture();
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: _liveEpisode());
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+
+      await tester.tap(find.byKey(const Key('episode_wrap_up_button')));
+      await tester.pump();
+      expect(capture.pauses, 0);
+      expect(episodes.live, isNull);
+      await _unmount(tester);
+    });
+
+    testWidgets('while paused the page leads with one-tap Resume, Wrap up beneath it', (tester) async {
+      final capture = _PausableCapture()..paused = true;
+      addTearDown(capture.dispose);
+      final episodes = _episodes(live: _liveEpisode());
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+
+      final resume = find.byKey(const Key('episode_resume_button'));
+      expect(resume, findsOneWidget);
+      expect(find.byKey(const Key('episode_wrap_up_button')), findsOneWidget);
+      expect(tester.getTopLeft(resume).dy,
+          lessThan(tester.getTopLeft(find.byKey(const Key('episode_wrap_up_button'))).dy));
+      await tester.tap(resume);
+      await tester.pump();
+      expect(capture.resumes, 1);
+      expect(find.byKey(const Key('episode_resume_button')), findsNothing);
+      await _unmount(tester);
+    });
+
     testWidgets('the transcript tab draws moment dividers and the captured item inline', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
@@ -387,6 +440,30 @@ void main() {
       expect(find.textContaining('Live · 3m', findRichText: true), findsOneWidget);
       await _unmount(tester);
     });
+    testWidgets('unnamed voices are never counted as people, however many diarization ids appear', (tester) async {
+      final capture = _LiveCapture();
+      addTearDown(capture.dispose);
+      capture.segments = [
+        _segment('me', 'Hello there', 0),
+        for (var i = 0; i < 40; i++)
+          TranscriptSegment(
+            id: 'v$i',
+            text: 'Voice $i',
+            speaker: 'SPEAKER_${i + 1}',
+            isUser: false,
+            personId: null,
+            translations: [],
+            start: 30.0 + i,
+            end: 31.0 + i,
+          ),
+      ];
+      final episodes = _episodes(live: _liveEpisode());
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      expect(find.textContaining('people', findRichText: true), findsNothing);
+      await _unmount(tester);
+    });
+
     testWidgets('shows the live episode as a quiet outlined row: its topic as title, Live and length', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);

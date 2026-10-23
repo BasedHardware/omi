@@ -14313,4 +14313,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get recapInTheBackground => '背景中';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '享受 $percent% 折扣继续使用';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return '继续使用，每月只需 $price，持续 $months 个月。';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return '完成。$percent% 折扣，持续 $months 个月。';
+  }
 }

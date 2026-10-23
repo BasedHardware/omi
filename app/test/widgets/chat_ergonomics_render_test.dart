@@ -27,6 +27,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 
 /// Renders the chat while Omi answers a message with a video attached: the bubble shows the
 /// clip's poster frame with a play badge and length, and the empty composer offers Stop.
@@ -54,7 +55,7 @@ Future<void> _loadFonts() async {
   ]) {
     final loader = FontLoader(family);
     for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
-      loader.addFont(rootBundle.load('assets/fonts/SFPRODISPLAY$font.OTF'));
+      loader.addFont(sfProFont('SFPRODISPLAY$font.OTF'));
     }
     await loader.load();
   }

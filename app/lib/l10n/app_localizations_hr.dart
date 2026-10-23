@@ -14573,4 +14573,19 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'U pozadini';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Ostani uz $percent% popusta';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Ostani i plaćaj $price mjesečno sljedećih $months mjeseca.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Gotovo. $percent% popusta sljedećih $months mjeseca.';
+  }
 }

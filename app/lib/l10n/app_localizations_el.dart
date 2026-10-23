@@ -14632,4 +14632,19 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Στο παρασκήνιο';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Μείνε με $percent% έκπτωση';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Μείνε και πλήρωνε $price τον μήνα για τους επόμενους $months μήνες.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Έγινε. $percent% έκπτωση για τους επόμενους $months μήνες.';
+  }
 }
