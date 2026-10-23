@@ -232,6 +232,24 @@ class ScopedRatchetTests(unittest.TestCase):
             "Selector<CaptureProvider, int>(selector: (_, p) => p.version, builder: build);",
         ):
             self.assertEqual(count_hits(snippet)["unselected-provider-listener"], 0, snippet)
+        unrelated_selector = "Selector<CaptureProvider, int>(selector: (_, p) => p.version, builder: build);"
+        self.assertEqual(count_hits(VIOLATIONS["unselected-provider-listener"] + unrelated_selector)["unselected-provider-listener"], 1)
+
+    def test_adding_callback_to_existing_global_wrapper_is_an_increase(self) -> None:
+        base = "Listener(onPointerDown: inspect, child: child);"
+        head = "Listener(onPointerDown: inspect, onPointerMove: walkTree, child: child);"
+        self.assertEqual(count_hits(base)["global-input-listener"], 1)
+        self.assertEqual(count_hits(head)["global-input-listener"], 2)
+        self.assertTrue(any("global-input-listener 1 → 2" in problem for problem in compare(PROVIDER, head, base)))
+
+    def test_global_input_exception_only_covers_its_callback_line(self) -> None:
+        text = """Listener(
+  // omi-perf-allow: global-input-listener -- one bounded on-demand hit test
+  onPointerDown: inspect,
+  onPointerMove: walkTree,
+  child: child,
+);"""
+        self.assertEqual(count_hits(text)["global-input-listener"], 1)
 
     def test_selected_callback_requires_guard_before_work(self) -> None:
         text = """
@@ -279,12 +297,14 @@ void onCapture() {
             "class ConversationListItem extends StatelessWidget {\n Widget build(BuildContext c) => Opacity(opacity: alpha, child: row);\n}",
             "class MessageRow extends StatelessWidget {\n Widget build(BuildContext c) => draw();\n void draw() { canvas.saveLayer(bounds, paint); }\n}",
             "ListView.builder(itemBuilder: (c, i) { canvas.saveLayer(bounds, paint); return row; });",
+            "ListView.builder(itemBuilder: (c, i) => CustomPaint(painter: BubblePainter()));\nclass BubblePainter extends CustomPainter {\n void paint(Canvas canvas, Size size) { canvas.saveLayer(bounds, paint); }\n}",
         ):
             self.assertEqual(count_hits(text)["list-item-layer"], 1, text)
         for text in (
             "Widget build(BuildContext c) => Opacity(opacity: .5, child: hero);",
             "ListView.builder(itemBuilder: (c, i) => FadeTransition(opacity: alpha, child: row));",
             "void paint(Canvas canvas) { canvas.saveLayer(bounds, paint); }",
+            "ListView.builder(itemBuilder: (c, i) => row);\nclass UnusedPainter extends CustomPainter {\n void paint(Canvas canvas, Size size) { canvas.saveLayer(bounds, paint); }\n}",
         ):
             self.assertEqual(count_hits(text)["list-item-layer"], 0, text)
 

@@ -242,6 +242,12 @@ def find_hits(text: str, path: str = "app/lib/x.dart") -> dict[str, list[int]]:
             continue
         for match in rule.pattern.finditer(masked):
             start, end = _line_bounds(text, match.start())
+            if rule.id == "global-input-listener":
+                for position in _global_input_hits(text, match, path):
+                    callback_start, callback_end = _line_bounds(text, position)
+                    if not _allowed_at(text, callback_start, callback_end, rule.id):
+                        hits[rule.id].append(text.count("\n", 0, position) + 1)
+                continue
             if rule.id == "forced-semantics":
                 key = (path, re.sub(r"\s+", "", masked[start:end]))
                 if key in SEMANTICS_ALLOWLIST and key not in semantics_seen:
@@ -250,8 +256,6 @@ def find_hits(text: str, path: str = "app/lib/x.dart") -> dict[str, list[int]]:
             if rule.accept is not None and not rule.accept(text, match):  # type: ignore[operator]
                 continue
             if not rule.absolute and _allowed_at(text, start, end, rule.id):
-                continue
-            if rule.id == "global-input-listener" and not _global_input_listener(text, match, path):
                 continue
             hits[rule.id].append(text.count("\n", 0, match.start()) + 1)
     return hits
@@ -444,6 +448,8 @@ def _deferred_spans(masked: str) -> tuple[tuple[int, int], ...]:
 def _ui_scopes(text: str, kind: str) -> tuple[tuple[int, int], ...]:
     masked = _mask(text)
     declarations = _declarations(masked)
+    classes = [(m.group(1), m.end(), _matching(masked, m.end() - 1, "{", "}"))
+               for m in re.finditer(r"\bclass\s+(\w+)\b[^{}]*\{", masked)]
     if kind == "build":
         spans = [(a, b) for name, a, b in declarations if name == "build"]
         spans += _callback_spans(masked, r"builder|itemBuilder|separatorBuilder")
@@ -454,23 +460,32 @@ def _ui_scopes(text: str, kind: str) -> tuple[tuple[int, int], ...]:
             spans.append((match.end(), _matching(masked, match.end() - 1, "(", ")")))
         # A reusable row can be built in another file: recognize its declared
         # role, rather than exempting/banning whole directories or filenames.
-        for match in re.finditer(r"\bclass\s+\w*(?:ListItem|Row|Tile)\b[^{}]*\{", masked):
-            end = _matching(masked, match.end() - 1, "{", "}")
-            spans += [(a, b) for name, a, b in declarations if name == "build" and match.end() <= a < end]
+        for class_name, start, end in classes:
+            if class_name.endswith(("ListItem", "Row", "Tile")):
+                spans += [(a, b) for name, a, b in declarations if name == "build" and start <= a < end]
     # Follow same-file helper calls and tear-offs, including row builders.
     # Cycles terminate; external helpers/types are outside this lexical guard.
     selected = set(spans)
     deferred = _deferred_spans(masked)
+
+    def referenced(pattern: str) -> bool:
+        return any(not any(a <= start + ref.start() < b for a, b in deferred)
+                   for start, end in selected for ref in re.finditer(pattern, masked[start:end]))
+
     while True:
         added = {
             (a, b)
             for name, a, b in declarations
-            if any(
-                not any(a <= start + ref.start() < b for a, b in deferred)
-                for start, end in selected
-                for ref in re.finditer(rf"\b{re.escape(name)}\b", masked[start:end])
-            )
-        } - selected
+            if referenced(rf"\b{re.escape(name)}\b")
+        }
+        if kind == "list":
+            # List rows often construct a same-file widget/painter; only its
+            # build/paint methods are row work, not initState or tap handlers.
+            for class_name, start, end in classes:
+                if referenced(rf"\b{re.escape(class_name)}\s*\("):
+                    added.update((a, b) for name, a, b in declarations
+                                 if name in {"build", "paint"} and start <= a < end)
+        added -= selected
         if not added:
             return tuple(sorted(selected))
         selected.update(added)
@@ -482,7 +497,7 @@ def _in_ui_scope(text: str, position: int, kind: str) -> bool:
     return any(start <= position < end for start, end in _ui_scopes(text, kind))
 
 
-def _global_input_listener(text: str, match: re.Match[str], path: str) -> bool:
+def _global_input_hits(text: str, match: re.Match[str], path: str) -> list[int]:
     masked = _mask(text)
     args = masked[match.end() : _matching(masked, match.end() - 1, "(", ")")]
     named = {}
@@ -491,24 +506,25 @@ def _global_input_listener(text: str, match: re.Match[str], path: str) -> bool:
         end = _expression_end(args, index)
         argument = re.match(r"\s*(\w+)\s*:\s*", args[index:end])
         if argument:
-            named[argument.group(1)] = args[index + argument.end() : end]
+            named[argument.group(1)] = (args[index + argument.end() : end], match.end() + index + argument.start(1))
         index = end + 1
     # Root entry points or arbitrary-child wrappers, not a local gesture surface.
-    if path != MAIN_DART and not re.match(r"(?:widget\.child\b|child\b|MaterialApp\s*\(|Navigator\s*\(|Router\s*\()", named.get("child", "")):
-        return False
+    if path != MAIN_DART and not re.match(r"(?:widget\.child\b|child\b|MaterialApp\s*\(|Navigator\s*\(|Router\s*\()", named.get("child", ("", 0))[0]):
+        return []
     if masked[match.start() : match.end()].startswith("NotificationListener"):
-        if "<" in match.group() and not re.search(r"\b(?:Scroll\w*Notification|Notification)\b", match.group()):
-            return False  # domain events are not per-scroll/frame observation
+        if "<" in match.group() and not re.search(r"\b(?:Scroll\w*Notification|Notification|dynamic)\b", match.group()):
+            return []  # domain events are not per-scroll/frame observation
         callback = r"onNotification"
     else:
         callback = r"onPointer(?:Down|Move|Hover|Signal|PanZoomUpdate)"
-    for name, value in named.items():
+    positions = []
+    for name, (value, position) in named.items():
         if not re.fullmatch(callback, name):
             continue
         if re.match(r"\s*\([^()]*\)\s*(?:=>\s*(?:false|true|null)\b|\{\s*(?:return\s+(?:false|true|null)\s*;\s*)?\})", value):
             continue  # literal no-op callback does no per-input work
-        return True
-    return False
+        positions.append(position)
+    return positions
 
 
 HIGH_FREQUENCY_PROVIDER = r"(?:Capture|Sync|Conversation|Message|Episode|Device|VoiceRecorder)Provider"
@@ -678,6 +694,8 @@ def hook_violations(name: str, sources: dict[str, str]) -> list[str]:
     problems: list[str] = []
     found = False
     for path, text in sources.items():
+        if name not in text:
+            continue  # avoid lexing every app source again for each root hook
         masked = _mask(text)
         for match in declaration.finditer(masked):
             close = _matching(masked, masked.index("(", match.start()), "(", ")")
@@ -736,6 +754,8 @@ def check_semantics(root: Path) -> list[str]:
         if not is_contract_source(path):
             continue
         text = file.read_text(encoding="utf-8", errors="ignore")
+        if "ensureSemantics" not in text:
+            continue
         if re.search(r"\bensureSemantics\s*\(", _mask(text)):
             for line in find_hits(text, path)["forced-semantics"]:
                 problems.append(f"{path}:{line}: forced-semantics; use {fix_for('forced-semantics')}")
