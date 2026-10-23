@@ -1,18 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/pages/onboarding/find_device/page.dart';
+import 'package:omi/pages/capture/connect.dart';
+
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/widgets/device_widget.dart';
-import 'package:omi/widgets/scanning_ripple.dart';
 
-/// Pairing with no "do you have an Omi" question. The body is the Connect page's own: the same
-/// ripple and device animation over [FindDevicesPage], which owns the scan, the nearby device
-/// list, the tap-to-connect path and the "No Omi Found" help. Back or Not now leaves the step.
+/// Pairing with no "do you have an Omi" question. The body is Home's Connect page itself
+/// ([ConnectDevicePage]): the same scan, nearby device list, tap-to-connect path and help, plus
+/// "Not now". Back or Not now leaves the step.
 class PocketPairingStep extends StatefulWidget {
   const PocketPairingStep({super.key, required this.onDone});
 
@@ -111,57 +108,7 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   }
 
   Widget _scaffold(BuildContext context) {
-    final l10n = context.l10n;
-    return Scaffold(
-      backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
-        leading: OmiBackButton(onPressed: _back),
-      ),
-      body: Consumer<OnboardingProvider>(
-        builder: (context, onboardingProvider, child) {
-          return ListView(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-                child: Column(
-                  children: [
-                    Text(l10n.pairingPowerOnTitle, style: OmiType.title1, textAlign: TextAlign.center),
-                    const SizedBox(height: OmiSpacing.xs),
-                    Text(
-                      l10n.pairingPowerOnSubtitle,
-                      style: OmiType.body.copyWith(color: OmiColors.textSecondary),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-              Stack(
-                alignment: Alignment.center,
-                children: [
-                  if (!onboardingProvider.isConnected)
-                    ScanningRippleWidget(
-                      isScanning: !onboardingProvider.isConnected,
-                      size: (MediaQuery.sizeOf(context).height <= 700 ? 280.0 : 360.0) *
-                          (onboardingProvider.pairingFailureReason == null ? 1 : 0.5),
-                    ),
-                  DeviceAnimationWidget(
-                    sizeMultiplier: onboardingProvider.pairingFailureReason == null ? 1 : 0.5,
-                    isConnected: onboardingProvider.isConnected,
-                    deviceName: onboardingProvider.deviceName,
-                    deviceType: onboardingProvider.deviceType,
-                    animatedBackground: onboardingProvider.isConnected,
-                  ),
-                ],
-              ),
-              FindDevicesPage(
-                isFromOnboarding: true,
-                goNext: () => _finish(true),
-                onSkip: () => _finish(false),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    // The Home Connect page itself: same scan, device list and tap-to-connect as in the app.
+    return ConnectDevicePage(onConnected: () => _finish(true), onSkip: () => _finish(false));
   }
 }
