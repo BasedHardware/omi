@@ -326,7 +326,13 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           await TrialUpsellSheet.show(context, source: 'onboarding');
           if (!mounted) return;
         }
-        await routeToPage(context, PocketOnboardingFlow(onComplete: _finishOnboarding));
+        // The flow offers no plan itself: skip the end placement only when sign-up already showed one.
+        await routeToPage(
+          context,
+          PocketOnboardingFlow(
+              onComplete: ({required bool paywallShown}) =>
+                  _finishOnboarding(paywallShown: paywallShown || _signupPaywallShown)),
+        );
         return;
       case OnboardingVariant.yinka:
         await routeToPage(context, YinkaOnboardingFlow(onComplete: _finishOnboarding));

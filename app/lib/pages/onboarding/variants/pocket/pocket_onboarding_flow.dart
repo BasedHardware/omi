@@ -99,7 +99,7 @@ class _PocketOnboardingFlowState extends State<PocketOnboardingFlow> {
     // onboarding.
     await seedOnboardingConversation().timeout(const Duration(seconds: 4), onTimeout: () => false);
     if (!mounted) return;
-    final saved = await widget.onComplete(paywallShown: true);
+    final saved = await widget.onComplete(paywallShown: false);
     if (saved) SharedPreferencesUtil().remove(resumeKey(SharedPreferencesUtil().uid));
     _finishing = false;
   }
