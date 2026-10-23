@@ -970,11 +970,16 @@ class CaptureController extends ChangeNotifier
   DateTime? _lastVoiceCommandAutoSubmitAt;
   List<List<int>> _commandBytes = [];
   int _voiceCommandSubmissionGeneration = 0;
+  bool _voiceCommandSubmissionInFlight = false;
+  bool _tutorialSubmissionInFlight = false;
   bool _voiceCommandStartedDuringOnboarding = false;
+  DeviceOnboardingProvider? _voiceCommandOnboardingProvider;
+  int? _voiceCommandTutorialAttemptId;
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
   final LiveFinalizeGate _finalizeGate = LiveFinalizeGate();
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
+  static const Duration _voiceCommandSubmissionTimeout = Duration(seconds: 35);
 
   RecordingState recordingState = RecordingState.stop;
 
@@ -1831,56 +1836,138 @@ class CaptureController extends ChangeNotifier
     String deviceId,
     List<List<int>> data, {
     bool allowWhenDisabled = false,
+    DeviceOnboardingProvider? tutorialOnboarding,
+    int? tutorialAttemptId,
   }) async {
-    final submissionGeneration = _voiceCommandSubmissionGeneration;
+    final activeOnboarding =
+        tutorialOnboarding ?? (deviceOnboardingProvider?.isOnboardingActive == true ? deviceOnboardingProvider : null);
+    final attemptId = tutorialAttemptId ?? activeOnboarding?.activeAttemptId;
+    void failTutorial(VoiceQuestionFailure failure) {
+      if (activeOnboarding == null || !identical(deviceOnboardingProvider, activeOnboarding)) return;
+      if (!activeOnboarding.isOnboardingActive) return;
+      activeOnboarding.onVoiceQuestionFailed(failure: failure, attemptId: attemptId);
+    }
+
+    void completeTutorial(VoiceQuestionOutcome outcome) {
+      if (activeOnboarding == null || !identical(deviceOnboardingProvider, activeOnboarding)) return;
+      if (!activeOnboarding.isOnboardingActive) return;
+      if (outcome.isAnswered) {
+        activeOnboarding.onVoiceResponseReceived(outcome.answer!, question: outcome.question, attemptId: attemptId);
+      } else {
+        activeOnboarding.onVoiceQuestionFailed(
+          failure: outcome.failure ?? VoiceQuestionFailure.unknown,
+          attemptId: attemptId,
+        );
+      }
+    }
+
     if (_omiButtonActionsDisabled && !allowWhenDisabled) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.actionsDisabled);
       return;
     }
     if (data.isEmpty) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
-      if (deviceOnboardingProvider?.isOnboardingActive == true) {
-        deviceOnboardingProvider!.onVoiceQuestionFailed();
-      }
+      failTutorial(VoiceQuestionFailure.noSpeech);
       return;
     }
-
+    if (_voiceCommandSubmissionInFlight) {
+      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.sendInFlight);
+      failTutorial(VoiceQuestionFailure.busy);
+      return;
+    }
     if (_recordingDevice == null) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.noDevice);
+      failTutorial(VoiceQuestionFailure.deviceUnavailable);
       return;
     }
 
-    late final BleAudioCodec codec;
+    final submissionGeneration = ++_voiceCommandSubmissionGeneration;
+    _voiceCommandSubmissionInFlight = true;
+    _tutorialSubmissionInFlight = activeOnboarding != null;
+    Timer? submissionWatchdog;
+    var timedOut = false;
     try {
-      codec = await _getAudioCodec(_recordingDevice!.id);
-    } catch (_) {
-      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.codecLookupFailed);
-      return;
-    }
-    if (submissionGeneration != _voiceCommandSubmissionGeneration) {
-      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.cancelled);
-      return;
-    }
-    if (_omiButtonActionsDisabled && !allowWhenDisabled) {
-      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.actionsDisabled);
-      return;
-    }
-    await externalActions.sendVoiceMessageStreamToServer(
-      data,
-      onFirstChunkRecived: () {
-        _playSpeakerHaptic(deviceId, 2);
-      },
-      codec: codec,
-      // Device-button voice → speak the reply aloud (BG/lock-screen safe).
-      // Gated by _preferences.voiceResponseEnabled inside the service.
-      playResponseAudio: true,
-      onNoSpeech: () async {
-        await _playVoiceQuestionFailureHaptic(deviceId);
-        if (deviceOnboardingProvider?.isOnboardingActive == true) {
-          deviceOnboardingProvider!.onVoiceQuestionFailed();
+      submissionWatchdog = _scheduling.once(_voiceCommandSubmissionTimeout, () {
+        if (submissionGeneration != _voiceCommandSubmissionGeneration) return;
+        timedOut = true;
+        _voiceCommandSubmissionGeneration++;
+        _voiceCommandSubmissionInFlight = false;
+        _tutorialSubmissionInFlight = false;
+        failTutorial(VoiceQuestionFailure.timeout);
+      });
+
+      late final BleAudioCodec codec;
+      try {
+        codec = await _getAudioCodec(_recordingDevice!.id).timeout(_voiceCommandSubmissionTimeout);
+      } on TimeoutException {
+        _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.codecLookupFailed);
+        if (!timedOut && submissionGeneration == _voiceCommandSubmissionGeneration) {
+          failTutorial(VoiceQuestionFailure.timeout);
         }
-      },
-    );
+        return;
+      } catch (_) {
+        _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.codecLookupFailed);
+        if (!timedOut && submissionGeneration == _voiceCommandSubmissionGeneration) {
+          failTutorial(VoiceQuestionFailure.codecFailed);
+        }
+        return;
+      }
+      if (timedOut || submissionGeneration != _voiceCommandSubmissionGeneration) {
+        if (!timedOut) {
+          _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.cancelled);
+        }
+        return;
+      }
+      if (_omiButtonActionsDisabled && !allowWhenDisabled) {
+        _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.actionsDisabled);
+        return;
+      }
+
+      var noSpeechHandled = false;
+      late final VoiceQuestionOutcome outcome;
+      try {
+        outcome = await externalActions
+            .sendVoiceMessageStreamToServer(
+              data,
+              onFirstChunkRecived: () {
+                if (submissionGeneration == _voiceCommandSubmissionGeneration) {
+                  _playSpeakerHaptic(deviceId, 2);
+                }
+              },
+              codec: codec,
+              // Device-button voice → speak the reply aloud (BG/lock-screen safe).
+              // Gated by _preferences.voiceResponseEnabled inside the service.
+              playResponseAudio: true,
+              onNoSpeech: () async {
+                if (submissionGeneration != _voiceCommandSubmissionGeneration) return;
+                noSpeechHandled = true;
+                await _playVoiceQuestionFailureHaptic(deviceId);
+                failTutorial(VoiceQuestionFailure.noSpeech);
+              },
+            )
+            .timeout(_voiceCommandSubmissionTimeout);
+      } on TimeoutException {
+        if (!timedOut && submissionGeneration == _voiceCommandSubmissionGeneration) {
+          failTutorial(VoiceQuestionFailure.timeout);
+        }
+        return;
+      } catch (_) {
+        if (!timedOut && submissionGeneration == _voiceCommandSubmissionGeneration) {
+          failTutorial(VoiceQuestionFailure.unknown);
+        }
+        return;
+      }
+
+      if (timedOut || submissionGeneration != _voiceCommandSubmissionGeneration) return;
+      if (noSpeechHandled && outcome.failure == VoiceQuestionFailure.noSpeech) return;
+      completeTutorial(outcome);
+    } finally {
+      submissionWatchdog?.cancel();
+      if (submissionGeneration == _voiceCommandSubmissionGeneration) {
+        _voiceCommandSubmissionInFlight = false;
+        _tutorialSubmissionInFlight = false;
+      }
+    }
   }
 
   Future<void> _playVoiceQuestionFailureHaptic(String deviceId) async {
@@ -1905,6 +1992,36 @@ class CaptureController extends ChangeNotifier
     });
   }
 
+  void _beginVoiceCommandSession(
+    String deviceId,
+    _VoiceCommandTrigger trigger, {
+    DeviceOnboardingProvider? onboarding,
+  }) {
+    if (onboarding != null) {
+      final attemptId = onboarding.onVoiceSessionStarted();
+      if (attemptId == null) return;
+      _voiceCommandOnboardingProvider = onboarding;
+      _voiceCommandTutorialAttemptId = attemptId;
+      _voiceCommandStartedDuringOnboarding = true;
+    } else {
+      _voiceCommandOnboardingProvider = null;
+      _voiceCommandTutorialAttemptId = null;
+      _voiceCommandStartedDuringOnboarding = false;
+    }
+    if (trigger == _VoiceCommandTrigger.toggle && OmiVoicePlaybackService.instance.isSpeaking) {
+      OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.newVoiceQuery);
+    }
+    _lastVoiceCommandAutoSubmitAt = null;
+    _voiceCommandSession = _now();
+    _voiceCommandTrigger = trigger;
+    _commandBytes = [];
+    _startVoiceCommandTimeout(deviceId);
+    _playSpeakerHaptic(deviceId, 1);
+    if (trigger == _VoiceCommandTrigger.toggle) {
+      unawaited(DebugLogManager.logEvent('pendant_voice_question', {'phase': 'started'}));
+    }
+  }
+
   // End voice command session and process the collected audio
   void _endVoiceCommandSession(String deviceId, {bool autoSubmitted = false}) {
     _voiceCommandTimeoutTimer?.cancel();
@@ -1912,14 +2029,28 @@ class CaptureController extends ChangeNotifier
     _voiceCommandSession = null;
     _voiceCommandTrigger = null;
     _lastVoiceCommandAutoSubmitAt = autoSubmitted ? _now() : null;
-    if (autoSubmitted) deviceOnboardingProvider?.onQuestionAutoSubmitted();
+
+    final sessionOnboarding =
+        _voiceCommandOnboardingProvider ?? (_voiceCommandStartedDuringOnboarding ? deviceOnboardingProvider : null);
+    final tutorialAttemptId = _voiceCommandTutorialAttemptId ?? sessionOnboarding?.activeAttemptId;
+    final tutorialStillActive = sessionOnboarding != null &&
+        identical(deviceOnboardingProvider, sessionOnboarding) &&
+        sessionOnboarding.isOnboardingActive;
+    if (tutorialStillActive) {
+      if (autoSubmitted) {
+        sessionOnboarding.onQuestionAutoSubmitted(attemptId: tutorialAttemptId);
+      } else {
+        sessionOnboarding.onVoiceQuestionSubmitted(attemptId: tutorialAttemptId);
+      }
+    }
 
     // The started-during-onboarding exemption only holds while the tutorial is
     // still active: if onboarding exited (dispose/skip/complete), the session
     // should have been cancelled — never submit audio captured after leaving.
-    final allowWhenDisabled =
-        _voiceCommandStartedDuringOnboarding && deviceOnboardingProvider?.isOnboardingActive == true;
+    final allowWhenDisabled = _voiceCommandStartedDuringOnboarding && tutorialStillActive;
     _voiceCommandStartedDuringOnboarding = false;
+    _voiceCommandOnboardingProvider = null;
+    _voiceCommandTutorialAttemptId = null;
     var data = List<List<int>>.from(_commandBytes);
     _commandBytes = [];
     unawaited(
@@ -1929,7 +2060,15 @@ class CaptureController extends ChangeNotifier
         'auto_submitted': autoSubmitted,
       }),
     );
-    _processVoiceCommandBytes(deviceId, data, allowWhenDisabled: allowWhenDisabled);
+    unawaited(
+      _processVoiceCommandBytes(
+        deviceId,
+        data,
+        allowWhenDisabled: allowWhenDisabled,
+        tutorialOnboarding: tutorialStillActive ? sessionOnboarding : null,
+        tutorialAttemptId: tutorialStillActive ? tutorialAttemptId : null,
+      ),
+    );
   }
 
   void cancelActiveVoiceSession() {
@@ -1937,21 +2076,25 @@ class CaptureController extends ChangeNotifier
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.cancelled);
     }
     _voiceCommandSubmissionGeneration++;
+    _voiceCommandSubmissionInFlight = false;
+    _tutorialSubmissionInFlight = false;
     _voiceCommandTimeoutTimer?.cancel();
     _voiceCommandTimeoutTimer = null;
     _voiceCommandSession = null;
     _voiceCommandTrigger = null;
 
     _voiceCommandStartedDuringOnboarding = false;
+    _voiceCommandOnboardingProvider = null;
+    _voiceCommandTutorialAttemptId = null;
     _commandBytes = [];
   }
 
-  /// Cancel a voice session only if the tutorial started it.
+  /// Cancel a voice session or in-flight submission only if the tutorial started it.
   ///
   /// Tapping Start then exiting during step 0 never starts a voice session, so
   /// a pre-existing Omi command must be left alone.
   void cancelTutorialOwnedVoiceSession() {
-    if (!_voiceCommandStartedDuringOnboarding) return;
+    if (!_voiceCommandStartedDuringOnboarding && !_tutorialSubmissionInFlight) return;
     cancelActiveVoiceSession();
   }
 
@@ -1999,19 +2142,25 @@ class CaptureController extends ChangeNotifier
   void _handleButtonEvent(String deviceId, int buttonState) {
     unawaited(DebugLogManager.logEvent('pendant_button_event', {'state': buttonState}));
     // Intercept for interactive device onboarding
-    if (deviceOnboardingProvider?.isOnboardingActive == true) {
-      deviceOnboardingProvider!.onButtonEvent(buttonState);
-      // For step 1 (ask question), let single-tap fall through to normal voice command handling
-      if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
-        // Fall through to normal single-tap handling below
-      } else {
+    final activeOnboarding = deviceOnboardingProvider?.isOnboardingActive == true ? deviceOnboardingProvider : null;
+    if (activeOnboarding != null) {
+      if (activeOnboarding.currentStep != DeviceOnboardingProvider.askQuestionStep) {
+        activeOnboarding.onButtonEvent(buttonState);
+        return;
+      }
+      // On the ask-question step, tutorial listening/submission is driven only
+      // from admitted capture transitions so dropped or overlapping presses
+      // cannot advance the step UI ahead of capture.
+      if (buttonState != 1 && buttonState != 3 && buttonState != 5) return;
+      if (_voiceCommandSession == null &&
+          (!activeOnboarding.canStartVoiceQuestion || _voiceCommandSubmissionInFlight)) {
         return;
       }
     }
 
     // Omi button actions are disabled by the user: skip action handling but
     // onboarding (handled above) still receives button events regardless.
-    if (_omiButtonActionsDisabled && deviceOnboardingProvider?.isOnboardingActive != true) {
+    if (_omiButtonActionsDisabled && activeOnboarding == null) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.actionsDisabled);
       return;
     }
@@ -2085,20 +2234,7 @@ class CaptureController extends ChangeNotifier
         }
         // Start voice question session (new toggle mode)
         debugPrint("Starting voice question session (toggle mode)");
-        // Cut off any in-flight voice playback from a prior reply so the
-        // new recording starts clean.
-        if (OmiVoicePlaybackService.instance.isSpeaking) {
-          OmiVoicePlaybackService.instance.interrupt(source: VoiceReplyPlaybackInterruptSource.newVoiceQuery);
-        }
-        _lastVoiceCommandAutoSubmitAt = null;
-        _voiceCommandSession = _now();
-        _voiceCommandTrigger = _VoiceCommandTrigger.toggle;
-        _commandBytes = [];
-        _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
-
-        _startVoiceCommandTimeout(deviceId);
-        _playSpeakerHaptic(deviceId, 1);
-        unawaited(DebugLogManager.logEvent('pendant_voice_question', {'phase': 'started'}));
+        _beginVoiceCommandSession(deviceId, _VoiceCommandTrigger.toggle, onboarding: activeOnboarding);
       } else {
         debugPrint("Ending voice question session (toggle mode)");
         _endVoiceCommandSession(deviceId);
@@ -2109,13 +2245,7 @@ class CaptureController extends ChangeNotifier
     // Legacy support: start long press (for voice commands) - older firmware
     if (buttonState == 3 && _voiceCommandSession == null) {
       debugPrint("Legacy: Long press start detected");
-      _voiceCommandSession = _now();
-      _voiceCommandTrigger = _VoiceCommandTrigger.legacyLongPress;
-      _commandBytes = [];
-      _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
-
-      _startVoiceCommandTimeout(deviceId);
-      _playSpeakerHaptic(deviceId, 1);
+      _beginVoiceCommandSession(deviceId, _VoiceCommandTrigger.legacyLongPress, onboarding: activeOnboarding);
     }
 
     // Legacy support: release (end voice command) - older firmware
@@ -3704,9 +3834,11 @@ class CaptureController extends ChangeNotifier
     if (event is CaptureCommittedEvent) {
       final phone = _wal.getSyncs().phone;
       if (phone is LocalWalSyncImpl)
-        unawaited(phone.recordCaptureCommitted(event).catchError((Object _) {
-          Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error');
-        }));
+        unawaited(
+          phone.recordCaptureCommitted(event).catchError((Object _) {
+            Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error');
+          }),
+        );
       return;
     }
     if (event is SpeakerLabelSuggestionEvent) {

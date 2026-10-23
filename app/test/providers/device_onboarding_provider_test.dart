@@ -81,5 +81,74 @@ void main() {
 
       expect(provider.questionFailed, isFalse);
     });
+
+    test('records failure reason and transcribed question across attempts', () {
+      final firstAttempt = provider.onVoiceSessionStarted();
+      expect(firstAttempt, isNotNull);
+      expect(provider.onVoiceQuestionSubmitted(attemptId: firstAttempt), isTrue);
+
+      provider.onVoiceQuestionFailed(failure: VoiceQuestionFailure.quota, attemptId: firstAttempt);
+      expect(provider.questionFailed, isTrue);
+      expect(provider.questionFailure, VoiceQuestionFailure.quota);
+
+      final secondAttempt = provider.onVoiceSessionStarted();
+      expect(secondAttempt, isNotNull);
+      expect(secondAttempt, isNot(firstAttempt));
+      expect(provider.questionFailed, isFalse);
+      expect(provider.questionFailure, isNull);
+      expect(provider.onVoiceQuestionSubmitted(attemptId: secondAttempt), isTrue);
+
+      provider.onVoiceResponseReceived(
+        'Your next meeting is at 3 PM.',
+        question: 'When is my next meeting?',
+        attemptId: secondAttempt,
+      );
+      expect(provider.aiResponse, 'Your next meeting is at 3 PM.');
+      expect(provider.userQuestion, 'When is my next meeting?');
+      expect(provider.questionFailed, isFalse);
+      expect(provider.questionFailure, isNull);
+    });
+
+    test('ignores stale attempt callbacks after retry or step exit', () {
+      final staleAttempt = provider.onVoiceSessionStarted();
+      expect(provider.onVoiceQuestionSubmitted(attemptId: staleAttempt), isTrue);
+      provider.onVoiceQuestionFailed(failure: VoiceQuestionFailure.timeout, attemptId: staleAttempt);
+
+      final currentAttempt = provider.onVoiceSessionStarted();
+      expect(provider.onVoiceQuestionSubmitted(attemptId: currentAttempt), isTrue);
+
+      // Late answer/failure from the old attempt must not affect the new attempt.
+      provider.onVoiceResponseReceived('Stale answer', attemptId: staleAttempt);
+      provider.onVoiceQuestionFailed(failure: VoiceQuestionFailure.server, attemptId: staleAttempt);
+      expect(provider.aiResponse, isNull);
+      expect(provider.questionSent, isTrue);
+      expect(provider.questionFailed, isFalse);
+
+      // Exiting the step invalidates the active attempt.
+      provider.completeOnboarding();
+      provider.onVoiceResponseReceived('Late answer after exit', attemptId: currentAttempt);
+      expect(provider.aiResponse, isNull);
+    });
+
+    test('ignores overlapping presses while processing or after answer arrives', () {
+      provider.onButtonEvent(1); // start listening
+      provider.onButtonEvent(1); // submit question
+      final attemptWhileProcessing = provider.activeAttemptId;
+
+      // Extra press while processing must not flip back to listening.
+      provider.onButtonEvent(1);
+      expect(provider.voiceSessionActive, isFalse);
+      expect(provider.questionSent, isTrue);
+      expect(provider.activeAttemptId, attemptWhileProcessing);
+
+      provider.onVoiceResponseReceived('Done', attemptId: attemptWhileProcessing);
+      expect(provider.aiResponse, 'Done');
+      expect(provider.canStartVoiceQuestion, isFalse);
+
+      // Extra press after answer must not restart listening.
+      provider.onButtonEvent(1);
+      expect(provider.voiceSessionActive, isFalse);
+      expect(provider.aiResponse, 'Done');
+    });
   });
 }

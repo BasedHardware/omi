@@ -67,10 +67,13 @@ class _NoSocketCaptureProvider extends CaptureProvider {
 }
 
 class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
+  _RecordingCaptureExternalActions({this.onSend});
+
   int sendCount = 0;
+  Future<VoiceQuestionOutcome> Function()? onSend;
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionOutcome> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required void Function() onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
@@ -78,6 +81,8 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
     required bool playResponseAudio,
   }) async {
     sendCount++;
+    if (onSend != null) return onSend!();
+    return const VoiceQuestionOutcome.answered(answer: 'Test answer', question: 'Test question');
   }
 }
 
@@ -455,6 +460,151 @@ void main() {
 
     provider.cancelTutorialOwnedVoiceSession();
     expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('codec lookup failure resets the tutorial question step instead of stalling (#23385)', () async {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => throw StateError('BLE disconnected'),
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 1);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(actions.sendCount, 0);
+    expect(onboarding.voiceSessionActive, isFalse);
+    expect(onboarding.questionSent, isFalse);
+    expect(onboarding.questionFailed, isTrue);
+    expect(onboarding.questionFailure, VoiceQuestionFailure.codecFailed);
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('transport failure resets the tutorial step and allows a clean retry (#23385)', () async {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    var attempt = 0;
+    final actions = _RecordingCaptureExternalActions(
+      onSend: () async {
+        attempt++;
+        if (attempt == 1) {
+          return const VoiceQuestionOutcome.failed(VoiceQuestionFailure.offline);
+        }
+        return const VoiceQuestionOutcome.answered(answer: 'It is sunny and 72°F.', question: 'What is the weather?');
+      },
+    );
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    // First attempt fails offline.
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 1);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(onboarding.questionFailed, isTrue);
+    expect(onboarding.questionFailure, VoiceQuestionFailure.offline);
+    expect(onboarding.questionSent, isFalse);
+
+    // Retry succeeds and populates question + answer.
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(onboarding.voiceSessionActive, isTrue);
+    expect(onboarding.questionFailed, isFalse);
+    provider.addVoiceCommandBytesForTesting(<int>[4, 5, 6]);
+    provider.handleButtonEventForTesting('test-id', 1);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(onboarding.aiResponse, 'It is sunny and 72°F.');
+    expect(onboarding.userQuestion, 'What is the weather?');
+    expect(onboarding.questionFailed, isFalse);
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test(
+    'tap dropped by auto-submit grace or in-flight submission does not flip tutorial to listening (#23385)',
+    () async {
+      var now = DateTime.utc(2026, 9, 27, 12);
+      final replyCompleter = Completer<VoiceQuestionOutcome>();
+      final onboarding = DeviceOnboardingProvider()..startOnboarding();
+      onboarding.advanceStep();
+      final actions = _RecordingCaptureExternalActions(onSend: () => replyCompleter.future);
+      final provider = CaptureProvider(
+        externalActions: actions,
+        audioCodecLoader: (_) async => BleAudioCodec.opus,
+        speakerHaptic: (_, __) async => true,
+        now: () => now,
+      );
+      provider.deviceOnboardingProvider = onboarding;
+      provider.updateRecordingDevice(_device(DeviceType.omi));
+
+      provider.handleButtonEventForTesting('test-id', 1);
+      provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+      provider.endVoiceCommandSessionForTesting('test-id', autoSubmitted: true);
+      await Future<void>.delayed(Duration.zero);
+      expect(onboarding.voiceSessionActive, isFalse);
+      expect(onboarding.questionSent, isTrue);
+
+      // Tap during auto-submit grace window and while request is in flight: must be ignored.
+      now = now.add(const Duration(milliseconds: 500));
+      provider.handleButtonEventForTesting('test-id', 1);
+      expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+      expect(onboarding.voiceSessionActive, isFalse);
+      expect(onboarding.questionSent, isTrue);
+
+      replyCompleter.complete(const VoiceQuestionOutcome.answered(answer: 'All good'));
+      await Future<void>.delayed(Duration.zero);
+      expect(onboarding.aiResponse, 'All good');
+      provider.dispose();
+      onboarding.dispose();
+    },
+  );
+
+  test('exiting onboarding while a tutorial submission is in flight cancels late completion (#23385)', () async {
+    final replyCompleter = Completer<VoiceQuestionOutcome>();
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final actions = _RecordingCaptureExternalActions(onSend: () => replyCompleter.future);
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 1);
+    await Future<void>.delayed(Duration.zero);
+    expect(onboarding.questionSent, isTrue);
+
+    // User exits onboarding while the request is still processing, then restarts onboarding.
+    provider.cancelTutorialOwnedVoiceSession();
+    onboarding.completeOnboarding();
+    onboarding.startOnboarding();
+    onboarding.advanceStep();
+
+    replyCompleter.complete(const VoiceQuestionOutcome.answered(answer: 'Stale reply'));
+    await Future<void>.delayed(Duration.zero);
+
+    expect(onboarding.aiResponse, isNull);
+    expect(onboarding.questionSent, isFalse);
     provider.dispose();
     onboarding.dispose();
   });

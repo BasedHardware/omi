@@ -1,0 +1,3 @@
+{
+  "change": "Fix the pendant tutorial question step stalling when chat is on another session or app or when a voice question fails."
+}
