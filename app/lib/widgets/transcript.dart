@@ -4,7 +4,14 @@ import 'dart:math';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show RenderAbstractViewport, RenderBox, ScrollDirection;
+import 'package:flutter/rendering.dart'
+    show
+        RenderAbstractViewport,
+        RenderBox,
+        RenderObject,
+        RenderSliverMultiBoxAdaptor,
+        ScrollDirection,
+        SliverMultiBoxAdaptorParentData;
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart' show kTouchSlop, PointerDownEvent, PointerMoveEvent;
@@ -214,6 +221,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   // Search result tracking
   final Map<String, GlobalKey> _segmentKeys = {};
+  final GlobalKey _listKey = GlobalKey();
   final List<GlobalKey> _matchKeys = [];
   int _previousSearchResultIndex = -1;
 
@@ -500,7 +508,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       var anchorViewportOffset = 0.0;
       if (!isAtBottom) {
         var closestTop = double.infinity;
-        for (var index = 0; index < widget.segments.length; index++) {
+        for (final index in _builtSegmentIndices()) {
           final segment = widget.segments[index];
           final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
           if (renderObject is! RenderBox) continue;
@@ -525,6 +533,36 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
       );
     }
     _setIsAtBottom(isAtBottom);
+  }
+
+  /// Rows in the sliver's layout/cache window, excluding headings and spacing.
+  /// Scroll updates must not probe a GlobalKey for every line in the recording:
+  /// a saved conversation can have thousands of lines but only a few mounted.
+  Iterable<int> _builtSegmentIndices() sync* {
+    final root = _listKey.currentContext?.findRenderObject();
+    if (root == null) return;
+    RenderSliverMultiBoxAdaptor? sliver;
+    void findSliver(RenderObject object) {
+      if (sliver != null) return;
+      if (object is RenderSliverMultiBoxAdaptor) {
+        sliver = object;
+      } else {
+        object.visitChildren(findSliver);
+      }
+    }
+
+    findSliver(root);
+    final rows = sliver;
+    if (rows == null) return;
+    var child = rows.firstChild;
+    while (child != null) {
+      final itemIndex = (child.parentData! as SliverMultiBoxAdaptorParentData).index;
+      if (itemIndex != null) {
+        final segmentIndex = itemIndex - widget.leadingItems.length - 1;
+        if (segmentIndex >= 0 && segmentIndex < widget.segments.length) yield segmentIndex;
+      }
+      child = rows.childAfter(child);
+    }
   }
 
   Future<void> _restoreAnchor() async {
@@ -596,7 +634,13 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
 
   void _setIsAtBottom(bool value) {
     if (_isAtBottom == value || !mounted) return;
-    setState(() => _isAtBottom = value);
+    // Saved transcripts have no jump-to-latest control. Updating their scroll
+    // bookkeeping must not rebuild the list and its whole-transcript resolver.
+    if (widget.followLatest) {
+      setState(() => _isAtBottom = value);
+    } else {
+      _isAtBottom = value;
+    }
   }
 
   Future<void> _runFollowToBottom({required bool animated}) async {
@@ -859,6 +903,7 @@ class _TranscriptWidgetState extends State<TranscriptWidget> {
               }
             },
             child: ListView.builder(
+              key: _listKey,
               controller: _scrollController,
               padding: EdgeInsets.only(top: searchBarHeight),
               itemCount: widget.leadingItems.length + widget.segments.length + 2,

@@ -100,11 +100,9 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
   int _locateDirection(int segmentIndex) {
     var minBuilt = widget.segments.length;
     var maxBuilt = -1;
-    for (var i = 0; i < widget.segments.length; i++) {
-      if (_segmentKeys[widget.segments[i].id]?.currentContext != null) {
-        if (i < minBuilt) minBuilt = i;
-        if (i > maxBuilt) maxBuilt = i;
-      }
+    for (final i in _builtSegmentIndices()) {
+      if (i < minBuilt) minBuilt = i;
+      if (i > maxBuilt) maxBuilt = i;
     }
     if (segmentIndex < minBuilt) return -1;
     if (segmentIndex > maxBuilt) return 1;
@@ -183,7 +181,8 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     TranscriptSegment? topSegment;
     var closestTop = double.infinity;
     final currentScroll = _scrollController.offset;
-    for (final segment in widget.segments) {
+    for (final index in _builtSegmentIndices()) {
+      final segment = widget.segments[index];
       final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
       if (renderObject is! RenderBox) continue;
       final viewport = RenderAbstractViewport.of(renderObject);
