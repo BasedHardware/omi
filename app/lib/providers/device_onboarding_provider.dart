@@ -233,8 +233,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void onVoiceResponseReceived(String response, {String? question, int? attemptId}) {
     if (_disposed || !isOnboardingActive || currentStep != askQuestionStep) return;
-    if (!questionSent || aiResponse != null) return;
-    if (attemptId != null && attemptId != _activeAttemptId) return;
+    if (aiResponse != null || (attemptId != null && (!questionSent || attemptId != _activeAttemptId))) return;
     final trimmed = response.trim();
     if (trimmed.isEmpty) {
       onVoiceQuestionFailed(failure: VoiceQuestionFailure.incomplete, attemptId: attemptId);
