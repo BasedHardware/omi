@@ -215,6 +215,14 @@ def is_firestore_index_guard_path(path: str) -> bool:
 
 AREA_TESTS = (
     (
+        ('backend/charts/incluster-guards/',),
+        (
+            'backend/charts/monitoring/prometheus-adapter/*_omi_prometheus_adapter.yaml',
+            'backend/charts/parakeet/*_omi_parakeet_values.yaml',
+        ),
+        ('tests/unit/test_incluster_guards.py',),
+    ),
+    (
         # Task-target routes whose expected retries must stay 409 (contract (d)). #22431 moved
         # FirstSummaryCallbackPending and a router edit could no longer see the stale EXPECTED_RETRIES
         # key: routers/batch_pipeline.py selected no route test. utils/enrichment/ stays unmapped on
@@ -533,6 +541,8 @@ def is_selectable_backend_path(path: str) -> bool:
         return False
     if path.startswith('backend/docs/'):
         return False
+    if path.startswith('backend/charts/incluster-guards/'):
+        return True
     if path.startswith('backend/charts/'):
         monitoring_contract_prefixes = MONITORING_CONTRACT_SOURCES
         return any(
