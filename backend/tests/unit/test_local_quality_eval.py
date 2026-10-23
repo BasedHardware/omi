@@ -44,6 +44,16 @@ def test_unknown_anonymous_does_not_equal_hand_named_identity():
     assert result['hungarian_oracle_diagnostic']['accuracy_1to1'] == 1
 
 
+def test_persisted_overlapping_groups_keep_their_actual_identity_claims():
+    truth = [word(0), word(1, 'person'), word(3)]
+    turns = [turn(0, end=4, is_user=True), turn(1, person_id='p', speaker='second')]
+    result = score_recording(truth, turns, {'owner': {'is_user': True}, 'person': {'person_id': 'p'}})
+    # Equal overlap prefers the earlier persisted group; no truth-driven remap.
+    assert result['strict_all_word_correct'] == 2
+    assert result['false_owner_words'] == 1
+    assert result['predicted_voices'] == 2
+
+
 def test_deletions_do_not_improve_fixed_clock_identity():
     truth = [word(0), word(1, text='missing'), word(2, text='last')]
     turns = [turn(is_user=True), turn(2, text='last', person_id='wrong')]

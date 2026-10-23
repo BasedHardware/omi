@@ -177,6 +177,9 @@ def create_manifest(archive, audio_dirs, snapshot_dir, output):
         if len(matches) != 1:
             raise ValueError('expected exactly one permitted source recording')
         recording['audio'] = str(matches[0])
+        # This task's authorized corpus is explicitly declared English. Keep
+        # that declaration separate from the containers' und language tags.
+        recording['declared_language'] = 'en'
         table = {}
         for label in sorted({w['truth'] for w in recording['words'] if w['truth'] is not None}):
             if label == owner:

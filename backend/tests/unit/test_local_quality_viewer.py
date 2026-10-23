@@ -109,6 +109,19 @@ def test_capture_clock_is_rebased_only_for_production():
     assert viewer.production_turns(data, 100)[0]['start'] == pytest.approx(0.2)
 
 
+def test_persisted_numeric_voice_zero_and_other_channels_remain_distinct():
+    data = {
+        'clock': 'crop',
+        'turns': [
+            {'start': 0, 'end': 1, 'text': 'synthetic', 'speaker_id': 0, 'speaker_id_scope': 'unit'},
+            {'start': 1, 'end': 2, 'text': 'example', 'speaker_id': 1, 'speaker_id_scope': 'unit'},
+        ],
+    }
+    rows = viewer.production_turns(data, 0)
+    assert [r['name'] for r in rows] == ['Speaker 0', 'Speaker 1']
+    assert rows[0]['speaker'] != rows[1]['speaker']
+
+
 def test_populated_pairs_are_balanced_and_provenance_hidden(tmp_path):
     reference = fixture(tmp_path)
     result = viewer.build(reference, runs(), tmp_path / 'task', section_seconds=4)
