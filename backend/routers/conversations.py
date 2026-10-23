@@ -161,11 +161,8 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync
     if conversations_db.is_soft_deleted(conversation):
         if not follow_sync_bridge or not conversation.get('sync_merged_into'):
             raise HTTPException(status_code=404, detail="Conversation not found")
-        survivor_id = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
-        if not survivor_id:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        conversation = conversations_db.get_conversation(
-            uid, survivor_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+        conversation = conversations_db.get_sync_redirected_conversation(
+            uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
         )
         if not conversation or conversations_db.is_soft_deleted(conversation):
             raise HTTPException(status_code=404, detail="Conversation not found")
