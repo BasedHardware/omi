@@ -6,6 +6,11 @@ conversation/action sources, plus a random per-owner/family version in the
 transforms, transaction IDs/retries, and public SDK result lengths remain intact.
 Document deletion also deletes its projected row atomically. Nested conversation
 corrections and account/entitlement changes invalidate the appropriate versions.
+Masked root patches limited to the exact platform telemetry fields written by
+`record_user_platform` do not invalidate lists or append version writes. This
+keeps authentication telemetry from defeating conditional polls, including when
+Redis is unavailable. Mixed patches, unknown fields, root replacement/create,
+and root deletion retain conservative invalidation of both families.
 
 Paths under `users/{uid}`:
 

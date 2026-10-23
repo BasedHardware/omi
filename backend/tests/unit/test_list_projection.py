@@ -12,10 +12,10 @@ from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from google.cloud.firestore_v1 import _helpers
 from google.cloud.firestore_v1.async_client import AsyncClient
-from google.cloud.firestore_v1.types import CommitResponse, WriteResult, Write
+from google.cloud.firestore_v1.types import CommitResponse, DocumentTransform, WriteResult, Write
 
 from database import list_projection as projection, action_item_versions
-from database import list_projection_head, legal_holds, user_data_deletion, batch_pipeline_purge
+from database import list_projection_head, legal_holds, user_data_deletion, batch_pipeline_purge, users
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import list_version_check as checks
 from routers import conversations as conversation_routes
@@ -50,8 +50,15 @@ def store(monkeypatch):
             else:
                 after[path] = data
             for transform in write.update_transforms:
-                assert transform.field_path == 'sort_order'
-                after[path]['sort_order'] = after[path].get('sort_order', 0) + transform.increment.integer_value
+                if transform.field_path == 'platforms_used':
+                    values = [
+                        _helpers.decode_value(value, client) for value in transform.append_missing_elements.values
+                    ]
+                    existing = after[path].setdefault('platforms_used', [])
+                    existing.extend(value for value in values if value not in existing)
+                else:
+                    assert transform.field_path == 'sort_order'
+                    after[path]['sort_order'] = after[path].get('sort_order', 0) + transform.increment.integer_value
         state.rows = after
         return CommitResponse(write_results=[WriteResult() for _ in request['writes']])
 
@@ -153,6 +160,59 @@ def test_owner_family_nested_corrections_and_account_invalidation(store):
     assert checks._version('b', 'action_items') != b_version
 
 
+@pytest.mark.parametrize('operation', ['merge', 'update', 'transform'])
+def test_telemetry_only_root_masks_and_transforms_add_no_projection_writes(store, operation):
+    root = store.client.document('users/owner')
+    batch = store.client.batch()
+    data = {'last_active_at': firestore.SERVER_TIMESTAMP, 'platforms_used': firestore.ArrayUnion(['mobile'])}
+    if operation == 'merge':
+        batch.set(root, data, merge=True)
+    elif operation == 'update':
+        batch.update(root, data)
+    else:
+        batch._write_pbs.append(
+            Write(
+                transform=DocumentTransform(
+                    document=root._document_path,
+                    field_transforms=[
+                        DocumentTransform.FieldTransform(field_path='last_active_at', set_to_server_value=1)
+                    ],
+                )
+            )
+        )
+    source = copy.deepcopy(batch._write_pbs)
+    assert projection.project_writes(batch._write_pbs) is batch._write_pbs
+    assert batch._write_pbs == source
+
+
+@pytest.mark.parametrize('operation', ['replace', 'create', 'mixed', 'unknown', 'nested', 'delete', 'transform'])
+def test_root_fences_unknown_fields_and_replacements_still_invalidate_both_families(store, operation):
+    root = store.client.document('users/owner')
+    batch = store.client.batch()
+    if operation == 'delete':
+        batch.delete(root)
+    elif operation == 'replace':
+        batch.set(root, {'last_active_platform': 'mobile'})
+    elif operation == 'create':
+        batch.create(root, {'last_active_platform': 'mobile'})
+    elif operation == 'transform':
+        batch.set(root, {'last_active_platform': 'mobile', 'subscription': firestore.SERVER_TIMESTAMP}, merge=True)
+    else:
+        payload = {
+            'mixed': {'last_active_platform': 'mobile', 'subscription': {'plan': 'free'}},
+            'unknown': {'future_list_policy': True},
+            'nested': {'last_active_platform.policy': False},
+        }[operation]
+        batch.update(root, payload)
+    source = copy.deepcopy(batch._write_pbs)
+    expanded = projection.project_writes(batch._write_pbs)
+    assert expanded[: len(source)] == source
+    assert len(expanded) == len(source) + 2
+    for family in ['conversations', 'action_items']:
+        head = f'{root._document_path}/{projection.STATE_COLLECTION}/{family}'
+        assert any((write.delete if operation == 'delete' else write.update.name) == head for write in expanded)
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('transaction', [False, True])
 async def test_async_sdk_contract(store, transaction):
@@ -193,13 +253,16 @@ class CountedQuery:
             yield SimpleNamespace(id=key, to_dict=lambda row=row: copy.deepcopy(row))
 
 
-def make_app(store, *, truncated=False, mutate=False):
+def make_app(store, *, truncated=False, mutate=False, platform_telemetry=False):
     app = FastAPI()
 
     def auth(request: Request):
         if request.headers.get('authorization') != 'synthetic-key':
             raise HTTPException(401)
-        return request.headers.get('x-owner', 'owner')
+        uid = request.headers.get('x-owner', 'owner')
+        if platform_telemetry:
+            users.record_user_platform(uid, request.headers.get('x-app-platform'))
+        return uid
 
     @app.get('/v1/conversations')
     def listing(request: Request, response: Response, uid: str = Depends(auth)):
@@ -241,6 +304,39 @@ def test_http_equivalence_unchanged_poll_one_read_no_query_and_auth_preserved(st
     assert store.queries == 2
     assert client.get('/v1/conversations?offset=1', headers=headers).status_code == 200
     assert client.get('/v1/conversations', headers={**headers, 'x-owner': 'other'}).status_code == 200
+
+
+@pytest.mark.parametrize('platform', ['ios', 'macos', 'web'])
+def test_auth_platform_telemetry_keeps_both_versions_and_warm_poll_bypass(store, monkeypatch, platform):
+    root = store.client.document('users/owner')
+    root.set({'subscription': {'plan': 'free'}})
+    store.client.document('users/owner/conversations/one').set({'status': 'completed'})
+    heads = {path: copy.deepcopy(row) for path, row in store.rows.items() if projection.STATE_COLLECTION in path}
+    monkeypatch.setattr(users, 'db', store.client)
+    # Model Redis being unavailable: every auth request writes telemetry.
+    monkeypatch.setattr(users, 'try_acquire_user_platform_write_lock', lambda *args: True)
+
+    def snapshot(reference, *args, **kwargs):
+        store.reads += 1
+        return SimpleNamespace(exists=True, to_dict=lambda: copy.deepcopy(store.rows[reference._document_path]))
+
+    monkeypatch.setattr(type(root), 'get', snapshot)
+    client = make_app(store, platform_telemetry=True)
+    headers = {'authorization': 'synthetic-key', 'if-none-match': 'legacy', 'x-app-platform': platform}
+    first = client.get('/v1/conversations', headers=headers)
+    assert first.status_code == 200 and len(first.json()) == 100
+    assert len(store.commits[-1]) == 1  # Only the original auth telemetry write.
+    assert 'signup_platform' in store.rows[root._document_path]
+    before = store.reads
+    headers['if-none-match'] = first.headers['etag']
+    second = client.get('/v1/conversations', headers=headers)
+    assert second.status_code == 304 and store.queries == 1
+    assert store.reads == before + 2  # Existing auth read + one marker; zero list reads.
+    assert len(store.commits[-1]) == 1
+    assert {path: store.rows[path] for path in heads} == heads
+    root.update({'subscription': {'plan': 'changed'}})
+    assert client.get('/v1/conversations', headers=headers).status_code == 200
+    assert store.queries == 2
 
 
 @pytest.mark.parametrize('truncated,mutate', [(True, False), (False, True)])

@@ -51,6 +51,37 @@ ROW_FIELDS = frozenset(
     }
 )
 
+# Exact fields written by users.record_user_platform. They do not participate
+# in list authorization or representation. Unknown root fields still invalidate
+# both families, as do full replacements and deletes (which can remove fences).
+_PLATFORM_TELEMETRY_FIELDS = frozenset(
+    {
+        'last_active_platform',
+        'last_active_os',
+        'last_active_at',
+        'last_active_at_desktop',
+        'last_active_at_mobile',
+        'last_active_at_web',
+        'platforms_used',
+        'signup_platform',
+        'signup_os',
+        'signup_platform_at',
+    }
+)
+
+
+def _root_affects_lists(write: Any) -> bool:
+    if write.delete:
+        return True
+    if write.transform.document:
+        paths = {transform.field_path for transform in write.transform.field_transforms}
+    elif Write.pb(write).HasField('update_mask'):
+        paths = set(write.update_mask.field_paths)
+        paths.update(transform.field_path for transform in write.update_transforms)
+    else:
+        return True
+    return not paths or not paths.issubset(_PLATFORM_TELEMETRY_FIELDS)
+
 
 def _path(write: Any) -> str:
     return write.delete or write.update.name or write.transform.document
@@ -106,7 +137,7 @@ def project_writes(writes: list[Any]) -> list[Any]:
                 additions.append(row)
         # Account/entitlement/privacy changes and deletion intent invalidate
         # both lists. No authorization fence is replaced by these versions.
-        elif len(parts) == 7 or (
+        elif (len(parts) == 7 and _root_affects_lists(write)) or (
             len(parts) >= 9
             and parts[7]
             in {
