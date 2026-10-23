@@ -6,6 +6,7 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 from fastapi import Request, Response
 from prometheus_client import Counter
@@ -58,6 +59,7 @@ class ListVersionCheck:
     before: str | None = None
     etag: str | None = None
     not_modified: Response | None = None
+    initial_validator: bool = False
 
     @classmethod
     def start(cls, request: Request | None, uid: str, family: str) -> 'ListVersionCheck':
@@ -71,10 +73,15 @@ class ListVersionCheck:
         release = os.getenv('OMI_BACKEND_RELEASE_SHA', '').strip()
         if not check.origin or not epoch or not release or not writer_enabled():
             return check
-        # Preserve existing action-item cache economics for clients that never
-        # send validators. Clients already sending body ETags graduate on the
-        # next source read; no cache TTL or existing lever is retuned here.
-        if family == 'action_items' and not request.headers.get('if-none-match'):
+        # Clients that never send validators must add ZERO marker reads. A
+        # random initial conversation tag invites existing HTTP caches to
+        # revalidate; it never matches a version-backed lp1 tag. The first
+        # conditional request still reads the source before issuing lp1.
+        # Action lists already emit body ETags, so retain that cache path.
+        if not request.headers.get('if-none-match'):
+            if family == 'conversations':
+                check.etag = f'W/"lp0-{uuid4().hex}"'
+                check.initial_validator = True
             return check
         check.before = _version(uid, family)
         if check.before is None:
@@ -113,13 +120,13 @@ class ListVersionCheck:
         return {'ETag': self.etag or '', 'Cache-Control': 'private, no-cache', 'Vary': 'Authorization'}
 
     def finish(self, response: Response | None, *, truncated: bool, cacheable: bool = True) -> None:
-        # Never attach a validator to a partial page or a page spanning a
-        # concurrent mutation. Existing clients receive the original response.
+        # An initial tag cannot produce a 304: its next request always reads
+        # the source. Version-backed tags require a stable source interval.
+        # Partial/locked pages never get either tag.
         if (
             response is not None
-            and self.active
             and not truncated
             and cacheable
-            and _version(self.uid, self.family) == self.before
+            and (self.initial_validator or (self.active and _version(self.uid, self.family) == self.before))
         ):
             response.headers.update(self.headers())

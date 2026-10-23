@@ -29,17 +29,22 @@ user and source deletes remove the matching projection; no content is copied.
 use `If-None-Match` without a new parameter or client release. After existing
 authentication/scope dependencies and input validation, a matching validator
 returns 304 with one version lookup and no list query. A changed full response
-uses the existing source reader and emits an ETag only if a second version
+uses the existing source reader and emits a version-backed ETag only if a second version
 lookup confirms that no mutation crossed the read. Truncated pages and pages
 with locked conversations never get a validator: lock recovery must still run
 when allowance rolls over without a source write. User, route, exact query,
 authentication, server release, and rollout epoch
 scope the validator. No response data is cached by this protocol.
 
-Ordinary action-item requests without validators retain their existing cache
-path and add zero reads. Existing action ETag clients graduate on their next
-source read. A nonconditional conversation GET adds two marker reads when the
-reader is active. A missing head is initialized once with create-only semantics
+Requests without validators add **zero marker reads**. Action-item requests
+retain their existing cache/body ETag path. A full, unlocked conversation page
+receives a random initial `lp0` tag: it cannot match a version-backed `lp1` tag.
+An HTTP cache that returns that initial tag gets another ordinary source response
+before it receives a stable `lp1` tag. This also holds if a source mutation crossed
+the initial response; `lp0` can never directly produce a 304. Clients that never
+return validators retain the original source-read count. Existing action body
+ETag clients also graduate on their next source read. A changed conditional GET
+adds two marker reads. A missing head is initialized once with create-only semantics
 under the existing transactional destructive-operation fence (three additional
 cold-path authority/head reads), without scanning/backfilling source rows or
 overwriting a concurrent writer. A deletion or destructive-operation denial
@@ -88,6 +93,10 @@ are **unknown** until conditional-request share and residual source reads are
 measured over equal full-day windows. One successful 100-row fake poll changes
 from 100 source reads to 1 version read; this is a mechanism test, not fleet
 billing evidence. An unchanged legacy poll remains a source query/cache hit.
+The shipped client-tree audit found no explicit `If-None-Match` literals; HTTP
+caches may still revalidate automatically. Measure actual conditional-request
+adoption before attributing or expanding this reader, rather than assuming the
+ceiling is reachable in the first PR.
 
 Added writes include one lazy baseline head per active owner/family, plus at most
 one small projected row per changed source row and

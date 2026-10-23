@@ -225,7 +225,7 @@ def make_app(store, *, truncated=False, mutate=False):
 def test_http_equivalence_unchanged_poll_one_read_no_query_and_auth_preserved(store):
     store.client.document('users/owner/conversations/one').set({'status': 'completed'})
     client = make_app(store)
-    headers = {'authorization': 'synthetic-key'}
+    headers = {'authorization': 'synthetic-key', 'if-none-match': 'legacy-validator'}
     first = client.get('/v1/conversations', headers=headers)
     assert first.status_code == 200
     assert len(first.json()) == 100
@@ -247,7 +247,7 @@ def test_http_equivalence_unchanged_poll_one_read_no_query_and_auth_preserved(st
 def test_partial_or_racing_source_response_never_gets_validator(store, truncated, mutate):
     store.client.document('users/owner/conversations/one').set({'status': 'completed'})
     result = make_app(store, truncated=truncated, mutate=mutate).get(
-        '/v1/conversations', headers={'authorization': 'synthetic-key'}
+        '/v1/conversations', headers={'authorization': 'synthetic-key', 'if-none-match': 'legacy-validator'}
     )
     assert result.status_code == 200 and 'etag' not in result.headers
 
@@ -388,7 +388,7 @@ def test_recursive_wipe_closes_head_recreation_when_user_root_already_missing(mo
 def test_release_and_epoch_rotation_invalidate_existing_validator(store, monkeypatch):
     store.client.document('users/owner/conversations/one').set({'status': 'completed'})
     client = make_app(store)
-    headers = {'authorization': 'synthetic-key'}
+    headers = {'authorization': 'synthetic-key', 'if-none-match': 'legacy-validator'}
     first = client.get('/v1/conversations', headers=headers)
     headers['if-none-match'] = first.headers['etag']
     monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'new-rollout-after-writer-gap')
@@ -404,10 +404,38 @@ def test_no_header_action_polls_keep_old_cache_path_without_marker_reads(store):
     assert store.reads == 0
 
 
+@pytest.mark.parametrize('mutate', [False, True])
+def test_no_header_conversation_polls_add_zero_reads_and_initial_tag_never_shortcuts_source(store, mutate):
+    store.client.document('users/owner/conversations/one').set({'status': 'completed'})
+    client = make_app(store, mutate=mutate)
+    headers = {'authorization': 'synthetic-key'}
+    first = client.get('/v1/conversations', headers=headers)
+    second = client.get('/v1/conversations', headers=headers)
+    assert first.status_code == second.status_code == 200
+    assert first.json() == second.json()
+    assert first.headers['etag'].startswith('W/"lp0-')
+    assert first.headers['etag'] != second.headers['etag']
+    assert store.reads == 200 and store.queries == 2  # source only, no marker lookups
+    # Even a tag emitted across a source mutation cannot cause a false 304.
+    client = make_app(store)
+    headers['if-none-match'] = first.headers['etag']
+    graduated = client.get('/v1/conversations', headers=headers)
+    assert graduated.status_code == 200 and graduated.json() == first.json()
+    assert graduated.headers['etag'].startswith('W/"lp1-')
+    assert store.reads == 302 and store.queries == 3
+    headers['if-none-match'] = graduated.headers['etag']
+    assert client.get('/v1/conversations', headers=headers).status_code == 304
+    assert store.reads == 303 and store.queries == 3
+
+
 def test_per_request_proxy_trace_does_not_break_unchanged_poll(store):
     store.client.document('users/owner/conversations/one').set({'status': 'completed'})
     client = make_app(store)
-    headers = {'authorization': 'synthetic-key', 'x-cloud-trace-context': 'trace-one'}
+    headers = {
+        'authorization': 'synthetic-key',
+        'x-cloud-trace-context': 'trace-one',
+        'if-none-match': 'legacy-validator',
+    }
     first = client.get('/v1/conversations', headers=headers)
     headers.update({'if-none-match': first.headers['etag'], 'x-cloud-trace-context': 'trace-two'})
     assert client.get('/v1/conversations', headers=headers).status_code == 304
@@ -468,5 +496,16 @@ def test_real_conversation_route_preserves_locked_allowance_recovery(store, monk
         }
     )
     params['request'] = conditional
+    graduated = Response()
+    assert conversation_routes.get_conversations(response=graduated, **params) == rows
+    assert graduated.headers['etag'].startswith('W/"lp1-')
+    params['request'] = Request(
+        {
+            'type': 'http',
+            'path': '/v1/conversations',
+            'query_string': b'',
+            'headers': [(b'if-none-match', graduated.headers['etag'].encode())],
+        }
+    )
     assert conversation_routes.get_conversations(response=Response(), **params).status_code == 304
-    assert calls == ['source', 'heal', 'source', 'heal', 'source', 'heal']
+    assert calls == ['source', 'heal'] * 4
