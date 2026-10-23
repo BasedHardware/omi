@@ -16,6 +16,7 @@ from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
 from database.firestore_tier_context import bind_request_owner
 from database.account_deletion_policy import account_deletion_blocks_access
+from database._client import is_transient_availability_error
 from database.users import record_client_device, record_user_platform
 from utils.account_cutover.access import (
     cutover_enforcement_enabled,
@@ -57,6 +58,20 @@ async def run_critical_ws(fn: Callable[..., Any], *args: Any) -> Any:
         return await run_blocking(critical_executor, fn, *args)
     except ExecutorSaturatedError as error:
         raise WebSocketException(code=1013, reason='Service temporarily unavailable; retry shortly.') from error
+
+
+def _admission_fence_transient(error: BaseException) -> bool:
+    """True for a bounded availability fault an admission fence can answer with 1013.
+
+    The same transient set every ``database/`` retry lane already bounds:
+    503 ``ServiceUnavailable``, 504 ``DeadlineExceeded``, 500
+    ``InternalServerError`` and the SDK's drained-retry ``RetryError`` when
+    its cause is in that set. Deliberately narrower than "any exception":
+    permanent refusals (``PermissionDenied``, the fence's own denial types)
+    keep propagating, because a misconfigured fence is a deploy fault, not a
+    client retry.
+    """
+    return is_transient_availability_error(error)
 
 
 def get_user_deletion_wipe_status(uid: str) -> str | None:
@@ -430,21 +445,62 @@ async def get_current_user_uid_ws_listen(
         enforce_jit_qa_uid(uid)
     except JITQAAdmissionError as error:
         raise WebSocketException(code=1008, reason="Account is not admitted to isolated JIT QA") from error
-    await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
+    try:
+        await run_blocking(db_executor, enforce_account_deletion_ws_access, uid)
+    except WebSocketException:
+        raise
+    except ExecutorSaturatedError as error:
+        # Pool saturation is the fence's own bounded transient: the pod is
+        # busy, not the account denied. The mid-session watcher answers the
+        # same fault with the same 1013 close one minute later; admission
+        # must not crash the ASGI callable with the unclassified traceback
+        # instead (prod backend-listen 2026-10-22: x8/30m at uvicorn's
+        # ``run_asgi``).
+        raise WebSocketException(code=1013, reason='Service temporarily unavailable; retry shortly.') from error
+    except Exception as error:
+        if _admission_fence_transient(error):
+            # The uncached fence read hit a momentary datastore fault. The
+            # client's reconnect is the retry; the crash traceback the
+            # dependency used to leak is not a serving answer.
+            raise WebSocketException(code=1013, reason='Service temporarily unavailable; retry shortly.') from error
+        raise
     if cutover_enforcement_enabled() and websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]
-        await run_blocking(
-            db_executor,
-            enforce_account_cutover_ws_access,
-            uid,
-            path=websocket.url.path,
-            headers=websocket.headers,
-        )
+        try:
+            await run_blocking(
+                db_executor,
+                enforce_account_cutover_ws_access,
+                uid,
+                path=websocket.url.path,
+                headers=websocket.headers,
+            )
+        except WebSocketException:
+            # The fence's own denial close (4006) passes through unchanged.
+            raise
+        except ExecutorSaturatedError as error:
+            # This fence runs on the shared db pool, not the critical one, so
+            # its saturation arm is owned here: the same retryable close the
+            # critical-pool hop answers with.
+            raise WebSocketException(code=1013, reason='Service temporarily unavailable; retry shortly.') from error
+        except Exception as error:
+            if _admission_fence_transient(error):
+                raise WebSocketException(code=1013, reason='Service temporarily unavailable; retry shortly.') from error
+            raise
 
     # Extract BYOK headers from the WS upgrade request and validate.
     if websocket is not None:  # pyright: ignore[reportUnnecessaryComparison]  # websocket is None outside WS context
-        validated_byok_keys, error = await run_critical_ws(
-            validate_byok_websocket_keys, uid, extract_byok_from_websocket(websocket)
-        )
+        try:
+            validated_byok_keys, error = await run_critical_ws(
+                validate_byok_websocket_keys, uid, extract_byok_from_websocket(websocket)
+            )
+        except WebSocketException:
+            raise
+        except Exception as error:
+            # The enrollment read runs inside the critical pool, so saturation
+            # is already a 1013 close; a datastore fault under it is the same
+            # bounded transient as the deletion/cutover fences above.
+            if _admission_fence_transient(error):
+                raise WebSocketException(code=1013, reason='Service temporarily unavailable; retry shortly.') from error
+            raise
         if error:
             raise WebSocketException(code=4003, reason=error)
         set_validated_byok_keys(validated_byok_keys, uid)

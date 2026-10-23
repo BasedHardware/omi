@@ -2288,6 +2288,26 @@ Cancellation still propagates — the deletion fence and ASGI shutdown cancel
 this task and must stay observable to their callers — and the accepted-session
 no-audio teardown counter still runs on every exit path.
 
+### The FastAPI admission dependency answers fence faults with the retryable close
+
+Failure-Class: FC-lifecycle-close-classified-by-transport-phase
+
+`get_current_user_uid_ws_listen` runs entirely in front of that boundary, so
+its own fault arms needed the same ownership. The token-verification hop
+already routed through `run_critical_ws` (1013 close), and the deletion
+watcher re-checks its fence one minute into the session — where the same
+fault classifies as the retryable 1013 close. The admission-time arms now
+answer identically instead of leaking the unclassified traceback: db-pool
+saturation under the deletion fence, every bounded availability fault under
+the deletion, account-cutover and BYOK enrollment reads (503
+`ServiceUnavailable`, 504 `DeadlineExceeded`, 500 `InternalServerError`, the
+SDK's drained-retry `RetryError` over that set — the same transient set every
+`database/` retry lane bounds), and db-pool saturation under the cutover
+fence. The client's reconnect is the retry. Permanent refusals keep their
+loud classification — `PermissionDenied` and the fences' own denial closes
+(4005 deletion, 4006 cutover, 4003 BYOK mismatch) pass through unchanged,
+because a misconfigured fence is a deploy fault, not a client retry.
+
 ## 3.1 Pusher Reconnect & Pending Flush
 
 When pusher reconnects after a disconnection, all buffered conversations are replayed.

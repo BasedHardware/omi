@@ -47,6 +47,7 @@ from fastapi import Depends, FastAPI, WebSocket
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from database._client import is_transient_availability_error
 from testing.import_isolation import stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
@@ -107,6 +108,7 @@ def _build_fakes():
     database_client_stub = types.ModuleType("database._client")
     database_client_stub.db = MagicMock()
     database_client_stub.document_id_from_seed = MagicMock(return_value="doc-id")
+    database_client_stub.is_transient_availability_error = is_transient_availability_error
 
     database_redis_stub = types.ModuleType("database.redis_db")
     database_redis_stub.check_rate_limit = MagicMock(return_value=True)
