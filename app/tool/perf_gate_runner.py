@@ -27,7 +27,9 @@ def main():
             parser.error(f'{key} cannot override an admission dataset/budget; use perf_harness.sh for exploration')
     if os.environ.get('PERF_GATE_MUTATION', '') not in {'', 'held_semantics'}:
         parser.error('unknown PERF_GATE_MUTATION; supported: held_semantics')
-    artifacts = Path(os.environ.get('PERF_SCORECARD_DIR') or tempfile.mkdtemp(prefix='omi-perf-gate-'))
+    artifact_root = APP.parent / '.agent-artifacts/perf-gate/runs'
+    artifact_root.mkdir(parents=True, exist_ok=True)
+    artifacts = Path(os.environ.get('PERF_SCORECARD_DIR') or tempfile.mkdtemp(prefix='run-', dir=artifact_root))
     artifacts.mkdir(parents=True, exist_ok=True)
     if list(artifacts.glob('scorecard-*.json')):
         parser.error('PERF_SCORECARD_DIR must contain no previous scorecards; use a fresh directory')

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'perf_budget.dart';
@@ -16,6 +17,8 @@ void main() {
   group('gate', () {
     for (final name in scenarioNames) {
       testWidgets(name, (tester) async {
+        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+        addTearDown(() => debugDefaultTargetPlatformOverride = null);
         binding.testTextInput.register();
         final world = PerfWorld();
         await tester.runAsync(world.seed);
