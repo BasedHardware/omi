@@ -504,3 +504,12 @@ tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_no
 # --all shards and locally. Same boundary shape as the Dream retry entries above; the decode is the
 # test's real work, so keep it in the unit lane via the allowlist rather than a global threshold bump.
 tests/unit/test_batch_audio_language.py::test_admitted_short_false_permission_cannot_bypass_worker_barrier[zh-clean_speech-6s-pcm16]
+# PR #22861 shard 2: the production callback drives LiveChainSession.connect, which
+# imports dream vocabulary and builds a VAD gate in the call phase. Measured 3.99s
+# then 6.63s CPU vs the 1.00s fail limit (two CI runs, 10-23). The assertions are
+# the dedupe contract; the cost is connect setup, not a loop.
+tests/unit/test_live_speaker_renumber_dedup.py::test_production_callback_deduplication_against_last_end[asyncio]
+# PR #22861 shard 1: 1.06s and 1.05s CPU vs the 1.00s fail limit on this PR's shard
+# runner. Same boundary shape as the other PR-shard overruns above.
+tests/unit/test_task_sync_cloud_export_dedup.py::test_retried_cloud_sync_does_not_create_a_second_external_task
+tests/unit/test_task_sync_cloud_export_dedup.py::test_batch_cloud_sync_isolates_a_failing_item_from_the_rest
