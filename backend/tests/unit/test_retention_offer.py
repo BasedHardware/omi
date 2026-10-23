@@ -526,3 +526,35 @@ def test_repeat_request_after_a_later_cancellation_keeps_it_cancelled(monkeypatc
     fake.subs['sub_1']['cancel_at_period_end'] = True  # the reader cancels after taking the offer
     assert ro.accept('sub_1').reason == 'already_applied'
     assert fake.subs['sub_1']['cancel_at_period_end'] is True
+
+
+def test_endpoint_repeat_after_cancel_keeps_stripe_and_firestore_cancelled(monkeypatch):
+    import routers.retention_offer as router
+
+    fake = _FakeStripe(monkeypatch, [_sub(cancel_at_period_end=True)])
+    stored = {'stripe_subscription_id': 'sub_1', 'cancel_at_period_end': True}
+
+    class _Sub:
+        def __init__(self):
+            self.stripe_subscription_id = stored['stripe_subscription_id']
+            self.cancel_at_period_end = stored['cancel_at_period_end']
+
+        def model_dump(self):
+            return {
+                'stripe_subscription_id': self.stripe_subscription_id,
+                'cancel_at_period_end': self.cancel_at_period_end,
+            }
+
+    monkeypatch.setattr(router.users_db, 'get_user_subscription', lambda uid: _Sub())
+    monkeypatch.setattr(router.users_db, 'update_user_subscription', lambda uid, data: stored.update(data))
+
+    assert router.accept_retention_offer_endpoint(uid='uid').eligible
+    assert fake.subs['sub_1']['cancel_at_period_end'] is False and stored['cancel_at_period_end'] is False
+
+    # The reader cancels again: Stripe and Firestore both record it.
+    fake.subs['sub_1']['cancel_at_period_end'] = True
+    stored['cancel_at_period_end'] = True
+
+    router.accept_retention_offer_endpoint(uid='uid')  # repeated acceptance
+    assert fake.subs['sub_1']['cancel_at_period_end'] is True
+    assert stored['cancel_at_period_end'] is True

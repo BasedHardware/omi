@@ -56,7 +56,9 @@ def accept_retention_offer_endpoint(uid: str = Depends(auth.get_current_user_uid
     except Exception as e:
         logger.error(f"Error applying retention offer: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Could not apply the offer. Please try again.")
-    if subscription.cancel_at_period_end:
+    # Only a fresh redemption clears the cancellation (in the same Stripe write). A repeat
+    # (already_applied) leaves Stripe untouched, so a later cancellation must stay recorded here too.
+    if offer.reason == 'eligible' and subscription.cancel_at_period_end:
         subscription.cancel_at_period_end = False
         users_db.update_user_subscription(uid, subscription.model_dump())
     logger.info(f"Retention offer accepted uid={uid}")
