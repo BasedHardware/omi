@@ -38,6 +38,9 @@ permissions:
 
 jobs:
   deploy:
+    # Prod runs only the reviewed workflow definition on main; source_sha pins the chart files,
+    # this pins the auth/Helm steps that apply them.
+    if: inputs.environment != 'prod' || github.ref == 'refs/heads/main'
     environment: ${{ inputs.environment }}
     runs-on: ubuntu-latest
     timeout-minutes: 15

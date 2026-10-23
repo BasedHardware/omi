@@ -1579,7 +1579,7 @@
       "display_name": "deploy",
       "expected_runs_class": "non-pr",
       "expected_runs_per_day": 0,
-      "if": null,
+      "if": "inputs.environment != 'prod' || github.ref == 'refs/heads/main'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
