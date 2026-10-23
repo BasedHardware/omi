@@ -222,7 +222,7 @@ def test_restored_blank_capture_keeps_deterministic_title_without_a_model_call(s
 @pytest.mark.parametrize('model_name', ['Conversation', 'CreateConversation'])
 @pytest.mark.parametrize('output_kind', ['notes', 'minimum'])
 def test_completed_boundary_finalizes_salience(stack, processing, monkeypatch, model_name, output_kind):
-    from utils.llm import notes_output_contract as contract
+    from utils.conversations import relevance_salience as contract
     from models.speaker_evidence import SpeakerEvidence, VoiceCluster
 
     now = datetime(2026, 10, 1, tzinfo=timezone.utc)
