@@ -19,6 +19,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from models.goal import GoalStatus
 from testing.import_isolation import load_module_fresh, stub_modules
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -76,10 +77,10 @@ def _set_stream_docs(goals, docs):
 def test_get_user_goals_returns_oldest_first_regardless_of_doc_order(goals):
     # Documents streamed in arbitrary doc ID order (newest first in stream)
     docs = [
-        _Doc('g3', {'created_at': BASE.replace(day=3), 'is_active': True, 'status': 'in_progress'}),
-        _Doc('g1', {'created_at': BASE.replace(day=1), 'is_active': True, 'status': 'in_progress'}),
-        _Doc('g4', {'created_at': BASE.replace(day=4), 'is_active': True, 'status': 'in_progress'}),
-        _Doc('g2', {'created_at': BASE.replace(day=2), 'is_active': True, 'status': 'in_progress'}),
+        _Doc('g3', {'created_at': BASE.replace(day=3), 'is_active': True, 'status': GoalStatus.focused.value}),
+        _Doc('g1', {'created_at': BASE.replace(day=1), 'is_active': True, 'status': GoalStatus.background.value}),
+        _Doc('g4', {'created_at': BASE.replace(day=4), 'is_active': True, 'status': GoalStatus.focused.value}),
+        _Doc('g2', {'created_at': BASE.replace(day=2), 'is_active': True, 'status': GoalStatus.background.value}),
     ]
     _set_stream_docs(goals, docs)
 
@@ -91,11 +92,11 @@ def test_get_user_goals_returns_oldest_first_regardless_of_doc_order(goals):
 def test_get_user_goals_filters_achieved_and_abandoned_without_truncating_page(goals):
     # First two documents are ended (achieved and abandoned)
     docs = [
-        _Doc('g_achieved', {'created_at': BASE.replace(day=1), 'is_active': True, 'status': 'achieved'}),
-        _Doc('g_abandoned', {'created_at': BASE.replace(day=2), 'is_active': True, 'status': 'abandoned'}),
-        _Doc('g_act1', {'created_at': BASE.replace(day=3), 'is_active': True, 'status': 'active'}),
-        _Doc('g_act2', {'created_at': BASE.replace(day=4), 'is_active': True, 'status': 'in_progress'}),
-        _Doc('g_act3', {'created_at': BASE.replace(day=5), 'is_active': True, 'status': 'focused'}),
+        _Doc('g_achieved', {'created_at': BASE.replace(day=1), 'is_active': True, 'status': GoalStatus.achieved.value}),
+        _Doc('g_abandoned', {'created_at': BASE.replace(day=2), 'is_active': True, 'status': GoalStatus.abandoned.value}),
+        _Doc('g_act1', {'created_at': BASE.replace(day=3), 'is_active': True, 'status': GoalStatus.focused.value}),
+        _Doc('g_act2', {'created_at': BASE.replace(day=4), 'is_active': True, 'status': GoalStatus.background.value}),
+        _Doc('g_act3', {'created_at': BASE.replace(day=5), 'is_active': True, 'status': GoalStatus.focused.value}),
     ]
     _set_stream_docs(goals, docs)
 
@@ -107,8 +108,8 @@ def test_get_user_goals_filters_achieved_and_abandoned_without_truncating_page(g
 
 def test_get_user_goals_dateless_legacy_goals_sort_first(goals):
     docs = [
-        _Doc('g_dated', {'created_at': BASE.replace(day=5), 'is_active': True, 'status': 'in_progress'}),
-        _Doc('g_legacy', {'is_active': True, 'status': 'in_progress'}),
+        _Doc('g_dated', {'created_at': BASE.replace(day=5), 'is_active': True, 'status': GoalStatus.focused.value}),
+        _Doc('g_legacy', {'is_active': True, 'status': GoalStatus.background.value}),
     ]
     _set_stream_docs(goals, docs)
 
@@ -118,9 +119,9 @@ def test_get_user_goals_dateless_legacy_goals_sort_first(goals):
 
 def test_get_user_goals_none_or_negative_limit_returns_all_active(goals):
     docs = [
-        _Doc('g1', {'created_at': BASE.replace(day=1), 'is_active': True, 'status': 'in_progress'}),
-        _Doc('g2', {'created_at': BASE.replace(day=2), 'is_active': True, 'status': 'in_progress'}),
-        _Doc('g3', {'created_at': BASE.replace(day=3), 'is_active': True, 'status': 'in_progress'}),
+        _Doc('g1', {'created_at': BASE.replace(day=1), 'is_active': True, 'status': GoalStatus.focused.value}),
+        _Doc('g2', {'created_at': BASE.replace(day=2), 'is_active': True, 'status': GoalStatus.background.value}),
+        _Doc('g3', {'created_at': BASE.replace(day=3), 'is_active': True, 'status': GoalStatus.focused.value}),
     ]
     _set_stream_docs(goals, docs)
 
