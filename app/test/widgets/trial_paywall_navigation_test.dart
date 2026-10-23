@@ -78,6 +78,8 @@ void main() {
     await tester.tap(find.byKey(const Key('trial_paywall_cta')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('trial_paywall_restore')), warnIfMissed: false);
+    // The free-plan dismissal now uses the close control; also exercise system back.
+    await tester.binding.handlePopRoute();
     await tester.tap(find.byKey(const Key('trial_paywall_close')), warnIfMissed: false);
     await tester.pump();
     expect(usage.restores, 0, reason: 'restore must not run concurrently with a checkout');

@@ -53,9 +53,10 @@ abstract final class PaywallCheckout {
       final session = await provider.createUserCheckoutSession(priceId: priceId, trialDays: trialDays);
       if (!context.mounted) return PaywallCheckoutOutcome.cancelled;
       if (session != null && session['error'] == true) {
+        // Checkout's 409 is an existing subscription, not a pending cancellation.
         report(
-          isPendingCancelConflict(session['status_code'])
-              ? l10n.resubscribeFirstToChangePlans
+          session['status_code'] == 409
+              ? l10n.checkoutExistingSubscription
               : session['detail'] as String? ?? l10n.couldNotProcessSubscription,
           error: true,
         );

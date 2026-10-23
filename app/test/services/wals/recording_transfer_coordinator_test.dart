@@ -165,6 +165,7 @@ void main() {
       var drains = 0;
       var holds = 0;
       var releases = 0;
+      var admissions = 0;
       final retries = <void Function()>[];
       final coordinator = RecordingTransferCoordinator(
         reconcile: () async {},
@@ -182,12 +183,14 @@ void main() {
         fencedPassTimeLimit: const Duration(milliseconds: 20),
         onPassTimedOut: (trigger, _) => timedOut.add(trigger),
         scheduleCooldown: (_, callback) => retries.add(callback),
+        onTransferAdmitted: () => admissions++,
         onTransferStarted: () async => holds++,
         onTransferFinished: () async => releases++,
       );
       addTearDown(coordinator.dispose);
 
       final fenced = coordinator.wake(WakeTrigger.periodic);
+      expect(admissions, 1, reason: 'account admission is synchronous, before native lease acquisition');
       await _settle();
       expect(SyncWakeScope.syncOnly, true);
       expect(coordinator.wake(WakeTrigger.userRetry), same(fenced), reason: 'later wakes join the stuck pass');
@@ -199,7 +202,9 @@ void main() {
       expect(discoveries, 1, reason: 'no second discovery runs beside the still-running body');
       expect(drains, 0);
       expect(holds - releases, 1, reason: 'the keep-alive is held while the abandoned body runs');
+      expect(admissions, 1, reason: 'keeping the old body alive must not re-admit it');
       await coordinator.wake(WakeTrigger.userRetry);
+      expect(admissions, 1, reason: 'no new account is admitted beside an abandoned body');
       expect(discoveries, 1, reason: 'still blocked: the gate holds until the body really exits');
       expect(drains, 0);
 
@@ -209,6 +214,7 @@ void main() {
       expect(holds, releases);
 
       await coordinator.wake(WakeTrigger.userRetry);
+      expect(admissions, 2);
       expect(discoveries, 2);
       expect(drains, 1);
     });

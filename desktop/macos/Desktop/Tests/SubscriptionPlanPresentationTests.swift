@@ -51,4 +51,18 @@ final class SubscriptionPlanPresentationTests: XCTestCase {
     XCTAssertEqual(plan.displayName, "Plan unavailable")
     XCTAssertFalse(plan.hasPaidCapability)
   }
+
+  func testCheckoutConflictIsAnExistingSubscriptionNotAPendingCancellation() {
+    let existing =
+      "You already have a subscription. Manage your existing subscription instead of starting a new checkout."
+    XCTAssertEqual(
+      SubscriptionPlanPresentation.checkoutErrorMessage(.httpError(statusCode: 409, detail: existing)), existing)
+    XCTAssertEqual(
+      SubscriptionPlanPresentation.checkoutErrorMessage(.httpError(statusCode: 409)), "Failed to open checkout.")
+    XCTAssertEqual(
+      SubscriptionPlanPresentation.upgradeErrorMessage(.httpError(statusCode: 409, detail: "anything")),
+      SubscriptionPlanPresentation.resubscribeFirst)
+    XCTAssertEqual(
+      SubscriptionPlanPresentation.upgradeErrorMessage(.httpError(statusCode: 400, detail: "Bad promo")), "Bad promo")
+  }
 }

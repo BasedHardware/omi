@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Kontrollera anslutningen och försök igen.",
     "useFreePlan": "Använd gratisplan",
     "continueText": "Fortsätt",
+    "checkoutExistingSubscription": "Du har redan en prenumeration. Hantera din nuvarande prenumeration i stället för att starta en ny.",
     "resubscribeFirstToChangePlans": "Prenumerera igen först för att byta plan.",
     "resubscribe": "Prenumerera igen",
     "couldNotOpenPaymentSettings": "Kunde inte öppna betalningsinställningar. Försök igen.",

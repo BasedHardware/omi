@@ -69,6 +69,74 @@ No customer diagnostic export or firmware version was supplied for the Discord
 physical microphone behavior, recap dependency or recoverability. A passing
 software regression and a merged PR are not a verified customer resolution.
 
+## Startup transfer admission (#23223)
+
+The recovery coordinator must admit the account before its first asynchronous
+native keep-alive acquisition. Reconciliation and device discovery do not need
+a new upload first. Previously, `SyncProvider._admittedWorkGeneration` stayed
+at -1 until a drain or manual upload started: startup could acknowledge a
+completed server job without surfacing its conversation, and skip device
+discovery and the coordinator's inventory refresh entirely.
+
+`RecordingTransferCoordinator.onTransferAdmitted` now binds the existing
+provider session generation synchronously for a new transfer run. Native
+keep-alive acquisition and an extra hold for abandoned work remain separate:
+neither re-admits an old pass, and an abandoned body blocks new admission until
+it exits. Each reconciliation binds its callback to the admitted generation;
+`SyncReconciler.poke` snapshots that callback with its phone owner before an
+await. Reattachment cannot hand an old account's results to a replacement
+callback. Discovery, refresh, drain and reconnect-retry reset respect that
+same admitted generation. Auto-sync opt-out still allows discovery and
+reconciliation but never an automatic upload.
+
+No storage, job API, codec, timestamp, backend or firmware contract changes.
+Queued server work stays pending; only an authoritative completed response
+acknowledges it. This does not reprocess an audio file or invent its transcript.
+
+The Discord screenshot shows the On the Way sync queue, not the on-device
+transcription banner: 381 recordings, 42 hours of audio and nine almost ready.
+Audio duration is not elapsed server-processing time. This screenshot alone
+does not identify a missing handle, a queued server job, a failed upload or
+whether all audio is retained. Existing #22484 addresses dead-handle poll
+starvation; #21999 remains an open proposal for legacy sequenced-job staleness.
+Neither is proof of this reporter's cause. Codemagic iOS build #4162 resolves
+to 1.0.570+1430 at
+`b859b78f821217c0df0082359cbcf70b6f29987d`; ancestry confirms #22484 is
+included. Public iOS 1.0.570 was visible on the App Store on 2026-10-22.
+The public page does not expose its binary build number, and this customer
+only reported "latest", so their installed build remains unverified. Internal
+TestFlight versions after 1.0.570 are not proof of a public release.
+
+### Startup recovery checklist
+
+- [x] Reproduce four production failures on unchanged main: missing completed
+  conversation delivery, skipped device discovery, replacement-account polling
+  after native acquisition, and callback adoption after reattachment.
+- [x] Bind startup recovery at the existing transfer owner, preserve opt-out,
+  and keep genuinely queued work pending without duplicate uploads.
+- [x] Finish focused verification (41 passed), analyzer ratchet (unchanged
+  baseline), mobile journeys (six journeys / 23 checks) and local preflight
+  (25 checks). Full app run: 7,062 passed, four skipped, one unrelated paywall
+  failure (`trial_paywall_free` finder in `trial_paywall_navigation_test.dart`),
+  reproduced with the three production sync files restored to unchanged
+  main `a8fdd3889d`. Repair the stale test to exercise the actual system-back
+  and close dismissal controls during checkout; all four paywall navigation
+  tests now pass with the restore, no-pop and late-completion assertions
+  intact. No paywall production code or analyzer baseline changes. Remote CI
+  must confirm the complete suite on the final commit.
+- [ ] Merge and release the mobile fix after CI/review; this change itself
+  needs no backend deployment or firmware release.
+- [ ] Verify this customer's exact app build and diagnostic/job responses,
+  then confirm the backlog declines and the corresponding conversations open.
+  Keep recordings and app data intact while investigating; do not prescribe
+  deletion, sign-out, reinstall or reset as queue recovery.
+
+Focused regression: `flutter test
+test/providers/sync_provider_background_admission_test.dart
+test/providers/sync_provider_startup_reconciliation_test.dart
+test/providers/sync_provider_session_generation_test.dart
+test/services/wals/recording_transfer_coordinator_test.dart` (from `app/`).
+
 ## Request refusals and deliberate recovery (#23049)
 
 A failed HTTP request is not proof that every recording in it is unusable.

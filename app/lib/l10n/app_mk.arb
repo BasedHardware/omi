@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "Веќе имате претплата. Управувајте со тековната претплата наместо да започнете нова.",
     "resubscribeFirstToChangePlans": "Прво претплатете се повторно за да го смените планот.",
     "resubscribe": "Претплати се повторно",
     "@resubscribe": {
