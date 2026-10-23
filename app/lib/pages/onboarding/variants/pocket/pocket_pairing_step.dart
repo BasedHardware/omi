@@ -83,7 +83,11 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   void _back() {
     final devices = context.read<DeviceProvider>();
     final onboarding = context.read<OnboardingProvider>();
-    _finish(devices.isConnected && devices.connectedDevice != null && !onboarding.isClicked);
+    _finish(devices.isConnected &&
+        devices.connectedDevice != null &&
+        !onboarding.isClicked &&
+        onboarding.connectingToDeviceId == null &&
+        !onboarding.isSettlingConnection);
   }
 
   @override
@@ -93,9 +97,10 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _back();
       },
-      // Rebuilds on connection changes so a delayed reconnect of the saved pendant still advances.
-      child: Consumer<DeviceProvider>(
-        builder: (context, devices, _) {
+      // Rebuilds on connection and tap-settle changes, so a delayed reconnect, or a tap that settled
+      // after the reader left and came back, still advances.
+      child: Consumer2<DeviceProvider, OnboardingProvider>(
+        builder: (context, devices, onboarding, _) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _maybeAdvanceOnReconnect();
           });
