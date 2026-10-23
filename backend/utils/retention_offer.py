@@ -134,6 +134,19 @@ def _ensure_coupon() -> None:
 _RELEASE_IF_OWNER = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
 
 
+_RENEW_IF_OWNER = (
+    "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('expire', KEYS[1], ARGV[2]) else return 0 end"
+)
+
+
+def _hold_lock(customer_id: str, token: str) -> None:
+    """Renews the lease right before a Stripe write; a worker that lost it stops without writing."""
+    from database.redis_db import r
+
+    if not r.eval(_RENEW_IF_OWNER, 1, f'retention_offer:{customer_id}', token, LOCK_TTL_SECONDS):
+        raise ValueError('lease_lost')
+
+
 def _acquire_lock(customer_id: str) -> Optional[str]:
     """Per-customer lease; returns the owner token, or None when another worker holds it."""
     from database.redis_db import r
@@ -157,8 +170,10 @@ def accept(subscription_id: str) -> RetentionOffer:
     - the claim (customer metadata naming this subscription) uses a per-customer Stripe
       idempotency key, so even a worker that outlived its lease cannot claim for a second
       subscription (Stripe rejects the same key with different parameters);
-    - the discount write also stamps the subscription as applied, so the offer never returns
-      after the 3 discounted months end.
+    - the discount write uses a fixed per-subscription idempotency key, so a worker that
+      resumes after its lease replays the earlier result instead of writing again (and cannot
+      undo a cancellation made since); it also stamps the subscription as applied, so the
+      offer never returns after the 3 discounted months end.
     A retry after any partial failure finishes the same redemption. Raises ValueError(reason).
     """
     sub, _ = _retrieve(subscription_id)
@@ -182,34 +197,51 @@ def accept(subscription_id: str) -> RetentionOffer:
                 raise ValueError('already_used')  # redeemed earlier and the discount has ended
             # Retry after a lost response: finish the bookkeeping, never reapply.
             if not claimed_by:
+                _hold_lock(customer_id, token)
                 _claim(customer_id, subscription_id)
-            updates = {}
+            # Never touch cancel_at_period_end here: a cancellation made after the redemption
+            # belongs to the reader, and a late or repeated request must not undo it.
             if not applied:
-                updates['metadata'] = {APPLIED_METADATA_KEY: '1'}
-            if _get(sub, 'cancel_at_period_end'):
-                updates['cancel_at_period_end'] = False
-            if updates:
-                stripe.Subscription.modify(subscription_id, **updates)
+                _hold_lock(customer_id, token)
+                stripe.Subscription.modify(subscription_id, metadata={APPLIED_METADATA_KEY: '1'})
             return RetentionOffer(eligible=True, reason='already_applied')
         offer = evaluate(sub, customer)
         if not offer.eligible:
             raise ValueError(offer.reason)
         if not claimed_by:
+            _hold_lock(customer_id, token)
             _claim(customer_id, subscription_id)
         _ensure_coupon()
+        _hold_lock(customer_id, token)
+        _apply(subscription_id)
+        return offer
+    finally:
+        _release_lock(customer_id, token)
+
+
+def _apply(subscription_id: str) -> None:
+    """Discount the subscription and keep it renewing, at most once per subscription.
+
+    The key is fixed per subscription, so a worker that resumes after its lease expired sends
+    the same key and parameters as the request that already redeemed: Stripe replays that
+    result instead of executing again, and a cancellation made since then stays intact. A
+    failure is never retried blind: the subscription is re-read, and a discount that landed
+    counts as success. A cached failure leaves nothing applied; the reader can retry later.
+    """
+    try:
         stripe.Subscription.modify(
             subscription_id,
             discounts=[{'coupon': COUPON_ID}],
             cancel_at_period_end=False,
             metadata={APPLIED_METADATA_KEY: '1'},
-            # Fresh key per attempt: this runs only after the locked read showed no discount, and
-            # `discounts` replaces the list, so a repeat can never stack a second discount. A fixed
-            # key would replay a cached Stripe 5xx for 24h and strand a claimed customer.
-            idempotency_key=f'retention-apply-{subscription_id}-{uuid.uuid4().hex}',
+            idempotency_key=f'retention-apply-{subscription_id}',
         )
-        return offer
-    finally:
-        _release_lock(customer_id, token)
+        return
+    except stripe.StripeError:
+        sub = stripe.Subscription.retrieve(subscription_id, expand=['discounts'])
+    if _has_retention_coupon(sub):
+        return  # the write landed even though the response failed
+    raise ValueError('unavailable')
 
 
 def _claim(customer_id: str, subscription_id: str) -> None:

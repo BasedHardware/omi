@@ -109,6 +109,9 @@ class _FakeStripe:
         monkeypatch.setattr(ro.stripe.Coupon, 'create', lambda **kw: self.coupons.setdefault(kw['id'], kw))
         monkeypatch.setattr(ro, '_acquire_lock', self.acquire)
         monkeypatch.setattr(ro, '_release_lock', self.release)
+        monkeypatch.setattr(ro, '_hold_lock', self.hold)
+        self.before_write = None
+        self.before_sub_modify = None  # runs once at the start of the next subscription write
 
     def acquire(self, cid):
         with self.lock_guard:
@@ -122,6 +125,14 @@ class _FakeStripe:
         with self.lock_guard:
             if self.locks.get(cid) == token:
                 del self.locks[cid]
+
+    def hold(self, cid, token):
+        if self.before_write:
+            hook, self.before_write = self.before_write, None
+            hook()
+        with self.lock_guard:
+            if self.locks.get(cid) != token:
+                raise ValueError('lease_lost')
 
     def expire_lease(self, cid):
         with self.lock_guard:
@@ -159,6 +170,9 @@ class _FakeStripe:
         return copy.deepcopy(self.subs[sid])
 
     def sub_modify(self, sid, **kw):
+        if self.before_sub_modify:
+            hook, self.before_sub_modify = self.before_sub_modify, None
+            hook()
         self.calls.append(('sub', sid, kw))
         self._maybe_fail('sub', kw, lambda: self._apply_sub(sid, kw))
         if self._idempotent(kw):
@@ -206,7 +220,7 @@ def test_accept_claims_customer_then_discounts_and_clears_cancel(monkeypatch):
     assert [c[0] for c in fake.calls] == ['cus', 'sub']  # claim before discount
     assert fake.customers['cus_1']['metadata'][ro.USED_METADATA_KEY] == 'sub_1'
     assert fake.subs['sub_1']['cancel_at_period_end'] is False and fake.discounted() == ['sub_1']
-    assert fake.calls[1][2]['idempotency_key'].startswith('retention-apply-sub_1-')
+    assert fake.calls[1][2]['idempotency_key'] == 'retention-apply-sub_1'  # fixed per subscription
     assert fake.coupons[ro.COUPON_ID]['percent_off'] == 50 and fake.locks == {}
 
 
@@ -297,7 +311,7 @@ def test_discounted_without_claim_reconciles_the_claim(monkeypatch):
     fake = _FakeStripe(monkeypatch, [applied])
     assert ro.accept('sub_1').reason == 'already_applied'
     assert fake.customers['cus_1']['metadata'][ro.USED_METADATA_KEY] == 'sub_1'
-    assert fake.subs['sub_1']['cancel_at_period_end'] is False
+    assert fake.subs['sub_1']['cancel_at_period_end'] is True  # reconciling never undoes a cancellation
     assert fake.subs['sub_1']['metadata'][ro.APPLIED_METADATA_KEY] == '1'
 
     # The coupon expires later: no second redemption.
@@ -379,23 +393,27 @@ def test_real_lease_helpers_use_owner_token(monkeypatch):
     assert calls[1] == ('eval', 'retention_offer:cus_1', token, True)
 
 
-def test_apply_cached_500_retry_discounts_once_with_a_fresh_key(monkeypatch):
+def test_apply_cached_500_keeps_the_claim_and_never_retries_blind(monkeypatch):
     fake = _FakeStripe(monkeypatch, [_sub()])
     fake.fail_once['sub'] = 'before'
-    with pytest.raises(ro.stripe.APIError):
+    with pytest.raises(ValueError, match='unavailable'):
         ro.accept('sub_1')
     assert fake.customers['cus_1']['metadata'][ro.USED_METADATA_KEY] == 'sub_1' and fake.discounted() == []
-
+    # The fixed per-subscription key replays the cached 500: nothing is applied blind.
+    with pytest.raises(ValueError, match='unavailable'):
+        ro.accept('sub_1')
+    assert fake.discounted() == [] and fake.locks == {}
+    # Once the cached result expires the same claim finishes, with one discount.
+    fake.cached_errors.clear()
+    fake.idempotency.clear()
     assert ro.accept('sub_1').eligible
     assert fake.discounted() == ['sub_1'] and len(fake.subs['sub_1']['discounts']) == 1
-    assert ro.accept('sub_1').reason == 'already_applied'
 
 
-def test_apply_landed_but_response_lost_does_not_stack(monkeypatch):
+def test_apply_landed_but_response_lost_counts_as_success(monkeypatch):
     fake = _FakeStripe(monkeypatch, [_sub()])
     fake.fail_once['sub'] = 'after'
-    with pytest.raises(ro.stripe.APIError):
-        ro.accept('sub_1')
+    assert ro.accept('sub_1').eligible  # the re-read shows the discount landed
     assert ro.accept('sub_1').reason == 'already_applied'
     assert len(fake.subs['sub_1']['discounts']) == 1
 
@@ -440,3 +458,71 @@ def test_request_paused_after_its_first_read_sees_the_other_redemption(monkeypat
     assert state['b'] == 'eligible'
     assert sum(1 for c in fake.calls if c[0] == 'sub' and 'discounts' in c[2]) == 1
     assert len(fake.subs['sub_1']['discounts']) == 1
+
+
+def test_worker_that_outlives_its_lease_after_reading_writes_nothing(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub(cancel_at_period_end=True)])
+    state = {}
+
+    def a_stalls_past_its_lease():
+        # A has done its in-lease reads; its lease expires and B redeems the same subscription.
+        fake.expire_lease('cus_1')
+        state['b'] = ro.accept('sub_1').reason
+        # The customer cancels again after taking the offer.
+        fake.subs['sub_1']['cancel_at_period_end'] = True
+
+    fake.before_write = a_stalls_past_its_lease
+    with pytest.raises(ValueError, match='lease_lost'):
+        ro.accept('sub_1')  # request A
+
+    assert state['b'] == 'eligible'
+    assert sum(1 for c in fake.calls if c[0] == 'sub' and 'discounts' in c[2]) == 1
+    assert fake.subs['sub_1']['cancel_at_period_end'] is True  # no stale write undid the new cancel
+
+
+def test_real_hold_renews_only_for_the_owner(monkeypatch):
+    calls = []
+
+    class FakeRedis:
+        def __init__(self, owner):
+            self.owner = owner
+
+        def eval(self, script, n, key, token, ttl):
+            calls.append((key, token, ttl, 'expire' in script))
+            return 1 if token == self.owner else 0
+
+    import database.redis_db as redis_db
+
+    monkeypatch.setattr(redis_db, 'r', FakeRedis('tok'))
+    ro._hold_lock('cus_1', 'tok')
+    with pytest.raises(ValueError, match='lease_lost'):
+        ro._hold_lock('cus_1', 'stale')
+    assert calls[0] == ('retention_offer:cus_1', 'tok', ro.LOCK_TTL_SECONDS, True)
+
+
+def test_worker_resuming_after_its_lease_mid_write_replays_instead_of_reapplying(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub(cancel_at_period_end=True)])
+    state = {}
+
+    def a_pauses_inside_its_write():
+        # A passed its lease check and is about to send the discount; it stalls past the lease.
+        fake.expire_lease('cus_1')
+        state['b'] = ro.accept('sub_1').reason  # B redeems the same subscription
+        fake.subs['sub_1']['cancel_at_period_end'] = True  # then the reader cancels again
+
+    fake.before_sub_modify = a_pauses_inside_its_write
+    ro.accept('sub_1')  # request A resumes and sends its stale write
+
+    assert state['b'] == 'eligible'
+    applied = [c for c in fake.calls if c[0] == 'sub' and 'discounts' in c[2]]
+    assert len({c[2]['idempotency_key'] for c in applied}) == 1  # Stripe replays A's request
+    assert len(fake.subs['sub_1']['discounts']) == 1
+    assert fake.subs['sub_1']['cancel_at_period_end'] is True  # the new cancellation survives
+
+
+def test_repeat_request_after_a_later_cancellation_keeps_it_cancelled(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub(cancel_at_period_end=True)])
+    assert ro.accept('sub_1').eligible
+    fake.subs['sub_1']['cancel_at_period_end'] = True  # the reader cancels after taking the offer
+    assert ro.accept('sub_1').reason == 'already_applied'
+    assert fake.subs['sub_1']['cancel_at_period_end'] is True
