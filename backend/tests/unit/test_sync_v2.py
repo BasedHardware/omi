@@ -115,36 +115,6 @@ class TestSyncV2Structure:
         assert '"/v1/sync-local-files", deprecated=True, status_code=410' in source
         assert '\ndef sync_local_files(' in source
 
-    def test_v2_returns_202_with_job_id(self):
-        """v2 POST must return 202 with job_id."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files_v2')
-        # Find the next top-level function or decorator
-        next_section = source.find('\n@router.', start + 1)
-        if next_section == -1:
-            next_section = len(source)
-        func_body = source[start:next_section]
-
-        assert 'status_code=202' in func_body, "v2 must return 202"
-        assert "'job_id'" in func_body, "v2 response must include job_id"
-        assert "'poll_after_ms'" in func_body, "v2 response must include poll_after_ms"
-
-    def test_v2_dispatches_async_coordinator(self):
-        """v2 must dispatch background work via start_background_task (async coordinator, #7361)."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files_v2')
-        next_section = source.find('\n@router.', start + 1)
-        if next_section == -1:
-            next_section = len(source)
-        func_body = source[start:next_section]
-
-        assert 'start_background_task' in func_body, "v2 must use start_background_task for async coordinator"
-        assert '_run_full_pipeline_background_async' in func_body, "v2 must dispatch the async pipeline coordinator"
-        assert 'submit_with_context' not in func_body, (
-            "v2 must NOT use submit_with_context — async coordinator runs on event loop, "
-            "not a thread pool slot (#7361)"
-        )
-
     def test_v2_has_hard_restriction_gate(self):
         """v2 inline path must check hard restriction (fast 429 for restricted users)."""
         source = self._read_sync_source()
@@ -294,20 +264,6 @@ class TestSyncV2Structure:
         assert 'get_user_private_cloud_sync_enabled' in _get_pipeline_async_function_body('_load_sync_segment_context')
         assert 'private_cloud_sync_enabled=private_cloud_sync_enabled' in func_body
 
-    def test_v2_fast_path_only_saves_files(self):
-        """v2 fast path must only save raw files — no decode, no VAD, no prefs/cache fetch."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files_v2')
-        next_section = source.find('\n@router.', start + 1)
-        if next_section == -1:
-            next_section = len(source)
-        func_body = source[start:next_section]
-
-        assert '_retrieve_file_paths_v2' in func_body, "v2 must save raw files"
-        assert 'create_sync_job' in func_body, "v2 must create Redis job"
-        assert 'get_user_transcription_preferences' not in func_body, "prefs fetch moved to bg"
-        assert 'build_person_embeddings_cache' not in func_body, "cache build moved to bg"
-
     def test_v2_fast_path_uses_sync_executor(self):
         """Fast-path file save must use sync_executor, not storage_executor (#7372)."""
         source = self._read_sync_source()
@@ -323,27 +279,6 @@ class TestSyncV2Structure:
         assert (
             'run_blocking(storage_executor' not in func_body
         ), "fast-path must NOT use storage_executor — background pipeline saturates it (#7372)"
-
-    def test_device_provenance_survives_inline_and_cloud_task_dispatch(self):
-        """Offline sync must stamp the conversation that canonical extraction reads."""
-        source = self._read_sync_source()
-        v2_start = source.index('async def sync_local_files_v2')
-        v2_end = source.find('\n@router.', v2_start + 1)
-        v2 = source[v2_start:v2_end]
-        task_handler = source[source.index('async def run_sync_job') :]
-        # process_segment was extracted to utils/sync/pipeline.py (W4 refactor)
-        pipeline_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
-        with open(pipeline_path, encoding='utf-8') as f:
-            pipeline_source = f.read()
-        segment = pipeline_source[
-            pipeline_source.index('def process_segment(') : pipeline_source.index('\ndef _store_sync_audio_chunk')
-        ]
-
-        assert 'resolve_client_device(' in v2
-        assert "'client_device_id': client_device_context.client_device_id" in v2
-        assert 'client_device_id=client_device_context.client_device_id' in v2
-        assert 'client_device_id=client_device_id' in task_handler
-        assert 'client_device_id=client_device_id' in segment
 
 
 # ---------------------------------------------------------------------------
@@ -685,12 +620,6 @@ class TestV2EndpointContract:
         if next_section == -1:
             next_section = len(source)
         return source[start:next_section]
-
-    def test_v2_transfers_file_ownership_to_bg_task(self):
-        """v2 must transfer raw path ownership to prevent double cleanup."""
-        body = self._get_v2_post_body()
-        assert 'owned_paths = list(paths)' in body
-        assert 'paths = []' in body
 
     def test_v2_handles_429_hard_restricted(self):
         """v2 must check hard restriction at the top."""
@@ -3816,67 +3745,6 @@ class TestV2EndpointExecution:
         finally:
             self._cleanup_modules(saved)
 
-    def test_post_returns_202_and_schedules_background(self, sync_endpoint_module):
-        """POST /v2/sync-local-files must return 202, create job, and schedule async background task."""
-        saved, mock_sync_jobs, module = sync_endpoint_module
-        mock_sync_jobs.create_sync_job = MagicMock(
-            return_value={
-                'job_id': 'created-job',
-                'uid': 'test-uid',
-                'status': 'queued',
-                'total_files': 1,
-                'total_segments': 0,
-            }
-        )
-
-        try:
-            module.get_sync_job = mock_sync_jobs.get_sync_job
-            module.create_sync_job = mock_sync_jobs.create_sync_job
-
-            module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
-
-            async def _noop_pipeline(*args, **kwargs):
-                pass
-
-            module._run_full_pipeline_background_async = _noop_pipeline
-            scheduled_tasks = []
-
-            def _capture_background_task(coro, *, name):
-                scheduled_tasks.append(name)
-                coro.close()
-
-            module.start_background_task = _capture_background_task
-
-            async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
-                return fn(*args, **kwargs)
-
-            module.run_blocking = _passthrough_run_blocking
-            module.classify_sync_lane = MagicMock(
-                return_value=types.SimpleNamespace(
-                    lane=module.SyncLane.FRESH,
-                    trust=types.SimpleNamespace(value='legacy'),
-                    reason='recent_capture',
-                    maximum_age_seconds=60,
-                    automatic_recovery_allowed=True,
-                )
-            )
-
-            import asyncio
-            from starlette.datastructures import UploadFile
-
-            upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
-            resp = asyncio.run(module.sync_local_files_v2(files=[upload], uid='test-uid'))
-
-            assert resp.status_code == 202, f"Expected 202, got {resp.status_code}: {resp.text}"
-            body = json.loads(resp.body)
-            assert 'job_id' in body
-            assert body['status'] == 'queued'
-            assert body['poll_after_ms'] == 3000
-            mock_sync_jobs.create_sync_job.assert_called_once()
-            assert scheduled_tasks == [f"sync_pipeline:{body['job_id']}"]
-        finally:
-            self._cleanup_modules(saved)
-
     @pytest.fixture
     def sync_endpoint_module(self):
         """Keep real router import/setup outside the endpoint execution budget."""
@@ -3891,50 +3759,6 @@ class TestV2EndpointExecution:
             spec.loader.exec_module(module)
             gc.collect()
             yield saved, jobs, module
-        finally:
-            self._cleanup_modules(saved)
-
-    @pytest.mark.parametrize('failure_key', ['invalid_audio', 'persistent_persistence'])
-    def test_capped_content_returns_a_per_wal_retryable_job_without_dispatch(self, failure_key, sync_endpoint_module):
-        saved, mock_sync_jobs, module = sync_endpoint_module
-        try:
-            module._retrieve_file_paths_v2 = MagicMock(return_value=['/tmp/fake.opus'])
-            module._cleanup_files = MagicMock()
-            module.claim_sync_content = MagicMock(
-                return_value={'outcome': 'capped', 'failure_key': failure_key, 'retry_after': 123}
-            )
-            module.start_background_task = MagicMock()
-
-            async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
-                return fn(*args, **kwargs)
-
-            module.run_blocking = _passthrough_run_blocking
-            module.classify_sync_lane = MagicMock(
-                return_value=types.SimpleNamespace(
-                    lane=module.SyncLane.FRESH,
-                    trust=types.SimpleNamespace(value='legacy'),
-                    reason='recent_capture',
-                    maximum_age_seconds=60,
-                    automatic_recovery_allowed=True,
-                )
-            )
-            from starlette.datastructures import UploadFile
-
-            upload = UploadFile(filename='test.opus', file=BytesIO(b'\x00' * 10))
-            resp = asyncio.run(module.sync_local_files_v2(files=[upload], uid='test-uid'))
-            assert resp.status_code == 202
-            body = json.loads(resp.body)
-            assert body['status'] == 'failed'
-            assert body['job_id']
-            assert body['poll_after_ms'] == 0
-            assert 'X-Omi-Rate-Limit-Reason' not in resp.headers
-            assert 'Retry-After' not in resp.headers
-            mock_sync_jobs.mark_job_failed.assert_called_once_with(
-                body['job_id'], 'Repeated content failure paused', reason_code='sync_repeat_failure_paused'
-            )
-            mock_sync_jobs.delete_sync_job.assert_not_called()
-            module.start_background_task.assert_not_called()
-            module._cleanup_files.assert_called_once_with(['/tmp/fake.opus'])
         finally:
             self._cleanup_modules(saved)
 
@@ -4055,17 +3879,6 @@ class TestBYOKContextPropagation:
         path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
         with open(path, encoding='utf-8') as f:
             return f.read()
-
-    def test_v2_uses_start_background_task_for_context_inheritance(self):
-        """v2 must use start_background_task which wraps create_task (auto-inherits ContextVars/BYOK)."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files_v2')
-        next_section = source.find('\n@router.', start + 1)
-        if next_section == -1:
-            next_section = len(source)
-        func_body = source[start:next_section]
-
-        assert 'start_background_task' in func_body, "v2 must use start_background_task for context inheritance"
 
     def test_async_coordinator_clears_byok_in_finally(self):
         """Async coordinator must clear BYOK context in its finally block."""

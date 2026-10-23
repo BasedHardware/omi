@@ -202,7 +202,7 @@ def mobile_sync_router():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('start,end', [(None, None), (20, 10), (0, float('nan'))])
-async def test_partial_ramp_unknown_incoming_audio_keeps_real_upload_on_legacy(
+async def test_partial_ramp_unknown_incoming_audio_keeps_real_upload_retryable(
     mobile_sync_router, monkeypatch, start, end
 ):
     module, jobs, bytes_io = mobile_sync_router
@@ -226,22 +226,26 @@ async def test_partial_ramp_unknown_incoming_audio_keeps_real_upload_on_legacy(
     monkeypatch.setattr(batch_intake, 'FirestoreStore', lambda *args: store)
     monkeypatch.setattr(batch_intake, 'current_stage', lambda: 'dev')
     module.accept_batch_upload = AsyncMock(wraps=batch_intake.accept_upload)
+    monkeypatch.setattr(module.legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
     response = await module.sync_local_files_v2(
         files=[UploadFile(filename='synthetic.opus', file=bytes_io(b'synthetic'))],
         uid='test-uid',
         audio_start_seconds=start,
         audio_end_seconds=end,
     )
-    assert response.status_code == 202
+    assert response.status_code == 409
+    assert json.loads(response.body)['code'] == 'sync_content_retry_later'
     assert incoming == [None]
-    assert not module.create_sync_job.call_args.kwargs['policy'].batch_enabled
+    module.create_sync_job.assert_not_called()
     assert not module.accept_batch_upload.call_args.kwargs['policy'].batch_enabled
     assert not store.rows
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('archive_fails', [False, True])
-async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(mobile_sync_router, archive_fails):
+async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(
+    mobile_sync_router, monkeypatch, archive_fails
+):
     module, jobs, bytes_io = mobile_sync_router
     calls = []
 
@@ -251,6 +255,7 @@ async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(mob
             raise OSError('archive unavailable')
 
     module.archive_mobile_batch_raw_files = archive
+    monkeypatch.setattr(module.legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
     module.start_background_task = MagicMock()
     uploads = [UploadFile(filename='audio_omimobilebatch001_opus_16000_1_fs160_1000.bin', file=bytes_io(b'original'))]
     if archive_fails:
@@ -266,7 +271,9 @@ async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(mob
         module.start_background_task.assert_not_called()
         jobs.mark_job_completed.assert_not_called()
     else:
-        assert response.status_code == 202
+        assert response.status_code == 409
+        assert json.loads(response.body)['code'] == 'sync_content_retry_later'
+        module.create_sync_job.assert_not_called()
 
 
 def test_visibility_resume_keeps_the_existing_live_capture_wall_clock_gap():

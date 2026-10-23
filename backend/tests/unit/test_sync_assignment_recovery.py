@@ -250,29 +250,6 @@ def admission_router():
                 sys.modules[name] = original
 
 
-@pytest.mark.asyncio
-async def test_paused_persistence_upload_keeps_the_retaining_contract_before_dispatch(admission_router, caplog):
-    module, jobs, bytes_io = admission_router
-    module.claim_sync_content = MagicMock(
-        return_value={'outcome': 'capped', 'failure_key': 'persistent_persistence', 'retry_after': 3600}
-    )
-    module.start_background_task = MagicMock()
-    response = await module.sync_local_files_v2(
-        files=[UploadFile(filename='synthetic.opus', file=bytes_io(b'synthetic'))],
-        uid='test-uid',
-    )
-    assert response.status_code == 202
-    assert json.loads(response.body)['status'] == 'failed'
-    module.mark_job_failed.assert_called_once()
-    assert module.mark_job_failed.call_args.kwargs['reason_code'] == 'sync_repeat_failure_paused'
-    module.enqueue_sync_job.assert_not_called()
-    module.start_background_task.assert_not_called()
-    jobs.mark_job_completed.assert_not_called()
-    event = next(r.message for r in caplog.records if 'event=sync_repeat_failure_cap' in r.message)
-    assert 'outcome=paused' in event and 'failure_key=persistent_persistence' in event
-    assert 'quarantined' not in event and 'test-uid' not in event
-
-
 def test_batch_explicit_live_target_missing_holds_and_replays_after_live_create():
     store = StrictFirestore()
     incoming = dict(chunk('batch-anchor', 1000), _batch_require_live_target=True)

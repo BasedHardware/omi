@@ -1518,16 +1518,8 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
-          SYNC_LEGACY_FRESH_ENABLED:
-            category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             category: rollout
-          SYNC_LEGACY_FRESH_PERCENT:
-            category: rollout
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            category: reliability
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            category: reliability
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'
@@ -1875,16 +1867,8 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
-          SYNC_LEGACY_FRESH_ENABLED:
-            category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             category: rollout
-          SYNC_LEGACY_FRESH_PERCENT:
-            category: rollout
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            category: reliability
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            category: reliability
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'

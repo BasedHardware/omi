@@ -49,13 +49,11 @@ async def test_router_never_creates_a_legacy_job_outside_on(monkeypatch, mode):
     try:
         monkeypatch.setattr(legacy_dark, 'current_mode', lambda: mode)
         monkeypatch.setattr(legacy_dark, 'read_ledger_row', lambda uid, content_id: None)
-        module.legacy_fresh.enabled_for = MagicMock(return_value=True)
         module.create_sync_job = MagicMock()
         response = await _upload(module, BytesIO)
         assert response.status_code == 409
         assert json.loads(response.body)['code'] == 'sync_content_retry_later'
         module.create_sync_job.assert_not_called()
-        module.legacy_fresh.enabled_for.assert_not_called()
     finally:
         _restore(saved)
 
@@ -155,7 +153,7 @@ async def test_router_reads_the_legacy_mode_off_the_event_loop(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_router_is_unchanged_at_on(monkeypatch):
+async def test_router_never_admits_legacy_even_when_mode_is_on(monkeypatch):
     module, saved, jobs, BytesIO = _router()
     try:
         reads = []
@@ -163,18 +161,16 @@ async def test_router_is_unchanged_at_on(monkeypatch):
         counter = legacy_dark.OMI_LEGACY_SYNC_ADMISSIONS_TOTAL.labels(reason='batch_not_enabled')
         before = counter._value.get()
         response = await _upload(module, BytesIO)
-        assert response.status_code == 202
-        assert counter._value.get() == before + 1
+        assert response.status_code == 409
+        assert counter._value.get() == before
         assert len(reads) == 1  # a young mode read is not taken again
     finally:
         _restore(saved)
 
 
 @pytest.mark.asyncio
-async def test_router_revalidates_a_stale_mode_read_before_creating_a_legacy_job(monkeypatch):
-    """#23129 review: a request that read 'on', then stalled past ADMISSION_REVALIDATE_SECONDS,
-    reads the mode again before a legacy job; draining by then means the fence, not a job. This
-    bounds how long after a flip a stale 'on' can create a legacy job (final_pass_rehome's grace)."""
+async def test_router_never_admits_legacy_after_a_stale_on_read(monkeypatch):
+    """Even a stale ON read cannot create a job after C9 permanently retires legacy admission."""
     from unittest.mock import MagicMock
 
     module, saved, jobs, BytesIO = _router()
