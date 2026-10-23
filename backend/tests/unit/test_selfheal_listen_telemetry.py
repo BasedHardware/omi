@@ -269,8 +269,12 @@ async def test_run_listen_session_runtime_failure_still_counts_accepted_session(
             raise RuntimeError('boom')
 
     monkeypatch.setattr(runtime_module, 'ListenSessionRuntime', _Runtime)
-    with pytest.raises(RuntimeError):
-        await runtime_module.run_listen_session(SimpleNamespace(source='omi'))
+    # The crash no longer escapes: run_listen_session owns the ASGI callable — it
+    # classifies the failure (one traceback-bearing log) and closes the socket with
+    # the session's terminal code. The accepted-session no-audio contract this test
+    # pins is unchanged: exactly one teardown row still fires. The socket here is
+    # not connected, so the boundary's best-effort close is skipped.
+    await runtime_module.run_listen_session(SimpleNamespace(source='omi', uid='uid-web', websocket=None))
     assert calls == [('omi', 'web')]
 
 

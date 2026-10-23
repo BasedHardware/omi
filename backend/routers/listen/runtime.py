@@ -66,7 +66,11 @@ from utils.pusher import PusherCircuitBreakerOpen
 from utils.live_speaker_suggestions import emit_speaker_suggestion as emit_live_speaker_suggestion
 from utils.stt.streaming import get_stt_service_for_language
 import utils.stt.replay_delivery as replay_delivery
-from utils.stt.live_failure import terminate_live_stt_backoff
+from utils.stt.live_failure import (
+    LIVE_STT_FAILURE_CLOSE_CODE,
+    LIVE_STT_FAILURE_CLOSE_REASON,
+    terminate_live_stt_backoff,
+)
 from config.live_demand import DemandSelection, language_qualified, resolve_live_demand
 from utils.stt.live_rollout import WindowSelection, managed_chain_enabled, window_allocation, window_selection_kwargs
 from utils.stt.live_metrics import (
@@ -1303,13 +1307,56 @@ class ListenSessionRuntime:
 
 
 async def run_listen_session(request: ListenRequest) -> None:
+    """Own the socket for the whole ASGI callable, including connect-time failures.
+
+    The supervised session body already contains its failures (``_run``'s
+    ``except Exception`` plus ``_teardown``), but the connect-time admission
+    path in front of it — runtime construction and the pre-supervision
+    ``_admit``/``_bootstrap`` reads — had no owner: one failure on
+    ``is_trial_paywalled`` or ``load_listen_connect_base``'s user and
+    transcription-preference reads escaped the ASGI callable and surfaced as
+    uvicorn's full ``Exception in ASGI application`` traceback (prod
+    backend-listen 2026-10-22: x8/30m at
+    ``uvicorn/protocols/websockets/websockets_impl.py`` ``run_asgi``), and the
+    client saw an abrupt socket drop with no close frame it could act on. This
+    boundary classifies the failure, logs it once with its traceback, and
+    closes the socket with the session's terminal code so the client's
+    ordinary reconnect handles a transient admission fault instead of an
+    unclassified server crash. Cancellation still propagates: the deletion
+    fence and ASGI shutdown cancel this task and must stay observable to
+    their callers.
+    """
     runtime: Optional[ListenSessionRuntime] = None
     try:
         runtime = ListenSessionRuntime(request)
         await runtime.run()
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        logger.exception(
+            'listen session failed before supervision; closing uid=%s source=%s',
+            request.uid,
+            request.source,
+        )
+        await _close_admission_failed_socket(request)
     finally:
         if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
             record_listen_no_audio_teardown(
                 source=request.source,
                 platform=runtime.client_device_context.platform,
             )
+
+
+async def _close_admission_failed_socket(request: ListenRequest) -> None:
+    """Best-effort terminal close after a pre-supervision failure.
+
+    The runtime may not exist (construction failed) or its socket may already
+    be gone; a close failure here changes nothing about the outcome — the
+    traceback above is the evidence, and the client's reconnect is the retry.
+    """
+    try:
+        state = getattr(request.websocket, 'client_state', None)
+        if state == WebSocketState.CONNECTED:
+            await request.websocket.close(code=LIVE_STT_FAILURE_CLOSE_CODE, reason=LIVE_STT_FAILURE_CLOSE_REASON)
+    except Exception as error:
+        logger.warning('listen admission-failure close failed type=%s', type(error).__name__)

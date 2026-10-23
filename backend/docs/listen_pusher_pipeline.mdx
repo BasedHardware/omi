@@ -2228,6 +2228,28 @@ sequenceDiagram
 
 **Teardown invariant:** flush any remaining multi-channel mix via `audio_bytes_send` **before** `pusher_close()` so `ListenPusherSession._flush()` can deliver tail audio to pusher.
 
+### Pre-supervision admission failures stay inside the ASGI callable
+
+Failure-Class: FC-lifecycle-close-classified-by-transport-phase
+
+`run_listen_session` owns the accepted socket for the whole ASGI callable.
+The supervised session body already contains its failures (`_run`'s
+`except Exception` plus `_teardown`), and the connect-time path in front of
+supervision — runtime construction and the `_admit`/`_bootstrap` reads
+(`is_trial_paywalled`, `load_listen_connect_base`'s user and transcription
+preference reads, the reconnect budget) — is owned by the same boundary: a
+failure there is logged once with its traceback (`listen session failed
+before supervision; closing`) and the socket is closed with the session's
+terminal code (`1011` `transcription_service_unavailable`, the same code
+`terminate_live_stt_backoff` uses), so the client's ordinary reconnect
+handles a transient admission fault instead of observing an abrupt drop
+with no close frame. Before this boundary, one such failure escaped the
+ASGI callable as uvicorn's `Exception in ASGI application` traceback (prod
+backend-listen 2026-10-22: ×8/30m at `websockets_impl.py` `run_asgi`).
+Cancellation still propagates — the deletion fence and ASGI shutdown cancel
+this task and must stay observable to their callers — and the accepted-session
+no-audio teardown counter still runs on every exit path.
+
 ## 3.1 Pusher Reconnect & Pending Flush
 
 When pusher reconnects after a disconnection, all buffered conversations are replayed.
