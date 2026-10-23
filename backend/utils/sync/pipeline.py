@@ -88,6 +88,7 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
 )
+from utils.stt.transcript_admission import admit_segments
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import bounded_envelope, unknown_envelope
 from models.conversation import Conversation, CreateConversation
@@ -154,7 +155,7 @@ from utils.stt.pre_recorded import (
     postprocess_words,
     prerecorded,
 )
-from utils.sync import empty_recovery, minimal_redrive
+from utils.sync import empty_recovery, empty_success_guard, minimal_redrive
 from utils.sync.empty_recovery_intent import dispatch_once as dispatch_empty_recovery_once
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -185,7 +186,14 @@ from utils.sync.input_limits import (
 )
 from utils.sync.capture import chunk_identity
 from utils.sync.recording_session_target import resolve_recording_session_sync_target
-from utils.sync.wal_audio_coverage import apply_sync_wal_audio_coverage
+from utils.capture.sync_coverage import (
+    apply_sync_coverage as apply_sync_wal_audio_coverage,
+    record_sync,
+    annotate_identity,
+    covering_target,
+    legacy_audio_trim,
+)
+from utils.sync.word_timing import first_word_offset, shift_to_vad_file_clock
 from utils.sync.safety_wal_coverage import apply_safety_wal_coverage
 from config.sync_safety_wal import sync_safety_wal_enabled
 from utils.sync.safety_wal_metrics import AUDIO_BYTES_NOT_STORED, SEGMENTS_DEDUPED, suppressed_pcm_bytes
@@ -408,6 +416,14 @@ def _record_sync_segment_failure(
     exception: BaseException | str | None = None,
     attempt_ref: str | None = None,
 ) -> None:
+    if job_id and failure.outcome.value in empty_success_guard.PROVIDER_CLASS_OUTCOMES:
+        # Durable per-job provider-failure evidence for the empty-success guard:
+        # survives Cloud Tasks redelivery onto another instance. Best effort —
+        # the failure recording itself must never depend on the marker.
+        try:
+            try_mark_once(job_id, empty_success_guard.PRIOR_PROVIDER_FAILURE_TAG)
+        except Exception:
+            logger.warning('event=sync_transcription_metric outcome=marker_failed kind=prior_provider_failure')
     if record_metric:
         _record_sync_segment_outcome(
             failure.outcome,
@@ -1240,30 +1256,6 @@ class _OrderedTurnstile:
             self._cond.notify_all()
 
 
-def _first_word_offset(words: list[Any]) -> float:
-    """Seconds from the start of a VAD file to its first word.
-
-    postprocess_words starts the transcript clock at this word, while the file's
-    timestamp, stored audio and capture evidence start where VAD did. A word
-    without a start time keeps the file clock.
-    """
-    first = words[0] if words else None
-    timing = first.get('timestamp') if isinstance(first, dict) else None
-    return round(float(timing[0]), 2) if timing else 0.0
-
-
-def _shift_to_vad_file_clock(segments: list[TranscriptSegment], offset: float) -> None:
-    """Put lines timed from the first word back on the VAD file clock.
-
-    started_at, the stored audio chunk and capture evidence share that clock. The
-    file can open on a cough or noise well before the first word.
-    """
-    if offset:
-        for segment in segments:
-            segment.start = round(segment.start + offset, 2)
-            segment.end = round(segment.end + offset, 2)
-
-
 def _recover_empty_segment(
     path: str,
     uid: str,
@@ -1345,7 +1337,7 @@ def _recover_empty_segment(
         outcome='recovered',
         log=logger,
     )
-    return transcript_segments, recovered_language, _first_word_offset(words)
+    return transcript_segments, recovered_language, first_word_offset(words)
 
 
 def _assign_segment_speakers(
@@ -1442,6 +1434,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     cap_recovery_checkpoint: dict | None = None,
     cap_dispatch_lane: str = 'sync',
     redrive_mode: str | None = None,
+    recording_session_id: str | None = None,
 ):
     if cap_dispatch_lane not in LANES:
         raise ValueError('unknown cap dispatch lane')
@@ -1460,6 +1453,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         'client_platform': client_platform,
         'geolocation': geolocation,
         'source_position_map': source_position_map,
+        'recording_session_id': recording_session_id,
         'lineage_binding': lineage_binding,
         'sync_lane': sync_lane,
         'origin': cap_dispatch_lane,
@@ -1591,7 +1585,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             language = user_language if (single_language_mode and user_language) else detected_language
             phase = 'parse'
             transcript_segments = postprocess_words(words, 0) if words else []
-            speech_offset = _first_word_offset(words)
+            speech_offset = first_word_offset(words)
             if sync_safety_wal_enabled():
                 for segment in transcript_segments:
                     segment.stt_provider = model
@@ -1619,6 +1613,12 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                         language = user_language if (single_language_mode and user_language) else recovered_language
                         recovered_via_retry = True
                         break
+                held, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
+                if held:
+                    # Speech-positive audio that a degraded provider chain returned
+                    # empty stays retryable; completing it as silence is the
+                    # provider-failure-ends-as-success class (2026-10-23 soak).
+                    raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
                 _record_empty_segment_as_silence(
                     provider=provider,
                     model=model,
@@ -1632,22 +1632,35 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             empty_retried = True
             _log_empty_retry('started', words=len(words or []), raw_empty=not words)
 
-        # Chronological scheduling reduces bridge work; the transaction remains
-        # correct when independent jobs or a timed-out worker arrive out of order.
+        # refactor: superseded by utils.stt.transcript_admission when MEDIA_NOISE_MODE=serve
+        transcript_segments = admit_segments(uid, transcript_segments, origin='sync')
+        if not transcript_segments:
+            held_after_admission, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
+            if held_after_admission:
+                # Admission discarded every word on speech-positive audio after a
+                # degraded chain; completing as silence hides the same loss.
+                raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
+            _record_empty_segment_as_silence(
+                provider=provider,
+                model=model,
+                lane=sync_lane,
+                deferred_outcome=deferred_outcome,
+                job_id=job_id,
+                segment_key=segment_key,
+                attempt_ref=attempt_ref,
+            )
+            return False
         phase = 'assignment'
         if turnstile and not turnstile.wait_turn(path):
             logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')
 
         timestamp = get_timestamp_from_path(path)
         clock_run = clock_run_from_path(path)
-        # The content identity survives job-directory changes and retry. Direct
-        # legacy callers retain a capture-time scope, never one shared by all WALs.
+        # Legacy callers retain a capture-time scope, never one shared by all WALs.
         for segment in transcript_segments:
             segment.speaker_id_scope = speaker_scope or f'sync:{timestamp}'
         # Lines are timed from the first word, speech_offset seconds into this file.
         segment_end_timestamp = timestamp + speech_offset + max(segment.end for segment in transcript_segments)
-        # Target eligibility (including live stubs and tombstones) is resolved
-        # inside the same transaction as temporal assignment.
         # Minimal redrive attaches first; lineage-bound segments keep their plan.
         target_conversation_id = minimal_redrive.segment_target(
             redrive_mode,
@@ -1660,6 +1673,9 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             client_device_id,
             is_locked,
             clock_run,
+        )
+        target_conversation_id = target_conversation_id or covering_target(
+            uid, source_position_map, path, device_id=client_device_id, recording_session_id=recording_session_id
         )
         closest_memory = (
             None
@@ -1702,7 +1718,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         finally:
             if audio_bytes is not None and not private_cloud_sync_enabled:
                 audio_bytes = None
-        _shift_to_vad_file_clock(transcript_segments, speech_offset)
+        shift_to_vad_file_clock(transcript_segments, speech_offset)
         started_at = datetime.fromtimestamp(timestamp, tz=timezone.utc)
         create_memory = CreateConversation(
             started_at=started_at,
@@ -1738,6 +1754,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         if clock_run:
             incoming[SYNC_CLOCK_RUN_FIELD] = clock_run
         apply_capture_evidence_dark_write(incoming, source_position_map, transcript_segments)
+        annotate_identity(incoming, client_device_id, recording_session_id)
         if lineage_binding is not None and target_conversation_id:
             incoming['_sync_lineage_binding'] = lineage_binding
         phase = 'persistence'
@@ -1781,6 +1798,16 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 _bounded_correlation_ref(attempt_ref),
             )
         record_capture_evidence_metric(incoming)
+        record_sync(
+            uid,
+            incoming,
+            assigned,
+            source_position_map,
+            path,
+            device_id=client_device_id,
+            recording_session_id=recording_session_id,
+            survivors=survivors,
+        )
 
         def mark_finalize():
             nonlocal phase
@@ -2601,6 +2628,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     capture_evidence_claims,
                     wav_paths,
                     decoded_frames,
+                    cleanup_paths=safety_coverage_paths,
                     run_blocking=run_blocking,
                     db_executor=db_executor,
                     storage_executor=storage_executor,
@@ -2623,7 +2651,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                         audio_start_seconds,
                         audio_end_seconds,
                     )
-            if sync_safety_wal_enabled():
+            # refactor: superseded by utils.capture.coverage when CAPTURE_COVERAGE_MODE=serve
+            if sync_safety_wal_enabled() and legacy_audio_trim(uid):
                 coverage_inputs = list(wav_paths)
                 safety_coverage_paths.update(coverage_inputs)
                 wav_paths, safety_generated = await apply_safety_wal_coverage(
@@ -3086,6 +3115,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     segment_key=segment_id or path,
                     attempt_ref=attempt_ref,
                     source_position_map=segment_source_maps.get(path),
+                    recording_session_id=recording_session_id,
                     **({'lineage_binding': segment_binding_reasons.get(path)} if use_lineage else {}),
                     **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),

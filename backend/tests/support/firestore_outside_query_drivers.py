@@ -350,6 +350,7 @@ _driver(
         'as_of': (None, 'internal scan-time override; does not select a history view'),
         'budget': BUDGET,
         'item_filter': (None, 'post-read predicate only'),
+        'candidate_snapshots': (None, 'injected candidate snapshots bypass the serving query; policy unchanged'),
     },
 )
 _driver(

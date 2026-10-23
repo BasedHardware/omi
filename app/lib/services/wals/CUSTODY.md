@@ -51,6 +51,13 @@ provider's scan: keeping that dependency would strand overflow once Home becomes
 2. **Delete only on confirmation.** A custody file is deleted only when its upload job completes,
    when the live transcript covers it (`confirmSessionTranscription`), when the user deletes it,
    or when a Watch copy is proven redundant (invariant 5).
+   With PostHog `custody_capture_committed_release` explicitly true, exact server `capture_committed`
+   source-frame receipts replace the live transcript heuristic. Unknown/false keeps the heuristic.
+   Receipt ranges are journaled durably per owner even in shadow; comparisons emit
+   `event=refactor_shadow lane=L5 check=custody_release outcome=agree|disagree`. The union must cover
+   the entire WAL in its capture root, mono channel, clock epoch and (when supplied) recording session.
+   Gaps, foreign owners, missing ordinals and in-flight/manual/on-device WALs never release.
+   A release marks server-confirmed synced retention; only the existing retention policy deletes bytes.
 3. **Owner before anything.** A WAL's `ownerUid` is set before it is listed, played, uploaded or
    deleted. Watch copies take the owner from their iPhone receipt. Other native files take the
    signed-in uid at intake, the same as every other producer. Once registered, the ledger
@@ -92,6 +99,12 @@ Native batch directory and WAL documents directory must match. A mismatch (for e
 absolute path after an iOS update moves the app container) emits `Native Custody Observed /
 directory_mismatch`, repoints `batchAudioDir` at the documents directory, and scans there.
 
+Chunked on-device transcript exports freeze their prepared segments, language, duration and optional
+projection in the same owner-scoped WAL index before sending the first chunk. A restart reuses
+that immutable input instead of running speech recognition again and changing an accepted chunk.
+The outbox remains on failure and clears only with the durable conversation result. Flag:
+`clients_from_segments_chunks`; guard: `unit/on_device_runner_test.dart` restart test.
+
 ## Server contract used
 
 `POST /v2/sync-local-files` with the existing parameters (`conversation_id`,
@@ -99,9 +112,12 @@ directory_mismatch`, repoints `batchAudioDir` at the documents directory, and sc
 headers). The server binds by `recording_session_id`, otherwise to the conversation closest in
 time, otherwise it creates one. No backend change is needed.
 
-Follow-up for the backend architecture plan (not in this change): a `capture_committed` websocket
-event and a coverage query, so the client can release live-covered custody by the server's word
-instead of the transcript-coverage heuristic, and the batch pipeline must apply S1 coverage before
+`capture_committed` listen events are consumed by `capture_committed_custody.dart`;
+`CaptureCommittedJournal` records each receipt before applying it. `confirmSessionTranscription`
+compares exact receipts with the old coverage decision in shadow. The opt-in is identity-fenced and
+off unless explicitly true. S1 source frame ordinals already in the ledger are sent by
+`captureEvidenceUploadHeader` on both batch and single safety-WAL uploads; legacy/unpositioned
+WALs omit claims rather than deriving them from wall clock. Batch must apply L1 coverage before
 the legacy coverage trim is deleted (plan C, C11).
 
 ## Guards
@@ -109,7 +125,7 @@ the legacy coverage trim is deleted (plan C, C11).
 | Invariant | Behavioral guard under `app/test/` |
 |---|---|
 | 1 | `unit/local_recordings_auto_upload_test.dart` (lib source scan) |
-| 2 | `unit/wal_upload_resilience_test.dart`, WAL reconcile/retention tests, `unit/watch_custody_dedupe_test.dart`, `unit/native_completion_surface_test.dart` |
+| 2 | `unit/l5_capture_committed_test.dart`, `unit/wal_upload_resilience_test.dart`, WAL reconcile/retention tests, `unit/watch_custody_dedupe_test.dart`, `unit/native_completion_surface_test.dart` |
 | 3 | `unit/local_recordings_owner_test.dart` |
 | 4 | `unit/local_recordings_auto_upload_test.dart`, `unit/sync_poll_storm_test.dart` |
 | 5 | `unit/watch_custody_dedupe_test.dart` |

@@ -127,6 +127,13 @@
       "why": "reviewed safe: daemon processing-lease heartbeat stopped in finally; if killed the lease ages out and the crash-orphan sweep recovers the row"
     },
     {
+      "path": "utils/conversations/merge_conversations_job.py",
+      "function": "run",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "Reviewed safe: renewable merge-lease heartbeat only; stop is set and the task is awaited in finally before the coordinator returns. SIGKILL leaves an indexed durable outbox job whose expired epoch reconciles; the heartbeat owns no transcript or completion side effect."
+    },
+    {
       "path": "utils/conversations/process_conversation.py",
       "function": "_write_action_items",
       "kind": "submit_with_context",
@@ -146,6 +153,34 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "_heartbeat",
+      "kind": "threading.Thread",
+      "count": 1,
+      "why": "reviewed safe: request-scoped CAS lease heartbeat stopped when the request exits; a lost lease cannot resurrect"
+    },
+    {
+      "path": "utils/episodes/live.py",
+      "function": "on_realtime_segments",
+      "kind": "start_background_task",
+      "count": 2,
+      "why": "reviewed safe (Episodes v1/v1.1): best-effort moment update and the structural attach on the episode overlay; neither holds conversation, task or memory authority. A moment lost at SIGKILL is re-applied by the conversation's finalization tail (record_moment over segments past the episode's applied offset), and a lost attach is redone by the next batch on any replica (the attach is idempotent) or by that moment/finalization, which opens or joins the episode itself"
+    },
+    {
+      "path": "utils/episodes/finalize.py",
+      "function": "schedule_after_finalization",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "reviewed safe (Episodes finalize): the synchronous POST /v1/conversations route's post-processing episode hook (tail notes and provisional-item reconciliation on the episode overlay), which holds no conversation, task or memory authority; the conversation, its tasks and the episode close are all committed before it is submitted. Lost at SIGKILL, the closed episode only misses its last tail bullets and that conversation's shadow items stay unreconciled; awaiting it would add a model call to the user's finalize request"
+    },
+    {
+      "path": "utils/episodes/live.py",
+      "function": "on_session_end",
+      "kind": "start_background_task",
+      "count": 1,
+      "why": "reviewed safe (Episodes v1.1): the session-end flush is itself the recovery for an in-process buffer; if it is lost at SIGKILL the conversation's finalization tail applies the same segments past the episode's applied offset"
     },
     {
       "path": "utils/llm/byok_errors.py",
@@ -288,13 +323,6 @@
       "why": "reviewed safe: best-effort playback cache warming"
     },
     {
-      "path": "utils/enrichment/outbox.py",
-      "function": "_heartbeat",
-      "kind": "threading.Thread",
-      "count": 1,
-      "why": "reviewed safe: request-scoped CAS lease heartbeat stopped when the request exits; a lost lease cannot resurrect"
-    },
-    {
       "path": "utils/sync/wal_audio_coverage.py",
       "function": "_submit_orphan_cleanup",
       "kind": "submit_with_context",
@@ -307,20 +335,6 @@
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/episodes/live.py",
-      "function": "on_realtime_segments",
-      "kind": "start_background_task",
-      "count": 2,
-      "why": "reviewed safe (Episodes v1/v1.1): best-effort moment update and the structural attach on the episode overlay; neither holds conversation, task or memory authority. A moment lost at SIGKILL is re-applied by the conversation's finalization tail (record_moment over segments past the episode's applied offset), and a lost attach is redone by the next batch on any replica (the attach is idempotent) or by that moment/finalization, which opens or joins the episode itself"
-    },
-    {
-      "path": "utils/episodes/live.py",
-      "function": "on_session_end",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "reviewed safe (Episodes v1.1): the session-end flush is itself the recovery for an in-process buffer; if it is lost at SIGKILL the conversation's finalization tail applies the same segments past the episode's applied offset"
     }
   ]
 }

@@ -50,8 +50,8 @@ ESTIMATES_AS_OF = "2026-10-16"
 COST = {"GCP": "#5c6b80", "Vertex LLM": "#8494ab", "OpenAI": "#aab6c6", "Anthropic": "#cdd5df"}
 # Estimated lines are drawn apart from measured/invoiced ones: sand, low opacity.
 ESTIMATE_OPACITY = 55  # invoiced bars use 88
-ESTIMATE = {"STT est.": "#d8b46a", "SaaS est.": "#eedcb3"}  # sand, not the MCP-only yellow
-MEASURED = {"STT measured": "#aab6c6", "SaaS measured (Mercury)": "#8494ab"}
+ESTIMATE = {"STT est.": "#d8b46a", "SaaS est.": "#eedcb3", "Modulate modelled": "#e3c98a"}  # sand, not the MCP-only yellow
+MEASURED = {"STT measured": "#aab6c6", "STT cash (Mercury)": "#bfc9d6", "SaaS measured (Mercury)": "#8494ab"}
 GOOD_MARK, BAD_MARK = "​", "⁠"  # tone markers set by the series API
 # Cohort curve: one neutral ramp, oldest dimmest → newest brightest and thickest
 # (no platform hue: the curve is not a platform split). Index = cohort age.
@@ -354,11 +354,13 @@ def columns():
              [("headline", "netCost", "Cost / day", "currencyUSD", 2),
               ("headline", "costPerMau", "Cost / user", "currencyUSD", 2)]),
         (12, chart("Cost vs revenue",
-                   ALL_IN + "Settled through D−2. Measured/invoiced lines are solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are sand-colored. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR ÷ 30.4.",
+                   ALL_IN + "Settled through D−2. Measured/invoiced lines are solid blue-greys: STT measured is the Soniox prepaid-balance delta plus measured Deepgram usage only; STT cash is Mercury vendor cash; measured SaaS (Mercury) is the daily SaaS aggregate. Modulate modelled (measured volume × committed price), STT est. (Soniox console) and SaaS est. (fixed) are sand-colored because they are not measured. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2× and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR ÷ 30.4.",
                    [target("health", "cost", [DATE, ("gcp", "GCP", "number"),
                                               ("vertexLlm", "Vertex LLM", "number"),
                                               ("openai", "OpenAI", "number"), ("anthropic", "Anthropic", "number"),
                                               ("sttMeasuredUsd", "STT measured", "number"),
+                                              ("sttCashUsd", "STT cash (Mercury)", "number"),
+                                              ("sttModulateModelledUsd", "Modulate modelled", "number"),
                                               ("sttEstimateUsd", "STT est.", "number"),
                                               ("saasMeasuredUsd", "SaaS measured (Mercury)", "number"),
                                               ("saasEstimateUsd", "SaaS est.", "number"),

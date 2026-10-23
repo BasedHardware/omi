@@ -17,6 +17,7 @@ from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy 
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
 from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
+from utils.stt import transcript_admission  # noqa: F401 - retain shared admission policy across legacy package stubs
 from utils.stt import batch_language  # noqa: F401 - retain detector/metric owner across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
 from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
@@ -4019,10 +4020,14 @@ class TestConversationFinalizerExecutor:
 
     def test_process_conversation_uses_postprocess_bulkhead(self):
         source = self._read_finalizer_source()
-        assert 'postprocess_executor' in source
         assert re.search(
-            r'run_blocking\(\s+postprocess_executor,\s+process_with_episode_budget,\s+process_conversation', source
+            r'run_blocking\(\s+lifecycle_executor\(uid\),\s+process_with_episode_budget,\s+process_conversation', source
         )
+        # The selector preserves the original bulkhead outside the serve cohort.
+        from utils.executors import lifecycle_executor, postprocess_executor
+
+        with patch('utils.executors.serving_for', return_value=False):
+            assert lifecycle_executor('synthetic-owner') is postprocess_executor
 
 
 # 14. Bulkhead executor infrastructure tests

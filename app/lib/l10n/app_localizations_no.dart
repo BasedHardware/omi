@@ -14491,4 +14491,54 @@ class AppLocalizationsNo extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Også: $items';
   }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Trykk på knappen på Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Ett kort trykk. Spør deretter om hva som helst.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Still spørsmålet ditt';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Si det høyt. Omi lytter.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Ferdig? Trykk på knappen igjen for å sende.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Du har fått $days dager gratis';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dager Omi Pro på oss. Vi minner deg på det før betaling. Avbryt når som helst.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Få $days dagers prøveperiode';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Start din gratis prøveperiode på $days dager';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Slå på Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Trykk én gang på knappen og hold den nær telefonen.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Det var alt. Omi fortsetter å ta opp samtalene dine i bakgrunnen.';
+
+  @override
+  String get noThanks => 'Nei takk';
+
+  @override
+  String get recapInTheBackground => 'I bakgrunnen';
 }

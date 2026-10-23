@@ -149,6 +149,10 @@ answer returning near expiry; it does not extend the deadline or guarantee
 survival for a held answer returned earlier. Forced releases remain included in
 `omi_stt_window_forced_cuts_total`.
 
+## Same-provider speaker scope preservation and successor replay deduplication
+
+During live `/v4/listen` sessions on flaky connections, mid-session reconnects to the same STT provider retain the session's active `SpeakerProviderEpoch` and connection scope across successor sockets (`same_provider=True`). This guarantees that `ConversationSpeakerIdAllocator` preserves mapped speaker numbers (e.g. SPEAKER_0, SPEAKER_1) across reconnects without renumbering speakers. Successor replay duplicates and straddling segments are deduplicated against the session timeline's `last_end` in the session callback, while successor windowed sockets count stream seconds from their own 0.0 boundary without premature `last_emitted_end` truncation.
+
 ## Demand-driven live provider lane
 
 The `/v4/listen` runtime owns the dark-by-default live-demand policy. Existing
@@ -5185,19 +5189,24 @@ Long-audio batch qualification uses the same final-pass HTTP client and public
 corpus only; see [the stage C load method and probe commands](diarizer-batch-stagec-load.md).
 Its wall/RTF scenarios remain unqualified until the lead fills the timing table.
 
-### As-captured archive trial
+### As-captured archive
 
-The default-off `AUDIO_ARCHIVE_*` cohort captures original live Opus packets
-before they are transformed for STT/pusher, using the same
-`omi-wal-uint32le-opus-v1` container and shared canonical writer as the mobile
-Standard archive. Live packs are owner/conversation/hour/channel bounded at
-16 MiB; non-Opus PCM uses lossless FLAC. v1/v2 offline intake archives original
-uploaded files before decode and acceptance. Raw metadata records unknown
-legacy provenance explicitly; storage consent never authorizes training.
+Per David's 2026-10-22 ruling (P71), the as-captured archive is a fleet
+default, not a trial: `AUDIO_ARCHIVE_LIVE_ENABLED` and
+`AUDIO_ARCHIVE_READ_ENABLED` default **on** (flag-only kill switches, no
+percent cohort) so the original live Opus packets are captured before they are
+transformed for STT/pusher, using the same `omi-wal-uint32le-opus-v1` container
+and shared canonical writer as the mobile Standard archive. Live packs are
+owner/conversation/hour/channel bounded at 16 MiB; non-Opus PCM uses lossless
+FLAC. v1/v2 offline intake archives original uploaded files before decode and
+acceptance (still behind `AUDIO_ARCHIVE_SYNC_ENABLED`). Raw metadata records
+unknown legacy provenance explicitly; storage consent never authorizes training.
 
 PCM remains available in dual-write. READ prefers complete, checksum-verified
-raw spans; STOP_PCM skips a batch only when committed raw reconstructs every
-PCM range, verified by capture-PCM hash or byte-identical decode. Missing spans,
+raw spans; STOP_PCM (default off, ramps on `AUDIO_ARCHIVE_STOP_PCM_PERCENT`,
+never the shared `AUDIO_ARCHIVE_PERCENT` that COALESCE pins at 100) skips a
+batch only when committed raw reconstructs every PCM range, verified by
+capture-PCM hash or byte-identical decode. Missing spans,
 checksum failures or identity mismatches keep today's
 path. Rollback STOP_PCM first; retain READ for raw-only history until verified
 PCM regeneration. Archive tail flushing runs after STT drain, outside its deadline.
@@ -5205,8 +5214,8 @@ Regional cache routing never relocates canonical capture. Account and conversati
 deletion purge live and noncurrent generations across configured buckets.
 
 The [archive runbook](runbooks/sync-ingest-archive.md) owns flag phases, bucket
-provisioning, C023 estimates, playback/byte/deletion canaries and David's
-≤5%/≥12h ramp. No live deployment or deletion is part of this change.
+provisioning, C023 estimates, playback/byte/deletion canaries and the STOP_PCM
+≤5%/≥12h ramp.
 ### Recent LEGACY offline-sync admission
 
 V2 resolves identity from `X-App-Platform` + `X-Device-Id-Hash`, but grants
@@ -5388,7 +5397,12 @@ precache on open, and audio download enqueue the existing named audio-merge task
 GCS listing generations/checksums plus the complete ordered chunk geometry select
 stable UUIDs. Entries without immutable source evidence retain fresh IDs. The worker
 verifies stamped sources before/after merge. Conversation MP3s use immutable
-fingerprint paths, including the conversation origin used for seek offsets. Raw
+fingerprint paths, including the conversation origin used for seek offsets. The
+conversation key also includes `CONVERSATION_BUILD_FORMAT` (bump on gap-collapse,
+span-projection or export changes), with a canonical audio-file list order.
+Corrupt span sidecars invalidate only the observed MP3/sidecar generations and
+rebuild as a cache miss; missing legacy sidecars are published for stamp-retry
+reuse. See `docs/runbooks/playback-write-amplification.md` for force regeneration. Raw
 capture bytes, metadata, retention and consent rules remain unchanged. Up to 128 recent prior IDs per group resolve to the current source identity (never
 to an old artifact); stored objects remain untouched. Clients refresh `/urls` after
 a longer revision history or a group split. Newly rebuilt groups receive stable IDs.
@@ -6396,3 +6410,154 @@ arming, retires queued checks without processing, and restores the prior
 2-hour fallback threshold. Already-admitted processing jobs finish under their
 normal fences. Re-enable with `true`; resumed sockets and the legacy sweep pick
 up remaining debt. This PR does not deploy or change any production row.
+
+### Held-audio staging transport custody
+
+A live held fragment keeps the same immutable GCS identity across at most two
+upload attempts. Each socket timeout is 1.5 seconds, each async wait is at most
+4 seconds, and the whole upload window is 8 seconds including exponential
+backoff with scaled uniform jitter: `min(0.2 * 2**(n-1), 1.0) * U(0.5, 1.5)`
+seconds. With two attempts the one backoff is 100–300 ms. Retryable errors
+are transport timeouts/resets, HTTP 408/429 and 5xx. Other HTTP 4xx are permanent
+and do not retry. Encoder workers finish before upload workers start; late
+upload workers retain encoded bytes only and cannot commit a held receipt.
+Both encoder passes retain their original 20-second subprocess timeout; the
+8-second budget applies to upload waiting, not encoding. The outer shutdown
+delivery deadline still bounds the close waiter.
+
+After an exhausted or permanent upload, the receiver keeps its PCM until an
+owner-fenced, encrypted emergency journal is created in the existing
+`stt_cap_holds` staging collection. The journal contains at most 128 KiB of
+encoded Opus plus encrypted metadata, has no TTL, and expires its writer lease
+immediately. The existing staging sweep restores the same immutable fragment,
+then appends and seals through the fragment-claim ledger. That claim prevents
+an ambiguous original staging commit and journal recovery from counting the
+same audio twice. With fragmentation disabled, the journal uses the original
+receipt ID and a separate recovery fragment ID. A permanent GCS error leaves
+the journal for later sweeps after the underlying permission/request fault is
+fixed; it cannot trigger a tight retry loop on the live socket.
+
+Pending PCM is limited to 15 seconds per session (60 with fragmentation off)
+and 600 seconds across a pod. Reaching either bound forces a flush/handoff
+before accepting more capture; no chunk is evicted. If both storage paths fail,
+ordinary flushes retain their PCM for the next update. At a full bound or final
+close, an unconfirmed handoff fails closed: 1011 is reserved for inability to
+continue custody. All updater exceptions are contained and logged; the updater
+continues until the session stop event. Sealing/refund failures after custody
+transfer do not revoke the durable record or close the live socket.
+
+Client close and lifespan shutdown flush pending publication through the same
+journal path. The delivery budget is shared with listen's
+`SHUTDOWN_DELIVERY_SECONDS` (28 seconds); the lifespan caps its wait at that
+budget. Already deferred fragments need no GCS availability on close: the
+journal survives the socket/pod and the scheduler owns recovery. Unconfirmed
+bytes remain process-owned until publication completes; a simultaneous failure
+of both durable stores cannot be converted into a success acknowledgement.
+
+Ramp signals: `omi_held_content_staging_retry_total{outcome}` has the closed
+outcomes `retried_ok`, `deferred`, `exhausted`, `permanent`, `retained`.
+`retained` increments on each non-final flush that cannot reach either durable
+store and keeps PCM volatile; it is distinct from a confirmed `deferred` journal.
+Treat any new `retained` increment as custody at risk even below the memory
+limit. Its WARNING is emitted at most once per hold per 60 seconds; updater
+and publication-failure warnings use the same per-hold interval independently.
+`omi_held_content_deferred_seconds_total` counts seconds handed to journals;
+`omi_held_content_pcm_custody_seconds` measures current process-local held PCM.
+It refreshes on capture/retirement and each one-second updater tick. It is an
+occupancy signal, not a heartbeat or durable backlog: idle held PCM does not
+expire, so an unchanged value is valid. The cap guard should use `retained`
+counter increases for new volatile-custody failures, rather than infer health
+from whether this gauge changes.
+The existing publication counters and fleet staging/redrive snapshot remain
+available. No user/session/object identities are metric labels.
+
+## Capture/speaker/notes refactor integration
+
+The integrated composition and rollback contract is documented in
+[capture/speaker/notes refactor](capture_speaker_notes_refactor.md). The app-client
+surface now includes authenticated coverage queries and boundary-evidence intake;
+wire generation owns OpenAPI, Dart, Swift and TypeScript outputs. Live speaker
+suggestions include explicit `is_user`, and committed capture events preserve
+channel, epoch and recording-session identity. These additive fields are ignored
+by clients until their opt-in paths serve.
+
+Live durability → coverage ledger → committed event is the custody ordering.
+Continuation uploads stage encrypted chunks by deterministic session and index,
+retain incomplete/expired assemblies for client retry, and only return a completed
+receipt after durable projection. Tombstone-first deletion purges staging even
+without a conversation parent; seven-day expiry is checked at assembly, with
+physical Firestore TTL activation required before serving.
+
+Merge jobs share the finalization outbox. Admission is atomic across every source;
+epoch renewal fences stale workers. Correction transfer atomically seals the
+irreversible boundary, so recovery either rolls back preparation or replays only
+source cleanup. Empty quiet checks retain their durable successor until the
+lifecycle owner's content/lease-fenced delete succeeds. Notes/episode prompts use
+L2 roster priors and L3 rendering/language authorities; notes cache identities
+include effective packet selection and version. Cloud Run metric export includes
+the refactor families while retaining the prerecorded-language gate allowlist.
+
+### Wave 2 evidence and consumers
+
+Speaker refinement uses the same evidence record: count hints cannot merge
+confident distinct identities, and desktop-channel/near-field anchors remain
+explicit candidates. Live text-only introductions cannot create or link people
+in the speaker serve cohort. Unknown acoustic evidence preserves the existing
+identity/status; count consolidation does not require an identity claim.
+
+`MEDIA_NOISE_MODE` classifies before paid notes, using current speaker evidence
+and bounded foreground screen observations. Its serving minima persist
+`content_kind=media|noise` and the existing terminal-no-derived-effects marker.
+Memory/task entrypoints and daily/simple/comprehensive recaps use the same
+eligibility helper. Restoring a recording protects it, reclassification clears
+its exclusion, and successful reprocessing clears the terminal marker. Shadow
+preserves transcripts, labels and derived output; it never writes media edges.
+
+Cross-device reconciliation runs at completed-conversation finalization. Wall
+time proposes candidates; ordered shared speech must confirm every group pair.
+Grouping preserves original transcripts and audio, and a secondary with any
+unique speech remains visible. Exact secondary capture keys acquire only
+already-committed frame aliases to the elected primary. Coverage queries
+transactionally revalidate fingerprints, privacy state, membership and primary;
+edits, separation or primary replacement invalidate old aliases. No wall-time
+position is converted into a source-frame receipt.
+
+`coverage.committed_events` can construct confirmed alias receipts, but live
+secondary-socket dispatch and streaming partial-window suppression remain
+unwired. Closed clients query coverage. Server SNR/confidence is optional and
+not consistently persisted; absent measurements retain source/duration ranking.
+This branch does not repair historical derived effects or release audio based
+on inferred alignment.
+
+Database-writing shadow paths use `refactor_modes.shadow_sampled`: capture
+coverage, speaker evidence and boundary evidence each declare
+`<FLAG>_SHADOW_PERCENT`, default 5. Serve cohorts always write; zero disables
+shadow writes. No serve percentage or digest cohort is configured in source.
+
+
+Wave 2 call projection preserves optional `meeting_link`,
+`call_controls_detected` and `call_platform` through the boundary payload.
+Phone transports, matching calendar meeting links and explicit joined controls
+can establish call metadata; media playback and an open chat window cannot.
+Conversation locations remain owner locations, with remote participants explicit.
+
+V4's boundary publication is serve-only under `CALLS_RECAP_MODE`; shadow
+projects phone/calendar evidence locally and never adds it to the wave-1
+boundary authority for non-cohort users. Soniox initial, reconnect and managed
+legs pass the authenticated request uid explicitly to vocabulary admission;
+no ambient BYOK identity is consulted. Social tasks with a named counterpart
+and a specific place/time survive the owner-alias guard.
+
+Scheduled recaps retain the completed-day grace period. An explicit on-demand
+request bypasses that grace to summarize the partial day, while keeping locks,
+compute admission, content guards and durable state handling.
+
+V4's completed-local-day recap producer shares `status` and `generated_at` with
+M's read adapter. Pending, failed, empty and not-generated rows keep a null
+`generated_at`; only a legacy successful row without that field uses creation
+time as a compatibility fallback. Stored media/noise-only days are not-generated,
+not empty capture days. Rollback resumes unfinished stubs under the same ID.
+Both one-shot and agentic notes mounts receive cohort-gated owner-involved task
+rules, authenticated identity and matching cache identity. Exact-reference stale
+capture policy still lacks its producer binding/CAS lifecycle adapter; no fuzzy
+or historical task cancellation is performed.

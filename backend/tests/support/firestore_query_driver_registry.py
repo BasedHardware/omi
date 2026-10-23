@@ -159,7 +159,7 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
     'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
     'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
-    'database.dream_scheduler.discover': 'd59ab87e7e2a306a0e28edd41c66b5fa31ef210f2abc8f55327f94f4d93a4d2f',
+    'database.dream_scheduler.discover': 'e614de2d842268bb1b96e7e7a12c885b3e1bbcef9bd63da881baccf177d1c722',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
     'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
@@ -1057,6 +1057,26 @@ _add(
     )
 )
 _add(DriverEntry('database.daily_summaries.get_daily_summary_by_date', base={'uid': UID, 'date': '2026-01-01'}))
+_add(DriverEntry('database.daily_summaries.get_day_recording_count', base={'uid': UID, 'start': T0, 'end': T1}))
+_add(
+    DriverEntry(
+        'database.mcp_memory_queries.read_mcp_memory_candidates',
+        base={'uid': UID},
+        neutrals={'budget': _BUDGET, 'max_candidates': _LIMIT},
+        domains={
+            'origin': ['memory_items', 'memories'],
+            'filters': [
+                {},
+                {'updated_after': T0},
+                {'reviewed': True},
+                {'manually_added': True},
+                {'categories': ['manual']},
+                {'reviewed': False},
+                {'categories': ['interesting']},
+            ],
+        },
+    )
+)
 _add(DriverEntry('database.daily_summaries.get_desktop_daily_usage', base={'uid': UID, 'date': '2026-01-01'}))
 _add(DriverEntry('database.daily_summaries.get_summaries_count', base={'uid': UID}))
 

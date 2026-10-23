@@ -115,7 +115,8 @@ class WallV2Contract(unittest.TestCase):
         board = load("omi-tv-v2")
         cost = next(p for p in board["panels"] if p["title"] == "Cost vs revenue")
         fields = [c["selector"] for c in cost["targets"][0]["columns"]]
-        for line in ["gcp", "vertexLlm", "openai", "anthropic", "sttMeasuredUsd", "sttEstimateUsd",
+        for line in ["gcp", "vertexLlm", "openai", "anthropic", "sttMeasuredUsd", "sttCashUsd",
+                     "sttModulateModelledUsd", "sttEstimateUsd",
                      "saasMeasuredUsd", "saasEstimateUsd", "revenuePerDay"]:
             self.assertIn(line, fields)
         styled = {o["matcher"]["options"]: {p["id"]: p["value"] for p in o["properties"]}
@@ -123,14 +124,17 @@ class WallV2Contract(unittest.TestCase):
         for name in ESTIMATE:
             self.assertEqual(styled[name]["custom.fillOpacity"], ESTIMATE_OPACITY)
             self.assertNotIn("custom.stacking", styled[name])  # still in the stack
-        self.assertEqual(set(ESTIMATE), {"STT est.", "SaaS est."})
-        self.assertEqual(set(MEASURED), {"STT measured", "SaaS measured (Mercury)"})
+        # The measured stack carries ONLY measured dollars per provider; modelled
+        # Modulate and the dated constants stay sand-colored estimate series.
+        self.assertEqual(set(ESTIMATE), {"STT est.", "SaaS est.", "Modulate modelled"})
+        self.assertEqual(set(MEASURED), {"STT measured", "STT cash (Mercury)", "SaaS measured (Mercury)"})
         for name in MEASURED:
             self.assertIn(name, styled)
             self.assertNotIn("custom.fillOpacity", styled[name])
         self.assertTrue(cost["options"]["legend"]["showLegend"])  # identity is never color alone
         self.assertIn("Soniox console", cost["description"])
         self.assertIn("measured SaaS (Mercury)", cost["description"])
+        self.assertIn("Modulate modelled", cost["description"])
         self.assertNotIn("FinOps modelled", cost["description"])
 
     def test_status_colors_curve_placeholder_and_data_through(self):

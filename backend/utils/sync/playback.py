@@ -198,9 +198,28 @@ def _conversation_audio_urls_entry(
         )
         if stamped == source_fingerprint:
             cached_fingerprint, immutable = source_fingerprint, True
-    if stamped == cached_fingerprint:
+    artifact_fingerprint = (conversation or {}).get('conversation_audio_artifact_fingerprint')
+    current_artifact = (
+        compute_audio_files_fingerprint(
+            audio_files,
+            origin=(conversation or {}).get('started_at') or (conversation or {}).get('created_at'),
+            source_identity=True,
+        )
+        if artifact_fingerprint
+        else None
+    )
+    if stamped == cached_fingerprint and artifact_fingerprint == current_artifact:
         signed_url = get_conversation_playback_signed_url(
-            uid, conversation_id, **({'fingerprint': cached_fingerprint} if immutable else {})
+            uid,
+            conversation_id,
+            **(
+                {
+                    'fingerprint': (conversation or {}).get('conversation_audio_artifact_fingerprint')
+                    or cached_fingerprint
+                }
+                if immutable or (conversation or {}).get('conversation_audio_artifact_fingerprint')
+                else {}
+            ),
         )
         if signed_url:
             return {
@@ -581,7 +600,7 @@ def build_conversation_playback_artifact(
     """
     parts = sorted(
         [af for af in audio_files if af.get('id') and af.get('chunk_timestamps')],
-        key=lambda af: min(af['chunk_timestamps']),
+        key=lambda af: (min(af['chunk_timestamps']), str(af['id'])),
     )
     verified = (strict_sources or playback_on_demand()) and any(af.get('source_fingerprint') for af in parts)
     if verified:

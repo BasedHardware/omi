@@ -857,6 +857,7 @@ async def process_audio_soniox(
     *,
     profile: LiveLanguageProfile | None = None,
     idle_budget: SonioxIdleBudget | None = None,
+    uid: str | None = None,
 ) -> STTSocket:
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -907,6 +908,9 @@ async def process_audio_soniox(
             rejected,
         )
 
+    from utils.stt.vocabulary import apply_context
+
+    await apply_context(config, uid)
     url = SONIOX_WS_URL
 
     async def connect(callback: Any) -> SafeSonioxSocket:

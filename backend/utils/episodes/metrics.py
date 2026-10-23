@@ -35,12 +35,24 @@ def _reuse_or_create(factory, name: str, documentation: str, labelnames: list[st
 
 
 MOMENT_OUTCOMES = frozenset(
-    {'applied', 'skipped_short', 'skipped_applied', 'rate_limited', 'llm_error', 'parse_error', 'conflict', 'error'}
+    {
+        'applied',
+        'skipped_short',
+        'skipped_applied',
+        'skipped_closed',
+        'rate_limited',
+        'llm_error',
+        'parse_error',
+        'conflict',
+        'error',
+    }
 )
 MOMENT_TRIGGERS = frozenset({'pause', 'rollover', 'interval', 'session_end', 'finalize'})
 # Gated work that never ran: ended moments by trigger, plus conversation attaches.
 SKIP_TRIGGERS = MOMENT_TRIGGERS | {'attach'}
-CLOSE_REASON_LABELS = frozenset({'user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on'})
+CLOSE_REASON_LABELS = frozenset(
+    {'user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on', 'boundary'}
+)
 PROVISIONAL_OUTCOMES = frozenset({'kept', 'dropped', 'dismissed'})
 BOUNDARY_OUTCOMES = frozenset(
     {'new', 'continue', 'parallel', 'pending', 'close', 'jev_continue', 'jev_close', 'jev_no_answer'}

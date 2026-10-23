@@ -2,6 +2,28 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.526",
+      "date": "2026-10-23",
+      "changes": [
+        "Keep non-Omi chat message saves from consuming Omi question allowance and count multi-round Omi tool turns once per prompt."
+      ]
+    },
+    {
+      "version": "0.12.525",
+      "date": "2026-10-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.524",
+      "date": "2026-10-22",
+      "changes": [
+        "Improved recognition of your voice, speaker labels after transcript updates, and long local recording uploads",
+        "Fixed open messaging chats being mistaken for meeting participants"
+      ]
+    },
+    {
       "version": "0.12.523",
       "date": "2026-10-22",
       "changes": [

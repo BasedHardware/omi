@@ -100,3 +100,40 @@ def test_promote_decision_rejects_incoherent_reconciliation_mutations():
         _promote(item, reconciliation="replace", target_memory_id="mem_old")
     with pytest.raises(ValueError, match="cannot supersede"):
         _promote(item, reconciliation="keep_both", supersedes=["mem_old"])
+
+
+@pytest.mark.parametrize('tier,route', [(MemoryTier.short_term, None), (MemoryTier.archive, 'review')])
+def test_undecided_and_historical_review_stay_visible_after_ttl(monkeypatch, tier, route):
+    from models.product_memory import MemoryAccessPolicy, is_default_access_eligible, visible_memory_tier
+
+    item = _item('old', 'A synthetic pending observation.', tier=tier)
+    item.captured_at = NOW - timedelta(days=5)
+    item.promotion = {'route': route} if route else {}
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'true')
+    assert is_default_access_eligible(item, MemoryAccessPolicy.for_omi_chat(), now=NOW).allowed
+    assert visible_memory_tier(item) == MemoryTier.short_term
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'off')
+    rolled_back = is_default_access_eligible(item, MemoryAccessPolicy.for_omi_chat(), now=NOW)
+    assert rolled_back.allowed == (tier == MemoryTier.short_term)
+    if tier == MemoryTier.short_term:
+        assert rolled_back.reason == "short_term_expired_pending_adjudication"
+
+
+@pytest.mark.parametrize(
+    'field,value',
+    [
+        ('status', MemoryItemStatus.hidden),
+        ('processing_state', ProcessingState.blocked),
+        ('source_state', SourceState.tombstoned),
+        ('sensitivity_labels', ['credential']),
+        ('promotion', {'route': 'review', 'user_review': False}),
+    ],
+)
+def test_pending_visibility_never_overrides_privacy_fences(monkeypatch, field, value):
+    from models.product_memory import MemoryAccessPolicy, is_default_access_eligible
+
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'true')
+    item = _item('fenced', 'A synthetic pending observation.')
+    item.captured_at = NOW - timedelta(days=5)
+    item = item.model_copy(update={field: value})
+    assert not is_default_access_eligible(item, MemoryAccessPolicy.for_omi_chat(), now=NOW).allowed

@@ -65,6 +65,12 @@ from models.conversation_enums import (
     ConversationStatus,
     ExternalIntegrationConversationSource,
 )
+from config.refactor_modes import serving_for
+from utils.conversations.relevance import content_minimum
+from utils.conversations.relevance_salience import finish_home_salience
+from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
+from utils.llm.notes_short_clip import quiet_minimum
+from utils.llm.output_language import resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
     deterministic_minimum_title,
@@ -344,12 +350,34 @@ def _get_structured(
     try:
         if is_recovery_trigger(trigger) and not recovery_transcript_decoded:
             # An unreadable stored blob is never evidence of an empty capture.
-            # Keep the pre-discard typed minimum failure before persistence.
             return Structured(), False
+        # refactor: superseded by utils.conversations.relevance_media when MEDIA_NOISE_MODE=serve
+        media_minimum = None if is_release_probe_uid(uid) else content_minimum(uid, conversation, user_kept=user_kept)
+        if media_minimum is not None:
+            hidden = noise_hidden_from_home(
+                uid,
+                conversation,
+                user_kept=user_kept,
+                client_supports_discarded=getattr(conversation, 'client_platform', None) in ('ios', 'android'),
+            )
+            if relevance_observer is not None:
+                relevance_observer(RelevanceDecision('discard' if hidden else 'keep', 'rule', 'content_kind', trigger))
+            return media_minimum, hidden
         task_intelligence_capture = _proposes_task_candidates(conversation)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
-        user_language = users_db.get_user_language_preference(uid) or language_code
+        user_language = (
+            resolve_output_language(uid, language_code)
+            if serving_for('NOTES_PACKET_V2_MODE', uid)
+            else users_db.get_user_language_preference(uid) or language_code
+        )
+        minimum = quiet_minimum(uid, conversation, tz=tz)
+        if minimum is not None:
+            if relevance_observer is not None:
+                relevance_observer(RelevanceDecision('keep', 'rule', 'content_below_floor', trigger))
+            if recovery_minimum_fallback_observer is not None:
+                recovery_minimum_fallback_observer()
+            return minimum, False
         prompt_conversation_id = (
             conversation_id
             or getattr(conversation, 'id', None)
@@ -357,7 +385,6 @@ def _get_structured(
             or str(uuid.uuid4())
         )
 
-        # Extract calendar context from external_data
         direct_calendar_context = getattr(conversation, 'calendar_meeting_context', None)
         calendar_context: Optional[CalendarMeetingContext] = (
             direct_calendar_context
@@ -375,8 +402,7 @@ def _get_structured(
                 if calendar_data:
                     calendar_context = CalendarMeetingContext(**calendar_data)
 
-        # Source records provenance; segment uploads can carry integration labels
-        # without the text-only fields of an external-integration create request.
+        # Segment uploads can carry provenance without external text-only fields.
         if isinstance(conversation, ExternalIntegrationCreateConversation) and (
             conversation.source == ConversationSource.workflow
             or conversation.source == ConversationSource.external_integration
@@ -455,8 +481,7 @@ def _get_structured(
         transcript_text, action_items_transcript, speaker_map = conversation_transcripts_for_llm(uid, main_conv, people)
         has_wake_word_marker = has_structural_wake_word_marker(action_items_transcript)
 
-        # Transcript span, not the wall window: `started_at` is the streaming-session
-        # origin, so `finished_at - started_at` read an 8s scrap as 42 minutes (#4056).
+        # Use transcript span: session wall windows inflate short clips (#4056).
         duration_seconds: Optional[float] = conversation_duration_seconds(main_conv)
         segments = main_conv.transcript_segments or []
         discard_transcript = action_items_transcript if has_wake_word_marker else transcript_text
@@ -473,20 +498,14 @@ def _get_structured(
                     neighbor_position=neighbor.position if neighbor else None,
                 )
 
-        # Only described photos reach the model (ConversationPhoto.photos_as_string).
         has_described_photos = any((photo.description or '').strip() for photo in main_conv.photos or [])
         if trigger is ProcessingTrigger.SERVER_RECOVERY and recovery_minimum_terminal_enabled():
-            # A clear rule-level discard (empty transcript, filler, mic check)
-            # is what ordinary capture-end processing would have concluded, so
-            # recovery records the same verdict as an explicit server-recovery
-            # discard instead of surfacing an untitled row with nothing in it.
-            # Discard stays restorable (Show discarded), and no paid LLM call runs.
+            # Content-free rule discards remain restorable in recovery, without paid calls.
             ordinary = decide_relevance(
                 trigger=ProcessingTrigger.CAPTURE_END,
                 texts=[segment.text for segment in segments],
                 speech_seconds=None,
-                # An undescribed photo still contains user data, so never
-                # classify that capture as obvious transcript filler.
+                # An undescribed photo is user data, never obvious transcript filler.
                 has_photos=bool(main_conv.photos),
                 user_kept=user_kept,
                 exempt=is_release_probe_uid(uid),
@@ -532,9 +551,7 @@ def _get_structured(
                     ),
                     False,
                 )
-        # Jev replaces conv_discard only for transcript-only conversations, the
-        # population it was measured on; photos and wake-word invocations keep
-        # the existing model prompt (#14835).
+        # Jev covers transcript-only captures; photos/wake words keep their model (#14835).
         arm = relevance_arm(prompt_conversation_id)
         jev_discard: Optional[Callable[[], Optional[float]]] = None
         jev_transcript = relevance_transcript(segments)
@@ -548,10 +565,7 @@ def _get_structured(
             speech_seconds=sum(max(0.0, segment.end - segment.start) for segment in segments) if segments else None,
             has_photos=has_described_photos,
             user_kept=user_kept,
-            # The release probe's terminal contract only completes through a
-            # kept conversation (gate convention, utils/release_probe.py); its
-            # synthetic transcript's durable word count varies with STT yield
-            # (run 35583992730), so no tier may judge it.
+            # Release-probe STT yield varies; every tier must retain it (run 35583992730).
             exempt=is_release_probe_uid(uid),
             trusted_wake_word=has_wake_word_marker,
             model_discards=model_discards,
@@ -576,7 +590,6 @@ def _get_structured(
         if decision.discard:
             return Structured(emoji=random.choice(['🧠', '🎉'])), True
 
-        # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
 
         roster: Optional[MeetingRoster] = None
@@ -640,13 +653,11 @@ def _get_conversation_obj(
     conversation_id: Optional[str] = None,
     *,
     relevance_discarded: Optional[bool] = None,
+    user_kept: bool = False,
 ) -> Conversation:
+    structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     if relevance_discarded is False and not structured.title.strip():
-        # A kept conversation must never become an empty-title row merely
-        # because structure generation returned a partial object. Use the same
-        # deterministic, model-free title as the minimum-processing path. An
-        # explicit relevance discard keeps its empty title: that remains the
-        # durable discard verdict and is hidden by default at the list boundary.
+        # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
         structured.title = deterministic_minimum_title(
             conversation,
             tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
@@ -656,12 +667,8 @@ def _get_conversation_obj(
         if relevance_discarded is not None
         else structured.title == '' and not is_release_probe_uid(uid)
     )
-    # The empty-title fallback is the discard gate's second verdict and is
-    # covered by the same release-probe exemption as the LLM discard above:
-    # an LLM mood must not terminalize the probe lane's synthetic capture.
     if isinstance(conversation, CreateConversation):
         conversation_dict = conversation.dict()
-        # Store calendar context in external_data if available
         calendar_context = conversation_dict.pop('calendar_meeting_context', None)
 
         # Use started_at as created_at for imported conversations to preserve original timestamp
@@ -728,6 +735,8 @@ def trigger_conversation_apps(
     Omi"): no preferred app and no suggestion runs, so no template result is
     produced or paid for.
     """
+    if serving_for('NOTES_PACKET_V2_MODE', uid):
+        language_code = resolve_output_language(uid, conversation.language or language_code)
     if first_party_only and app_id:
         raise ValueError('first_party_only excludes an explicit app selection')
     if usage_attribution is None:
@@ -996,6 +1005,8 @@ def extract_memories(uid: str, conversation: Conversation) -> None:
     Finalization workers use this public boundary while holding their durable
     lease. Keep the private helper below for existing in-module async callers.
     """
+    if exclude_from_derived(uid, conversation, consumer='memories'):
+        return
     # The deployment-wide capability fence is mandatory even when this
     # account's non-compatibility writer delegates formation to the sweep.
     # Otherwise a reused release-probe principal could skip the exact static
@@ -1745,6 +1756,18 @@ def _extract_memories_canonical(
         conversation.id,
         replacement_payloads,
     )
+    # Decision work starts only after durable capture. Failure retains the source
+    # and is observable; Dream's paid/allowlist cleanup ramp cannot gate intake.
+    if replacement_payloads and not is_locked:
+        from utils.memory.canonical_consolidation import complete_observation_intake
+
+        complete_observation_intake(
+            uid,
+            memory_ids=[memory.id for memory, *_ in parsed_memories if memory.id],
+            db_client=db_client,
+            now=datetime.now(timezone.utc),
+            run_id=f'observation-intake:{conversation.id}',
+        )
     if llm_input_dedupe.l1_succeeded(uid, conversation, l1_digest, db_client=db_client):
         record_feature(uid, conversation, 'l1', 'durable')
         conversation.l1_llm_input_hash = l1_digest
@@ -1973,6 +1996,8 @@ def _save_action_items(
     commands and the few real commitments, or nothing — and what it admits is
     written as a task.
     """
+    if exclude_from_derived(uid, conversation, consumer='action_items'):
+        return
     if not conversation.structured:
         return
 
@@ -2680,6 +2705,7 @@ def process_conversation(
         conversation,
         conversation_id=generated_conversation_id,
         relevance_discarded=discarded,
+        user_kept=user_kept,
     )
     _attach_client_projection(conversation, client_projection)
     relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
@@ -2724,10 +2750,16 @@ def process_conversation(
     # integrations, vectors, memories, action items, audio artifacts, folders,
     # calendar links, usage, or webhooks from a stale in-memory snapshot.
     conversation.status = ConversationStatus.completed
+    content_excluded = exclude_from_derived(uid, conversation, consumer='notes')
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
-    payload.update(llm_hashes)
+    if serving_for('MEDIA_NOISE_MODE', uid):
+        payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True if content_excluded else None
     from config.sync_reprocess import dedupe_enabled
-    from utils.conversations.llm_input_dedupe import NOTES_HASH, NOTES_OUTPUT_HASH, L1_HASH
+    from utils.conversations.llm_input_dedupe import NOTES_HASH, NOTES_OUTPUT_HASH, L1_HASH, output_fingerprint
+
+    if NOTES_OUTPUT_HASH in llm_hashes:
+        llm_hashes[NOTES_OUTPUT_HASH] = output_fingerprint(structured)
+    payload.update(llm_hashes)
 
     if not dedupe_enabled() and not is_initial_creation:
         # Rollback keeps generating normally; clear server-only checkpoints in
@@ -2752,7 +2784,7 @@ def process_conversation(
         )
     else:
         persisted = lifecycle_service.persist_processed_conversation(uid, payload)
-    if recovery_minimum_fallback or silent_backfill:
+    if recovery_minimum_fallback or silent_backfill or content_excluded:
         report_persistence(
             persisted,
             completed=conversation,
@@ -2768,7 +2800,7 @@ def process_conversation(
         )
         return conversation
 
-    if silent_backfill:
+    if silent_backfill or content_excluded:
         # Historical enrichment is summary-only. No extraction/reminder, app,
         # goal, webhook, lazy-effects queue or notification can escape this seam.
         if derived_effects_disposition_observer is not None:

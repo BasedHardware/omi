@@ -15,7 +15,7 @@ from testing.import_isolation import AutoMockModule, load_module_fresh, package_
 
 BACKEND = Path(__file__).resolve().parents[2]
 DUE = datetime(2030, 1, 1, 12, tzinfo=timezone.utc)
-PUBLIC_KEYS = {'id', 'description', 'completed', 'created_at', 'due_at', 'completed_at', 'conversation_id'}
+PUBLIC_KEYS = {'id', 'description', 'completed', 'created_at', 'due_at', 'completed_at', 'conversation_id', 'source'}
 
 
 @pytest.fixture
@@ -90,6 +90,7 @@ def test_mcp_due_update_cancels_using_raw_status_but_keeps_public_response_uncha
     assert world.sent == [('synthetic-owner', {'type': 'action_item_delete', 'action_item_id': 'task-1'})]
     assert set(result) == PUBLIC_KEYS
     assert result['completed'] is False
+    assert result['source'] == 'conversation'
     assert result['due_at'] == DUE
     assert 'status' not in result and 'private_metadata' not in result
 

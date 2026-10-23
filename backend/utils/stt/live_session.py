@@ -85,6 +85,7 @@ class LiveChainSession:
         self.total_speech_ms = 0
         self.vad_mode = 'off'
         self._routing_target_entry: Target | None = None
+        self.speaker_provider_epoch: SpeakerProviderEpoch | None = None
 
     def consume_speech_ms_delta(self) -> int:
         delta, self.speech_ms = self.speech_ms, 0
@@ -216,7 +217,11 @@ class LiveChainSession:
 
         async def build(service: st.STTService) -> STTSocket:
             is_window = service == st.STTService.parakeet and window
-            stream_epoch = SpeakerProviderEpoch()
+            if same_provider and self.speaker_provider_epoch is not None:
+                stream_epoch = self.speaker_provider_epoch
+            else:
+                stream_epoch = SpeakerProviderEpoch()
+                self.speaker_provider_epoch = stream_epoch
             target = connecting_target.get()
             if target is not None and (
                 target.family != service.value
@@ -286,29 +291,47 @@ class LiveChainSession:
                         elif gate is not None and not passthrough:
                             gate.remap_segments(translated)
                         translated.sort(key=lambda item: item['start'])
+                        retained = []
                         for segment in translated:
                             segment_offset = 0.0 if epoch.replay_origin_sample is not None else offset
-                            start = max(self.last_end, segment_offset + max(0.0, float(segment['start'])))
-                            end = max(start, segment_offset + max(0.0, float(segment['end'])))
+                            raw_start = segment_offset + max(0.0, float(segment['start']))
+                            raw_end = segment_offset + max(0.0, float(segment['end']))
+                            if raw_end <= self.last_end:
+                                continue
+                            start = max(self.last_end, raw_start)
+                            end = max(start, raw_end)
+                            if end <= start:
+                                continue
                             segment['start'], segment['end'] = start, end
                             self.last_end = end
-                        leg.note_selection_transcript(translated)
-                        self.receiver._enqueue_epoch_segments(
-                            translated, provider=service.value, speaker_epoch=stream_epoch
-                        )
+                            retained.append(segment)
+                        if retained:
+                            leg.note_selection_transcript(retained)
+                            self.receiver._enqueue_epoch_segments(
+                                retained, provider=service.value, speaker_epoch=stream_epoch
+                            )
 
                     self.receiver._run_on_listen_loop(attach_then_rebase, segments)
                     return
                 if gate is not None and not passthrough:
                     gate.remap_segments(segments)
                 segments.sort(key=lambda item: item['start'])
+                retained = []
                 for segment in segments:
-                    start = max(self.last_end, offset + max(0.0, float(segment['start'])))
-                    end = max(start, offset + max(0.0, float(segment['end'])))
+                    raw_start = offset + max(0.0, float(segment['start']))
+                    raw_end = offset + max(0.0, float(segment['end']))
+                    if raw_end <= self.last_end:
+                        continue
+                    start = max(self.last_end, raw_start)
+                    end = max(start, raw_end)
+                    if end <= start:
+                        continue
                     segment['start'], segment['end'] = start, end
                     self.last_end = end
-                leg.note_selection_transcript(segments)
-                self.receiver._enqueue_stt_segments(segments, provider=service.value, speaker_epoch=stream_epoch)
+                    retained.append(segment)
+                if retained:
+                    leg.note_selection_transcript(retained)
+                    self.receiver._enqueue_stt_segments(retained, provider=service.value, speaker_epoch=stream_epoch)
 
             raw = None
             try:
@@ -346,6 +369,7 @@ class LiveChainSession:
                         language,
                         profile=host.language_profile,
                         idle_budget=getattr(self.receiver, 'soniox_idle_budget', None),
+                        uid=uid,
                     )
                 elif service == st.STTService.modulate:
                     raw = await connect_modulate(callback, sample_rate, language)
@@ -367,6 +391,7 @@ class LiveChainSession:
                     epoch.provider_label = service.value
                 leg = LiveLegSocket(raw, gate, self, service, sample_rate, is_window, passthrough, send_tracker=epoch)
                 leg.speaker_provider_epoch = stream_epoch
+                self.receiver.speaker_provider_epoch = stream_epoch
                 replay_ring = getattr(self.receiver, '_window_ring', None)
                 if not is_window and callable(replay_ring) and replay_ring() is not None:
                     # An empty snapshot still carries the obligation to retain

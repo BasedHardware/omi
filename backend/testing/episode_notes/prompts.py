@@ -1,3 +1,5 @@
+from testing.episode_notes.legacy_prompts import conversation_notes_volatile_instructions
+
 """Feed offline bundles through the production notes prompt builders."""
 
 from datetime import datetime
@@ -21,16 +23,16 @@ from utils.conversations.meeting_participants import normalize_meeting_participa
 from utils.conversations.screen_text_digest import digest_screen_rows
 from utils.llm.conversation_notes_prompts import (
     conversation_notes_static_instructions,
-    conversation_notes_volatile_instructions,
 )
 from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
-from utils.llm.episode_notes_prompts import (
+from testing.episode_notes.contract import (
     EPISODE_WAKE_WORD_RULES,
     episode_static_instructions,
     episode_volatile_instructions,
 )
 
-from utils.llm.meeting_notes_rich_prompts import rich_static_instructions, rich_volatile_instructions
+from utils.llm.meeting_notes_rich_prompts import rich_static_instructions
+from testing.episode_notes.legacy_prompts import rich_volatile_instructions
 
 GENERATION_REVIEW_PROMPT = 'episode_generation_review_v1'
 

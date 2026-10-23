@@ -16,6 +16,8 @@ overlay:
           value: ''
         AUDIO_ARCHIVE_PERCENT:
           value: '0'
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -85,6 +87,8 @@ overlay:
     pusher:
       env:
         AUDIO_ARCHIVE_PERCENT:
+          value: '0'
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
           value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -310,6 +314,8 @@ overlay:
             value: syncing-local-development
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -371,6 +377,8 @@ overlay:
           BUCKET_BATCH_PIPELINE:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
@@ -453,6 +461,8 @@ overlay:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
             value: '0'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
           SYNC_REPROCESS_COALESCE_ENABLED:
@@ -524,6 +534,8 @@ overlay:
           BUCKET_BATCH_PIPELINE:
             value: ''
           AUDIO_ARCHIVE_PERCENT:
+            value: '0'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omiapi.com

@@ -944,6 +944,12 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
     ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
 )
 
+OMI_SYNC_EMPTY_SUCCESS_GUARD_TOTAL = Counter(
+    'omi_sync_empty_success_guard_total',
+    'Zero-word sync segment dispositions at the silence decision, by provider and reason',
+    ['provider', 'reason'],
+)
+
 OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
     'omi_sync_bridge_retraction_total',
     (

@@ -126,8 +126,10 @@ def test_mcp_sse_memory_tools_keep_scope_grants_and_use_universal_service():
 
     assert "auth_context is None" in get_tool
     assert "authorize_memory_external_default_memory_read(auth_context, db_client=db)" in get_tool
-    assert "MemoryService(db_client=db).read" in get_tool
-    assert "collect_filtered_memories" in get_tool
+    assert "memories_page_core(" in get_tool
+    assert "MemoryService(db_client=db_client).read_mcp_filtered(" in source
+    assert "service.read_page(" in source
+    assert "collect_filtered_memories" not in source
     assert "read_default_read_rollout" not in get_tool
     assert "memories_db" not in get_tool
     assert "authorize_memory_external_default_memory_read(auth_context, db_client=db)" in search_tool

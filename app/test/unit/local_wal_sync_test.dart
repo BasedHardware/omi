@@ -24,6 +24,7 @@ import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/wal_file_manager.dart';
+import 'package:omi/services/wals/deleted_account_uids.dart';
 
 /// Minimal listener for testing — records calls without side effects.
 class _MockListener implements IWalSyncListener {
@@ -3610,6 +3611,126 @@ void main() {
       await local.syncAll();
       expectSubsecondSplit(local.testWals);
       expectSubsecondBounds(local.testWals, bounds);
+    });
+  });
+
+  group('deleted-account WAL purge', () {
+    late Directory directory;
+    late List<Map<String, dynamic>> persisted;
+
+    setUp(() async {
+      directory = await Directory.systemTemp.createTemp('wal_orphan_');
+      persisted = [];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        (MethodCall call) async {
+          if (call.method == 'getApplicationDocumentsDirectory') return directory.path;
+          return null;
+        },
+      );
+    });
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('plugins.flutter.io/path_provider'),
+        null,
+      );
+      if (directory.existsSync()) directory.deleteSync(recursive: true);
+    });
+
+    Wal owned(String owner, int timerStart, {WalStatus status = WalStatus.miss}) {
+      final name = '${owner}_$timerStart.bin';
+      File('${directory.path}/$name').writeAsBytesSync([1, 2, 3]);
+      return Wal(
+        timerStart: timerStart,
+        codec: BleAudioCodec.opus,
+        seconds: 60,
+        storage: WalStorage.disk,
+        status: status,
+        filePath: name,
+      )..ownerUid = owner;
+    }
+
+    bool fileExists(Wal wal) => File('${directory.path}/${wal.filePath}').existsSync();
+
+    LocalWalSyncImpl build({List<Wal> loaded = const []}) => LocalWalSyncImpl(
+          _MockListener(),
+          loadWals: () async => List<Wal>.from(loaded),
+          persistWals: (wals) async {
+            persisted = wals.map((w) => w.toJson()).toList();
+          },
+        );
+
+    test('purgeAccountWals removes the deleted account across active, retired and foreign; keeps others', () async {
+      SharedPreferencesUtil().uid = 'dead-account';
+      final local = build();
+      final active = owned('dead-account', 100);
+      final unstamped = owned('dead-account', 101)..ownerUid = null;
+      final retired = owned('dead-account', 102, status: WalStatus.synced);
+      final foreign = owned('dead-account', 103);
+      final other = owned('other-account', 104);
+      final otherRetired = owned('other-account', 105);
+      local.testWals = [active, unstamped];
+      local.testRetiredWals.addAll([retired, otherRetired]);
+      local.testForeignWals.addAll([foreign, other]);
+
+      final removed = await local.purgeAccountWals('dead-account');
+
+      expect(removed, 4);
+      expect(local.testWals, isEmpty);
+      expect(local.testRetiredWals, [otherRetired]);
+      expect(local.testForeignWals, [other]);
+      for (final wal in [active, unstamped, retired, foreign]) {
+        expect(fileExists(wal), isFalse, reason: wal.filePath);
+      }
+      expect(fileExists(other), isTrue);
+      expect(fileExists(otherRetired), isTrue);
+      expect(persisted.map((w) => w['owner_uid']), everyElement('other-account'));
+    });
+
+    test('purgeAccountWals with an empty uid is a no-op', () async {
+      final local = build();
+      final wal = owned('someone', 100)..ownerUid = null;
+      local.testWals = [wal];
+      expect(await local.purgeAccountWals(''), 0);
+      expect(local.testWals, [wal]);
+      expect(fileExists(wal), isTrue);
+    });
+
+    test('load deletes foreign records of remembered deleted accounts and keeps other foreign records', () async {
+      SharedPreferencesUtil().uid = 'current';
+      final mine = owned('current', 100);
+      final deadA = owned('dead-a', 101);
+      final deadA2 = owned('dead-a', 102);
+      final deadB = owned('dead-b', 103);
+      final stranger = owned('stranger', 104);
+
+      await saveDeletedAccountUids(['dead-a', 'dead-b']);
+      addTearDown(() => saveDeletedAccountUids(const []));
+      final local = build(loaded: [mine, deadA, deadA2, deadB, stranger]);
+      addTearDown(local.stop);
+      local.start();
+      await local.walReady;
+
+      expect(local.testWals, [mine]);
+      expect(local.testForeignWals, [stranger]);
+      expect(fileExists(deadA), isFalse);
+      expect(fileExists(deadA2), isFalse);
+      expect(fileExists(deadB), isFalse);
+      expect(fileExists(stranger), isTrue);
+      expect(fileExists(mine), isTrue);
+      expect(persisted.map((w) => w['owner_uid']).toSet(), {'current', 'stranger'});
+    });
+
+    test('foreign records never count toward this account retention pressure', () async {
+      final local = build();
+      local.testForeignWals.addAll(List.generate(maxRetainedCaptureWalCount + 5, (i) => owned('stranger', i)));
+
+      final excess = await local.enforceRetentionPolicyForTesting();
+
+      expect(excess, 0);
+      expect(local.retentionRisk, isNull);
+      expect(local.testForeignWals, hasLength(maxRetainedCaptureWalCount + 5));
     });
   });
 }

@@ -53,6 +53,8 @@ overlay:
           value: based-hardware-batch-pipeline-staging
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -226,6 +228,8 @@ overlay:
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -466,6 +470,8 @@ overlay:
             value: syncing-local
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -539,7 +545,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '100'
+            value: '25'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -776,6 +782,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
@@ -851,7 +859,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '100'
+            value: '25'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1123,6 +1131,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
@@ -1198,7 +1208,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '100'
+            value: '25'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1466,6 +1476,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1482,7 +1494,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '100'
+            value: '25'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'

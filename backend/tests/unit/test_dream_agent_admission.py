@@ -148,7 +148,11 @@ async def test_cold_and_expired_cohort_is_loaded_before_dream_capacity(admission
             expected = (
                 {'status': 'waiting', 'reason': 'reserved_capacity'}
                 if membership is True
-                else {'status': 'not_admitted', 'reason': 'ineligible'}
+                else (
+                    {'status': 'waiting', 'reason': 'eligibility_unavailable'}
+                    if membership == 'error'
+                    else {'status': 'not_admitted', 'reason': 'ineligible'}
+                )
             )
             assert report == expected
             assert reads == [UID] * (attempt + 1)

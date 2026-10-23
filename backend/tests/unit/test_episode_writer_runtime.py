@@ -8,7 +8,7 @@ import pytest
 from config.episode_writer import EpisodeWriterSettings, episode_writer_settings
 from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.episode_tiers import episode_tier
-from utils.llm.episode_writer import episode_runtime_settings, invoke_episode_writer
+from testing.episode_notes.writer_runtime import episode_runtime_settings, invoke_episode_writer
 from utils.llm.notes_observability import NotesRun
 from utils.observability import fallback
 from testing.episode_notes import systemone
@@ -108,7 +108,7 @@ def test_late_completed_writer_is_preserved_and_repair_disabled(monkeypatch):
 
 
 def test_wire_image_messages_are_counted_when_optional_guard_is_disabled():
-    from utils.llm.episode_writer import episode_input_bytes, episode_budget_exceeded
+    from testing.episode_notes.writer_runtime import episode_input_bytes, episode_budget_exceeded
 
     image = {'role': 'user', 'content': [{'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,eA=='}}]}
     assert episode_input_bytes([image]) > 25

@@ -15,6 +15,7 @@ from utils.stt_cap_dispatch import LiveAdmission, current_live_admission, suppre
 from utils.manual_speaker_assignments import acknowledged_teaching
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.sync.live_cap_hold import LiveHeldAudio
+from utils.sync.cap_hold_lifecycle import SHUTDOWN_DELIVERY_SECONDS
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
@@ -182,9 +183,9 @@ logger = logging.getLogger(__name__)
 def mark_listen_internal_error(state: Any) -> None:
     """Close the listen socket when a turn raised after audio was not staged.
 
-    A staged publication returns. The receive loop does not call this, and the
-    socket stays up so the redrive can seal. A staging write that did not land
-    still raises, and both listen failure sites close with 1011 through here.
+    Published fragments and encrypted journals keep custody with redrive.
+    Retained PCM stays live through transient failures. This path remains for
+    failures where the receiver cannot retain or durably hand off more audio.
     """
     state.close_code = 1011
 
@@ -193,7 +194,6 @@ def mark_listen_internal_error(state: Any) -> None:
 # to terminate a zombie "Listening" session promptly, far below ws_receive_timeout.
 STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
 
-SHUTDOWN_DELIVERY_SECONDS = 28.0
 SHUTDOWN_CLEANUP_SECONDS = 2.0
 
 # Longest frame the Opus format can carry, in milliseconds.
@@ -1023,6 +1023,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self.host.stt_language,
                     profile=self.host.language_profile,
                     idle_budget=self.soniox_idle_budget,
+                    uid=self.host.request.uid,
                 )
             # Soniox identifies language itself, so no language gate on the fallbacks;
             # they inherit the same chain a Modulate primary uses.
@@ -1048,6 +1049,7 @@ class ListenReceiver(ReplayFilterMixin):
                     self.host.stt_language,
                     profile=self.host.language_profile,
                     idle_budget=self.soniox_idle_budget,
+                    uid=self.host.request.uid,
                 ),
                 connect_modulate=(
                     (

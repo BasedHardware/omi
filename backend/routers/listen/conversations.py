@@ -47,6 +47,10 @@ from utils.transcribe_decisions import (
 )
 from utils.transcribe_store import calendar_db, conversations_db, redis_db
 from config.occasion_conversations import OCCASION_MAX_SPAN_SECONDS
+from utils.conversations.lifecycle_clocks import speech_clock
+from utils.episodes import boundaries, boundary_runtime
+from routers.listen.occasion import occasion_attach_target
+from routers.listen.boundary_poll import poll_calendar, ingest_calendar, conversation_action
 
 logger = logging.getLogger(__name__)
 
@@ -434,6 +438,7 @@ class LiveConversationController:
             )
             candidates = []
             for meeting in meetings or []:
+                await ingest_calendar(self, meeting)
                 if meeting.get('calendar_source') == 'screen_activity':
                     continue
                 start = persisted_started_seconds(meeting.get('start_time'))
@@ -753,7 +758,7 @@ class LiveConversationController:
             await self.create_new_in_progress_conversation()
             return None
         existing = await self._continuity_row(existing)
-        finished_at = datetime.fromisoformat(existing['finished_at'].isoformat())
+        finished_at = speech_clock(self.host.request.uid, existing) or self.clock()
         seconds = (self.clock() - finished_at).total_seconds()
         if (
             decide_existing_conversation_action(
@@ -920,42 +925,11 @@ class LiveConversationController:
     def _occasion_span_exceeded(self, conversation: dict[str, Any]) -> bool:
         if not getattr(self.host, 'occasion_mode', False):
             return False
-        started = conversation.get('started_at')
-        if not isinstance(started, datetime):
-            return False
-        started = started if started.tzinfo else started.replace(tzinfo=timezone.utc)
-        return (self.clock() - started).total_seconds() >= OCCASION_MAX_SPAN_SECONDS
+        started = persisted_started_seconds(conversation.get('started_at'))
+        return started is not None and self.clock().timestamp() - started >= OCCASION_MAX_SPAN_SECONDS
 
     async def _occasion_attach_target(self) -> Optional[str]:
-        """The user's open conversation when this session may continue it as the same occasion."""
-        if not getattr(self.host, 'occasion_mode', False) or self.host.is_multi_channel:
-            return None
-        if self.host.request.onboarding_mode and self.host.onboarding_admitted:
-            return None
-        existing = await self.host.persistence.call(retrieve_in_progress_conversation, self.host.request.uid)
-        if not existing or existing.get('status') not in (ConversationStatus.in_progress, 'in_progress'):
-            return None
-        source = getattr(existing.get('source'), 'value', existing.get('source'))
-        if (
-            any(existing.get(key) for key in ('deleted', 'discarded', 'is_locked'))
-            or existing.get('client_device_id') != self.host.client_device_context.client_device_id
-            or not should_attach_to_existing_in_progress(
-                existing_source=source if isinstance(source, str) else None, request_source=self.host.request.source
-            )
-            or self._occasion_span_exceeded(existing)
-        ):
-            return None
-        existing = await self._continuity_row(existing)
-        if not resumable_continuation(
-            existing,
-            source=normalize_listen_source(self.host.request.source),
-            device_id=self.host.client_device_context.client_device_id,
-            now=self.clock(),
-            timeout=self.host.conversation_creation_timeout,
-        ):
-            return None
-        logger.info('event=occasion_attach conversation=%s', existing['id'])
-        return str(existing['id'])
+        return await occasion_attach_target(self)
 
     async def lifecycle_loop(self) -> None:
         while self.host.state.active:
@@ -964,6 +938,7 @@ class LiveConversationController:
             conversation_id = self.host.state.current_conversation_id
             if not conversation_id:
                 continue
+            await poll_calendar(self)
             conversation = await self.host.persistence.call(
                 conversations_db.get_conversation,
                 self.host.request.uid,
@@ -974,7 +949,7 @@ class LiveConversationController:
                 await self.create_new_in_progress_conversation(rollover=True)
                 continue
             conversation = await self._continuity_row(conversation)
-            finished_at = datetime.fromisoformat(conversation['finished_at'].isoformat())
+            finished_at = speech_clock(self.host.request.uid, conversation) or self.clock()
             action = decide_lifecycle_action(
                 conversation_exists=True,
                 status=conversation.get('status'),
@@ -984,7 +959,22 @@ class LiveConversationController:
                     conversation, self.host.conversation_creation_timeout
                 ),
             )
-            if action == ConversationLifecycleAction.continue_current and self._occasion_span_exceeded(conversation):
+            boundary_action = await conversation_action(self, conversation)
+            if boundary_action == 'hold':
+                action = ConversationLifecycleAction.continue_current
+            elif boundary_action == 'close':
+                await self.host.persistence.call(
+                    boundary_runtime.apply_signal_edges,
+                    self.host.request.uid,
+                    now=self.clock(),
+                    quiet=(self.clock() - finished_at).total_seconds() >= boundaries.QUIET_SECONDS,
+                )
+                action = ConversationLifecycleAction.process_and_create_new
+            if (
+                boundary_action != 'hold'
+                and action == ConversationLifecycleAction.continue_current
+                and self._occasion_span_exceeded(conversation)
+            ):
                 # One occasion is capped like a smart-merged chain: all-day capture still rolls over.
                 logger.info('event=occasion_span_rollover conversation=%s', conversation_id)
                 action = ConversationLifecycleAction.process_and_create_new

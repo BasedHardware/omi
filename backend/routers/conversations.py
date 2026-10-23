@@ -86,6 +86,7 @@ from utils.conversations.process_conversation import (
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.episodes import finalize as episode_finalize
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
@@ -140,6 +141,15 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _heal_locked_conversations_if_eligible(uid: str, conversations: List[Dict[str, Any]]) -> None:
+    try:
+        paid_lock_recovery.heal_conversations(uid, conversations)
+    except paid_lock_recovery.RecoveryUnavailable as error:
+        raise HTTPException(
+            status_code=503, detail="Saved conversation access could not be restored. Please retry."
+        ) from error
+
+
 def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync_bridge: bool = False) -> dict:
     conversation = conversations_db.get_conversation(
         uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
@@ -159,6 +169,7 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync
         if not conversation or conversations_db.is_soft_deleted(conversation):
             raise HTTPException(status_code=404, detail="Conversation not found")
 
+    _heal_locked_conversations_if_eligible(uid, [conversation])
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
@@ -547,6 +558,8 @@ def process_in_progress_conversation(
     current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
     if current_in_progress_id == conversation.id:
         redis_db.remove_in_progress_conversation_id(uid)
+    # The user ended it (Wrap up, a pendant double-tap): its live episode ends now, not after processing.
+    episode_finalize.close_now(uid, conversation.id, ProcessingTrigger.CLIENT_FINALIZE)
 
     conversation.status = ConversationStatus.processing
     persisted = False
@@ -577,6 +590,8 @@ def process_in_progress_conversation(
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+    # The durable finalizer's episode hook: tail notes and item reconciliation, off the request path.
+    episode_finalize.schedule_after_finalization(uid, conversation.id, ProcessingTrigger.CLIENT_FINALIZE)
     # A terminal free-tier minimum persists successfully but must not fan out
     # apps/webhooks — the same decision the durable finalizer already honours
     # via derived_effects_disposition_observer (section 1.7). The conversation
@@ -691,6 +706,8 @@ def finalize_conversation(
     current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
     if current_in_progress_id == conversation_id:
         redis_db.remove_in_progress_conversation_id(uid)
+    # The worker repeats this when it starts; closing here means the episode ends with the request.
+    episode_finalize.close_now(uid, conversation_id, ProcessingTrigger.CLIENT_FINALIZE)
 
     # The outbox transaction reports whether the submitted projection bound.
     # A follow-up read would attribute a later request's projection to this one.
@@ -990,6 +1007,7 @@ def get_conversations(
         list_fields_only=True,
     )
 
+    _heal_locked_conversations_if_eligible(uid, conversations)
     redact_conversations_for_list(conversations)
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
@@ -2044,6 +2062,7 @@ async def _search_exact_conversation_reference(
         [exact_conversation_id],
         include_discarded=bool(search_request.include_discarded),
     )
+    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     conversations = [
         conversation
@@ -2140,6 +2159,8 @@ async def search_conversations_endpoint(
     )
 
     def _typesense_page() -> Dict[str, Any]:
+        # These owner-scoped candidates stay server-side until authoritative
+        # hydration/recovery below. Only locked rows need an entitlement read.
         search_results = search_conversations(
             query=search_request.query,
             page=effective_page,
@@ -2149,6 +2170,7 @@ async def search_conversations_endpoint(
             start_date=start_timestamp,
             end_date=end_timestamp,
             speaker_id=search_request.speaker_id,
+            include_locked=True,
         )
         return search_results
 
@@ -2198,8 +2220,9 @@ async def search_conversations_endpoint(
     # Preserve merge order (transcript-first on page 1); Firestore fetch may reshuffle.
     by_id = {c.get('id'): c for c in conversations if c.get('id')}
     conversations = [by_id[cid] for cid in conversation_ids if cid in by_id]
-    # Typesense filters locked hits, but the index can lag Firestore. Re-check after hydration
-    # so search never leaks that a locked conversation matched a query.
+    # The index can lag Firestore. Restore an eligible owner's historical
+    # access, then filter all remaining locks before returning any matches.
+    await run_blocking(db_executor, _heal_locked_conversations_if_eligible, uid, conversations)
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     # Speaker filtering happens here, not in Typesense: the index has no transcript_segments field, so
     # asking Typesense for one 400'd and 500'd the request. The hydrated Firestore documents do carry
@@ -2222,7 +2245,9 @@ async def search_conversations_endpoint(
     # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
     # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
     # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
-    has_more = len(conversations) >= effective_per_page or len(typesense_ids) >= effective_per_page
+    # Internal locked candidates must not leak through pagination metadata.
+    unlocked_keyword_hits = sum(1 for cid in typesense_ids if cid in by_id and not by_id[cid].get('is_locked'))
+    has_more = len(conversations) >= effective_per_page or unlocked_keyword_hits >= effective_per_page
     search_results['total_pages'] = effective_page + 1 if has_more else effective_page
     return search_results
 
@@ -2343,31 +2368,14 @@ def merge_conversations(
     background_tasks: BackgroundTasks,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "conversations:merge")),
 ):
-    """
-    Merge multiple conversations into a new conversation (async).
-
-    Flow:
-    1. Validates conversations (locked? completed?)
-    2. Returns immediately with 200 OK
-    3. Background task creates new merged conversation
-    4. Background task deletes source conversations
-    5. FCM notification sent on completion
-
-    The merged conversation will have:
-    - A new ID (source conversations are deleted)
-    - Merged transcript segments with adjusted timestamps
-    - Copied audio chunks
-    - Regenerated title, summary, action items, memories via process_conversation()
-    """
+    """Admit completed sources, merge into a new ID asynchronously, then notify the client."""
     from utils.conversations.merge_conversations import validate_merge_compatibility, perform_merge_async
 
-    # Validate minimum number of conversations
     if len(request.conversation_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 conversations required to merge")
     if len(request.conversation_ids) != len(set(request.conversation_ids)):
         raise HTTPException(status_code=400, detail="Cannot merge duplicate conversations.")
 
-    # Fetch all conversations
     conversations = []
     for conv_id in request.conversation_ids:
         conv = conversations_db.get_conversation(uid, conv_id)
@@ -2375,16 +2383,33 @@ def merge_conversations(
             raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
         conversations.append(conv)
 
-    # Validate merge compatibility (returns warning for large gaps but doesn't reject)
     is_valid, error_message, warning_message = validate_merge_compatibility(conversations)
     if not is_valid:
         raise HTTPException(status_code=400, detail=error_message)
 
-    # Set all source conversations to 'merging' status so user knows they're being processed
-    for conv_id in request.conversation_ids:
-        lifecycle_service.begin_merge(uid, conv_id)
+    from config.refactor_modes import serving_for
 
-    # Start background merge task
+    if serving_for('LIFECYCLE_V2_MODE', uid):
+        job = lifecycle_service.merge_jobs.admit(uid, request.conversation_ids, request.reprocess)
+        if job is None:
+            raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
+        background_tasks.add_task(lifecycle_service.merge_jobs.run, job['job_id'], job['dispatch_generation'])
+        return MergeConversationsResponse(
+            status='merging',
+            message='Merge started',
+            warning=warning_message,
+            conversation_ids=request.conversation_ids,
+        )
+
+    # refactor: superseded by lifecycle.merge_jobs when LIFECYCLE_V2_MODE=serve
+    admitted = []
+    for conv_id in request.conversation_ids:
+        if not lifecycle_service.begin_merge(uid, conv_id):
+            for prior_id in admitted:
+                lifecycle_service.complete(uid, prior_id)
+            raise HTTPException(status_code=409, detail='Conversation changed during merge admission')
+        admitted.append(conv_id)
+
     background_tasks.add_task(
         perform_merge_async,
         uid=uid,

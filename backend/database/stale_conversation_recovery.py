@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from google.cloud import firestore
+from config.refactor_modes import serving_for, shadow_or_serve
+from utils.conversations.lifecycle_metrics import observe
 
 from database.account_deletion_marker import account_deletion_document, account_deletion_firestore_client
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
@@ -13,6 +15,7 @@ from database.firestore_index_registry import STALE_RECOVERY_PAGE_QUERY
 
 PAGE_SIZE = 10
 PAGE_BACKOFF = timedelta(minutes=1)
+HEAD_CLAIM_INTERVAL = 3
 
 
 def _claim_page_txn(transaction, state_ref, revision, next_cursor, now, *, deletion_ref):
@@ -44,7 +47,8 @@ def get_stale_recovery_page(
 ) -> list[dict[str, Any]]:
     """Claim at most ten rows, newest eligible first, resuming past prior attempts.
 
-    Read at most two pages (20 rows), cursor state and the deletion marker. A transaction CAS
+    Read at most three bounded pages in shadow (tail, wrap and head probe),
+    plus cursor state and the deletion marker. A transaction CAS
     advances the cursor *before* processing, so refusals, errors, cancellations,
     or a worker dying cannot pin the head. A short/empty tail wraps on the next
     claim. No snapshot lookup is needed for the cursor: deleted rows still make
@@ -87,9 +91,18 @@ def get_stale_recovery_page(
             page = list(query.stream())
     else:
         page = list(query.stream())
+    head_claim = bool(cursor) and (int(state.get('revision') or 0) + 1) % HEAD_CLAIM_INTERVAL == 0
+    if head_claim and shadow_or_serve('LIFECYCLE_V2_MODE'):
+        head = list(query.stream())
+        observe('recovery_head', [s.id for s in page] == [s.id for s in head])
+        if serving_for('LIFECYCLE_V2_MODE', uid):
+            page = head
     next_cursor = None
     if len(page) == PAGE_SIZE:
         next_cursor = {'finished_at': page[-1].to_dict()['finished_at'], 'id': page[-1].id}
+    if head_claim and serving_for('LIFECYCLE_V2_MODE', uid):
+        # A head probe must not reset the tail's progress through old refusals.
+        next_cursor = cursor
     claimed = firestore.transactional(_claim_page_txn)(
         client.transaction(),
         state_ref,

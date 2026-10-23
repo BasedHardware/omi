@@ -1203,8 +1203,11 @@ def _load_sync_router_for_fast_path():
     from pydantic import BaseModel
     from database.sync_jobs import SyncLedgerFenceMode
     from utils.stt import outcomes as actual_outcomes
+    from utils.stt import prerecorded_health as actual_prerecorded_health
     from utils.stt import speaker_match as actual_speaker_match
     from utils.stt import speaker_identity as actual_speaker_identity
+    from utils.stt import transcript_admission as actual_transcript_admission
+    from utils.stt import vendor_guard as actual_vendor_guard
     from utils import manual_speaker_assignments as actual_manual_assignments
     from utils.sync import lanes as actual_sync_lanes, rate_limit as actual_rl
     from utils import capture_evidence as actual_capture_evidence
@@ -1446,6 +1449,7 @@ def _load_sync_router_for_fast_path():
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
     saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
+    saved_modules['utils.stt.transcript_admission'] = sys.modules.get('utils.stt.transcript_admission')
     saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
     sys.modules['utils.observability'] = obs_pkg
     # Empty __path__ hides new observability modules. Derive the rest from disk
@@ -1463,6 +1467,13 @@ def _load_sync_router_for_fast_path():
     )
     sys.modules['utils.conversation_shape'] = shape_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
+    # Keep the empty-success guard's vendor-state reads real (stdlib+prometheus
+    # only): the guard resolves them lazily at call time, and a MagicMock
+    # parent for utils.stt is not a package.
+    saved_modules['utils.stt.prerecorded_health'] = sys.modules.get('utils.stt.prerecorded_health')
+    saved_modules['utils.stt.vendor_guard'] = sys.modules.get('utils.stt.vendor_guard')
+    sys.modules['utils.stt.prerecorded_health'] = actual_prerecorded_health
+    sys.modules['utils.stt.vendor_guard'] = actual_vendor_guard
     # Keep the decision policy real (pure, dependency-free): the sync pipeline now
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
     # decision whose fields blow up the %.3f log formatting even on an empty match set.
@@ -1470,6 +1481,7 @@ def _load_sync_router_for_fast_path():
     # Keep allocator + receipt policy real: assignment.py imports both at module
     # scope, and MagicMock parents for utils / utils.stt are not packages.
     sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+    sys.modules['utils.stt.transcript_admission'] = actual_transcript_admission
     sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
     # Keep the S1 evidence envelope builder real (pure, stdlib-only): the sync
     # pipeline imports unknown_envelope at module scope, and a MagicMock parent
