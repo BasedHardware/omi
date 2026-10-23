@@ -28,8 +28,32 @@ def _agent_config() -> Optional[Dict[str, Any]]:
         return None
 
 
-def _format_hour(hour: int) -> str:
-    """Convert 24-hour format to friendly 12-hour format."""
+def _coerce_hour(hour: Any) -> Optional[int]:
+    """Coerce an LLM-supplied hour into an int, or None when it is not numeric.
+
+    Tool-calling models frequently emit numbers as strings (``hour="22"``), and
+    some emit ``"10 PM"``-style text or ``None``. Returning ``None`` lets callers
+    respond with a validation message instead of raising ``TypeError``.
+    """
+    if hour is None or isinstance(hour, bool):
+        return None
+    try:
+        return int(hour)
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_hour(hour: Any) -> str:
+    """Convert 24-hour format to friendly 12-hour format.
+
+    Accepts ints or numeric strings and never raises: unparseable input degrades
+    to a plain label rather than crashing the agent pipeline.
+    """
+    hour_int = _coerce_hour(hour)
+    if hour_int is None:
+        return f"{hour}:00"
+    hour = hour_int
+
     if hour == 0:
         return "12:00 AM (midnight)"
     elif hour == 12:
@@ -42,8 +66,10 @@ def _format_hour(hour: int) -> str:
 
 @tool
 def manage_daily_summary_tool(
-    action: str,
-    hour: Optional[int] = None,
+    # Optional[...] rather than str/int: model tool-calling can emit None or a
+    # numeric string, and both are handled defensively below instead of raising.
+    action: Optional[str],
+    hour: Optional[Any] = None,
     config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
@@ -92,52 +118,79 @@ def manage_daily_summary_tool(
             uid = configurable.get('user_id')
         else:
             uid = None
+        # Defensive fallback: some call paths place user_id at the top level of the config.
+        if not uid:
+            uid = cfg.get('user_id')
     except (KeyError, TypeError):
         return "Error: Configuration not available"
 
     if not uid:
         return "Error: User ID not found"
 
+    if not isinstance(action, str):
+        return (
+            f"Unknown action: {action}. Use 'enable', 'disable', 'set_time', or 'get_settings'."
+        )
+
     action = action.lower().strip()
+    if not action:
+        return "Error: Please specify an action: 'enable', 'disable', 'set_time', or 'get_settings'."
 
-    if action == "enable":
-        notification_db.set_daily_summary_enabled(uid, True)
-        _hour = notification_db.get_daily_summary_hour_local(uid)
-        current_hour = 22 if _hour is None else _hour
-        hour_str = _format_hour(current_hour)
-        return f"Daily summary notifications enabled. You'll receive them at {hour_str}."
-
-    elif action == "disable":
-        notification_db.set_daily_summary_enabled(uid, False)
-        return "Daily summary notifications disabled."
-
-    elif action == "set_time":
-        if hour is None:
-            return "Error: Please specify the hour (0-23). Example: 22 for 10 PM, 9 for 9 AM."
-
-        if not (0 <= hour <= 23):
-            return f"Error: Hour must be between 0 and 23. You provided {hour}."
-
-        notification_db.set_daily_summary_hour_local(uid, hour)
-        hour_str = _format_hour(hour)
-
-        # Also enable if currently disabled
-        if not notification_db.get_daily_summary_enabled(uid):
+    try:
+        if action == "enable":
             notification_db.set_daily_summary_enabled(uid, True)
-            return f"Daily summary time changed to {hour_str} and notifications enabled."
+            _hour = notification_db.get_daily_summary_hour_local(uid)
+            current_hour = 22 if _hour is None else _hour
+            hour_str = _format_hour(current_hour)
+            return f"Daily summary notifications enabled. You'll receive them at {hour_str}."
 
-        return f"Daily summary time changed to {hour_str}."
+        elif action == "disable":
+            notification_db.set_daily_summary_enabled(uid, False)
+            return "Daily summary notifications disabled."
 
-    elif action == "get_settings":
-        enabled = notification_db.get_daily_summary_enabled(uid)
-        _hour = notification_db.get_daily_summary_hour_local(uid)
-        current_hour = 22 if _hour is None else _hour
-        hour_str = _format_hour(current_hour)
+        elif action == "set_time":
+            if hour is None:
+                return "Error: Please specify the hour (0-23). Example: 22 for 10 PM, 9 for 9 AM."
 
-        if enabled:
-            return f"Daily summary is enabled, scheduled for {hour_str} daily."
+            hour_int = _coerce_hour(hour)
+            if hour_int is None:
+                return (
+                    "Error: Hour must be a whole number between 0 and 23. "
+                    f"You provided {hour!r}."
+                )
+
+            if not (0 <= hour_int <= 23):
+                return f"Error: Hour must be between 0 and 23. You provided {hour_int}."
+
+            notification_db.set_daily_summary_hour_local(uid, hour_int)
+            hour_str = _format_hour(hour_int)
+
+            # Also enable if currently disabled
+            if not notification_db.get_daily_summary_enabled(uid):
+                notification_db.set_daily_summary_enabled(uid, True)
+                return f"Daily summary time changed to {hour_str} and notifications enabled."
+
+            return f"Daily summary time changed to {hour_str}."
+
+        elif action == "get_settings":
+            enabled = notification_db.get_daily_summary_enabled(uid)
+            _hour = notification_db.get_daily_summary_hour_local(uid)
+            current_hour = 22 if _hour is None else _hour
+            hour_str = _format_hour(current_hour)
+
+            if enabled:
+                return f"Daily summary is enabled, scheduled for {hour_str} daily."
+            else:
+                return f"Daily summary is currently disabled. Last set time was {hour_str}."
+
         else:
-            return f"Daily summary is currently disabled. Last set time was {hour_str}."
+            return f"Unknown action: {action}. Use 'enable', 'disable', 'set_time', or 'get_settings'."
 
-    else:
-        return f"Unknown action: {action}. Use 'enable', 'disable', 'set_time', or 'get_settings'."
+    except Exception as e:
+        logger.error(
+            "manage_daily_summary_tool failed for action '%s': %s",
+            action,
+            e,
+            exc_info=True,
+        )
+        return "Error: Unable to access daily summary settings right now. Please try again later."

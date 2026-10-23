@@ -18,9 +18,36 @@ from utils.mcp_server.handlers import other as mcp_people
 from utils.retrieval.turn_refs import resolve_edit_ref, tool_error
 
 
+def _configurable(config: Any) -> Dict[str, Any]:
+    """Return the runnable ``configurable`` mapping, tolerating ``None``.
+
+    LangChain hands tools a config whose ``configurable`` key is frequently
+    present but ``None`` (uninitialized), so ``config['configurable']`` cannot
+    be assumed to be a mapping.
+    """
+    if not isinstance(config, dict):
+        return {}
+    configurable = config.get('configurable')
+    return configurable if isinstance(configurable, dict) else {}
+
+
+def _text(value: Any) -> str:
+    """Coerce an LLM-supplied argument to ``str``, mapping ``None`` to ``''``.
+
+    Every optional argument may arrive as ``None`` even when annotated ``str``;
+    going through this helper keeps ``.strip()`` from raising ``AttributeError``.
+    """
+    if value is None:
+        return ''
+    if isinstance(value, str):
+        return value
+    return str(value)
+
+
 def owner(config):
-    config = config or {}
-    uid = config.get('configurable', {}).get('user_id')
+    config = config if isinstance(config, dict) else {}
+    configurable = _configurable(config)
+    uid = configurable.get('user_id') or config.get('user_id')
     if not uid:
         raise PermissionError('Authenticated owner required')
     return uid
@@ -43,8 +70,9 @@ def update_conversation(
     a transcript or delete a whole conversation. Returns a structured undo receipt.
     """
     uid = owner(config)
+    configurable = _configurable(config)
     conversation_id, error = resolve_edit_ref(
-        config.get('configurable', {}),
+        configurable,
         'conversations',
         conversation_id,
         parameter='conversation_id',
@@ -53,8 +81,11 @@ def update_conversation(
     if error:
         return error
     assert conversation_id is not None
+    correction = _text(correction)
     if not correction.strip() or len(correction) > 2000 or (title is None and overview is None):
         return tool_error('invalid_correction', 'Provide a confirmed correction and a title or overview.')
+    title = _text(title) if title is not None else None
+    overview = _text(overview) if overview is not None else None
     if title is not None and (not title.strip() or len(title) > 300):
         return tool_error('invalid_title', 'Title must contain 1 to 300 characters.')
     if overview is not None and (not overview.strip() or len(overview) > 20000):
@@ -94,7 +125,11 @@ def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
     retaining the previous name as an alias. Undo restores the prior name and aliases.
     """
     uid = owner(config)
-    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'people', person_id, parameter='person_id')
+    configurable = _configurable(config)
+    name = _text(name)
+    if not name.strip() or len(name) > 300:
+        return 'Error: name must contain 1 to 300 characters.'
+    resolved_id, error = resolve_edit_ref(configurable, 'people', person_id, parameter='person_id')
     if error:
         return error
     assert resolved_id is not None
@@ -103,7 +138,7 @@ def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
         return 'Error: person not found.'
     before = chat_edits.snapshot(uid, 'person', person_id)
     write_state = {'before': before}
-    result = mcp_people.rename_person(uid, {'person_id': person_id, 'name': name}, expected_chat_state=write_state)
+    result = mcp_people.rename_person(uid, {'person_id': person_id, 'name': name.strip()}, expected_chat_state=write_state)
     after = write_state['after']
     summary = 'Name → ' + result['person']['name']
     record_write(uid, 'person', person_id, envelope(before, 'Person'), envelope(after, summary))
@@ -118,11 +153,13 @@ def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
     preserving canonical correction history. Returns a structured undo receipt.
     """
     uid = owner(config)
-    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    configurable = _configurable(config)
+    resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error
     assert resolved_id is not None
     memory_id = resolved_id
+    content = _text(content)
     if not content.strip() or len(content) > 20000:
         return 'Error: memory content must contain 1 to 20000 characters.'
     db = get_data_plane_firestore_client()
@@ -150,7 +187,8 @@ def delete_memory(memory_id: str, *, config: RunnableConfig) -> str:
     controls for permanent erasure. Returns a structured undo receipt.
     """
     uid = owner(config)
-    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    configurable = _configurable(config)
+    resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error
     assert resolved_id is not None
