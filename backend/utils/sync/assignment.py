@@ -574,6 +574,7 @@ def assign_in_transaction(
                 receipt=result.get('manual_speaker_assignments') or {},
                 existing=existing,
                 enabled=batch_voice_links.linking_enabled(),
+                conversation_id=canonical,
             )
             result[batch_voice_links.FIELD] = batch_voice_links.encode_registry(registry, user_ref.id)
         for segment in survivors:

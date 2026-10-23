@@ -77,7 +77,10 @@ def _identity(value):
 def _manual_identities(speaker_id, receipt, segments):
     identities = set()
     speakers = receipt.get('speakers') or {}
-    identity = _identity(speakers.get(str(speaker_id)))
+    decision = speakers.get(str(speaker_id))
+    identity = _identity(decision)
+    if isinstance(decision, dict) and (decision.get('rejection') or {}).get('kind') == 'not_me':
+        identity = '!user'
     if identity:
         identities.add(identity)
     overrides = receipt.get('segments') or {}
@@ -89,7 +92,9 @@ def _manual_identities(speaker_id, receipt, segments):
     return identities
 
 
-def link_unit_voices(registry, evidence, segments, allocator, *, receipt=None, existing=(), enabled=True):
+def link_unit_voices(
+    registry, evidence, segments, allocator, *, receipt=None, existing=(), enabled=True, conversation_id=None
+):
     """Bind scoped labels before allocation, returning a new bounded registry.
 
     Existing bindings always win, including while disabled. New links require
@@ -103,9 +108,19 @@ def link_unit_voices(registry, evidence, segments, allocator, *, receipt=None, e
         return registry
     if type(generation) is not int or generation < 0:
         return registry
-    state = deepcopy(registry) if registry.get('privacy_generation') == generation else {}
+    state = (
+        deepcopy(registry)
+        if registry.get('privacy_generation') == generation and registry.get('conversation_id') == conversation_id
+        else {}
+    )
     if not state:
-        state = {'version': 1, 'privacy_generation': generation, 'voices': {}, 'bindings': {}}
+        state = {
+            'version': 1,
+            'privacy_generation': generation,
+            'conversation_id': conversation_id,
+            'voices': {},
+            'bindings': {},
+        }
     voices, bindings = state['voices'], state['bindings']
     allocator.hydrate_receipt({'speakers': {str(sid): {} for sid in bindings.values() if type(sid) is int}})
     labels = sorted(
@@ -202,15 +217,16 @@ def link_unit_voices(registry, evidence, segments, allocator, *, receipt=None, e
 
 def arbitrate_linked_owner_claims(segments, receipt):
     """Distinct automatic voices may not simultaneously claim the owner."""
-    manual = {
-        int(key)
-        for key, value in (receipt.get('speakers') or {}).items()
-        if str(key).isdigit() and _identity(value) == 'user'
-    }
+    from utils.manual_speaker_assignments import manual_assignment_decision
+
+    manual = set()
+    for segment in segments:
+        decision = manual_assignment_decision(segment, receipt)
+        if decision and decision.get('is_user') and not decision.get('segment_only'):
+            manual.add(segment.get('speaker_id'))
     owners = {s.get('speaker_id') for s in segments if s.get('is_user')}
     if len(owners) <= 1 and not (manual and owners - manual):
         return segments
-    from utils.manual_speaker_assignments import manual_assignment_decision
 
     result = []
     for segment in segments:

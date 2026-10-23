@@ -177,3 +177,39 @@ def test_allocator_never_overwrites_existing_scope_binding():
     allocator.bind('final:batch:a', 'SPEAKER_00', 3)
     allocator.bind('final:batch:a', 'SPEAKER_0', 5)
     assert allocator.lookup('final:batch:a', 'SPEAKER_0') == 3
+
+
+def test_segment_receipt_reserves_owner_before_manual_projection():
+    segments = [
+        {'id': 'manual', 'speaker_id': 1, 'is_user': False},
+        {'id': 'automatic', 'speaker_id': 2, 'is_user': True},
+    ]
+    receipt = {'segments': {'manual': {'is_user': True, 'speaker_id': 1}}}
+    result = arbitrate_linked_owner_claims(segments, receipt)
+    assert not result[1]['is_user']
+
+
+def test_manual_owner_rejection_vetoes_owner_named_link():
+    state, first = run({}, 'a', {'SPEAKER_00': [1.0, 0.0]})
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate(first)
+    second = [{'id': 'new', 'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:b', 'is_user': True}]
+    receipt = {'speakers': {'0': {'is_user': False, 'rejection': {'kind': 'not_me'}}}}
+    link_unit_voices(
+        state, evidence('b', {'SPEAKER_00': [1.0, 0.0]}), second, allocator, receipt=receipt, existing=first
+    )
+    allocator.assign(second[0])
+    assert second[0]['speaker_id'] != first[0]['speaker_id']
+
+
+def test_ciphertext_copied_to_another_conversation_cannot_import_voice_links():
+    state, first = run({}, 'a', {'SPEAKER_00': [1.0, 0.0]})
+    state['conversation_id'] = 'original'
+    allocator = ConversationSpeakerIdAllocator()
+    incoming = [{'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:b'}]
+    moved = link_unit_voices(
+        state, evidence('b', {'SPEAKER_00': [0.0, 1.0]}), incoming, allocator, conversation_id='different'
+    )
+    assert moved['conversation_id'] == 'different'
+    assert set(moved['bindings']) == {'final:batch:b/SPEAKER_0'}
+    assert moved['voices']['0']['embedding'] == [0.0, 1.0]
