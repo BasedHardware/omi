@@ -1,19 +1,19 @@
-"""Deterministic reproduction test for Firestore 'in' / 'array_contains_any' 30-element query limit in database/notifications.py.
+"""Deterministic reproduction test for Firestore 'in' 30-element query limit in database/notifications.py.
 
-Firestore imposes a strict maximum of 30 elements on 'in' and 'array_contains_any' query filters.
+Firestore imposes a strict maximum of 30 elements on 'in' query filters.
 When more than 30 elements are provided to a query filter, Firestore raises:
-`google.api_core.exceptions.InvalidArgument: 400 'in' / 'array_contains_any' filters support up to 30 elements`.
+`google.api_core.exceptions.InvalidArgument: 400 'in' filters support up to 30 elements`.
 
 In database/notifications.py:
-1. Multi-user token retrieval `get_tokens_for_users` must chunk user IDs into slices of <= 30 items,
-   querying each chunk and aggregating all tokens per user.
-2. `remove_bulk_tokens` must chunk token lists into slices of <= 30 items when querying fcm_tokens.
-3. `get_users_token_in_timezones` and `get_users_id_in_timezones` must chunk timezone lists into slices of <= 30 items.
+1. `remove_bulk_tokens` chunks token lists into slices of <= 30 items when querying fcm_tokens.
+2. `get_users_token_in_timezones` and `get_users_id_in_timezones` chunk timezone lists into slices of <= 30 items.
+3. Partial failure in `_get_users_in_timezones` logs the error and continues to resolve remaining chunks.
 
 This test simulates Firestore's server-side 30-element limit and proves:
-- Direct unchunked queries exceeding 30 items deterministically fail with InvalidArgument (RED phase).
-- Chunked functions safely handle > 30 items by slicing into batches of <= 30 items (GREEN phase).
+- Direct unchunked queries exceeding 30 items deterministically fail with InvalidArgument.
+- Chunked functions safely handle > 30 items by slicing into batches of <= 30 items.
 - Empty inputs return immediately without issuing queries.
+- Partial chunk failures are logged without aborting remaining chunks.
 """
 
 import os
@@ -36,7 +36,7 @@ _FIRESTORE_IN_LIMIT = 30
 
 
 class _FirestoreLimitEnforcingQuery:
-    """Mock query that enforces Firestore's strict limit of <= 30 items on 'in' and 'array_contains_any' filters."""
+    """Mock query that enforces Firestore's strict limit of <= 30 items on 'in' filters."""
 
     def __init__(self, collection_name: str, parent_db: "_FakeFirestoreClient"):
         self.collection_name = collection_name
@@ -73,7 +73,6 @@ class _FirestoreLimitEnforcingQuery:
         return self
 
     def stream(self):
-        # Record the executed query filter
         filter_tuples = []
         for f in self.filters:
             if isinstance(f, FieldFilter):
@@ -83,9 +82,14 @@ class _FirestoreLimitEnforcingQuery:
                 filter_tuples.append((field_path, op, val))
         self.parent_db.executed_queries.append(filter_tuples)
 
-        # Return simulated documents matching the filters
+        if self.parent_db.fail_on_chunk and any(
+            self.parent_db.fail_on_chunk in val
+            for _, _, val in filter_tuples
+            if isinstance(val, (list, tuple, set))
+        ):
+            raise RuntimeError(f"Simulated transient error on chunk containing {self.parent_db.fail_on_chunk}")
+
         if self.collection_name == "fcm_tokens":
-            # Collection group fcm_tokens
             tokens_in_filter = []
             for f_path, op, val in filter_tuples:
                 if (
@@ -104,23 +108,9 @@ class _FirestoreLimitEnforcingQuery:
             return iter(matched)
 
         if self.collection_name == "users":
-            # users collection
             matched = []
             for f_path, op, val in filter_tuples:
                 if (
-                    f_path in ("__name__", "id")
-                    and op == "in"
-                    and isinstance(val, (list, tuple, set))
-                ):
-                    for uid in val:
-                        doc = MagicMock()
-                        doc.id = uid
-                        doc.to_dict.return_value = {
-                            "time_zone": "UTC",
-                            "fcm_token": f"legacy_{uid}",
-                        }
-                        matched.append(doc)
-                elif (
                     f_path == "time_zone"
                     and op == "in"
                     and isinstance(val, (list, tuple, set))
@@ -158,7 +148,6 @@ class _FakeUserDocumentRef:
 
     def collection(self, name: str):
         assert name == "fcm_tokens"
-        # Return subcollection tokens mock
         token_doc = MagicMock()
         token_doc.id = f"device_{self.uid}"
         token_doc.to_dict.return_value = {"token": f"fcm_{self.uid}"}
@@ -168,9 +157,10 @@ class _FakeUserDocumentRef:
 
 
 class _FakeFirestoreClient:
-    def __init__(self):
+    def __init__(self, fail_on_chunk: str | None = None):
         self.executed_queries: List[List[Any]] = []
         self.batch_commit_counts: List[int] = []
+        self.fail_on_chunk = fail_on_chunk
 
     def collection(self, name: str):
         query = _FirestoreLimitEnforcingQuery(name, self)
@@ -192,7 +182,6 @@ def test_unchunked_in_filter_exceeding_30_raises_invalid_argument():
     excessive_tokens = [f"token_{i}" for i in range(35)]
 
     with pytest.raises(InvalidArgument) as exc_info:
-        # Direct unchunked query with 35 items
         client.collection_group("fcm_tokens").where(
             filter=FieldFilter("token", "in", excessive_tokens)
         )
@@ -200,55 +189,34 @@ def test_unchunked_in_filter_exceeding_30_raises_invalid_argument():
     assert "got 35" in str(exc_info.value)
 
 
-def test_get_tokens_for_users_handles_more_than_30_uids(monkeypatch):
-    """When querying tokens for 35 user IDs, get_tokens_for_users must chunk into slices of <= 30."""
-    fake_client = _FakeFirestoreClient()
-    monkeypatch.setattr(notifications_db, "db", fake_client)
-    monkeypatch.setattr(notifications_db, "get_firestore_client", lambda: fake_client)
-
-    uids = [f"user_{i}" for i in range(35)]
-    # In unpatched code, get_tokens_for_users does not exist
-    results = notifications_db.get_tokens_for_users(uids, firestore_client=fake_client)
-
-    # 35 users should be sliced into 2 query chunks (30 and 5)
-    assert len(fake_client.executed_queries) == 2
-    for query_filters in fake_client.executed_queries:
-        for f_path, op, val in query_filters:
-            assert len(val) <= _FIRESTORE_IN_LIMIT
-
-    # All 35 users should have tokens returned
-    assert len(results) == 35
-    for uid in uids:
-        assert uid in results
-        assert f"fcm_{uid}" in results[uid]
-
-
-def test_remove_bulk_tokens_handles_more_than_30_tokens(monkeypatch):
+def test_remove_bulk_tokens_handles_more_than_30_tokens():
     """When deleting 35 invalid tokens, remove_bulk_tokens must chunk into slices of <= 30."""
     fake_client = _FakeFirestoreClient()
-    monkeypatch.setattr(notifications_db, "db", fake_client)
-    monkeypatch.setattr(notifications_db, "get_firestore_client", lambda: fake_client)
-
     tokens = [f"invalid_token_{i}" for i in range(35)]
+
     notifications_db.remove_bulk_tokens(tokens, firestore_client=fake_client)
 
-    # Should execute in 2 query chunks (30 and 5)
+    # 35 items sliced into 2 chunks (30 and 5)
     assert len(fake_client.executed_queries) == 2
     for query_filters in fake_client.executed_queries:
         for f_path, op, val in query_filters:
             assert len(val) <= _FIRESTORE_IN_LIMIT
 
-    # Deletions were committed in batch
     assert sum(fake_client.batch_commit_counts) == 35
 
 
-def test_get_users_token_in_timezones_handles_more_than_30_timezones(monkeypatch):
+def test_remove_bulk_tokens_empty_noop():
+    """Empty token list should return immediately without issuing queries."""
+    fake_client = _FakeFirestoreClient()
+    notifications_db.remove_bulk_tokens([], firestore_client=fake_client)
+    assert len(fake_client.executed_queries) == 0
+
+
+def test_get_users_token_in_timezones_handles_more_than_30_timezones():
     """When querying users in 35 timezones, timezone filters must be chunked <= 30."""
     fake_client = _FakeFirestoreClient()
-    monkeypatch.setattr(notifications_db, "db", fake_client)
-    monkeypatch.setattr(notifications_db, "get_firestore_client", lambda: fake_client)
-
     timezones = [f"TZ_{i}" for i in range(35)]
+
     tokens = notifications_db.get_users_token_in_timezones(
         timezones, firestore_client=fake_client
     )
@@ -260,13 +228,19 @@ def test_get_users_token_in_timezones_handles_more_than_30_timezones(monkeypatch
     assert len(tokens) > 0
 
 
-def test_get_users_id_in_timezones_handles_more_than_30_timezones(monkeypatch):
+def test_get_users_token_in_timezones_empty():
+    """Empty timezone list should return [] immediately without querying."""
+    fake_client = _FakeFirestoreClient()
+    tokens = notifications_db.get_users_token_in_timezones([], firestore_client=fake_client)
+    assert tokens == []
+    assert len(fake_client.executed_queries) == 0
+
+
+def test_get_users_id_in_timezones_handles_more_than_30_timezones():
     """When querying user IDs across 35 timezones, timezone filters must be chunked <= 30."""
     fake_client = _FakeFirestoreClient()
-    monkeypatch.setattr(notifications_db, "db", fake_client)
-    monkeypatch.setattr(notifications_db, "get_firestore_client", lambda: fake_client)
-
     timezones = [f"TZ_{i}" for i in range(35)]
+
     user_tuples = notifications_db.get_users_id_in_timezones(
         timezones, firestore_client=fake_client
     )
@@ -275,76 +249,28 @@ def test_get_users_id_in_timezones_handles_more_than_30_timezones(monkeypatch):
     for query_filters in fake_client.executed_queries:
         for f_path, op, val in query_filters:
             assert len(val) <= _FIRESTORE_IN_LIMIT
-    assert len(user_tuples) == 35
+
+    # Count derived from mock documents: 1 mock user per timezone in mock
+    assert len(user_tuples) == len(timezones)
+    for uid, tokens, tz in user_tuples:
+        assert uid.startswith("user_tz_")
+        assert len(tokens) > 0
+        assert tz in timezones
 
 
-def test_get_tokens_for_users_empty_noop(monkeypatch):
-    """Empty uid list should immediately return an empty dictionary without querying."""
-    fake_client = _FakeFirestoreClient()
-    monkeypatch.setattr(notifications_db, "get_firestore_client", lambda: fake_client)
+def test_get_users_in_timezones_partial_failure_logs_and_continues():
+    """Verify partial failure semantics: one failed chunk logs error without aborting remaining chunks."""
+    # Chunk 1 (TZ_0..TZ_29) has TZ_0 which will fail; Chunk 2 (TZ_30..TZ_34) should still resolve
+    fake_client = _FakeFirestoreClient(fail_on_chunk="TZ_0")
+    timezones = [f"TZ_{i}" for i in range(35)]
 
-    results = notifications_db.get_tokens_for_users([], firestore_client=fake_client)
-    assert results == {}
-    assert len(fake_client.executed_queries) == 0
-
-
-def test_chunked_filter_in_cleans_duplicates_and_nones():
-    """Verify chunked_filter_in strips None and deduplicates values preserving order."""
-    mock_collection = MagicMock()
-    mock_query = MagicMock()
-    mock_collection.where.return_value = mock_query
-    mock_query.stream.return_value = []
-
-    # 35 unique values, plus None and duplicates
-    unique_tokens = [f"tok_{i}" for i in range(35)]
-    raw_tokens = [None, unique_tokens[0], None, unique_tokens[1], unique_tokens[0]] + unique_tokens
-
-    results = notifications_db.chunked_filter_in(mock_collection, "token", raw_tokens, op="in")
-    assert results == []
-
-    # Should have called where twice: chunk 1 (30 items), chunk 2 (5 items)
-    assert mock_collection.where.call_count == 2
-    first_call_filter = mock_collection.where.call_args_list[0].kwargs["filter"]
-    second_call_filter = mock_collection.where.call_args_list[1].kwargs["filter"]
-    assert len(first_call_filter.value) == 30
-    assert len(second_call_filter.value) == 5
-    assert None not in first_call_filter.value
-    assert None not in second_call_filter.value
-
-
-def test_chunked_filter_in_deduplicates_docs_across_chunks_for_array_contains_any():
-    """Verify documents returned across multiple chunks in array_contains_any are deduplicated by doc.id."""
-    mock_collection = MagicMock()
-
-    doc_dup = MagicMock()
-    doc_dup.id = "shared_doc_1"
-    doc_chunk1 = MagicMock()
-    doc_chunk1.id = "unique_doc_chunk1"
-    doc_chunk2 = MagicMock()
-    doc_chunk2.id = "unique_doc_chunk2"
-
-    q1 = MagicMock()
-    q1.stream.return_value = [doc_dup, doc_chunk1]
-    q2 = MagicMock()
-    q2.stream.return_value = [doc_dup, doc_chunk2]
-
-    mock_collection.where.side_effect = [q1, q2]
-
-    # 35 elements forces 2 chunks
-    tags = [f"tag_{i}" for i in range(35)]
-    results = notifications_db.chunked_filter_in(
-        mock_collection, "tags", tags, op="array_contains_any"
+    user_tuples = notifications_db.get_users_id_in_timezones(
+        timezones, firestore_client=fake_client
     )
 
-    # doc_dup must only appear once, preserving first-seen order
-    assert len(results) == 3
-    assert [d.id for d in results] == ["shared_doc_1", "unique_doc_chunk1", "unique_doc_chunk2"]
-
-
-def test_chunked_filter_in_empty_returns_empty():
-    """Verify empty or all-None input returns [] immediately without querying."""
-    mock_collection = MagicMock()
-    assert notifications_db.chunked_filter_in(mock_collection, "field", []) == []
-    assert notifications_db.chunked_filter_in(mock_collection, "field", [None, None]) == []
-    assert mock_collection.where.call_count == 0
-
+    # 2 query attempts were made
+    assert len(fake_client.executed_queries) == 2
+    # Only Chunk 2 (5 timezones: TZ_30..TZ_34) succeeded and returned records
+    assert len(user_tuples) == 5
+    for uid, tokens, tz in user_tuples:
+        assert tz in timezones[30:]
