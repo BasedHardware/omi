@@ -236,7 +236,7 @@ def _close_stale_current(uid: str, episode: Optional[Mapping[str, Any]], c: Coll
 
 
 def _close_pending_wrap_up(uid: str, episode: Optional[Mapping[str, Any]], c: Collaborators, now: datetime) -> bool:
-    if not policy.is_live(episode) or not episode.get('wrap_up_requested_at'):
+    if episode is None or not policy.is_live(episode) or not episode.get('wrap_up_requested_at'):
         return False
     _close(uid, episode, 'user', c, now=now, closing=episode.get('closing_conversation_id') or None)
     return True
@@ -381,7 +381,7 @@ def record_moment(uid: str, moment: MomentInput, collaborators: Optional[Collabo
 
 def _settle_boundary(
     uid: str,
-    episode: Optional[dict[str, Any]],
+    episode: Optional[Mapping[str, Any]],
     moment: MomentInput,
     facts: policy.MomentFacts,
     text: str,
@@ -690,8 +690,10 @@ def _close_for_finalize(
     c: Collaborators,
     now: datetime,
 ) -> str:
-    ids = list((episode or {}).get('conversation_ids') or [])
-    if not policy.is_live(episode) or conversation_id not in ids:
+    if episode is None or not policy.is_live(episode):
+        return 'not_live'
+    ids = list(episode.get('conversation_ids') or [])
+    if conversation_id not in ids:
         return 'not_live'
     if trigger != CLIENT_FINALIZE and ids[-1] != conversation_id:
         # A conversation joined after this one (a rollover, a second device): the occasion goes on.
