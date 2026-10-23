@@ -14,9 +14,9 @@ import sys
 import threading
 import time
 from collections import OrderedDict
-from typing import Any
+from typing import Any, cast
 
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 
 from database.firestore_read_origin import current_read_origin, read_origin
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD as HEAD_DOCUMENT
@@ -28,11 +28,23 @@ from utils.other.list_budget import (
     budgeted_stream_list,
 )
 
-EVENTS = Counter(
-    'omi_memory_released_projection_total',
-    'Versioned released memory raw-query projection outcomes.',
-    ['surface', 'outcome', 'origin'],
-)
+
+def _projection_events_counter() -> Counter:
+    # Reuse the collector and its counts after import-isolated module eviction.
+    try:
+        return Counter(
+            'omi_memory_released_projection_total',
+            'Versioned released memory raw-query projection outcomes.',
+            ['surface', 'outcome', 'origin'],
+        )
+    except ValueError:
+        return cast(
+            Counter,
+            REGISTRY._names_to_collectors['omi_memory_released_projection_total'],  # type: ignore[attr-defined]
+        )
+
+
+EVENTS = _projection_events_counter()
 SURFACES = frozenset({'canonical_scan', 'historical_scan', 'list_window', 'status_pairs', 'mcp_cards'})
 MAX_ENTRIES = 128
 MAX_BYTES = 16 * 1024 * 1024

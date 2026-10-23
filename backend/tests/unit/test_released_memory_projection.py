@@ -311,3 +311,32 @@ def test_sync_scrape_keeps_projection_and_existing_billing_authority_counters():
         'omi_fsr_leader_lease_total',
     ):
         assert any(rule['action'] == 'keep' and re.fullmatch(rule['regex'], name) for rule in filters)
+
+
+def test_reimport_preserves_projection_and_origin_observations():
+    from database import firestore_read_origin as origin
+    from testing.import_isolation import load_module_fresh, stub_modules
+
+    backend = Path(__file__).resolve().parents[2]
+    overflow = origin.FIRESTORE_ORIGIN_LABEL_OVERFLOW
+    events = projection.EVENTS.labels(surface='canonical_scan', outcome='miss', origin='unset')
+    before_overflow = overflow._value.get()
+    before_events = events._value.get()
+    # Repeat the archive fixture lifecycle: Python modules are evicted/restored,
+    # while the real process-wide Prometheus registry retains its collectors.
+    for _ in range(2):
+        with stub_modules({}):
+            fresh_origin = load_module_fresh(
+                'database.firestore_read_origin', str(backend / 'database/firestore_read_origin.py')
+            )
+            fresh_projection = load_module_fresh(
+                'database.released_memory_projection', str(backend / 'database/released_memory_projection.py')
+            )
+            assert fresh_origin.FIRESTORE_ORIGIN_LABEL_OVERFLOW is overflow
+            assert fresh_projection.EVENTS is projection.EVENTS
+            fresh_origin.MAX_ORIGINS = 0
+            with fresh_origin.read_origin('job:reimport_test'):
+                assert fresh_origin.current_read_origin() == 'overflow'
+            fresh_projection.EVENTS.labels(surface='canonical_scan', outcome='miss', origin='unset').inc()
+    assert overflow._value.get() == before_overflow + 2
+    assert events._value.get() == before_events + 2
