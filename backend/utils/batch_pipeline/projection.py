@@ -339,8 +339,11 @@ class Projector:
         playback: Callable | None = None,
         fetch_audio: Callable[[WorkItem], bytes] | None = None,
         clock: Callable[[], float] = time.time,
+        projection_store=None,
+        assign_conversation: Callable | None = None,
     ):
-        self.store = ProjectionStore(store)
+        self.store = projection_store if projection_store is not None else ProjectionStore(store)
+        self.assign_conversation = assign_conversation
         self.load_result, self.publish, self.playback, self.clock = load_result, publish, playback, clock
         self.fetch_audio = fetch_audio
         self.followups = None
@@ -777,7 +780,7 @@ class Projector:
                         receipt = session.persist_empty()
                     else:
                         try:
-                            assigned = conversations_db.assign_sync_conversation(
+                            assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
                                 binding.owner_id,
                                 incoming,
                                 target_id=context.target_id,
