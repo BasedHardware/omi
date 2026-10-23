@@ -130,10 +130,22 @@ class ProjectionSession:
         # privacy guard. No enrollment/profile fetch or new read is introduced.
         from utils.manual_speaker_assignments import manual_owner_reserved
 
-        reserved = any(
-            manual_owner_reserved(row.get('manual_speaker_assignments') or {})
-            for row in snapshots.get('conversations', {}).values()
-        )
+        from database.conversations import decode_manual_speaker_assignments
+
+        try:
+            receipts = [
+                decode_manual_speaker_assignments(
+                    self.binding.owner_id,
+                    row.get('manual_speaker_assignments'),
+                    bool(row.get('manual_speaker_assignments_compressed')),
+                )
+                for row in snapshots.get('conversations', {}).values()
+            ]
+        except Exception:
+            # A corrupted/protected receipt is not evidence that no manual
+            # owner exists. Never publish over an unreadable authority.
+            raise ProjectionBlocked('batch manual receipt unavailable') from None
+        reserved = any(manual_owner_reserved(receipt) for receipt in receipts)
         receipt = {'speakers': {'reserved': {'is_user': True}}} if reserved else {}
         return NamingSnapshot(
             owner_id=self.binding.owner_id,

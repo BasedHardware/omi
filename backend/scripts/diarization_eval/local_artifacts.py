@@ -5,7 +5,7 @@ adapter persists projected segments; it does not claim Firestore qualification.
 """
 
 import argparse
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from functools import partial
 import hashlib
 import importlib
@@ -139,6 +139,8 @@ def frozen_naming_snapshot(gallery, *, owner_id='local-evaluation', privacy_gene
 def project(artifacts, item, binding, uri, *, policy=None, naming_snapshot=None):
     from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
+    # Filesystem evaluation has no canonical cloud conversation lookup.
+    binding = replace(binding, target_conversation_id=binding.target_conversation_id or 'local-conversation')
     root = artifacts.root / 'projection' / item.segment_id
     store = LocalProjectionStore(root)
     projector_type = importlib.import_module('utils.batch_pipeline.projection').Projector

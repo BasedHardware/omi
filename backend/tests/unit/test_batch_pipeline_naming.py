@@ -436,3 +436,22 @@ def test_hosted_embedding_encodes_bounded_pcm_for_existing_v2_endpoint(monkeypat
     assert calls == [30.0]
     with pytest.raises(ValueError, match='bounded evidence'):
         HostedCentroidEmbedding()(np.zeros(11 * RATE))
+
+
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_loaded_manual_owner_receipt_decodes_actual_storage_encoding(monkeypatch, level):
+    from database.conversations import encode_conversation_for_write
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from utils.manual_speaker_assignments import manual_owner_reserved
+
+    monkeypatch.setenv('ENCRYPTION_SECRET', '01' * 32)
+    encoded = encode_conversation_for_write(
+        'owner', {'manual_speaker_assignments': {'speakers': {'7': {'generation': 1, 'is_user': True}}}}, level
+    )
+    assert not isinstance(encoded['manual_speaker_assignments'], dict)
+    session = object.__new__(ProjectionSession)
+    session.binding = ProjectionBinding('owner', 'job', 'content', ('unit',))
+    session._naming_guard_snapshots = {'user': {'speaker_embedding': [1, 0]}, 'conversations': {'canonical': encoded}}
+    assert manual_owner_reserved(session.loaded_naming_snapshot().manual_receipt)
+    decisions = naming_decisions(evidence(), session.loaded_naming_snapshot(), owner_id='owner', privacy_generation=0)
+    assert decisions['a'].person_id is None
