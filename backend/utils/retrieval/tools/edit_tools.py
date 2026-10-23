@@ -18,6 +18,11 @@ from utils.mcp_server.handlers import other as mcp_people
 from utils.retrieval.turn_refs import resolve_edit_ref, tool_error
 
 
+def _configurable(config: Any) -> Dict[str, Any]:
+    # Runtime callers may pass a non-dict despite the RunnableConfig annotation (#23408).
+    return (config.get('configurable') if isinstance(config, dict) else None) or {}
+
+
 def owner(config):
     config = config or {}
     configurable = config.get('configurable') if isinstance(config, dict) else None
@@ -44,7 +49,7 @@ def update_conversation(
     a transcript or delete a whole conversation. Returns a structured undo receipt.
     """
     uid = owner(config)
-    configurable = config.get('configurable') or {}
+    configurable = _configurable(config)
     conversation_id, error = resolve_edit_ref(
         configurable,
         'conversations',
@@ -96,7 +101,7 @@ def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
     retaining the previous name as an alias. Undo restores the prior name and aliases.
     """
     uid = owner(config)
-    configurable = config.get('configurable') or {}
+    configurable = _configurable(config)
     resolved_id, error = resolve_edit_ref(configurable, 'people', person_id, parameter='person_id')
     if error:
         return error
@@ -126,7 +131,7 @@ def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
     preserving canonical correction history. Returns a structured undo receipt.
     """
     uid = owner(config)
-    configurable = config.get('configurable') or {}
+    configurable = _configurable(config)
     resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error
@@ -159,7 +164,7 @@ def delete_memory(memory_id: str, *, config: RunnableConfig) -> str:
     controls for permanent erasure. Returns a structured undo receipt.
     """
     uid = owner(config)
-    configurable = config.get('configurable') or {}
+    configurable = _configurable(config)
     resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error

@@ -15,7 +15,7 @@ class TurnRefs:
     seen: set[tuple[str, str]] = field(default_factory=set)
 
 
-def initialize_turn_refs(configurable: Optional[dict[str, Any]]) -> TurnRefs:
+def initialize_turn_refs(configurable: Any) -> TurnRefs:
     refs = TurnRefs()
     if not isinstance(configurable, dict):
         return refs
@@ -27,7 +27,7 @@ def initialize_turn_refs(configurable: Optional[dict[str, Any]]) -> TurnRefs:
     return refs
 
 
-def register_record_ref(configurable: Optional[dict[str, Any]], collection: str, record_id: Any) -> None:
+def register_record_ref(configurable: Any, collection: str, record_id: Any) -> None:
     """Read producers call this only for owned records admitted to model output."""
     if not isinstance(configurable, dict):
         return
@@ -41,7 +41,7 @@ def tool_error(code: str, message: str, **details: Any) -> str:
 
 
 def resolve_edit_ref(
-    configurable: Optional[dict[str, Any]],
+    configurable: Any,
     collection: str,
     record_id: Optional[str],
     *,
