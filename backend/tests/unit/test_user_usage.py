@@ -237,7 +237,11 @@ def test_hourly_transcription_writer_keeps_plan_and_missing_cost_explicit(mock_d
         {'transcription_seconds': 12},
     )
 
-    update = hourly_ref.set.call_args.args[0]
+    source, total = mock_db.batch.return_value.set.call_args_list
+    assert source.args[0] is hourly_ref
+    update = source.args[1]
+    assert total.kwargs['merge'] is True
+    mock_db.batch.return_value.commit.assert_called_once()
     assert getattr(update['plan_usage']['plus']['transcription_seconds'], '_value', None) == 12
     assert getattr(update['plan_usage']['plus']['_metadata']['cost_status_counts']['missing'], '_value', None) == 1
     assert all('cost_usd' not in key for key in update)

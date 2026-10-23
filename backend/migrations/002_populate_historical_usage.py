@@ -20,6 +20,8 @@ from models.conversation import Conversation
 from models.memories import MemoryDB
 from utils import encryption
 from database.fsr_read_cache import cache_writer
+from database.monthly_usage_totals import queue_invalidation
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -142,6 +144,15 @@ def delete_hourly_usage_for_user(uid: str):
         batch = db.batch()
         for doc in docs:
             batch.delete(doc.reference)
+        months = set()
+        for doc in docs:
+            try:
+                stamp = datetime.strptime(doc.id, '%Y-%m-%d-%H')
+            except ValueError:
+                continue  # Noncanonical sources never have a ready projection.
+            months.add(stamp.replace(day=1, hour=0))
+        for stamp in months:
+            queue_invalidation(batch, db.collection('users').document(uid), stamp)
         batch.commit()
         if len(docs) < batch_size:
             break

@@ -40,6 +40,10 @@ class Doc:
     def collection(self, name):
         return Collection(self.store, self.path + '/' + name)
 
+    @property
+    def parent(self):
+        return Collection(self.store, self.path.rsplit('/', 1)[0])
+
     def get(self, field_paths=None, transaction=None):
         self.store.reads += 1
         data = self.store.docs.get(self.path)
@@ -74,6 +78,10 @@ class Collection:
 
     def document(self, id):
         return Doc(self.store, self.path + '/' + id)
+
+    @property
+    def parent(self):
+        return Doc(self.store, self.path.rsplit('/', 1)[0])
 
     def where(self, filter):
         return Collection(self.store, self.path, (*self.filters, filter), self.fields, self.cap)
@@ -122,3 +130,22 @@ class Store:
 
     def transaction(self):
         return object()
+
+    def batch(self):
+        return Batch()
+
+
+class Batch:
+    """Serialize all writes before applying; transaction races use the emulator."""
+
+    def __init__(self):
+        self.pending = []
+
+    def set(self, ref, data, merge=False):
+        # Validate each payload with the SDK before staging any mutation.
+        _helpers.pbs_for_set_with_merge('projects/test/databases/(default)/documents/' + ref.path, data, merge=merge)
+        self.pending.append((ref, data, merge))
+
+    def commit(self):
+        for ref, data, merge in self.pending:
+            ref.set(data, merge=merge)

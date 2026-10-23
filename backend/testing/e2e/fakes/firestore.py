@@ -312,6 +312,7 @@ def clear_user_data(uid: str):
         "chat_sessions",
         "folders",
         "hourly_usage",
+        "monthly_usage_totals",
         # Universal memory authority. The E2E store is session-scoped, so
         # omitting these collections leaks apply state and canonical rows from
         # an earlier test into later legacy-compatibility scenarios.

@@ -647,10 +647,26 @@ def apply_reset(client: Any, uid: str, plan: ResetPlan) -> None:
 
     with writing('usage_month_cache', uid):
         hourly = client.collection("users").document(uid).collection("hourly_usage")
-        for chunk_start in range(0, len(plan.doc_ids), _BATCH_LIMIT):
+        # A reset also invalidates each affected monthly projection atomically.
+        # Half the write limit leaves room even for one distinct month per doc.
+        chunk_size = _BATCH_LIMIT // 2
+        for chunk_start in range(0, len(plan.doc_ids), chunk_size):
             batch = client.batch()
-            for doc_id in plan.doc_ids[chunk_start : chunk_start + _BATCH_LIMIT]:
+            months = set()
+            for doc_id in plan.doc_ids[chunk_start : chunk_start + chunk_size]:
                 batch.set(hourly.document(doc_id), {"transcription_seconds": 0}, merge=True)
+                try:
+                    stamp = datetime.strptime(doc_id, '%Y-%m-%d-%H')
+                except ValueError:
+                    # Noncanonical rows cannot have a ready monthly projection.
+                    continue
+                months.add(stamp.strftime('%Y-%m'))
+            for month in months:
+                batch.set(
+                    client.collection('users').document(uid).collection('monthly_usage_totals').document(month),
+                    {'ready': False},
+                    merge=True,
+                )
             batch.commit()
 
 

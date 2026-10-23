@@ -48,6 +48,20 @@ class Store:
     def transaction(self):
         return None
 
+    def batch(self):
+        class Batch:
+            def __init__(self):
+                self.pending = []
+
+            def set(self, ref, data, merge=False):
+                self.pending.append((ref, data, merge))
+
+            def commit(self):
+                for ref, data, merge in self.pending:
+                    ref.set(data, merge=merge)
+
+        return Batch()
+
 
 class Ref:
     def __init__(self, store, path, filters=(), count=None):

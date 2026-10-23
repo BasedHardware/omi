@@ -139,7 +139,7 @@ def test_hourly_write_keeps_root_meter_and_finops_counters_and_recovers_dotted_h
         firestore_client=store,
         usage_metadata={'provider': 'parakeet', 'funding': 'omi', 'source': 'test'},
     )
-    assert store.writes == 1
+    assert store.writes == 2  # hourly source + atomic monthly total
     data = store.docs[path]
     assert data['transcription_seconds'] == 82
     assert data['plan_usage.plus.transcription_seconds'] == 70
@@ -269,7 +269,7 @@ def test_v1_and_v2_usage_projections_keep_separate_card_identity(units, monkeypa
     assert 'usage_units_v1' not in attempt
 
 
-def test_sync_marker_and_nested_usage_remain_in_existing_two_write_transaction(units, monkeypatch):
+def test_sync_marker_and_nested_usage_share_transaction_with_monthly_total(units, monkeypatch):
     from database import user_usage
 
     monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *a, **k: 'plus')
@@ -289,9 +289,9 @@ def test_sync_marker_and_nested_usage_remain_in_existing_two_write_transaction(u
         'usage_metadata': {'provider': 'parakeet', 'funding': 'omi', 'source': 'sync_v2'},
     }
     assert user_usage.update_hourly_usage_once('u', date, {'transcription_seconds': 60}, 'capture', **kwargs)
-    assert store.writes == 2
+    assert store.writes == 3
     assert not user_usage.update_hourly_usage_once('u', date, {'transcription_seconds': 60}, 'capture', **kwargs)
-    assert store.writes == 2
+    assert store.writes == 3
     assert store.docs['users/u/hourly_usage/2026-10-01-08']['plan_usage']['plus']['transcription_seconds'] == 60
 
 
@@ -335,7 +335,7 @@ def test_missing_history_and_shadow_price_failure_do_not_hide_gaps_or_break_lega
         firestore_client=store,
         usage_metadata={'funding': 'omi', 'provider': 'parakeet', 'source': 'test'},
     )
-    assert store.writes == 1
+    assert store.writes == 2
     data = store.docs['users/u/hourly_usage/2026-10-01-00']
     assert data['transcription_seconds'] == 5
     assert data['shadow_v1']['features']['transcription']['funding']['omi']['status_counts'] == {'missing': 1}
@@ -456,7 +456,7 @@ def test_invalid_accepted_speech_never_suppresses_legacy_hourly_write(units, mon
             'accepted_speech_seconds': accepted,
         },
     )
-    assert store.writes == 1
+    assert store.writes == 2
     data = store.docs['users/u/hourly_usage/2026-10-01-00']
     assert data['transcription_seconds'] == 5
     leaf = data['shadow_v1']['features']['transcription']['funding']['omi']
