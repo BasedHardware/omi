@@ -15,11 +15,7 @@ from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database import conversation_finalization_jobs as jobs_db
-from database.conversation_terminal_title import (
-    FIRESTORE_MAX_DOCUMENT_BYTES,
-    TERMINAL_SIZE_HEADROOM_BYTES,
-    estimate_firestore_document_bytes,
-)
+from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from models.conversation_continuity import continuation_timeout
 from config.refactor_modes import serving_for
 from utils.conversations.lifecycle_clocks import speech_clock
@@ -27,6 +23,7 @@ from utils.conversations.lifecycle_clocks import speech_clock
 QUIET_CHECK_KIND = 'listen_quiet_check'
 QUIET_CHECK_STATUS = 'waiting_quiet'
 QUIET_SOURCES = frozenset({'omi', 'phone'})
+_QUIET_CHECK_SIZE_HEADROOM_BYTES = 65_536
 
 
 def _now() -> datetime:
@@ -60,7 +57,7 @@ def _update_row_if_fits(transaction: Any, row_ref: Any, row: dict[str, Any], upd
     path = getattr(row_ref, 'path', None)
     doc_path = path if isinstance(path, str) else None
     if (
-        estimate_firestore_document_bytes({**row, **updates}, doc_path) + TERMINAL_SIZE_HEADROOM_BYTES
+        estimate_firestore_document_bytes({**row, **updates}, doc_path) + _QUIET_CHECK_SIZE_HEADROOM_BYTES
         <= FIRESTORE_MAX_DOCUMENT_BYTES
     ):
         transaction.update(row_ref, updates)

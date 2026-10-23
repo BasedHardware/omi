@@ -64,7 +64,7 @@ def occasion_size_exceeded(
         and len(segments) >= OCCASION_MAX_TRANSCRIPT_SEGMENTS
     ):
         return True
-    from database.conversation_terminal_title import estimate_firestore_document_bytes
+    from utils.firestore_document_size import estimate_firestore_document_bytes
 
     return estimate_firestore_document_bytes(conversation, document_path) >= OCCASION_MAX_DOCUMENT_BYTES
 
