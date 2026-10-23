@@ -1582,9 +1582,223 @@ def test_gke_values_mode_matches_prod_chart_values(checker) -> None:
         }
         (result,) = checker.inspect_gke_drift(env='prod', workloads=(workload,), gke_state=gke_state)
         assert result.error is None, result.error
-        assert result.status == 'OK', (workload, result)
         assert result.envfrom_refs == (cm_name,)
         assert result.manifest_key_count == len({*(e['name'] for e in live_env), *cm_data})
+        assert result.unallowlisted_live_only == ()
+        assert result.value_mismatches == ()
+        if workload == 'backend-listen':
+            # The privateEnv-replaceable keys (LISTEN_PRIVATE_VALUES_YAML) are
+            # presence-only without the deployed override state, so they are
+            # never value-asserted; the offline ConfigMap data is proven, so
+            # the rest still compares exactly and the result stays OK.
+            private_keys = checker.LISTEN_PRIVATE_ENV & {e['name'] for e in live_env}
+            assert private_keys, 'chart must still bind the privateEnv-replaceable keys'
+            assert result.value_unchecked_keys >= len(private_keys)
+            assert [m.key for m in result.value_mismatches if m.key in checker.LISTEN_PRIVATE_ENV] == []
+            assert result.status == 'OK', (workload, result)
+            assert not result.has_drift
+            assert checker.exit_code((result,), strict=True) == 0
+        else:
+            assert result.status == 'OK', (workload, result)
+
+
+def test_gke_listen_private_env_never_false_drifts_without_override_state(checker) -> None:
+    # Thread: prod backend-listen values for the STT_CAP_DISPATCH_* keys can be
+    # replaced at deploy time from the LISTEN_PRIVATE_VALUES_YAML secret (the
+    # chart's privateEnv mechanism). Without the exact override argv the
+    # checked-in defaults are not the proven deployed values, so a valid
+    # serving ReplicaSet carrying replaced values must degrade to INVENTORY
+    # (strict exit 0), not value drift (strict exit 1).
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    values = yaml.safe_load(
+        (BACKEND_ROOT.parent / checker.GKE_WORKLOADS['backend-listen'].values_file.format(env='prod')).read_text(
+            encoding='utf-8'
+        )
+    )
+    deployment = 'prod-omi-backend-listen'
+    envfrom = [{'configMapRef': {'name': cm_name}}]
+    live_env = []
+    for entry in values['env']:
+        entry = dict(entry)
+        if entry['name'] == 'GOOGLE_CLOUD_PROJECT':
+            entry['value'] = values['runtimeGcpProjectId']
+        ref = (entry.get('valueFrom') or {}).get('configMapKeyRef')
+        if ref is not None and values.get('runtimeConfigMapName'):
+            entry['valueFrom'] = {'configMapKeyRef': {**ref, 'name': values['runtimeConfigMapName']}}
+        # The deploy replaced every privateEnv-replaceable key out of band.
+        if entry['name'] in checker.LISTEN_PRIVATE_ENV:
+            entry = {'name': entry['name'], 'value': 'private-deploy-replaced'}
+        live_env.append(entry)
+    gke_state = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'backend-listen': {
+            'deployment': {
+                'spec': {
+                    'template': {
+                        'spec': {'containers': [{'name': 'backend-listen', 'env': live_env, 'envFrom': envfrom}]}
+                    }
+                }
+            },
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, live_env, 'backend-listen', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(env='prod', workloads=('backend-listen',), gke_state=gke_state)
+    assert result.error is None, result.error
+    private_keys = checker.LISTEN_PRIVATE_ENV & {e['name'] for e in live_env}
+    assert private_keys
+    # Presence-only: no value assertion on the privateEnv-replaceable keys, so
+    # the out-of-band replaced values cannot produce drift (strict stays 0).
+    assert [m.key for m in result.value_mismatches if m.key in checker.LISTEN_PRIVATE_ENV] == []
+    assert result.value_unchecked_keys >= len(private_keys)
+    assert not result.has_drift
+    assert checker.exit_code((result,), strict=True) == 0
+
+
+def test_gke_listen_private_env_still_compared_with_override_state(checker) -> None:
+    # The degrade is scoped to the missing override state: with the exact
+    # deployed inputs (the -f private values fragment the prod workflow passes
+    # through --gke-helm-arg), the rendered expectation is proven and a serving
+    # value that contradicts it is real drift again.
+    rendered = yaml.safe_dump_all(
+        [
+            {
+                'kind': 'Deployment',
+                'metadata': {'name': 'prod-omi-backend-listen'},
+                'spec': {
+                    'template': {
+                        'spec': {
+                            'containers': [
+                                {
+                                    'name': 'backend-listen',
+                                    'env': [
+                                        {'name': 'STT_CAP_DISPATCH_ENFORCEMENT', 'value': 'enforced-private'},
+                                    ],
+                                }
+                            ]
+                        }
+                    }
+                },
+            }
+        ]
+    )
+
+    def runner(argv, **_kwargs):
+        return subprocess.CompletedProcess(argv, 0, stdout=rendered, stderr='')
+
+    deployment = 'prod-omi-backend-listen'
+    gke_state = {
+        'backend-listen': {
+            'deployment': {},
+            'replicasets': [
+                _replicaset(
+                    f'{deployment}-a',
+                    deployment,
+                    2,
+                    [{'name': 'STT_CAP_DISPATCH_ENFORCEMENT', 'value': 'stale-chart-default'}],
+                    'backend-listen',
+                )
+            ],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod',
+        workloads=('backend-listen',),
+        render='helm',
+        gke_state=gke_state,
+        runner=runner,
+        helm_args_for={'backend-listen': ('-f', 'private-values.yaml')},
+    )
+    assert result.error is None, result.error
+    assert [m.key for m in result.value_mismatches] == ['STT_CAP_DISPATCH_ENFORCEMENT']
+    assert result.value_unchecked_keys == 0
+    assert result.status == 'DRIFT', result
+    assert checker.exit_code((result,), strict=True) == 1
+
+
+def test_gke_explicit_binding_dropped_but_supplied_by_envfrom_is_drift(checker) -> None:
+    # Thread: the chart declares a key explicitly (values env / rendered env)
+    # while the shared ConfigMap also exports the same name. A serving
+    # ReplicaSet that drops the explicit entry still obtains the name through
+    # envFrom, so the flattened comparison saw the key (not missing) and the
+    # envFrom unproven subtraction removed it from value comparison — the
+    # provable spec divergence vanished into INVENTORY with --strict exit 0.
+    # The dropped explicit binding must be flagged as drift by itself.
+    cm_name, cm_data = _prod_configmap_fixture(checker)
+    assert 'STT_SERVICE_MODELS' in cm_data  # the manifest ConfigMap exports it
+    deployment = 'prod-omi-pusher'
+    envfrom = [{'configMapRef': {'name': cm_name}}]
+    serving_env = [
+        {'name': 'X', 'value': 'x'},
+        # STT_SERVICE_MODELS dropped: the name still arrives from envFrom.
+    ]
+    overrides = {
+        'pusher': {
+            'X': checker.value_hash('value', 'x'),
+            'STT_SERVICE_MODELS': checker.value_hash('value', 'dg-nova-3,parakeet'),
+        }
+    }
+    gke_state: dict = {
+        'configmaps': {cm_name: {'data': cm_data}},
+        'pusher': {
+            'deployment': {
+                'spec': {
+                    'template': {
+                        'spec': {
+                            'containers': [
+                                {
+                                    'name': 'pusher',
+                                    'env': [
+                                        *serving_env,
+                                        {'name': 'STT_SERVICE_MODELS', 'value': 'dg-nova-3,parakeet'},
+                                    ],
+                                    'envFrom': envfrom,
+                                }
+                            ]
+                        }
+                    }
+                }
+            },
+            'replicasets': [_replicaset(f'{deployment}-a', deployment, 2, serving_env, 'pusher', envfrom=envfrom)],
+        },
+    }
+    (result,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), gke_state=gke_state, expected_overrides=overrides
+    )
+    assert result.error is None, result.error
+    assert result.explicit_binding_lost == ('STT_SERVICE_MODELS',)
+    assert 'STT_SERVICE_MODELS' not in result.missing_from_live  # name present via envFrom
+    assert result.status == 'DRIFT', result
+    assert result.has_drift
+    assert checker.exit_code((result,), strict=True) == 1
+    # The offline fixture proves envFrom data, so the value the flattened map
+    # carries (the ConfigMap literal) also contradicts the chart's checked-in
+    # explicit value — both signals fire on the dropped binding.
+    assert [m.key for m in result.value_mismatches] == ['STT_SERVICE_MODELS']
+
+    # Control: with the explicit entry present and equal to the expectation,
+    # nothing is flagged and the offline-proven envFrom keys keep status OK.
+    gke_state['pusher']['replicasets'] = [
+        _replicaset(
+            f'{deployment}-a',
+            deployment,
+            2,
+            [
+                {'name': 'X', 'value': 'x'},
+                {'name': 'STT_SERVICE_MODELS', 'value': 'dg-nova-3,parakeet'},
+            ],
+            'pusher',
+            envfrom=envfrom,
+        )
+    ]
+    (control,) = checker.inspect_gke_drift(
+        env='prod', workloads=('pusher',), gke_state=gke_state, expected_overrides=overrides
+    )
+    assert control.error is None, control.error
+    assert control.explicit_binding_lost == ()
+    assert control.value_mismatches == ()
+    assert control.status == 'OK', control
+    assert not control.has_drift
+    assert checker.exit_code((control,), strict=True) == 0
 
 
 def test_gke_values_mode_reports_inventory_for_template_built_env(checker) -> None:
@@ -3564,6 +3778,11 @@ def test_rendered_state_rejects_unsupported_valuefrom_shape(checker, tmp_path: P
         {'configMapKeyRef': {'name': 'cm', 'key': 'k'}},
         {'secretKeyRef': {'name': '', 'key': 'latest'}},
         {'secretKeyRef': {'key': 'latest'}},
+        # The renderer emits only name and key (see _render_secret_entries);
+        # a carry-along field like ``optional`` is not renderer output, and
+        # adopting it would skip the manifest contradiction check for an
+        # env_var-backed secret (whose manifest hash is None).
+        {'secretKeyRef': {'name': 'TYPESENSE_HOST', 'key': 'latest', 'optional': True}},
     ):
         rendered = tmp_path / 'nested.json'
         rendered.write_text(

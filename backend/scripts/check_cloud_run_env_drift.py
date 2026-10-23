@@ -75,6 +75,26 @@ DEFAULT_REGION = 'us-central1'
 DEFAULT_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
 HASH_LENGTH = 12
 REDACTED_HASH = 'redacted'
+
+
+# backend-listen env names whose prod values can be replaced at deploy time from
+# the LISTEN_PRIVATE_VALUES_YAML protected-environment secret (the chart's
+# privateEnv mechanism: a privateEnv key replaces the chart env entry of the
+# same name). Without the exact deployed override state these chart defaults
+# are not provable exact values, so the comparison degrades them to unchecked
+# instead of asserting the checked-in literal — the same presence-only contract
+# backend/scripts/ops/drift_check.py holds for them. Sourced from that module
+# (single definition) when importable, with an inline fallback for standalone runs.
+def _listen_private_env() -> frozenset[str]:
+    try:
+        from ops.drift_check import LISTEN_PRIVATE_ENV
+
+        return frozenset(LISTEN_PRIVATE_ENV)
+    except ImportError:  # pragma: no cover - exercised only outside a repo checkout
+        return frozenset(('STT_CAP_DISPATCH_ENFORCEMENT', 'STT_CAP_DISPATCH_COHORT', 'STT_CAP_DISPATCH_LANES'))
+
+
+LISTEN_PRIVATE_ENV = _listen_private_env()
 # Marks a ConfigMap lookup that returned NotFound under an optional reference;
 # distinct from a real empty mapping so required references still fail.
 _NOT_FOUND_SENTINEL = object()
@@ -267,6 +287,12 @@ class ServiceEnvDrift:
     # skipped on a live read: the spec proves the binding, never the data the
     # container resolved at start (ConfigMap updates need a pod restart).
     explicit_unproven_keys: tuple[str, ...] = ()
+    # Expected-explicit env keys a serving target only obtains through envFrom:
+    # the chart (or expected state) binds them explicitly, so their absence
+    # from the container's env list is provable spec divergence even though the
+    # name still arrives (same value or not) from the bulk-loaded ConfigMap.
+    # Without this check the loss would flatten into envFrom and vanish.
+    explicit_binding_lost: tuple[str, ...] = ()
     # Cloud Run keys whose alias-resolved secret reference is form-ambiguous
     # (annotation project number vs repository project ID): value comparison
     # skipped, reported as unchecked (INVENTORY).
@@ -279,6 +305,7 @@ class ServiceEnvDrift:
             or self.value_mismatches
             or self.missing_from_live
             or self.envfrom_mismatched_refs
+            or self.explicit_binding_lost
         )
 
     @property
@@ -610,12 +637,14 @@ def _is_renderer_secret_entry(entry: Mapping[str, Any]) -> bool:
     """True when a rendered ``valueFrom`` entry matches the renderer's only nested shape.
 
     ``render_backend_runtime_env.py`` emits exactly ``valueFrom.secretKeyRef``
-    with non-empty ``name`` and ``key`` strings (see ``_render_secret_entries``);
-    every other nested source is not renderer output.
+    with only non-empty ``name`` and ``key`` string fields (see
+    ``_render_secret_entries``); every other nested source — or a carry-along
+    field such as ``optional`` — is not renderer output.
     """
     secret = (entry.get('valueFrom') or {}).get('secretKeyRef')
     return (
         isinstance(secret, Mapping)
+        and set(secret) == {'name', 'key'}
         and isinstance(secret.get('name'), str)
         and bool(secret.get('name'))
         and isinstance(secret.get('key'), str)
@@ -1575,6 +1604,7 @@ def compare_service(
     expected_envfrom_keys_by_ref: Mapping[str, frozenset[str]] | None = None,
     expected_keyref_hashes: Mapping[str, str] | None = None,
     expected_canonical_secret_hashes: Mapping[str, str] | None = None,
+    expected_explicit_keys: frozenset[str] = frozenset(),
 ) -> ServiceEnvDrift:
     expected_env: ExpectedEnv = expected or {}
     declared = frozenset(expected_env)
@@ -1614,6 +1644,13 @@ def compare_service(
     live_only: set[str] = set()
     missing: set[str] = set()
     mismatches: list[ValueMismatch] = []
+    # Expected-explicit keys a serving target dropped while envFrom still
+    # supplies the name (Thread: explicit bindings lost behind envFrom): the
+    # chart declares the key in env, so its absence from the container's env
+    # list is provable spec divergence even though the flattened comparison
+    # still sees the name. Flag it before the envFrom subtractions remove the
+    # key from every other check.
+    explicit_lost: set[str] = set()
     # Cloud Run keys whose alias-resolved reference is form-ambiguous (the
     # annotation's project number vs the repository's project ID): skipped
     # from value assertions, reported as unchecked (INVENTORY).
@@ -1688,6 +1725,14 @@ def compare_service(
                     key for key in expected_envfrom_keys for prefix in opaque_prefixes if key.startswith(prefix)
                 }
         missing |= declared - set(env_map) - skip_missing
+        # Expected-explicit bindings this target dropped while envFrom still
+        # supplies the name: the name's presence in env_map excused it from the
+        # missing check, and the envFrom subtractions below exclude it from the
+        # value comparison, so without this flag the provable spec divergence
+        # (the chart declares the key in env; the serving spec does not) would
+        # vanish into INVENTORY. Names absent from env entirely stay in
+        # ``missing``; the ``key in env_map`` guard keeps the two disjoint.
+        explicit_lost |= {key for key in expected_explicit_keys - target.explicit_keys if key in env_map}
         # Unproven live ConfigMap data only degrades keys whose effective value
         # comes from envFrom. A key this target sets through an explicit env
         # entry shadows envFrom (K8s precedence) and its spec is immutable, so
@@ -1821,6 +1866,7 @@ def compare_service(
         envfrom_unresolved=envfrom_unresolved,
         envfrom_unproven=envfrom_unproven,
         explicit_unproven_keys=tuple(sorted(explicit_unproven)),
+        explicit_binding_lost=tuple(sorted(explicit_lost)),
         alias_unproven_keys=tuple(sorted(alias_unproven)),
     )
 
@@ -1951,6 +1997,16 @@ def inspect_gke_drift(
         # Override arguments are workload-scoped: an argv generated from one
         # chart's env indices must not be applied to a different chart.
         workload_helm_args = (helm_args_for or {}).get(workload, ())
+        # backend-listen privateEnv keys (LISTEN_PRIVATE_VALUES_YAML): the prod
+        # workflow may replace their checked-in chart defaults at deploy time.
+        # The exact override state reaches this checker only through helm argv
+        # tokens (a ``-f <private values>`` fragment or env[i].value --set-string
+        # tokens, the shapes listen_helm_env_overrides.py emits). Without any
+        # token for this workload the checked-in defaults are not the proven
+        # deployed values, so those keys degrade to presence-only (None) — the
+        # same contract ops/drift_check.py holds — instead of false-drifting a
+        # valid serving ReplicaSet under --strict.
+        private_env_unproven = workload == 'backend-listen' and not workload_helm_args
         expected: ExpectedEnv | None = None
         expected_refs: tuple[str, ...] = ()
         expected_unresolved: tuple[str, ...] = ()
@@ -1981,6 +2037,20 @@ def inspect_gke_drift(
             else:
                 expected, expected_keyref_hashes = expected_gke_env_from_values(workload, env=env, root=root)
                 expected_refs = expected_gke_envfrom_refs(workload, env=env, root=root)
+            if private_env_unproven and expected is not None:
+                # Presence-only, never value-asserted: the deploy may hold a
+                # privateEnv replacement the repository cannot see. Only keys
+                # the chart itself binds (in expected) are degraded; an
+                # envFrom-provided key is not the chart's privateEnv entry.
+                for key in LISTEN_PRIVATE_ENV & set(expected):
+                    expected[key] = None
+                    expected_keyref_hashes.pop(key, None)
+            # Keys the expected state binds explicitly (chart env / rendered
+            # literals), captured before envFrom merging: a serving target that
+            # drops such an entry but still obtains the name through envFrom
+            # must not pass unnoticed — the spec divergence is provable even
+            # when the flattened value happens to match.
+            expected_explicit_keys = frozenset(expected) if expected is not None else frozenset()
             if expected is not None:
                 merged_keys: set[str] = set()
                 for ref in expected_refs:
@@ -2020,6 +2090,7 @@ def inspect_gke_drift(
                     expected_envfrom_keys=expected_envfrom_keys,
                     expected_envfrom_keys_by_ref=expected_envfrom_keys_by_ref,
                     expected_keyref_hashes=expected_keyref_hashes,
+                    expected_explicit_keys=expected_explicit_keys,
                 )
             )
         except Exception as exc:
@@ -2098,6 +2169,12 @@ def render_markdown_report(
                 f'- Explicit env keys not value-compared (configMapKeyRef binding; live ConfigMap data '
                 f'cannot prove the value running pods resolved): {keys_str}'
             )
+        if item.explicit_binding_lost:
+            keys_str = ', '.join(f'`{name}`' for name in item.explicit_binding_lost)
+            lines.append(
+                f'- Explicit env bindings dropped from the serving spec (name only reaches the container '
+                f'through envFrom; the chart declares it explicitly): {keys_str}'
+            )
         if item.alias_unproven_keys:
             keys_str = ', '.join(f'`{name}`' for name in item.alias_unproven_keys)
             lines.append(
@@ -2170,6 +2247,7 @@ def render_json_report(
                 'envfrom_unresolved': list(item.envfrom_unresolved),
                 'envfrom_unproven': list(item.envfrom_unproven),
                 'explicit_unproven_keys': list(item.explicit_unproven_keys),
+                'explicit_binding_lost': list(item.explicit_binding_lost),
                 'alias_unproven_keys': list(item.alias_unproven_keys),
                 'value_mismatches': [
                     {
