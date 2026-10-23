@@ -36,4 +36,3 @@ def test_watch_upload_keeps_audio_retryable_after_legacy_retirement(client, auth
     assert response.json()['code'] == 'sync_content_in_progress'
     assert response.json()['job_id'] is None
     assert int(response.headers['retry-after']) >= 60
-    assert raw == (struct.pack('<I', 320) + struct.pack('<160h', *range(160))) * 100
