@@ -56,8 +56,10 @@ export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
 # LangSmith's pytest integration is for live evaluation/upload, which this
 # hermetic suite does not use. Local startup measurements saved ~0.17s per
 # process before collection; file isolation pays this cost hundreds of times.
-# Keep the other plugins active.
-pytest_args=(-p no:langsmith_plugin -v)
+# Only the diarizer loopback test needs pytest-httpserver. It imports the
+# upstream fixtures locally, so the other file-isolated processes avoid the
+# HTTP server/Werkzeug import chain. Keep asyncio and xdist active.
+pytest_args=(-p no:langsmith_plugin -p no:pytest_httpserver -v)
 
 marker_expr="${BACKEND_PYTEST_MARK_EXPR:-not integration and not slow}"
 if [[ -n "$marker_expr" ]]; then
@@ -253,10 +255,15 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
       test_index=$((test_index + 1))
       (
         echo "::group::$test_path"
+        # Bash's clock avoids starting extra Python processes for every file.
+        # Include collection/import and process shutdown, which pytest's
+        # call-phase duration summary omits. Precision is one second.
+        file_started=$SECONDS
         set +e
         "$PYTHON_BIN" -m pytest "${pytest_args[@]}" "$test_path"
         status=$?
         set -e
+        echo "BACKEND-UNIT-FILE-WALL $((SECONDS - file_started))s $test_path"
         if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
           echo "No tests matched marker expression for $test_path; treating as skipped."
           status=0
