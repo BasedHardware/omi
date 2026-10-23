@@ -29,12 +29,14 @@ import pytest
 import config.rollout_cohorts as _rollout_cohorts
 
 
-@pytest.fixture(autouse=True)
-def legacy_offline_spend_policy(monkeypatch):
+@pytest.fixture(scope='session', autouse=True)
+def legacy_offline_spend_policy():
     # Component fixtures have fake storage/providers but no funded subscription.
     # Keep billing admission explicit: the offline spend contract suite unsets
     # this value to test the production default; boundary tests enable it.
-    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false')
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false')
+        yield
 
 
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
