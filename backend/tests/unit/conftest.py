@@ -28,6 +28,15 @@ import pytest
 # Capture the pure resolver boundary before legacy suites replace package objects.
 import config.rollout_cohorts as _rollout_cohorts
 
+
+@pytest.fixture(autouse=True)
+def legacy_offline_spend_policy(monkeypatch):
+    # Component fixtures have fake storage/providers but no funded subscription.
+    # Keep billing admission explicit: the offline spend contract suite unsets
+    # this value to test the production default; boundary tests enable it.
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false')
+
+
 from tests.unit.memory_import_isolation import (  # noqa: F401 — re-export for test modules
     AutoMockModule as _AutoMockModule,
     install_database_client_stub,

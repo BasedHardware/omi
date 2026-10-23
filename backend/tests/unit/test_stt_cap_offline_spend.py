@@ -16,7 +16,7 @@ from utils.observability.stt_cap_dispatch import (
 
 
 @pytest.fixture(autouse=True)
-def offline_defaults(monkeypatch):
+def offline_defaults(monkeypatch, legacy_offline_spend_policy):
     monkeypatch.delenv('STT_CAP_OFFLINE_ENFORCEMENT', raising=False)
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
     monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
