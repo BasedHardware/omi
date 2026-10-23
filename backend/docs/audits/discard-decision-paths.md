@@ -159,3 +159,82 @@ without changing its policy, classifier, approval fences, or delivery behavior.
 The existing eight-word deferred placeholder builder now lives beside the other
 pure title helpers in `deterministic_minimum.py`, keeping the processing
 coordinator below main's file-size ratchet without changing title policy.
+
+## Round 5 flags-off parity diagnosis (2026-10-23)
+
+Verdict: **A, intended mandatory stamp**, for every failing parameter. A local
+payload-dump patch reproduced 18 failures / 22 passes at head `00b5510582d`.
+Each complete JSON pair was recursively compared: the only two changed locations
+were the returned survivor (or finish-hook survivor) and its persisted row, both
+adding exactly the same `relevance_decision`. All other payload bytes, including
+logs, routing, transcript segments, revisions, and flags, were unchanged. The
+dump patch was removed before validation.
+
+At the reported index 3090, the old bytes contain
+`"private_cloud_sync_enabled":false,"source":"omi"`; the new bytes contain
+`"private_cloud_sync_enabled":false,"relevance_decision":{...},"source":"omi"`.
+The added record is exactly:
+
+```json
+{"decided_by": "policy", "reason": "sync_intake_default", "rules_version": 1, "trigger": "sync_intake", "verdict": "keep"}
+```
+
+The harness generates bytes from frozen source in
+`tests/unit/fixtures/sync_lineage_main_parity.json`; there is no regeneration
+script or separate expected-byte blob. The fixture retains the original lineage
+baseline revision and now records one explicit expectation update (including its
+original source hash): a literal keep record on a previously undecided sync
+survivor. The assignment source hash is recomputed. The literal does not call the
+serving stamp helper, and the complete byte-equality assertions remain unchanged.
+Resolver and process-segment frozen sources are unchanged. No serving code or
+feature gating was changed; intake provenance is mandatory across cohorts.
+
+Parameter IDs below are the exact original pytest IDs. `assignment` expands to
+`test_assignment_matches_frozen_main_or_unstamped_gap_routing`; `process` expands
+to `test_process_segment_saved_rows_results_finish_and_log_bytes_match_main`;
+`excluded` expands to `test_excluded_cohort_stays_main_even_with_both_flags_on`.
+
+| Test | Parameter | First byte diff | Verdict | Changed locations |
+| --- | --- | --- | --- | --- |
+| assignment | `disabled-typo-all_repeat` | 2292 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `disabled-typo-mixed1200` | 3062 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `disabled-typo-mixed40` | 3090 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `disabled-typo-new_row` | 3062 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `disabled-typo-pinned` | 1259 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `disabled-typo-same_range` | 696 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `off-all_repeat` | 2292 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `off-mixed1200` | 3062 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `off-mixed40` | 3090 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `off-new_row` | 3062 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `off-pinned` | 1259 | Intended stamp only | result survivor + persisted survivor |
+| assignment | `off-same_range` | 696 | Intended stamp only | result survivor + persisted survivor |
+| excluded | `disabled-typo` | 3090 | Intended stamp only | result survivor + persisted survivor |
+| excluded | `off` | 3090 | Intended stamp only | result survivor + persisted survivor |
+| process | `disabled-typo-texts0-True` | 1253 | Intended stamp only | finish survivor + persisted survivor |
+| process | `disabled-typo-texts1-True` | 2313 | Intended stamp only | finish survivor + persisted survivor |
+| process | `off-texts0-True` | 1253 | Intended stamp only | finish survivor + persisted survivor |
+| process | `off-texts1-True` | 2313 | Intended stamp only | finish survivor + persisted survivor |
+
+Calendar overlap, rule keeps, photos/wake words, user discards and tombstones
+retain their existing protections. No thresholds, lexicon, backfill, client, or
+production data were changed. Raw synthetic payloads and per-file logs remain
+local at `/Volumes/Ephemeral/scratch/discard-round5/`.
+
+Round 5 verification: 49 unit files each ran in a separate pytest process with
+`backend/.venv/bin/python -m pytest <file> -q --tb=short`: **1,949 passed**, no
+skips or failures. This includes all 40 flags-off parity cases and the relevance,
+terminal/dead-letter, finalization, lifecycle, client-processing and lineage
+suites. The lifecycle write guard and `make preflight` (37 local checks) passed.
+The standalone backend preflight uses `PYTHON=.venv/bin/python`; the initial
+system-Python invocation was corrected. Missing local pinned test dependencies
+(`fakeredis==2.36.2`, `fake-firestore==0.13.1`) were installed before resuming the
+extra assignment-recovery suite. The pre-existing uncommitted
+`testing/import_isolation.py` change was preserved and present during testing;
+it is outside this Round 5 commit.
+
+Current-PR metadata validation separately fails its synthetic-merge line-count
+check: `origin/main` at `fef4dd8fd8181f1e7c45eab223f22987ecd85530` conflicts with
+the original `00b5510582d` head in `tests/fast_unit_duration_allowlist.txt`.
+A read-only `git merge-tree --write-tree origin/main 00b5510582d` reproduces the
+same conflict without any Round 5 edits. Local preflight success is not current
+main merge readiness. No rebase, push, merge, deployment, or GCP tier was used.

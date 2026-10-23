@@ -1,4 +1,9 @@
-"""Dedupe/coverage OFF retain baseline behavior except the always-on stamp-gap guard."""
+"""Dedupe/coverage OFF retain baseline behavior plus mandatory safety stamps.
+
+The frozen source fixture includes the explicit, unconditional sync-intake keep
+record from #23370. It is literal expected data, independent of the production
+stamp helper, so payload bytes (including the decision) still compare exactly.
+"""
 
 import hashlib
 import json
@@ -41,10 +46,10 @@ def _load(name, source, monkeypatch, namespace=None):
     if namespace is not None:
         module.__dict__.update(namespace)
     monkeypatch.setitem(sys.modules, name, module)
-    # The immutable snapshot predates graduation. Pin its removed recovery
+    # The lineage baseline predates graduation. Pin its removed recovery
     # switch to the shipped ON behavior without restoring a production API.
     source = source.replace('from config.sync_assignment_recovery import sync_assignment_recovery_enabled\n', '')
-    # Adapt only the import path after verifying the immutable snapshot hash.
+    # Adapt only the import path after verifying the frozen source hash.
     source = source.replace('from utils.conversation_continuity import', 'from models.conversation_continuity import')
     module.sync_assignment_recovery_enabled = lambda: True
     module.capture_evidence_dark_write_enabled = lambda: True
