@@ -210,7 +210,7 @@ def evaluate(
         *[p for p in sorted((ROOT / 'utils/batch_pipeline').glob('*.py')) if not p.name.startswith('projection')],
         ROOT / 'utils/stt/voice_centroids.py',
         ROOT / 'diarizer/embedding.py',
-        Path(__file__).with_name('inference_archive.py'),
+        Path(__file__).resolve().with_name('inference_archive.py'),
         *sorted((ROOT / 'config').glob('batch_pipeline*.py')),
     ]
     projection_sources = [
@@ -219,9 +219,11 @@ def evaluate(
         ROOT / 'utils/conversations/final_pass_assignment.py',
         ROOT / 'utils/stt/speaker_identity.py',
         ROOT / 'utils/sync/assignment.py',
-        Path(__file__).with_name('local_artifacts.py'),
+        Path(__file__).resolve().with_name('local_artifacts.py'),
     ]
-    projection_fingerprint = fingerprint({str(p.relative_to(ROOT)): file_digest(p) for p in projection_sources})
+    projection_fingerprint = fingerprint(
+        {str(p.resolve().relative_to(ROOT)): file_digest(p.resolve()) for p in projection_sources}
+    )
     from config.policy.kill_switches import kill_switch
 
     settings['local_quality_enabled'] = kill_switch('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED')
@@ -280,7 +282,9 @@ def evaluate(
                 )
                 payload['local_composed_provenance'] = {
                     'original_inference': original_receipt,
-                    'current_enrichment_sources': {str(p.relative_to(ROOT)): file_digest(p) for p in sources},
+                    'current_enrichment_sources': {
+                        str(p.resolve().relative_to(ROOT)): file_digest(p.resolve()) for p in sources
+                    },
                     'current_enrichment_enabled': settings['local_quality_enabled'],
                     'full_current_worker_executed': False,
                 }

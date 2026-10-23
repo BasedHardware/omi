@@ -272,3 +272,21 @@ def test_external_projection_serializes_frozen_snapshot_privately(tmp_path, monk
     assert (
         local_artifacts.project_external('python', artifacts, item, binding, 'unused', naming_snapshot=snapshot) == []
     )
+
+
+def test_relative_runpy_entrypoint_fingerprints_sources_before_model_loading(tmp_path, monkeypatch, no_network):
+    import runpy
+
+    root = Path(__file__).resolve().parents[3]
+    monkeypatch.chdir(root)
+    profile, people, manifest = tmp_path / 'profile.json', tmp_path / 'people.json', tmp_path / 'corpus.json'
+    profile.write_text('{}')
+    people.write_text('[]')
+    manifest.write_text(json.dumps({'profile_file': str(profile), 'people_file': str(people), 'recordings': []}))
+    # The standard torch-thread wrapper passes this relative spelling to runpy;
+    # its __file__ stays relative even though ROOT was normalized at import.
+    namespace = runpy.run_path('backend/scripts/diarization_eval/run_local.py', run_name='relative_eval_fixture')
+    assert not Path(namespace['__file__']).is_absolute()
+    report = namespace['evaluate'](manifest, run_name='relative-fixture')
+    assert report['recordings_expected'] == 0
+    assert report['cloud_inference_calls'] == 0
