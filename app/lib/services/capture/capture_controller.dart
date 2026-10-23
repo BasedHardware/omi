@@ -2131,7 +2131,6 @@ class CaptureController extends ChangeNotifier
     final revision = _preferences.capturePolicy.revision;
     if (!_admitsCapture(revision)) return false;
     Logger.debug('streamAudioToWs in capture_provider');
-    _startMetricsTracking();
     final subscription = await _getBleAudioBytesListener(
       deviceId,
       onAudioBytesReceived: (List<int> value) {
@@ -2234,9 +2233,11 @@ class CaptureController extends ChangeNotifier
       await subscription?.cancel();
       return false;
     }
+    if (subscription == null) return false;
+    _startMetricsTracking();
     _bleBytesStream = lifetime.takeSubscription(_bleBytesStream, subscription);
     notifyListeners();
-    return subscription != null;
+    return true;
   }
 
   Future<void> _resetState() async {
@@ -2304,7 +2305,12 @@ class CaptureController extends ChangeNotifier
       return Future.value(null);
     }
     if (_fenceUplinkForSync()) return null;
-    return connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+    try {
+      return await connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
+    } catch (e) {
+      Logger.debug('Failed to get BLE audio bytes listener for device $deviceId: $e');
+      return null;
+    }
   }
 
   Future<StreamSubscription?> _getBleButtonListener(
@@ -2420,6 +2426,9 @@ class CaptureController extends ChangeNotifier
     }
     if (foregroundAudioReady) {
       await _preferences.saveBool('nativeBleForegroundReady', true);
+    } else {
+      Logger.debug('[_initiateDeviceAudioStreaming] streamAudioToWs returned false for device $deviceId');
+      return;
     }
 
     // Update state (limitless is excluded: the pendant records on-device, so the
