@@ -4427,6 +4427,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get continueText => 'চালিয়ে যান';
 
   @override
+  String get checkoutExistingSubscription =>
+      'আপনার ইতিমধ্যেই একটি সাবস্ক্রিপশন আছে। নতুনটি শুরু না করে বর্তমান সাবস্ক্রিপশন পরিচালনা করুন।';
+
+  @override
   String get resubscribeFirstToChangePlans => 'প্ল্যান বদলাতে আগে পুনরায় সাবস্ক্রাইব করুন।';
 
   @override

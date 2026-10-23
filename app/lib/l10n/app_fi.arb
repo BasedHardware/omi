@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Tarkista yhteys ja yritä uudelleen.",
     "useFreePlan": "Käytä ilmaista tilausta",
     "continueText": "Jatka",
+    "checkoutExistingSubscription": "Sinulla on jo tilaus. Hallitse nykyistä tilaustasi uuden aloittamisen sijaan.",
     "resubscribeFirstToChangePlans": "Tilaa ensin uudelleen, jotta voit vaihtaa pakettia.",
     "resubscribe": "Tilaa uudelleen",
     "couldNotOpenPaymentSettings": "Maksuasetuksia ei voitu avata. Yritä uudelleen.",
