@@ -11,7 +11,8 @@ import yaml
 from google.auth.credentials import AnonymousCredentials
 from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 from google.cloud import firestore
-from google.cloud.firestore_v1.document import DocumentReference, DocumentSnapshot
+from google.cloud.firestore_v1.document import DocumentReference
+from google.cloud.firestore_v1.base_document import DocumentSnapshot
 from google.cloud.firestore_v1.query import Query
 
 from database import released_memory_projection as projection
