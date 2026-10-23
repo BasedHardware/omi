@@ -160,7 +160,7 @@
         "sync-cloud-tasks-stack-gauntlet"
       ],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "Legacy-retire C11 (#22635) removes only the retired Phase0A dependency from failure reporting. Retained suites, runner, invocation counts and 5-minute p50 stay unchanged; P18 daily nightly invocation remains budgeted.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
