@@ -221,6 +221,8 @@ def test_silent_backfill_never_uses_rule_discard_or_quiet_minimum(monkeypatch, i
         )
     assert not discarded and structured.overview == expected.overview
     notes.assert_called_once()
+
+
 @pytest.mark.parametrize('text_source', ['audio', 'message', 'other'])
 def test_external_text_paths_record_explicit_policy(isolated_processing_module, text_source):
     pc = isolated_processing_module
