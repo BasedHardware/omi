@@ -68,6 +68,34 @@ def payloads(rows):
     return [(row.reference.path, row.to_dict(), row.update_time) for row in rows]
 
 
+@pytest.fixture
+def canonical_adapter():
+    from utils.memory import canonical_memory_adapter
+
+    return canonical_memory_adapter
+
+
+def test_canonical_caller_rechecks_device_policy_on_a_warm_raw_page(store, canonical_adapter):
+    from tests.unit.test_universal_memory_list_cursor import _canonical_scan_memory_item
+    from utils.client_device import DeviceScopeRequest
+
+    for index in range(3):
+        identity, item = _canonical_scan_memory_item('u', f'm{index}', now=store.stamp, day=index)
+        item = item.model_copy(update={'capture_device_ids': ['phone-a']})
+        store.rows[f'users/u/memory_items/{identity}'] = item.model_dump(mode='python')
+    first, _ = canonical_adapter.read_canonical_scan_page('u', db_client=store.client, now=store.stamp)
+    assert sum(item is not None for item, _ in first) == 3
+    before = store.reads
+    scoped, _ = canonical_adapter.read_canonical_scan_page(
+        'u',
+        db_client=store.client,
+        now=store.stamp,
+        device_scope_request=DeviceScopeRequest(device_scope='current', client_device_id='phone-b'),
+    )
+    assert len(scoped) == 3 and all(item is None for item, _ in scoped)
+    assert store.reads - before == 2 and store.scans == 1
+
+
 def test_repeated_page_100_billed_reads_becomes_two_and_preserves_snapshots(store):
     store.rows = {f'users/u/memory_items/m{i}': {'content': str(i), 'nested': {'a': [1]}} for i in range(100)}
     first = store.read()
