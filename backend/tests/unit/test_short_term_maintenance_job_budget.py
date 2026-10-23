@@ -18,6 +18,7 @@ NOW = datetime(2026, 9, 6, 12, 0, tzinfo=timezone.utc)
 
 
 def test_ttl_lifecycle_stops_before_the_next_item_when_job_budget_is_gone(monkeypatch):
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'false')
     items = [
         SimpleNamespace(tier=MemoryLayer.short_term, memory_id="mem-a"),
         SimpleNamespace(tier=MemoryLayer.short_term, memory_id="mem-b"),

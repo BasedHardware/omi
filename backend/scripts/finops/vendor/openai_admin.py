@@ -12,7 +12,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
+import sys
 from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import auth_http  # noqa: E402
 
 BASE_URL = "https://api.openai.com"
 SKILL_DIR = Path(__file__).resolve().parents[1]
@@ -81,9 +85,11 @@ def api_get(path: str, params: dict[str, Any] | None = None) -> Any:
         url += "?" + urllib.parse.urlencode(query)
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {key}"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as res:
+        with auth_http.open_authenticated(req, timeout=60) as res:
             raw = res.read().decode("utf-8")
             return json.loads(raw) if raw else {}
+    except auth_http.RedirectRefused:
+        raise SystemExit("openai redirect refused") from None
     except urllib.error.HTTPError as exc:
         body = exc.read().decode("utf-8", errors="replace")[:2000]
         try:

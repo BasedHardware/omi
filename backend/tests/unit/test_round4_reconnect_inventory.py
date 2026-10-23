@@ -50,6 +50,11 @@ def _historical(name, revision, path):
     source = subprocess.check_output(
         ['git', 'show', f'{revision}:{path}'], cwd=Path(__file__).resolve().parents[2], text=True
     )
+    # Pin historical consumer code ON after DEC-PRD-004 removes its config reader.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType(name)
     sys.modules[name] = module
     exec(compile(source, path, 'exec'), module.__dict__)
@@ -178,7 +183,7 @@ async def _uncertain_send_run(mp, *, spans, protection, session_module=None, pee
             ),
         )
     stack = f._Stack(mp, v2=False, spans=spans, conversation_id=f.CONV1)
-    mp.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     peer = peer or f.pusher
     if storage_peer is not None:
         mp.setattr(storage_peer, '_get_storage_client', lambda: storage_module._get_storage_client())
@@ -268,13 +273,13 @@ def _old_peer_wiring(mp, old_pusher, old_storage):
     for attr in (
         'get_audio_bytes_webhook_seconds',
         'is_audio_bytes_app_enabled',
-        'is_audio_merge_dispatch_enabled',
         'schedule_person_voice_learning_retry',
         'run_authorized_person_learning',
         'PUSHER_ACTIVE_WS_CONNECTIONS',
         'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS',
     ):
         mp.setattr(old_pusher, attr, getattr(f.pusher, attr))
+    mp.setattr(old_pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     if old_storage is not None:
         mp.setattr(old_storage, '_get_storage_client', lambda: storage_module._get_storage_client())
         mp.setattr(old_storage, 'private_cloud_sync_bucket', storage_module.private_cloud_sync_bucket)
@@ -336,7 +341,7 @@ async def _interior_prefix_run(mp, *, protection, session_module=None, peer=None
             ),
         )
     stack = f._Stack(mp, v2=False, spans=False, conversation_id=f.CONV1)
-    mp.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     peer = peer or f.pusher
     if storage_peer is not None:
         mp.setattr(storage_peer, '_get_storage_client', lambda: storage_module._get_storage_client())
@@ -811,7 +816,7 @@ async def test_late_ack_same_socket_resumes_through_real_pusher(monkeypatch, pro
     f.pusher_env.__wrapped__(monkeypatch)
     monkeypatch.setattr(storage_module.users_db, 'get_data_protection_level', lambda uid: protection)
     stack = f._Stack(monkeypatch, v2=False, spans=True, conversation_id=f.CONV1)
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     receiver_task = None
 
     class DelayedRecv:
@@ -956,8 +961,7 @@ def _segment_snapshot(conv):
 
 def _inventory_base(mp):
     store, diarizer = stagemod.env.__wrapped__(mp)
-    mp.setenv('AUDIO_TIMELINE_SPANS', 'true')
-    mp.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
+
     mp.setenv('AUDIO_TIMELINE_V2', 'false')
     client = f.FakeStorageClient()
     mp.setattr(storage_module, '_get_storage_client', lambda: client)
@@ -1294,19 +1298,19 @@ async def test_unbound_runs_freeze_to_acceptance_conversation(monkeypatch):
 
 
 @pytest.mark.parametrize('cache_state', ['missing', 'corrupt'])
-def test_off_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, cache_state):
+def test_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, cache_state):
     store, diarizer = env
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     target = round4_stage if round4_stage else stagemod.stage
     conv = stagemod._conversation([0, 1] * 4)
-    audio = stagemod.FakeAudio([0, 1] * 4)
-    monkeypatch.setattr(stagemod.stage, 'iter_audio_chunk_pcm', audio)
+    audio = stagemod._install_audio(monkeypatch, [0, 1] * 4)
     if round4_stage is not None:
         monkeypatch.setattr(round4_stage, 'iter_audio_chunk_pcm', audio)
     target.resolve_speakers_for_processing('u1', conv)
     assert conv.speaker_resolution.status == 'resolved'
+    origin = stagemod.STARTED.timestamp()
+    conv.audio_files = [stagemod._span_manifest(origin, [(origin, origin + 32)])]
     first_calls = diarizer.calls
     first_ids = {s.id: s.speaker_id for s in conv.transcript_segments}
     first_sources = {s.id: s.audio_source for s in conv.transcript_segments}
@@ -1327,16 +1331,17 @@ def test_off_saved_sync_cache_rebuild_resolves(env, monkeypatch, round4_stage, c
 @pytest.mark.parametrize(
     'damage', ['retimed', 'absent', 'non_sync', 'malformed', 'nonfinite', 'unplaced', 'origin_changed']
 )
-def test_off_capture_history_without_saved_sync_refuses(env, monkeypatch, damage):
+@pytest.mark.parametrize('capture_covered', [False, True])
+def test_capture_history_requires_saved_sync_or_validated_spans(env, monkeypatch, damage, capture_covered):
     store, diarizer = env
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'false')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     conv = stagemod._conversation([0, 1] * 4)
-    audio = stagemod.FakeAudio([0, 1] * 4)
-    monkeypatch.setattr(stagemod.stage, 'iter_audio_chunk_pcm', audio)
+    audio = stagemod._install_audio(monkeypatch, [0, 1] * 4)
     stagemod.stage.resolve_speakers_for_processing('u1', conv)
     assert conv.speaker_resolution.status == 'resolved'
+    origin = stagemod.STARTED.timestamp()
+    conv.audio_files = [stagemod._span_manifest(origin, [(origin, origin + 32)])] if capture_covered else []
     calls = diarizer.calls
     for s in conv.transcript_segments:
         s.audio_capture_start = stagemod.STARTED.timestamp() + s.start
@@ -1361,8 +1366,14 @@ def test_off_capture_history_without_saved_sync_refuses(env, monkeypatch, damage
             conv.started_at = conv.started_at + timedelta(hours=1)
     store.clear()
     stagemod.stage.resolve_speakers_for_processing('u1', conv)
-    assert conv.speaker_resolution.status != 'resolved'
-    assert diarizer.calls == calls
+    if capture_covered and damage != 'unplaced':
+        # The graduated consumer can use independently proven capture spans
+        # even when the old saved-sync marker no longer proves placement.
+        assert conv.speaker_resolution.status == 'resolved'
+        assert diarizer.calls == calls + 8
+    else:
+        assert conv.speaker_resolution.status != 'resolved'
+        assert diarizer.calls == calls
 
 
 def test_off_own_capture_cache_loss_parity_with_main(env, monkeypatch, round4_stage):
@@ -1375,8 +1386,7 @@ def test_off_own_capture_cache_loss_parity_with_main(env, monkeypatch, round4_st
         mp = pytest.MonkeyPatch()
         store, diarizer = stagemod.env.__wrapped__(mp)
         stagemod._patch_stage_deps(mp, module, store, diarizer)
-        mp.setenv('AUDIO_TIMELINE_SPANS', 'false')
-        mp.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
         mp.setenv('AUDIO_TIMELINE_V2', 'false')
         audio = stagemod.FakeAudio([0, 1] * 4)
         mp.setattr(module, 'iter_audio_chunk_pcm', audio)

@@ -9,18 +9,27 @@ import pytest
 from testing.pipeline_sim.scenarios import run
 from testing.pipeline_sim.workload import NORMAL, PRIVACY_AT_ADMISSION
 
+# Recovery dispatched only from the serving pass: the cadence #22321 was measured on.
+PASS_DISPATCH = {'BATCH_PIPELINE_RECOVERY_DISPATCH_INTERVAL_SECONDS': 'off'}
+
 VARIANTS = {
     'serial': ('burst_owner_serial_sequencer', {}),
     'widened': ('burst_owner_serial_sequencer', {'per_owner_concurrency': 32}),
     'steady': ('mixed_fleet_steady', {}),
-    'exhaustion': ('provider_exhaustion_window', {}),
+    'exhaustion': ('provider_exhaustion_window', {'overrides': {'flags': PASS_DISPATCH}}),
+    'exhaustion_dispatch_loop': ('provider_exhaustion_window', {}),
     # Diagnostic counterfactual only; the exhaustion baseline uses shipping defaults.
     'exhaustion_former_rate': (
         'provider_exhaustion_window',
-        {'overrides': {'flags': {'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE': '1'}}},
+        {'overrides': {'flags': {**PASS_DISPATCH, 'BATCH_PIPELINE_RECOVERY_DISPATCH_BATCH_SIZE': '1'}}},
     ),
     'stale': ('stale_finalize_targets', {}),
-    'stale_no_purge': ('stale_finalize_targets', {'overrides': {'purge_on_fence': False}}),
+    # Strict merge order (head wait off) isolates what the purge alone prevents.
+    'stale_no_purge': (
+        'stale_finalize_targets',
+        {'overrides': {'purge_on_fence': False, 'flags': {'BATCH_PIPELINE_MERGE_HEAD_WAIT_SECONDS': 'off'}}},
+    ),
+    'stale_no_purge_head_wait': ('stale_finalize_targets', {'overrides': {'purge_on_fence': False}}),
     'privacy': ('privacy_blocked_users', {}),
     'summary_shared': ('summary_behind_transcription', {}),
     'summary_isolated': ('summary_behind_transcription', {'summary_pool': 'isolated'}),
@@ -78,6 +87,16 @@ def test_bounded_recovery_clears_exhaustion_tail_without_hiding_unrecovered_audi
     assert sim['recovery_states']['recovered'] >= 0.95 * sim['paid_fallback_calls']
 
 
+def test_recovery_dispatch_loop_shortens_the_quarantine_tail_without_extra_paid_calls(samples):
+    pass_only, loop = samples['exhaustion'], samples['exhaustion_dispatch_loop']
+    assert loop['quarantine_projection_cohort_count'] == pass_only['quarantine_projection_cohort_count']
+    assert loop['quarantine_projection_p95_seconds'] < pass_only['quarantine_projection_p95_seconds']
+    assert loop['sim']['paid_fallback_calls'] == pass_only['sim']['paid_fallback_calls']
+    assert loop['sim']['max_paid_calls_per_segment'] <= 1
+    # Unrecovered audio is still scored, whichever units the model leaves held.
+    assert loop['unrecovered_quarantines'] == loop['sim']['recovery_states'].get('failed_held', 0)
+
+
 def test_stale_finalize_targets_are_neither_failures_nor_paid(samples):
     sample = samples['stale']
     sim = sample['sim']
@@ -96,6 +115,12 @@ def test_without_the_purge_a_fenced_head_blocks_the_owners_ordered_merge(samples
     states = sample['sim']['job_states']
     assert states.get('privacy_blocked', 0) > 0 and states.get('result_ready', 0) > 0
     assert sample['projection_obligations_over_15m'] > 0
+
+
+def test_bounded_head_wait_commits_past_a_fenced_head_without_the_purge(samples):
+    # Each released row still passes its own privacy fence; only the fenced head stays behind.
+    states = samples['stale_no_purge_head_wait']['sim']['job_states']
+    assert states.get('privacy_blocked', 0) > 0 and states.get('result_ready', 0) == 0
 
 
 def test_privacy_blocked_users_get_no_paid_calls_or_projection_and_are_reported_distinctly(samples):

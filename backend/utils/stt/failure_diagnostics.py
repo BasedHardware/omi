@@ -29,6 +29,22 @@ class TransportFailureFields(NamedTuple):
     session_age_bucket: str
 
 
+def frame_close_code(frame: object) -> int:
+    """A close frame's wire code, or -1 when no valid frame was observed."""
+    code = getattr(frame, 'code', None)
+    if not isinstance(code, int) or isinstance(code, bool):
+        return -1
+    normalized_code = int(code)
+    return normalized_code if 1000 <= normalized_code <= 4999 else -1
+
+
+def session_age_bucket(age_seconds: float) -> str:
+    for limit, bucket in ((30, 'lt_30s'), (300, 'lt_5m'), (1800, 'lt_30m'), (3600, 'lt_60m'), (18000, 'lt_300m')):
+        if age_seconds < limit:
+            return bucket
+    return 'ge_300m'
+
+
 def transport_failure_fields(error: BaseException, age_seconds: float) -> TransportFailureFields:
     """Never serialize exception text, close reasons, or arbitrary class names.
 
@@ -36,27 +52,15 @@ def transport_failure_fields(error: BaseException, age_seconds: float) -> Transp
     keepalive timeout. -1 means no close frame was observed in that direction.
     """
 
-    def close_code(frame: object) -> int:
-        code = getattr(frame, 'code', None)
-        if not isinstance(code, int) or isinstance(code, bool):
-            return -1
-        normalized_code = int(code)
-        return normalized_code if 1000 <= normalized_code <= 4999 else -1
-
     received = getattr(error, 'rcvd', None)
     sent = getattr(error, 'sent', None)
     name = type(error).__name__
-    age = 'ge_300m'
-    for limit, bucket in ((30, 'lt_30s'), (300, 'lt_5m'), (1800, 'lt_30m'), (3600, 'lt_60m'), (18000, 'lt_300m')):
-        if age_seconds < limit:
-            age = bucket
-            break
     return TransportFailureFields(
         name if name in _TRANSPORT_EXCEPTION_CLASSES else 'other',
-        close_code(received),
-        close_code(sent),
+        frame_close_code(received),
+        frame_close_code(sent),
         'keepalive_ping_timeout' if getattr(sent, 'reason', None) == 'keepalive ping timeout' else 'other',
-        age,
+        session_age_bucket(age_seconds),
     )
 
 

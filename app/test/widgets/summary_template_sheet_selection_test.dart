@@ -16,7 +16,7 @@ import '../helpers/summary_fixtures.dart';
 class _RecordingReprocess {
   final List<String?> appIds = [];
 
-  Future<ReprocessResult> call(String id, {String? appId, bool requireSpeakerReceipt = false}) {
+  Future<ReprocessResult> call(String id, {String? appId, bool requireSpeakerReceipt = false, bool forceOmi = false}) {
     appIds.add(appId);
     return Future.value(const ReprocessFailed());
   }

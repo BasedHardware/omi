@@ -362,7 +362,9 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'id: backfill-runtime' in action
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'render_cloud_run_clone_env.py' in action
-    assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
+    # B4: the worker's queues come from the ops file in prod (sync-backfill only outside prod).
+    assert 'SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}' in action
+    assert 'ops_train.py" render-env --env prod' in action
     # Dispatch concurrency must stay within max instances x concurrency: offering more
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
     # back it off, which previously stranded recordings for hours. A warm
@@ -1248,8 +1250,11 @@ def test_backfill_queue_comes_from_the_manifest_not_a_literal(tmp_path, manifest
         (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(encoding='utf-8')
     )
     steps = {step.get('id'): step for step in action['runs']['steps']}
-    service_step = steps['backfill-service']['run']
-    script = service_step.split('PROJECT_NUMBER=', 1)[0] + 'echo "SYNC_BACKFILL_TASKS_QUEUE=${BACKFILL_QUEUE}"'
+    # Queues resolve once in ops-queues (B4): prod reads the ops file (fail-closed, tested in
+    # test_config_train); every other project takes the manifest's values, sync-backfill only as default.
+    queue_step = steps['ops-queues']['run']
+    assert steps['ops-queues']['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
+    script = queue_step.split('if [[', 1)[0] + 'echo "SYNC_BACKFILL_TASKS_QUEUE=${backfill_queue}"'
     result = subprocess.run(
         ['bash', '-c', script],
         env={**os.environ, 'BACKFILL_ENV': manifest_env},
@@ -1258,6 +1263,10 @@ def test_backfill_queue_comes_from_the_manifest_not_a_literal(tmp_path, manifest
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == f'SYNC_BACKFILL_TASKS_QUEUE={expected}'
+    assert steps['backfill-service']['env']['BACKFILL_QUEUE'] == '${{ steps.ops-queues.outputs.backfill_queue }}'
     overlay = steps['backfill-runtime']['env']['ENV_OVERLAY'].splitlines()
-    # The legacy default comes first so the manifest overlay (later lines win) overrides it.
-    assert overlay.index('SYNC_TASKS_QUEUE=sync-backfill') < overlay.index('${{ inputs.backfill_env_vars }}')
+    # The resolved worker queue comes after the manifest overlay, so no literal can override it.
+    assert overlay.index('${{ inputs.backfill_env_vars }}') < overlay.index(
+        'SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}'
+    )
+    assert 'SYNC_TASKS_QUEUE=sync-backfill' not in overlay

@@ -5,7 +5,10 @@ import ScreenMoments from './screen-moments';
 import MemoryEvents from '../events/memory-events';
 import Plugins from '../plugins/plugins';
 import Markdown from 'markdown-to-jsx';
-import { resolvableNoteSources } from '@omi/note-shared/note-sources.mjs';
+import {
+  presentableNoteSection,
+  resolvableNoteSources,
+} from '@omi/note-shared/note-sources.mjs';
 import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 
 interface SummaryProps {
@@ -26,11 +29,11 @@ export default function Summary({
     (memory?.structured?.overview || '').trim(),
     knownIDs,
   ).text;
-  const presentable = memory?.structured?.sections?.map((section) => ({
-    ...section,
-    heading: repairNoteCitations(section.heading ?? '', knownIDs).text,
-    body_markdown: repairNoteCitations(section.body_markdown ?? '', knownIDs).text,
-  }));
+  // Inline citations the repair removes become source chips (legacy notes whose only
+  // evidence was `[s01234]` keep their pointer to the transcript).
+  const presentable = memory?.structured?.sections?.map((section) =>
+    presentableNoteSection(section, knownIDs),
+  );
   const { mains, sideNotes } = splitSections(presentable);
   const ids = assignSectionIds(mains);
 
@@ -120,7 +123,7 @@ export default function Summary({
 
       {memory?.structured?.action_items?.length > 0 && (
         <div className="sn-block">
-          <ActionItems items={memory.structured.action_items} />
+          <ActionItems items={memory.structured.action_items} knownIDs={knownIDs} />
         </div>
       )}
 
@@ -134,7 +137,7 @@ export default function Summary({
 
       {memory?.structured?.events?.length > 0 && (
         <div className="sn-block">
-          <MemoryEvents events={memory.structured.events} />
+          <MemoryEvents events={memory.structured.events} knownIDs={knownIDs} />
         </div>
       )}
 

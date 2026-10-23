@@ -11,7 +11,7 @@ evidence:
 covers:
   - app/lib/widgets/bottom_nav_bar.dart
   - app/lib/providers/capture_provider.dart
-  - app/lib/pages/conversation_capturing/page.dart
+  - app/lib/pages/episodes/live_episode_page.dart
   - app/lib/pages/conversations/widgets/processing_capture.dart
 preconditions:
   - auth_ready  # User signed in and onboarding completed. App shows home screen.
@@ -43,18 +43,18 @@ steps:
         min: 2
     evidence:
       - screenshot: step-S2.webp
-    note: "Tapping the mic button calls captureProvider.streamRecording() which: (1) sets state to RecordingState.initialising, (2) requests mic permission, (3) sends geolocation, (4) configures PCM16 codec at 16kHz sample rate, (5) starts mic streaming audio bytes to backend via WebSocket, (6) navigates to ConversationCapturingPage. The app bar shows '🎙️ Listening'."
+    note: "Tapping the mic button calls captureProvider.streamRecording() which: (1) sets state to RecordingState.initialising, (2) requests mic permission, (3) sends geolocation, (4) configures PCM16 codec at 16kHz sample rate, (5) starts mic streaming audio bytes to backend via WebSocket, (6) navigates to LiveEpisodePage. The app bar shows '🎙️ Listening'."
 
   - id: S3
     name: Verify capturing page — waiting for transcripts
-    do: "Verify the ConversationCapturingPage shows: back arrow (top-left), '🎙️' emoji + 'Listening' title in app bar, and the message 'Waiting for transcripts or photos...' in the center. No 'Process Now' button visible yet (it only appears after segments/photos arrive). Two tabs exist: Transcripts (tab 0, active) and Summary (tab 1)."
+    do: "Verify the LiveEpisodePage shows: back arrow (top-left), '🎙️' emoji + 'Listening' title in app bar, and the message 'Waiting for transcripts or photos...' in the center. No 'Process Now' button visible yet (it only appears after segments/photos arrive). Two tabs exist: Transcripts (tab 0, active) and Summary (tab 1)."
     verify: true
     expect:
       - kind: interactive_count
         min: 1
     evidence:
       - screenshot: step-S3.webp
-    note: "The ConversationCapturingPage has a TabBarView with 2 tabs. Tab 0 shows transcripts/photos, tab 1 shows silence timeout info and 'No summary yet'. The floating action buttons (Process Now + Mute) only appear when provider.segments.isNotEmpty || provider.photos.isNotEmpty."
+    note: "The LiveEpisodePage has a TabBarView with 2 tabs. Tab 0 shows transcripts/photos, tab 1 shows silence timeout info and 'No summary yet'. The floating action buttons (Process Now + Mute) only appear when provider.segments.isNotEmpty || provider.photos.isNotEmpty."
 
   - id: S4
     name: Speak and verify live transcription appears

@@ -8,6 +8,7 @@ import 'package:omi/backend/http/action_items_api_contract.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
 import 'package:omi/providers/review_provider.dart';
@@ -15,6 +16,7 @@ import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/home_bottom_bar.dart';
 
 import 'project_task_sections.dart';
@@ -23,6 +25,7 @@ import 'task_delete_undo.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/task_row_parts.dart';
+import 'widgets/task_suggestions_section.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -85,6 +88,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (!mounted) return;
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      final suggestions = provider.suggestions;
+      if (suggestions != null && !suggestions.loaded && suggestions.loadProblem == null) {
+        suggestions.load();
+      }
       final phase = provider.apiViewState.phase;
       final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
           phase == ApiViewPhase.locked ||
@@ -233,6 +240,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     return PullDownButton(
       itemBuilder: (context) => [
+        PullDownMenuItem(
+          title: context.l10n.taskIntegrations,
+          iconWidget: const Icon(Icons.ios_share_rounded, size: 18),
+          onTap: () => routeToPage(context, const TaskIntegrationsPage()),
+        ),
         PullDownMenuItem(
           title: context.l10n.selectActionItems,
           iconWidget: const Icon(Icons.check_box_outlined, size: 18),
@@ -482,6 +494,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               controller: _scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
+                                SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
                                 SliverFillRemaining(
                                   hasScrollBody: false,
                                   child: Center(child: ActionItemsApiStatus(provider: provider)),
@@ -489,7 +502,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               ],
                             )
                           : categorizedItems.values.every((l) => l.isEmpty)
-                              ? _buildEmptyTasksList()
+                              ? _buildEmptyTasksList(provider)
                               : _buildTasksList(categorizedItems, provider),
                 ),
               ),
@@ -517,11 +530,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildEmptyTasksList() {
+  Widget _buildEmptyTasksList(ActionItemsProvider provider) {
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
-      slivers: [SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent()))],
+      slivers: [
+        SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
+        if (provider.suggestions?.items.isEmpty ?? true)
+          SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+        SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),
+      ],
     );
   }
 
@@ -553,6 +571,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       slivers: [
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
         SliverToBoxAdapter(child: _buildPageHeader(provider)),
+        if (!isSearching) SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
 
         if (isSearching) ...[
           if (filteredItems.isEmpty)

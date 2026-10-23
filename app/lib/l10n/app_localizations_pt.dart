@@ -13420,9 +13420,6 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Continuar com o plano gratuito';
-
-  @override
   String get paywallTrialCancelNote => 'Cancele a qualquer momento. Sem taxas, sem multas.';
 
   @override
@@ -14412,4 +14409,161 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'O Omi continua gravando';
+
+  @override
+  String get episodeNow => 'Agora';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Ao vivo · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count momentos',
+      one: '1 momento',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Momentos';
+
+  @override
+  String get episodeSoFar => 'Até agora';
+
+  @override
+  String get episodeUpdatedJustNow => 'Atualizado agora · notas completas no final';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Atualizado há $minutes min · notas completas no final';
+  }
+
+  @override
+  String get episodeNotesSoon => 'As notas aparecem após os primeiros minutos de conversa.';
+
+  @override
+  String get episodeOpenAll => 'Abrir Tudo';
+
+  @override
+  String get episodeWrapUpNow => 'Concluir Agora';
+
+  @override
+  String get episodeWrapsUpHint => 'O Omi conclui isto quando você passa para outra coisa';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Tarefa detectada: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Lembrete detectado: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Tarefa salva: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'adicionando $duration do seu Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Ouvindo agora';
+
+  @override
+  String get deviceHeardToday => 'Ouvido hoje';
+
+  @override
+  String get deviceToSync => 'para sincronizar';
+
+  @override
+  String get deviceRightNow => 'Agora mesmo';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Episódio ao vivo · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Atualizando';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done de $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Recentemente';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Desconectado por $duration';
+  }
+
+  @override
+  String get deviceControls => 'Controles';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Também: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Pressiona o botão do teu Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Um toque curto. Depois pergunta o que quiseres.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Faz a tua pergunta';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Di-lo em voz alta. O Omi está a ouvir.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Pronto? Pressiona o botão outra vez para enviar.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Tens $days dias grátis';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dias de Omi Pro por nossa conta. Avisamos antes de qualquer cobrança. Cancela quando quiseres.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Quero a prova de $days dias';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Começa a tua prova grátis de $days dias';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Liga o teu Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Pressiona o botão uma vez e mantém-no perto do telemóvel.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'É isso. O Omi continua a gravar as tuas conversas em segundo plano.';
+
+  @override
+  String get noThanks => 'Não, obrigado';
+
+  @override
+  String get recapInTheBackground => 'Em segundo plano';
 }

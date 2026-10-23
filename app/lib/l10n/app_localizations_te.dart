@@ -13449,9 +13449,6 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'ఉచిత ప్లాన్‌తో కొనసాగండి';
-
-  @override
   String get paywallTrialCancelNote => 'ఎప్పుడైనా రద్దు చేయండి. ఎటువంటి రుసుములు, జరిమానాలు లేవు.';
 
   @override
@@ -14443,4 +14440,161 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omiలో రికార్డింగ్ కొనసాగుతోంది';
+
+  @override
+  String get episodeNow => 'ఇప్పుడు';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'లైవ్ · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count క్షణాలు',
+      one: '1 క్షణం',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'క్షణాలు';
+
+  @override
+  String get episodeSoFar => 'ఇప్పటివరకు';
+
+  @override
+  String get episodeUpdatedJustNow => 'ఇప్పుడే నవీకరించబడింది · ముగిసినప్పుడు పూర్తి నోట్స్';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes నిమి. క్రితం నవీకరించబడింది · ముగిసినప్పుడు పూర్తి నోట్స్';
+  }
+
+  @override
+  String get episodeNotesSoon => 'మాటల మొదటి కొన్ని నిమిషాల తర్వాత నోట్స్ కనిపిస్తాయి.';
+
+  @override
+  String get episodeOpenAll => 'అన్నీ తెరవండి';
+
+  @override
+  String get episodeWrapUpNow => 'ఇప్పుడే ముగించు';
+
+  @override
+  String get episodeWrapsUpHint => 'మీరు ముందుకు వెళ్లినప్పుడు Omi దీన్ని ముగిస్తుంది';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'పని గుర్తించబడింది: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'రిమైండర్ గుర్తించబడింది: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'పని సేవ్ చేయబడింది: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'మీ Omi నుండి $duration జోడిస్తోంది';
+  }
+
+  @override
+  String get episodeListeningNow => 'ఇప్పుడు వింటోంది';
+
+  @override
+  String get deviceHeardToday => 'ఈరోజు విన్నది';
+
+  @override
+  String get deviceToSync => 'సింక్ చేయాల్సినది';
+
+  @override
+  String get deviceRightNow => 'ప్రస్తుతం';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'లైవ్ ఎపిసోడ్ · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'వెనుకబడినది సరిచేస్తోంది';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total నిమి.';
+  }
+
+  @override
+  String get deviceRecently => 'ఇటీవల';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration డిస్‌కనెక్ట్';
+  }
+
+  @override
+  String get deviceControls => 'నియంత్రణలు';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'అలాగే: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'మీ Omi బటన్ నొక్కండి';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'ఒక చిన్న నొక్కు. తర్వాత ఏదైనా అడగండి.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'మీ ప్రశ్న అడగండి';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'బిగ్గరగా చెప్పండి. Omi వింటోంది.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'పూర్తయిందా? పంపడానికి బటన్ మళ్లీ నొక్కండి.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'మీకు $days రోజులు ఉచితం';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days రోజుల Omi Pro మా తరఫున. ఛార్జ్‌కు ముందు గుర్తు చేస్తాం. ఎప్పుడైనా రద్దు చేయండి.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days రోజుల ట్రయల్ పొందండి';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'మీ $days రోజుల ఉచిత ట్రయల్ ప్రారంభించండి';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'మీ Omi ఆన్ చేయండి';
+
+  @override
+  String get pairingPowerOnSubtitle => 'బటన్‌ను ఒకసారి నొక్కి ఫోన్ దగ్గర ఉంచండి.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'అంతే. Omi బ్యాక్‌గ్రౌండ్‌లో మీ సంభాషణలను రికార్డ్ చేస్తూనే ఉంటుంది.';
+
+  @override
+  String get noThanks => 'వద్దు, ధన్యవాదాలు';
+
+  @override
+  String get recapInTheBackground => 'నేపథ్యంలో';
 }

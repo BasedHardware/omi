@@ -104,7 +104,7 @@ enum RealtimeHubProviderLogTag {
 /// OpenAI's transport can also surface an already-retired socket as an ENOTCONN
 /// ("Socket is not connected") write race, typically right after the 60-minute
 /// rotation. All of these expected lifecycle paths should re-warm quietly rather
-/// than page Sentry as production errors. Fast 1008 closes are different: they
+/// than surface as production errors. Fast 1008 closes are different: they
 /// usually mean provider policy/auth/config rejection and should still be
 /// reported, but with a stable category instead of raw provider text.
 enum RealtimeHubCloseCategory: String {
@@ -134,7 +134,7 @@ enum RealtimeHubSessionRotationPlan: Equatable {
 
 struct RealtimeHubFailureReportingPlan: Equatable {
   let localMessage: String
-  let sentryMessage: String
+  let boundedErrorMessage: String
 
   static func make(
     failure: RealtimeHubTransportFailure,
@@ -156,7 +156,7 @@ struct RealtimeHubFailureReportingPlan: Equatable {
         + " provider=\(provider)"
         + " aliveFor=\(Int(aliveFor))s"
         + " detail=\(failure.message)",
-      sentryMessage: bounded)
+      boundedErrorMessage: bounded)
   }
 }
 
@@ -365,7 +365,7 @@ enum RealtimeHubCloseClassifier {
     category == .expectedIdleTeardown || category == .expectedSessionRotation
   }
 
-  static func shouldReportToSentry(_ category: RealtimeHubCloseCategory?) -> Bool {
+  static func isActionableClose(_ category: RealtimeHubCloseCategory?) -> Bool {
     !isExpectedLifecycleClose(category)
   }
 }

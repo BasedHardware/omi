@@ -34,7 +34,8 @@ class _FailingCopyFile implements File {
     FileMode mode = FileMode.write,
     Encoding encoding = utf8,
     bool flush = false,
-  }) => _real.writeAsString(contents, mode: mode, encoding: encoding, flush: flush);
+  }) =>
+      _real.writeAsString(contents, mode: mode, encoding: encoding, flush: flush);
 
   @override
   Future<File> rename(String newPath) => _real.rename(newPath);

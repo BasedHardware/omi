@@ -10,6 +10,24 @@ import pathlib
 import re
 
 DAYS_PER_MONTH = Decimal('30.4375')
+ANNUAL_REPEAT_MIN_DAYS = 304  # ~10 months: yearly spacing, not monthly or quarterly
+ANNUAL_REPEAT_MAX_DAYS = 426  # ~14 months
+ANNUAL_OUTLIER_MULTIPLE = Decimal('5')
+ANNUAL_OUTLIER_MIN_OTHERS = 3  # a stable monthly median needs at least three other charges
+# Cadence detection covers software spend; the SaaS run-rate line amortizes the
+# `saas` subset only (stt/llm cash stays a cross-check line and never enters SaaS).
+CADENCE_CATEGORIES = ('saas', 'stt_vendor', 'llm_vendor')
+SAAS_RUN_RATE_CATEGORIES = ('saas',)
+INFRA_RUN_RATE_CATEGORY = 'infra_non_gcp'
+# Infra vendors whose Mercury cash is already counted on another wall line are
+# kept out of the infra run-rate `amount_usd`: `stripe_fees` cash is the same
+# money as the measured `stripe_fee_daily` line (Stripe balance transactions),
+# so counting it there would double the fees line. Their own run rate rides
+# along in `stripe_fees_usd` so the wall can count that cash on the infra line
+# on a day the measured fee line is unavailable — never on both lines, never
+# on neither. STT compute vendors never overlap this category (they map to
+# `stt_vendor`; pinned by test).
+INFRA_EXCLUDED_VENDORS = frozenset({'stripe_fees'})
 CATEGORIES = {
     'saas',
     'stt_vendor',
@@ -175,15 +193,75 @@ def anniversary(day: dt.date, years: int) -> dt.date:
     return day.replace(year=year, day=min(day.day, calendar.monthrange(year, day.month)[1]))
 
 
-def saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
-    """Normal SaaS: last 30 posted days / 30.4375. Annual: bill / 12 / 30.4375
-    for the following 12 calendar months. Older annual aggregates survive refresh.
-    A complete line requires all 30 days, uncategorized spend at or below the map's
-    threshold, and (when annual vendors exist) a full preceding year's coverage
-    with uncategorized spend at or below that threshold. The legacy unmapped_usd
-    and unmapped_count output fields now report uncategorized spend and transactions.
+def detect_annual_charges(
+    rows: list[dict], config: dict, categories: tuple[str, ...] = SAAS_RUN_RATE_CATEGORIES
+) -> dict[tuple[str, str], str]:
+    """Automatic yearly-cadence detection from charge history; no name inference.
+
+    Returns (vendor, posted day) -> basis for every charge treated as an annual
+    bill:
+      override  manual `annual: true` correction in the vendor map
+      repeat    about one charge per 12 months (gap to the previous or next
+                charge within the ~10..14-month band)
+      outlier   a charge at least ANNUAL_OUTLIER_MULTIPLE times that vendor's
+                other-charge median (a yearly bill next to monthly ones)
+      one_off   the vendor's only charge in the available history: ambiguous,
+                amortized /12 for run-rate purposes and reported as estimated
+
+    `annual: false` in the map means auto-detect (the default); only `true`
+    forces. Synthetic rule-classified vendors (mercury_category, category_data)
+    share one blended series behind the rule. Callers cadence-checking other
+    software categories pass them via `categories` (CADENCE_CATEGORIES).
     """
-    annual = {v for v, entry in config['vendors'].items() if entry['annual']}
+    overrides = {v for v, entry in config['vendors'].items() if entry['annual']}
+    series: dict[str, list[tuple[str, Decimal]]] = {}
+    for row in rows:
+        if row['category'] in categories:
+            series.setdefault(row['vendor'], []).append((row['date'], money(row['amount_usd'])))
+    annual: dict[tuple[str, str], str] = {}
+    for vendor, charges in series.items():
+        charges.sort()
+        if vendor in overrides:
+            annual.update(((vendor, day), 'override') for day, _ in charges)
+            continue
+        if len(charges) == 1:
+            annual[(vendor, charges[0][0])] = 'one_off'
+            continue
+        posted = [dt.date.fromisoformat(day) for day, _ in charges]
+        for i, (day, amount) in enumerate(charges):
+            gaps = []
+            if i:
+                gaps.append((posted[i] - posted[i - 1]).days)
+            if i + 1 < len(posted):
+                gaps.append((posted[i + 1] - posted[i]).days)
+            if any(ANNUAL_REPEAT_MIN_DAYS <= gap <= ANNUAL_REPEAT_MAX_DAYS for gap in gaps):
+                annual[(vendor, day)] = 'repeat'
+                continue
+            others = sorted(value for j, (_, value) in enumerate(charges) if j != i)
+            if len(others) >= ANNUAL_OUTLIER_MIN_OTHERS:
+                median = others[len(others) // 2]
+                if median > 0 and amount >= ANNUAL_OUTLIER_MULTIPLE * median:
+                    annual[(vendor, day)] = 'outlier'
+    return annual
+
+
+def run_rate_rows(rows: list[dict], dates: list[str], config: dict, category: str) -> list[dict]:
+    """Shared run rate for one category (SaaS today, non-GCP infra alongside):
+    last 30 posted days / 30.4375 plus detected annual bills / 12 / 30.4375 for
+    the following 12 calendar months (manual override, ~yearly repeat,
+    monthly-median outlier, or an ambiguous one-off reported as estimated in
+    `annual_estimated_usd`). Older annual aggregates survive refresh.
+    `inputs_complete` covers the 30-posted-day cash window: all 30 days fetched
+    and uncategorized spend at or below the map's threshold.
+    `annual_history_complete` requires a full preceding 365 covered days and
+    tolerates no above-threshold uncategorized year-window spend, regardless of
+    configured annual vendors: an empty override map no longer implies
+    complete (2026-10-23). While false, `annual_history_reason` names the
+    blocking gate: `history_under_12_months` or `uncategorized_above_threshold`.
+    The legacy unmapped_usd and unmapped_count output fields report
+    uncategorized spend and transactions.
+    """
+    annual = detect_annual_charges(rows, config, categories=(category,))
     max_uncategorized = money(config.get('max_uncategorized_usd', DEFAULT_MAX_UNCATEGORIZED_USD))
     coverage = {r['date'] for r in rows if r['vendor'] == 'unmapped' and r['category'] == 'unmapped'}
     output = []
@@ -197,8 +275,15 @@ def saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
             Decimal(0),
         )
         annual_unknown = annual_uncategorized > max_uncategorized
-        annual_complete = not annual or (required_annual <= coverage and not annual_unknown)
-        monthly, annual_monthly, uncategorized = Decimal(0), Decimal(0), Decimal(0)
+        history_covered = required_annual <= coverage
+        annual_complete = history_covered and not annual_unknown
+        if annual_complete:
+            annual_reason = None
+        elif not history_covered:
+            annual_reason = 'history_under_12_months'
+        else:
+            annual_reason = 'uncategorized_above_threshold'
+        monthly, annual_monthly, annual_estimated, uncategorized = Decimal(0), Decimal(0), Decimal(0), Decimal(0)
         unmapped_count = 0
         for row in rows:
             if row['date'] > date:
@@ -206,10 +291,13 @@ def saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
             value = money(row['amount_usd'])
             if value < 0:
                 raise MercuryError('negative aggregate Mercury spend')
-            if row['category'] == 'saas':
-                if row['vendor'] in annual:
+            if row['category'] == category:
+                basis = annual.get((row['vendor'], row['date']))
+                if basis:
                     if day < anniversary(dt.date.fromisoformat(row['date']), 1):
                         annual_monthly += value / 12
+                        if basis == 'one_off':
+                            annual_estimated += value / 12
                 elif row['date'] >= lower:
                     monthly += value
             elif row['category'] == 'unmapped' and row['date'] >= lower:
@@ -220,14 +308,43 @@ def saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
             {
                 'date': date,
                 'vendor': 'all',
-                'category': 'saas',
+                'category': category,
                 'amount_usd': str(((monthly + annual_monthly) / DAYS_PER_MONTH).quantize(Decimal('0.000000001'))),
                 'annual_monthly_usd': str(annual_monthly.quantize(Decimal('0.000000001'))),
+                'annual_estimated_usd': str(annual_estimated.quantize(Decimal('0.000000001'))),
                 'unmapped_usd': str(uncategorized),
                 'unmapped_count': unmapped_count,
                 'coverage_days': covered,
                 'annual_history_complete': annual_complete,
-                'inputs_complete': covered == 30 and annual_complete and uncategorized <= max_uncategorized,
+                'annual_history_reason': annual_reason,
+                'inputs_complete': covered == 30 and uncategorized <= max_uncategorized,
             }
         )
+    return output
+
+
+def saas_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
+    """The SaaS run rate (`mercury_saas_daily`): the shared cadence treatment
+    over the `saas` category only — stt/llm/infra cash never enters SaaS."""
+    return run_rate_rows(rows, dates, config, SAAS_RUN_RATE_CATEGORIES[0])
+
+
+def infra_rows(rows: list[dict], dates: list[str], config: dict) -> list[dict]:
+    """The non-GCP infra run rate (`mercury_infra_non_gcp_daily`): Modal, AWS,
+    Runpod and similar — cash that is not in GCP billing, so the wall's all-in
+    software cost stack counts it here exactly once. Same cadence treatment as
+    SaaS (yearly repeats and one-off charges amortize ÷12; a one-off stays an
+    ambiguity reported as estimated). Vendors measured on their own wall line
+    (the Stripe fee table) are kept out of `amount_usd` so no dollar is counted
+    twice; their cash gets the same run-rate treatment on its own and is
+    reported in `stripe_fees_usd`, so the wall can still count it on a day the
+    measured fee line is dark. STT compute vendors live in `stt_vendor` and
+    never enter this line."""
+    kept = [row for row in rows if row['vendor'] not in INFRA_EXCLUDED_VENDORS]
+    excluded = [row for row in rows if row['vendor'] in INFRA_EXCLUDED_VENDORS]
+    output = run_rate_rows(kept, dates, config, INFRA_RUN_RATE_CATEGORY)
+    # Cadence detection is per vendor, so splitting the series by vendor keeps
+    # every charge's annual/monthly basis identical to the combined run.
+    for row, fees in zip(output, run_rate_rows(excluded, dates, config, INFRA_RUN_RATE_CATEGORY)):
+        row['stripe_fees_usd'] = fees['amount_usd']
     return output

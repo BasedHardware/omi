@@ -1,12 +1,14 @@
 """Versioned, immutable batch decisions. Resolution is an admission operation."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 import hashlib
+import json
 import math
 from collections.abc import Mapping
 from typing import Any
 
 from config.policy.parts import PolicyPart, boolean, member, policy_environment, source_role
+from config.rollout_cohorts import runtime_percent
 
 # Compatibility exceptions: these deployed cohorts used the same unsalted
 # sha256 first-four-byte bucket. A salt migration would reassign existing users.
@@ -17,14 +19,37 @@ COHORT_SALTS = {
     'transcription-final-pass': '',  # existing assignment retained (E1)
 }
 LEGACY_CORRELATED_COHORTS = frozenset({'first-summary', 'transcription-final-pass'})
+STT_ROUTES = frozenset({'parakeet', 'provider'})
+PROVIDER_REASONS = frozenset({'none', 'byok', 'unsupported_language'})
+PROVIDER_SERVICES = frozenset({'none', 'byok', 'soniox', 'deepgram', 'modulate'})
+_ROUTE_DEFAULTS = {'stt_route': 'parakeet', 'provider_reason': 'none', 'provider_service': 'none'}
+_UNSET = object()
 
 
-def cohort_bucket(uid: str, salt: str, *, bits: int = 32) -> float:
-    # Listen deployed 64-bit buckets; batch retains its original 32-bit buckets.
+def cohort_bucket(
+    uid: str,
+    salt: str,
+    *,
+    bits: int = 32,
+    formula: str = 'fraction',
+    separator: str = ':',
+    clamp_upper: bool = False,
+    empty_salt_prefix: bool = False,
+) -> float:
+    """Shared hash primitive preserving each deployed cohort's assignment.
+
+    Fractional buckets use the first 32/64 bits scaled to [0, 100]. Older
+    modulo cohorts deliberately retain their modulo bias. A caller's salt,
+    width and separator are part of its persisted rollout contract.
+    """
     if bits not in (32, 64):
         raise ValueError('cohort bucket requires 32 or 64 bits')
-    payload = uid if not salt else f'{salt}:{uid}'
-    return int.from_bytes(hashlib.sha256(payload.encode()).digest()[: bits // 8], 'big') / 2**bits * 100
+    if formula not in ('fraction', 'modulo'):
+        raise ValueError('cohort bucket requires fraction or modulo formula')
+    payload = f'{salt}{separator}{uid}' if salt or empty_salt_prefix else uid
+    value = int.from_bytes(hashlib.sha256(payload.encode()).digest()[: bits // 8], 'big')
+    bucket = value % 100 if formula == 'modulo' else value / 2**bits * 100
+    return min(bucket, math.nextafter(100.0, 0.0)) if clamp_upper else bucket
 
 
 @dataclass(frozen=True)
@@ -39,6 +64,10 @@ class BatchUnitPolicy(PolicyPart):
     live_stt_retired: bool = False
     final_pass_enabled: bool = False
     final_pass_authoritative: bool = False
+    # Contract (c) STT route (lane 8): stamped by intake once the route is known.
+    stt_route: str = 'parakeet'
+    provider_reason: str = 'none'
+    provider_service: str = 'none'
 
     def __post_init__(self):
         object.__setattr__(self, 'batch_percent', float(self.batch_percent))
@@ -47,7 +76,21 @@ class BatchUnitPolicy(PolicyPart):
             raise ValueError('live STT retirement requires batch coverage')
         if not 0 <= self.retire_percent <= self.batch_percent <= 100:
             raise ValueError('retire percent must be nested within batch percent')
+        if not _valid_route(self.stt_route, self.provider_reason, self.provider_service):
+            raise ValueError('closed STT route fields required')
         super().__post_init__()
+        # Additive fields enter the identity only when set: a snapshot stamped before
+        # they existed keeps its stored policy_id (default route == pre-field row).
+        content = {
+            f.name: getattr(self, f.name)
+            for f in fields(self)
+            if f.name != 'policy_id' and _ROUTE_DEFAULTS.get(f.name, _UNSET) != getattr(self, f.name)
+        }
+        object.__setattr__(
+            self,
+            'policy_id',
+            hashlib.sha256(json.dumps(content, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+        )
 
     @classmethod
     def from_dict(cls, raw: object) -> 'BatchUnitPolicy':
@@ -58,7 +101,21 @@ class BatchUnitPolicy(PolicyPart):
         values['retire_percent'] = min(parse_percent(str(values.get('retire_percent', 0))), values['batch_percent'])
         if not values.get('batch_enabled', False):
             values['live_stt_retired'] = False
+        route = (values.get(key, default) for key, default in _ROUTE_DEFAULTS.items())
+        if not _valid_route(*route):
+            # A malformed route reads as the default (no BYOK funding claim): fail closed.
+            for key in _ROUTE_DEFAULTS:
+                values.pop(key, None)
         return super().from_dict(values)
+
+
+def _valid_route(route: object, reason: object, service: object) -> bool:
+    return (
+        route in STT_ROUTES
+        and reason in PROVIDER_REASONS
+        and service in PROVIDER_SERVICES
+        and (route == 'provider') == (service != 'none')
+    )
 
 
 def batch_generation_violations(policy_or_values: BatchUnitPolicy | Mapping[str, Any]) -> tuple[str, ...]:
@@ -136,7 +193,7 @@ def resolve_batch_policy(
         return member(uid, env, name, key, explicit=flags is not None)
 
     def enabled(key, default='false', *, strip=True):
-        return boolean(env, key, default, strip=strip)
+        return boolean(env, key, default, strip=strip, uid=uid)
 
     percent_raw = env.get('BATCH_PIPELINE_PERCENT', '0')
     percent = parse_percent(percent_raw)
@@ -144,11 +201,23 @@ def resolve_batch_policy(
         valid_percent = math.isfinite(float(percent_raw)) and 0 <= float(percent_raw) <= 100
     except ValueError:
         valid_percent = False
+    if flags is None:
+        # Contract (f): production reads the percent from `rollout_cohorts/_ramp` (30s cache, LKG on
+        # error) and records it in the snapshot; the env value stays the fail-safe when no document
+        # sets it. Explicit flags (hermetic replay) are a complete environment and never read _ramp.
+        ramped = runtime_percent('batch-pipeline', env_default=math.nan)
+        if math.isfinite(ramped):
+            percent, valid_percent = parse_percent(str(ramped)), True
     eligible = enabled('BATCH_PIPELINE_ENABLED', strip=False) and valid_percent and bool(uid)
     allowlisted = eligible and cohort('batch-pipeline', 'BATCH_PIPELINE_UID_ALLOWLIST')
     batch = eligible and (allowlisted or cohort_bucket(uid, COHORT_SALTS['batch-pipeline']) < percent)
     live_admission = enabled('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', strip=False)
-    retire = min(parse_percent(env.get('BATCH_LIVE_STT_RETIRE_PERCENT', '0')), percent)
+    retire_raw = env.get('BATCH_LIVE_STT_RETIRE_PERCENT', '0')
+    if flags is None:
+        ramped_retire = runtime_percent('batch-live-stt-retire', env_default=math.nan)
+        if math.isfinite(ramped_retire):
+            retire_raw = str(ramped_retire)
+    retire = min(parse_percent(retire_raw), percent)
     final_pass = False
     if env.get('TRANSCRIPTION_FINAL_PASS_DIARIZER', 'legacy') == 'pyannote_shadow':
         final_percent = max(0.0, min(100.0, float(env.get('TRANSCRIPTION_FINAL_PASS_PERCENT', '0'))))

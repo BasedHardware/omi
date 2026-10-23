@@ -13,7 +13,7 @@ turn a shared session into an unbounded write loop.
 
 | Module | Responsibility |
 | --- | --- |
-| `session.py` | Seen refs, budgets, precise tool results, resubmission and the sanctioned shaped-agent loop |
+| `session.py` | Seen refs, budgets, precise tool results, resubmission and the sanctioned shaped-agent loop; applies the harness tool design rules (`utils/llm/ARCHITECTURE.md`): context-window default for temporal search, `Z` times, declared argument aliases |
 | `limits.py` | Caller-supplied bounded resource limits (Dream bucket policy lives in `config/dream_session.py`) |
 | `search.py` | Owner-scoped lexical, semantic and temporal discovery with opaque cursors |
 | `reads.py` | Decrypted records behind visibility, lock and source-generation boundaries |

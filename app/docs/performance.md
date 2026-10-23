@@ -42,6 +42,11 @@ changing it), SD-card/flash-page sync refreshes the WAL list per downloaded chun
   list identity, length or a version counter (`segmentsPhotosVersion`) before walking anything.
 - **Frame-rate visuals tick their own listenable.** Never `notifyListeners()` a shared provider at
   60 Hz; use an `AnimationController` or a `ValueNotifier` the painter listens to.
+- **No `SchedulerBinding.scheduleTask` below `Priority.animation` from a surface that can
+  animate.** The default strategy declines the task while any ticker runs, and the scheduler
+  re-arms a zero-delay timer every event-loop turn until it can run: a pulsing dot or an
+  indeterminate bar turns one queued idle task into a busy-looping UI isolate. Defer with
+  `Timer.run`, a `Future` or a post-frame callback instead.
 - **Narrow listeners**: prefer `Selector`/`context.select` over `Consumer`/`watch` at page roots.
 - **Paint cost**: no blur in lists or persistent surfaces, decode network images at display size
   (`memCacheWidth`), and use slivers instead of `shrinkWrap: true`.
@@ -52,6 +57,7 @@ changing it), SD-card/flash-page sync refreshes the WAL list per downloaded chun
 |---|---|---|
 | `.github/scripts/check_mobile_ui_isolate.py` | New sync I/O, provider JSON, JSON outside `offUiIsolate` in the WAL index / live transcript / conversation list / preferences modules, fast timers, blur, unsized images, shrinkWrap lists in changed files (no-increase ratchet); any proxy hook that notifies without an `identical`/`==` early return, or whose declaration it cannot read | `mobile-ui-isolate` in `.github/checks-manifest.yaml` |
 | `test/perf/notify_amplification_test.dart` | Proxy hooks re-notifying; capture notifies walking the transcript | `bash test.sh` |
+| `test/perf/home_after_detail_perf_test.dart` | An idle-priority scheduler task behind Home's live dot; the 1-second tick leaving its leaf; tickers or rebuilds left behind by a detail visit; list updates rebuilding more than one shell per mounted row | `bash test.sh` |
 | `test/perf/conversation_list_off_ui_test.dart` | Off-isolate parse/encode drift, stale cache writes, non-sendable payloads | `bash test.sh` |
 | `test/unit/wal_file_manager_save_cost_test.dart` | Save coalescing, off-isolate index encode, backup validation | `bash test.sh` |
 | `test/unit/voice_recorder_mic_contention_test.dart` (waveform case) | 60 Hz provider notifies while dictating | `bash test.sh` |
@@ -81,3 +87,56 @@ python3 .github/scripts/check_mobile_ui_isolate.py --graph
   enabled. Turn it on, reproduce the lag, and read which route and background activity coincided.
 - **A device trace** is the ground truth: `flutter run --profile` on a phone, then DevTools'
   Performance view during a sync or a long recording.
+
+## Sync ring and Device page regression (October 21, 2026)
+
+`OmiActivityRing` used a `RotationTransition` without a repaint boundary. In a
+60-frame window the real Home battery header had 60 rotation-widget builds and
+60 surrounding display-list repaints while syncing (both zero while idle).
+It did not rebuild Home's page root or notify a provider at frame rate. The arc
+now listens to its controller directly in a `CustomPainter` inside its own
+`RepaintBoundary`; its static glyph and the header stay out of those repaints.
+The controller stops when inactive, under Reduce Motion, or outside `TickerMode`.
+
+Separately, Device settings listened to all Capture, Sync, Conversation and
+Episode notifications at the page root. Metric samples and progress updates
+rebuilt every section and recalculated the WAL totals and today's conversation
+durations. Capture metrics sample every five seconds; episodes poll and tick
+every 30 seconds. Neither is a frame-rate timer. Device settings now selects
+its visible capture state and sync badge, with separate subscriptions for stats,
+Right now and the diagnostic rates. Ten irrelevant Capture/Sync notification
+pairs per simulated second used to cause ten whole-page builds, both idle and
+syncing; now they cause zero. Visible pause and sync-amount updates remain tested.
+
+Reproduce the counters with `flutter test test/perf/sync_indicator_isolation_test.dart`
+from `app/`. For the same workload with an explicit live frame policy, run
+`flutter test --no-pub -d flutter-tester integration_test/perf/sync_indicator_perf.dart`.
+It pumps 60 frames at 16,667 microseconds each, after warmup, and logs rebuilds,
+surrounding paints and host UI pipeline p50/p95. The page input stress rate is
+10 notification pairs per second, not a claim about the production notification
+rate. Optional `SYNC_INDICATOR_EVIDENCE_DIR` writes synthetic screenshots.
+These host timings do not measure phone latency or GPU raster; use rebuild and
+paint counts as the portable regression signal and a phone profile for device jank.
+
+## Home scroll after opening a conversation (October 21, 2026)
+
+Opening a conversation from Home queued its analytics through
+`SchedulerBinding.scheduleTask(…, Priority.idle)`. The default scheduling
+strategy declines an idle task while `transientCallbackCount > 0`, and
+`SchedulerBinding._runTasks` then re-arms `Timer.run` every event-loop turn
+until the task can run. With a capture live, Home's episode row pulses its dot
+indefinitely, so the UI isolate busy-looped from the tap onward: through the
+push, through a processing conversation's indeterminate bar on the detail
+page, and on Home again after the pop. In a widget test the same shape never
+returns from `pump` and the tester grows to 34 GB. The call now defers with
+`Timer.run`. The capture card's own 1-second `setState` also stops while the
+episode row draws the capture, since the card renders nothing then.
+
+`flutter test test/perf/home_after_detail_perf_test.dart` from `app/` pumps the
+real Home with the pulsing live row and a pushed detail page: the scheduling
+strategy is consulted zero times on open (the old code trips the spy at 51),
+the open still reaches analytics, five ticks rebuild only `LiveEpisodeClock`,
+three visits leave `transientCallbackCount` at baseline, and ten list identity
+replacements cost one shell build per mounted row each (20 here; row content
+stays behind its `Selector`). That last number is the current cost of a
+completion landing on Home, not a floor.

@@ -315,6 +315,7 @@ class TestTheMarkerMustCoverTheCurrentWindow:
 
 def _process_after_wait(monkeypatch, *, reloaded_status, outcome='arrived'):
     """Run the finalizer to process_conversation with a transcript that grows during the wait."""
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'off')
     before = dict(MEETING, id='c', status='processing', segments=['hello'])
     after = dict(MEETING, id='c', status=reloaded_status, segments=['hello', 'tail said during the wait'])
     reads = iter([before, after])
@@ -332,6 +333,8 @@ def _process_after_wait(monkeypatch, *, reloaded_status, outcome='arrived'):
         if function is finalizer.conversations_db.get_conversation:
             return next(reads)
         if function is finalizer.reserve_recording:
+            return function(*args, **kwargs)
+        if function is finalizer.apply_call_metadata:
             return function(*args, **kwargs)
         if function is finalizer.get_cached_user_geolocation:
             return None

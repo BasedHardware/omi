@@ -516,8 +516,8 @@ async def run_canonical_short_term_maintenance_cron(
                 uid,
             )
             break
-        # The shared Flex router remains only for owed explicit normalization.
-        # Semantic cleanup, recurrence discovery and maintenance dreaming are gone.
+        # Owed explicit normalization and ordinary intake share the bounded Flex
+        # router. Retrospective semantic cleanup remains Dream's responsibility.
         model = flex_run.llm_for_uid(
             uid,
             standard_feature="memory_l2",
@@ -530,6 +530,15 @@ async def run_canonical_short_term_maintenance_cron(
         def normalize(item):
             return invoke_required_memory_processor(item, model)
 
+        def decide_observations(items):
+            from utils.memory.canonical_consolidation import plan_observation_intake
+
+            if model is None:
+                raise RuntimeError('observation_intake_model_unavailable')
+            result = plan_observation_intake(items, llm=model)
+            flex_run.assert_result_current()
+            return result
+
         try:
             report = await run_canonical_short_term_maintenance_async(
                 uid,
@@ -537,6 +546,7 @@ async def run_canonical_short_term_maintenance_cron(
                 now=maintenance_now,
                 run_id=effective_run_id,
                 required_processor=normalize if model is not None else None,
+                observation_planner=decide_observations,
                 required_processing_limit=25 if model is not None else 0,
                 required_processing_attempt_lease_seconds=MEMORY_PROMOTION_FLEX_LEASE_SECONDS,
                 required_processing_result_guard=flex_run.assert_result_current,
@@ -595,6 +605,8 @@ async def run_canonical_short_term_maintenance_cron(
             summary.errors.append(
                 f"uid={uid}: required_intake_failed:count={len(report.required_intake.failed_memory_ids)}"
             )
+        if report.observations and report.observations.error_code:
+            summary.errors.append(f"uid={uid}: observation_intake_failed:{report.observations.error_code}")
         if outbox_retryable or outbox_dead_letters or outbox_ack_failures or outbox_error_count:
             summary.errors.append(
                 f"uid={uid}: outbox_delivery_failed:"

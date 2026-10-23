@@ -18,8 +18,8 @@ from utils.metrics import OMI_FALLBACK_TOTAL
 from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import DEMAND_COHORTS, FAILURE_DETAIL, current_demand
 from utils.observability.routing_cohort import current_routing_cohort
+from utils.observability.reasons import FallbackReason, LiveSttReason, reason_values
 from utils.stt.failure_diagnostics import CONNECTION_LOSS_CAUSES
-from utils.stt.live_reason import LIVE_STT_REASONS
 
 logger = logging.getLogger(__name__)
 
@@ -146,65 +146,25 @@ _SAFE_LABEL_CHARS = frozenset('._:-')
 
 ALLOWED_OUTCOMES = frozenset({'recovered', 'degraded', 'exhausted'})
 
-ALLOWED_REASONS = LIVE_STT_REASONS | frozenset(
-    {
-        'gate_unavailable',
-        'http_error',
-        'http_429',
-        'transport_error',
-        'unavailable',
-        'unconfigured',
-        'malformed',
-        'timeout',
-        'provider_5xx',
-        'provider_429',
-        'enqueue_failed',
-        'marker_failed',
-        'enqueue_uncertain',
-        'marker_timeout',
-        'acquire_unsettled',
-        'marker_clear_failed',
-        'owner_write_failed',
-        'pre_lock_expiry',
-        'preamble_timeout',
-        'deferrals_exhausted',
-        'config_incomplete',
-        'circuit_open',
-        'last_resort',
-        'session_excluded',
-        'recovery_budget',
-        'connection_lost',
-        'modulate_serve_error',
-        'capability_mismatch',
-        'auth',
-        'quota',
-        'local_heal',
-        'policy',
-        'dispatch_disabled',
-        'byok',
-        'malformed_doc',
-        'capacity_full',
-        'auth_error',
-        'connection_error',
-        'first_text_deadline',
-        'empty_streak',
-        'allocation_rejected',
-        'private_tool_output_in_context',
-        'not_authorized',
-        'authorization_unavailable',
-        'unmigrated_principal',
-        'document_size_limit',
-        'kept_over_80pct',
-        'other',
-        'none',
-    }
-)
+ALLOWED_REASONS = reason_values(FallbackReason)
 
 # Diagnostic detail stays in the log; metric dimensions stay fixed and live
 # STT reasons share the bounded vocabulary used by cost health.
 ALLOWED_CAPACITY_SUBTYPES = frozenset({'buffer_cap', 'span_cap', 'admission', 'queue_timeout'})
-# Bounded ramp-watch reasons with their own failure-detail series.
-FAILURE_DETAIL_REASONS = frozenset({'first_text_deadline', 'capacity_full', 'replay_ring_overflow', 'gate_unavailable'})
+# Bounded ramp-watch reasons with their own failure-detail series. The local
+# delivery deaths (send_queue_full / replay_send_stalled / delivery_expired)
+# carry their own series instead of hiding inside capacity_full.
+FAILURE_DETAIL_REASONS = frozenset(
+    {
+        'first_text_deadline',
+        'capacity_full',
+        'replay_ring_overflow',
+        'gate_unavailable',
+        'send_queue_full',
+        'replay_send_stalled',
+        'delivery_expired',
+    }
+)
 ALLOWED_STT_FAILURE_SUBTYPES = frozenset(
     {
         'initialization_failed',
@@ -386,9 +346,27 @@ def safe_label(value: object, *, default: str = 'unknown') -> str:
 
 
 def initialize_live_stt_exhausted_children() -> None:
-    """Expose zero before the first burst so increase() can observe it."""
+    """Expose zero before the first burst so increase() can observe it.
+
+    The full provider x replacement x reason matrix is deliberate: increase()
+    cannot observe a one-off burst on a lazily created counter (its first sample
+    already holds the burst, and the flat tail reads as zero), and the
+    retired-provider and capacity_full-by-to_mode alerts select across the whole
+    from x to x reason product over 6h windows. Each series costs one entry per
+    listen/pusher/gateway pod and per Cloud Run instance, so shrink this only by
+    shrinking the reason vocabulary itself, never by dropping combinations.
+
+    'text' and 'no_text' are transcript-outcome tokens, never fallback reasons,
+    so they stay out of the baseline (they were silently adding 2 x 24 series
+    per emitter).
+    """
     providers = ('parakeet', 'modulate', 'soniox', 'deepgram')
-    reasons = LIVE_STT_REASONS | {'auth', 'quota', 'last_resort', 'config_incomplete'}
+    # Built from the enum, not utils.stt.live_reason: live_reason imports utils.observability.reasons,
+    # whose package import loads this module (and runs this at import), so importing it here cycles
+    # when live_reason loads first (#23074's provider_resilience does). Same set as
+    # live_reason.LIVE_STT_FAILURE_REASONS.
+    live_failures = reason_values(LiveSttReason) - {'text', 'no_text'}
+    reasons = live_failures | {'auth', 'quota', 'last_resort', 'config_incomplete'}
     for reason in sorted(reasons):
         for provider in providers:
             for replacement in providers:

@@ -26,6 +26,7 @@ from config.dream_agent import (
     LEASE_RECLAIM_MARGIN_SECONDS,
 )
 from config.plan_catalog import PAID_PLAN_IDS
+from database import firestore_transaction_retry
 from database.dream_history import review_id
 from database._client import get_firestore_client
 
@@ -382,7 +383,9 @@ def acquire(
             tx.set(database.collection('dream_due').document(uid), {'due_at': patch['next_due_at']})
         return lease, reclaimed, denial
 
-    lease, reclaimed, denial = claim(database.transaction())
+    lease, reclaimed, denial = firestore_transaction_retry.run_with_transaction_contention_retry(
+        database.transaction, claim, operation_name='dream_acquire'
+    )
     if reclaimed and reclaim_sink is not None:
         reclaim_sink.update(age_s=reclaimed[0], size_bucket=reclaimed[1])
     if denial:

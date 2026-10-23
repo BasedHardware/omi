@@ -12,6 +12,7 @@ import 'scenarios/chat.dart';
 import 'scenarios/conversation_detail.dart';
 import 'scenarios/conversations.dart';
 import 'scenarios/device.dart';
+import 'scenarios/episodes.dart';
 import 'scenarios/home.dart';
 import 'scenarios/offline_processing.dart';
 import 'scenarios/imports.dart';
@@ -36,6 +37,7 @@ final auditSuite = AuditSuite(
     ...homeScenarios,
     ...captureScenarios,
     ...deviceScenarios,
+    ...episodeScenarios,
     ...conversationsScenarios,
     ...offlineProcessingScenarios,
     ...speakerPromptScenarios,

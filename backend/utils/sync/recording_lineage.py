@@ -32,7 +32,6 @@ fails the sync job by itself.
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import uuid
@@ -40,15 +39,13 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Sequence
 
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.sync_lineage import (
     sync_lineage_resolve_enabled,
     sync_lineage_resolve_uid_allowed,
-    sync_lineage_s1_required,
 )
 from config.sync_live_dedupe import sync_live_dedupe_active_for, sync_live_dedupe_enabled
 from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class
-from utils.capture_evidence import parse_sync_file_claims
+from utils.capture_evidence import parse_sync_file_claims, validate_sync_file_claims
 from utils.metrics import OMI_SYNC_LINEAGE_RESOLVE_TOTAL
 from utils.observability.fallback import record_fallback
 from utils.sync.lineage_diagnostics import classify_generation_row, probe_token
@@ -93,6 +90,23 @@ OUTCOMES = (
 )
 
 S1_REFUSAL_REASONS = ('no_claims', 'parse_failed', 'count_mismatch', 'filename_mismatch', 'not_admitted')
+S1_STAGES = ('http_boundary', 'intake', 'batch_projection', 'coordinator')
+
+
+def _s1_count_bucket(count: Optional[int]) -> str:
+    if type(count) is not int or count < 0:
+        return 'none'
+    if count == 0:
+        return '0'
+    if count == 1:
+        return '1'
+    if count <= 5:
+        return '2_5'
+    if count <= 10:
+        return '6_10'
+    if count <= 20:
+        return '11_20'
+    return 'gt_20'
 
 
 @dataclass(frozen=True)
@@ -123,8 +137,7 @@ class LineagePlan:
 def _s1_claims_complete(capture_evidence_claims: Optional[Mapping], filenames: Sequence[str]) -> bool:
     """Complete validated S1 metadata for the exact uploaded basename set."""
     if (
-        not capture_evidence_dark_write_enabled()
-        or not isinstance(capture_evidence_claims, Mapping)
+        not isinstance(capture_evidence_claims, Mapping)
         or not capture_evidence_claims
         or not filenames
         or len(capture_evidence_claims) > 20
@@ -132,10 +145,9 @@ def _s1_claims_complete(capture_evidence_claims: Optional[Mapping], filenames: S
     ):
         return False
     try:
-        payload = json.dumps(
-            {'version': 1, 'files': [dict(claim, name=name) for name, claim in capture_evidence_claims.items()]}
+        parsed = validate_sync_file_claims(
+            [dict(claim, name=name) for name, claim in capture_evidence_claims.items()], filenames
         )
-        parsed = parse_sync_file_claims(payload, filenames)
     except Exception:
         return False
     return len(parsed) == len(filenames) == len(capture_evidence_claims)
@@ -149,8 +161,6 @@ def _s1_refusal_reason(capture_evidence_claims: object, filenames: Sequence[str]
     ``no_claims`` rather than the original parse failure.
     """
     try:
-        if not capture_evidence_dark_write_enabled():
-            return 'not_admitted'
         if capture_evidence_claims is None:
             return 'no_claims'
         if not isinstance(capture_evidence_claims, Mapping):
@@ -175,31 +185,59 @@ def _s1_refusal_reason(capture_evidence_claims: object, filenames: Sequence[str]
                     return 'parse_failed'
             except Exception:
                 return 'parse_failed'
-        try:
-            claim_items = [dict(claim, name=name) for name, claim in capture_evidence_claims.items()]
-        except Exception:
-            return 'parse_failed'
         if not filenames or len(capture_evidence_claims) > 20 or len(filenames) > 20:
             return 'count_mismatch'
         if len(capture_evidence_claims) != len(filenames) or len(set(filenames)) != len(filenames):
             return 'count_mismatch'
         if set(capture_evidence_claims.keys()) != set(filenames):
             return 'filename_mismatch'
-        try:
-            payload = json.dumps({'version': 1, 'files': claim_items})
-            if len(payload.encode('utf-8')) > 4096:
-                return 'parse_failed'
-        except Exception:
-            return 'parse_failed'
         return 'parse_failed'
     except Exception:
         return 'parse_failed'
 
 
-def emit_s1_refusal(reason: str) -> None:
-    """One bounded s1_refused outcome per refused upload; no ids, names or claim content."""
+def emit_s1_refusal(
+    reason: str, *, stage: str = 'intake', claim_count: Optional[int] = None, file_count: Optional[int] = None
+) -> None:
+    """One bounded s1_refused outcome per refused validation check; no ids, names or claim content."""
     safe_reason = reason if reason in S1_REFUSAL_REASONS else 'parse_failed'
-    _emit(LineagePlan(targets={}, outcome='s1_refused', reason=safe_reason), None, diagnostics=False)
+    safe_stage = stage if stage in S1_STAGES else 'intake'
+    claims = _s1_count_bucket(claim_count) if safe_reason == 'count_mismatch' else 'none'
+    files = _s1_count_bucket(file_count) if safe_reason == 'count_mismatch' else 'none'
+    try:
+        OMI_SYNC_LINEAGE_RESOLVE_TOTAL.labels(
+            outcome='s1_refused', stage=safe_stage, claim_count_bucket=claims, file_count_bucket=files
+        ).inc()
+    except Exception:
+        pass
+    try:
+        logger.info(
+            'event=sync_lineage_resolve outcome=s1_refused reason=%s stage=%s '
+            'claim_count_bucket=%s file_count_bucket=%s job_ref=none',
+            safe_reason,
+            safe_stage,
+            claims,
+            files,
+        )
+    except Exception:
+        pass
+
+
+def parse_s1_upload_claims(value: Optional[str], filenames: Sequence[str]) -> dict[str, dict]:
+    """HTTP parsing, with a content-free diagnostic for a supplied invalid header.
+
+    Downstream validation still sees the parser's empty mapping and may report
+    no_claims at its own stage; stage counts measure checks, not unique uploads.
+    """
+    claims = parse_sync_file_claims(value, filenames)
+    if isinstance(value, str) and value and not claims:
+        emit_s1_refusal('parse_failed', stage='http_boundary')
+    return claims
+
+
+def emit_s1_mapping_refusal(mapped_count: int, wav_count: int) -> None:
+    """Coordinator refused incomplete decoded position maps for surviving WAVs."""
+    emit_s1_refusal('count_mismatch', stage='coordinator', claim_count=mapped_count, file_count=wav_count)
 
 
 def lineage_resolution_requested(
@@ -211,6 +249,7 @@ def lineage_resolution_requested(
     job_id: Optional[str] = None,
     capture_evidence_claims: Optional[Mapping] = None,
     filenames: Sequence[str] = (),
+    stage: str = 'intake',
 ) -> bool:
     """True when this upload binds per segment; otherwise records why for eligible uploads.
 
@@ -236,8 +275,13 @@ def lineage_resolution_requested(
             diagnostics=sync_live_dedupe_active_for(uid),
         )
         return False
-    if sync_lineage_s1_required() and not _s1_claims_complete(capture_evidence_claims, filenames):
-        emit_s1_refusal(_s1_refusal_reason(capture_evidence_claims, filenames))
+    if not _s1_claims_complete(capture_evidence_claims, filenames):
+        emit_s1_refusal(
+            _s1_refusal_reason(capture_evidence_claims, filenames),
+            stage=stage,
+            claim_count=len(capture_evidence_claims) if isinstance(capture_evidence_claims, Mapping) else None,
+            file_count=len(filenames),
+        )
         return False
     return True
 
@@ -688,10 +732,7 @@ def resolve_segment_targets(
     lineage_module: list = []
     safe_overlap = sync_live_dedupe_active_for(uid)
     want_capture_evidence = bool(
-        safe_overlap
-        and capture_evidence_dark_write_enabled()
-        and segment_source_maps
-        and any(mapping is not None for mapping in segment_source_maps.values())
+        (safe_overlap and segment_source_maps and any(mapping is not None for mapping in segment_source_maps.values()))
     )
     try:
         try:
@@ -857,7 +898,9 @@ def _emit(plan: LineagePlan, job_id: Optional[str], diagnostics: Optional[bool] 
         diagnostics = sync_live_dedupe_enabled()
     outcome = plan.outcome if plan.outcome in OUTCOMES else 'lookup_failed'
     try:
-        OMI_SYNC_LINEAGE_RESOLVE_TOTAL.labels(outcome=outcome).inc()
+        OMI_SYNC_LINEAGE_RESOLVE_TOTAL.labels(
+            outcome=outcome, stage='none', claim_count_bucket='none', file_count_bucket='none'
+        ).inc()
     except Exception:
         pass
     counts = plan.counts

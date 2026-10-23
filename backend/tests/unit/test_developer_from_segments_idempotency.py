@@ -18,6 +18,17 @@ from utils.conversations.meeting_treatment import meeting_treatment_verdict
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
+@pytest.fixture
+def segment_api_client():
+    """Keep fresh router/auth setup outside the request's fast-unit CPU budget."""
+    app = FastAPI()
+    app.include_router(developer.router)
+    app.dependency_overrides[developer.get_current_user_uid] = lambda: 'uid1'
+    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
+    with TestClient(app) as client:
+        yield client
+
+
 @pytest.fixture(autouse=True)
 def _passthrough_resolve_geolocation(monkeypatch):
     # utils.conversations.location is stubbed with an AutoMockModule here, so the imported
@@ -109,7 +120,16 @@ def test_no_client_session_id_preserves_create_conversation_path(monkeypatch):
 
     assert response.id == 'random-process-id'
     assert isinstance(captured['conversation'], CreateConversation)
-    assert captured['conversation'].external_data == {'conversation_role': 'meeting'}
+    assert captured['conversation'].external_data == {
+        'conversation_role': 'meeting',
+        'capture_evidence': {
+            'version': 1,
+            'capability': 'unknown',
+            'coverage': 'unknown',
+            'origin': 'from_segments',
+            'reason': 'missing',
+        },
+    }
     conversations_db.get_conversation.assert_not_called()
     claim.assert_not_called()
 
@@ -181,7 +201,9 @@ def test_client_session_id_uses_stable_conversation_id(monkeypatch):
 @pytest.mark.parametrize('source', ['workflow', 'external_integration', None])
 @pytest.mark.parametrize('client_session_id', [None, 'integration-segments-session'])
 @pytest.mark.parametrize('path', ['/v1/conversations/from-segments', '/v1/dev/user/conversations/from-segments'])
-def test_from_segments_keeps_transcript_shape_for_integration_sources(monkeypatch, source, client_session_id, path):
+def test_from_segments_keeps_transcript_shape_for_integration_sources(
+    monkeypatch, source, client_session_id, path, segment_api_client
+):
     captured = []
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
@@ -204,11 +226,7 @@ def test_from_segments_keeps_transcript_shape_for_integration_sources(monkeypatc
         )
 
     monkeypatch.setattr(developer, 'process_conversation', process)
-    app = FastAPI()
-    app.include_router(developer.router)
-    app.dependency_overrides[developer.get_current_user_uid] = lambda: 'uid1'
-    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
-    response = TestClient(app).post(
+    response = segment_api_client.post(
         path, json=_request(source=source, client_session_id=client_session_id).model_dump(mode='json')
     )
 
@@ -746,7 +764,7 @@ def test_failed_creation_does_not_record_product_metric(monkeypatch):
     record.assert_not_called()
 
 
-def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_identical(monkeypatch):
+def test_s1_lineage_piggybacks_on_existing_from_segments_claim(monkeypatch):
     claim = MagicMock(return_value=True)
     monkeypatch.setattr(conversations_db, 'get_conversation', MagicMock(return_value=None))
     monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', claim)
@@ -766,14 +784,10 @@ def test_s1_lineage_piggybacks_on_existing_from_segments_claim_and_flag_off_is_i
         'units': [{'id': '42', 'start_ms': 0, 'end_ms': 1500}],
     }
     request = _request(client_session_id='local-session-1', capture_evidence=lineage)
-    monkeypatch.delenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', raising=False)
-    developer._create_conversation_from_segments('uid1', request)
-    assert 'capture_evidence' not in claim.call_args.args[1]['external_data']
 
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', '1')
     developer._create_conversation_from_segments('uid1', request)
     assert claim.call_args.args[1]['external_data']['capture_evidence'] == lineage
-    assert claim.call_count == 2  # no new Firestore claim/write operation
+    assert claim.call_count == 1  # no new Firestore claim/write operation
 
     mismatched = _request(client_session_id='local-session-1', capture_evidence={**lineage, 'capture_root': 'foreign'})
     developer._create_conversation_from_segments('uid1', mismatched)
@@ -938,7 +952,7 @@ def test_unknown_folder_id_is_rejected_before_processing(monkeypatch):
     process.assert_not_called()
 
 
-def test_folder_and_calendar_reach_create_conversation(monkeypatch):
+def test_folder_and_calendar_reach_create_conversation(monkeypatch, segment_api_client):
     captured = {}
     monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-1'}))
     refresh = MagicMock()
@@ -961,12 +975,9 @@ def test_folder_and_calendar_reach_create_conversation(monkeypatch):
         )
 
     monkeypatch.setattr(developer, 'process_conversation', process)
-    app = FastAPI()
-    app.include_router(developer.router)
-    app.dependency_overrides[developer.get_uid_with_conversations_from_segments_write] = lambda: 'uid1'
     body = _request().model_dump(mode='json')
     body.update(folder_id='folder-1', calendar_meeting_context=_calendar_meeting())
-    response = TestClient(app).post('/v1/dev/user/conversations/from-segments', json=body)
+    response = segment_api_client.post('/v1/dev/user/conversations/from-segments', json=body)
 
     assert response.status_code == 200, response.text
     conversation = captured['conversation']
@@ -1038,3 +1049,159 @@ def test_without_folder_id_ai_assignment_stays_in_charge(monkeypatch):
     assert captured['conversation'].calendar_meeting_context is None
     get_folder.assert_not_called()
     refresh.assert_not_called()
+
+
+def _late_request(folder_id=None, calendar_context=None):
+    return SimpleNamespace(folder_id=folder_id, calendar_meeting_context=calendar_context)
+
+
+def _calendar_context(title='Standup'):
+    from models.calendar_context import CalendarMeetingContext
+
+    context = CalendarMeetingContext(
+        calendar_event_id='event-1',
+        title=title,
+        participants=[],
+        start_time=NOW,
+        duration_minutes=30,
+        calendar_source='developer_api',
+    )
+    return SimpleNamespace(to_context=lambda: context)
+
+
+def test_idempotent_hit_binds_folder_the_retry_carries(monkeypatch):
+    """A retried upload must land in the folder it names, not stay in the AI-assigned one."""
+    existing = {'id': 'conv-1', 'folder_id': None, 'external_data': {}}
+    writes = []
+    refreshes = []
+    monkeypatch.setattr(
+        conversations_db, 'update_conversation', lambda uid, cid, data: writes.append((uid, cid, data)) or True
+    )
+    monkeypatch.setattr(
+        developer.folders_db, 'update_folder_conversation_count', lambda uid, fid: refreshes.append(fid)
+    )
+    monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-2'}))
+
+    updated = developer._apply_late_from_segments_context('uid1', existing, _late_request(folder_id='folder-2'))
+
+    assert writes == [('uid1', 'conv-1', {'folder_id': 'folder-2'})]
+    assert refreshes == ['folder-2']
+    assert updated['folder_id'] == 'folder-2'
+
+
+def test_idempotent_hit_moves_folder_and_refreshes_both_counts(monkeypatch):
+    """Changing the folder on a retry must refresh the folder it left as well as the one it enters."""
+    existing = {'id': 'conv-1', 'folder_id': 'folder-1', 'external_data': {}}
+    refreshes = []
+    monkeypatch.setattr(conversations_db, 'update_conversation', lambda uid, cid, data: True)
+    monkeypatch.setattr(
+        developer.folders_db, 'update_folder_conversation_count', lambda uid, fid: refreshes.append(fid)
+    )
+    monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value={'id': 'folder-2'}))
+
+    developer._apply_late_from_segments_context('uid1', existing, _late_request(folder_id='folder-2'))
+
+    assert sorted(refreshes) == ['folder-1', 'folder-2']
+
+
+def test_idempotent_hit_stores_calendar_context_once(monkeypatch):
+    """The meeting block must reach the stored row, and a second retry must not rewrite it."""
+    existing = {'id': 'conv-1', 'folder_id': None, 'external_data': {'keep': 'me'}}
+    writes = []
+    monkeypatch.setattr(conversations_db, 'update_conversation', lambda uid, cid, data: writes.append(data) or True)
+
+    updated = developer._apply_late_from_segments_context(
+        'uid1', existing, _late_request(calendar_context=_calendar_context())
+    )
+
+    assert len(writes) == 1
+    # Dotted write: the retry must not replace the map a concurrent writer owns.
+    stored = writes[0]['external_data.calendar_meeting_context']
+    assert stored['title'] == 'Standup'
+    assert updated['external_data']['keep'] == 'me'
+    assert updated['external_data']['calendar_meeting_context']['title'] == 'Standup'
+
+    # The row now carries the context, so a later retry is a no-op.
+    writes.clear()
+    developer._apply_late_from_segments_context('uid1', updated, _late_request(calendar_context=_calendar_context()))
+    assert writes == []
+
+
+def test_idempotent_hit_skips_a_folder_deleted_between_attempts(monkeypatch):
+    """A folder that no longer exists must not be written back as a dangling reference."""
+    existing = {'id': 'conv-1', 'folder_id': 'folder-1', 'external_data': {}}
+    writes = []
+    monkeypatch.setattr(conversations_db, 'update_conversation', lambda uid, cid, data: writes.append(data) or True)
+    monkeypatch.setattr(developer.folders_db, 'get_folder', MagicMock(return_value=None))
+
+    updated = developer._apply_late_from_segments_context('uid1', existing, _late_request(folder_id='folder-gone'))
+
+    assert writes == []
+    assert updated['folder_id'] == 'folder-1'
+
+
+def test_idempotent_hit_without_new_context_writes_nothing(monkeypatch):
+    existing = {'id': 'conv-1', 'folder_id': 'folder-1', 'external_data': {'calendar_meeting_context': {'title': 'x'}}}
+    writes = []
+    monkeypatch.setattr(conversations_db, 'update_conversation', lambda uid, cid, data: writes.append(data) or True)
+
+    developer._apply_late_from_segments_context('uid1', existing, _late_request(folder_id='folder-1'))
+
+    assert writes == []
+
+
+def test_http_continuation_assembles_one_recording_and_retry_never_creates_another(monkeypatch, segment_api_client):
+    """Exercise actual routing, request validation, assembly and existing admission ownership."""
+    from routers import developer_segments as intake
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    store = StrictFirestore()
+    monkeypatch.setenv(intake.CONTINUATION_FLAG_KEY, 'serve')
+    monkeypatch.setattr(intake.firestore, 'transactional', lambda fn: fn)
+    monkeypatch.setattr(intake, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(intake.encryption, 'encrypt', lambda value, owner: value)
+    monkeypatch.setattr(intake.encryption, 'decrypt', lambda value, owner: value)
+    monkeypatch.setattr(intake, 'purge_chunks', lambda *args: None)
+    persisted = {}
+    processed = []
+
+    def get(_owner, conversation_id, **kwargs):
+        return persisted.get(conversation_id)
+
+    def persist(_owner, row):
+        persisted[row['id']] = row
+
+    def process(_owner, _language, conversation, **kwargs):
+        processed.append(conversation)
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(conversations_db, 'get_conversation', get)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persist)
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    replies = []
+    bodies = []
+    for index, count in enumerate([500, 500, 1]):
+        body = _request(
+            client_session_id='synthetic-continuation',
+            chunk_index=index,
+            chunk_count=3,
+            finished_at=NOW + timedelta(hours=1),
+            transcript_segments=[
+                {**_segment(), 'speaker_id': position % 2, 'start': float(position), 'end': float(position) + 0.5}
+                for position in range(index * 500, index * 500 + count)
+            ],
+        ).model_dump(mode='json')
+        bodies.append(body)
+        reply = segment_api_client.post('/v1/conversations/from-segments', json=body)
+        assert reply.status_code == 200
+        replies.append(reply.json())
+    assert len({reply['id'] for reply in replies}) == 1
+    assert [reply['status'] for reply in replies] == ['processing', 'processing', 'completed']
+    assert len(processed) == 1
+    assert len(processed[0].transcript_segments) == 1001
+    retry = segment_api_client.post('/v1/conversations/from-segments', json=bodies[-1])
+    assert retry.status_code == 200
+    assert retry.json()['id'] == replies[-1]['id']
+    assert len(processed) == 1

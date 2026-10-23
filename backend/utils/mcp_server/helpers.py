@@ -68,6 +68,7 @@ def conversation_card(conversation: Dict[str, Any]) -> Dict[str, Any]:
         "started_at": conversation.get("started_at"),
         "finished_at": conversation.get("finished_at"),
         "language": conversation.get("language"),
+        **conversation_call_fields(conversation),
         "structured": {
             key: structured.get(key) for key in ("title", "overview", "category", "emoji") if key in structured
         },
@@ -106,10 +107,17 @@ def bounded_transcript_segments(
             truncated = True
         item = {key: segment.get(key) for key in allowed_keys if key in segment}
         if item.get('original_text') is not None:
-            item['original_text'] = str(item['original_text'])[:remaining_chars]
+            # The budget covers every text field the segment returns. Charging only
+            # `text` let a corrected segment spend the budget twice.
+            original_text = str(item['original_text'])
+            remaining_after_text = max_chars - used_chars - len(text)
+            if len(original_text) > remaining_after_text:
+                original_text = original_text[:remaining_after_text]
+                truncated = True
+            item['original_text'] = original_text
         item["text"] = text
         bounded.append(item)
-        used_chars += len(text)
+        used_chars += len(text) + len(item.get('original_text') or "")
         if truncated:
             break
 
@@ -119,3 +127,70 @@ def bounded_transcript_segments(
 
 
 _bounded_transcript_segments = bounded_transcript_segments
+
+
+def conversation_call_fields(conversation: Dict[str, Any]) -> Dict[str, Any]:
+    """Expose persisted call evidence only; unknown stays null."""
+    external = conversation.get('external_data')
+    external = external if isinstance(external, dict) else {}
+    contexts = [conversation.get(key) or external.get(key) for key in ('calendar_meeting_context', 'calendar_event')]
+    contexts = [value for value in contexts if isinstance(value, dict)]
+    source = conversation.get('source')
+    source = getattr(source, 'value', source)
+    source = source if isinstance(source, str) else None
+    platform = conversation.get('call_platform')
+    platform = platform if isinstance(platform, str) else None
+    event_id = conversation.get('calendar_event_id')
+    event_id = event_id if isinstance(event_id, str) else None
+    is_call = conversation.get('is_call')
+    is_call = is_call if isinstance(is_call, bool) else None
+    for context in contexts:
+        candidate_id = context.get('event_id') or context.get('calendar_event_id') or context.get('id')
+        if (
+            isinstance(candidate_id, str)
+            and candidate_id != 'screen-activity'
+            and context.get('calendar_source') != 'screen_activity'
+        ):
+            event_id = event_id or candidate_id
+        candidate_platform = context.get('platform') or context.get('call_platform')
+        if isinstance(candidate_platform, str):
+            platform = platform or candidate_platform
+        url = str(
+            context.get('meeting_link')
+            or context.get('meeting_url')
+            or context.get('join_url')
+            or context.get('url')
+            or ''
+        ).lower()
+        for token, name in (('meet.google.', 'google_meet'), ('zoom.us', 'zoom'), ('teams.microsoft.', 'teams')):
+            if token in url:
+                platform = platform or name
+        if context.get('is_call') is True:
+            is_call = True
+    if source in {'phone_call', 'call', 'desktop_call', 'zoom', 'google_meet', 'teams'}:
+        is_call = True
+        platform = platform or (
+            'phone' if source == 'phone_call' else source if source not in {'call', 'desktop_call'} else None
+        )
+    if platform:
+        normalized = str(platform).casefold().replace('_', ' ')
+        if normalized in {'in person', 'in-person', 'physical'}:
+            is_call = False if is_call is None else is_call
+            platform = None
+        else:
+            is_call = True
+    return {'source': source, 'is_call': is_call, 'call_platform': platform, 'calendar_event_id': event_id}
+
+
+def select_card_fields(card: Dict[str, Any], fields: Any) -> Dict[str, Any]:
+    """Optional lean card projection, with identity retained for reconciliation."""
+    if fields is None:
+        return card
+    if isinstance(fields, str):
+        fields = [field.strip() for field in fields.split(',') if field.strip()]
+    if not isinstance(fields, list) or not all(isinstance(field, str) for field in fields):
+        raise ToolExecutionError('fields must be an array of card field names or a comma-separated string', code=-32602)
+    unknown = set(fields) - set(card)
+    if unknown:
+        raise ToolExecutionError('Unknown card fields: ' + ', '.join(sorted(unknown)), code=-32602)
+    return {key: value for key, value in card.items() if key == 'id' or key in fields}

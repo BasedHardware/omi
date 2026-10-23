@@ -28,6 +28,7 @@ class ProcessingTrigger(str, Enum):
     MERGE = 'merge'  # the user merged conversations into it
     SMART_MERGE = 'smart_merge'  # a finished conversation was folded into this survivor
     SERVER_RECOVERY = 'server_recovery'
+    SILENT_BACKFILL = 'silent_backfill'  # operator-approved historical summary, no derived work
 
 
 class RelevancePolicy(str, Enum):
@@ -66,8 +67,13 @@ PROCESSING_MODES: Mapping[ProcessingTrigger, ProcessingMode] = MappingProxyType(
         # no created-side effects, and relevance must not hide the whole occasion.
         ProcessingTrigger.SMART_MERGE: ProcessingMode(True, True, _KEEP),
         ProcessingTrigger.SERVER_RECOVERY: ProcessingMode(True, True, _KEEP),
+        ProcessingTrigger.SILENT_BACKFILL: ProcessingMode(True, True, _KEEP),
     }
 )
+
+
+def is_recovery_trigger(trigger: ProcessingTrigger) -> bool:
+    return trigger in {ProcessingTrigger.SERVER_RECOVERY, ProcessingTrigger.SILENT_BACKFILL}
 
 
 def trigger_for_finalization_job(job: Mapping[str, object]) -> ProcessingTrigger:
@@ -77,6 +83,11 @@ def trigger_for_finalization_job(job: Mapping[str, object]) -> ProcessingTrigger
     ``force_process`` bit, which only the client finalize route ever set.
     """
     stored = job.get('processing_trigger')
+    policy = job.get('delivery_policy')
+    if policy is not None or stored == ProcessingTrigger.SILENT_BACKFILL.value:
+        if policy != 'silent_backfill_v1' or stored != ProcessingTrigger.SILENT_BACKFILL.value:
+            raise ValueError('invalid historical delivery policy')
+        return ProcessingTrigger.SILENT_BACKFILL
     if isinstance(stored, str):
         try:
             return ProcessingTrigger(stored)
