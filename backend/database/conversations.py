@@ -4161,10 +4161,12 @@ def assign_sync_conversation(
     converges each conversation once later (``index_sync_assignment``).
     """
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
-    from config.sync_lineage import sync_lineage_resolve_active_for
+    from config.sync_lineage import sync_lineage_resolve_enabled
     from utils.sync.intake_completion import log_sync_lineage_created
 
-    lineage_eligible = incoming.get('_sync_lineage_eligible') is True and sync_lineage_resolve_active_for(uid)
+    # The coordinator/projection already validated S1 and cohort admission.
+    # Rechecking membership here can refresh its Firestore cache on the hot path.
+    lineage_eligible = incoming.get('_sync_lineage_eligible') is True and sync_lineage_resolve_enabled()
 
     clock = SyncAssignmentClock(logger, enabled=timing)
     client = firestore_client if firestore_client is not None else get_firestore_client()

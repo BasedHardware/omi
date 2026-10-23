@@ -84,6 +84,8 @@ Eligibility/observations are transient: no persisted fields, extra Firestore
 reads, routing changes or metric labels. Legacy/held paths without an S1
 validation attestation are outside this observed population. Exclude these
 `stage=assignment` outcomes from the resolver-decision/truncation denominator.
+Eligibility carries the admission decision from the coordinator/projection;
+assignment checks only the local kill switch, without refreshing cohort storage.
 
 Then clear the value on all five services in one change and watch 24 h against the same gates. Rollback: restore the uid list (stops the feature for everyone else) or set `SYNC_LINEAGE_RESOLVE_ENABLED=false` on all five services. Neither undoes appends already written into live rows.
 

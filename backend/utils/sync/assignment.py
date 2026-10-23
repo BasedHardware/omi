@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, Callable, NamedTuple, Optional, TypeVar
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from config.sync_safety_wal import sync_safety_wal_enabled
-from config.sync_lineage import sync_lineage_resolve_active_for
+from config.sync_lineage import sync_lineage_resolve_enabled
 from database._client import firestore_document_kind, firestore_error_document_path, is_document_size_limit_error
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.observability.fallback import record_fallback
@@ -820,7 +820,7 @@ def assign_in_transaction(
     index.write(result, set(matched) | {canonical})
     if absorbed is not None:
         absorbed[:] = sorted(cid for cid in matched if cid != canonical)
-    if created and lineage_eligible and sync_lineage_resolve_active_for(user_ref.id):
+    if created and lineage_eligible and sync_lineage_resolve_enabled():
         # The adapter emits only the final successful transaction's observation,
         # after commit. Neither this marker nor eligibility enters the write codec.
         result['_sync_lineage_created'] = created_sync_row_observation(

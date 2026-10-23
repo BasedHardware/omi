@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from config import rollout_cohorts, sync_lineage
 from database import conversations as db
 from database import sync_live_overlap
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
@@ -48,7 +49,9 @@ def persist(monkeypatch, *, live=None, complete=True, eligible=True, client=None
 
     monkeypatch.setattr(db, 'find_sync_live_overlap_candidates', discover)
     incoming = dict(chunk('wal', 1000), data_protection_level='standard')
-    if eligible:
+    # Mirror the trusted producer's admission snapshot, not a fresh policy
+    # evaluation inside assignment (the real cohort resolver can perform IO).
+    if eligible and sync_lineage.sync_lineage_resolve_active_for('u'):
         incoming['_sync_lineage_eligible'] = True
     return client, db.assign_sync_conversation('u', incoming, firestore_client=client)
 
@@ -121,12 +124,14 @@ def test_live_recording_stamp_survives_sync_revision_and_replaced_capture_eviden
     }
 
 
-@pytest.mark.parametrize('admitted,s1', [(False, True), (True, False)])
+@pytest.mark.parametrize('admitted,s1,enabled', [(False, True, True), (True, False, True), (True, True, False)])
 def test_non_admitted_or_unvalidated_intake_is_silent_and_has_identical_reads_writes(
-    monkeypatch, caplog, admitted, s1, encoded_plans
+    monkeypatch, caplog, admitted, s1, enabled, encoded_plans
 ):
     if not admitted:
         monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', 'another-owner')
+    if not enabled:
+        monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'false')
     reads = []
     get = StrictFirestoreDocument.get
 
@@ -145,6 +150,21 @@ def test_non_admitted_or_unvalidated_intake_is_silent_and_has_identical_reads_wr
     assert encoded_plans[0] == encoded_plans[1]
     assert reads == baseline_reads
     assert not observations(caplog)
+
+
+def test_validated_admission_never_refreshes_cohort_storage_inside_assignment(monkeypatch, caplog):
+    incoming = dict(chunk('wal', 1000), data_protection_level='standard', _sync_lineage_eligible=True)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError('telemetry must not refresh cohort membership')
+
+    monkeypatch.setattr(rollout_cohorts, '_membership_resolver', forbidden)
+    monkeypatch.setenv('SYNC_LINEAGE_LIVE_DEDUPE_ENABLED', 'false')
+    monkeypatch.setattr(db, 'find_sync_live_overlap_candidates', lambda *args, **kwargs: ())
+    with caplog.at_level(logging.INFO):
+        _, created, _ = db.assign_sync_conversation('u', incoming, firestore_client=StrictFirestore())
+    assert created
+    assert len(observations(caplog)) == 1
 
 
 @pytest.mark.parametrize('stub', [False, True])
