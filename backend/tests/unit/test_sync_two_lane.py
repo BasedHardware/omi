@@ -1048,7 +1048,7 @@ def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
 
     transaction = _Transaction()
     marker_ref = _Ref({'status': 'processing'})
-    store = Store()
+    store = Store({'users/uid': {'synthetic': True}})
     user_ref = store.collection('users').document('uid')
     usage_ref = user_ref.collection('hourly_usage').document('2026-10-23-15')
     update = {'id': '2026-10-23-15', 'transcription_seconds': firestore.Increment(5)}
@@ -1058,12 +1058,14 @@ def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
         marker_ref,
         usage_ref,
         update,
+        firestore_client=store,
     )
     duplicate = user_usage._update_hourly_usage_once_transaction.to_wrap(
         _Transaction(),
         _Ref({'usage_committed_at': datetime.now(timezone.utc)}),
         usage_ref,
         update,
+        firestore_client=store,
     )
 
     assert recorded is True

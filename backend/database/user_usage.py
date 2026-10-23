@@ -426,10 +426,12 @@ def update_hourly_usage(
         update_doc['platforms'] = firestore.ArrayUnion([platform])
 
     update_doc.update(hourly_shadow(updates, usage_metadata))
-    batch = client.batch()
-    batch.set(hourly_usage_ref, nest_usage_fields(update_doc), merge=True)
-    monthly_usage_totals.queue_increment(batch, user_ref, date, update_doc)
-    batch.commit()
+
+    def write(transaction):
+        transaction.set(hourly_usage_ref, nest_usage_fields(update_doc), merge=True)
+        monthly_usage_totals.queue_increment(transaction, user_ref, date, update_doc)
+
+    monthly_usage_totals.commit_fenced(user_ref, write, firestore_client=client)
 
 
 @firestore.transactional
@@ -438,17 +440,21 @@ def _update_hourly_usage_once_transaction(
     marker_ref: Any,
     usage_ref: Any,
     update_doc: Dict[str, Any],
+    *,
+    firestore_client: Any,
 ) -> bool:
-    marker_snapshot = marker_ref.get(transaction=transaction)
-    marker_data = marker_snapshot.to_dict() or {} if marker_snapshot.exists else {}
-    if marker_data.get('usage_committed_at') is not None:
-        return False
-    transaction.set(marker_ref, {'usage_committed_at': datetime.now(timezone.utc)}, merge=True)
-    transaction.set(usage_ref, update_doc, merge=True)
-    monthly_usage_totals.queue_increment(
-        transaction, usage_ref.parent.parent, datetime.strptime(update_doc['id'], '%Y-%m-%d-%H'), update_doc
-    )
-    return True
+    user_ref = usage_ref.parent.parent
+    with monthly_usage_totals.publication_fence(user_ref, transaction, firestore_client=firestore_client):
+        marker_snapshot = marker_ref.get(transaction=transaction)
+        marker_data = marker_snapshot.to_dict() or {} if marker_snapshot.exists else {}
+        if marker_data.get('usage_committed_at') is not None:
+            return False
+        transaction.set(marker_ref, {'usage_committed_at': datetime.now(timezone.utc)}, merge=True)
+        transaction.set(usage_ref, update_doc, merge=True)
+        monthly_usage_totals.queue_increment(
+            transaction, user_ref, datetime.strptime(update_doc['id'], '%Y-%m-%d-%H'), update_doc
+        )
+        return True
 
 
 @cache_writer('usage_month_cache')
@@ -487,7 +493,9 @@ def update_hourly_usage_once(
         cost_exclusion=cost_exclusion,
         usage_metadata=usage_metadata,
     )
-    return _update_hourly_usage_once_transaction(client.transaction(), marker_ref, usage_ref, update_doc)
+    return _update_hourly_usage_once_transaction(
+        client.transaction(), marker_ref, usage_ref, update_doc, firestore_client=client
+    )
 
 
 @cache_writer('usage_month_cache')
@@ -495,29 +503,27 @@ def batch_update_hourly_usage(uid: str, hourly_updates: Dict[datetime, Dict[str,
     """Batch updates or creates usage stats for multiple hours."""
     batch_size = 200  # hourly set + monthly invalidation, below the 500-write limit
     items: List[Tuple[datetime, Dict[str, Any]]] = list(hourly_updates.items())
+    user_ref = db.collection('users').document(uid)
 
     for i in range(0, len(items), batch_size):
-        batch = db.batch()
         chunk = items[i : i + batch_size]
-        affected_months = set()
-        for date, updates in chunk:
-            doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
-            hourly_usage_ref = db.collection('users').document(uid).collection('hourly_usage').document(doc_id)
 
-            update_doc: Dict[str, Any] = updates.copy()
-            # Add year, month, day, hour fields for querying
-            update_doc['year'] = date.year
-            update_doc['month'] = date.month
-            update_doc['day'] = date.day
-            update_doc['hour'] = date.hour
-            update_doc['id'] = doc_id
-            update_doc['last_updated'] = datetime.now(timezone.utc)
+        def write(transaction):
+            affected_months = set()
+            for date, updates in chunk:
+                doc_id = f'{date.year}-{date.month:02d}-{date.day:02d}-{date.hour:02d}'
+                hourly_usage_ref = user_ref.collection('hourly_usage').document(doc_id)
 
-            batch.set(hourly_usage_ref, update_doc, merge=True)
-            affected_months.add(date.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
-        for date in affected_months:
-            monthly_usage_totals.queue_invalidation(batch, db.collection('users').document(uid), date)
-        batch.commit()
+                update_doc: Dict[str, Any] = updates.copy()
+                # Preserve absolute merge semantics and invalidate in the same commit.
+                update_doc.update(year=date.year, month=date.month, day=date.day, hour=date.hour, id=doc_id)
+                update_doc['last_updated'] = datetime.now(timezone.utc)
+                transaction.set(hourly_usage_ref, update_doc, merge=True)
+                affected_months.add(date.replace(day=1, hour=0, minute=0, second=0, microsecond=0))
+            for date in affected_months:
+                monthly_usage_totals.queue_invalidation(transaction, user_ref, date)
+
+        monthly_usage_totals.commit_fenced(user_ref, write, firestore_client=db)
 
 
 def get_today_usage_stats(uid: str, start: datetime, end: datetime) -> Dict[str, Any]:

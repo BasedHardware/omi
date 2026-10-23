@@ -5,11 +5,18 @@
 metrics, monthly sums and at most 31 daily subtotals. It contains no content or
 credentials. Account erasure already enumerates the complete user subtree.
 
-Every live usage write maintains these sums in the **same batch/transaction** as
+Every live usage write maintains these sums in the **same transaction** as
 the hourly write. Sync once keys and partial-completion receipts govern both
 writes; replay does not add a second charge. Ordinary live updates retain their
-existing additive behavior. Maintenance adds one write and zero reads per usage
-commit. It remains on while the reader is off. No entitlement or reservation
+existing additive behavior. Maintenance adds one write per usage commit.
+Ordinary/once/absolute/admin/migration writers also read the existing account
+deletion marker, destructive gate and user root in that transaction, before any
+receipt or source writes. Previously unfenced commits add three point reads
+(once-key replays also check authority); rejected commits do not stamp receipts.
+Existing projection sessions already read deletion/root/privacy authority in
+their transaction, so their added monthly write reuses those checks. No
+authority is cached across attempts. Maintenance remains on while the reader
+is off. No entitlement or reservation
 calculation changes, including Free; no authority checks are cached or removed.
 
 Historical absolute overwrites, operator transcription resets, and historical
@@ -46,7 +53,7 @@ is why the reader has a ramp instead of shipping immediately at 100%.
 
 The rollout lead and reads loop own this sequence:
 
-1. T2 (2026-10-23): deploy this writer contract to **every** source writer:
+1. Target T2 (2026-10-24 08:00Z, cutoff 07:30Z): deploy this writer contract to **every** source writer:
    listen, pusher, backend, sync, backfill, integration, desktop backend Python
    helpers and operator/migration tooling. Verify the actual serving artifacts,
    traffic and drained old revisions/jobs before enabling any reader. Cached
@@ -55,8 +62,10 @@ The rollout lead and reads loop own this sequence:
    Enable `usage_month_total:5` after the writer gate; run the loopback/synthetic
    equivalence scenarios on that artifact, require zero mismatches, no 5xx or
    p95 regression and no contention errors for two hours. Check the new origin
-   series and fallback rate. Full rollout is due by T3, **2026-10-24 08:00Z**;
-   the lead reports a blocker if writer coverage or the gate delays it.
+   series and fallback rate. The original full-ramp deadline of **2026-10-24
+   08:00Z** cannot follow an 08:00Z writer train and a two-hour hold. Report this
+   scheduling blocker to the lead; proposed replacement is **2026-10-24 12:00Z**,
+   subject to the lead's writer coverage and parity gate.
 3. The reads loop expands to 100%, measures matched full-day windows and D+2
    billing, and includes added writes/initialization reads in net economics.
 
@@ -80,6 +89,13 @@ The sprint report's latest-hour pool was 43.84M/day and its conditional target
 was 40M/day. Those are a modeled budget, not measured savings from this change.
 The separate funded `read_month` closed-bucket session and plan/shadow readers
 remain on their existing paths; do not claim their disappearance. Replacement
-cost is one small write per accounting commit, a once-per-active-month seed,
-and another seed after explicit correction/epoch changes. Measure actual write
-rate and contention before considering shards or booking savings.
+cost is one small write per accounting commit, three authority reads per
+previously unfenced commit attempt, a once-per-active-month seed, and another
+seed after explicit correction/epoch changes. If W is the daily count of those
+commit/replay attempts, subtract 3W from the modeled reader reduction, plus
+seed scans, point reads and fallbacks; account separately for added writes.
+Measure the original writer caller origins as well as all three reader origins.
+For example, 1M such attempts/day adds 3M reads/day; the modeled 40M/day gross
+reader reduction would then be at most 37M/day before seeds/fallbacks/retries.
+Neither W nor the net saving is measured yet. Measure actual rates and
+contention before considering shards or booking savings.

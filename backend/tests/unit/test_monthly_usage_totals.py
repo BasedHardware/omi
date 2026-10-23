@@ -15,7 +15,7 @@ NOW = datetime(2026, 10, 23, 15, tzinfo=timezone.utc)
 
 
 def seeded_month():
-    rows, days = {}, {}
+    rows, days = {'users/u': {'synthetic': True}}, {}
     counts = dict.fromkeys(totals.FIELDS, 0)
     for hour in range(31 * 24):
         stamp = NOW.replace(day=1, hour=0) + timedelta(hours=hour)
@@ -68,14 +68,14 @@ def test_disabled_or_bad_epoch_never_reads_projection(monkeypatch):
     client.collection.assert_not_called()
 
 
-def test_hour_writer_adds_one_atomic_write_and_no_reads(monkeypatch):
+def test_hour_writer_adds_one_atomic_write_and_three_authority_reads(monkeypatch):
     store = seeded_month()
     monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *a, **k: 'free')
     before = store.docs['users/u/monthly_usage_totals/2026-10']['totals'].copy()
     user_usage.update_hourly_usage(
         'u', NOW, {'transcription_seconds': 30, 'speech_seconds': 20}, firestore_client=store
     )
-    assert store.reads == 0 and store.writes == 2
+    assert store.reads == 3 and store.writes == 2
     row = store.docs['users/u/monthly_usage_totals/2026-10']
     assert row['totals']['transcription_seconds'] == before['transcription_seconds'] + 30
     assert row['totals']['speech_seconds'] == before['speech_seconds'] + 20

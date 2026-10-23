@@ -45,6 +45,8 @@ class Doc:
         return Collection(self.store, self.path.rsplit('/', 1)[0])
 
     def get(self, field_paths=None, transaction=None):
+        if transaction is not None and getattr(transaction, 'pending', []):
+            raise RuntimeError('Firestore transactions must read before writing')
         self.store.reads += 1
         data = self.store.docs.get(self.path)
         if data is not None and field_paths:
@@ -129,7 +131,7 @@ class Store:
         return [ref.get(field_paths) for ref in references]
 
     def transaction(self):
-        return object()
+        return Transaction()
 
     def batch(self):
         return Batch()
@@ -149,3 +151,24 @@ class Batch:
     def commit(self):
         for ref, data, merge in self.pending:
             ref.set(data, merge=merge)
+
+
+class Transaction(Batch):
+    """Single-attempt serialized writes; retry/erasure semantics use the emulator."""
+
+    _read_only = False
+    _max_attempts = 1
+    _id = None
+
+    def _clean_up(self):
+        self.pending.clear()
+        self._id = None
+
+    def _begin(self, retry_id=None):
+        self._id = b'shadow-usage-test'
+
+    def _commit(self):
+        self.commit()
+
+    def _rollback(self):
+        self.pending.clear()

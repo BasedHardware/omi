@@ -5,11 +5,12 @@ Enable readers only after every hourly writer has this contract (see docs).
 """
 
 import calendar
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import math
 import os
 import re
-from typing import Any
+from typing import Any, Callable, Iterator
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
@@ -17,11 +18,35 @@ from google.cloud.firestore_v1 import FieldFilter
 from config.firestore_read_levers import lever_enabled
 from database._client import get_firestore_client
 from database.firestore_read_origin import read_origin
-from database.legal_holds import external_write_fence
+from database.legal_holds import DestructiveOperationInProgress, external_write_fence
 from utils.observability.fallback import record_fallback
 
 FIELDS = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
 SCHEMA_VERSION = 1
+
+
+@contextmanager
+def publication_fence(user_ref: Any, transaction: Any, *, firestore_client: Any) -> Iterator[None]:
+    """Hold erasure authorities and the user root through aggregate publication."""
+    with external_write_fence(user_ref.id, firestore_client=firestore_client, transaction=transaction):
+        if not user_ref.get(transaction=transaction).exists:
+            raise DestructiveOperationInProgress('usage publication requires an existing user')
+        yield
+
+
+def commit_fenced(user_ref: Any, write: Callable[[Any], None], *, firestore_client: Any) -> None:
+    """Retry one bounded source/aggregate commit after fresh authority reads.
+
+    The callback must only queue Firestore writes, so retries cannot duplicate
+    external side effects. Previously unfenced writers pay three point reads.
+    """
+
+    @firestore.transactional
+    def commit(transaction: Any) -> None:
+        with publication_fence(user_ref, transaction, firestore_client=firestore_client):
+            write(transaction)
+
+    commit(firestore_client.transaction())
 
 
 def month_ref(user_ref: Any, date: datetime) -> Any:
