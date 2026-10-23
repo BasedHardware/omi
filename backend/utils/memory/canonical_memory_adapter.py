@@ -69,7 +69,6 @@ from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
     budgeted_document_get,
-    budgeted_stream_list,
     indexed_list_reads_enabled,
 )
 from models.memory_domain import (

@@ -49,7 +49,7 @@ from database import short_term_memories as short_term_db
 from ._client import get_firestore_client
 from models.memories import confidence_fields_for_evidence, merge_evidence_sets
 from utils import encryption
-from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all, budgeted_stream_list
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_get_all
 from utils.other.portability_read import current_portability_read, verified_encrypted_read
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read
 import logging

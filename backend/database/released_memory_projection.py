@@ -16,7 +16,7 @@ import time
 from collections import OrderedDict
 from typing import Any
 
-from google.cloud.firestore_v1.document import DocumentSnapshot
+from google.cloud.firestore_v1.base_document import DocumentSnapshot
 from prometheus_client import Counter
 
 from database.firestore_read_origin import current_read_origin, read_origin
