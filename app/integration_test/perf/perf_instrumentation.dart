@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/painting.dart';
-import 'package:integration_test/integration_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 class PerfInstrumentation {
   final List<FrameTiming> timings = [];
@@ -71,7 +71,7 @@ class PerfInstrumentation {
     }
   }
 
-  void start(IntegrationTestWidgetsFlutterBinding binding) {
+  void start(TestWidgetsFlutterBinding binding) {
     timings.clear();
     uiMs.clear();
     animationCallbacks.clear();
@@ -189,7 +189,7 @@ class PerfInstrumentation {
         }),
       };
 
-  void stop(IntegrationTestWidgetsFlutterBinding binding) {
+  void stop(TestWidgetsFlutterBinding binding) {
     active = false;
     _collectPhases();
     binding.removeTimingsCallback(_timings);

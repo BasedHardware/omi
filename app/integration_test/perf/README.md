@@ -71,7 +71,9 @@ The scorecard records:
   Host raster is unavailable. `save_layer_count` is null: only a device GPU
   trace can measure actual `saveLayer` calls; no proxy is passed off as a count.
 
-Host elapsed milliseconds are diagnostic. A shared Mac can pause mid-phase;
+Host frames use an AutomatedTestWidgetsFlutterBinding with virtual time and
+real loopback HTTP enabled; the real-time integration binding is reserved for
+device capture. Host elapsed milliseconds are diagnostic. A shared Mac can pause mid-phase;
 phase ratios can also vary. The exact zero semantics-share budget is robust to
 that noise; other phase shares are reported with variance, not assumed stable.
 Work counts are measured with debug instrumentation and cannot be compared to

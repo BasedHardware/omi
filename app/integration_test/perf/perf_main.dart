@@ -3,15 +3,32 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
 import 'perf_budget.dart';
 import 'perf_instrumentation.dart';
 import 'perf_scenarios.dart';
 import 'perf_scorecard.dart';
 
+/// Virtual frame time makes counts deterministic; the fixture still needs real
+/// loopback HTTP, which the ordinary widget binding disables by default.
+class _PerfHostBinding extends AutomatedTestWidgetsFlutterBinding {
+  @override
+  bool get overrideHttpClient => false;
+}
+
+_PerfHostBinding? _hostBinding;
+
 void main() {
-  final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
-  binding.framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.onlyPumps;
+  final binding = _hostBinding ??= _PerfHostBinding();
+  final testFailures = <String>[];
+  late TestExceptionReporter previousReporter;
+  setUpAll(() {
+    previousReporter = reportTestException;
+    reportTestException = (details, description) {
+      testFailures.add(details.toString());
+      previousReporter(details, description);
+    };
+  });
+  tearDownAll(() => reportTestException = previousReporter);
   indexWidgetSources();
   final results = <String, Object?>{};
   group('gate', () {
@@ -61,9 +78,8 @@ void main() {
       }, semanticsEnabled: false);
     }
   });
-  group('profile', () {
+  group('scorecard', () {
     testWidgets('emit scorecard even when a gate fails', (tester) async {
-      final testFailures = binding.failureMethodsDetails;
       final scorecard = <String, Object?>{
         'schema': 'omi-mobile-perf/v2',
         'lane': 'host_flutter_tester',
@@ -74,8 +90,7 @@ void main() {
         'scenarios': results,
         'test_failure_count': testFailures.length,
         'test_failures': [
-          for (final failure in testFailures)
-            failure.details.length > 2000 ? failure.details.substring(0, 2000) : failure.details
+          for (final failure in testFailures) failure.length > 2000 ? failure.substring(0, 2000) : failure
         ],
         'complete': results.length == scenarioNames.length && testFailures.isEmpty,
       };
@@ -84,8 +99,6 @@ void main() {
       final file = File('${directory.path}/scorecard-${DateTime.now().toUtc().microsecondsSinceEpoch}.json');
       file.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(scorecard));
       debugPrint('PERF_SCORECARD=${file.path}');
-      binding.reportData ??= <String, dynamic>{};
-      binding.reportData!['perf_scorecard'] = scorecard;
       expect(results.keys, containsAll(scenarioNames), reason: 'Scorecard must contain all scenarios');
     }, semanticsEnabled: false);
   });
