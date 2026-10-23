@@ -83,7 +83,7 @@ def load_pyannote_pair(model_batch_size, *, device='cuda:0'):
     return diarizer, vad
 
 
-def load_local_models(*, device='cpu', dtype='float32', model_batch_size=1):
+def load_local_models(*, device='cpu', dtype='float32', model_batch_size: int | None = 1):
     """Load pinned production models for explicit local numerical qualification.
 
     CPU FP32 is an evaluation configuration, not CUDA BF16 parity. No hosted
@@ -92,9 +92,7 @@ def load_local_models(*, device='cpu', dtype='float32', model_batch_size=1):
     """
     if (device, dtype) not in {('cpu', 'float32'), ('cuda:0', 'bfloat16')}:
         raise ValueError('local models require cpu/float32 or cuda:0/bfloat16')
-    if model_batch_size is not None and (
-        isinstance(model_batch_size, bool) or not isinstance(model_batch_size, int) or not 1 <= model_batch_size <= 32
-    ):
+    if model_batch_size is not None and (type(model_batch_size) is not int or not 1 <= model_batch_size <= 32):
         raise ValueError('model_batch_size must be None or an integer in [1, 32]')
     if torch is None or nemo_asr is None or hf_hub_download is None:
         raise RuntimeError('local models require the pinned NeMo and pyannote runtime')
@@ -105,7 +103,9 @@ def load_local_models(*, device='cpu', dtype='float32', model_batch_size=1):
     return asr, diarizer, vad
 
 
-def load_local_worker(artifacts, *, device='cpu', dtype='float32', model_batch_size=1, centroid_extractor=None):
+def load_local_worker(
+    artifacts, *, device='cpu', dtype='float32', model_batch_size: int | None = 1, centroid_extractor=None
+):
     """Compose the real worker adapters with caller-owned filesystem artifacts.
 
     The caller explicitly configures the dedicated-batch provider policy, just

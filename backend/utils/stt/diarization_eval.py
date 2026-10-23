@@ -1,6 +1,7 @@
 """Text-free per-word scoring. Truth is a list of {start, end, speaker}."""
 
 from collections import Counter
+from typing import Any
 import numpy as np
 from scipy.optimize import linear_sum_assignment
 
@@ -9,7 +10,7 @@ from utils.conversations.final_pass_assignment import assign_words
 IGNORED = {None, '', 'unsure', 'noise', 'mixed', '__unsure__', '__noise__', '__mixed__'}
 
 
-def score_words(truth, predicted):
+def score_words(truth, predicted) -> dict[str, Any]:
     if len(truth) != len(predicted):
         raise ValueError('word counts differ')
     pairs = [(str(t['speaker']), p) for t, p in zip(truth, predicted) if t['speaker'] not in IGNORED]
@@ -304,7 +305,7 @@ def aggregate_scorecards(results):
         'wrong_name_words',
         'false_owner_words',
     )
-    pooled = {key: sum(r[key] for r in results) for key in keys}
+    pooled: dict[str, Any] = {key: sum(r[key] for r in results) for key in keys}
     total, enrolled = pooled['words'], pooled['owner_enrolled_words']
     pooled.update(
         recordings=len(results),
@@ -324,7 +325,7 @@ def aggregate_scorecards(results):
         and pooled['wrong_name_false_owner_rate'] <= 0.01
     )
     pooled['engineering_gate'] = 'PASS' if passed else ('FAIL' if eligible else 'NOT_EVALUATED')
-    oracle = {
+    oracle: dict[str, Any] = {
         key: sum(r['hungarian_oracle_diagnostic'][key] for r in results)
         for key in ('words', 'correct_1to1', 'correct_many_to_1')
     }
@@ -337,7 +338,7 @@ def aggregate_scorecards(results):
             pooled[key] = {'status': 'NOT_EVALUATED'}
             continue
         metrics = ('reference_tokens', 'hypothesis_tokens', 'substitutions', 'deletions', 'insertions', 'matches')
-        summary = {metric: sum(r[metric] for r in rows) for metric in metrics}
+        summary: dict[str, Any] = {metric: sum(r[metric] for r in rows) for metric in metrics}
         summary['status'] = 'EVALUATED'
         if key == 'end_to_end_alignment':
             summary['reference_words'] = sum(r['reference_words'] for r in rows)
