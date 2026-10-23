@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -192,5 +194,18 @@ void main() {
     final some = await _provider([_task], []);
     await tester.pumpWidget(_host(some, const ReviewEntryCard(fallback: Text('old card'))));
     expect(find.byKey(const Key('review_entry_card')), findsOneWidget);
+  });
+
+  testWidgets('on launch, before Review availability is known, the old card never flashes', (tester) async {
+    final pending = Completer<ApiResult<ReviewItemsResponse>>();
+    final launching = ReviewProvider(
+        isEligible: () => true,
+        reportChannel: (_, {appBuild}) async => const ApiSuccess<void>(null),
+        loadItems: () => pending.future);
+    expect(launching.availability, ReviewAvailability.unknown);
+    await tester.pumpWidget(_host(launching, const ReviewEntryCard(fallback: Text('old card'))));
+    await tester.pump();
+    expect(find.text('old card'), findsNothing);
+    expect(find.byKey(const Key('review_entry_card')), findsNothing);
   });
 }
