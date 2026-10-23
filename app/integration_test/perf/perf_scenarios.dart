@@ -530,7 +530,7 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
           reason: 'Home must show the live episode row');
       await liveScrollRoundTrip(tester, world, ConversationsPage);
       globalNavigatorKey.currentState!.pop();
-      await pumpFrames(tester, 30);
+      await pumpFrames(tester, 120);
       expect(find.byType(ConversationsPage), findsNothing);
     case 'episode_page':
       globalNavigatorKey.currentState!
@@ -543,10 +543,10 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
       // Then the live transcript itself, with lines still arriving.
       final tab = find.descendant(of: find.byType(TabBar), matching: find.byType(Tab)).at(1);
       await tester.tap(tab);
-      await pumpFrames(tester, 10);
+      await pumpFrames(tester, 30);
       await liveScrollRoundTripOnKey(tester, world, const ValueKey('live-transcript-$liveConversationId'));
       globalNavigatorKey.currentState!.pop();
-      await pumpFrames(tester, 30);
+      await pumpFrames(tester, 120);
       expect(find.byType(LiveEpisodePage), findsNothing);
     case 'device_page':
       // The pendant David's report is about: connected, syncing its storage.
@@ -558,14 +558,14 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
       );
       world.device.isConnected = true;
       globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(builder: (_) => const DeviceSettings()));
-      await pumpFrames(tester, 30);
+      await pumpFrames(tester, 120);
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 150));
       });
       await pumpFrames(tester, 10);
       await scrollRoundTrip(tester, DeviceSettings);
       globalNavigatorKey.currentState!.pop();
-      await pumpFrames(tester, 30);
+      await pumpFrames(tester, 120);
       expect(find.byType(DeviceSettings), findsNothing);
     case 'tab_switch':
       globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(builder: (_) => _TabShellPage(world: world)));
@@ -581,7 +581,7 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
         deliverLiveSegments(world);
       }
       globalNavigatorKey.currentState!.pop();
-      await pumpFrames(tester, 30);
+      await pumpFrames(tester, 120);
     default:
       throw ArgumentError(name);
   }
@@ -701,7 +701,8 @@ Future<void> runScenario(WidgetTester tester, PerfWorld world, String name) asyn
     _ => throw ArgumentError(name),
   };
   globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(builder: (_) => page));
-  await pumpFrames(tester, 30);
+  // Virtual time must cover the production iOS route transition.
+  await pumpFrames(tester, 120);
   // Complete real loopback I/O outside the virtual clock, then fixed UI pumps.
   await tester.runAsync(() async {
     await Future<void>.delayed(const Duration(milliseconds: 100));
@@ -724,6 +725,6 @@ Future<void> runScenario(WidgetTester tester, PerfWorld world, String name) asyn
     await scrollRoundTrip(tester, page.runtimeType);
   }
   globalNavigatorKey.currentState!.pop();
-  await pumpFrames(tester, 30);
+  await pumpFrames(tester, 120);
   expect(find.byType(page.runtimeType), findsNothing);
 }
