@@ -169,6 +169,13 @@
       "why": "reviewed safe (Episodes v1/v1.1): best-effort moment update and the structural attach on the episode overlay; neither holds conversation, task or memory authority. A moment lost at SIGKILL is re-applied by the conversation's finalization tail (record_moment over segments past the episode's applied offset), and a lost attach is redone by the next batch on any replica (the attach is idempotent) or by that moment/finalization, which opens or joins the episode itself"
     },
     {
+      "path": "utils/episodes/finalize.py",
+      "function": "schedule_after_finalization",
+      "kind": "submit_with_context",
+      "count": 1,
+      "why": "reviewed safe (Episodes finalize): the synchronous POST /v1/conversations route's post-processing episode hook (tail notes and provisional-item reconciliation on the episode overlay), which holds no conversation, task or memory authority; the conversation, its tasks and the episode close are all committed before it is submitted. Lost at SIGKILL, the closed episode only misses its last tail bullets and that conversation's shadow items stay unreconciled; awaiting it would add a model call to the user's finalize request"
+    },
+    {
       "path": "utils/episodes/live.py",
       "function": "on_session_end",
       "kind": "start_background_task",

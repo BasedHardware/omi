@@ -86,6 +86,7 @@ from utils.conversations.process_conversation import (
     retrieve_in_progress_conversation,
 )
 from utils.conversations import lifecycle as lifecycle_service
+from utils.episodes import finalize as episode_finalize
 from utils.conversations import share_email
 from utils.conversations.meeting_receipt import record_finalized_meeting_receipt
 from utils.integration_telemetry import emit_posthog_event
@@ -557,6 +558,8 @@ def process_in_progress_conversation(
     current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
     if current_in_progress_id == conversation.id:
         redis_db.remove_in_progress_conversation_id(uid)
+    # The user ended it (Wrap up, a pendant double-tap): its live episode ends now, not after processing.
+    episode_finalize.close_now(uid, conversation.id, ProcessingTrigger.CLIENT_FINALIZE)
 
     conversation.status = ConversationStatus.processing
     persisted = False
@@ -587,6 +590,8 @@ def process_in_progress_conversation(
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+    # The durable finalizer's episode hook: tail notes and item reconciliation, off the request path.
+    episode_finalize.schedule_after_finalization(uid, conversation.id, ProcessingTrigger.CLIENT_FINALIZE)
     # A terminal free-tier minimum persists successfully but must not fan out
     # apps/webhooks — the same decision the durable finalizer already honours
     # via derived_effects_disposition_observer (section 1.7). The conversation
@@ -701,6 +706,8 @@ def finalize_conversation(
     current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
     if current_in_progress_id == conversation_id:
         redis_db.remove_in_progress_conversation_id(uid)
+    # The worker repeats this when it starts; closing here means the episode ends with the request.
+    episode_finalize.close_now(uid, conversation_id, ProcessingTrigger.CLIENT_FINALIZE)
 
     # The outbox transaction reports whether the submitted projection bound.
     # A follow-up read would attribute a later request's projection to this one.
