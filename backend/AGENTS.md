@@ -154,7 +154,7 @@ Runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE He
 
 Subscription plan contract: edit `config/plan_catalog.json`, then run `python scripts/generate_plan_catalog.py`; runtime code imports `config.plan_catalog`, never JSON or a copied plan set. Before review run `python scripts/generate_plan_catalog.py --check --base-ref origin/main`. Current Stripe amounts are import-blocked; follow `.github/agent-docs/plan-source-of-truth.md` and never publish or rebind a Price from an ordinary code-change workflow.
 
-Firestore schema rollout, readiness, and change controls: [queries and indexes](../.github/agent-docs/firestore-queries-and-indexes.md). Released-memory projections: [coverage and rollback](docs/released-memory-change-projection.md).
+Firestore schema rollout, readiness, and change controls are documented in [Firestore queries and indexes](../.github/agent-docs/firestore-queries-and-indexes.md).
 
 Update this map for inter-service call changes. For audio, transcription, conversation lifecycle (including advisory cross-device overlap links), speakers, or listen/pusher WebSocket changes, update `backend/docs/listen_pusher_pipeline.mdx` in the same PR; it owns the overlap env/wire contract.
 
