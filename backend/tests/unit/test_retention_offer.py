@@ -558,3 +558,47 @@ def test_endpoint_repeat_after_cancel_keeps_stripe_and_firestore_cancelled(monke
     router.accept_retention_offer_endpoint(uid='uid')  # repeated acceptance
     assert fake.subs['sub_1']['cancel_at_period_end'] is True
     assert stored['cancel_at_period_end'] is True
+
+
+def test_endpoint_stale_acceptance_resuming_mid_write_keeps_both_stores_cancelled(monkeypatch):
+    import routers.retention_offer as router
+
+    fake = _FakeStripe(monkeypatch, [_sub(cancel_at_period_end=True)])
+    stored = {'stripe_subscription_id': 'sub_1', 'cancel_at_period_end': True}
+    writes = []
+
+    class _Sub:
+        def __init__(self):
+            self.stripe_subscription_id = stored['stripe_subscription_id']
+            self.cancel_at_period_end = stored['cancel_at_period_end']
+
+        def model_dump(self):
+            return {
+                'stripe_subscription_id': self.stripe_subscription_id,
+                'cancel_at_period_end': self.cancel_at_period_end,
+            }
+
+    def update(uid, data):
+        writes.append(dict(data))
+        stored.update(data)
+
+    monkeypatch.setattr(router.users_db, 'get_user_subscription', lambda uid: _Sub())
+    monkeypatch.setattr(router.users_db, 'update_user_subscription', update)
+    state = {}
+
+    def a_pauses_before_its_write():
+        fake.expire_lease('cus_1')
+        state['b'] = router.accept_retention_offer_endpoint(uid='uid').eligible  # B redeems
+        # The reader cancels again; Stripe and Firestore both record it.
+        fake.subs['sub_1']['cancel_at_period_end'] = True
+        stored['cancel_at_period_end'] = True
+        writes.clear()
+
+    fake.before_sub_modify = a_pauses_before_its_write
+    router.accept_retention_offer_endpoint(uid='uid')  # request A resumes with its stale snapshot
+
+    assert state['b'] is True
+    assert fake.subs['sub_1']['cancel_at_period_end'] is True
+    assert stored['cancel_at_period_end'] is True
+    assert writes == []  # A never rewrote the record from its earlier snapshot
+    assert len(fake.subs['sub_1']['discounts']) == 1
