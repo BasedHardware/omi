@@ -355,7 +355,7 @@ def _get_qa_rag_prompt(
       - Avoid citing irrelevant memories.
     """
 
-    base_prompt = f"""
+    prompt = f"""
     <assistant_role>
         You are an assistant for question-answering tasks.
     </assistant_role>
@@ -415,7 +415,7 @@ def _get_qa_rag_prompt(
 
     <answer>
     """.replace('    ', '').replace('\n\n\n', '\n\n').strip()
-    return base_prompt + custom_instructions_section
+    return prompt + custom_instructions_section
 
 
 # The agentic system prompt is wrapped in a single Anthropic cache_control breakpoint,
