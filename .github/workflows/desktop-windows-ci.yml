@@ -129,13 +129,18 @@ jobs:
   build-linux:
     name: Linux package · helper smoke
     runs-on: ubuntu-latest
-    # A successful run finishes in ~10 minutes; 20 gives headroom while still
-    # failing fast instead of riding out the 6h GitHub Actions job ceiling.
+    # A successful run finishes in ~10 minutes. The budget must also cover
+    # the rare worst case: a cold apt cache on a degraded mirror can consume
+    # the full 20-minute step budget below (job 120074210159 measured
+    # ~40-45 KB/s pool throughput), so 20 + ~70s setup + ~5m packaging and
+    # smoke needs ~26m — 30 gives that headroom while still failing fast
+    # instead of riding out the 6h GitHub Actions job ceiling. Below that,
+    # a cancelled job never saves the apt cache and every retry stays cold.
     # This job has hung for the full 6h on multiple unrelated PRs and on
     # main (apt's mirror lookup in "Install Linux runtime dependencies"
     # stalls with no output and no built-in timeout) -- a pre-existing,
     # recurring infra flake, not specific to any one change.
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -168,15 +173,28 @@ jobs:
       # still streaming — the per-request apt timeouts cannot catch that.
       # Caching the .debs makes steady-state installs download-free; apt
       # verifies each cached file against the fresh indexes and fetches only
-      # version changes. The key tracks this file so package-list edits
-      # rotate the cache; the restore-key prefix carries over still-current
-      # .debs across any edit to this workflow.
+      # version changes.
+      - name: Identify Linux apt package cache
+        id: linux-apt-image
+        run: |
+          echo "image=${ImageOS:?}-${ImageVersion:?}" >> "$GITHUB_OUTPUT"
+          echo "imageos=${ImageOS:?}" >> "$GITHUB_OUTPUT"
       - name: Cache apt runtime packages
         uses: actions/cache@v6
         with:
           path: ~/apt-debs
-          key: apt-linux-runtime-${{ hashFiles('.github/workflows/desktop-windows-ci.yml') }}
-          restore-keys: apt-linux-runtime-
+          # actions/cache never re-saves when an exact key already exists, so
+          # a key that stays an exact match forever (e.g. hashFiles of this
+          # workflow) would freeze the cached .debs at their first versions
+          # as Ubuntu publishes updates, and gratuitously cold-start on every
+          # workflow edit. Key on the runner image instead: ImageVersion bumps
+          # roll the key so refreshed .debs are saved, and package-list edits
+          # rotate via the literal token (matches the scheme in PR #23344).
+          key: apt-linux-runtime-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.linux-apt-image.outputs.image }}-imagemagick-dejavu-tesseract-xvfb
+          # Same restore-key strategy as #23344: fall back to the newest
+          # saved image of the same runner OS so image bumps reuse still-
+          # current .debs instead of forcing a cold ~35 MB download.
+          restore-keys: apt-linux-runtime-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.linux-apt-image.outputs.imageos }}-
       - name: Install Linux runtime dependencies
         # Bound apt's network calls explicitly: a stalled mirror connection
         # (observed against the azure.archive.ubuntu.com mirror) otherwise
