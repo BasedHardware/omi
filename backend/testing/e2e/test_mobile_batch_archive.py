@@ -67,7 +67,8 @@ def test_local_http_batch_archive_acceptance(client, auth_headers, monkeypatch, 
             # Legacy-retire C9: an upload the batch lane does not take is refused by
             # the legacy-dark fence (409, audio kept on the client); no legacy job runs.
             assert response.status_code == 409, response.text
-            assert response.json()['code'] == 'sync_content_retry_later'
+            assert response.json()['code'] == 'sync_content_in_progress'
+            assert int(response.headers['retry-after']) >= 60
     finally:
         server.should_exit = True
         worker.join(timeout=10)

@@ -111,7 +111,6 @@ from utils.subscription import (
 )
 from utils.sync import playback as sync_playback
 from utils.sync.input_limits import BackfillInputLimitExceeded, BackfillStoragePressure, validate_backfill_uploads
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.sync.recording_lineage import parse_s1_upload_claims
 from utils.sync.files import (

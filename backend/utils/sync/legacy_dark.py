@@ -428,7 +428,10 @@ def fence_response(decision: FenceDecision, *, total_files: int, lane: str) -> O
             status_code=409,
             headers={'Retry-After': str(retry_after)},
             content={
-                'code': 'sync_content_retry_later',
+                # Released clients honor Retry-After only for this existing 409 code.
+                # A stranded/capped claim has no live owner to poll.
+                'code': 'sync_content_in_progress',
+                'job_id': None,
                 'reason': 'dependency_warming',
                 'detail': 'This audio will be processed shortly; local audio was not consumed',
                 'poll_after_ms': retry_after * 1000,
@@ -449,7 +452,8 @@ def admission_refused_response() -> JSONResponse:
         status_code=409,
         headers={'Retry-After': str(DARK_RETRY_AFTER_SECONDS)},
         content={
-            'code': 'sync_content_retry_later',
+            'code': 'sync_content_in_progress',
+            'job_id': None,
             'reason': 'dependency_warming',
             'detail': 'Sync is moving to a new pipeline; local audio was not consumed',
             'poll_after_ms': DARK_RETRY_AFTER_SECONDS * 1000,
