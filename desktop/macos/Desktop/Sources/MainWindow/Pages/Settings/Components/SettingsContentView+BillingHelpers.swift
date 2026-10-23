@@ -11,6 +11,17 @@ let operatorDeprecationFallbackPrice = "$49/mo"
 enum SubscriptionPlanPresentation {
   static let resubscribeFirst = "Resubscribe first to change plans."
 
+  /// The two routes use 409 for different refusals: upgrade means a pending
+  /// cancellation, checkout means the account already has a subscription.
+  static func upgradeErrorMessage(_ error: APIError) -> String {
+    if case .httpError(let statusCode, _) = error, statusCode == 409 { return resubscribeFirst }
+    return error.detail ?? "Failed to schedule plan change."
+  }
+
+  static func checkoutErrorMessage(_ error: APIError) -> String {
+    error.detail ?? "Failed to open checkout."
+  }
+
   enum Purchase {
     case resubscribe
     case blocked
@@ -1125,9 +1136,7 @@ extension SettingsContentView {
           await MainActor.run {
             activeCheckoutPriceId = nil
             pendingSubscriptionPriceId = nil
-            subscriptionError =
-              pendingCancelCheckoutMessage(apiError) ?? apiError.detail
-              ?? "Failed to schedule plan change."
+            subscriptionError = SubscriptionPlanPresentation.upgradeErrorMessage(apiError)
           }
         } catch {
           logError("Failed to schedule plan change", error: error)
@@ -1187,7 +1196,7 @@ extension SettingsContentView {
           activeCheckoutPriceId = nil
           pendingSubscriptionPriceId = nil
           pendingCheckoutSessionId = nil
-          subscriptionError = pendingCancelCheckoutMessage(apiError) ?? apiError.detail ?? "Failed to open checkout."
+          subscriptionError = SubscriptionPlanPresentation.checkoutErrorMessage(apiError)
         }
       } catch {
         logError("Failed to create checkout session", error: error)
@@ -1199,13 +1208,6 @@ extension SettingsContentView {
         }
       }
     }
-  }
-
-  func pendingCancelCheckoutMessage(_ error: APIError) -> String? {
-    if case .httpError(let statusCode, _) = error, statusCode == 409 {
-      return SubscriptionPlanPresentation.resubscribeFirst
-    }
-    return nil
   }
 
   func openCustomerPortal() {
