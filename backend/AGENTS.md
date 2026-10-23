@@ -95,9 +95,7 @@ backend/
 
 ## Service Map
 
-Authenticated standalone-plugin backup handoff and its source-only rollout boundary:
-[`docs/plugin-transport.md`](docs/plugin-transport.md). The pCloud service owns its
-durable export jobs, not Omi conversation/audio identity.
+[Plugin transport](docs/plugin-transport.md).
 
 ```
 Shared: Firestore, Redis
@@ -160,7 +158,7 @@ Subscription plan contract: edit `config/plan_catalog.json`, then run `python sc
 
 Firestore schema rollout, readiness, and change controls are documented in [Firestore queries and indexes](../.github/agent-docs/firestore-queries-and-indexes.md).
 
-Update this map for inter-service call changes. For audio, transcription, conversation lifecycle (including advisory cross-device overlap links), speakers, or listen/pusher WebSocket changes, update `backend/docs/listen_pusher_pipeline.mdx` in the same PR; it owns the overlap env/wire contract.
+For audio, transcription, conversation lifecycle (including advisory cross-device overlap links), speakers, or listen/pusher WebSocket changes, update `backend/docs/listen_pusher_pipeline.mdx` in the same PR; it owns the overlap env/wire contract.
 
 ## Import Rules
 
