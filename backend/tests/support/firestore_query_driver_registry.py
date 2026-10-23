@@ -463,6 +463,7 @@ _add(
         patchers=(
             _redis_noop('database.apps.get_generic_cache'),
             _redis_noop('database.apps.set_generic_cache'),
+            _stub('database.apps.get_memory_cache', SimpleNamespace(get_or_fetch=lambda key, fetch, **kw: fetch())),
         ),
     )
 )
@@ -486,6 +487,7 @@ _add(
         patchers=(
             _redis_noop('database.apps.get_generic_cache'),
             _redis_noop('database.apps.set_generic_cache'),
+            _stub('database.apps.get_memory_cache', SimpleNamespace(get_or_fetch=lambda key, fetch, **kw: fetch())),
         ),
     )
 )
@@ -1483,6 +1485,13 @@ _add(DriverEntry('database.knowledge_graph.find_node_by_label_or_alias', base={'
 _add(
     DriverEntry(
         'database.knowledge_graph.prune_memory_citations_from_kg', base={'uid': UID, 'memory_ids': ['mem-1', 'mem-2']}
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.knowledge_graph._citation_nodes',
+        covered_by=('database.knowledge_graph.prune_memory_citations_from_kg',),
+        reason='The prune driver exercises the native reverse-citation query before global orphan cleanup.',
     )
 )
 _add(
