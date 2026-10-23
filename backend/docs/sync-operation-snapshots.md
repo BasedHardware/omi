@@ -14,8 +14,13 @@ a detached copy, and mutations keep their existing transaction reads and CAS.
 First-summary outbox custody still resolves only an id and transfers its
 obligation transactionally; no snapshot passes into the next delivery.
 
-Bridge traversal reuses its initial survivor metadata only when it attempts no
-effects. Transfer, retraction, audio copy and receipt writes each force the
+Bridge traversal reuses its initial survivor metadata only when it has no
+donor lineage and attempts no effects. Reading a donor also forces the final
+refresh, so a redirect or deletion during ancestry traversal is observed.
+Reuse requires the existing `backfill_task_reads` metadata-only path; the
+legacy hydrated reader retains its refresh after photo/correction IO. This PR
+does not change that lever or its cohort.
+Transfer, retraction, audio copy and receipt writes each force the
 existing final refresh, including failed or deferred effects. A new traversal
 starts fresh. No transcript, speaker, cap, hold, deletion marker, entitlement,
 polling or privacy-authorization logic changes.
@@ -37,7 +42,7 @@ grading a vanished old caller as eliminated work.
 
 The report's P5 22M/day is a planning ceiling across raw snapshots, redirects,
 assignment and Typesense. This bounded change saves one read per successful
-redirect hydration and one per bridge traversal that performs no effects.
+redirect hydration and one per bridge traversal with no lineage or effects.
 Its daily prediction is the measured count of those two events, with coverage
 and operation mix checked against the origin's billed-equivalent reads. Do not
 book 22M/day or add it to another lever's saving. Equal 24h windows, the served

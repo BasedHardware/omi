@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from config import sync_operation_snapshot
 from database.conversation_revisions import firestore_revision_datetime
 
 
@@ -51,3 +52,28 @@ def resolve_snapshot(
             return None
         current_id = successor
     return None
+
+
+def read_redirected(
+    uid: str,
+    conversation_id: str,
+    *,
+    client_factory: Callable[[], Any],
+    hydrate: Callable[..., dict | None],
+    read_current: Callable[..., dict | None],
+    read_site: Any,
+) -> dict | None:
+    """Hydrate one resolved owner read, retaining the path id for legacy rows."""
+    resolved = resolve_snapshot(uid, conversation_id, client_factory=client_factory)
+    if resolved is None:
+        return None
+    if sync_operation_snapshot.enabled():
+        sync_operation_snapshot.avoided('redirect_hydration')
+        data = hydrate(uid, resolved.to_dict(), read_site=read_site)
+    else:
+        data = read_current(uid, resolved.conversation_id, read_site=read_site)
+    if data is not None:
+        # Add the path id only AFTER ordinary photo/codec hydration, preserving
+        # legacy photo behavior while allowing internal reprocessing to route.
+        data.setdefault('id', resolved.conversation_id)
+    return data

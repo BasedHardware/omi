@@ -104,6 +104,17 @@ def test_legacy_photo_hydration_is_identical(world, monkeypatch):
 
 
 @pytest.mark.parametrize('mode', ['true', 'false'])
+def test_legacy_survivor_routes_by_resolved_path_without_stored_id(world, monkeypatch, mode):
+    conversations, store, _, _ = world
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', mode)
+    store.rows[('users', 'u', 'conversations', 'survivor')].pop('id')
+    row = conversations.get_sync_redirected_conversation('u', 'donor')
+    assert row['id'] == 'survivor'
+    assert row['transcript_segments'][0]['text'] == 'Synthetic speech.'
+    assert 'id' not in store.rows[('users', 'u', 'conversations', 'survivor')]
+
+
+@pytest.mark.parametrize('mode', ['true', 'false'])
 @pytest.mark.parametrize('defect', ['donor_marker', 'survivor_marker', 'deleted', 'owner', 'path', 'cycle', 'missing'])
 def test_all_redirect_rejections_are_identical(world, monkeypatch, mode, defect):
     conversations, store, _, _ = world
@@ -179,18 +190,62 @@ def test_real_detail_route_has_identical_response_and_refreshes_deletion(world, 
         assert client.get('/v1/conversations/donor').status_code == 404
 
 
-@pytest.mark.parametrize('mode,expected', [('true', 1), ('false', 2)])
-def test_bridge_without_effects_reads_survivor_once(world, monkeypatch, mode, expected):
+@pytest.mark.parametrize('mode,metadata,expected', [('true', True, 1), ('false', True, 2), ('true', False, 2)])
+def test_bridge_without_effects_reads_survivor_once(world, monkeypatch, mode, metadata, expected):
     from utils.sync import bridge
 
     conversations, _, reads, _ = world
     monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', mode)
+    monkeypatch.setattr(bridge, 'lever_enabled', lambda *args: metadata)
     monkeypatch.setattr(
         bridge, 'read_metadata', lambda database, uid, cid, **kw: database.get_conversation_raw_snapshot(uid, cid)
     )
     assert bridge.finish_sync_bridges('u', 'survivor') == 'survivor'
     assert len(reads) == expected
     assert {path[-1] for path, _ in reads} == {'survivor'}
+
+
+@pytest.mark.parametrize('mode', ['true', 'false'])
+@pytest.mark.parametrize('redirect', [True, False])
+def test_bridge_refreshes_after_donor_reads_even_without_effects(monkeypatch, mode, redirect):
+    from utils.sync import bridge
+
+    reads = []
+    changed = False
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', mode)
+    monkeypatch.setattr(bridge, 'lever_enabled', lambda *args: True)
+
+    def read(_database, _uid, cid, **kwargs):
+        nonlocal changed
+        reads.append(cid)
+        if cid == 'donor':
+            changed = True
+            return {
+                'id': cid,
+                'deleted': True,
+                'sync_merged_into': 'survivor',
+                'sync_content_revision': 1,
+                'sync_bridge_cleaned_revision': 1,
+            }
+        if cid == 'new':
+            return {'id': cid}
+        if changed:
+            return {'id': cid, 'deleted': True, **({'sync_merged_into': 'new'} if redirect else {})}
+        return {'id': cid, 'sync_merged_from': ['donor']}
+
+    def unexpected(*args, **kwargs):
+        raise AssertionError('settled lineage must perform no effects')
+
+    monkeypatch.setattr(bridge, 'read_metadata', read)
+    for name in ('transfer_donor', 'retract_sync_bridge_source', 'copy_sync_bridge_audio', 'mark_sync_bridge_cleaned'):
+        monkeypatch.setattr(bridge, name, unexpected)
+    if redirect:
+        assert bridge.finish_sync_bridges('u', 'survivor') == 'new'
+        assert reads[:4] == ['survivor', 'donor', 'survivor', 'new']
+    else:
+        with pytest.raises(bridge.SyncAssignmentSuperseded):
+            bridge.finish_sync_bridges('u', 'survivor')
+        assert reads == ['survivor', 'donor', 'survivor']
 
 
 @pytest.mark.parametrize('effect', ['transfer', 'retract', 'copy', 'receipt', 'failed_transfer'])
@@ -218,6 +273,7 @@ def test_bridge_refreshes_after_every_effect_including_refused_transfer(monkeypa
         raise RuntimeError('synthetic partial effect')
 
     monkeypatch.setattr(bridge, 'sync_finalize_target_recovery_enabled', lambda: True)
+    monkeypatch.setattr(bridge, 'lever_enabled', lambda *args: True)
     monkeypatch.setattr(bridge, 'read_metadata', read)
     monkeypatch.setattr(
         bridge,

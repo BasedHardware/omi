@@ -16,6 +16,7 @@ from typing import Callable, NotRequired, TypedDict
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config import merge_ancestry
 from config import sync_operation_snapshot
+from config.firestore_read_levers import lever_enabled
 from config.sync_finalize import sync_finalize_target_recovery_enabled
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from database.action_item_refresh import RefreshConversationUnavailable
@@ -136,7 +137,9 @@ def finish_sync_bridges(
     uid: str, conversation_id: str, *, audio_source_id: str | None = None, silent: bool = False
 ) -> str:
     recovery = sync_finalize_target_recovery_enabled()
-    reuse = sync_operation_snapshot.enabled()
+    # The legacy hydrated reader can do photo/correction IO after its document
+    # snapshot, so only the existing metadata-only path permits this fast path.
+    reuse = sync_operation_snapshot.enabled() and lever_enabled('backfill_task_reads', uid)
     visited: set[str] = set()
     while True:
         if conversation_id in visited or len(visited) >= 16:
@@ -257,10 +260,10 @@ def finish_sync_bridges(
                     logger.info('event=sync_bridge outcome=converged uid=%s source_id=%s', uid, source_id)
         if redirected:
             continue
-        # A read-only traversal can linearize on its initial survivor snapshot.
-        # Even a failed/refused effect may have changed durable state: refresh
-        # after transfer, retraction, copy or receipt writes, as before.
-        if reuse and not effects_started:
+        # Only the no-lineage fast path has no intervening donor reads or
+        # effects. Recheck after a lineage traversal, even if cleanup was done,
+        # so a redirect during donor reads still updates the returned target.
+        if reuse and not effects_started and not lineage:
             current = row
             sync_operation_snapshot.avoided('bridge_no_effect')
         else:

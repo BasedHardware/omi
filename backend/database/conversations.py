@@ -27,7 +27,6 @@ from models.transcript_segment import TranscriptSegment, legacy_conversation_seg
 from utils import encryption
 from utils.conversation_page_cursor import BookmarkDict, decode_cursor, encode_cursor, query_scope
 from config.firestore_read_levers import lever_enabled
-from config import sync_operation_snapshot
 from utils.conversations.fragment_visibility import is_completed_rule_discard, is_user_curated
 from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
@@ -49,7 +48,7 @@ from utils.manual_speaker_assignments import (
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
-from database.sync_conversation_snapshot import resolve_snapshot
+from database.sync_conversation_snapshot import read_redirected, resolve_snapshot
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
@@ -1436,15 +1435,11 @@ def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_ho
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
-def _get_sync_redirected_conversation_snapshot(
-    uid: str, conversation_id: str, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED
+def _hydrate_sync_conversation_snapshot(
+    uid: str, conversation_data: dict, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED
 ) -> Optional[dict]:
-    resolved = resolve_snapshot(uid, conversation_id, client_factory=get_firestore_client)
-    if resolved is None:
-        return None
     record_document_read(read_site, FirestoreReadOutcome.HIT)
-    sync_operation_snapshot.avoided('redirect_hydration')
-    return resolved.to_dict()
+    return conversation_data
 
 
 @read_origin('job:sync_operation_snapshot')
@@ -1452,10 +1447,14 @@ def get_sync_redirected_conversation(
     uid: str, conversation_id: str, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED
 ) -> Optional[dict]:
     """Hydrate one checked snapshot; mutations still reread/CAS independently."""
-    if not sync_operation_snapshot.enabled():
-        canonical = resolve_sync_conversation_redirect(uid, conversation_id)
-        return get_conversation(uid, canonical, read_site=read_site) if canonical else None
-    return _get_sync_redirected_conversation_snapshot(uid, conversation_id, read_site=read_site)
+    return read_redirected(
+        uid,
+        conversation_id,
+        client_factory=get_firestore_client,
+        hydrate=_hydrate_sync_conversation_snapshot,
+        read_current=get_conversation,
+        read_site=read_site,
+    )
 
 
 def get_manual_speaker_receipt(uid: str, conversation_id: str, *, firestore_client: Any = None) -> dict:
