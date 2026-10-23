@@ -109,15 +109,25 @@ class _HomePageProduct extends StatefulWidget {
 class _HomePageProductState extends State<_HomePageProduct> {
   String? _navigateToRoute;
   bool _homeTrialSheetArmed = SharedPreferencesUtil().homeTrialSheetPending;
+  bool _homeTrialSheetChecking = false;
 
   /// Pocket's placement: the trial paywall once more, on the first tap in Home, for a reader who
   /// declined both sign-up offers. Fires at most once per device; a paid or ineligible reader
   /// never sees it.
   Future<void> _showHomeTrialSheetOnce() async {
-    if (!_homeTrialSheetArmed) return;
+    if (!_homeTrialSheetArmed || _homeTrialSheetChecking) return;
+    final usage = context.read<UsageProvider>();
+    if (usage.subscription == null) {
+      // Eligibility is unknown until the subscription loads: wait for it rather than spend the offer.
+      _homeTrialSheetChecking = true;
+      await usage.fetchSubscription().timeout(const Duration(seconds: 6), onTimeout: () {});
+      _homeTrialSheetChecking = false;
+      if (!mounted) return;
+      // Still unknown (the request failed or is slow): stay armed so the next tap tries again.
+      if (usage.subscription == null) return;
+    }
     setState(() => _homeTrialSheetArmed = false);
     SharedPreferencesUtil().homeTrialSheetPending = false;
-    final usage = context.read<UsageProvider>();
     if (!usage.showSubscriptionUI) return;
     if (usage.subscription?.subscription.plan.isPaid == true) return;
     if (usage.subscription?.trialEligible != true) return;
