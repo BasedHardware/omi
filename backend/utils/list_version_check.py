@@ -61,7 +61,9 @@ class ListVersionCheck:
 
     @classmethod
     def start(cls, request: Request | None, uid: str, family: str) -> 'ListVersionCheck':
-        check = cls(uid, family, ORIGINS.get(request.url.path, '') if isinstance(request, Request) else '')
+        if not isinstance(request, Request):
+            return cls(uid, family, '')
+        check = cls(uid, family, ORIGINS.get(request.url.path, ''))
         # An epoch is an operator attestation that ALL writer runtimes are
         # upgraded. Rotate it after any writer rollback/gap; never auto-enable
         # a mixed fleet simply because the serving process has new code.
