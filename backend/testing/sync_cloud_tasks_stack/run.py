@@ -10,6 +10,7 @@ transcription (legacy-retire C11).
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import secrets
@@ -498,10 +499,66 @@ def _job_status(stack: Stack, uid: str, job_id: str) -> dict[str, Any]:
     return body
 
 
-def _assert_evidence_is_sanitized(stack: Stack) -> None:
+def _upload_with_manifest(stack: Stack, uid: str) -> tuple[str, httpx.Response]:
+    stack.seed_user(uid)
+    filename = _fresh_pcm_filename()
+    audio = _pcm16_upload_bytes()
+    capture_conversation_id = f'sync-stack-capture-{uuid.uuid4().hex}'
+    _seed_capture_conversation(stack, uid, capture_conversation_id)
+    common_headers = {
+        **_auth_headers(uid),
+        'X-App-Platform': 'ios',
+        'X-Device-Id-Hash': DEVICE_HASH,
+    }
+    manifest_response = stack.http.post(
+        stack.admission_url + '/v2/sync-capture-manifest',
+        json={
+            'conversation_id': capture_conversation_id,
+            'files': [{'name': filename, 'sha256': hashlib.sha256(audio).hexdigest()}],
+        },
+        headers=common_headers,
+        timeout=10.0,
+    )
+    if manifest_response.status_code != 200:
+        raise StackFailure(f'fresh capture manifest returned HTTP {manifest_response.status_code}')
+    manifest_body = manifest_response.json()
+    manifest = manifest_body.get('manifest') if isinstance(manifest_body, dict) else None
+    if not isinstance(manifest, str) or not manifest:
+        raise StackFailure('fresh capture manifest response omitted its signed manifest')
+    response = stack.http.post(
+        stack.admission_url + f'/v2/sync-local-files?conversation_id={capture_conversation_id}',
+        files=[('files', (filename, audio, 'application/octet-stream'))],
+        headers={**common_headers, 'X-Omi-Sync-Capture-Manifest': manifest},
+        timeout=20.0,
+    )
+    return capture_conversation_id, response
+
+
+def _retired_admission(stack: Stack) -> None:
+    """A real signed upload cannot recreate legacy work after C9."""
+    uid = stack.scenario_uid('legacy-admission-retired')
+    _, response = _upload_with_manifest(stack, uid)
+    if response.status_code != 409:
+        raise StackFailure(f'retired legacy admission returned HTTP {response.status_code}')
+    body = response.json()
+    if body.get('code') != 'sync_content_in_progress' or body.get('job_id') is not None:
+        raise StackFailure('retired admission did not preserve the client retry contract')
+    if int(response.headers.get('Retry-After', '0')) < 60:
+        raise StackFailure('retired admission omitted the client cooldown hint')
+    if any(stack.evidence_events(stream) for stream in ('tasks', 'providers', 'jobs', 'storage', 'worker')):
+        raise StackFailure('retired admission dispatched or mutated legacy work')
+    if stack.fair_use_meter_ms(uid) != 0:
+        raise StackFailure('retired admission consumed speech allowance')
+    (stack.evidence_dir / 'admission.jsonl').write_text(
+        json.dumps({'event': 'legacy_admission_retired', 'http_status': 409, 'legacy_work_events': 0}) + '\n',
+        encoding='utf-8',
+    )
+
+
+def _assert_evidence_is_sanitized(stack: Stack, *, retired_admission: bool = False) -> None:
     # A deliberate pre-pipeline failure has no provider event; all scenarios
     # must still produce task, worker, durable-job, and storage evidence.
-    expected_streams = {'tasks', 'jobs', 'worker', 'storage'}
+    expected_streams = {'admission'} if retired_admission else {'tasks', 'jobs', 'worker', 'storage'}
     present = {path.stem for path in stack.evidence_dir.glob('*.jsonl')}
     if not expected_streams.issubset(present):
         raise StackFailure(f'missing sanitized evidence streams: {sorted(expected_streams - present)}')
@@ -518,15 +575,26 @@ def _assert_evidence_is_sanitized(stack: Stack) -> None:
                 raise StackFailure(f'non-object evidence event in {path.name}')
 
 
+def _run_retired_admission(state_dir: Path) -> None:
+    stack = Stack(state_dir)
+    try:
+        stack.start()
+        _retired_admission(stack)
+        _assert_evidence_is_sanitized(stack, retired_admission=True)
+    finally:
+        stack.close()
+        stack.cleanup_workspace_files()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, help='directory for sanitized evidence and private process logs')
     parser.add_argument('--keep', action='store_true', help='preserve state after a successful run')
     parser.add_argument(
         '--only',
-        choices=('all', 'batch'),
+        choices=('all', 'sync', 'batch'),
         default='all',
-        help='the legacy Sync Cloud Tasks scenarios were deleted with legacy transcription (legacy-retire C11); both values run the batch-lane scenarios',
+        help='run the Sync admission-retirement contract, batch-lane scenarios, or both',
     )
     args = parser.parse_args()
     if not PYTHON.exists():
@@ -536,6 +604,8 @@ def main() -> int:
     state_dir.mkdir(parents=True, exist_ok=True)
     succeeded = False
     try:
+        if args.only in {'all', 'sync'}:
+            _run_retired_admission(state_dir / 'legacy-admission-retired')
         if args.only in {'all', 'batch'}:
             from .batch import run_batch_scenarios
 
