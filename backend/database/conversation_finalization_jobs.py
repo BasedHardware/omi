@@ -18,13 +18,17 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
 from database import conversations as conversations_db
+from database.conversation_terminal_effects import refresh_terminal_visibility_after_commit
 from database import recording_sessions as recording_sessions_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database._client import document_id_from_seed, get_firestore_client
 from database.conversation_terminal_title import (
     dead_letter_conversation_updates,
+    prepare_calendar_probe,
+    recover_deferred_processing_failure_txn,
     kept_row_terminal_update,
     user_time_zone,
+    uid_from_conversation_path,
 )
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from database.firestore_index_registry import (
@@ -232,14 +236,6 @@ def _client(firestore_client: Any = None) -> Any:
 
 def _conversation_ref(client: Any, uid: str, conversation_id: str) -> Any:
     return client.collection('users').document(uid).collection(CONVERSATIONS_COLLECTION).document(conversation_id)
-
-
-def _uid_from_conversation_path(path: str) -> str | None:
-    """Return the uid from a ``users/{uid}/conversations/{conversation_id}`` path."""
-    parts = path.split('/')
-    if len(parts) == 4 and parts[0] == 'users' and parts[2] == CONVERSATIONS_COLLECTION:
-        return parts[1]
-    return None
 
 
 def _job_ref(client: Any, job_id: str) -> Any:
@@ -1306,6 +1302,7 @@ def _mark_finalization_dead_letter_txn(
     projection_collection: Any | None = None,
     failure_code: str = 'final_attempt_failed',
     time_zone_for_uid: Callable[[str], str | None] | None = None,
+    calendar_probe: Callable[[Mapping[str, Any]], bool | None] | None = None,
 ) -> bool:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
@@ -1348,7 +1345,7 @@ def _mark_finalization_dead_letter_txn(
         # Computed before the first write: it may read the photos child
         # collection inside this transaction.
         conversation_updates = dead_letter_conversation_updates(
-            uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid
+            uid, conversation, conversation_ref, transaction, failure_code, time_zone_for_uid, calendar_probe
         )
     if conversation_updates is not None and isinstance(uid, str) and isinstance(conversation, Mapping):
         from database.processing_attention import create_in_transaction
@@ -1378,6 +1375,7 @@ def _mark_finalization_dead_letter_txn(
     return True
 
 
+@refresh_terminal_visibility_after_commit
 def mark_finalization_dead_letter(
     job_id: str,
     dispatch_generation: int,
@@ -1388,10 +1386,17 @@ def mark_finalization_dead_letter(
     firestore_client: Any = None,
 ) -> bool:
     client = _client(firestore_client)
-    transaction = client.transaction()
+    # Provider IO must not consume the Firestore transaction's deadline/retries.
+    job_snapshot = _job_ref(client, job_id).get()
+    job = job_snapshot.to_dict() or {} if job_snapshot.exists else {}
+    calendar_probe = None
+    if _is_current_lease(job, dispatch_generation, lease_epoch) and job.get('uid') and job.get('conversation_id'):
+        row_snapshot = _conversation_ref(client, job['uid'], job['conversation_id']).get()
+        if row_snapshot.exists:
+            calendar_probe = prepare_calendar_probe(job['uid'], row_snapshot.to_dict() or {})
     transactional = firestore.transactional(_mark_finalization_dead_letter_txn)
     return transactional(
-        transaction,
+        client.transaction(),
         _job_ref(client, job_id),
         dispatch_generation,
         lease_epoch,
@@ -1401,6 +1406,7 @@ def mark_finalization_dead_letter(
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         failure_code,
         lambda uid: user_time_zone(client, uid),
+        calendar_probe,
     )
 
 
@@ -1676,7 +1682,7 @@ def get_meeting_receipt_backfill_candidates(
             if scanned > max_scan:
                 break
             last_path = snapshot.reference.path
-            uid = _uid_from_conversation_path(snapshot.reference.path)
+            uid = uid_from_conversation_path(snapshot.reference.path)
             if uid is None:
                 continue
             data = snapshot.to_dict() or {}
@@ -1947,7 +1953,7 @@ def get_stale_processing_orphan_candidates(
             if scanned > safe_max_scan:
                 break
             last_path = snapshot.reference.path
-            uid = _uid_from_conversation_path(snapshot.reference.path)
+            uid = uid_from_conversation_path(snapshot.reference.path)
             if uid is None:
                 continue
             data = snapshot.to_dict() or {}
@@ -2047,7 +2053,7 @@ def scan_in_progress_conversations(
             if scanned > max_scan:
                 break
             last_path = snapshot.reference.path
-            uid = _uid_from_conversation_path(snapshot.reference.path)
+            uid = uid_from_conversation_path(snapshot.reference.path)
             if uid is None:
                 continue
             rows.append(
@@ -2321,18 +2327,28 @@ def _complete_unstampable_orphan_conversation_txn(
     last_written = _parse_timestamp(getattr(snapshot, 'update_time', None))
     if last_written is None or last_written > stale_before:
         return False
-    transaction.update(conversation_ref, {'status': 'completed'})
+    uid = uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
+    terminal = kept_row_terminal_update(
+        uid or '',
+        data,
+        conversation_ref,
+        {'status': 'completed'},
+        None,
+        path='oversized_terminal',
+        transaction=transaction,
+    )
+    transaction.update(conversation_ref, terminal)
     return True
 
 
+@refresh_terminal_visibility_after_commit
 def complete_unstampable_orphan_conversation(
     uid: str, conversation_id: str, *, stale_after: timedelta, firestore_client: Any = None
 ) -> bool:
     """Terminalize a legacy orphan that is too large to accept the admission fence."""
     client = _client(firestore_client)
-    transaction = client.transaction()
     transactional = firestore.transactional(_complete_unstampable_orphan_conversation_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now() - stale_after)
+    return transactional(client.transaction(), _conversation_ref(client, uid, conversation_id), _now() - stale_after)
 
 
 def _complete_orphan_conversation_txn(
@@ -2371,23 +2387,24 @@ def _complete_orphan_conversation_txn(
     expected_admitted = _parse_timestamp(expected_admitted_at)
     if admitted_at is None or admitted_at != expected_admitted:
         return False
-    uid = uid or _uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
+    uid = uid or uid_from_conversation_path(str(getattr(conversation_ref, 'path', '') or ''))
     terminal: dict[str, Any] = {'status': 'completed'}
-    if uid:
-        terminal = kept_row_terminal_update(uid, data, conversation_ref, terminal, time_zone_for_uid)
+    terminal = kept_row_terminal_update(
+        uid or '', data, conversation_ref, terminal, time_zone_for_uid, transaction=transaction
+    )
     transaction.update(conversation_ref, terminal)
     return True
 
 
+@refresh_terminal_visibility_after_commit
 def complete_orphan_conversation(
     uid: str, conversation_id: str, *, expected_admitted_at: datetime | None, firestore_client: Any = None
 ) -> bool:
     """Close one crash orphan through the generation/ownership fence."""
     client = _client(firestore_client)
-    transaction = client.transaction()
     transactional = firestore.transactional(_complete_orphan_conversation_txn)
     return transactional(
-        transaction,
+        client.transaction(),
         _conversation_ref(client, uid, conversation_id),
         expected_admitted_at,
         _now(),
@@ -2449,27 +2466,11 @@ def reacquire_deferred_processing(uid: str, conversation_id: str, *, firestore_c
     return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now())
 
 
-def _recover_deferred_processing_failure_txn(transaction: Any, conversation_ref: Any) -> bool:
-    """Atomically publish a retryable terminal after deferred enrichment fails."""
-    snapshot = conversation_ref.get(transaction=transaction)
-    if not getattr(snapshot, 'exists', False):
-        return False
-    data = snapshot.to_dict() or {}
-    if (
-        data.get('status') not in {'processing', 'completed'}
-        or data.get('discarded')
-        or data.get('deferred') is not False
-    ):
-        return False
-    transaction.update(conversation_ref, {'status': 'completed', 'deferred': True})
-    return True
-
-
 def recover_deferred_processing_failure(uid: str, conversation_id: str, *, firestore_client: Any = None) -> bool:
     """Atomically re-arm deferred enrichment without exposing a stuck processing row."""
     client = _client(firestore_client)
     transaction = client.transaction()
-    transactional = firestore.transactional(_recover_deferred_processing_failure_txn)
+    transactional = firestore.transactional(recover_deferred_processing_failure_txn)
     return transactional(transaction, _conversation_ref(client, uid, conversation_id))
 
 
@@ -2666,7 +2667,15 @@ def _abandon_byok_finalization_job_txn(
     # Pure decode of the snapshot already held; no transactional read after a write.
     terminal: dict[str, Any] = {'status': 'completed', 'finalization_status': 'dead_letter'}
     if closes_conversation and isinstance(uid, str) and isinstance(conversation, Mapping):
-        terminal = kept_row_terminal_update(uid, conversation, conversation_ref, terminal, time_zone_for_uid)
+        terminal = kept_row_terminal_update(
+            uid,
+            conversation,
+            conversation_ref,
+            terminal,
+            time_zone_for_uid,
+            path='byok_abandoned',
+            transaction=transaction,
+        )
 
     transaction.update(
         job_ref,
@@ -2713,6 +2722,7 @@ def _abandon_byok_finalization_job_txn(
     return _byok_abandonment('abandoned', 'closed')
 
 
+@refresh_terminal_visibility_after_commit
 def abandon_byok_finalization_job(
     job_id: str,
     *,
@@ -2725,10 +2735,9 @@ def abandon_byok_finalization_job(
     """Close one unownable BYOK job through its generation/ownership fence."""
     client = _client(firestore_client)
     now = _now()
-    transaction = client.transaction()
     transactional = firestore.transactional(_abandon_byok_finalization_job_txn)
     return transactional(
-        transaction,
+        client.transaction(),
         _job_ref(client, job_id),
         expected_status,
         expected_dispatch_generation,

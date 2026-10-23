@@ -45,6 +45,7 @@ from utils.conversations.finalization_decision import (
 )
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
+from utils.conversations.terminal_relevance import stamp_terminal_decision
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
 from utils.other.storage import delete_conversation_audio_files
@@ -149,6 +150,9 @@ def create_processing_conversation(uid: str, conversation_data: dict[str, Any], 
 def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *, idempotent: bool = False) -> bool:
     """Create a fully processed conversation without granting processors recreate authority."""
     _require_status(conversation_data, ConversationStatus.completed)
+    stamp_terminal_decision(
+        conversation_data, path='import' if conversation_data.get('imported') else 'lifecycle_terminal'
+    )
     if idempotent:
         created = conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
     else:
@@ -198,6 +202,8 @@ def persist_processed_conversation(
         ConversationStatus.failed,
     )
 
+    stamp_terminal_decision(conversation_data, path='lifecycle_terminal')
+
     def _observe_first_completion() -> None:
         observe_completed_conversation_shape(uid, conversation_data)
 
@@ -216,6 +222,7 @@ def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -
     # Stamp imported so selective delete can distinguish ZIP imports from source=limitless
     # pendant/sync uploads that share the same ConversationSource.
     conversation_data['imported'] = True
+    stamp_terminal_decision(conversation_data, path='import')
     created = conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
     if created:
         observe_completed_conversation_shape(uid, conversation_data)

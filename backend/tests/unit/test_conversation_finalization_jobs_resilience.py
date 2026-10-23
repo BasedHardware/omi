@@ -182,7 +182,12 @@ def test_complete_orphan_conversation_naive_matching():
         now=cfj._now(),
     )
     assert res is True
-    mock_txn.update.assert_called_once_with(mock_ref, {"status": "completed"})
+    mock_txn.update.assert_called_once()
+    written_ref, patch = mock_txn.update.call_args.args
+    assert written_ref is mock_ref
+    assert patch['status'] == 'completed'
+    assert patch['relevance_decision']['verdict'] == 'keep'
+    assert patch['relevance_decision']['trigger'] == 'orphan_terminal'
 
 
 def test_complete_unstampable_orphan_conversation_naive_update_time():
@@ -206,7 +211,12 @@ def test_complete_unstampable_orphan_conversation_naive_update_time():
         stale_before=stale_before,
     )
     assert res is True
-    mock_txn.update.assert_called_once_with(mock_ref, {"status": "completed"})
+    mock_txn.update.assert_called_once()
+    written_ref, patch = mock_txn.update.call_args.args
+    assert written_ref is mock_ref
+    assert patch['status'] == 'completed'
+    assert patch['relevance_decision']['verdict'] == 'keep'
+    assert patch['relevance_decision']['trigger'] == 'oversized_terminal'
 
 
 def test_abandon_byok_finalization_job_txn_naive_lease():

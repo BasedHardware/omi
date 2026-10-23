@@ -93,6 +93,21 @@ def test_crash_before_worker_claim_also_rolls_back_durable_admission(store, monk
     recovery = jobs.begin_recovery(job['job_id'], firestore_client=store[0])
     assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
     assert all(row(store, cid)['status'] == 'completed' for cid in ('a', 'b'))
+    assert all(row(store, cid)['relevance_decision']['verdict'] == 'keep' for cid in ('a', 'b'))
+
+
+@pytest.mark.parametrize('reason', ['filler_only', 'empty_transcript'])
+def test_crash_rollback_preserves_legacy_rule_discard_and_visibility(store, monkeypatch, reason):
+    from database.conversations import is_visible_conversation
+
+    prior = dict(verdict='discard', decided_by='rule', reason=reason, trigger='capture_end')
+    row(store, 'a').update(discarded=False, relevance_decision=prior)
+    job = admit(store)
+    monkeypatch.setattr(jobs, '_now', lambda: NOW + jobs.LEASE)
+    recovery = jobs.begin_recovery(job['job_id'], firestore_client=store[0])
+    assert jobs.finish_recovery(job['job_id'], recovery['lease_epoch'], firestore_client=store[0])
+    assert row(store, 'a')['relevance_decision'] == prior
+    assert not is_visible_conversation(row(store, 'a'))
 
 
 def test_pretransfer_crash_is_still_safe_to_roll_back(store, monkeypatch):

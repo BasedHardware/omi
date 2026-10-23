@@ -392,8 +392,11 @@ def test_substantive_speech_promotes_and_drops_the_stale_rule_decision():
     assert not created and promoted['id'] == 'filler'
     assert promoted['discarded'] is False
     assert promoted['sync_relevance'] == 'keep'
-    assert promoted.get('relevance_decision') is None
-    assert _stored(store, 'filler').get('relevance_decision') is None
+    decision = promoted['relevance_decision']
+    assert decision['verdict'] == 'keep'
+    assert decision['decided_by'] == 'policy'
+    assert decision['reason'] == 'sync_intake_default'
+    assert _stored(store, 'filler')['relevance_decision'] == decision
 
 
 @pytest.mark.parametrize('curation', [{'sync_relevance_user_kept': True}, {'user_title': 'Saved note'}])

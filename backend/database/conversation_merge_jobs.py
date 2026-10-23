@@ -236,7 +236,18 @@ def finish_recovery(job_id: str, epoch: int, *, firestore_client: Any = None) ->
         sources = [source.get(transaction=transaction).to_dict() or {} for source in refs]
         for source, data in zip(refs, sources):
             if data.get('status') == 'merging' and data.get('merge_job_id') == job_id:
-                transaction.update(source, {'status': 'completed', 'merge_job_id': firestore.DELETE_FIELD})
+                from utils.conversations.terminal_relevance import stamp_terminal_decision
+
+                terminal = {**data, 'status': 'completed'}
+                stamp_terminal_decision(terminal, path='lifecycle_terminal')
+                transaction.update(
+                    source,
+                    {
+                        'status': 'completed',
+                        'merge_job_id': firestore.DELETE_FIELD,
+                        'relevance_decision': terminal['relevance_decision'],
+                    },
+                )
         transaction.update(
             ref,
             dict(

@@ -198,6 +198,8 @@ def test_filler_is_preserved_and_promoted_regardless_of_speakers(is_user, speake
     assert not created and promoted['id'] == review['id']
     assert promoted['sync_relevance'] == 'keep'
     assert promoted['discarded'] is False
+    assert promoted['relevance_decision']['verdict'] == 'keep'
+    assert promoted['relevance_decision']['trigger'] == 'sync_intake'
 
 
 @pytest.mark.parametrize('text', ['Help!', 'Yes', 'No', '嗯，请明天联系我', 'I love you', 'Mm 1234', '1234', ''])
@@ -213,6 +215,7 @@ def test_subsecond_meaningful_speech_is_kept(text):
     result, _, _ = intake(StrictFirestore(), short)
     assert result['sync_relevance'] == 'keep'
     assert result['discarded'] is False
+    assert result['relevance_decision']['verdict'] == 'keep'
 
 
 def test_separated_fillers_are_hidden_without_deleting_transcript_or_audio():

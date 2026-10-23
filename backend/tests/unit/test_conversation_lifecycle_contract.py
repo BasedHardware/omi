@@ -212,6 +212,7 @@ def test_discarded_conversation_cannot_be_readmitted(lifecycle_store):
     assert lifecycle_service.admit_processing('uid', 'conversation') is False
     lifecycle_service.restore_discarded('uid', 'conversation')
     assert lifecycle_store.conversation('uid', 'conversation')['discarded'] is False
+    assert lifecycle_store.conversation('uid', 'conversation')['relevance_decision']['decided_by'] == 'user'
 
 
 def test_terminal_failed_finalization_closes_only_the_current_processing_generation(lifecycle_store):
@@ -341,6 +342,7 @@ def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
     stored = lifecycle_store.conversation('uid', 'imported')
     assert stored['status'] == ConversationStatus.completed
     assert stored['imported'] is True
+    assert stored['relevance_decision']['reason'] == 'import_default'
     assert (
         lifecycle_service.persist_imported_conversation(
             'uid',
@@ -601,3 +603,65 @@ def test_failed_merge_restores_a_discarded_source_without_restoring_visibility(l
     assert lifecycle_service.complete('uid', 'conversation')
     row = lifecycle_store.conversation('uid', 'conversation')
     assert row['status'] == 'completed' and row['discarded'] is True
+
+
+@pytest.mark.parametrize('creator', ['create_completed_conversation', 'persist_imported_conversation'])
+def test_terminal_creation_always_stores_an_authorized_decision(lifecycle_store, creator):
+    payload = {
+        'id': 'decision-boundary',
+        'status': ConversationStatus.completed,
+        'discarded': False,
+        'relevance_decision': {},
+        'data_protection_level': 'standard',
+    }
+    assert getattr(lifecycle_service, creator)('uid', payload)
+    row = lifecycle_store.conversation('uid', 'decision-boundary')
+    assert row['relevance_decision']['verdict'] == 'keep'
+    assert row['relevance_decision']['decided_by'] == 'policy'
+    assert row['relevance_decision']['reason'] in {'import_default', 'lifecycle_terminal_default'}
+
+
+@pytest.mark.parametrize('entrypoint', ['transition', 'complete'])
+def test_merge_rollback_completes_with_decision(lifecycle_store, entrypoint):
+    lifecycle_store.put_conversation('uid', 'rollback', status='merging', discarded=False)
+    if entrypoint == 'transition':
+        assert lifecycle_service.transition(
+            'uid', 'rollback', ConversationStatus.completed, expected=ConversationStatus.merging
+        )
+    else:
+        assert lifecycle_service.complete('uid', 'rollback')
+    row = lifecycle_store.conversation('uid', 'rollback')
+    assert row['relevance_decision']['verdict'] == 'keep'
+    assert row['relevance_decision']['reason'] == 'lifecycle_terminal_default'
+
+
+@pytest.mark.parametrize('deleted', [True, False])
+def test_legacy_restore_records_user_verdict_without_restoring_tombstones(lifecycle_store, deleted):
+    lifecycle_store.put_conversation(
+        'uid', 'restore', status='completed', discarded=True, relevance_decision={}, deleted=deleted
+    )
+    restored = conversations_db.restore_conversation_from_discarded('uid', 'restore')
+    row = lifecycle_store.conversation('uid', 'restore')
+    assert restored is (not deleted)
+    assert row['discarded'] is deleted
+    if not deleted:
+        assert row['relevance_decision']['verdict'] == 'keep'
+        assert row['relevance_decision']['decided_by'] == 'user'
+        assert row['relevance_decision']['reason'] == 'restored'
+
+
+@pytest.mark.parametrize('entrypoint', ['transition', 'complete'])
+@pytest.mark.parametrize('reason', ['filler_only', 'empty_transcript'])
+def test_merge_rollback_preserves_legacy_rule_discard_and_visibility(lifecycle_store, entrypoint, reason):
+    prior = dict(verdict='discard', decided_by='rule', reason=reason, trigger='capture_end')
+    lifecycle_store.put_conversation('uid', 'rollback', status='merging', discarded=False, relevance_decision=prior)
+    if entrypoint == 'transition':
+        assert lifecycle_service.transition(
+            'uid', 'rollback', ConversationStatus.completed, expected=ConversationStatus.merging
+        )
+    else:
+        assert lifecycle_service.complete('uid', 'rollback')
+    row = lifecycle_store.conversation('uid', 'rollback')
+    assert row['status'] == 'completed'
+    assert row['relevance_decision'] == prior
+    assert not conversations_db.is_visible_conversation(row)

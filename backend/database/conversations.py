@@ -50,6 +50,7 @@ from ._client import db, delete_collection_recursive, get_firestore_client, run_
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
+from .conversation_status_transitions import recovery_discard_payload
 from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
@@ -389,14 +390,6 @@ def _require_segment_list(parsed: Any) -> List[Any]:
     return parsed
 
 
-def _is_verified_recovery_discard(write_data: Dict[str, Any]) -> bool:
-    # Imported lazily: several unit harnesses load this module with a stubbed
-    # ``utils`` package that has no ``utils.conversations`` subpackage.
-    from utils.conversations.recovery import verified_recovery_discard
-
-    return verified_recovery_discard(write_data.get('discarded'), write_data.get('relevance_decision'))
-
-
 def _decode_transcript_segments_strict(
     uid: str, raw_segments: Any, compressed: bool, *, require_decryption: bool = False
 ) -> List[Any]:
@@ -701,6 +694,11 @@ def _sync_conversation_search_index(uid: str, conversation_id: str) -> None:
         )
 
 
+def sync_conversation_search_index_public(uid: str, conversation_id: str) -> None:
+    """Public alias for the post-write Typesense projection convergence."""
+    _sync_conversation_search_index(uid, conversation_id)
+
+
 def _delete_conversation_search_index(uid: str, conversation_id: str) -> None:
     """Remove one conversation from Typesense after a durable delete (fail-open)."""
     try:
@@ -788,7 +786,10 @@ def is_visible_conversation(conversation: Optional[Mapping[str, Any]], *, includ
     """Whether a stored conversation may be put in front of a user or downstream job."""
     if not conversation:
         return False
-    if is_soft_deleted(conversation):
+    if (
+        is_soft_deleted(conversation)
+        or getattr(conversation.get('status'), 'value', conversation.get('status')) == 'failed'
+    ):
         return False
     if not include_discarded:
         # Dream duplicate captures are folded out of product reads, but the
@@ -1199,7 +1200,7 @@ def persist_processing_result_with_lifecycle(
             stale_sync_revision = True
             return False
 
-        if write_data.get('discarded') is True and _is_verified_recovery_discard(write_data):
+        if write_data.get('discarded') is True and recovery_discard_payload(write_data):
             from utils.conversations.recovery import (
                 RecoveryStructureUnavailableError,
                 structured_has_protected_content,
@@ -2676,13 +2677,6 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
     return run_transactional(client, link)
 
 
-def transition_conversation_status(uid: str, conversation_id: str, status: str):
-    user_ref = db.collection('users').document(uid)
-    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'status': status})
-    invalidate_people_stats_cache(uid)
-
-
 def claim_conversation_status(
     uid: str,
     conversation_id: str,
@@ -2728,6 +2722,12 @@ def claim_conversation_status(
                     uid, current, extra_updates, transcript_corrections=corrections
                 )
             )
+        if claimed_status == ConversationStatus.completed:
+            from utils.conversations.terminal_relevance import stamp_terminal_decision
+
+            result = {**current, **updates}
+            stamp_terminal_decision(result, path='lifecycle_terminal')
+            updates['relevance_decision'] = result['relevance_decision']
         transaction.update(conversation_ref, updates)
         return True
 
@@ -2842,6 +2842,13 @@ def restore_conversation_from_discarded(uid: str, conversation_id: str):
             # Restored-from-Jev stays countable after reassessment replaces
             # relevance_decision; the marker is written once and never cleared.
             updates['jev_discard_restored'] = True
+        # Only metadata: the existing tombstone fence and user restore state
+        # remain authoritative. Legacy restores must carry the user's verdict.
+        from utils.conversations.terminal_relevance import stamp_terminal_decision
+
+        restored = {**current, **updates}
+        stamp_terminal_decision(restored, path='user_restore')
+        updates['relevance_decision'] = restored['relevance_decision']
         transaction.update(conversation_ref, updates)
         return True
 

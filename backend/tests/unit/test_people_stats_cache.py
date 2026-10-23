@@ -707,7 +707,11 @@ def test_delete_conversation_invalidates_cache_when_proactivity_cleanup_fails(wr
 def test_transition_conversation_status_invalidates(writer_env):
     store, invalidated = writer_env
     store.seed_conv('u1', 'c1', status='in_progress')
-    conversations_db.transition_conversation_status('u1', 'c1', 'processing')
+    from models.conversation_enums import ConversationStatus
+
+    assert conversations_db.claim_conversation_status(
+        'u1', 'c1', ConversationStatus.in_progress, ConversationStatus.processing
+    )
     assert store.rows[store.conv_path('u1', 'c1')]['status'] == 'processing'
     assert invalidated == ['u1']
 

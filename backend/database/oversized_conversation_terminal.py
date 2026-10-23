@@ -18,6 +18,7 @@ from typing import Any, Callable, Literal
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database.conversation_terminal_effects import refresh_terminal_visibility_after_commit
 from database.conversation_terminal_title import (
     TERMINAL_SIZE_HEADROOM_BYTES,
     kept_row_terminal_update,
@@ -62,11 +63,20 @@ def _complete_oversized_in_progress_conversation_txn(
     estimated = estimate_firestore_document_bytes(data, path if isinstance(path, str) else None)
     if estimated + TERMINAL_SIZE_HEADROOM_BYTES < FIRESTORE_MAX_DOCUMENT_BYTES:
         return 'below_ceiling'
-    terminal = kept_row_terminal_update(uid, data, conversation_ref, {'status': 'completed'}, time_zone_for_uid)
+    terminal = kept_row_terminal_update(
+        uid,
+        data,
+        conversation_ref,
+        {'status': 'completed'},
+        time_zone_for_uid,
+        path='oversized_terminal',
+        transaction=transaction,
+    )
     transaction.update(conversation_ref, terminal)
     return 'closed'
 
 
+@refresh_terminal_visibility_after_commit
 def complete_oversized_in_progress_conversation(
     uid: str, conversation_id: str, *, quiet_for: timedelta, firestore_client: Any = None
 ) -> OversizedInProgressOutcome:

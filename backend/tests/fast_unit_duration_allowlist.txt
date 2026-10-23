@@ -504,3 +504,17 @@ tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_no
 # --all shards and locally. Same boundary shape as the Dream retry entries above; the decode is the
 # test's real work, so keep it in the unit lane via the allowlist rather than a global threshold bump.
 tests/unit/test_batch_audio_language.py::test_admitted_short_false_permission_cannot_bypass_worker_barrier[zh-clean_speech-6s-pcm16]
+# Discard-detection audit (PR: terminal decisions at every terminal state): these load the
+# full database graph or replay document-ceiling fixtures in the file-isolation runner,
+# so their first-test CPU amortizes imports; measured on the push-gate runner.
+tests/unit/test_conversation_terminal_effects.py::test_document_ceiling_failure_refreshes_visibility_after_commit
+tests/unit/test_dead_letter_visible_row_title.py::test_missing_structured_is_created_with_the_deterministic_title
+tests/unit/test_dead_letter_visible_row_title.py::test_many_action_item_maps_near_the_limit_drop_the_title
+tests/unit/test_dead_letter_visible_row_title.py::test_dead_letter_with_room_below_the_limit_keeps_title_and_retry
+tests/unit/test_dead_letter_visible_row_title.py::test_dead_letter_at_the_document_limit_still_terminalizes_without_growth
+tests/unit/test_dead_letter_visible_row_title.py::test_orphan_at_the_document_limit_still_terminalizes_without_growth
+tests/unit/test_people_stats_cache.py::test_repeated_route_calls_scan_once_then_serve_the_cache_hit
+tests/unit/test_terminal_relevance.py::test_production_terminal_assessment_call_sites_are_pinned
+tests/unit/test_terminal_relevance.py::test_real_terminal_calendar_probe_distinguishes_unavailable_evidence[no_overlap-False]
+tests/unit/test_terminal_relevance.py::test_real_terminal_calendar_probe_distinguishes_unavailable_evidence[provider_error-None]
+tests/unit/test_sync_cross_job_assignment.py::test_seventy_minutes_of_identical_narration_is_one_recording
