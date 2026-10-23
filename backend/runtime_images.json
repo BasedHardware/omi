@@ -635,5 +635,14 @@
       "pull_request_smoke": true,
       "outside_role_split": "Plugins service outside backend/; not part of the backend role split."
     }
-  ]
+  ],
+  "logging_configmap_charts": {
+    "incluster-guards": {
+      "template": "templates/guard.yaml",
+      "entrypoint": "/guard/guard.py",
+      "source": "files/guard.py",
+      "logging": "files/omi_logging.py",
+      "volume": "script"
+    }
+  }
 }
