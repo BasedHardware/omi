@@ -4424,5 +4424,6 @@
     "recapInTheBackground": "في الخلفية",
     "retentionOfferAccept": "ابقَ بخصم {percent}%",
     "retentionOfferBody": "ابقَ وادفع {price} شهريًا لمدة {months} أشهر قادمة.",
-    "retentionOfferApplied": "تم. خصم {percent}% لمدة {months} أشهر قادمة."
+    "retentionOfferApplied": "تم. خصم {percent}% لمدة {months} أشهر قادمة.",
+    "othersSpeakerLabel": "آخرون"
 }

@@ -14614,4 +14614,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gata. $percent% reducere în următoarele $months luni.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Alții';
 }

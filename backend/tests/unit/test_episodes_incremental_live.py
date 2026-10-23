@@ -20,7 +20,7 @@ def test_render_moment_joins_voices_and_bounds_long_text():
             {'text': 'hello there', 'is_user': True},
             {'text': 'still me', 'is_user': True},
             {'text': 'hi', 'speaker_id': 2},
-            {'text': 'named', 'person_name': 'Minh'},
+            {'text': 'named', 'person_name': 'Minh', 'person_id': 'minh'},
             {'text': '   '},
         ]
     )

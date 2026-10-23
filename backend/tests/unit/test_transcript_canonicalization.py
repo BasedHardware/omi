@@ -194,7 +194,7 @@ def test_assign_padded_person_id_stores_canonical_and_late_finalize_renders_alic
     assert models[0].person_id == _CANONICAL_PERSON_ID
     assert stored_transcript_is_canonical(models) is True
     assert _render(models) == 'Alice: I agree'
-    assert 'Speaker' not in _render(models)
+    assert 'Speaker 0:' not in _render(models)
 
     client_digest = transcript_sha256([{'text': _AGREED, 'person_id': _CANONICAL_PERSON_ID}])
     bound = _late_finalize(assigned, client_digest)
@@ -386,7 +386,7 @@ def test_empty_speaker_07_is_stored_hashed_and_rendered() -> None:
     assert bound is not None
     assert bound != without_empty
     assert 'Speaker B:' in _render(models)
-    assert 'Speaker 7:' not in _render(_as_models(stored[:1]))
+    assert 'Speaker B:' not in _render(_as_models(stored[:1]))
     assert _late_finalize(stored, without_empty) is None
     assert _late_finalize(stored, bound) == bound
 

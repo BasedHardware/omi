@@ -14538,4 +14538,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Done. $percent% off your next $months months.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Others';
 }

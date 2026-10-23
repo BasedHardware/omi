@@ -14617,4 +14617,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. $percent% попуст за следните $months месеци.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Други';
 }

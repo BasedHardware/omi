@@ -115,15 +115,13 @@ def _named_segments(uid: str, segments: Sequence[Mapping[str, Any]], c: Collabor
     return moment_render.name_segments(segments, names)
 
 
-def _owner_name(uid: str, c: Collaborators) -> Optional[str]:
-    """The owner's display name for moment dialogue labels; never blocks a moment."""
-    if c.owner_name is not None:
-        return c.owner_name(uid)
+def _owner_name(uid: str, c: Collaborators) -> str:
+    """Look up the owner's name once; an explicit fallback avoids a second auth read."""
     try:
-        return get_user_name(uid, use_default=False)
+        return (c.owner_name(uid) if c.owner_name is not None else get_user_name(uid, use_default=False)) or 'You'
     except Exception as error:
         logger.warning('event=episode_moment owner_name_failed exception_type=%s', type(error).__name__)
-        return None
+        return 'You'
 
 
 def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
@@ -476,8 +474,13 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         applied_until = float((episode.get('applied') or {}).get(moment.conversation_id, -1.0))
     segments = [s for s in moment.segments if _segment_end(s) > applied_until and str(s.get('text') or '').strip()]
     named = _named_segments(uid, segments, c)
+    owner_name = _owner_name(uid, c)
     text = incremental.render_moment(
-        named, uid=uid, conversation_id=moment.conversation_id, owner_name=_owner_name(uid, c)
+        named,
+        uid=uid,
+        conversation_id=moment.conversation_id,
+        owner_name=owner_name,
+        voice_order=(episode or {}).get('speaker_display_order') or [],
     )
     if text.words == 0:
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_applied')
@@ -495,10 +498,16 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
     )
     pending: Optional[dict[str, Any]] = None
     if closed is None:
+        previous_episode_id = episode.get('id') if episode else None
         settled = _settle_boundary(uid, episode, moment, facts, text.text, c, now)
         if isinstance(settled, str):
             return settled
         episode, pending = settled
+        if episode is None and previous_episode_id is not None and text.voice_order:
+            # A boundary opened a fresh occasion: do not carry its predecessor's labels.
+            text = incremental.render_moment(
+                named, uid=uid, conversation_id=moment.conversation_id, owner_name=owner_name, voice_order=[]
+            )
 
     state_updated_at = policy.utc(episode.get('state_updated_at')) if episode else None
     if (
@@ -579,6 +588,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         'moments': moments,
         'applied': applied,
         'usage': usage,
+        'speaker_display_order': list(text.voice_order),
         'speaker_keys': sorted(set(base.get('speaker_keys') or []) | set(facts.speakers)),
         'last_activity_at': max(moment.ended_at, last_activity) if last_activity else moment.ended_at,
         'calendar_identity': base.get('calendar_identity') or moment.calendar_identity,
@@ -955,13 +965,13 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
         'last_activity_at': episode.get('last_activity_at') or episode.get('started_at'),
         'closed_at': episode.get('closed_at'),
         'close_reason': episode.get('close_reason'),
-        'title': episode.get('title') or '',
-        'bullets': list(episode.get('bullets') or []),
-        'people': list(episode.get('people') or []),
+        'title': clean_text(episode.get('title'), 240),
+        'bullets': [clean_text(line, 400) for line in episode.get('bullets') or []],
+        'people': [clean_text(name, 60) for name in episode.get('people') or [] if clean_text(name, 60) != 'a speaker'],
         'provisional_items': [
             {
                 'id': item['id'],
-                'text': item['text'],
+                'text': clean_text(item['text'], 400),
                 'kind': item.get('kind') or 'task',
                 'status': item.get('status') or 'provisional',
                 'explicit': item.get('explicit') is True,
@@ -982,7 +992,7 @@ def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:
                 'ended_at': m.get('ended_at') or m.get('started_at'),
                 'start_offset': float(m.get('start_offset') or 0.0),
                 'end_offset': float(m.get('end_offset') or 0.0),
-                'heading': m.get('heading') or '',
+                'heading': clean_text(m.get('heading'), 240),
             }
             for m in episode.get('moments') or []
             if m.get('id') and m.get('conversation_id') and m.get('started_at')

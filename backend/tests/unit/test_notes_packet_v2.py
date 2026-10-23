@@ -35,6 +35,7 @@ def isolated_flags(monkeypatch):
         monkeypatch.delenv(flag + '_SERVE_PERCENT', raising=False)
         monkeypatch.delenv(flag + '_SERVE_UID_SHA256S', raising=False)
     monkeypatch.setattr(packet, 'get_evidence', lambda *_args: None)
+    monkeypatch.setattr(incremental, 'get_user_name', lambda *_a, **_kw: None)
     from utils.llm import known_spellings
 
     monkeypatch.setattr(
@@ -140,7 +141,14 @@ def test_one_builder_supplies_agent_and_oneshot_language_local_time_density_spel
 
 
 def candidate(name, probability, band, person_id='synthetic-contact'):
-    return SpeakerCandidate(person_id=person_id, name=name, probability=probability, band=band, source='voice')
+    return SpeakerCandidate(
+        person_id=person_id,
+        name=name,
+        probability=probability,
+        band=band,
+        source='voice',
+        label_eligible=band != 'unknown',
+    )
 
 
 def test_speaker_evidence_lists_best_probability_bands_and_similarity():
@@ -152,7 +160,8 @@ def test_speaker_evidence_lists_best_probability_bands_and_similarity():
                 id='v0',
                 segment_ids=['synthetic-a'],
                 candidates=[candidate('Other', 0.35, 'unknown'), candidate('Nik', 0.8, 'likely')],
-            )
+            ),
+            VoiceCluster(id='v1', segment_ids=['synthetic-b']),
         ],
         similarities=[ClusterSimilarity(a='v0', b='v1', similarity=0.82)],
     )
@@ -182,16 +191,21 @@ def test_renderer_uses_the_policy_band_and_higher_probability(band, expected):
             VoiceCluster(
                 id='v0',
                 segment_ids=['synthetic-a'],
-                candidates=[candidate('Wrong', 0.1, 'confident'), candidate('Nik', 0.8, band)],
+                candidates=[
+                    SpeakerCandidate(
+                        person_id='wrong', name='Wrong', probability=0.1, band='confident', source='roster'
+                    ),
+                    candidate('Nik', 0.8, band),
+                ],
             )
         ],
     )
     text, mapping = render_cluster_transcript(
         [{'id': 'synthetic-a', 'text': 'A synthetic remark', 'speaker_id': 0}], names={}, evidence=evidence
     )
-    assert mapping['v0'] == expected
+    assert mapping['c0'] == expected
     assert 'Wrong' not in text
-    assert '[synthetic-a v0]' in text
+    assert '[synthetic-a c0]' in text
 
 
 def test_scopes_do_not_collapse_reused_numeric_speaker_keys():

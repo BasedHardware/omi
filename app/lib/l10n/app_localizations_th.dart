@@ -14480,4 +14480,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'เรียบร้อย ส่วนลด $percent% ใน $months เดือนถัดไป';
   }
+
+  @override
+  String get othersSpeakerLabel => 'คนอื่น ๆ';
 }

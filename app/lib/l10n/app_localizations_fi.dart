@@ -14557,4 +14557,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Valmis. $percent % alennus seuraavat $months kuukautta.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Muut';
 }

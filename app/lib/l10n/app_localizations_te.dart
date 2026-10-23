@@ -14612,4 +14612,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'పూర్తైంది. $percent% తగ్గింపు, తదుపరి $months నెలలు.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'ఇతరులు';
 }

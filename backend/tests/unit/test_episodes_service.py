@@ -25,6 +25,8 @@ def _enabled(monkeypatch):
     # These tests exercise a user whose app shows episodes (test_episodes_client_gate covers the marker).
     monkeypatch.setattr(service.client_gate, 'client_seen', lambda uid: True)
     service.client_gate.reset_for_tests()
+    monkeypatch.setattr(service, 'get_user_name', lambda *_a, **_kw: None)
+    monkeypatch.setattr(service.incremental, 'get_user_name', lambda *_a, **_kw: None)
 
 
 class FakeModel:
@@ -653,7 +655,39 @@ def test_moment_render_receives_account_and_conversation_and_language_reaches_up
     assert render.call_args.kwargs == {
         'uid': UID,
         'conversation_id': moment.conversation_id,
-        'owner_name': None,
+        'owner_name': 'You',
+        'voice_order': [],
     }
     assert update.call_args.kwargs['conversation_language'] == 'en'
     assert len(model.calls) == 1
+
+
+def test_new_episode_resets_the_bounded_voice_order():
+    from dataclasses import replace
+
+    store = StrictFirestore()
+    model = FakeModel({'title': 'First'}, {'title': 'Next'})
+
+    def moment(cid, speaker, minutes):
+        return replace(
+            _moment(cid, minutes=minutes),
+            segments=[
+                {'id': cid, 'text': LONG, 'speaker_id': speaker, 'is_user': False, 'start': 0, 'end': 30},
+            ],
+        )
+
+    first = moment('c1', 378, 0)
+    assert (
+        service.record_moment(UID, first, _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+        == 'applied'
+    )
+    ask = lambda *_a, **_kw: SimpleNamespace(noul=lambda _name: 0.05)
+    later = moment('c2', 379, 12)
+    assert (
+        service.record_moment(UID, later, _collaborators(model, now=T0 + timedelta(minutes=13), ask=ask, store=store))
+        == 'applied'
+    )
+    newest_prompt = str(model.calls[-1])
+    assert 'Speaker A:' in newest_prompt and 'Speaker B:' not in newest_prompt
+    current = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert len(current['speaker_display_order']) == 1

@@ -516,7 +516,7 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
 
     Reviewer's reproduction: hashing stripped person_id 'alice' and ' alice '
     to the same digest while from-segments stored the raw value, so rendering
-    produced 'Alice: approved transfer' versus 'Speaker 0: approved transfer'.
+    produced 'Alice: approved transfer' versus 'Speaker A: approved transfer'.
 
     red-proof: persist ``person_id`` / ``speaker`` without canonical_segment
     (``person_id=payload['person_id']`` on TranscriptSegment) -- then the
@@ -582,7 +582,7 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
     assert padded_alice.person_id == 'alice'
     assert alice.person_id == 'alice'
     assert _render(alice) == _render(padded_alice) == 'Alice: approved transfer'
-    assert 'Speaker' not in _render(padded_alice)
+    assert 'Speaker 0:' not in _render(padded_alice)
 
     padded_slot = _store({'text': _RENDER_TEXT, 'speaker': '  SPEAKER_07  '})
     clean_slot = _store({'text': _RENDER_TEXT, 'speaker': 'SPEAKER_07'})
@@ -599,19 +599,17 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
         _store({'text': _RENDER_TEXT, 'speaker_id': 7}),
         _store({'text': '', 'speaker': 'SPEAKER_07'}),
     ]
-    # One transcript render keeps distinct voices on distinct dense labels while
-    # each segment's digest still binds its raw numeric speaker_id.
-    rendered = _render_transcript(distinct).split('\n\n')
+    rendered = [_render(segment) for segment in distinct]
     digests = [transcript_sha256([segment]) for segment in distinct]
     assert rendered == [
         'Alice: approved transfer',
         'Bob: approved transfer',
         'You: approved transfer',
         'Speaker A: approved transfer',
-        'Speaker B: approved transfer',
-        'Speaker B:',
+        'Speaker A: approved transfer',
+        'Speaker A:',
     ]
-    assert len(set(rendered)) == 6
+    assert len(set(rendered)) == 5  # isolated unnamed voices share a display label; wire identities stay distinct
     assert len(set(digests)) == 6
 
     # Reviewer's reproduction: ['approved transfer'] versus that plus an

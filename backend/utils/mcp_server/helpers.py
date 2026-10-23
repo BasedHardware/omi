@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from utils.conversations.render import redact_conversation_for_list
+from utils.speakers.display import display_participants
 from utils.mcp_data import parse_date_only_utc
 from utils.mcp_server.errors import ToolExecutionError
 
@@ -33,6 +34,9 @@ def conversation_participants(conversation: Dict[str, Any]) -> Dict[str, Any]:
     if conversation.get("is_locked") or not isinstance(segments, list):
         return {"participants_included": False}
     participants = []
+    display = display_participants(
+        [s for s in segments if isinstance(s, dict)], resolution=conversation.get('speaker_resolution')
+    )
     seen = set()
     for segment in segments:
         if not isinstance(segment, dict):
@@ -41,13 +45,21 @@ def conversation_participants(conversation: Dict[str, Any]) -> Dict[str, Any]:
         person_id = segment.get("person_id")
         speaker_id = speaker_id if isinstance(speaker_id, (str, int)) and not isinstance(speaker_id, bool) else None
         person_id = person_id if isinstance(person_id, str) and person_id else None
-        key = (speaker_id, person_id, segment.get("is_user") is True)
-        if key == (None, None, False):
+        key = (display.for_segment(segment).key, person_id, segment.get("is_user") is True)
+        if speaker_id is None and person_id is None and not key[2]:
             continue
         if key in seen:
             continue
         seen.add(key)
-        participants.append({"speaker_id": key[0], "person_id": key[1], "is_user": key[2]})
+        participants.append(
+            {
+                "speaker_id": None,
+                "speaker_key": key[0],
+                "speaker_label": display.label(segment),
+                "person_id": key[1],
+                "is_user": key[2],
+            }
+        )
     return {
         "participants_included": True,
         "participants": participants,
@@ -86,6 +98,10 @@ def bounded_transcript_segments(
     extra_keys: Tuple[str, ...] = (),
 ) -> Tuple[List[Dict[str, Any]], bool]:
     source = [segment for segment in segments if isinstance(segment, dict)] if isinstance(segments, list) else []
+    names = {
+        str(s['person_id']): str(s['speaker_name']) for s in source if s.get('person_id') and s.get('speaker_name')
+    }
+    display = display_participants(source, names=names)
     bounded: List[Dict[str, Any]] = []
     used_chars = 0
     truncated = False
@@ -115,6 +131,11 @@ def bounded_transcript_segments(
                 original_text = original_text[:remaining_after_text]
                 truncated = True
             item['original_text'] = original_text
+        item["speaker_id"] = None
+        item["speaker_key"] = display.for_segment(segment).key
+        item["speaker_label"] = display.label(segment)
+        if "speaker_name" in extra_keys:
+            item["speaker_name"] = display.label(segment)
         item["text"] = text
         bounded.append(item)
         used_chars += len(text) + len(item.get('original_text') or "")

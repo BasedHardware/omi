@@ -4459,5 +4459,6 @@
     "recapInTheBackground": "Di latar belakang",
     "retentionOfferAccept": "Tetap dengan diskon {percent}%",
     "retentionOfferBody": "Tetap dan bayar {price} per bulan selama {months} bulan ke depan.",
-    "retentionOfferApplied": "Selesai. Diskon {percent}% untuk {months} bulan ke depan."
+    "retentionOfferApplied": "Selesai. Diskon {percent}% untuk {months} bulan ke depan.",
+    "othersSpeakerLabel": "Lainnya"
 }
