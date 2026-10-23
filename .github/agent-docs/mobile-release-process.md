@@ -142,6 +142,20 @@ Gate receipts: see "Intraday exposure ladder" above — every advancing Android
 action stamps a minute-precision receipt into the Play release name so a
 retry inside an observation window cannot hop twice.
 
+### One iOS version with Apple at a time
+
+A version that is `WAITING_FOR_REVIEW`, `IN_REVIEW`, waiting for export
+compliance, processing, or approved and unreleased (`PENDING_DEVELOPER_RELEASE`
+or `PENDING_APPLE_RELEASE`) is never withdrawn or developer-rejected to make
+room for a newer build. Withdrawing restarts Apple's queue: on 2026-10-23 three
+overnight withdrawals (1.0.571 at 04:44Z, 1.0.572 at 12:03Z, 1.0.573 at 15:14Z
+UTC), each made to ship a newer build, kept every one of them out of the store.
+A newer build waits for the next train after the in-flight version is released;
+urgent fixes ask Apple to expedite the version already in review. The train
+holds on these states, `mobile_store_promote.py` refuses an iOS submission while
+another version is in them, and an exception needs Nik's explicit go-ahead in
+chat naming the version to withdraw.
+
 iOS (App Store Connect, versions are read per state because the unfiltered
 listing only returns live versions):
 
