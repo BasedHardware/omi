@@ -4427,6 +4427,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get continueText => 'Продовжити';
 
   @override
+  String get checkoutExistingSubscription =>
+      'У вас уже є підписка. Керуйте поточною підпискою замість оформлення нової.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Спочатку підпишіться знову, щоб змінити план.';
 
   @override

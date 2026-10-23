@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   RESUBSCRIBE_FIRST,
-  isPendingCancelConflict,
+  EXISTING_SUBSCRIPTION,
+  purchaseErrorMessage,
   renewalDateSeconds,
   yourPlanEndsOn,
   yourPlanWillRenewOn,
@@ -20,8 +21,12 @@ describe('cancel pending purchase copy', () => {
   });
 
   it('recognizes a 409 and a billing timestamp', () => {
-    expect(isPendingCancelConflict(new Error('API error: 409 Conflict'))).toBe(true);
-    expect(isPendingCancelConflict(new Error('API error: 400 Bad Request'))).toBe(false);
+    const conflict = new Error('API error: 409 Conflict');
+    expect(purchaseErrorMessage(conflict, 'upgrade')).toBe(RESUBSCRIBE_FIRST);
+    expect(purchaseErrorMessage(conflict, 'checkout')).toBe(EXISTING_SUBSCRIPTION);
+    expect(purchaseErrorMessage(new Error('API error: 400 Bad Request'), 'upgrade')).toBe(
+      'An error occurred. Please try again.',
+    );
     expect(renewalDateSeconds(1_762_128_000)).toBe(1_762_128_000);
     expect(renewalDateSeconds('1762128000')).toBe(1_762_128_000);
     expect(renewalDateSeconds(undefined, 10)).toBe(10);

@@ -4430,6 +4430,10 @@ class AppLocalizationsPl extends AppLocalizations {
   String get continueText => 'Kontynuuj';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Masz już subskrypcję. Zarządzaj obecną subskrypcją zamiast rozpoczynać nową.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Najpierw subskrybuj ponownie, aby zmienić plan.';
 
   @override

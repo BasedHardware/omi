@@ -567,8 +567,14 @@ final class ConversationRepository {
     let removedVisibleRow = conversations.contains { $0.id == id }
     conversations.removeAll { $0.id == id }
     pendingMutations.removeValue(forKey: id)
-    if removedVisibleRow, let count {
-      self.count = max(0, count - 1)
+    if removedVisibleRow {
+      if let count {
+        self.count = max(0, count - 1)
+      }
+      // The server pages by offset; removing a loaded row shifts every
+      // older row up one slot, so the next loadMore() must start one
+      // position earlier or it skips the row that moved into view.
+      nextPageOffset = max(0, nextPageOffset - 1)
     }
     emit(.server)
   }
@@ -770,8 +776,14 @@ final class ConversationRepository {
     guard matchesCurrentQuery(conversation) else {
       let removedVisibleRow = conversations.contains { $0.id == conversation.id }
       conversations.removeAll { $0.id == conversation.id }
-      if removedVisibleRow, let count {
-        self.count = max(0, count - 1)
+      if removedVisibleRow {
+        if let count {
+          self.count = max(0, count - 1)
+        }
+        // Same offset shift as `remove(id:)`: a row leaving the current
+        // filter (e.g. unstarring under Starred) vacates a loaded slot,
+        // so the next page must start one position earlier.
+        nextPageOffset = max(0, nextPageOffset - 1)
       }
       return
     }
