@@ -416,6 +416,14 @@ def _record_sync_segment_failure(
     exception: BaseException | str | None = None,
     attempt_ref: str | None = None,
 ) -> None:
+    if job_id and failure.outcome.value in empty_success_guard.PROVIDER_CLASS_OUTCOMES:
+        # Durable per-job provider-failure evidence for the empty-success guard:
+        # survives Cloud Tasks redelivery onto another instance. Best effort —
+        # the failure recording itself must never depend on the marker.
+        try:
+            try_mark_once(job_id, empty_success_guard.PRIOR_PROVIDER_FAILURE_TAG)
+        except Exception:
+            logger.warning('event=sync_transcription_metric outcome=marker_failed kind=prior_provider_failure')
     if record_metric:
         _record_sync_segment_outcome(
             failure.outcome,
@@ -1605,7 +1613,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                         language = user_language if (single_language_mode and user_language) else recovered_language
                         recovered_via_retry = True
                         break
-                held, _guard_reason = empty_success_guard.settle(path, provider=provider)
+                held, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
                 if held:
                     # Speech-positive audio that a degraded provider chain returned
                     # empty stays retryable; completing it as silence is the
@@ -1627,7 +1635,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         # refactor: superseded by utils.stt.transcript_admission when MEDIA_NOISE_MODE=serve
         transcript_segments = admit_segments(uid, transcript_segments, origin='sync')
         if not transcript_segments:
-            held_after_admission, _guard_reason = empty_success_guard.settle(path, provider=provider)
+            held_after_admission, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
             if held_after_admission:
                 # Admission discarded every word on speech-positive audio after a
                 # degraded chain; completing as silence hides the same loss.

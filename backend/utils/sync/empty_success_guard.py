@@ -9,20 +9,18 @@ speech-positive unit completed empty).
 
 This guard runs the same free strict local VAD at that silence decision. When
 the audio carries at least ``LONG_SPEECH_HANDOFF_SECONDS`` of speech AND the
-chain that produced the empty was degraded — a recent prerecorded vendor
-failure noted by the adapters, or a credit/auth refusal recorded by the vendor
-guard — the segment fails with the existing retryable ``empty_unexpected``
-outcome instead of completing as silence. Genuine silence, short speech, and
-healthy-chain empties keep today's behavior.
+chain that produced the empty was degraded — a provider-class failure already
+recorded for this job (durable across Cloud Tasks retries and instances), this
+segment's own swallowed LID probe failure, or a credit/auth refusal in the
+vendor guard — the segment fails with the existing retryable
+``empty_unexpected`` outcome instead of completing as silence. Genuine
+silence, short speech, and healthy-chain empties keep today's behavior.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-from contextlib import contextmanager
-from contextvars import ContextVar
-from typing import Iterator
 
 from prometheus_client import Counter
 
@@ -38,20 +36,15 @@ logger = logging.getLogger(__name__)
 CREDIT_AUTH = 'credit_auth'
 PROVIDER_ERROR = 'provider_error'
 
-# A Cloud Tasks redelivery proves a prior attempt failed somewhere — often the
-# provider error this guard exists for — on an instance whose in-memory state
-# this one cannot see. Durable per-unit degradation evidence.
-_prior_failed_attempt: ContextVar[bool] = ContextVar('sync_prior_failed_attempt', default=False)
-
-
-@contextmanager
-def prior_failed_attempt(value: bool) -> Iterator[None]:
-    """Mark this coordinator attempt as a redelivery of a failed attempt."""
-    token = _prior_failed_attempt.set(bool(value))
-    try:
-        yield
-    finally:
-        _prior_failed_attempt.reset(token)
+# Durable per-job marker: some segment of this job (any attempt, any instance)
+# ended in a provider-class failure. Written by the pipeline's segment-failure
+# recorder; read here before a zero-word segment settles as silence.
+PRIOR_PROVIDER_FAILURE_TAG = 'prior_provider_failure'
+# Outcomes that prove the provider chain failed for this job. A failure before
+# any provider call (lease loss, cancellation, pre-transcription timeout) never
+# reaches that recorder, so a healthy chain that was merely redelivered stays
+# healthy.
+PROVIDER_CLASS_OUTCOMES = frozenset(('upstream_error', 'timeout', 'provider_budget_exhausted', 'empty_unexpected'))
 
 
 GUARD_TOTAL = Counter(
@@ -88,16 +81,16 @@ def enabled() -> bool:
     )
 
 
-def chain_degradation() -> str | None:
+def chain_degradation(job_id: str | None) -> str | None:
     """The strongest degradation signal for this unit's chain.
 
     Credit/auth outranks a generic provider error: an out-of-credits refusal is
     deterministic until the account is funded, and both the vendor guard's
-    recorded refusals and the adapters' typed budget failures carry it. A Cloud
-    Tasks redelivery follows: the prior attempt failed somewhere — possibly on
-    another instance whose failure state left no trace here.
+    recorded refusals and the typed budget failures carry it. The per-job
+    marker follows: some segment of this job ended in a provider-class failure,
+    on this or a prior Cloud Tasks attempt, on this or another instance. The
+    dispatch note is last: this segment's own swallowed LID probe failure.
     """
-    from utils.stt.prerecorded_health import recent_provider_failure
     from utils.stt.vendor_guard import (
         ENDPOINT_LID,
         ENDPOINT_STT,
@@ -112,12 +105,25 @@ def chain_degradation() -> str | None:
         or quota_failures_in_window(ENDPOINT_LID)
     ):
         return CREDIT_AUTH
-    if _prior_failed_attempt.get():
+    if job_id and _job_prior_provider_failure(job_id):
         return PROVIDER_ERROR
-    return recent_provider_failure()
+    from utils.stt.prerecorded_health import recent_dispatch_failure
+
+    return recent_dispatch_failure()
 
 
-def settle(path: str, *, provider: str) -> tuple[bool, str]:
+def _job_prior_provider_failure(job_id: str) -> bool:
+    """Strict bool: a stubbed or unreadable marker never degrades a chain."""
+    try:
+        from database.sync_jobs import was_marked_once
+
+        marked = was_marked_once(job_id, PRIOR_PROVIDER_FAILURE_TAG)
+    except Exception:
+        return False
+    return marked is True
+
+
+def settle(path: str, *, provider: str, job_id: str | None = None) -> tuple[bool, str]:
     """Decide a zero-word segment's disposition before it is recorded as silence.
 
     Returns ``(held, reason)``. ``held`` means the caller must fail the segment
@@ -150,7 +156,7 @@ def settle(path: str, *, provider: str) -> tuple[bool, str]:
         return _settled(label, SILENCE_CONFIRMED, held=False)
     if speech_seconds < LONG_SPEECH_HANDOFF_SECONDS:
         return _settled(label, SPEECH_BELOW_THRESHOLD, held=False)
-    degradation = chain_degradation()
+    degradation = chain_degradation(job_id)
     if degradation == CREDIT_AUTH:
         return _settled(label, HELD_CREDIT_AUTH, held=True)
     if degradation == PROVIDER_ERROR:

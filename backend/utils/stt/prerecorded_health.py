@@ -1,78 +1,38 @@
-"""Recent prerecorded vendor failures, in-process, for the empty-success guard.
+"""Per-dispatch prerecorded vendor-failure notes for the empty-success guard.
 
-The vendor adapters raise on connection failures and credit/auth refusals, and
-the sync pipeline records those as segment failures. But two seams swallow them
-without any per-unit marker: the language-detection probe
-(``utils.stt.batch_language`` catches every exception) and Cloud Tasks retries
-(a failed attempt's provider error never reaches the attempt that ends with a
-valid-empty response). The empty-success guard reads this module to know the
-chain that produced a zero-word result was degraded.
+The language-detection probe is the one seam that swallows a vendor failure
+without raising (``utils.stt.batch_language.detect`` catches every exception),
+so a note is the only per-segment trace that the selection was degraded. The
+note is a ContextVar: it is visible only to the segment's own dispatch context
+(one executor leaf), never to unrelated segments, tasks, or instances.
+Raising vendor failures need no note — they fail their segment and are
+recorded durably per job by the pipeline.
 
-Bounded: one timestamped event per provider and kind, kept for a fixed window.
 No payloads, statuses, or exception text — only ``provider`` and ``kind``.
 """
 
 from __future__ import annotations
 
-import threading
-import time
-from collections import deque
-from typing import Final
+from contextvars import ContextVar
 
 PROVIDER_ERROR = 'provider_error'
 CREDIT_AUTH = 'credit_auth'
-KINDS: Final[frozenset[str]] = frozenset({PROVIDER_ERROR, CREDIT_AUTH})
-PROVIDERS: Final[frozenset[str]] = frozenset({'parakeet', 'modulate'})
+KINDS = frozenset({PROVIDER_ERROR, CREDIT_AUTH})
+PROVIDERS = frozenset({'parakeet', 'modulate'})
 
-# Long enough to cover a Cloud Tasks retry cycle after a provider outage;
-# short enough that a stale failure cannot hold empties from a healthy chain.
-FAILURE_WINDOW_SECONDS = 15 * 60
-
-_events: dict[tuple[str, str], deque[float]] = {}
-_lock = threading.Lock()
+_dispatch_failure: ContextVar[str | None] = ContextVar('prerecorded_dispatch_failure', default=None)
 
 
 def note_provider_failure(provider: str, kind: str = PROVIDER_ERROR) -> None:
-    """Record that this process saw a prerecorded vendor fail just now."""
-    if provider not in PROVIDERS or kind not in KINDS:
-        return
-    now = time.monotonic()
-    with _lock:
-        bucket = _events.setdefault((provider, kind), deque())
-        bucket.append(now)
-        cutoff = now - FAILURE_WINDOW_SECONDS
-        while bucket and bucket[0] < cutoff:
-            bucket.popleft()
+    """Record that this dispatch context saw a prerecorded vendor fail."""
+    if provider in PROVIDERS and kind in KINDS:
+        _dispatch_failure.set(kind)
 
 
-def recent_provider_failure(*, providers: frozenset[str] = PROVIDERS, kinds: frozenset[str] = KINDS) -> str | None:
-    """The kind of the most recent in-window vendor failure, or None when healthy.
-
-    Returns ``CREDIT_AUTH`` when both kinds are present: a credit/auth refusal
-    is the stronger, more deterministic degradation signal.
-    """
-    now = time.monotonic()
-    cutoff = now - FAILURE_WINDOW_SECONDS
-    credit_auth = False
-    latest_kind = None
-    latest_at = 0.0
-    with _lock:
-        for (provider, kind), bucket in _events.items():
-            if provider not in providers or kind not in kinds:
-                continue
-            while bucket and bucket[0] < cutoff:
-                bucket.popleft()
-            if not bucket:
-                continue
-            if kind == CREDIT_AUTH:
-                credit_auth = True
-            if bucket[-1] > latest_at:
-                latest_kind, latest_at = kind, bucket[-1]
-    if credit_auth:
-        return CREDIT_AUTH
-    return latest_kind
+def recent_dispatch_failure() -> str | None:
+    """The kind of vendor failure noted in this dispatch context, or None."""
+    return _dispatch_failure.get()
 
 
 def reset_prerecorded_health_for_tests() -> None:
-    with _lock:
-        _events.clear()
+    _dispatch_failure.set(None)

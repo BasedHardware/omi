@@ -45,7 +45,6 @@ from utils.stt.parakeet_request_metrics import observe_parakeet_request
 from utils.stt.brand_terms import normalize_brand_terms
 from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
-from utils.stt.prerecorded_health import CREDIT_AUTH, PROVIDER_ERROR, note_provider_failure
 from utils.stt.vendor_guard import (
     ENDPOINT_STT,
     ModulateQuotaError,
@@ -636,7 +635,6 @@ def modulate_prerecorded_from_bytes(
                 record_vendor_burn(ENDPOINT_STT, 'error', burn_seconds)
                 if fail_fast:
                     record_breaker_quota_error(ENDPOINT_STT, budget=True)
-                note_provider_failure('modulate', CREDIT_AUTH)
                 # Out-of-credits is deterministic until the account is funded:
                 # terminal and typed, so the sync job counts
                 # outcome=provider_budget_exhausted provider=modulate instead
@@ -734,7 +732,6 @@ def modulate_prerecorded_from_bytes(
     except Exception as e:
         if posted and not post_2xx:
             record_vendor_burn(ENDPOINT_STT, 'error', burn_seconds)
-        note_provider_failure('modulate', CREDIT_AUTH if is_quota_error(e) else PROVIDER_ERROR)
         logger.error('Modulate prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if fail_fast:
             if is_quota_error(e):
@@ -1064,7 +1061,6 @@ def parakeet_prerecorded_from_bytes(
         return words
 
     except Exception as e:
-        note_provider_failure('parakeet', PROVIDER_ERROR)
         logger.error('Parakeet prerecorded error exception_type=%s attempt=%s', type(e).__name__, attempts + 1)
         if attempts < 1 and _verification_deadline.get() is None and not _held_single_attempt.get():
             return parakeet_prerecorded_from_bytes(
