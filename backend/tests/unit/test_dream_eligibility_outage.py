@@ -44,6 +44,19 @@ def test_allowlist_outage_is_loud_without_broadening_authority(outage, monkeypat
     assert dream_agent.admission_for('synthetic-owner') == ('reserved', False)
 
 
+@pytest.mark.parametrize('policy_name', ['all', 'paid', 'allowlist'])
+def test_user_facing_dream_visibility_fails_closed_during_cohort_outage(outage, monkeypatch, policy_name):
+    """Review/report surfaces hide Dream instead of 500ing on a cohort outage."""
+    monkeypatch.setenv('DREAM_AGENT_ELIGIBILITY', policy_name)
+    user = {'plan': next(iter(PAID_PLAN_IDS))}
+    if policy_name == 'allowlist':
+        with pytest.raises(policy.RolloutCohortUnavailable):
+            dream_agent.eligible('synthetic-owner', user)
+    assert dream_agent.eligible_or_hidden('synthetic-owner', user) is (policy_name != 'allowlist')
+    # An explicitly ineligible owner stays hidden without raising.
+    assert dream_agent.eligible_or_hidden('synthetic-owner', {**user, 'deleted': True}) is False
+
+
 def test_unbound_resolver_is_unknown_instead_of_false(monkeypatch):
     monkeypatch.setattr(policy, '_membership_resolver', None)
     with pytest.raises(policy.RolloutCohortUnavailable):

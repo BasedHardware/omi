@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
-from config.dream_agent import Caps, eligible, mode, self_report_enabled
+from config.dream_agent import Caps, eligible_or_hidden, mode, self_report_enabled
 from database import dream_store, review_store
 from database._client import get_firestore_client
 from models.dream_report import DreamRun, DreamRunsResponse
@@ -16,7 +16,8 @@ def require_owner(uid):
     if not self_report_enabled() or mode() == 'off':
         raise HTTPException(404, detail='dream_report_disabled')
     user = get_firestore_client().collection('users').document(uid).get().to_dict() or {}
-    if not eligible(uid, user):
+    # A cohort outage hides Dream reports (404), never 500s /v1/dream/runs.
+    if not eligible_or_hidden(uid, user):
         raise HTTPException(404, detail='dream_report_disabled')
 
 

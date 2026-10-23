@@ -313,6 +313,51 @@ def test_legacy_offset_reads_visible_slice_without_raw_prefix_amplification(monk
     assert db.reads == 150
 
 
+def test_review_archive_projection_uses_a_dedicated_branch_not_the_tier_in(monkeypatch):
+    """Ordinary Archive history must not consume the default list-read budget.
+
+    The mitigation projects unresolved ``promotion.route=review`` archives as
+    Short-term. Widening the released-processed tier IN would let unrelated
+    Archive rows eat the bounded raw scan; the dedicated indexed branch keeps
+    them invisible to the default read entirely.
+    """
+    from utils.memory import canonical_memory_adapter as adapter
+
+    rows = []
+    for i in range(5000):
+        row = _row(f'0-plain-archive-{i:04d}', ledger_commit_id='commit', ledger_sequence=1)
+        row['tier'] = 'archive'
+        rows.append(row)
+    for i in range(5):
+        row = _row(f'1-review-archive-{i:04d}', ledger_commit_id='commit', ledger_sequence=1)
+        row.update(tier='archive', promotion={'required': False, 'route': 'review'})
+        rows.append(row)
+    rows += [_row(f'2-short-{i:04d}') for i in range(10)]
+    monkeypatch.setattr(adapter, 'indexed_list_reads_enabled', lambda: True)
+    db = Db(rows)
+    visible = _scan(db, monkeypatch, enabled=True)
+    # Review archives are projected Short-term and stay visible; ordinary
+    # archives are never fetched by any branch.
+    assert [memory_id for memory_id in visible if memory_id.startswith('1-review')] == [
+        f'1-review-archive-{i:04d}' for i in range(5)
+    ]
+    assert len(visible) == 15
+    assert db.reads == 15
+
+
+def test_review_archive_projection_is_gone_when_mitigation_is_off(monkeypatch):
+    from utils.memory import canonical_memory_adapter as adapter
+
+    rows = []
+    review = _row('review-archive', ledger_commit_id='commit', ledger_sequence=1)
+    review.update(tier='archive', promotion={'required': False, 'route': 'review'})
+    rows.append(review)
+    rows.append(_row('short'))
+    monkeypatch.setattr(adapter, 'indexed_list_reads_enabled', lambda: True)
+    monkeypatch.setenv('MEMORY_UNDECIDED_VISIBLE', 'false')
+    assert _scan(Db(rows), monkeypatch, enabled=True) == ['short']
+
+
 def test_branch_merge_keeps_firestore_nanosecond_order(monkeypatch):
     from google.api_core.datetime_helpers import DatetimeWithNanoseconds
     from utils.memory import canonical_memory_adapter as adapter

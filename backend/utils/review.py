@@ -28,13 +28,14 @@ from models.speaker_tag_prompts import SpeakerTagPrompt, SpeakerTagPromptAnswer,
 from utils import entity_pages
 from utils.speaker_tag_prompts import service as speakers
 from utils.task_intelligence import candidate_service
-from config.dream_agent import eligible
+from config.dream_agent import eligible_or_hidden
 from utils.task_intelligence.task_links import TaskLinkValidationError
 
 
 def dream_visible(uid: str) -> bool:
     user = store.user(uid).get().to_dict() or {}
-    return eligible(uid, user)
+    # A Dream cohort outage hides Dream surfaces; it must not 500 Review.
+    return eligible_or_hidden(uid, user)
 
 
 def one_line(text: str | None, limit: int = 180) -> str | None:

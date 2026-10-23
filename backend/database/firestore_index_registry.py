@@ -1048,6 +1048,31 @@ UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY = FirestoreQuerySpec(
         _asc('__name__'),
     ),
 )
+# Incident mitigation (MEMORY_UNDECIDED_VISIBLE): unresolved historical Review
+# parking is projected as Short-term on default reads. Ordinary Archive rows
+# must never consume that read path's budget, so the mitigation scans Review
+# archives through a dedicated indexed branch instead of widening the tier IN.
+UNIVERSAL_CANONICAL_REVIEW_ARCHIVE_PROCESSED_QUERY = FirestoreQuerySpec(
+    identifier='memory_items_review_archive_processed_list',
+    collection_group='memory_items',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('source_state', 'in', 'source_states'),
+        FirestoreQueryFilter('processing_state', '==', 'processing_state'),
+        FirestoreQueryFilter('tier', '==', 'tier'),
+        FirestoreQueryFilter('promotion.route', '==', 'review_route'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('source_state'),
+        _asc('processing_state'),
+        _asc('tier'),
+        _asc('promotion.route'),
+        _desc('updated_at'),
+        _asc('__name__'),
+    ),
+)
 UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY = FirestoreQuerySpec(
     identifier='memory_items_released_pending_list',
     collection_group='memory_items',
@@ -1965,6 +1990,7 @@ QUERY_SPECS = (
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
     UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY,
     UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY,
+    UNIVERSAL_CANONICAL_REVIEW_ARCHIVE_PROCESSED_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SUBJECT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_SLOT_QUERY,
     DAILY_SWEEP_ACTIVE_FACT_ENTITY_QUERY,

@@ -150,6 +150,19 @@ def eligible(uid, user):
     )
 
 
+def eligible_or_hidden(uid, user):
+    """User-facing Dream visibility: a cohort outage hides Dream, it never 500s.
+
+    Same containment shape as ``admission_for``: unknown membership is not a
+    grant, so Review/report surfaces keep serving non-Dream content. Loud
+    ``dream_cohort_health`` telemetry already fires at the membership read.
+    """
+    try:
+        return eligible(uid, user)
+    except RolloutCohortUnavailable:
+        return False
+
+
 def auto_apply_kinds(uid=None):
     return AUTO
 

@@ -28,7 +28,8 @@ from database import review_exact_undo
 from database.review_field_states import read_field_state, write_field_state
 from utils.dream_metrics import record_undo
 from utils.review_projection import sync_conversations
-from config.dream_agent import dream_journal_key, eligible
+from config import dream_agent
+from config.dream_agent import dream_journal_key
 from database.read_boundary import parse_payload_strict
 from models.review import ReviewChange, ReviewChangeDiff, ReviewChangesResponse
 
@@ -468,7 +469,8 @@ def list_changes(uid: str, cursor: str | None = None, *, now: datetime | None = 
         query = query.start_after(snap)
     rows = [store.require_doc(uid, s.to_dict()) for s in query.limit(31).stream()]
     user = store.user(uid).get().to_dict() or {}
-    show_dream = eligible(uid, user)
+    # A Dream cohort outage hides Dream-origin changes, never 500s the surface.
+    show_dream = dream_agent.eligible_or_hidden(uid, user)
     changes = []
     for row in rows[:30]:
         if row.get('phase', 'applied') != 'applied':

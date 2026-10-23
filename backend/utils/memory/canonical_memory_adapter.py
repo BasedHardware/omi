@@ -25,6 +25,7 @@ from database.firestore_index_registry import (
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
     UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY,
     UNIVERSAL_CANONICAL_RELEASED_PENDING_QUERY,
+    UNIVERSAL_CANONICAL_REVIEW_ARCHIVE_PROCESSED_QUERY,
 )
 from database.review_queue import purge_stale_review_conflicts_for_memories
 from utils.client_device import DeviceScopeRequest
@@ -881,10 +882,22 @@ def read_canonical_scan_page(
             'source_state': 'active',
             'source_states': ['active', 'missing'],
             'processing_state': 'processed',
-            # Historical Review archives are projected as Short-term while the
-            # mitigation is on. The policy below still rejects other archives.
-            'tiers': ['short_term', 'long_term', 'archive'] if undecided_visible() else ['short_term', 'long_term'],
         }
+        if undecided_visible():
+            # Incident mitigation: unresolved historical Review parking is
+            # projected as Short-term (visible_memory_tier). It must join the
+            # default stream through its own indexed branch so unrelated
+            # Archive history cannot exhaust the bounded raw scan budget.
+            # Run it first: it is the smallest branch, and a later branch that
+            # dies mid-stream must not leave this one unread (an unread branch
+            # has no frontier and would void the verified prefix).
+            queries.append(
+                UNIVERSAL_CANONICAL_REVIEW_ARCHIVE_PROCESSED_QUERY.build(
+                    items_ref,
+                    {**values, 'tier': 'archive', 'review_route': 'review'},
+                    field_filter_factory=FieldFilter,
+                )
+            )
         if include_pending_processing:
             # Usually empty: prove the pending branch first so a subsequent
             # interrupted processed stream can retain its verified prefix.
@@ -898,7 +911,7 @@ def read_canonical_scan_page(
         queries.append(
             UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY.build(
                 items_ref,
-                values,
+                {**values, 'tiers': ['short_term', 'long_term']},
                 field_filter_factory=FieldFilter,
             )
         )
