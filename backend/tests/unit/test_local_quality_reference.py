@@ -8,6 +8,7 @@ import sys
 import pytest
 
 from scripts.diarization_eval import run_reference as reference
+from scripts.diarization_eval.run_local import reference_text
 
 
 def test_cache_key_includes_crop_and_engine_provenance():
@@ -135,7 +136,6 @@ def test_invalid_private_output_reports_only_aggregate_error(tmp_path, monkeypat
 def test_scorecard_refuses_stale_source_crop_engine_or_lock(tmp_path):
     import copy
     import wave
-    from scripts.diarization_eval.run_local import reference_text
 
     source = tmp_path / 'source'
     source.write_bytes(b'synthetic-source')
