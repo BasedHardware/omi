@@ -179,7 +179,7 @@ def test_prod_pool_placement_preserves_current_cpu_pools(chart):
 def test_parakeet_scales_conservatively_without_relaxing_admission():
     objects = render('parakeet')
     hpa = objects['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 3
+    assert hpa['minReplicas'] == 5
     assert hpa['maxReplicas'] == 12
     assert hpa['behavior']['scaleDown']['stabilizationWindowSeconds'] == 900
     metrics = hpa['metrics']
@@ -187,7 +187,8 @@ def test_parakeet_scales_conservatively_without_relaxing_admission():
     external = {
         m['external']['metric']['name']: m['external']['target']['value'] for m in metrics if m['type'] == 'External'
     }
-    assert external == {'parakeet_gpu_utilization': '35', 'parakeet_request_latency_p99': '3'}
+    # workloadOnly (#22106, live 2026-10-23): no latency-p99 term; scale on workload only.
+    assert external == {'parakeet_gpu_utilization': '35'}
     env = {e['name']: e.get('value') for e in objects['Deployment']['spec']['template']['spec']['containers'][0]['env']}
     assert env['PARAKEET_MAX_INFLIGHT'] == '1'
 
