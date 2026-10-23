@@ -19,13 +19,16 @@ with how much history the user had, not with the screen in front of them.
 | `listSync` of the documents directory (which holds every WAL file) on every resume | `LocalRecordingsProvider.refresh` | Async `dir.list()`; when scans overlap, only the newest publishes or rewrites the owners file |
 | The memories list re-filtered every memory for each row it built | `MemoriesPage` | Filter once per build |
 | Voice dictation notified the provider at 60 Hz, rebuilding the whole chat composer | `VoiceRecorderProvider` | A dedicated `waveformTick` that only the waveform listens to |
+| The iOS rage-click tracker held a `SemanticsHandle` for the app's lifetime, so every production iOS frame compiled the semantics tree (17–25% of UI pipeline time while scrolling a list); host harnesses never mounted it | `RageClickContextTracker` | Resolve the tapped control from the pointer's render hit-test path; semantics stays off unless an assistive technology turns it on |
+| Background sync re-sorted the whole recording history on each progress refresh and published every inventory read and identical progress tick | `SyncProvider` | Reuse the sort order while membership and timestamps are unchanged; coalesce scalar progress to 100 ms (phase, file and terminal changes publish immediately); drop identical progress |
+| The breathing live marker rebuilt and relaid out its surroundings every animation frame | `omi_live_indicators.dart` | A fixed-size painter repaints only itself |
 
 Known remaining candidates (not yet changed): the chat sheet keeps a full-screen
 `BackdropFilter` (sigma 18) over the live home page for as long as chat is open
 (`lib/pages/chat/chat_route.dart`, a UX-contract D1 decision; measure raster on a device before
-changing it), SD-card/flash-page sync refreshes the WAL list per downloaded chunk
-(`SyncProvider.onWalUpdated`), and the batch audio buffer fsyncs once per second from the UI isolate
-(`MobileBatchBuffer`, a durability trade).
+changing it), sync backlog and filter getters still scan the WAL list linearly (refreshes are now
+coalesced to 100 ms and reuse the sort order), and the batch audio buffer fsyncs once per second from
+the UI isolate (`MobileBatchBuffer`, a durability trade).
 
 ## Rules of thumb
 
