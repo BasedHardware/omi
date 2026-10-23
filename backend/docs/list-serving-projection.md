@@ -18,7 +18,9 @@ Paths under `users/{uid}`:
 These are migration rows, **not a complete replacement collection**. Updating a
 legacy source only projects the fields that were written. There is no backfill,
 coverage claim, source-query change, or automatic serving cutover in this PR.
-Deleting a user still uses the existing recursive wipe. Rows stay under the same
+Deleting a user still uses the existing recursive wipe, with final head cleanup
+after all source collections even when the root user is already absent. A root
+user delete removes heads rather than recreating them. Rows stay under the same
 user and source deletes remove the matching projection; no content is copied.
 
 ## Optional unchanged-poll check
@@ -37,8 +39,11 @@ scope the validator. No response data is cached by this protocol.
 Ordinary action-item requests without validators retain their existing cache
 path and add zero reads. Existing action ETag clients graduate on their next
 source read. A nonconditional conversation GET adds two marker reads when the
-reader is active. A missing head is initialized once with create-only semantics,
-without scanning/backfilling source rows or overwriting a concurrent writer.
+reader is active. A missing head is initialized once with create-only semantics
+under the existing transactional destructive-operation fence (three additional
+cold-path authority/head reads), without scanning/backfilling source rows or
+overwriting a concurrent writer. A deletion or destructive-operation denial
+falls back to the source reader; its authorization dependencies still apply.
 Malformed heads, a lost baseline race or unavailable Firestore use the old reader.
 There is no Redis dependency for the version check; existing caches are unchanged.
 

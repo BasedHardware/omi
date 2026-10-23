@@ -91,11 +91,14 @@ def project_writes(writes: list[Any]) -> list[Any]:
         return writes
     additions = []
     owners: set[tuple[str, str]] = set()
+    deleted_owners: set[str] = set()
     for write in writes:
         parts = _path(write).split('/')
         if len(parts) < 7 or parts[4:6] != ['documents', 'users']:
             continue
         owner = '/'.join(parts[:7])
+        if len(parts) == 7 and write.delete:
+            deleted_owners.add(owner)
         if len(parts) >= 9 and parts[7] in ROW_COLLECTIONS:
             owners.add((owner, parts[7]))
             row = _row_write(write, parts) if len(parts) == 9 else None
@@ -115,6 +118,9 @@ def project_writes(writes: list[Any]) -> list[Any]:
         ):
             owners.update((owner, family) for family in ROW_COLLECTIONS)
     for owner, family in sorted(owners):
+        if owner in deleted_owners:
+            additions.append(Write(delete=f'{owner}/{STATE_COLLECTION}/{family}'))
+            continue
         additions.append(
             Write(
                 update=Document(

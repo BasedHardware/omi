@@ -1,6 +1,7 @@
 """Actual SDK surfaces: atomic projection writes and unchanged-poll read counts."""
 
 import copy
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -8,13 +9,14 @@ import pytest
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from fastapi.testclient import TestClient
 from google.auth.credentials import AnonymousCredentials
-from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 from google.cloud.firestore_v1 import _helpers
 from google.cloud.firestore_v1.async_client import AsyncClient
 from google.cloud.firestore_v1.types import CommitResponse, WriteResult, Write
 
 from database import list_projection as projection, action_item_versions
+from database import list_projection_head, legal_holds, user_data_deletion, batch_pipeline_purge
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import list_version_check as checks
 from routers import conversations as conversation_routes
 
@@ -300,29 +302,87 @@ def test_production_version_lookup_bounds_io_and_falls_back(monkeypatch):
 
 @pytest.mark.parametrize('race', [False, True])
 def test_missing_version_baseline_is_create_only_and_cannot_overwrite_writer(monkeypatch, race):
-    calls = []
+    path = ('users', 'owner', projection.STATE_COLLECTION, 'conversations')
+    database = StrictFirestore({path: {'version': 'a' * 32}} if race else {})
+    factory = database.transaction
+    monkeypatch.setattr(database, 'transaction', lambda **kw: factory())
+    value = list_projection_head.initialize_head('owner', 'conversations', firestore_client=database)
+    assert value == database.rows[path]['version']
+    transaction = database.transactions[-1]
+    assert len(transaction.creates) == (0 if race else 1)
+    assert value == 'a' * 32 if race else len(value) == 32
 
-    class Reference:
-        def collection(self, name):
-            return self
 
-        def document(self, name):
-            return self
+@pytest.mark.parametrize('blocked_by', ['account_deletion', 'destructive_operation'])
+def test_baseline_uses_existing_transactional_deletion_authority(monkeypatch, blocked_by):
+    rows = (
+        {('account_deletions', 'owner'): {'wipe_status': 'in_progress'}}
+        if blocked_by == 'account_deletion'
+        else {
+            ('legal_hold_deletion_gates', 'owner'): {
+                'schema_version': 'legal_hold_deletion_gate.v1',
+                'uid': 'owner',
+                'kind': 'account_deletion',
+                'token': 'synthetic',
+                'state': 'running',
+                'started_at': datetime.now(timezone.utc),
+                'finished_at': None,
+            }
+        }
+    )
+    database = StrictFirestore(rows)
+    factory = database.transaction
+    monkeypatch.setattr(database, 'transaction', lambda **kw: factory())
+    with pytest.raises(legal_holds.DestructiveOperationInProgress):
+        list_projection_head.initialize_head('owner', 'conversations', firestore_client=database)
+    assert not database.transactions[-1].creates
+    assert database.rows == rows
 
-        def get(self, **kwargs):
-            calls.append('read')
-            return SimpleNamespace(exists=False)
 
-        def create(self, data, **kwargs):
-            calls.append(data['version'])
-            assert kwargs == {'timeout': 1.0, 'retry': None}
-            if race:
-                raise AlreadyExists('atomic source writer won')
+def test_root_delete_clears_heads_instead_of_recreating_them(store):
+    user = store.client.document('users/owner')
+    user.set({'language': 'en'})
+    assert checks._version('owner', 'conversations')
+    user.delete()
+    assert checks._version('owner', 'conversations') is None
+    assert checks._version('owner', 'action_items') is None
+    assert all(write.delete for write in store.commits[-1])
 
-    monkeypatch.setattr(checks, 'get_firestore_client', Reference)
-    value = checks._version('synthetic-owner', 'conversations')
-    assert len(calls) == 2 and calls[0] == 'read'
-    assert value is None if race else value == calls[1]
+
+def test_recursive_wipe_closes_head_recreation_when_user_root_already_missing(monkeypatch):
+    rows = {
+        projection.STATE_COLLECTION: {'conversations': {}, 'action_items': {}},
+        'conversations': {'one': {}},
+        'action_items': {'one': {}},
+    }
+
+    def collection(name):
+        return SimpleNamespace(document=lambda key: SimpleNamespace(delete=lambda: rows.get(name, {}).pop(key, None)))
+
+    root = SimpleNamespace(
+        get=lambda: SimpleNamespace(exists=False),
+        collection=collection,
+        collections=lambda: [SimpleNamespace(id=name) for name in rows],
+    )
+    client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda key: root))
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+    monkeypatch.setattr(
+        user_data_deletion,
+        'get_data_plane_firestore_client',
+        lambda: SimpleNamespace(
+            collection=lambda name: SimpleNamespace(document=lambda key: SimpleNamespace(delete=lambda: None))
+        ),
+    )
+
+    def recursive(subcollection, **kwargs):
+        rows[subcollection.id].clear()
+        if subcollection.id in projection.ROW_COLLECTIONS:
+            # Model atomic source-delete hooks running after the heads were
+            # walked, the worst collection-enumeration order for an erase.
+            rows[projection.STATE_COLLECTION][subcollection.id] = {'version': 'rotated'}
+
+    assert user_data_deletion.purge_user_subtree('owner', client, recursive)['status'] == 'ok'
+    assert all(not values for values in rows.values())
 
 
 def test_release_and_epoch_rotation_invalidate_existing_validator(store, monkeypatch):
