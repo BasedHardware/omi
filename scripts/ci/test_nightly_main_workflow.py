@@ -37,10 +37,16 @@ INTENTIONAL_BUDGET_CHANGES = {
     # checkout 72s, apt-get 155s), so 227s + 720s crossed the ceiling and the
     # shard was cancelled mid-run while still inside its step budget — four
     # such 917-920s walls in the week to 2026-10-22 (39741901310,
-    # 39739120103, 39676205452, 39668020536). 20m holds the 720s budget plus
-    # worst-plausible setup; the step budget stays the regression gate, so
-    # budget_p50 stays 8.
-    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "20",
+    # 39739120103, 39676205452, 39668020536). 20m held until the apt
+    # cold-cache step needed recycling room: on 2026-10-23, after cache
+    # eviction, three cold shards died to throttled mirrors (39951629124,
+    # 39954484165, 39929405042), so that step now restarts apt under
+    # timeout(1) slices inside a 10m ceiling, bounding a recycled cold
+    # download at ~570s. 25m holds the 720s budget plus that
+    # worst-plausible setup (72s checkout + ~90s toolchain + ~570s apt);
+    # the step budget stays the regression gate and warm-path walls are
+    # unchanged, so budget_p50 stays 8.
+    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "25",
 }
 
 
