@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 from google.auth.credentials import AnonymousCredentials
+from google.api_core.datetime_helpers import DatetimeWithNanoseconds
 from google.cloud import firestore
 from google.cloud.firestore_v1.document import DocumentReference, DocumentSnapshot
 from google.cloud.firestore_v1.query import Query
@@ -25,9 +26,12 @@ def store(monkeypatch):
     client = firestore.Client(project='demo-projection', credentials=AnonymousCredentials())
     state = SimpleNamespace(client=client, reads=0, scans=0, heads=0, token='v1', blocked=None, rows={}, hook=None)
     stamp = datetime(2026, 10, 23, tzinfo=timezone.utc)
+    state.stamp = stamp
 
     def snapshot(path, data):
-        return DocumentSnapshot(client.document(path), copy.deepcopy(data), data is not None, stamp, stamp, stamp)
+        return DocumentSnapshot(
+            client.document(path), copy.deepcopy(data), data is not None, state.stamp, state.stamp, state.stamp
+        )
 
     def get(ref, **kwargs):
         state.reads += 1
@@ -74,6 +78,16 @@ def test_repeated_page_100_billed_reads_becomes_two_and_preserves_snapshots(stor
     assert payloads(first) == payloads(second)
     second[0]._data['nested']['a'].append(2)
     assert store.read()[0].to_dict()['nested']['a'] == [1]
+
+
+def test_cached_revision_metadata_preserves_firestore_nanoseconds(store):
+    store.stamp = DatetimeWithNanoseconds(2026, 10, 23, nanosecond=123456789, tzinfo=timezone.utc)
+    store.rows = {f'users/u/memory_items/{i}': {'n': i} for i in range(3)}
+    first, second = store.read(), store.read()
+    for rows in (first, second):
+        assert rows[0].update_time.nanosecond == 123456789
+        assert rows[0].create_time.nanosecond == 123456789
+        assert rows[0].read_time.nanosecond == 123456789
 
 
 @pytest.mark.parametrize('mutation', ['update', 'delete', 'override', 'legacy'])

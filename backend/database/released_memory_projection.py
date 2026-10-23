@@ -193,7 +193,9 @@ def projected_stream_list(query: Any, budget: Any = None, *, surface: str, _sour
     with _lock:
         _prune(time.monotonic())
         entry = _entries.get(key)
-        cached = copy.deepcopy(entry[1]) if entry else None
+        # SDK datetime subclasses carry nanoseconds outside deepcopy's state.
+        # Keep immutable revision timestamps; copy only payload containers.
+        cached = [{**row, 'data': copy.deepcopy(row['data'])} for row in entry[1]] if entry else None
         if entry:
             _entries.move_to_end(key)
     if cached is not None:
