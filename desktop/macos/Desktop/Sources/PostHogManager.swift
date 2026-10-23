@@ -34,6 +34,11 @@ class PostHogManager {
 
     PostHogSDK.shared.setup(config)
 
+    // Remove the retired identity experiment's persisted super-properties.
+    for key in ["experiment_id", "variant", "experiment_forced"] {
+      PostHogSDK.shared.unregister(key)
+    }
+
     // Release-identity super-properties (#10425): every captured event carries the
     // app version + build + release channel, so PostHog (including
     // `floating_bar_ptt_ended` and other per-event tracks that previously carried no
@@ -110,24 +115,6 @@ class PostHogManager {
     guard isInitialized else { return }
     PostHogSDK.shared.capture(eventName, properties: properties)
     log("PostHog: Tracked event '\(eventName)'")
-  }
-
-  /// EXP-002: attach `experiment_id` + `variant` to every captured event as
-  /// super-properties, so all product events (`question_asked`/`question_answered`,
-  /// `desktop_daily_summary`, PTT lifecycle) are sliceable by
-  /// arm without per-event plumbing. Distinct id stays the uid — the variant is
-  /// a property, never an identity. Called once the launch's arm resolves.
-  func setExperimentContext(experimentId: String, variant: String, forced: Bool) {
-    guard isInitialized else {
-      log("PostHog: experiment context skipped (not initialized)")
-      return
-    }
-    PostHogSDK.shared.register([
-      "experiment_id": experimentId,
-      "variant": variant,
-      "experiment_forced": forced,
-    ])
-    log("PostHog: registered experiment context \(experimentId)/\(variant)")
   }
 
   nonisolated static func diagnosticErrorClass(_ value: String) -> String {

@@ -15,7 +15,7 @@ from config import live_stt_state
 from utils.stt.live_gate import GateState, begin_trial, transition, gate_rate
 from utils.stt.live_signal import provider_observation
 from utils.stt.live_metrics import COST_STAGE, COST_STATE_KNOWN, COST_EVENTS, COST_SNAPSHOT_AT, COST_ALL_DEGRADED
-from tests.unit.test_live_cost_router import MemoryRedis, controls
+from tests.unit.test_live_cost_router import MemoryRedis, controls  # noqa: F401 -- autouse fixture
 
 
 @pytest.mark.parametrize('sessions', [2000, pytest.param(20000, marks=pytest.mark.slow)])
@@ -210,7 +210,9 @@ def test_trial_terminal_remains_a_failover_leg_when_cheaper_healthy_target_exist
     assert [target.id for target in tail] == ['soniox']
 
 
-def test_terminal_share_is_unrestricted_and_all_degraded_chain_uses_health_order():
+@pytest.mark.parametrize('exclude_benched', [True, False])
+def test_terminal_share_is_unrestricted_and_all_degraded_chain_uses_health_order(monkeypatch, exclude_benched):
+    monkeypatch.setenv('LISTEN_STT_ESCAPE_EXCLUDES_BENCHED_ENABLED', 'true' if exclude_benched else 'false')
     target = DEFAULT_TARGETS[-1]
     for stage in (0, 5, 25):
         for uid in map(str, range(100)):
@@ -227,10 +229,11 @@ def test_terminal_share_is_unrestricted_and_all_degraded_chain_uses_health_order
         for i in range(1000)
         if not any(assigned(str(i), 'stt-reentry:' + t.id, states[t.id].stage) for t in DEFAULT_TARGETS)
     )
+    # The benched window stays out while stage>0 targets can serve (2026-10-20).
     assert [target.id for target in live_router.select(DEFAULT_TARGETS, states, uid, 'en')] == [
         'soniox',
         'modulate-velma-2',
-        'parakeet-window',
+        *([] if exclude_benched else ['parakeet-window']),
     ]
     assert metric._value.get() == before + 1
     states = {target.id: GateState(stage=0, n=100, failures=10) for target in DEFAULT_TARGETS}

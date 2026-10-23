@@ -47,12 +47,17 @@ class ConversationTitleField extends StatefulWidget {
   /// Shown while the title is empty; "Untitled Conversation" when null.
   final String? hintText;
 
+  /// Maps the stored title to the text drawn at rest (citation debris repaired). Editing and
+  /// saving always use the controller's stored text.
+  final String Function(String)? displayText;
+
   const ConversationTitleField({
     super.key,
     required this.style,
     required this.controller,
     required this.focusNode,
     this.hintText,
+    this.displayText,
   });
 
   @override
@@ -110,6 +115,12 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
     }
   }
 
+  String _atRestText(String stored) {
+    final shown = widget.displayText?.call(stored) ?? stored;
+    // A stored title that was only citation debris reads as untitled, never as the raw debris.
+    return shown.isNotEmpty ? shown : (widget.hintText ?? context.l10n.untitledConversation);
+  }
+
   @override
   Widget build(BuildContext context) {
     final text = widget.controller?.text ?? '';
@@ -125,7 +136,7 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
           child: IgnorePointer(
             child: ExcludeSemantics(
               child: Text(
-                text,
+                _atRestText(text),
                 key: const Key('conversation_title_at_rest'),
                 maxLines: 3,
                 overflow: TextOverflow.ellipsis,

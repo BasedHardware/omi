@@ -37,6 +37,31 @@ def require(condition, code):
         raise Refused(code)
 
 
+SERVER_FLAG_ROLES = ('K_SERVICE', 'OMI_SYNC_STACK_ROLE')
+
+
+def load_server_flags(path):
+    """The serving role's live settings for units with no stored recovery policy.
+
+    Without a file, such a unit is refused ('policy_unpinned'). This operator
+    process's own environment is never used to pin a policy. The file is a JSON
+    object exported from the serving role's env (e.g. the Cloud Run service);
+    only its role name and BATCH_PIPELINE_* keys are kept, and it is never printed.
+    """
+    if not path:
+        return None
+    try:
+        raw = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        raise Refused('server_flags_unreadable')
+    require(
+        isinstance(raw, dict) and all(isinstance(k, str) and isinstance(v, str) for k, v in raw.items()),
+        'server_flags_invalid',
+    )
+    require(bool(raw.get('K_SERVICE', '').strip()), 'server_flags_role_required')
+    return {k: v for k, v in raw.items() if k in SERVER_FLAG_ROLES or k.startswith('BATCH_PIPELINE_')}
+
+
 def fingerprint(job):
     values = {
         key: job.get(key)
@@ -82,6 +107,7 @@ def readonly_run(store, operation):
 
 def checked_job(store, sid, uid, key):
     from database.batch_pipeline_quarantine_recovery import RecoveryStore
+    from database.sync_ledger import batch_ledger_owes_held_units
 
     def check(tx):
         job, binding = RecoveryStore(store).checked(tx, sid, allow_completed_silence=True)
@@ -107,7 +133,7 @@ def checked_job(store, sid, uid, key):
         )
         require(bool(job.get('recovery', {}).get('settled_at')), 'missing_terminal_intent')
         ledger = tx.get('content', f'{uid}/{binding.content_id}')
-        require(ledger.get('status') != 'completed' and ledger.get('usage_committed_at') is None, 'completed_ledger')
+        require(batch_ledger_owes_held_units(ledger), 'completed_ledger')
         return job
 
     return readonly_run(store, check)
@@ -128,7 +154,8 @@ def inspect_unit(store, artifacts, sid, uid, key):
     return 'speech' if spans else 'silent'
 
 
-def apply_silent(store, artifacts, sid, uid, key, approved_digest):
+def apply_silent(store, artifacts, sid, uid, key, approved_digest, *, server_flags):
+    from database.batch_pipeline_policy import UnpinnedPolicyRefused
     from database.batch_pipeline_quarantine_recovery import SilenceDispositionStore
     from utils.batch_pipeline.contracts import WorkItem
     from utils.batch_pipeline.recovery_disposition import inspect_audio, silence_payload, result_outcome
@@ -139,8 +166,11 @@ def apply_silent(store, artifacts, sid, uid, key, approved_digest):
     item = WorkItem(**{f.name: job[f.name] for f in fields(WorkItem) if f.name in job})
     _, duration, spans = inspect_audio(item, artifacts.fetch_audio(item))
     require(not spans, 'silence_decision_changed')
-    protocol = SilenceDispositionStore(store)
-    job = protocol.prepare_silence(sid, uid, approved_digest, time.time())
+    protocol = SilenceDispositionStore(store, server_flags=server_flags)
+    try:
+        job = protocol.prepare_silence(sid, uid, approved_digest, time.time())
+    except UnpinnedPolicyRefused:
+        return 'policy_unpinned'
     token = job['silence_disposition']['token']
     uri = artifacts.find_recovery_result(item, token)
     if uri:
@@ -161,6 +191,9 @@ def main():
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--approve-plan-sha256')
     parser.add_argument('--apply-limit', type=int, default=1, help='Fixed silent prefix; repeat is idempotent')
+    parser.add_argument(
+        '--server-flags-file', help='Serving role env JSON for units with no stored policy; absent refuses them'
+    )
     args = parser.parse_args()
     logging.disable(logging.CRITICAL)
     require(not os.getenv('FIRESTORE_EMULATOR_HOST'), 'explicit_cloud_only')
@@ -179,6 +212,7 @@ def main():
     cutoff_time = datetime.fromisoformat(args.quarantined_before.replace('Z', '+00:00'))
     require(cutoff_time.utcoffset() is not None and cutoff_time.utcoffset().total_seconds() == 0, 'utc_cutoff_required')
     cutoff = cutoff_time.timestamp()
+    server_flags = load_server_flags(args.server_flags_file)
     # Check availability before making any cloud read. Never fetch or print secrets.
     secret = os.getenv('ENCRYPTION_SECRET', '').encode()
     bucket = os.getenv('BUCKET_BATCH_PIPELINE', '')
@@ -254,6 +288,7 @@ def main():
         'strict_vad': dict(counts),
         'silent_fraction': counts['silent'] / len(units),
         'plan_sha256': digest,
+        'unpinned_policy': 'server_flags' if server_flags else 'refuse',
         'paid_stt_calls': 0,
         'firestore_writes': 0,
     }
@@ -261,7 +296,11 @@ def main():
         # Per-unit mutation consumes its persisted recovery owner part.
         require(args.approve_plan_sha256 == digest, 'approval_digest_changed')
         silent = [(sid, key) for sid, key, decision in units if decision == 'silent'][: args.apply_limit]
-        output['outcomes'] = dict(Counter(apply_silent(store, artifacts, sid, uid, key, digest) for sid, key in silent))
+        output['outcomes'] = dict(
+            Counter(
+                apply_silent(store, artifacts, sid, uid, key, digest, server_flags=server_flags) for sid, key in silent
+            )
+        )
         del output['firestore_writes']
     print(json.dumps(output, indent=2, sort_keys=True))
 

@@ -715,7 +715,9 @@ process memory and are never printed. A separate ADC login is not needed.
 All local checks and production reads in this lane used `ro-prod`; no commands that
 write production were run. Use the existing release process first to admit/build the
 changed backend image. Set `ADMITTED_BACKEND_IMAGE` to that receipt's full
-`gcr.io/based-hardware/backend@sha256:...` (or production Artifact Registry digest).
+`gcr.io/based-hardware/backend@sha256:...` (after the plan B B3 cutover, the
+`gcr.io/based-hardware/backend-workers@sha256:...` digest; `messaging_operations.py`
+admits exactly those two repositories).
 Do not substitute `latest` or the previously serving image: it lacks the new
 maintenance failure logging/context telemetry. Normal backend deployment starts the
 new context/album behavior; the cleanup job is a separate install.

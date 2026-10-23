@@ -12,7 +12,7 @@ evidence:
 covers:
   - app/lib/providers/capture_provider.dart
   - app/lib/providers/device_provider.dart
-  - app/lib/pages/conversation_capturing/page.dart
+  - app/lib/pages/episodes/live_episode_page.dart
   - app/lib/pages/conversations/widgets/processing_capture.dart
 preconditions:
   - auth_ready  # User signed in and onboarding completed. App shows home screen.
@@ -41,11 +41,11 @@ steps:
         min: 4
     evidence:
       - screenshot: step-S2.webp
-    note: "Audio streams from Omi device via BLE (PCM16 or opus codec) → phone app → WebSocket → backend → transcription → TranscriptSegmentEvent back to app. The processing_capture widget shows truncated transcript text in the status row. Tap the status card to navigate to ConversationCapturingPage."
+    note: "Audio streams from Omi device via BLE (PCM16 or opus codec) → phone app → WebSocket → backend → transcription → TranscriptSegmentEvent back to app. The processing_capture widget shows truncated transcript text in the status row. Tap the status card to navigate to LiveEpisodePage."
 
   - id: S3
     name: Open capturing page — view live transcription
-    do: "Tap the 'Listening' status card on the home screen to navigate to the ConversationCapturingPage. Verify the page shows: back arrow (top-left), '🎙️ Listening' title in app bar, transcript segments with speaker labels (e.g., 'Speaker 1'), timestamps per segment, and 'Process Now' button (yellow) + mute button (grey circle) at the bottom."
+    do: "Tap the 'Listening' status card on the home screen to navigate to the LiveEpisodePage. Verify the page shows: back arrow (top-left), '🎙️ Listening' title in app bar, transcript segments with speaker labels (e.g., 'Speaker 1'), timestamps per segment, and 'Process Now' button (yellow) + mute button (grey circle) at the bottom."
     verify: true
     expect:
       - kind: text_visible
@@ -54,7 +54,7 @@ steps:
         min: 3
     evidence:
       - screenshot: step-S3.webp
-    note: "The ConversationCapturingPage is identical for device and phone mic recording. The difference is in the mute behavior: device mute calls pauseDeviceRecording() (cancels BLE audio stream but keeps connection), phone mute calls stopStreamRecording() (stops mic completely). The page has 2 tabs: Transcripts (tab 0) and Summary (tab 1)."
+    note: "The LiveEpisodePage is identical for device and phone mic recording. The difference is in the mute behavior: device mute calls pauseDeviceRecording() (cancels BLE audio stream but keeps connection), phone mute calls stopStreamRecording() (stops mic completely). The page has 2 tabs: Transcripts (tab 0) and Summary (tab 1)."
 
   - id: S4
     name: Test mute — pause device recording

@@ -3,14 +3,17 @@ import path from "node:path";
 import { NextRequest, NextResponse } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { posthogResults, verifyAdmin } = vi.hoisted(() => ({
+const { posthogResults, requireScope } = vi.hoisted(() => ({
   posthogResults: vi.fn(),
-  verifyAdmin: vi.fn(async () => ({ uid: "admin" })),
+  requireScope: vi.fn(),
 }));
 vi.mock("@/lib/posthog", () => ({ posthogResults }));
-vi.mock("@/lib/auth", () => ({ verifyAdmin }));
+vi.mock("@/lib/auth", () => ({ requireScope }));
 
+import { testIdentity } from "./support/test-identity";
 import { GET } from "@/app/api/omi/stats/device-health/route";
+
+requireScope.mockImplementation(async () => testIdentity(undefined, "admin"));
 
 const ENV_KEYS = [
   "POSTHOG_PERSONAL_API_KEY",
@@ -90,7 +93,9 @@ function sampleFixture(
 afterEach(() => {
   vi.useRealTimers();
   posthogResults.mockReset();
-  vi.mocked(verifyAdmin).mockResolvedValue({ uid: "admin" } as never);
+  vi.mocked(requireScope).mockImplementation(async () =>
+    testIdentity(undefined, "admin")
+  );
   for (const key of ENV_KEYS) {
     if (originalEnv[key] == null) delete process.env[key];
     else process.env[key] = originalEnv[key];
@@ -530,7 +535,7 @@ describe("device health stats route", () => {
     expect(posthogResults).not.toHaveBeenCalled();
 
     configure();
-    vi.mocked(verifyAdmin).mockResolvedValue(
+    vi.mocked(requireScope).mockResolvedValue(
       NextResponse.json({ error: "Forbidden" }, { status: 403 }) as never
     );
     const forbidden = await GET(request());

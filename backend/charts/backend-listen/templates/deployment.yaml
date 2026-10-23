@@ -53,14 +53,22 @@ spec:
           securityContext:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          image: "{{ required "image.repository is required" .Values.image.repository }}:{{ required "image.tag is required" .Values.image.tag }}"
+          image: "{{ required "image.repository is required" .Values.image.repository }}{{ if .Values.image.digest }}@{{ .Values.image.digest }}{{ else }}:{{ required "image.tag is required" .Values.image.tag }}{{ end }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           {{- with .Values.envFrom }}
           envFrom:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- /*
+          privateEnv (NAME: string) comes from a values file the prod workflow
+          renders from a protected-environment secret. Each name is emitted
+          exactly once: a privateEnv key replaces the env entry of the same
+          name, because duplicate names break strategic-merge upgrades.
+          */}}
+          {{- $privateEnv := .Values.privateEnv | default dict }}
           env:
             {{- range .Values.env }}
+            {{- if not (hasKey $privateEnv .name) }}
             - name: {{ .name }}
               {{- if eq .name "GOOGLE_CLOUD_PROJECT" }}
               value: {{ required "runtimeGcpProjectId is required" $.Values.runtimeGcpProjectId | quote }}
@@ -70,6 +78,17 @@ spec:
               valueFrom:
                 {{- toYaml .valueFrom | nindent 16 }}
               {{- end }}
+            {{- end }}
+            {{- end }}
+            {{- range $name, $value := $privateEnv }}
+            {{- if not (regexMatch "^[A-Z][A-Z0-9_]*$" $name) }}
+            {{- fail "privateEnv has a key that is not an env var name" }}
+            {{- end }}
+            {{- if not (kindIs "string" $value) }}
+            {{- fail (printf "privateEnv.%s must be a string" $name) }}
+            {{- end }}
+            - name: {{ $name }}
+              value: {{ $value | quote }}
             {{- end }}
           ports:
             - name: http

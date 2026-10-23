@@ -1,0 +1,147 @@
+# Production ops values (B4). Applied only by the config-train
+# (.github/workflows/config_train.yml -> backend/scripts/ops_train.py).
+#
+# Ownership: every value here is `owner: ops`. A backend train must not
+# change it, and an out-of-band edit is break-glass followed by a same-day PR
+# to this file. Cohorts, percents and allowlists never live here; they live in
+# Firestore `rollout_cohorts` (ruling #8).
+#
+# Schema (validated by ops_train.py; unknown keys are rejected):
+#   cloud_run.<service>.env.<KEY>: string        ops-owned env value on the serving revision
+#   cloud_run.<service>.max_instances: int        service-level run.googleapis.com/maxScale
+#     or {owner: <controller>, floor: int, ceiling: int}
+#                                                 a live controller owns the value; the
+#                                                 config-train only enforces the bounds
+#   cloud_run.<service>.min_instances: int        service-level run.googleapis.com/minScale
+#   cloud_tasks.<queue>: {max_concurrent_dispatches, max_dispatches_per_second,
+#                         max_attempts (-1 = unlimited), min_backoff, max_backoff,
+#                         max_doublings, log_sampling_ratio, enabled}
+#     Omitted fields are not managed. enabled: false declares a queue that the
+#     config-train must neither create nor update yet.
+#
+# Every env change creates a revision from the service template and routes 100%
+# of traffic to that named revision explicitly: backend-sync-backfill pins
+# traffic to a named revision, so an unrouted env update never serves (10-19
+# 04:52Z). The config-train refuses when the template differs from the serving
+# revision (a failed no-traffic deploy left it), so it can never promote an
+# unqualified image.
+schema: omi.ops/v1
+environment: prod
+project: based-hardware
+region: us-central1
+
+# Keys below a "live-only" comment were set on prod by hand and existed nowhere in
+# source; a declarative deploy (staging's deploy.sh, a fresh service) dropped them.
+# Values are the serving revisions' on 2026-10-20 (drift_check.py inventory,
+# lesson 9). Secret and environment-specific live-only keys are listed in
+# live_only.yaml instead; they belong in runtime_env.
+cloud_run:
+  backend:
+    env:
+      # live-only, 2026-10-20 inventory
+      AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
+      FAIR_USE_ENABLED: 'true'
+      HTTP_AUDIO_MERGE_RUN_TIMEOUT: '600'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_GET_TIMEOUT: '30'
+      HTTP_POST_TIMEOUT: '600'
+      LANGCHAIN_TRACING_V2: 'false'
+      LANGSMITH_TRACING: 'false'
+      MEMORY_MODE: 'false'
+      OMI_LANGSMITH_AGENTIC_PROMPT_NAME: agentic-chat-main
+      OMI_LANGSMITH_PROMPT_CACHE_TTL_SECONDS: '3600'
+      TYPESENSE_HOST_PORT: '443'
+  backend-sync:
+    env:
+      # 10-18 18:59Z stall: sync-jobs went into Cloud Tasks system backoff after
+      # fast 500s. Root fix is the 409 retry contract (#22371).
+      SYNC_TASKS_QUEUE: sync-jobs-fresh
+      # 10-19 04:52Z stall, same cause.
+      SYNC_BACKFILL_TASKS_QUEUE: sync-backfill-fresh
+      # live-only, 2026-10-20 inventory
+      AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
+      FAIR_USE_ENABLED: 'true'
+      HTTP_AUDIO_MERGE_RUN_TIMEOUT: '600'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_POST_TIMEOUT: '600'
+      HTTP_SYNC_JOBS_RUN_TIMEOUT: '1500'
+      LANGCHAIN_TRACING_V2: 'false'
+      MEMORY_MODE: 'off'
+    max_instances: 80
+    min_instances: 1
+  backend-sync-backfill:
+    env:
+      SYNC_TASKS_QUEUE: sync-backfill-fresh
+      SYNC_BACKFILL_TASKS_QUEUE: sync-backfill-fresh
+      # live-only, 2026-10-20 inventory
+      AUDIO_MERGE_DISPATCH_MODE: cloud_tasks
+      DREAM_AGENT_HUNT_INTERVAL_HOURS: '2'
+      DREAM_AGENT_MANUAL_RUNS_PER_DAY: '3'
+      DREAM_AGENT_PASSES_PER_DAY: '48'  # main #23016 (6 -> 48 on the 3.8 reservation)
+      FAIR_USE_ENABLED: 'true'
+      HTTP_AUDIO_MERGE_RUN_TIMEOUT: '600'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_POST_TIMEOUT: '600'
+      HTTP_SYNC_JOBS_RUN_TIMEOUT: '1500'
+      LANGCHAIN_TRACING_V2: 'false'
+      LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED: 'true'
+      LISTEN_FINALIZATION_RECOVERY_MINIMUM_TERMINAL_ENABLED: 'true'
+      MEETING_NOTES_EVIDENCE_WAIT_SECONDS: '25'
+      MEMORY_MODE: 'off'
+      TYPESENSE_HOST_PORT: '443'
+    # redis_guard.sh moves this between 8 and 40 from Redis memory. It is
+    # deleted with the sequencer (C10); until then the config-train only
+    # enforces the bounds.
+    max_instances: {owner: redis_guard, floor: 8, ceiling: 40}
+  backend-integration:
+    env:
+      SYNC_TASKS_QUEUE: sync-jobs-fresh
+      # C4 (lane 9): summary-debt repair moves to the enrichment-maintenance Scheduler job,
+      # which targets backend-integration. The manifest enables it on backend-sync only,
+      # so without this the new owner's tick is a no-op.
+      SUMMARY_DEBT_REPAIR_ENABLED: 'true'
+      # live-only, 2026-10-20 inventory
+      FAIR_USE_ENABLED: 'true'
+      HTTP_DEFAULT_TIMEOUT: '600'
+      HTTP_GET_TIMEOUT: '30'
+      LANGCHAIN_TRACING_V2: 'false'
+      MEMORY_MODE: 'off'
+      TYPESENSE_HOST_PORT: '443'
+    min_instances: 1
+
+cloud_tasks:
+  batch-quarantine-recovery:
+    # 10-19 01:27Z: 4/4 left recovery p95 just over five minutes at the 5% ramp.
+    max_concurrent_dispatches: 16
+    max_dispatches_per_second: 8
+    max_attempts: 5
+    min_backoff: 5s
+    max_backoff: 60s
+  sync-jobs-fresh:
+    # Five attempts: sync's 409 leaves the retry to the queue (routers/sync.py), and
+    # utils/cloud_tasks.py get_sync_tasks_max_attempts mirrors it. The config-train is
+    # the only writer of this cap now that trains skip the ops-owned queues.
+    max_concurrent_dispatches: 160
+    max_dispatches_per_second: 25
+    max_attempts: 5
+    min_backoff: 60s
+    max_backoff: 300s
+    log_sampling_ratio: 1.0
+  sync-backfill-fresh:
+    # Same rate and retry as sync-backfill (train ceiling 90 = 15 x 6 bounded by
+    # the worker cap x concurrency 6). Attempts and doublings are unmanaged
+    # until the first config-train plan reads them.
+    max_concurrent_dispatches: 90
+    max_dispatches_per_second: 15
+    max_attempts: 5
+    min_backoff: 5s
+    max_backoff: 60s
+    log_sampling_ratio: 1.0
+  enrichment:
+    # Contract (a)/(d), lane 9. Created by the first prod config-train at M3.
+    enabled: false
+    max_concurrent_dispatches: 50
+    max_dispatches_per_second: 25
+    max_attempts: -1
+    min_backoff: 10s
+    max_backoff: 300s

@@ -15,7 +15,6 @@ import logging
 import threading
 from typing import Callable, Optional
 
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import (
     bounded_envelope,
     merge_track_receipts,
@@ -23,6 +22,7 @@ from utils.capture_evidence import (
     unknown_envelope,
 )
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
+from utils.observability.fallback import record_fallback
 from utils.stt.outcomes import TranscriptionOutcome
 
 logger = logging.getLogger(__name__)
@@ -65,8 +65,6 @@ def apply_capture_evidence_dark_write(
     incoming: dict, source_position_map: Optional[tuple[dict, int]], transcript_segments: list
 ) -> None:
     """Populate ``incoming['capture_evidence']`` from the pre-ingest receipts."""
-    if not capture_evidence_dark_write_enabled():
-        return
     receipt = unknown_envelope('missing_source_position', origin='sync_vad')
     if source_position_map is not None:
         frame_map, derivative_start = source_position_map
@@ -90,11 +88,10 @@ def apply_capture_evidence_dark_write(
 
 def record_capture_evidence_metric(incoming: dict) -> None:
     """Emit the post-ingest envelope metric for a dark-written capture receipt."""
-    if capture_evidence_dark_write_enabled():
-        OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
-            path='sync',
-            status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
-        ).inc()
+    OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(
+        path='sync',
+        status='mapped' if incoming['capture_evidence']['capability'] == 'source_position' else 'unknown',
+    ).inc()
 
 
 def log_sync_lineage_append(stats: dict, existing_completion: bool = False) -> None:
@@ -120,6 +117,22 @@ def log_sync_lineage_stamp_append(span_delta_bucket: str) -> None:
         logger.info('event=sync_lineage_stamp_append span_delta_bucket=%s', span_delta_bucket)
     except Exception:
         pass
+
+
+def log_sync_lineage_stamp_gap_refused() -> None:
+    """Both legacy and batch projection report a committed stamp-gap reroute."""
+    try:
+        logger.info('event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0')
+    except Exception:
+        pass
+    record_fallback(
+        component='sync_dispatch',
+        from_mode='explicit_target',
+        to_mode='temporal_assignment',
+        reason='policy',
+        outcome='degraded',
+        log=logger,
+    )
 
 
 def complete_sync_intake(
@@ -149,6 +162,7 @@ def complete_sync_intake(
     completion_pending = bool(assigned.pop('_sync_lineage_completion_pending', False))
     stats = assigned.pop('_sync_lineage_dedupe', None)
     stamp_bucket = assigned.pop('_sync_lineage_stamp_append', None)
+    stamp_gap_refused = assigned.pop('_sync_lineage_stamp_gap_refused', False)
     # An exact sync-scoped retry may owe enrichment from an earlier partial
     # run. That existing debt still enrolls and finishes even though this
     # upload wrote nothing; pristine live repeats invent no new debt.
@@ -166,6 +180,8 @@ def complete_sync_intake(
         log_sync_lineage_append(stats, existing_completion=existing_completion and repeat_only)
     if stamp_bucket is not None:
         log_sync_lineage_stamp_append(stamp_bucket)
+    if stamp_gap_refused:
+        log_sync_lineage_stamp_gap_refused()
     store_audio(conversation_id)
     mark_finalize()
     if not repeat_only or existing_completion:

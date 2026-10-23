@@ -1,9 +1,11 @@
 'use client';
 
 import { AudioLines } from 'lucide-react';
-import { resolvableNoteSources } from '@omi/note-shared/note-sources.mjs';
+import {
+  presentableNoteSection,
+  resolvableNoteSources,
+} from '@omi/note-shared/note-sources.mjs';
 import ReactMarkdown from 'react-markdown';
-import { repairNoteCitations } from '@omi/note-shared/note-citations.mjs';
 import { cn } from '@/lib/utils';
 import { splitNoteSections, type NoteSectionInput } from '@/lib/meetingNotes';
 
@@ -45,14 +47,11 @@ export function NoteSections({
   const transcriptIDs = transcriptSegments.flatMap((segment) =>
     segment.id ? [segment.id] : [],
   );
-  const presentable = sections.map((section) => {
-    const valid = [...transcriptIDs, ...(section.source_segment_ids ?? [])];
-    return {
-      ...section,
-      heading: repairNoteCitations(section.heading ?? '', valid).text,
-      body_markdown: repairNoteCitations(section.body_markdown ?? '', valid).text,
-    };
-  });
+  // Inline citations the repair removes become the section's source control, so a legacy
+  // note whose only evidence was `[s01234]` keeps its pointer to the transcript.
+  const presentable = sections.map((section) =>
+    presentableNoteSection(section, transcriptIDs),
+  );
   const { mains, sideNotes } = splitNoteSections(presentable);
 
   // One quiet control per section, beside its heading, instead of a row of timestamps under

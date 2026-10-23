@@ -160,9 +160,9 @@ registry_extension = SimpleNamespace(
         'database.dream_scheduler.discover': CoveredByEntry(
             'database.dream_scheduler.discover',
             covered_by=('database.dream_scheduler.candidate_page',),
-            reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its get_all calls read explicit document refs and its transaction only initializes due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
+            reason='Discovery streams only through candidate_page (allowlist mode reads listed user documents by explicit ref instead); its chunked get_all calls read explicit document refs in bounded transactions that only initialize due rows and a cursor. SDK queue races are exercised in test_dream_queue_emulator.',
             expect_observed=False,
-            body_digest='925cc08b93ece7ff9e68c75a87aaf0437b80575a4794325b5153dfa30d875d16',
+            body_digest='e614de2d842268bb1b96e7e7a12c885b3e1bbcef9bd63da881baccf177d1c722',
         )
     },
     SKIPS={},

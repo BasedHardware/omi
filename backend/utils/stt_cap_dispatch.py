@@ -1,4 +1,4 @@
-"""Funded-provider admission; legacy root usage counters deliberately stay unchanged."""
+"""Funded-provider admission; legacy root counters exclude only receiver-held live audio."""
 
 import logging
 import os
@@ -83,6 +83,10 @@ def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown', *, lan
     return allowance.managed
 
 
+HELD_SPAN_MERGE_GAP_SECONDS = 0.5
+MAX_HELD_SPANS = 256
+
+
 @lru_cache(maxsize=16)
 def _units_per_second(provider='deepgram'):
     from config.rate_card import price_transcription
@@ -112,6 +116,10 @@ class LiveAdmission:
         self.usage_cache = None
         self.capture_observer: Callable[[bytes, int, int, bool], None] | None = None
         self.active_capture: tuple[bytes, int, list[tuple[int, int]]] | None = None
+        # Merged wall-clock receipt spans of receiver-denied audio. The usage flush
+        # excludes their overlap with its billable window: held audio is metered
+        # once, by recovery, when it is actually transcribed.
+        self.held_spans: list[list[float]] = []
         if budget_enforcement_enabled():
             from database.usage_units_session import UsageUnitsSession
 
@@ -189,11 +197,35 @@ class LiveAdmission:
                 return False
         return True
 
+    def note_held(self, received_at, seconds):
+        """Record the receipt span of audio the receiver denied before any provider.
+
+        Spans are wall clock, so channels overlap and bursts collapse to their
+        arrival time. Socket-level suppression of already-admitted queued audio is
+        not recorded: its receipt window may already be billed.
+        """
+        start, end = received_at - seconds, received_at
+        spans = self.held_spans
+        if spans and start <= spans[-1][1] + HELD_SPAN_MERGE_GAP_SECONDS:
+            spans[-1][0] = min(spans[-1][0], start)
+            spans[-1][1] = max(spans[-1][1], end)
+            return
+        spans.append([start, end])
+        if len(spans) > MAX_HELD_SPANS:
+            del spans[0]  # Dropping a span bills it as before; never subtracts more.
+
+    def held_seconds_between(self, start, end):
+        """Held wall-clock seconds in [start, end]; spans ending by `end` are released."""
+        held = sum(max(0.0, min(end, b) - max(start, a)) for a, b in self.held_spans)
+        self.held_spans = [[max(a, end), b] for a, b in self.held_spans if b > end]
+        return held
+
+    def record_suppressed(self, provider, seconds):
+        record_audio('live', 'suppressed', provider, seconds, self.reason == 'plan_allowance_exhausted')
+
     def send(self, raw, data, provider, rate, *args, **kwargs):
         if not self.packet_allowed(data, provider, rate):
-            record_audio(
-                'live', 'suppressed', provider, len(data) / (2 * rate), self.reason == 'plan_allowance_exhausted'
-            )
+            self.record_suppressed(provider, len(data) / (2 * rate))
             self.observe_capture(False)
             # Policy absorption is not a transport failure. The receive/archive
             # paths continue, and recovery must not fail over or close capture.
@@ -309,26 +341,14 @@ class CapSocket(STTSocket):
         if start_sample is not None:
             self.admission.active_capture = (data, self.rate, ((start_sample, len(data) // 2),))
         if self.raw is None or not self.admission.packet_allowed(data, self.provider, self.rate):
-            record_audio(
-                'live',
-                'suppressed',
-                self.provider,
-                len(data) / (2 * self.rate),
-                self.admission.reason == 'plan_allowance_exhausted',
-            )
+            self.admission.record_suppressed(self.provider, len(data) / (2 * self.rate))
             self.admission.observe_capture(False)
             return True
         return False
 
     def send(self, data, *args, **kwargs):
         if self.raw is None:
-            record_audio(
-                'live',
-                'suppressed',
-                self.provider,
-                len(data) / (2 * self.rate),
-                self.admission.reason == 'plan_allowance_exhausted',
-            )
+            self.admission.record_suppressed(self.provider, len(data) / (2 * self.rate))
             self.admission.observe_capture(False)
             return True
         return self.admission.send(self.raw, data, self.provider, self.rate, *args, **kwargs)
@@ -338,8 +358,15 @@ class CapSocket(STTSocket):
         if self.raw is not None:
             return self.raw.finish()
 
-    def finalize(self):
+    def finalize(self, *args, **kwargs):
         if self.raw is not None:
+            # The proxy exposes the provider's class, so managed window VAD
+            # calls finalize(vad_pause=True) through it. Preserve that protocol
+            # just as send() does; otherwise a local TypeError kills the leg.
+            if os.getenv('STT_CAP_FINALIZE_FORWARD_ENABLED', 'true').strip().lower() not in {'false', '0', 'off'}:
+                return self.raw.finalize(*args, **kwargs)
+            # Emergency generic-finalize mode retains the provider's no-arg
+            # behavior without reintroducing the proxy signature exception.
             return self.raw.finalize()
 
 

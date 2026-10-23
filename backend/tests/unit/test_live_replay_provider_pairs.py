@@ -8,7 +8,7 @@ import pytest
 
 from tests.unit.test_parakeet_window_live import runtime, receiver, Client  # noqa: F401
 from tests.unit.test_live_cost_router import controls  # noqa: F401
-from config.live_stt_replay import ReplayLimits
+from config.live_stt_replay import DEFAULT_LIVE_TAIL_CATCHUP_RATE, DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS, ReplayLimits
 from routers.listen.receiver import ListenReceiver
 from utils.stt import (
     parakeet_window as window,
@@ -36,6 +36,13 @@ from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
+# A full-ring prefix under shipped defaults: the 20s wall less the margin held
+# back so 1x delivery lands inside it, in bytes and 16 KiB replay packets.
+PREFIX_SECONDS = 20.0 - DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
+PREFIX_BYTES = int(PREFIX_SECONDS * 32000)
+PREFIX_PACKETS = -(-PREFIX_BYTES // 16384)
 
 
 class Transport:
@@ -112,7 +119,7 @@ async def test_old_unyielding_replay_overflows_both_real_provider_queues(kind):
                 break
             accepted += 1
         assert accepted == 2000
-        assert raw.is_connection_dead and raw.typed_death_reason == 'capacity_full'
+        assert raw.is_connection_dead and raw.typed_death_reason == 'send_queue_full'
     finally:
         await stop([raw])
 
@@ -327,7 +334,7 @@ async def test_managed_soniox_internal_finish_still_fails_over(monkeypatch):
         while not soniox.raw._send_queue.full():
             soniox.raw._send_queue.put_nowait(b'\x01\x00')
         assert not soniox.send(b'\x01\x00' * 480)
-        assert soniox.normalized_death_reason == 'capacity_full'
+        assert soniox.normalized_death_reason == 'send_queue_full'
         assert soniox.raw._finishing
         assert not socket_is_finishing(soniox)
         assert await actual._failover_stt_socket()
@@ -403,7 +410,7 @@ async def test_stalled_replay_queue_rejects_with_bounded_capacity_cause(monkeypa
     raw.send(b'\x01\x00')
     try:
         assert not await raw.wait_send_capacity()
-        assert raw.is_connection_dead and raw.typed_death_reason == 'capacity_full'
+        assert raw.is_connection_dead and raw.typed_death_reason == 'replay_send_stalled'
     finally:
         await stop([raw])
 
@@ -422,14 +429,14 @@ async def test_stalled_default_queue_replay_never_hides_behind_2000_slots(monkey
         rejected = await replay_chunks(raw, ring.snapshot(), source=ring, provider='parakeet', soniox=None)
         assert rejected is not None
         assert raw._send_queue.maxsize == 2000 and raw._send_queue.high_water == 2
-        assert raw.typed_death_reason == 'capacity_full'
+        assert raw.typed_death_reason == 'replay_send_stalled'
     finally:
         await stop([raw])
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('successor', ['soniox', 'modulate-velma-2'])
-async def test_adopted_tail_capacity_full_is_censored_not_provider_death(monkeypatch, successor):
+async def test_adopted_tail_bound_is_censored_not_provider_death(monkeypatch, successor):
     actual, _, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor])
     actual.stt_socket.raw.fail('first_text_deadline')
     try:
@@ -438,19 +445,21 @@ async def test_adopted_tail_capacity_full_is_censored_not_provider_death(monkeyp
         assert isinstance(tail, ReplayTailSocket)
         assert not tail.connection.is_connection_dead
         assert not tail.send(b'\x01\x00' * (27 * 16000), 135 * 16000)
-        assert tail.typed_death_reason == 'capacity_full'
+        # The tail's own live-residence bound filled: a local queue, never
+        # destination capacity (which stays capacity_full).
+        assert tail.typed_death_reason == 'send_queue_full'
         assert not raws[-1].is_connection_dead
-        assert live_stt_terminal_reason(tail, 'send_failed') == 'capacity_full'
+        assert live_stt_terminal_reason(tail, 'send_failed') == 'send_queue_full'
         hop = PendingLiveFailover.from_socket(tail, actual.host.stt_service.value, 'unavailable')
-        assert hop.reason == 'capacity_full'
+        assert hop.reason == 'send_queue_full'
         before = fallback_count()
         hop.note_failure(None)
         hop.note_failure(None)
         assert legs[-1].leg_outcome.settled
         assert fallback_count() - before == 1
-        assert provider_observation('failover', 'capacity_full') is None
+        assert provider_observation('failover', 'send_queue_full') is None
         recorded = [entry for entry in observations if entry[0] == legs[-1].routing_target]
-        assert recorded and recorded[-1][5] == 'capacity_full'
+        assert recorded and recorded[-1][5] == 'send_queue_full'
         assert recorded[-1][5] != 'connection_lost'
     finally:
         await actual._drain_stt_sockets()
@@ -587,26 +596,37 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
     try:
         assert await task
         replay_wall = virtual_clock.now
-        assert 19 <= replay_wall <= 20 + 3 * 0.512 + 0.001
+        assert PREFIX_SECONDS - 0.1 <= replay_wall <= 20 + 3 * 0.512 + 0.001
         await ingestion
-        expected = original[115 * 32000 :] + b''.join(tail)
+        expected = original[-PREFIX_BYTES:] + b''.join(tail)
         await until(lambda: raws[-1]._ws.byte_count == len(expected))
         transport = raws[-1]._ws
         assert transport.pcm == expected
         assert raws[-1]._send_queue.high_water <= 2
         assert not raws[-1].is_connection_dead
-        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == 115
-        assert REPLAY_AUDIO.labels(**labels)._value.get() - audio_before == pytest.approx(20)
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(135 - PREFIX_SECONDS)
+        assert REPLAY_AUDIO.labels(**labels)._value.get() - audio_before == pytest.approx(PREFIX_SECONDS)
         assert REPLAY_CLOSED.labels(**labels)._value.get() == closed_before
-        # For every replay admission interval: <=1x audio plus one bounded packet.
+        # Replay admissions stay at <=1x audio plus one bounded packet. Once
+        # the live tail is behind, the pump drains it at the catch-up rate, so
+        # cumulative delivery may run ahead of 1x but never past the
+        # successor's catch-up ceiling plus one packet.
         packets = [(data, at) for data, at in zip(transport.sent, transport.sent_at) if isinstance(data, bytes)]
+        catchup_rate = actual.stt_socket.pacer.catchup_rate
+        assert catchup_rate == DEFAULT_LIVE_TAIL_CATCHUP_RATE
         delivered = 0.0
-        for data, at in packets:
+        for n, (data, at) in enumerate(packets):
             delivered += len(data) / 32000
-            assert delivered <= at + 0.512 + 0.001
-        live_times = [at for _, at in packets[40:]]  # ceil(640000 / 16384) replay packets
+            if n < PREFIX_PACKETS:
+                assert delivered <= at + 0.512 + 0.001
+            assert delivered <= at * catchup_rate + 0.512 + 0.001
+        live_times = [at for _, at in packets[PREFIX_PACKETS:]]
         assert len(live_times) == len(captured)
         assert max(at - born for at, born in zip(live_times, captured)) <= 20.532 + 3 * 0.512
+        # The capture held through the 19 s prefix is drained at 1.5x rather
+        # than carried for the rest of the leg: the last live packet lands
+        # well inside the ~19 s lag the exact-rate tail used to keep.
+        assert live_times[-1] - captured[-1] <= 21.0 / catchup_rate + 1.0
         assert sum(len(packet.data) for packet in actual.stt_socket.tail) <= 21 * 32000
     finally:
         task.cancel()
@@ -660,7 +680,7 @@ async def test_adopted_live_tail_drains_before_eos_after_client_departure(monkey
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
     actual, _, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor])
     actual.stt_socket.raw.fail('first_text_deadline')
-    original = b''.join(data for _, data in actual._window_ring().snapshot())[-640000:]
+    original = b''.join(data for _, data in actual._window_ring().snapshot())[-PREFIX_BYTES:]
     monkeypatch.setattr(actual, '_capture', lambda *args, **kwargs: None)
     task = asyncio.create_task(actual._failover_stt_socket())
     try:
@@ -684,4 +704,28 @@ async def test_adopted_live_tail_drains_before_eos_after_client_departure(monkey
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
         actual.stt_socket.finish()
+        await stop(raws)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('with_ring', [False, True])
+@pytest.mark.parametrize('enabled', [True, False])
+async def test_serving_soniox_pre_text_transport_death_redials_soniox_once(monkeypatch, enabled, with_ring):
+    # 2026-10-20: a Soniox blip on the serving leg fell to a 40%-failing
+    # Modulate or exhausted. One jittered same-target retry comes first.
+    monkeypatch.setenv('LISTEN_STT_SAME_TARGET_RETRY_ENABLED', 'true' if enabled else 'false')
+    monkeypatch.setattr('utils.stt.live_recovery.retry_jitter_seconds', lambda: 0.0)
+    actual, _, raws, legs, _ = await setup_receiver(monkeypatch, ['soniox', 'modulate-velma-2'], source='soniox')
+    if not with_ring:
+        actual._window_replay_audio = None
+    try:
+        actual.stt_socket.raw._mark_dead('synthetic provider death', typed_reason='connection_lost')
+        async with asyncio.timeout(10):
+            assert await actual._failover_stt_socket()
+        successor = SafeSonioxSocket if enabled else SafeModulateSocket
+        assert [type(raw) for raw in raws] == [SafeSonioxSocket, successor]
+    finally:
+        actual.stt_socket.finish()
+        for leg in legs:
+            leg.finish()
         await stop(raws)

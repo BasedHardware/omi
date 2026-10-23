@@ -1,6 +1,14 @@
 name: OpenAPI Contract
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches:
       - main
@@ -47,8 +55,19 @@ permissions:
 concurrency:
   # Preserve every main/manual compatibility result while cancelling obsolete
   # PR revisions that can no longer merge.
-  group: openapi-contract-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  group: openapi-contract-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: true
+
+env:
+  # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches
+  # from github.com intermittently stop receiving data for 7-10 minutes before
+  # the connection resets (Backend Hermetic E2E run 39435458398 spent 498 s in
+  # "Checkout code" and hit its 10-minute cap). With these set, git aborts any
+  # transfer that stays under 1 KB/s for 60 s, and actions/checkout retries the
+  # fetch (its built-in 3 attempts); a healthy depth-1 fetch takes ~20 s.
+  # Applies to every git network call in the workflow, including script steps.
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   openapi-contract:
@@ -60,6 +79,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
 
       - name: Set up Python

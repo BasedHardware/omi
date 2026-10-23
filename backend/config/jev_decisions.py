@@ -14,9 +14,10 @@ disabled host cannot become enabled when the old gate is removed.
 
 from __future__ import annotations
 
-import hashlib
 import math
 import os
+
+from config.policy.batch import cohort_bucket
 from typing import Literal
 
 JEV_AUTO_LANE_ID = 'omi:auto:jev-decisions'
@@ -43,9 +44,7 @@ CONVERSATION_RELEVANCE_JEV_PERCENT_ENV = 'CONVERSATION_RELEVANCE_JEV_PERCENT'
 
 def uid_bucket(uid: str, salt: str) -> float:
     """Stable salted identity bucket; ``uid`` may also be a conversation ID."""
-    digest = hashlib.sha256(f'{salt}\0{uid}'.encode()).digest()
-    # Floating-point rounding of the largest uint64 must not produce 100.
-    return min(int.from_bytes(digest[:8], 'big') / 2**64 * 100, math.nextafter(100.0, 0.0))
+    return cohort_bucket(uid, salt, bits=64, separator='\0', clamp_upper=True, empty_salt_prefix=True)
 
 
 def percentage(name: str, *, default: float = 0.0) -> float:

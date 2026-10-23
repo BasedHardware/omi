@@ -333,9 +333,9 @@ and an overlapping context for the same entrypoint.
 | `routers/feedback_admin.py:generate_feedback_report` (scheduled/manual dated backfill) | `@read_origin('job:feedback_report_generate')` |
 
 Cron HTTP routes already receive their route-template origins without these
-optional job decorators. `main.py` also launches live-STT refresh, Soniox runway,
+optional job decorators. `main.py` also launches live-STT refresh,
 executor health and proactive dispatch with constant names; those receive
-`task:live_stt_fleet_health`, `task:soniox_runway`, `task:executor_health` and
+`task:live_stt_fleet_health`, `task:executor_health` and
 `task:proactive_message_dispatcher` automatically. S2's new startup queue publisher
 receives `task:startup_durable_queue_age_publish` automatically.
 

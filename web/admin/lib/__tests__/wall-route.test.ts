@@ -1,7 +1,10 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
 import { computeWall } from "../wall-metrics";
-vi.mock("@/lib/auth", () => ({ verifyAdmin: vi.fn() }));
+vi.mock("@/lib/auth", async () => {
+  const { testIdentity } = await import("./support/test-identity");
+  return { requireScope: vi.fn().mockResolvedValue(testIdentity()) };
+});
 vi.mock("@/lib/wall-cache", () => ({
   wallPayload: vi.fn(),
   wallSnapshotStore: () => undefined,
@@ -9,15 +12,16 @@ vi.mock("@/lib/wall-cache", () => ({
 vi.mock("@/lib/wall-local-fixture", () => ({
   localWallFixture: vi.fn(async () => null),
 }));
-import { verifyAdmin } from "../auth";
+import { requireScope } from "../auth";
 import { wallPayload } from "../wall-cache";
 import { GET } from "@/app/api/omi/stats/wall/route";
+import { testIdentity } from "./support/test-identity";
 const fail = async () => {
   throw new Error("source unavailable");
 };
 beforeEach(() => vi.clearAllMocks());
 it("retains admin authorization", async () => {
-  vi.mocked(verifyAdmin).mockResolvedValue(
+  vi.mocked(requireScope).mockResolvedValue(
     NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   );
   expect(
@@ -26,7 +30,7 @@ it("retains admin authorization", async () => {
   expect(wallPayload).not.toHaveBeenCalled();
 });
 it("all source failures yield 502 with every metric null and a reason", async () => {
-  vi.mocked(verifyAdmin).mockResolvedValue({ uid: "test" });
+  vi.mocked(requireScope).mockResolvedValue(testIdentity(undefined, "test"));
   vi.mocked(wallPayload).mockResolvedValue(
     await computeWall({
       query: fail,
@@ -48,7 +52,7 @@ it("all source failures yield 502 with every metric null and a reason", async ()
   expect(p.tiles.growth_wau.value).toBeNull();
 });
 it("partial fixtures preserve source timestamps and return usable aggregates", async () => {
-  vi.mocked(verifyAdmin).mockResolvedValue({ uid: "test" });
+  vi.mocked(requireScope).mockResolvedValue(testIdentity(undefined, "test"));
   const p = await computeWall({
     query: async () => [[0, "macos", 3]],
     shopify: fail,
@@ -68,7 +72,7 @@ it("partial fixtures preserve source timestamps and return usable aggregates", a
   expect(response.headers.get("Cache-Control")).toBe("private, no-store");
 });
 it("returns loading cards with 200 while a cold refresh is retained", async () => {
-  vi.mocked(verifyAdmin).mockResolvedValue({ uid: "test" });
+  vi.mocked(requireScope).mockResolvedValue(testIdentity(undefined, "test"));
   vi.mocked(wallPayload).mockResolvedValue({
     ...(await computeWall({
       query: fail,

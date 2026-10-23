@@ -23,6 +23,7 @@ from utils.stt.batch_pressure import BatchPressure
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.stt import streaming as st
+from utils.stt.live_reason import LOCAL_DELIVERY_REPLAY_SEND_STALLED
 from utils.observability.demand_cohort import record_metric
 from utils.observability.demand_cohort import demand_cohort
 from utils.observability.routing_cohort import current_routing_cohort
@@ -690,14 +691,22 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._dead_reason = reason
         if reason == 'capacity_full':
             self._capacity_subtype = capacity_subtype
-        if reason in {'first_text_deadline', 'empty_streak', 'capacity_full', 'replay_ring_overflow'}:
+        if reason in {
+            'first_text_deadline',
+            'empty_streak',
+            'capacity_full',
+            'replay_ring_overflow',
+            LOCAL_DELIVERY_REPLAY_SEND_STALLED,
+        }:
             self._typed_death_reason = reason
         # Observers must see the root cause before they see the dead latch.
         self._dead = True
         self.finish()
 
     def _shed_capacity(self) -> None:
-        st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+        st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+            error_class='capacity_full'
+        )
         self.fail('capacity_full', capacity_subtype='buffer_cap')
 
     def finish(self) -> None:
@@ -1232,7 +1241,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self.fail('capacity_full', capacity_subtype='queue_timeout')
                 response.raise_for_status()
             if response.status_code >= 500:
-                st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                    error_class='provider_5xx'
+                )
                 self.fail('provider_5xx')
                 response.raise_for_status()
             if response.status_code == 413:
@@ -1257,7 +1268,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self.fail('timeout')
             raise
         except (TimeoutError, httpx.TimeoutException):
-            st._parakeet_circuit.record_serve_failure()  # type: ignore[reportPrivateUsage]  # shared circuit owner
+            st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                error_class='timeout'
+            )
             self.fail('timeout')
             raise
         except Exception:

@@ -84,6 +84,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   final List<Timer> _ownedLifecycleTimers = [];
   bool _isProgrammaticScroll = false;
   int _lastObservedMessageCount = 0;
+  int _sendTurn = 0;
   String? _lastObservedMessageId;
   int _lastObservedTextLength = 0;
   int _lastObservedContentBlockCount = 0;
@@ -587,6 +588,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                           ValueListenableBuilder<TextEditingValue>(
                             valueListenable: textController,
                             builder: (context, value, child) {
+                              // While Omi answers, the empty composer offers Stop.
+                              if (value.text.isEmpty && provider.canStopReply) {
+                                return ChatComposerRoundButton(
+                                  buttonKey: const ValueKey('omi.chat.stop'),
+                                  icon: const Icon(Icons.stop),
+                                  label: context.l10n.stop,
+                                  onPressed: () {
+                                    OmiHaptics.light();
+                                    provider.stopReply();
+                                  },
+                                );
+                              }
                               if (value.text.isEmpty) {
                                 return ChatComposerRoundButton(
                                   icon: const FaIcon(FontAwesomeIcons.microphone),
@@ -599,7 +612,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                 );
                               }
                               final hasText = value.text.trim().isNotEmpty;
-                              if (!hasText || provider.sendingMessage) return const SizedBox.shrink();
+                              // A message sent while Omi answers replaces that reply.
+                              if (!hasText || (provider.sendingMessage && !provider.canStopReply)) {
+                                return const SizedBox.shrink();
+                              }
                               final canSend = !provider.isUploadingFiles && connectivityProvider.isConnected;
                               return ChatComposerRoundButton(
                                 buttonKey: const ValueKey('omi.chat.send'),
@@ -698,6 +714,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   _sendMessageUtil(String text) async {
     var provider = context.read<MessageProvider>();
+    // A new message while Omi is still answering stops that reply first. The
+    // earlier message stays in the thread, so the next reply sees both.
+    if (provider.canStopReply && !provider.isUploadingFiles) {
+      final draft = textController.text;
+      textController.clear();
+      await provider.stopReply(superseded: true);
+      if (!mounted) return;
+      if (provider.chatMutationInProgress) {
+        if (textController.text.isEmpty) textController.text = draft;
+        return;
+      }
+    }
     // Guard against re-entry (rapid double-tap of send, voice→transcribeSuccess
     // race firing onTranscriptReady twice, etc.). Without this the chat could
     // submit the same text twice and the AI replies twice.
@@ -724,10 +752,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     _resumeFollowingAndScroll(delayMs: 300, animated: true);
 
+    final turn = ++_sendTurn;
     await provider.sendMessageStreamToServer(text, context: _chatScope);
 
     // Plans sheet is shown reactively via _onMessageProviderChanged listener
 
+    // A newer message may already own the composer if this reply was replaced.
+    if (turn != _sendTurn) return;
     provider.clearSelectedFiles();
     provider.setSendingMessage(false);
   }

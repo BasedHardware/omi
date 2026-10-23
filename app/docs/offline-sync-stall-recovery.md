@@ -68,3 +68,64 @@ No customer diagnostic export or firmware version was supplied for the Discord
 0/127 case. These tests do not confirm that case's cause, cloud-worker state,
 physical microphone behavior, recap dependency or recoverability. A passing
 software regression and a merged PR are not a verified customer resolution.
+
+## Request refusals and deliberate recovery (#23049)
+
+A failed HTTP request is not proof that every recording in it is unusable.
+The upload owner isolates a refused multi-file 400/413 request into single-file
+attempts through the same serialized upload gate. Only a single-file refusal
+becomes `uploadRejected`; a successful split does not report the original
+request failure as a recording failure. Isolation is bounded to one original
+request plus at most one attempt per member in that pass (batches contain at
+most 20 files). Each iteration still reselects live-priority work, applies
+capture-manifest completeness rules and checks the account generation. File
+contents, ownership, capture times and consent are unchanged.
+
+HTTP 401/403 is an authentication pause, not an audio verdict. Stop the current
+drain, persist the exhausted retry budget and retain `miss` so a deliberate
+retry or the existing connectivity recovery can acquire fresh authentication.
+The single-file manual path persists the same pause. Do not recommend logout
+or reinstall to obtain new credentials while recordings may remain local.
+
+Historical `uploadRejected` rows do not retain enough evidence to decide
+whether one bad sibling, request size or old credentials caused the refusal.
+They remain excluded from automatic uploads. The existing explicit Try Again
+controls now re-arm those rows, including the error card and when a tap is
+coalesced into the transfer coordinator. The card, recording row and individual-file row share
+the same retry classification. A mixed recording retries only eligible files.
+On-device-only custody is excluded. Missing/corrupt files, confirmed unsupported
+audio and the server's recovery-window verdict are not re-armed. Existing
+play/share navigation stays available for retained audio.
+
+The original Needs Attention no-op (#21828) is already released in iOS 1.0.566,
+confirmed in its public App Store release notes on 2026-10-21. These additional
+request-refusal changes need merge and a mobile release; they introduce no
+backend API, firmware, bulk migration or data deletion. They do not bypass
+server timestamp validation or recover an unknown true recording time.
+
+The supplied support diagnostic excerpt reports stale phone-local backlog but
+contains no upload response or terminal reason. It does not establish which
+refusal (if any) affected the reported files or guarantee that they can decode.
+No customer audio or account records were accessed or modified.
+
+### Implementation / verification checklist
+
+- [x] Reproduce blanket batch refusal, auth classification and unreachable
+  persisted-refusal retry against unchanged main.
+- [x] Isolate 400/413 members through the existing upload owner and gate.
+- [x] Keep authentication failures retryable, durable and bounded.
+- [x] Re-arm preserved request refusals only on an explicit user gesture.
+- [x] Keep permanent audio/window verdicts and local-only custody excluded.
+- [x] Verify focused provider/state/UI tests, analyzer and native simulator
+  interaction; capture request counts, retained files and a valid WAV export.
+- [x] Complete the final full-suite (7,016 passed / 9 skipped, plus 138 spine
+  tests) and 25-check preflight after the error-card fix.
+- [ ] Merge and release mobile after CI/review.
+- [ ] Verify the customer's affected recordings and exported audio on the
+  actual phone; keep the incident open until that outcome is known.
+
+Regression commands (from `app/`):
+
+```sh
+flutter test test/unit/wal_upload_resilience_test.dart test/unit/wal_sync_display_state_test.dart test/providers/sync_provider_needs_attention_retry_test.dart test/providers/sync_provider_sync_wal_wake_test.dart test/pages/conversations/offline_sync_recording_blocks_test.dart test/widgets/sync_row_recovery_window_test.dart
+```

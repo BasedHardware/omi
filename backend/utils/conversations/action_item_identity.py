@@ -38,17 +38,6 @@ still need provider-side idempotency. First processing keeps today's order and a
 An unexpected planner exception falls back to the kill-switch plan (fresh ids, every
 row delivered, today's order), so the planner can never cost a conversation its tasks.
 
-Anchor shadow (measurement only). The log line also counts how many prior rows the exact
-rule left unmatched could be paired with an unmatched new item by stored structural
-provenance: the transcript segment ids each row cites for THIS conversation
-(``provenance[].transcript_segment_ids``, written by ``conversation_capture``). A pair
-needs at least ``ANCHOR_MIN_SHARED_SEGMENTS`` shared segment ids and must be one-to-one:
-the old row overlaps exactly one unmatched new item and that item overlaps exactly one
-unmatched old row. Every other overlap is ambiguous and never a pair. This compares
-record provenance, not task text, and its result is only logged: the plan, writes,
-deletions, deliveries and reminders are computed before it and never read it. Any
-exception in it is logged as ``shadow=error`` and swallowed; its kill switch is
-``ACTION_ITEM_IDENTITY_ANCHOR_SHADOW_ENABLED``.
 """
 
 from __future__ import annotations
@@ -56,11 +45,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, cast
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from config.action_item_identity_key import identity_key
 from config.action_item_identity import (
-    action_item_identity_anchor_shadow_enabled,
     action_item_identity_preserve_enabled,
 )
 from utils.conversations.processing_trigger import ProcessingTrigger
@@ -78,37 +66,6 @@ NEW = 'new'
 SKIPPED_EXPORTED = 'skipped_already_exported'
 DISABLED = 'disabled'
 OUTCOMES = (REUSED, NEW, SKIPPED_EXPORTED, DISABLED)
-
-# Anchor shadow: shared transcript segment ids an (old row, new item) pair needs. One is
-# the simplest structural rule; the one-to-one requirement, not a threshold, rejects splits.
-ANCHOR_MIN_SHARED_SEGMENTS = 1
-# The one field the shadow adds to the prior-row read (same query, no extra document).
-ANCHOR_READ_FIELDS = ('provenance',)
-SHADOW_FIELDS = (
-    'unmatched_prior',
-    'unmatched_prior_exported',
-    'unmatched_prior_ineligible',
-    'prior_without_anchor',
-    'unmatched_new',
-    'new_without_anchor',
-    'anchor_pairs',
-    'anchor_ambiguous',
-)
-_SHADOW_FORMAT = ' '.join(f'{name}=%d' for name in SHADOW_FIELDS)
-SHADOW_STATES = {True: 'ok', False: 'disabled'}  # plus 'error'
-# Reject an oversized measurement rather than sampling and reporting false pairs.
-ANCHOR_MAX_ROWS = 512
-ANCHOR_MAX_COMPARISONS = 65_536
-ANCHOR_MAX_PROVENANCE_ENTRIES = 64
-ANCHOR_MAX_SEGMENTS_PER_ROW = 512
-ANCHOR_MAX_TOTAL_SEGMENTS = 65_536
-ANCHOR_MAX_SEGMENT_ID_LENGTH = 256
-_MAX_LOG_COUNT = 2**31 - 1
-_SHADOW_ERROR_NAMES = frozenset({'RuntimeError', 'TypeError', 'ValueError', 'AssertionError', 'KeyError'})
-
-
-class AnchorShadowLimitExceeded(Exception):
-    """Measurement exceeded its work budget; the completed write plan is still valid."""
 
 
 def _instant(value: object) -> Optional[int]:
@@ -208,14 +165,6 @@ def _unchanged(items: Sequence[Dict[str, Any]]) -> ReplacementPlan:
     return ReplacementPlan(list(items), None, [DISABLED] * len(items), {}, False)
 
 
-def prior_read_kwargs() -> Dict[str, Any]:
-    """Extra keyword arguments for the prior-row read: the anchor field, only while the shadow runs."""
-    try:
-        return {'extra_fields': ANCHOR_READ_FIELDS} if action_item_identity_anchor_shadow_enabled() else {}
-    except Exception:
-        return {}  # fail-open: the read stays exactly today's, and _shadow logs the error
-
-
 def plan_replacement(
     conversation_id: str,
     items: Sequence[Dict[str, Any]],
@@ -249,7 +198,7 @@ def _plan(
     new_items = list(items)
     if not action_item_identity_preserve_enabled():
         plan = _unchanged(new_items)
-        return _emit(plan, len(prior_rows), _shadow(conversation_id, new_items, prior_rows, plan, trigger))
+        return _emit(plan, len(prior_rows), trigger)
 
     pools: Dict[str, List[Mapping[str, Any]]] = {}
     for row in prior_rows:
@@ -290,108 +239,10 @@ def _plan(
         kept[row_id] = bool(row.get('due_at')) and not row.get('completed')
         outcomes.append(SKIPPED_EXPORTED if row.get('exported') else REUSED)
     plan = ReplacementPlan(planned, document_ids if kept else None, outcomes, kept, bool(prior_rows))
-    return _emit(plan, len(prior_rows), _shadow(conversation_id, new_items, prior_rows, plan, trigger))
+    return _emit(plan, len(prior_rows), trigger)
 
 
-def _segment_anchor(row: Mapping[str, Any], conversation_id: str) -> frozenset[str]:
-    """Transcript segment ids this row's provenance cites for this conversation; empty means no anchor."""
-    anchor: set[str] = set()
-    provenance = row.get('provenance')
-    if not isinstance(provenance, (list, tuple)):
-        return frozenset()
-    if len(provenance) > ANCHOR_MAX_PROVENANCE_ENTRIES:
-        raise AnchorShadowLimitExceeded()
-    segment_count = 0
-    for entry in provenance:
-        evidence: Mapping[str, Any] = cast(Mapping[str, Any], entry) if isinstance(entry, Mapping) else {}
-        if evidence.get('kind') == 'conversation' and evidence.get('id') == conversation_id:
-            segments = evidence.get('transcript_segment_ids')
-            if not isinstance(segments, (list, tuple)):
-                continue
-            segment_count += len(segments)
-            if segment_count > ANCHOR_MAX_SEGMENTS_PER_ROW:
-                raise AnchorShadowLimitExceeded()
-            if any(isinstance(seg, str) and len(seg) > ANCHOR_MAX_SEGMENT_ID_LENGTH for seg in segments):
-                raise AnchorShadowLimitExceeded()
-            anchor.update(seg for seg in segments if isinstance(seg, str) and seg)
-    return frozenset(anchor)
-
-
-def _anchor_counts(
-    conversation_id: str,
-    items: Sequence[Mapping[str, Any]],
-    prior_rows: Sequence[Mapping[str, Any]],
-    plan: ReplacementPlan,
-    enabled: bool,
-) -> Dict[str, int]:
-    """Shadow counts over the rows the exact rule left unmatched. Reads its inputs; writes nothing."""
-    if enabled and max(len(prior_rows), len(items)) > ANCHOR_MAX_ROWS:
-        raise AnchorShadowLimitExceeded()
-    reused_ids = plan.reused_ids
-    unmatched_prior = [row for row in prior_rows if row.get('id') not in reused_ids]
-    exact = (REUSED, SKIPPED_EXPORTED)
-    unmatched_new = [item for item, outcome in zip(items, plan.outcomes) if outcome not in exact]
-    eligible = [row for row in unmatched_prior if _eligible(row, conversation_id)]
-    counts: Dict[str, int] = dict.fromkeys(SHADOW_FIELDS, 0)
-    counts.update(
-        unmatched_prior=len(unmatched_prior),
-        unmatched_prior_exported=sum(1 for row in unmatched_prior if row.get('exported')),
-        unmatched_prior_ineligible=len(unmatched_prior) - len(eligible),
-        unmatched_new=len(unmatched_new),
-    )
-    if not enabled:
-        return {name: min(value, _MAX_LOG_COUNT) for name, value in counts.items()}
-    if len(eligible) * len(unmatched_new) > ANCHOR_MAX_COMPARISONS:
-        raise AnchorShadowLimitExceeded()
-    old = [_segment_anchor(row, conversation_id) for row in eligible]
-    new = [_segment_anchor(item, conversation_id) for item in unmatched_new]
-    if sum(map(len, old)) + sum(map(len, new)) > ANCHOR_MAX_TOTAL_SEGMENTS:
-        raise AnchorShadowLimitExceeded()
-    # Degree counts avoid storing the graph and the former cubic dense-graph scan.
-    old_degree, new_degree = [0] * len(old), [0] * len(new)
-    sole_new = [0] * len(old)
-    for i, a in enumerate(old):
-        for j, b in enumerate(new):
-            if a and b and len(a & b) >= ANCHOR_MIN_SHARED_SEGMENTS:
-                old_degree[i] += 1
-                new_degree[j] += 1
-                sole_new[i] = j
-    pairs = sum(1 for i, degree in enumerate(old_degree) if degree == 1 and new_degree[sole_new[i]] == 1)
-    counts.update(
-        prior_without_anchor=sum(1 for a in old if not a),
-        new_without_anchor=sum(1 for b in new if not b),
-        anchor_pairs=pairs,
-        anchor_ambiguous=sum(1 for degree in old_degree if degree) - pairs,
-    )
-    return counts
-
-
-def _shadow(
-    conversation_id: str,
-    items: Sequence[Mapping[str, Any]],
-    prior_rows: Sequence[Mapping[str, Any]],
-    plan: ReplacementPlan,
-    trigger: object,
-) -> Dict[str, Any]:
-    """Bounded shadow log fields; fail-open, so the shadow can never touch the write path."""
-    fields: Dict[str, Any] = {'trigger': 'unknown', 'shadow': 'error', 'shadow_error': 'none'}
-    try:
-        if isinstance(trigger, ProcessingTrigger):
-            fields['trigger'] = trigger.value
-        enabled = action_item_identity_anchor_shadow_enabled()
-        fields.update(_anchor_counts(conversation_id, items, prior_rows, plan, enabled), shadow=SHADOW_STATES[enabled])
-    except Exception as error:
-        name = type(error).__name__
-        error_label = (
-            'budget_exceeded'
-            if isinstance(error, AnchorShadowLimitExceeded)
-            else (name if name in _SHADOW_ERROR_NAMES else 'Exception')
-        )
-        fields.update(dict.fromkeys(SHADOW_FIELDS, 0), shadow='error', shadow_error=error_label)
-    return fields
-
-
-def _emit(plan: ReplacementPlan, prior_rows: int, shadow: Mapping[str, Any]) -> ReplacementPlan:
+def _emit(plan: ReplacementPlan, prior_rows: int, trigger: object) -> ReplacementPlan:
     """One bounded metric per outcome and one log line per replace; never ids or task text."""
     counts = {outcome: plan.outcomes.count(outcome) for outcome in OUTCOMES}
     for outcome, count in counts.items():
@@ -403,17 +254,14 @@ def _emit(plan: ReplacementPlan, prior_rows: int, shadow: Mapping[str, Any]) -> 
     try:
         logger.info(
             'event=action_item_identity reused_identity=%d new=%d skipped_already_exported=%d disabled=%d '
-            'prior_rows=%d deliver_after_persist=%s trigger=%s shadow=%s shadow_error=%s ' + _SHADOW_FORMAT,
+            'prior_rows=%d deliver_after_persist=%s trigger=%s',
             counts[REUSED],
             counts[NEW],
             counts[SKIPPED_EXPORTED],
             counts[DISABLED],
             prior_rows,
             plan.deliver_after_persist,
-            shadow['trigger'],
-            shadow['shadow'],
-            shadow['shadow_error'],
-            *(shadow[name] for name in SHADOW_FIELDS),
+            trigger.value if isinstance(trigger, ProcessingTrigger) else 'unknown',
         )
     except Exception:
         pass

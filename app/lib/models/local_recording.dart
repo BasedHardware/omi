@@ -1,13 +1,13 @@
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/utils/batch_recording.dart';
+import 'package:omi/services/wals/wal.dart';
 
 /// Lifecycle of a local recording captured in batch/offline mode.
 enum LocalRecordingState {
   /// On disk, not yet uploaded. The user can transcribe it.
   pending,
 
-  /// Upload in flight (multipart POST to /v2/sync-local-files).
+  /// Upload in flight (multipart POST to custody upload).
   uploading,
 
   /// Uploaded; the server is transcribing in the background (job reconciling).
@@ -17,13 +17,7 @@ enum LocalRecordingState {
   failed,
 }
 
-/// A recording captured in batch/offline mode and written natively to the phone
-/// as a length-prefixed `.bin` file (see [BatchRecordingInfo]).
-///
-/// Unlike a WAL it is **not** backed by the offline-sync store — the file on
-/// disk is the single source of truth and this object is derived on demand by
-/// scanning the recordings directory (fieldy-style). Uploading one turns it
-/// into a conversation. See [LocalRecordingsProvider].
+/// A Home view of a user-held custody WAL.
 class LocalRecording {
   /// The `.bin` file name. Doubles as the stable id and the relative path that
   /// `AudioPlayerUtils`/`Wal.getFilePath` resolve against the app documents dir.
@@ -63,6 +57,25 @@ class LocalRecording {
     this.jobId,
   });
 
+  factory LocalRecording.fromWal(Wal wal, {required String filePath, required int sizeBytes}) => LocalRecording(
+        fileName: wal.filePath!,
+        filePath: filePath,
+        timerStart: wal.timerStart,
+        codec: wal.codec,
+        frameSize: wal.frameSize,
+        sizeBytes: sizeBytes,
+        seconds: wal.seconds,
+        geolocation: wal.geolocation,
+        jobId: wal.jobId,
+        state: wal.isSyncing
+            ? LocalRecordingState.uploading
+            : wal.status == WalStatus.uploaded
+                ? LocalRecordingState.processing
+                : wal.retryCount > 0 || wal.status != WalStatus.miss
+                    ? LocalRecordingState.failed
+                    : LocalRecordingState.pending,
+      );
+
   String get id => fileName;
 
   DateTime get startedAt => DateTime.fromMillisecondsSinceEpoch(timerStart * 1000);
@@ -70,31 +83,4 @@ class LocalRecording {
   /// True while uploading or processing — playback/delete stay allowed, but a
   /// second upload must not start.
   bool get isBusy => state == LocalRecordingState.uploading || state == LocalRecordingState.processing;
-
-  /// Build from a finalized batch `.bin` file on disk. Returns null if [fileName]
-  /// isn't a parseable recording filename or the file is empty.
-  static LocalRecording? fromFile({
-    required String fileName,
-    required String filePath,
-    required int sizeBytes,
-    int? seconds,
-    Geolocation? geolocation,
-    String? jobId,
-    required LocalRecordingState state,
-  }) {
-    final info = BatchRecordingInfo.fromFileName(fileName);
-    if (info == null || sizeBytes <= 0) return null;
-    return LocalRecording(
-      fileName: fileName,
-      filePath: filePath,
-      timerStart: info.timerStart,
-      codec: info.codec,
-      frameSize: info.frameSize,
-      sizeBytes: sizeBytes,
-      seconds: seconds ?? info.estimateSeconds(sizeBytes),
-      geolocation: geolocation,
-      jobId: jobId,
-      state: state,
-    );
-  }
 }

@@ -40,6 +40,7 @@ ERROR_TYPES = {
     'ServiceUnavailable',
     'NotFound',
     'DeadlineExceeded',
+    'FirestoreContentionExhausted',
     'AdmissionDenied',
     'AgentTranscriptReadError',
     'InvalidModelResponse',

@@ -78,24 +78,80 @@ def test_cohort_pinned_at_admission_even_after_kill(monkeypatch, enabled, percen
 
 
 @pytest.mark.parametrize(
-    'field,value',
+    'field,value,reason',
     [
-        ('recovery_enabled', False),
-        ('is_multi_channel', True),
-        ('use_custom_stt', True),
-        ('multi_lang_enabled', True),
-        ('language', 'pt'),
-        ('source', 'phone_call'),
-        ('onboarding_mode', True),
+        ('recovery_enabled', False, 'recovery_off'),
+        ('is_multi_channel', True, 'unmanaged_chain'),
+        ('use_custom_stt', True, 'unmanaged_chain'),
+        ('multi_lang_enabled', True, 'language_unqualified'),
+        ('language', 'pt', 'language_unqualified'),
+        ('language_profile', None, 'no_profile'),
+        ('source', 'phone_call', 'phone_call'),
+        ('onboarding_mode', True, 'onboarding'),
     ],
 )
-def test_safety_exclusions_never_become_control(monkeypatch, field, value):
+def test_safety_exclusions_never_become_control(monkeypatch, field, value, reason):
     monkeypatch.setattr(demand_routing, 'managed_chain_enabled', lambda _: True)
     monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
     monkeypatch.setenv('STT_LIVE_DEMAND_PERCENT', '100')
     h = host()
     setattr(h.request if field in {'source', 'onboarding_mode'} else h, field, value)
-    assert demand_routing.capture_demand_admission(h).cohort == 'ineligible'
+    pinned = demand_routing.capture_demand_admission(h)
+    assert pinned.cohort == 'ineligible'
+    # The first failing admission condition names the exclusion (ruling f12e4a).
+    assert pinned.ineligible_reason == reason
+
+
+def test_ineligible_reason_is_the_first_failing_condition_and_eligible_has_none(monkeypatch):
+    monkeypatch.setattr(demand_routing, 'managed_chain_enabled', lambda _: True)
+    monkeypatch.setenv('STT_LIVE_DEMAND_ENABLED', 'true')
+    monkeypatch.setenv('STT_LIVE_DEMAND_PERCENT', '100')
+    h = host()
+    h.recovery_enabled = False
+    h.request.source = 'phone_call'  # also fails, but recovery is checked first
+    assert demand_routing.ineligible_reason(h) == 'recovery_off'
+    assert demand_routing.capture_demand_admission(h).ineligible_reason == 'recovery_off'
+    assert demand_routing.ineligible_reason(host()) is None
+    eligible = demand_routing.capture_demand_admission(host())
+    assert eligible.cohort == 'admitted' and eligible.ineligible_reason == 'none'
+    # Bounded: a reason only exists for the ineligible cohort and only from the closed set.
+    assert telemetry.DemandTelemetry('admitted', 'phone_call').ineligible_reason == 'none'
+    assert telemetry.DemandTelemetry('ineligible', 'free text').ineligible_reason == 'none'
+    assert telemetry.DemandTelemetry('ineligible', 'no_profile').ineligible_reason == 'no_profile'
+
+
+def test_exhausted_sessions_carry_the_ineligible_reason_and_zero_children_exist():
+    pinned = telemetry.DemandTelemetry('ineligible', 'unmanaged_chain')
+    before = value(
+        telemetry.EXHAUSTED_SESSIONS, demand_cohort='ineligible', outcome='no', ineligible_reason='unmanaged_chain'
+    )
+    pinned.finish()
+    assert (
+        value(
+            telemetry.EXHAUSTED_SESSIONS, demand_cohort='ineligible', outcome='no', ineligible_reason='unmanaged_chain'
+        )
+        - before
+        == 1
+    )
+    for reason in telemetry.INELIGIBLE_REASONS:
+        for outcome in ('yes', 'no'):
+            assert (
+                REGISTRY.get_sample_value(
+                    'omi_listen_demand_exhausted_sessions_total',
+                    {'demand_cohort': 'ineligible', 'outcome': outcome, 'ineligible_reason': reason},
+                )
+                is not None
+            ), (reason, outcome)
+    # 'none' exists for every cohort: the eligible ones always, and ineligible
+    # for a session a batch preview moved there after admission.
+    for cohort in ('admitted', 'eligible_control', 'ineligible'):
+        assert (
+            REGISTRY.get_sample_value(
+                'omi_listen_demand_exhausted_sessions_total',
+                {'demand_cohort': cohort, 'outcome': 'yes', 'ineligible_reason': 'none'},
+            )
+            is not None
+        )
 
 
 def value(metric, **labels):
@@ -169,7 +225,7 @@ def test_exhausted_session_is_once_and_not_hop_count(monkeypatch):
     monkeypatch.setattr('utils.observability.fallback.logger.warning', lambda *a, **k: None)
     cohort = telemetry.DemandTelemetry('admitted')
     telemetry.current_demand.set(cohort)
-    before = value(telemetry.EXHAUSTED_SESSIONS, demand_cohort='admitted', outcome='yes')
+    before = value(telemetry.EXHAUSTED_SESSIONS, demand_cohort='admitted', outcome='yes', ineligible_reason='none')
     for _ in range(2):
         record_fallback(
             component='stt_live_session',
@@ -180,7 +236,10 @@ def test_exhausted_session_is_once_and_not_hop_count(monkeypatch):
         )
     cohort.finish()
     cohort.finish()
-    assert value(telemetry.EXHAUSTED_SESSIONS, demand_cohort='admitted', outcome='yes') - before == 1
+    assert (
+        value(telemetry.EXHAUSTED_SESSIONS, demand_cohort='admitted', outcome='yes', ineligible_reason='none') - before
+        == 1
+    )
 
 
 def test_capture_and_first_output_and_visible_return_use_real_clocks(monkeypatch):
@@ -215,8 +274,20 @@ def test_metrics_only_expose_closed_labels():
     ):
         for family in metric.collect():
             for sample in family.samples:
-                assert set(sample.labels) <= {'demand_cohort', 'provider', 'outcome', 'trigger', 'le'}
+                assert set(sample.labels) <= {
+                    'demand_cohort',
+                    'provider',
+                    'outcome',
+                    'trigger',
+                    'le',
+                    'ineligible_reason',
+                }
                 assert sample.labels['demand_cohort'] in telemetry.DEMAND_COHORTS
+                reason = sample.labels.get('ineligible_reason')
+                if reason is not None:
+                    assert reason in telemetry.INELIGIBLE_REASONS or reason == 'none'
+                    if sample.labels['demand_cohort'] != 'ineligible':
+                        assert reason == 'none'
     for cohort in telemetry.DEMAND_COHORTS:
         assert (
             REGISTRY.get_sample_value(

@@ -17,7 +17,7 @@ import utils.conversations.audio_placement as placement_module
 from models.audio_file import AudioFile, ChunkSpan
 from models.conversation import AudioTimelineProvenance, Conversation
 from models.structured import Structured
-from models.transcript_segment import TranscriptSegment
+from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
 from utils.conversations import speaker_resolution as stage
 from utils.conversations.audio_placement import prepare_audio_coverage
 from utils.conversations.smart_merge_policy import rebase_donor_segments
@@ -132,6 +132,11 @@ def _load_baseline_stage():
         capture_output=True,
         text=True,
     ).stdout
+    # Pin historical consumer code ON after DEC-PRD-004 removes its config reader.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType('speaker_resolution_pinned_baseline')
     exec(compile(source, 'speaker_resolution.py', 'exec'), module.__dict__)
     return module
@@ -173,6 +178,11 @@ def _round3_module(name, relpath):
         capture_output=True,
         text=True,
     ).stdout
+    # Pin historical consumer code ON after DEC-PRD-004 removes its config reader.
+    source = source.replace(
+        'from config.audio_timeline import live_speaker_span_resolution_enabled',
+        'def live_speaker_span_resolution_enabled(): return True',
+    )
     module = types.ModuleType(name)
     exec(compile(source, relpath, 'exec'), module.__dict__)
     return module
@@ -225,8 +235,6 @@ def _install_audio(monkeypatch, plan, seconds=4.0, offset=0.0):
 
 
 def _span_flags(monkeypatch):
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'true')
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
 
 
@@ -505,7 +513,7 @@ def test_live_scopes_are_not_resolved_until_their_audio_timeline_is_trusted(env,
     assert [s.speaker_id for s in conversation.transcript_segments] == [0, 1, 2, 3]
 
 
-def test_legacy_sync_donor_scope_does_not_block_conversation_resolution(env, monkeypatch):
+def test_unproven_legacy_donor_abstains_without_blocking_other_sync_voices(env, monkeypatch):
     plan = [0, 1] * 6
     _install_audio(monkeypatch, plan)
     scopes = [f'sync:job-{i}' for i in range(len(plan))]
@@ -515,7 +523,9 @@ def test_legacy_sync_donor_scope_does_not_block_conversation_resolution(env, mon
     stage.resolve_speakers_for_processing('u1', conversation)
 
     assert conversation.speaker_resolution.status == 'resolved'
-    assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
+    assert conversation.transcript_segments[0].speaker_identity_status == SpeakerIdentityStatus.unknown
+    assert len({s.speaker_id for s in conversation.transcript_segments[1:]}) == 2
+    assert env[1].calls == len(plan) - 1
 
 
 def test_a_resolved_conversation_that_grew_by_sync_resolves_again(env, monkeypatch):
@@ -698,26 +708,6 @@ def test_span_resolution_refuses_when_the_manifest_has_an_uncovered_hole(env, mo
     assert conversation.speaker_resolution.status == 'unavailable'
 
 
-def test_consumer_off_preserves_capture_span_cache_and_never_reembeds(env, monkeypatch):
-    """Rollback guard: OFF must not prune capture-span keys or re-embed at legacy coordinates."""
-    store, diarizer = env
-    conversation = _conversation([0, 1] * 4)
-    blob = stage.encode_cache(
-        {
-            'capture-span:s0:1700000100.0:1700000103.8': (3.8, np.ones(64, dtype=np.float32)),
-            's1': (3.8, np.zeros(64, dtype=np.float32)),
-        }
-    )
-    store['c1'] = blob
-    _install_audio(monkeypatch, [0, 1] * 4)
-
-    stage.resolve_speakers_for_processing('u1', conversation)
-
-    assert diarizer.calls == 0
-    assert store['c1'] == blob
-    assert conversation.speaker_resolution.status == 'unavailable'
-
-
 def test_shifted_capture_window_reembeds_only_the_shifted_entry(env, monkeypatch):
     _span_flags(monkeypatch)
     _, diarizer = env
@@ -832,51 +822,6 @@ def test_span_on_placeable_sync_and_v2_segments_with_capture_fields_reuse_bare_c
     assert set(stage.decode_cache(store['c1'])) == keys
 
 
-def test_on_then_off_cache_intact_refuses_without_touching_the_cache(env, monkeypatch):
-    """A real ON->OFF rollback: the capture-span cache stays byte-identical and
-    nothing re-embeds at legacy coordinates."""
-    _span_flags(monkeypatch)
-    store, diarizer = env
-    plan = [0, 1] * 4
-    _install_audio(monkeypatch, plan, offset=180.0)
-    conversation = _capture_shifted_conversation(plan)
-    stage.resolve_speakers_for_processing('u1', conversation)
-    assert conversation.speaker_resolution.status == 'resolved'
-    cached_blob = store['c1']
-    calls_after_on = diarizer.calls
-
-    monkeypatch.delenv('LIVE_SPEAKER_SPAN_RESOLUTION')
-    stage.resolve_speakers_for_processing('u1', conversation)
-
-    assert conversation.speaker_resolution.status == 'capture'
-    assert diarizer.calls == calls_after_on
-    assert store['c1'] == cached_blob
-
-
-@pytest.mark.parametrize('missing', ['absent', 'corrupt'])
-def test_on_then_off_missing_or_corrupt_cache_refuses_before_any_embedding(env, monkeypatch, missing):
-    """Rollback with a vanished or undecodable cache: OFF must refuse rather
-    than embed previously-resolved capture segments at provider coordinates."""
-    _span_flags(monkeypatch)
-    store, diarizer = env
-    plan = [0, 1] * 4
-    _install_audio(monkeypatch, plan, offset=180.0)
-    conversation = _capture_shifted_conversation(plan)
-    stage.resolve_speakers_for_processing('u1', conversation)
-    assert conversation.speaker_resolution.status == 'resolved'
-    calls_after_on = diarizer.calls
-    if missing == 'absent':
-        del store['c1']
-    else:
-        store['c1'] = b'\x00\x01\x02corrupt'
-
-    monkeypatch.delenv('LIVE_SPEAKER_SPAN_RESOLUTION')
-    stage.resolve_speakers_for_processing('u1', conversation)
-
-    assert conversation.speaker_resolution.status == 'capture'
-    assert diarizer.calls == calls_after_on
-
-
 def test_shadow_placement_metrics_count_per_segment_and_reason_metrics_once_per_outcome(env, monkeypatch):
     _span_flags(monkeypatch)
     _, diarizer = env
@@ -899,11 +844,9 @@ def test_shadow_placement_metrics_count_per_segment_and_reason_metrics_once_per_
     assert placed('capture_span', 'resolved') == (len(plan), 1)
 
 
-def test_off_shadow_metrics_measure_capture_readiness_without_changing_behavior(env, monkeypatch):
-    """Consumer OFF: advisory locate still counts capture_span per embeddable
-    segment while legacy resolution keeps sync-only behavior."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+def test_graduated_consumer_resolves_capture_windows_by_default(env, monkeypatch):
+    """The graduated consumer resolves proven live windows with no env opt-in."""
+
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
     _, diarizer = env
     plan = [0, 1] * 4
@@ -914,15 +857,13 @@ def test_off_shadow_metrics_measure_capture_readiness_without_changing_behavior(
     stage.resolve_speakers_for_processing('u1', conversation)
 
     assert OMI_AUDIO_PLACEMENT_TOTAL.labels(reason='capture_span')._value.get() == before + len(plan)
-    assert diarizer.calls == 0
-    assert conversation.speaker_resolution.status == 'unavailable'
+    assert diarizer.calls == len(plan)
+    assert conversation.speaker_resolution.status == 'resolved'
 
 
-def test_off_shadow_records_sync_reason_without_span_manifest(env, monkeypatch):
-    """Consumer OFF shadow queries the index even when no manifest exists:
-    sync-scoped segments still measure sync, not a skipped measurement."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+def test_consumer_records_sync_reason_without_span_manifest(env, monkeypatch):
+    """Sync-scoped segments still resolve without a span manifest."""
+
     _, diarizer = env
     plan = [0, 1] * 4
     _install_audio(monkeypatch, plan)
@@ -936,11 +877,9 @@ def test_off_shadow_records_sync_reason_without_span_manifest(env, monkeypatch):
     assert diarizer.calls == len(plan)
 
 
-def test_off_shadow_records_untrusted_clock_for_live_no_spans(env, monkeypatch):
-    """Consumer OFF shadow with an unvalidated (absent) manifest still
-    measures each live segment's refusal instead of skipping it."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+def test_consumer_records_untrusted_clock_for_live_no_spans(env, monkeypatch):
+    """An absent manifest records refusal for every unproven live window."""
+
     _, diarizer = env
     plan = [0, 1] * 4
     _install_audio(monkeypatch, plan, offset=180.0)
@@ -952,32 +891,6 @@ def test_off_shadow_records_untrusted_clock_for_live_no_spans(env, monkeypatch):
     assert OMI_AUDIO_PLACEMENT_TOTAL.labels(reason='untrusted_clock')._value.get() == before + len(plan)
     assert conversation.speaker_resolution.status == 'unavailable'
     assert diarizer.calls == 0
-
-
-def test_off_advisory_zero_budget_never_locates_even_with_empty_manifest(env, monkeypatch):
-    """An already-spent shadow budget skips dumps, preparation and lookups
-    entirely — an empty manifest must not open a free pass."""
-    monkeypatch.setenv('AUDIO_TIMELINE_SPANS', 'true')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
-    _, diarizer = env
-    plan = [0, 1] * 4
-    _install_audio(monkeypatch, plan)
-    monkeypatch.setattr(stage, 'ADVISORY_PLACEMENT_SECONDS', 0.0)
-    locate_calls = []
-    real_locate = stage.locate
-
-    def counting_locate(*args, **kwargs):
-        locate_calls.append(args)
-        return real_locate(*args, **kwargs)
-
-    monkeypatch.setattr(stage, 'locate', counting_locate)
-
-    conversation = _conversation(plan)
-    stage.resolve_speakers_for_processing('u1', conversation)
-
-    assert locate_calls == []
-    assert conversation.speaker_resolution.status == 'resolved'
-    assert diarizer.calls == len(plan)
 
 
 def test_span_on_single_live_scope_unplaceable_is_unavailable_not_capture(env, monkeypatch):
@@ -1237,102 +1150,6 @@ def test_span_on_prepares_coverage_once_per_stage(env, monkeypatch):
     assert len(prepare_calls) == 1
 
 
-def test_off_advisory_is_bounded_and_does_not_delay_legacy_embeddings(env, monkeypatch):
-    """Shadow placement measurement stops at its bounds; legacy embedding,
-    status and cache are exactly what they were without the shadow."""
-    store, diarizer = env
-    plan = [0, 1] * 4
-    _install_audio(monkeypatch, plan)
-    conversation = _conversation(plan)
-    origin = STARTED.timestamp()
-    conversation.audio_files = [_span_manifest(origin, [(origin, origin + len(plan) * 4.0)])]
-    monkeypatch.setattr(stage, 'MAX_ADVISORY_PLACEMENTS', 3)
-    locate_calls = []
-    real_locate = stage.locate
-
-    def counting_locate(*args, **kwargs):
-        locate_calls.append(args)
-        return real_locate(*args, **kwargs)
-
-    monkeypatch.setattr(stage, 'locate', counting_locate)
-
-    stage.resolve_speakers_for_processing('u1', conversation)
-
-    assert conversation.speaker_resolution.status == 'resolved'
-    assert diarizer.calls == len(plan)
-    assert len(locate_calls) <= 3
-    assert 'c1' in store
-
-
-@pytest.mark.parametrize('bound', ['count', 'time'])
-def test_off_advisory_bound_skips_manifest_serialization(env, monkeypatch, bound):
-    store, diarizer = env
-    plan = [0, 1] * 4
-    _install_audio(monkeypatch, plan)
-    conversation = _conversation(plan)
-    origin = STARTED.timestamp()
-    conversation.audio_files = [_span_manifest(origin, [(origin + i * 4.0, origin + i * 4.0 + 4.0) for i in range(20)])]
-    if bound == 'count':
-        monkeypatch.setattr(stage, 'MAX_PLACEMENT_SPANS', 10)
-    else:
-        monkeypatch.setattr(stage, 'ADVISORY_PLACEMENT_SECONDS', 0.0)
-
-    dump_calls = []
-    real_dump = AudioFile.model_dump
-
-    def counting_dump(self, *args, **kwargs):
-        dump_calls.append(self)
-        return real_dump(self, *args, **kwargs)
-
-    monkeypatch.setattr(AudioFile, 'model_dump', counting_dump)
-
-    stage.resolve_speakers_for_processing('u1', conversation)
-
-    assert conversation.speaker_resolution.status == 'resolved'
-    assert diarizer.calls == len(plan)
-    assert dump_calls == []
-    assert 'c1' in store
-
-
-def test_off_advisory_elapsed_extends_the_legacy_embedding_deadline(env, monkeypatch):
-    store, diarizer = env
-    plan = [0, 1] * 4
-    _install_audio(monkeypatch, plan)
-    conversation = _conversation(plan)
-    origin = STARTED.timestamp()
-    conversation.audio_files = [_span_manifest(origin, [(origin, origin + len(plan) * 4.0)])]
-    monkeypatch.setattr(stage, 'ADVISORY_PLACEMENT_SECONDS', 60.0)
-
-    values = []
-
-    def fake_monotonic():
-        value = 100.0 + len(values) * 0.05
-        values.append(value)
-        return value
-
-    monkeypatch.setattr(time, 'monotonic', fake_monotonic)
-
-    captured = {}
-    real_embed = stage._embed_missing
-
-    def spy_embed(uid, conv, pending, cache, deadline, **kwargs):
-        captured['deadline'] = deadline
-        captured['ticks_at_entry'] = len(values)
-        return real_embed(uid, conv, pending, cache, deadline, **kwargs)
-
-    monkeypatch.setattr(stage, '_embed_missing', spy_embed)
-
-    stage.resolve_speakers_for_processing('u1', conversation)
-
-    assert conversation.speaker_resolution.status == 'resolved'
-    assert 'deadline' in captured
-    base = values[0] + stage._budget_seconds()
-    advisory_began = values[2]
-    last_advisory_read = values[captured['ticks_at_entry'] - 1]
-    assert captured['deadline'] > base
-    assert captured['deadline'] == pytest.approx(base + (last_advisory_read - advisory_began))
-
-
 def test_on_deadline_expiry_refuses_before_any_embedding(env, monkeypatch):
     _span_flags(monkeypatch)
     store, diarizer = env
@@ -1374,11 +1191,10 @@ def test_on_saved_sync_source_in_ambiguous_manifest_still_refuses(env, monkeypat
 def test_grouping_shadow_reuses_cache_no_new_model_calls_and_manual_overlay(monkeypatch, env, caplog):
     store, diarizer = env
     plan = [0, 1, 0, 1]
-    audio = FakeAudio(plan, seconds=8)
-    monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', audio)
+    audio = _install_audio(monkeypatch, plan, seconds=8)
     monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': VOICES[0]})
     monkeypatch.setenv('SPEAKER_GROUPING_SHADOW', 'off')
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     c = _conversation(plan, seconds=8)
     stage.resolve_speakers_for_processing('owner', c)
     calls, downloads = diarizer.calls, audio.downloads
@@ -1410,9 +1226,9 @@ def test_shadow_failure_does_not_withdraw_incumbent_resolution(monkeypatch, env)
     from utils.conversations import speaker_grouping_shadow as shadow
 
     plan = [0, 0]
-    monkeypatch.setattr(stage, 'iter_audio_chunk_pcm', FakeAudio(plan, seconds=8))
+    _install_audio(monkeypatch, plan, seconds=8)
     monkeypatch.setattr(stage, 'load_voiceprints_for_resolution', lambda *a, **kw: {'user': VOICES[0]})
-    monkeypatch.setenv('LIVE_SPEAKER_SPAN_RESOLUTION', 'false')
+
     monkeypatch.setenv('SPEAKER_GROUPING_SHADOW', 'cohort')
     monkeypatch.setenv('SPEAKER_GROUPING_SHADOW_PERCENT', '100')
     monkeypatch.setattr(shadow, 'count', lambda *a, **kw: (_ for _ in ()).throw(RuntimeError('metric down')))

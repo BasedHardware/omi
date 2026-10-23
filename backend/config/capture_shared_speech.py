@@ -1,8 +1,9 @@
 """Deterministic capture grouping rollout; no IO or import-time env snapshots."""
 
-import hashlib
 import math
 import os
+
+from config.policy.batch import cohort_bucket
 
 MODE_ENV = 'CAPTURE_SHARED_SPEECH_MODE'
 ALLOWLIST_ENV = 'CAPTURE_SHARED_SPEECH_UID_ALLOWLIST'
@@ -27,5 +28,5 @@ def shared_speech_mode(uid: str) -> str:
         return 'off'
     if not math.isfinite(percent) or not 0 <= percent <= 100:
         return 'off'
-    bucket = int.from_bytes(hashlib.sha256(f'capture_shared_speech_v1:{uid}'.encode()).digest()[:8], 'big')
-    return mode if bucket / 2**64 * 100 < percent else 'off'
+    bucket = cohort_bucket(uid, 'capture_shared_speech_v1', bits=64)
+    return mode if bucket < percent else 'off'

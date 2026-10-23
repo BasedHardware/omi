@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from utils.observability.sync_phases import sync_phase
 from config.batch_pipeline import live_record_enabled_for, record_capture_eligible
+from config.policy import resolve_batch_policy
+from database.batch_ramp import ramp_admission_policy
 
 import logging
 import os
@@ -20,10 +22,13 @@ from typing import Any, Mapping, Optional
 
 from database.helpers import set_data_protection_level
 from database import conversation_finalization_jobs as jobs_db
+from utils.conversations import merge_conversations_job
+
 from database import conversations as conversations_db
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database import sync_cap_recovery
+from database import stuck_backfill as stuck_backfill_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
@@ -38,6 +43,7 @@ from utils.conversations.finalization_decision import (
     LifecyclePhase,
     decide_finalization,
 )
+from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_intake_outcome
@@ -48,6 +54,7 @@ from utils.conversation_shape import observe_completed_conversation_shape
 from utils.product_metrics import record_product_event
 
 logger = logging.getLogger(__name__)
+merge_jobs = merge_conversations_job
 
 _STATUS_TRANSITIONS = {
     ConversationStatus.in_progress.value: {
@@ -103,7 +110,13 @@ def _require_status(data: Mapping[str, Any], *allowed: ConversationStatus) -> No
 def _reserve_batch_live_capture(uid: str, conversation_data: dict[str, Any]) -> None:
     # Resolve privacy at the existing write boundary before deciding ownership.
     # The downstream DB decorator sees the resolved value and performs no second lookup.
-    if record_capture_eligible(uid, conversation_data):
+    if conversation_data.get('record_lane_owner'):
+        return
+    policy = resolve_batch_policy(uid)
+    if (
+        record_capture_eligible(uid, conversation_data, policy=policy)
+        and ramp_admission_policy(uid, policy).live_record_enabled
+    ):
         conversation_data['record_lane_owner'] = 'batch_live_v1'
 
 
@@ -214,34 +227,32 @@ def transition(
     conversation_id: str,
     target: ConversationStatus,
     *,
-    expected: ConversationStatus | None = None,
+    expected: ConversationStatus,
     extra_updates: dict[str, Any] | None = None,
+    expected_fields: dict[str, Any] | None = None,
+    allow_discarded: bool = False,
 ) -> bool:
     """Apply one typed status transition, failing closed on an invalid state.
 
-    A discard does not block one.  It is the system's verdict that a
-    conversation held nothing, and a later sync can arrive carrying the speech
-    it was missing; treating it as terminal left such a conversation stuck at
-    whatever status it was wearing when the verdict was made.
+    Processing admission keeps its discard fence. Explicit user merges may
+    include completed discarded sources while preserving their verdict.
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if not conversation:
         raise LifecycleTransitionError(f'conversation {conversation_id} does not exist')
     current = _status_value(conversation.get('status'))
-    if expected is not None and current != expected.value:
+    if current != expected.value:
         return False
     if target.value not in _STATUS_TRANSITIONS.get(current, set()):
         raise LifecycleTransitionError(f'invalid lifecycle transition {current}->{target.value}')
-    if expected is not None:
-        return conversations_db.claim_conversation_status(
-            uid,
-            conversation_id,
-            expected,
-            target,
-            extra_updates=extra_updates,
-        )
-    conversations_db.transition_conversation_status(uid, conversation_id, target)
-    return True
+    guards = {}
+    if expected_fields is not None:
+        guards['expected_fields'] = expected_fields
+    if allow_discarded:
+        guards['allow_discarded'] = True
+    return conversations_db.claim_conversation_status(
+        uid, conversation_id, expected, target, extra_updates=extra_updates, **guards
+    )
 
 
 def admit_processing(uid: str, conversation_id: str, *, extra_updates: dict[str, Any] | None = None) -> bool:
@@ -288,6 +299,7 @@ def complete(uid: str, conversation_id: str) -> bool:
         conversation_id,
         ConversationStatus.merging,
         ConversationStatus.completed,
+        allow_discarded=True,
     )
 
 
@@ -465,12 +477,35 @@ def recover_deferred_processing_failure(uid: str, conversation_id: str) -> bool:
 
 
 def begin_merge(uid: str, conversation_id: str) -> bool:
-    return transition(uid, conversation_id, ConversationStatus.merging)
+    return transition(
+        uid,
+        conversation_id,
+        ConversationStatus.merging,
+        expected=ConversationStatus.completed,
+        expected_fields={'deleted': False, 'is_locked': False},
+        allow_discarded=True,
+    )
 
 
 def discard(uid: str, conversation_id: str) -> None:
     """Discard is terminal and deliberately cannot be undone by a generic write."""
     conversations_db.set_conversation_as_discarded(uid, conversation_id)
+
+
+def rule_discard_outcome(
+    uid: str,
+    conversation_id: str,
+    relevance_decision: dict[str, Any],
+    *,
+    expected_sync_content_revision: Optional[int] = None,
+) -> str:
+    """``discarded`` on a write, ``already_discarded`` for a stored hide, else ``refused``."""
+    return conversations_db.rule_discard_outcome(
+        uid,
+        conversation_id,
+        relevance_decision,
+        expected_sync_content_revision=expected_sync_content_revision,
+    )
 
 
 def discard_by_relevance(
@@ -687,14 +722,24 @@ def delete_empty_recording_conversation(
     uid: str,
     conversation_id: str,
     recording_session_id: str | None,
+    *,
+    recovery_cutoff: datetime | None = None,
+    require_expired_recording_lease: bool = False,
+    firestore_client: Any = None,
 ) -> bool:
     """Delete only a still-empty listen generation and tombstone it atomically."""
     deleted_conversation: dict[str, Any] = {}
+    recovery_guards: dict[str, Any] = {}
+    if require_expired_recording_lease:
+        recovery_guards = dict(recovery_cutoff=recovery_cutoff, require_expired_recording_lease=True)
+    if firestore_client is not None:
+        recovery_guards['firestore_client'] = firestore_client
     deleted = recording_sessions_db.tombstone_and_delete_empty_conversation(
         uid,
         conversation_id,
         recording_session_id,
         deleted_conversation=deleted_conversation,
+        **recovery_guards,
     )
     if deleted:
         # Remove the search projection before photo/audio cleanup: a later
@@ -888,9 +933,15 @@ def request_finalization(
     client_kind: object = 'unknown',
     app_build: object = 'unknown',
     recovery_cutoff: datetime | None = None,
+    require_expired_recording_lease: bool = False,
     firestore_client: Any = None,
+    expected_update_time: datetime | None = None,
+    backfill_run_id: str | None = None,
+    expected_session_revision: str | None = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
+    if trigger is ProcessingTrigger.SILENT_BACKFILL and not require_cloud_tasks:
+        raise FinalizationDispatchUnavailable('silent backfill requires durable Cloud Tasks')
     if require_cloud_tasks and not (
         is_listen_finalization_dispatch_configured() and is_listen_finalization_dispatch_enabled()
     ):
@@ -899,6 +950,13 @@ def request_finalization(
         # that this deployment cannot recover or dispatch.
         raise FinalizationDispatchUnavailable('durable conversation finalization worker is not configured')
 
+    backfill_fence: jobs_db.BackfillAdmissionFence = {}
+    if trigger is ProcessingTrigger.SILENT_BACKFILL:
+        backfill_fence = {
+            'expected_update_time': expected_update_time,
+            'backfill_run_id': backfill_run_id,
+            'expected_session_revision': expected_session_revision,
+        }
     try:
         intent = jobs_db.create_or_get_finalization_intent(
             uid,
@@ -907,8 +965,10 @@ def request_finalization(
             finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
             trigger=trigger,
             extra_updates=extra_updates,
-            recovery_cutoff=recovery_cutoff if trigger is ProcessingTrigger.SERVER_RECOVERY else None,
+            recovery_cutoff=recovery_cutoff if is_recovery_trigger(trigger) else None,
             firestore_client=firestore_client,
+            **backfill_fence,
+            require_expired_recording_lease=require_expired_recording_lease,
         )
     except FirestoreContentionExhausted as error:
         # An exhausted contention budget is a clean retry boundary: no outbox
@@ -1009,3 +1069,43 @@ def get_finalization_status(uid: str, conversation_id: str) -> dict[str, Any] | 
         'terminal_outcome': terminal_outcome,
         'fanout_status': fanout_status,
     }
+
+
+def close_stuck_backfill_noise(
+    uid: str,
+    conversation_id: str,
+    *,
+    expected_revision: str,
+    cutoff: datetime,
+    expected_session_revision: str | None,
+    run_id: str,
+    firestore_client: Any = None,
+) -> str:
+    """Lifecycle owner for the operator's approved metadata-only close."""
+    return stuck_backfill_db.close_noise(
+        uid,
+        conversation_id,
+        expected_revision=expected_revision,
+        cutoff=cutoff,
+        expected_session_revision=expected_session_revision,
+        run_id=run_id,
+        firestore_client=firestore_client,
+    )
+
+
+def restore_stuck_backfill_noise(
+    uid: str,
+    conversation_id: str,
+    *,
+    expected_closed_revision: str,
+    run_id: str,
+    firestore_client: Any = None,
+) -> None:
+    """Restore only the unchanged metadata generation closed by this run."""
+    stuck_backfill_db.restore_noise(
+        uid,
+        conversation_id,
+        expected_closed_revision=expected_closed_revision,
+        run_id=run_id,
+        firestore_client=firestore_client,
+    )

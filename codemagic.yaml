@@ -39,14 +39,9 @@ workflows:
     scripts:
       - name: Verify dispatcher source pin
         script: |
-          set -euo pipefail
-          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
-            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
-            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
-              echo "dispatcher source pin does not match checked-out HEAD" >&2
-              exit 1
-            }
-          fi
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
 
       - name: Installing Opus
         script: |
@@ -147,7 +142,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -226,14 +220,9 @@ workflows:
     scripts:
       - name: Verify dispatcher source pin
         script: |
-          set -euo pipefail
-          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
-            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
-            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
-              echo "dispatcher source pin does not match checked-out HEAD" >&2
-              exit 1
-            }
-          fi
+          # Checks out the dispatcher's evaluated commit when main moved past it
+          # after dispatch; fails closed on anything else.
+          bash scripts/checkout_release_source_pin.sh
 
       - name: Installing Android SDK
         script: |
@@ -354,7 +343,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -514,7 +502,6 @@ workflows:
             --build-number=$BUILD_NUMBER \
             --flavor prod \
             --export-options-plist=$HOME/export_options.plist \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
     artifacts:
@@ -917,7 +904,6 @@ workflows:
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true \
             $PROVENANCE_ARGS
 
 
@@ -1745,7 +1731,6 @@ workflows:
   #   FIREBASE_PROJECT_ID, FIREBASE_API_KEY
   #   APPLE_CLIENT_ID, APPLE_TEAM_ID, APPLE_KEY_ID, APPLE_PRIVATE_KEY
   #   RESEND_API_KEY
-  #   SENTRY_AUTH_TOKEN, SENTRY_ADMIN_UID, SENTRY_WEBHOOK_SECRET
   #   REDIS_DB_HOST, REDIS_DB_PORT, REDIS_DB_PASSWORD
   #   BETA_PROMOTION_TOKEN             — narrow backend capability for candidate reservation and signed Beta promotion
   #   GITHUB_TOKEN                     — repo-scoped token used for immutable candidate-release publishing
@@ -2674,13 +2659,6 @@ workflows:
           fi
           set -euo pipefail
 
-          # Keep symbol publication repairable: a Sentry credential outage must not
-          # strand an otherwise signed and smoke-tested candidate. The exact,
-          # UUID-verified dSYM is retained as a GitHub release artifact below.
-          scripts/publish-desktop-debug-symbols.sh upload-best-effort \
-            --binary "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" \
-            --dsym "$DSYM_PATH"
-
           CHANGELOG_MD=$(python3 ../../.github/scripts/desktop-changelog.py latest-release --format markdown || echo "- Bug fixes and improvements")
 
           # Build changelog as pipe-separated string for KEY_VALUE_START
@@ -2908,6 +2886,28 @@ workflows:
     artifacts:
       - dist/*.dmg
       - dist/*.zip
+
+  # Manual/API only. No build, upload, iOS action, or rollout advancement.
+  android-rollout-brake:
+    name: Android Production Rollout Brake
+    instance_type: mac_mini_m2
+    max_build_duration: 10
+    environment:
+      groups:
+        - google_play
+        - mobile_release_admission  # GITHUB_TOKEN (read-only) for the writer quiescence check
+      vars:
+        BRAKE_ACTION: "unset"
+        BRAKE_VERSION_CODE: "0"
+        BRAKE_USER_FRACTION: "unset"
+        BRAKE_SUPERSEDES_VERSION_CODE: "0"
+        CONFIRM: "not-confirmed"
+    working_directory: app
+    scripts:
+      - name: Read or brake the explicitly selected production rollout
+        script: |
+          set -euo pipefail
+          python3 scripts/mobile_rollout_brake.py
 
   mobile-store-promote:
     name: Promote Existing Mobile Builds to Store Review

@@ -371,5 +371,116 @@ class TestDatabaseGetFocusSessionsStreamResilience(unittest.TestCase):
         self.assertNotIn("user_resilience_test", log_text)
 
 
+class _PagingQuery:
+    """Firestore query stand-in that honours offset/limit against a snapshot list."""
+
+    def __init__(self, snapshots: list[Any]):
+        self._snapshots = snapshots
+        self._offset = 0
+        self._limit = 100
+
+    def order_by(self, *args: Any, **kwargs: Any) -> "_PagingQuery":
+        return self
+
+    def where(self, *args: Any, **kwargs: Any) -> "_PagingQuery":
+        return self
+
+    def offset(self, value: int) -> "_PagingQuery":
+        self._offset = value
+        return self
+
+    def limit(self, value: int) -> "_PagingQuery":
+        self._limit = value
+        return self
+
+    def stream(self) -> list[Any]:
+        return self._snapshots[self._offset : self._offset + self._limit]
+
+
+class TestFocusSessionPaginationFill(unittest.TestCase):
+    """A skipped poison row must not shorten a page or hide the rows behind it."""
+
+    @staticmethod
+    def _session(doc_id: str, now: datetime) -> _FakeSnapshot:
+        return _FakeSnapshot(
+            doc_id,
+            {
+                "status": "focused",
+                "app_or_site": "Xcode",
+                "description": "Deep work",
+                "created_at": now,
+                "duration_seconds": 600,
+            },
+        )
+
+    def _query(self, snapshots: list[Any]) -> MagicMock:
+        col = MagicMock()
+        col.order_by.return_value = _PagingQuery(snapshots)
+        return col
+
+    def test_page_is_filled_when_poison_rows_come_first(self):
+        now = datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc)
+        snapshots = [
+            _FakeSnapshot("bad-1", None),
+            self._session("s1", now),
+            self._session("s2", now),
+            self._session("s3", now),
+        ]
+
+        with patch.object(focus_sessions_db, "_user_col", return_value=self._query(snapshots)):
+            results = focus_sessions_db.get_focus_sessions("uid", limit=2)
+
+        # The caller asked for two readable rows and gets two, not one.
+        self.assertEqual([r["id"] for r in results], ["s1", "s2"])
+
+    def test_all_poison_collection_stops_at_the_scan_cap(self):
+        """A collection that is entirely poison must end at the scan cap, not run forever."""
+
+        class _EndlessPoisonQuery:
+            def __init__(self) -> None:
+                self.calls = 0
+
+            def order_by(self, *args: Any, **kwargs: Any) -> "_EndlessPoisonQuery":
+                return self
+
+            def where(self, *args: Any, **kwargs: Any) -> "_EndlessPoisonQuery":
+                return self
+
+            def offset(self, value: int) -> "_EndlessPoisonQuery":
+                return self
+
+            def limit(self, value: int) -> "_EndlessPoisonQuery":
+                return self
+
+            def stream(self) -> list[Any]:
+                self.calls += 1
+                return [_FakeSnapshot(f"bad-{self.calls}-{index}", None) for index in range(100)]
+
+        query = _EndlessPoisonQuery()
+        col = MagicMock()
+        col.order_by.return_value = query
+
+        with patch.object(focus_sessions_db, "_user_col", return_value=col):
+            results = focus_sessions_db.get_focus_sessions("uid", limit=100)
+
+        self.assertEqual(results, [])
+        self.assertEqual(query.calls, focus_sessions_db._MAX_FOCUS_SESSION_SCAN_ROWS // 100)
+
+    def test_offset_still_counts_stored_rows(self):
+        now = datetime(2026, 10, 3, 10, 0, tzinfo=timezone.utc)
+        snapshots = [
+            self._session("s1", now),
+            _FakeSnapshot("bad-1", {}),
+            self._session("s2", now),
+            self._session("s3", now),
+        ]
+
+        with patch.object(focus_sessions_db, "_user_col", return_value=self._query(snapshots)):
+            results = focus_sessions_db.get_focus_sessions("uid", limit=2, offset=1)
+
+        # Rows 1..N are skipped by position; the poison row is still filled past.
+        self.assertEqual([r["id"] for r in results], ["s2", "s3"])
+
+
 if __name__ == "__main__":
     unittest.main()

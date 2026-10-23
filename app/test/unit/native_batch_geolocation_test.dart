@@ -8,8 +8,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/geolocation.dart';
-import 'package:omi/models/local_recording.dart';
-import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/services/wals/native_recording_intake.dart';
+import '../support/custody_test_helpers.dart';
 import 'package:omi/services/capture/native_batch_geolocation.dart';
 import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/sync_upload_gate.dart';
@@ -21,7 +21,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     SyncRateLimiter.instance.clear();
-    directory = await Directory.systemTemp.createTemp('omi-native-batch-location-');
+    directory = await custodyDirectory();
   });
 
   tearDown(() async {
@@ -42,15 +42,6 @@ void main() {
         }),
       );
 
-      final snapshot = await readNativeBatchGeolocation(file.path);
-      final recording = LocalRecording.fromFile(
-        fileName: file.path.split('/').last,
-        filePath: file.path,
-        sizeBytes: 1,
-        seconds: 1,
-        state: LocalRecordingState.pending,
-        geolocation: snapshot,
-      )!;
       Geolocation? uploaded;
       final gate = SyncUploadGate(
         limiter: SyncRateLimiter.instance,
@@ -69,7 +60,13 @@ void main() {
         },
       );
 
-      await uploadNativeBatchRecording(recording, file: file, uploadGate: gate);
+      // Native sidecar enters custody, then the same manual drain carries it.
+      await SharedPreferencesUtil().saveString('batchAudioDir', directory.path);
+      final ledger = await custodyLedger(gate: gate);
+      await NativeRecordingIntake(ledger, directory: () async => directory).scan();
+      final wal = (await ledger.getAllWals()).single;
+      // Path provider resolves the ledger file under the test directory.
+      await ledger.syncWal(wal: wal);
 
       expect(uploaded?.latitude, 37.7749);
       expect(uploaded?.longitude, -122.4194);
