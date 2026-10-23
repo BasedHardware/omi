@@ -54,7 +54,7 @@ def month_ref(user_ref: Any, date: datetime) -> Any:
 
 
 def queue_increment(writer: Any, user_ref: Any, date: datetime, update_doc: dict) -> None:
-    """Reuse the source's transforms and transaction/once receipt; add no reads."""
+    """Reuse source transforms and once receipts under the caller's publication fence."""
     increments = {key: update_doc[key] for key in FIELDS if key in update_doc}
     if increments:
         writer.set(
