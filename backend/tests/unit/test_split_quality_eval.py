@@ -1,10 +1,14 @@
 """Fixed-denominator split qualification without model inference."""
 
 from copy import deepcopy
+import hashlib
+import json
+from pathlib import Path
+import wave
 
 import pytest
 
-from scripts.diarization_eval.split_quality import qualify, validate_units
+from scripts.diarization_eval.split_quality import _digest, qualify, verify_provenance
 
 
 def units(boundary=None):
@@ -98,10 +102,6 @@ def test_unverified_provenance_is_blocked_before_projection():
 
 
 def receipt_manifest(tmp_path):
-    import hashlib
-    import json
-    import wave
-    from scripts.diarization_eval.split_quality import _digest
 
     frames = b''.join((index % 32767).to_bytes(2, 'little') for index in range(160000))
 
@@ -151,7 +151,6 @@ def receipt_manifest(tmp_path):
 
 
 def test_provenance_verifies_actual_pcm_payload_and_common_config(tmp_path):
-    from scripts.diarization_eval.split_quality import verify_provenance
 
     data = receipt_manifest(tmp_path)
     loaded = verify_provenance(data)
@@ -160,9 +159,6 @@ def test_provenance_verifies_actual_pcm_payload_and_common_config(tmp_path):
 
 @pytest.mark.parametrize('tamper', ['payload', 'settings', 'input', 'offset', 'missing-receipt'])
 def test_stale_or_unrelated_same_duration_payloads_are_rejected(tmp_path, tamper):
-    import json
-    from pathlib import Path
-    from scripts.diarization_eval.split_quality import verify_provenance
 
     data = receipt_manifest(tmp_path)
     unit = data['cases'][0][0]

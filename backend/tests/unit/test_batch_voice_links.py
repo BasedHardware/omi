@@ -1,6 +1,7 @@
 """Synthetic durable voice continuity, abstention and privacy contracts."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
 import json
 import math
 
@@ -16,6 +17,9 @@ from utils.stt.batch_voice_links import (
     link_unit_voices,
 )
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.test_batch_pipeline_live import recording, incoming
+from tests.unit.test_sync_cross_job_assignment import chunk, intake
 
 
 def evidence(unit, vectors, generation=0):
@@ -150,8 +154,6 @@ def test_owner_claims_are_arbitrated_after_linking():
 
 @pytest.mark.parametrize('reverse', [False, True])
 def test_assignment_atomic_continuity_and_private_evidence_consumed(reverse):
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-    from tests.unit.test_sync_cross_job_assignment import chunk, intake
 
     store = StrictFirestore()
     chunks = [chunk('a', 1000, text='First synthetic sentence.'), chunk('b', 1060, text='Second synthetic sentence.')]
@@ -217,10 +219,6 @@ def test_ciphertext_copied_to_another_conversation_cannot_import_voice_links():
 
 @pytest.mark.parametrize('manual', [False, True])
 def test_native_record_replacement_links_units_and_keeps_manual_decisions(manual):
-    from datetime import datetime, timezone
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-    from tests.unit.test_batch_pipeline_live import recording, incoming
-    from tests.unit.test_sync_cross_job_assignment import intake
 
     store = StrictFirestore()
     current = recording()
@@ -248,9 +246,6 @@ def test_native_record_replacement_links_units_and_keeps_manual_decisions(manual
 
 
 def test_native_unsafe_manual_remap_never_commits_unapplied_voice_anchors():
-    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-    from tests.unit.test_batch_pipeline_live import recording, incoming
-    from tests.unit.test_sync_cross_job_assignment import intake
 
     store = StrictFirestore()
     current = recording(has_transcript_corrections=True)
