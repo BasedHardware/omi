@@ -38,6 +38,7 @@ def _setup_stubs_and_import():
 
     stubs = [
         "redis",
+        "redis.exceptions",
         "firebase_admin",
         "firebase_admin.auth",
         "pycountry",
