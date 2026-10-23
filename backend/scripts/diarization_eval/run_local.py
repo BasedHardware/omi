@@ -7,7 +7,7 @@ stay in a permission-restricted artifact directory beside the corpus manifest.
 
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import importlib
 import importlib.metadata
 import json
@@ -38,6 +38,7 @@ from utils.conversations.final_pass_assignment import name_centroids
 from utils.stt.diarization_eval import aggregate_scorecards, model_reference_wer, score_recording
 from utils.stt.voiceprints import usable_person_voiceprint
 from config.batch_pipeline_providers import provider_config
+from scripts.diarization_eval.inference_archive import load_inference
 
 ROOT = Path(__file__).resolve().parents[2]
 EMBEDDING_SPACE = 'pyannote/wespeaker-voxceleb-resnet34-LM:v2'
@@ -162,7 +163,14 @@ def reference_text(path, recording, wav, engine):
 
 
 def evaluate(
-    manifest_path, *, device='cpu', dtype='float32', run_name='pr1', reference_files=None, projection_python=None
+    manifest_path,
+    *,
+    device='cpu',
+    dtype='float32',
+    run_name='pr1',
+    reference_files=None,
+    projection_python=None,
+    inference_archive=None,
 ):
     manifest_path = Path(manifest_path)
     private_dir(manifest_path.parent)
@@ -222,7 +230,24 @@ def evaluate(
             with wave.open(str(wav), 'rb') as audio:
                 captured_seconds = audio.getnframes() / audio.getframerate()
             item = WorkItem(key, 'local-evaluation', 1_700_000_000.0, str(wav), captured_seconds, Priority.DEEP)
-            if not cached.exists():
+            archived = (
+                load_inference(
+                    inference_archive,
+                    corpus_sha256=manifest_hash,
+                    recording=recording,
+                    wav=wav,
+                    current_settings=settings,
+                )
+                if inference_archive
+                else None
+            )
+            if archived is not None:
+                payload, original_receipt = archived
+                key = original_receipt['cache_key']
+                item = replace(item, segment_id=key)
+                cached = root / ('archive-' + key + '.json')
+                private_json(cached, payload)
+            elif not cached.exists():
                 if worker is None:
                     if model_failed:
                         raise RuntimeError('models_unavailable')
@@ -297,6 +322,10 @@ def evaluate(
                     'rtf': elapsed / recording['dur'],
                     'decoded_audio_seconds': captured_seconds,
                     'declared_crop_seconds': recording['dur'],
+                    'inference_reused': archived is not None,
+                    'original_configuration_evidence': (
+                        archived[1]['provider_config_evidence'] if archived else 'captured'
+                    ),
                 }
             )
             scores.append(score)
@@ -333,7 +362,12 @@ def evaluate(
                     'status': 'ok',
                     'clock': 'crop',
                     'turns': persisted,
-                    'provenance': {'production_path': True, **settings},
+                    'provenance': {
+                        'production_path': True,
+                        **settings,
+                        'full_current_worker_executed': archived is None,
+                        'original_inference': archived[1] if archived else None,
+                    },
                     'cache_key': key,
                 }
             )
@@ -383,6 +417,9 @@ def main():
     parser.add_argument('--run-name', default='pr1')
     parser.add_argument('--projection-python', type=Path, default=ROOT / '.venv' / 'bin' / 'python')
     parser.add_argument(
+        '--inference-archive', type=Path, help='Explicit immutable inference archive with verified receipts'
+    )
+    parser.add_argument(
         '--reference-files', type=Path, help='Private JSON mapping recording IDs to model-reference files'
     )
     args = parser.parse_args()
@@ -401,6 +438,7 @@ def main():
                 run_name=args.run_name,
                 reference_files=json.loads(args.reference_files.read_text()) if args.reference_files else None,
                 projection_python=args.projection_python,
+                inference_archive=args.inference_archive,
             )
         except Exception as error:
             traceback.print_exc()
