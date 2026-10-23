@@ -20,7 +20,8 @@ from utils.retrieval.turn_refs import resolve_edit_ref, tool_error
 
 def owner(config):
     config = config or {}
-    uid = config.get('configurable', {}).get('user_id')
+    configurable = config.get('configurable') if isinstance(config, dict) else None
+    uid = (configurable or {}).get('user_id')
     if not uid:
         raise PermissionError('Authenticated owner required')
     return uid
@@ -43,8 +44,9 @@ def update_conversation(
     a transcript or delete a whole conversation. Returns a structured undo receipt.
     """
     uid = owner(config)
+    configurable = (config.get('configurable') if isinstance(config, dict) else None) or {}
     conversation_id, error = resolve_edit_ref(
-        config.get('configurable', {}),
+        configurable,
         'conversations',
         conversation_id,
         parameter='conversation_id',
@@ -94,16 +96,20 @@ def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
     retaining the previous name as an alias. Undo restores the prior name and aliases.
     """
     uid = owner(config)
-    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'people', person_id, parameter='person_id')
+    configurable = (config.get('configurable') if isinstance(config, dict) else None) or {}
+    resolved_id, error = resolve_edit_ref(configurable, 'people', person_id, parameter='person_id')
     if error:
         return error
     assert resolved_id is not None
     person_id = resolved_id
+    clean_name = str(name or '').strip()
+    if not clean_name or len(clean_name) > 100:
+        return tool_error('invalid_name', 'Person name must contain 1 to 100 characters.')
     if not users.get_person(uid, person_id):
         return 'Error: person not found.'
     before = chat_edits.snapshot(uid, 'person', person_id)
     write_state = {'before': before}
-    result = mcp_people.rename_person(uid, {'person_id': person_id, 'name': name}, expected_chat_state=write_state)
+    result = mcp_people.rename_person(uid, {'person_id': person_id, 'name': clean_name}, expected_chat_state=write_state)
     after = write_state['after']
     summary = 'Name → ' + result['person']['name']
     record_write(uid, 'person', person_id, envelope(before, 'Person'), envelope(after, summary))
@@ -118,7 +124,8 @@ def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
     preserving canonical correction history. Returns a structured undo receipt.
     """
     uid = owner(config)
-    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    configurable = (config.get('configurable') if isinstance(config, dict) else None) or {}
+    resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error
     assert resolved_id is not None
@@ -150,7 +157,8 @@ def delete_memory(memory_id: str, *, config: RunnableConfig) -> str:
     controls for permanent erasure. Returns a structured undo receipt.
     """
     uid = owner(config)
-    resolved_id, error = resolve_edit_ref(config.get('configurable', {}), 'memories', memory_id, parameter='memory_id')
+    configurable = (config.get('configurable') if isinstance(config, dict) else None) or {}
+    resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error
     assert resolved_id is not None

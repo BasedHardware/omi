@@ -4446,6 +4446,10 @@ class AppLocalizationsTe extends AppLocalizations {
   String get continueText => 'కొనసాగండి';
 
   @override
+  String get checkoutExistingSubscription =>
+      'మీకు ఇప్పటికే సభ్యత్వం ఉంది. కొత్తది ప్రారంభించే బదులు ప్రస్తుత సభ్యత్వాన్ని నిర్వహించండి.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'ప్లాన్ మార్చడానికి ముందు మళ్లీ సబ్‌స్క్రైబ్ చేయండి.';
 
   @override
