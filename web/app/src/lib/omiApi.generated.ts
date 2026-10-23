@@ -1937,6 +1937,13 @@ export interface CsatRatingRequest {
   score: number;
 }
 
+export interface CustomInstructionsResponse {
+  about_me?: string;
+  enabled?: boolean;
+  response_style?: string;
+  updated_at?: string | null;
+}
+
 export interface CustomerPortalSessionResponse {
   url: string;
 }
@@ -4765,6 +4772,7 @@ export interface SeenRequest {
 
 export interface SendMessageRequest {
   context?: PageContext | null;
+  custom_instructions_enabled?: boolean | null;
   device_tools?: Array<string> | null;
   file_ids?: Array<string> | null;
   text: string;
@@ -5894,6 +5902,12 @@ export interface UpdateConversationRequest {
   title?: string | null;
 }
 
+export interface UpdateCustomInstructionsRequest {
+  about_me?: string | null;
+  enabled?: boolean | null;
+  response_style?: string | null;
+}
+
 export interface UpdateFolderRequest {
   color?: string | null;
   description?: string | null;
@@ -6521,6 +6535,7 @@ export interface OmiApiSchemas {
   "CsatConfigResponse": CsatConfigResponse;
   "CsatRatingReceipt": CsatRatingReceipt;
   "CsatRatingRequest": CsatRatingRequest;
+  "CustomInstructionsResponse": CustomInstructionsResponse;
   "CustomerPortalSessionResponse": CustomerPortalSessionResponse;
   "DailySummariesResponse": DailySummariesResponse;
   "DailySummaryActionItem": DailySummaryActionItem;
@@ -7050,6 +7065,7 @@ export interface OmiApiSchemas {
   "UpdateAssistantSettingsRequest": UpdateAssistantSettingsRequest;
   "UpdateChatSessionRequest": UpdateChatSessionRequest;
   "UpdateConversationRequest": UpdateConversationRequest;
+  "UpdateCustomInstructionsRequest": UpdateCustomInstructionsRequest;
   "UpdateFolderRequest": UpdateFolderRequest;
   "UpdateGoalRequest": UpdateGoalRequest;
   "UpdateMemoryRequest": UpdateMemoryRequest;
@@ -10935,6 +10951,40 @@ export interface OmiApiPaths {
       operationId: "report_surface_state_v1_users_client_state_post";
       responses: {
         "200": UserStatusResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/users/custom-instructions": {
+    get: {
+      operationId: "get_custom_instructions_endpoint_v1_users_custom_instructions_get";
+      responses: {
+        "200": CustomInstructionsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    put: {
+      operationId: "put_custom_instructions_endpoint_v1_users_custom_instructions_put";
+      responses: {
+        "200": CustomInstructionsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    patch: {
+      operationId: "patch_custom_instructions_endpoint_v1_users_custom_instructions_patch";
+      responses: {
+        "200": CustomInstructionsResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "delete_custom_instructions_endpoint_v1_users_custom_instructions_delete";
+      responses: {
+        "200": CustomInstructionsResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -19821,6 +19871,86 @@ export async function report_surface_state_v1_users_client_state_post(header: { 
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_custom_instructions_endpoint_v1_users_custom_instructions_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CustomInstructionsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/custom-instructions`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function put_custom_instructions_endpoint_v1_users_custom_instructions_put(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: UpdateCustomInstructionsRequest, init?: OmiApiClientInit): Promise<CustomInstructionsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/custom-instructions`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PUT",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function patch_custom_instructions_endpoint_v1_users_custom_instructions_patch(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: UpdateCustomInstructionsRequest, init?: OmiApiClientInit): Promise<CustomInstructionsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/custom-instructions`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "PATCH",
+    headers: {
+      ...(body ? { 'Content-Type': 'application/json' } : {}),
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function delete_custom_instructions_endpoint_v1_users_custom_instructions_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CustomInstructionsResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/users/custom-instructions`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function get_daily_summaries_v1_users_daily_summaries_get(query: { limit?: number, offset?: number }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<DailySummariesResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/users/daily-summaries`;
@@ -22834,4 +22964,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 525 client methods generated.
+// Total: 529 client methods generated.

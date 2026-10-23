@@ -53,8 +53,6 @@ from models.users import (
     Subscription,
     PlanType,
     SubscriptionStatus,
-    CUSTOM_INSTRUCTIONS_MAX_LENGTH,
-    sanitize_custom_instruction_text,
 )
 from models.other import Person
 import logging
@@ -2520,6 +2518,8 @@ def _default_custom_instructions() -> dict:
 
 
 def _normalize_custom_instructions_dict(raw: Any) -> dict:
+    from models.users import CUSTOM_INSTRUCTIONS_MAX_LENGTH, sanitize_custom_instruction_text
+
     if not isinstance(raw, dict):
         return _default_custom_instructions()
     enabled = raw.get('enabled')
@@ -2560,6 +2560,8 @@ def update_custom_instructions(
     response_style: Optional[str] = None,
 ) -> dict:
     """Create or partially update account-wide custom instructions on users/{uid}."""
+    from models.users import CUSTOM_INSTRUCTIONS_MAX_LENGTH, sanitize_custom_instruction_text
+
     existing = _get_custom_instructions_from_firestore(uid)
     if enabled is not None:
         existing['enabled'] = bool(enabled)
