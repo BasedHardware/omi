@@ -121,6 +121,36 @@ def model_reference_wer(reference, hypothesis):
     }
 
 
+def persisted_word_turns(truth, turns):
+    """Choose persisted turns by overlap, including legacy overlapping groups.
+
+    A transcript group can span another group's clock even when the underlying
+    diarizer was exclusive. Preserve those actual groups and their identities;
+    never repair output or fit channels to the reference labels for scoring.
+    Ties use midpoint containment and then the earliest start/end/input index.
+    """
+    from math import isfinite
+
+    ordered = sorted(enumerate(turns), key=lambda row: (row[1]['start'], row[1]['end'], row[0]))
+    if any(not isfinite(float(t[k])) or t['end'] <= t['start'] for _, t in ordered for k in ('start', 'end')):
+        raise ValueError('invalid persisted turn clock')
+    selected = []
+    for word in truth:
+        left, right = float(word['start']), float(word['end'])
+        if not isfinite(left) or not isfinite(right) or right < left:
+            raise ValueError('invalid reference word clock')
+        candidates = []
+        for rank, (index, turn) in enumerate(ordered):
+            if turn['start'] > right:
+                break
+            overlap = min(right, turn['end']) - max(left, turn['start'])
+            if overlap > 0 or (left == right and turn['start'] <= left < turn['end']):
+                midpoint = (left + right) / 2
+                candidates.append((overlap, turn['start'] <= midpoint < turn['end'], -rank, index))
+        selected.append(max(candidates)[-1] if candidates else None)
+    return selected
+
+
 def score_recording(truth, turns, identity_table, *, crop_start=0.0, excluded_spans=(), model_reference=None):
     """Score fixed reference word clocks against actual persisted, exclusive turns.
 
@@ -148,9 +178,7 @@ def score_recording(truth, turns, identity_table, *, crop_start=0.0, excluded_sp
     ]
     # Unique temporary indices retain each turn's actual identity metadata even
     # when the same voice is named differently across persisted turns.
-    predicted_indices = [
-        w['speaker'] for w in assign_words([{'timestamp': [w['start'], w['end']]} for w in truth], shifted)
-    ]
+    predicted_indices = persisted_word_turns(truth, shifted)
     scored = []
     ignored = enrollment_excluded = 0
     for word, index in zip(truth, predicted_indices):

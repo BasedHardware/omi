@@ -4,16 +4,21 @@ No cloud clients, enrollment acquisition or vendor inference. The assignment
 adapter persists projected segments; it does not claim Firestore qualification.
 """
 
-from dataclasses import dataclass
+import argparse
+from dataclasses import asdict, dataclass
+from functools import partial
 import hashlib
 import importlib
 import json
 import os
 from pathlib import Path
+import secrets
+import subprocess
 from types import SimpleNamespace
 
 from config.policy import ProjectionPolicy
 from scripts.diarization_eval.prep_speaker_task import private_dir
+from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 
 
 def private_json(path, value):
@@ -91,18 +96,29 @@ class LocalProjectionStore:
         return None
 
 
-def filesystem_assignment(owner_id, incoming, *, before_assign, validate_plan, after_assign, **kwargs):
+def filesystem_assignment(owner_id, incoming, *, before_assign, validate_plan, after_assign, allocator=None, **kwargs):
+    from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
+
     before_assign(None)
+    allocator = allocator or ConversationSpeakerIdAllocator()
+    for segment in incoming['transcript_segments']:
+        allocator.assign(segment)
+    validate_plan(None, incoming)
     after_assign(None, incoming)
     return incoming, True, incoming['transcript_segments']
 
 
 def project(artifacts, item, binding, uri, *, policy=None):
+    from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
+
     root = artifacts.root / 'projection' / item.segment_id
     store = LocalProjectionStore(root)
     projector_type = importlib.import_module('utils.batch_pipeline.projection').Projector
     projector = projector_type(
-        SimpleNamespace(), artifacts.load_result, projection_store=store, assign_conversation=filesystem_assignment
+        SimpleNamespace(),
+        artifacts.load_result,
+        projection_store=store,
+        assign_conversation=partial(filesystem_assignment, allocator=ConversationSpeakerIdAllocator()),
     )
     projector.assign_parts(
         item,
@@ -117,3 +133,40 @@ def project(artifacts, item, binding, uri, *, policy=None):
         persisted = json.loads(path.read_text())
         turns.extend(persisted['transcript_segments'])
     return turns
+
+
+def project_external(python, artifacts, item, binding, uri):
+    """Keep the model runtime separate from the pinned backend projection env."""
+    request = artifacts.root / 'projection-request.json'
+    response = artifacts.root / 'projection-response.json'
+    encoded = asdict(item)
+    encoded['priority'] = item.priority.value
+    private_json(request, {'root': str(artifacts.root), 'item': encoded, 'binding': asdict(binding), 'uri': uri})
+    completed = subprocess.run(
+        [str(python), str(Path(__file__).resolve()), '--request', str(request), '--response', str(response)],
+        capture_output=True,
+    )
+    if completed.returncode:
+        # The caller captures this within its private model log.
+        private_json(artifacts.root / 'projection-failure.json', {'stderr': completed.stderr.decode(errors='replace')})
+        raise RuntimeError('local_projection_failed')
+    return json.loads(response.read_text())
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--request', type=Path, required=True)
+    parser.add_argument('--response', type=Path, required=True)
+    args = parser.parse_args()
+    os.umask(0o077)
+    os.environ['ENCRYPTION_SECRET'] = secrets.token_hex(32)
+    request = json.loads(args.request.read_text())
+    request['binding']['segment_ids'] = tuple(request['binding']['segment_ids'])
+    turns = project(
+        Artifacts(request['root']), WorkItem(**request['item']), ProjectionBinding(**request['binding']), request['uri']
+    )
+    private_json(args.response, turns)
+
+
+if __name__ == '__main__':
+    main()

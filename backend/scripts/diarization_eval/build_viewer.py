@@ -61,9 +61,15 @@ def production_turns(run, offset):
         start, end = finite(turn['start']) - shift, finite(turn['end']) - shift
         if end < start or not isinstance(turn['text'], str):
             raise ValueError('invalid production turn')
-        speaker = str(turn.get('speaker') or 'Anonymous')
+        raw_voice = turn.get('speaker_id') if turn.get('speaker_id') is not None else turn.get('speaker')
+        scope = turn.get('speaker_id_scope') or turn.get('speaker_scope') or ''
+        speaker = f'{scope}:{raw_voice}' if raw_voice is not None else 'Anonymous'
         # Only persisted identity evidence is displayed. Never fit identity from truth.
-        name = str(turn.get('display_name') or turn.get('person_id') or speaker)
+        name = str(
+            turn.get('display_name')
+            or ('You' if turn.get('is_user') else None)
+            or (f'Speaker {raw_voice}' if raw_voice is not None else 'Anonymous')
+        )
         result.append(
             {
                 'start': start,

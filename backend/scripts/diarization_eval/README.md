@@ -84,6 +84,10 @@ word clocks. Outputs must be outside Git. It predeclares owner/person identities
 from the supplied snapshot, and reserves the first clean 6–10 seconds per voice
 for a separate enrollment-rich diagnostic. The automatic gate retains all scored
 words; only that diagnostic excludes enrollment-overlapping words.
+The permitted corpus declares English separately from undecided container tags;
+that declaration travels through the existing staged-audio context. Admission
+uses decoded PCM duration because archived crop durations can be rounded. Neither
+the frozen crop nor the reference-word denominator changes.
 
 ```bash
 nice -n 10 env PYTHONPATH=backend backend/.venv-eval/bin/python \
@@ -100,6 +104,12 @@ The snapshot's compatible enrolled gallery is local; absent batch centroids prin
 an explicit naming abstention. Inference caches bind audio/crop hashes, model
 revisions, dependency versions, decoding policy and source-file hashes; projection
 always reruns. The corpus file is frozen by digest before scoring.
+Legacy persisted transcript groups can overlap even when diarizer turns were
+exclusive. The scorer chooses the persisted identity with maximum word overlap,
+then midpoint containment and earliest clock; it does not repair or relabel the
+stored output. The enrollment-rich diagnostic uses only the predeclared held-out
+spans and excludes their intersecting reference words. Without production naming
+evidence, richer enrollment still leaves the persisted baseline anonymous.
 
 The engineering gate uses pooled owner/enrolled word accuracy >=90%, wrong-name
 plus false-owner <=1% of all scored words, and speaker count within one on every
@@ -121,6 +131,8 @@ not inferred provenance for the archived words. Supply `--reference-files` to
 `references/mlx-whisper-large-v3/`. Available base-engine indexes there add WER
 comparisons using identical normalization and substitution/deletion/insertion
 counts. Large-v3 is a **model reference, not human truth**.
+The separate `requirements-reference-fw.txt` and `requirements-reference-mlx.txt`
+pin those engine environments independently of the NeMo evaluation runtime.
 
 `build_viewer.py --reference /private/gate-t-reference.json --runs
 /private/pr1/runs.json` builds a blinded decision-mill pair task outside Git.

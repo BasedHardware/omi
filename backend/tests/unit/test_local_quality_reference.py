@@ -105,4 +105,28 @@ def test_engines_keep_stronger_reference_and_turbo_distinct():
     assert reference.ENGINES['faster-whisper-base']['decoding']['beam_size'] == 1
     assert reference.ENGINES['faster-whisper-base']['decoding']['vad_filter']
     assert reference.ENGINES['mlx-whisper-base']['decoding']['condition_on_previous_text'] is False
+    assert reference.ENGINES['mlx-whisper-base']['decoding']['temperature'] == (0.0, 0.2, 0.4, 0.6, 0.8, 1.0)
+    assert reference.ENGINES['mlx-whisper-large-v3']['decoding']['temperature'] == 0.0
     assert reference.ENGINES['mlx-whisper-large-v3']['repo'] != reference.ENGINES['mlx-whisper-large-v3-turbo']['repo']
+
+
+def test_invalid_private_output_reports_only_aggregate_error(tmp_path, monkeypatch, capsys):
+    (tmp_path / '.git').write_text('gitdir: fictional')
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'run_reference',
+            '--manifest',
+            str(tmp_path / 'private-manifest.json'),
+            '--engine',
+            'mlx-whisper-base',
+            '--output-root',
+            str(tmp_path),
+        ],
+    )
+    assert reference.main() == 1
+    captured = capsys.readouterr()
+    report = json.loads(captured.out)
+    assert report['status'] == 'BLOCKED'
+    assert str(tmp_path) not in captured.out + captured.err

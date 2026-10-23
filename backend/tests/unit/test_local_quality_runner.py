@@ -149,9 +149,13 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path,
     calls = []
 
     def crop(recording, output):
+        import wave
+
         assert recording['t0'] == 10
         calls.append('crop')
-        output.write_bytes(b'synthetic-crop')
+        with wave.open(str(output), 'wb') as audio:
+            audio.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+            audio.writeframes(b'\0\0' * 128000)
 
     class Worker:
         def __init__(self, artifacts):
@@ -183,3 +187,36 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path,
     assert run_local.main() == 0
     capsys.readouterr()
     assert calls == ['crop', 'inference']
+
+
+def test_declared_language_is_carried_in_existing_staging_envelope(tmp_path, monkeypatch):
+    import io
+    import wave
+    from types import SimpleNamespace
+    from scripts.diarization_eval import run_local
+    from utils.batch_pipeline.audio import read_context
+
+    body = io.BytesIO()
+    with wave.open(body, 'wb') as stream:
+        stream.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        stream.writeframes(b'\0\0' * 16000)
+    output = tmp_path / 'crop.wav'
+
+    def decode(*args, **kwargs):
+        output.write_bytes(body.getvalue())
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(run_local.subprocess, 'run', decode)
+    run_local.crop_audio({'audio': 'synthetic.m4a', 't0': 60, 'dur': 1, 'declared_language': 'en'}, output)
+    context = read_context(output.read_bytes())
+    assert context['stt_language'] == 'en'
+    assert context['stt_language_evidence'] == 'declared'
+    assert context['stt_language_confidence'] == 1.0
+
+
+def test_private_artifact_root_rejects_git_checkout(tmp_path):
+    from scripts.diarization_eval.local_artifacts import Artifacts
+
+    (tmp_path / '.git').mkdir()
+    with pytest.raises(ValueError, match='outside a Git checkout'):
+        Artifacts(tmp_path / 'output')

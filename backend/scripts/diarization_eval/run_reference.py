@@ -33,7 +33,11 @@ ENGINES = {
     'mlx-whisper-base': {
         'repo': 'mlx-community/whisper-base-mlx',
         'packages': ['mlx-whisper', 'mlx', 'huggingface-hub'],
-        'decoding': {'condition_on_previous_text': False, 'word_timestamps': True, 'temperature': 0.0},
+        'decoding': {
+            'condition_on_previous_text': False,
+            'word_timestamps': True,
+            'temperature': (0.0, 0.2, 0.4, 0.6, 0.8, 1.0),
+        },
         'device': 'metal',
         'compute_type': 'float16',
     },
@@ -290,7 +294,11 @@ def main():
     parser.add_argument('--cache-dir', type=Path)
     args = parser.parse_args()
     os.umask(0o077)
-    root = private_dir(args.output_root / args.engine)
+    try:
+        root = private_dir(args.output_root / args.engine)
+    except Exception as error:
+        print(json.dumps({'engine': args.engine, 'status': 'BLOCKED', 'error_type': type(error).__name__}))
+        return 1
     with private_logs(root / 'model-private.log'):
         try:
             report = run(args.manifest, args.engine, args.output_root, cache_dir=args.cache_dir)

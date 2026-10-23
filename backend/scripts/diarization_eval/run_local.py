@@ -7,6 +7,7 @@ stay in a permission-restricted artifact directory beside the corpus manifest.
 
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
+from dataclasses import asdict
 import importlib
 import importlib.metadata
 import json
@@ -15,22 +16,37 @@ from pathlib import Path
 import resource
 import secrets
 import subprocess
+import sys
 import time
 import traceback
+import wave
 
-from scripts.diarization_eval.local_artifacts import Artifacts, cache_key, file_digest, private_json, project
-from scripts.diarization_eval.run_reference import private_logs
+from scripts.diarization_eval.local_artifacts import (
+    Artifacts,
+    cache_key,
+    file_digest,
+    private_json,
+    project,
+    project_external,
+)
+from scripts.diarization_eval.run_reference import ENGINES, artifact_key, fingerprint, private_logs
 from scripts.diarization_eval.prep_speaker_task import private_dir
+from scripts.diarization_eval.enrollment import build_gallery
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
+from utils.batch_pipeline.audio import with_context
 from utils.conversations.final_pass_assignment import name_centroids
 from utils.stt.diarization_eval import aggregate_scorecards, model_reference_wer, score_recording
 from utils.stt.voiceprints import usable_person_voiceprint
+from config.batch_pipeline_providers import provider_config
 
 ROOT = Path(__file__).resolve().parents[2]
 EMBEDDING_SPACE = 'pyannote/wespeaker-voxceleb-resnet34-LM:v2'
 
 
 def crop_audio(recording, output):
+    language = recording.get('declared_language')
+    if not isinstance(language, str) or not language:
+        raise ValueError('explicit_corpus_language_required')
     # ffmpeg stderr can contain source paths: capture it, never relay it.
     result = subprocess.run(
         [
@@ -57,6 +73,16 @@ def crop_audio(recording, output):
     )
     if result.returncode:
         raise RuntimeError('audio_decode_failed')
+    output.write_bytes(
+        with_context(
+            output.read_bytes(),
+            {
+                'stt_language': language,
+                'stt_language_evidence': 'declared',
+                'stt_language_confidence': 1.0,
+            },
+        )
+    )
     output.chmod(0o600)
 
 
@@ -83,7 +109,59 @@ def versions():
     return result
 
 
-def evaluate(manifest_path, *, device='cpu', dtype='float32', run_name='pr1', reference_files=None):
+def reference_text(path, recording, wav, engine):
+    """Require the declared engine, immutable lock and exact frozen audio crop."""
+    path = Path(path)
+    artifact = json.loads(path.read_text())
+    provenance = artifact['provenance']
+    lock = json.loads((path.parent / 'model-lock.json').read_text())
+    source_hash = file_digest(recording['audio'])
+    crop_id = fingerprint({'audio': source_hash, 't0': recording['t0'], 'dur': recording['dur']})
+    crop = path.parent / 'crops' / (crop_id + '.wav')
+    expected = ENGINES[engine]
+    if not (
+        artifact.get('status') == 'ok'
+        and artifact.get('id') == recording['id']
+        and isinstance(artifact.get('text'), str)
+        and artifact.get('t0') == recording['t0']
+        and artifact.get('dur') == recording['dur']
+        and artifact.get('audio_sha256') == source_hash
+        and artifact.get('crop_sha256') == file_digest(crop)
+        and provenance.get('engine') == engine
+        and provenance.get('repo') == expected['repo']
+        and provenance.get('revision') == lock['revision']
+        and len(lock['revision']) == 40
+        and provenance.get('model_files') == lock['files']
+        and lock['files']
+        and provenance.get('cloud_inference_calls') == 0
+        and provenance.get('clock') == 'crop'
+        and fingerprint(provenance.get('decoding')) == fingerprint(expected['decoding'])
+        and artifact.get('cache_key')
+        == artifact_key(
+            source_hash=source_hash, crop_hash=artifact['crop_sha256'], recording=recording, provenance=provenance
+        )
+    ):
+        raise ValueError('reference_provenance_mismatch')
+
+    def pcm_digest(audio_path):
+        import hashlib
+
+        digest = hashlib.sha256()
+        with wave.open(str(audio_path), 'rb') as audio:
+            if (audio.getframerate(), audio.getnchannels(), audio.getsampwidth()) != (16000, 1, 2):
+                raise ValueError('reference_pcm_format_mismatch')
+            while block := audio.readframes(65536):
+                digest.update(block)
+        return digest.hexdigest()
+
+    if pcm_digest(crop) != pcm_digest(wav):
+        raise ValueError('reference_crop_mismatch')
+    return artifact['text']
+
+
+def evaluate(
+    manifest_path, *, device='cpu', dtype='float32', run_name='pr1', reference_files=None, projection_python=None
+):
     manifest_path = Path(manifest_path)
     private_dir(manifest_path.parent)
     if not run_name or any(
@@ -104,7 +182,13 @@ def evaluate(manifest_path, *, device='cpu', dtype='float32', run_name='pr1', re
     private_json(frozen, {'sha256': manifest_hash})
     gallery, display_names = load_gallery(manifest)
     model_versions = versions()
-    settings = {'device': device, 'dtype': dtype, 'packages': model_versions, 'model_batch_size': 1}
+    settings = {
+        'device': device,
+        'dtype': dtype,
+        'packages': model_versions,
+        'model_batch_size': 1,
+        'provider_config': asdict(provider_config()),
+    }
     settings['model_revisions'] = {
         'parakeet': '541d1f99c6b0c3cd0b11a95167540bb8edefd82b',
         'community_1': '3533c8cf8e369892e6b79ff1bf80f7b0286a54ee',
@@ -115,7 +199,7 @@ def evaluate(manifest_path, *, device='cpu', dtype='float32', run_name='pr1', re
         *sorted((ROOT / 'utils/batch_pipeline').glob('*.py')),
         *sorted((ROOT / 'config').glob('batch_pipeline*.py')),
     ]
-    scores, recordings, failures = [], [], 0
+    scores, recordings, failures, rich_scores = [], [], 0, []
     worker, model_failed = None, False
     for index, recording in enumerate(manifest['recordings']):
         began = time.monotonic()
@@ -125,12 +209,18 @@ def evaluate(manifest_path, *, device='cpu', dtype='float32', run_name='pr1', re
                 audio=recording['audio'],
                 crop=[recording['t0'], recording['dur']],
                 source_files=sources,
-                settings=settings,
+                settings={**settings, 'declared_language': recording.get('declared_language')},
             )
             cached = root / (key + '.json')
             wav = root / f'crop-{index}.wav'
-            if not cached.exists():
+            if not wav.exists() or not cached.exists():
                 crop_audio(recording, wav)
+            # Archive durations are rounded; admit the exact decoded capture,
+            # leaving the frozen crop and every reference-word clock intact.
+            with wave.open(str(wav), 'rb') as audio:
+                captured_seconds = audio.getnframes() / audio.getframerate()
+            item = WorkItem(key, 'local-evaluation', 1_700_000_000.0, str(wav), captured_seconds, Priority.DEEP)
+            if not cached.exists():
                 if worker is None:
                     if model_failed:
                         raise RuntimeError('models_unavailable')
@@ -140,15 +230,20 @@ def evaluate(manifest_path, *, device='cpu', dtype='float32', run_name='pr1', re
                     except Exception:
                         model_failed = True
                         raise
-                item = WorkItem(key, 'local-evaluation', 1_700_000_000.0, str(wav), recording['dur'], Priority.DEEP)
                 outcomes = worker.process_batch([item])
                 if len(outcomes) != 1 or getattr(outcomes[0], 'outcome', None) != 'success':
+                    private_json(
+                        root / f'failure-{index}.json',
+                        {
+                            'outcomes': [type(outcome).__name__ for outcome in outcomes],
+                            'reasons': [getattr(outcome, 'reason', None) for outcome in outcomes],
+                        },
+                    )
                     raise RuntimeError('pipeline_did_not_produce_transcript')
                 payload = artifacts.load_result(item, outcomes[0].result_uri)
                 private_json(cached, payload)
             else:
                 payload = json.loads(cached.read_text())
-                item = WorkItem(key, 'local-evaluation', 1_700_000_000.0, str(wav), recording['dur'], Priority.DEEP)
             diarization = payload['diarization']
             compatible = diarization.get('embedding_space') == EMBEDDING_SPACE
             # PR1 intentionally reports today's absence of compatible evidence.
@@ -162,7 +257,12 @@ def evaluate(manifest_path, *, device='cpu', dtype='float32', run_name='pr1', re
                 target_conversation_id='local-conversation',
                 record_origin=True,
             )
-            persisted = project(artifacts, item, binding, str(cached))
+            persisted = (
+                project_external(projection_python, artifacts, item, binding, str(cached))
+                if projection_python is not None
+                and Path(projection_python).absolute() != Path(sys.executable).absolute()
+                else project(artifacts, item, binding, str(cached))
+            )
             for turn in persisted:
                 if turn.get('is_user'):
                     turn['display_name'] = 'You'
@@ -171,18 +271,19 @@ def evaluate(manifest_path, *, device='cpu', dtype='float32', run_name='pr1', re
             truth = [{**word, 'speaker': word['truth']} for word in recording['words']]
             reference = None
             if reference_files and recording['id'] in reference_files:
-                reference = json.loads(Path(reference_files[recording['id']]).read_text())['text']
+                reference = reference_text(reference_files[recording['id']], recording, wav, 'mlx-whisper-large-v3')
             score = score_recording(truth, persisted, recording['identity_table'], model_reference=reference)
             if reference is not None:
                 score['whisper_base_model_reference_wer'] = {}
                 for engine in ('faster-whisper-base', 'mlx-whisper-base'):
                     index_file = manifest_path.parent / 'references' / engine / 'reference-files.json'
+                    historical_index = manifest_path.parent / 'references-historical' / engine / 'reference-files.json'
+                    if historical_index.exists():
+                        index_file = historical_index
                     if index_file.exists():
                         paths = json.loads(index_file.read_text())
-                        artifact = json.loads(Path(paths[recording['id']]).read_text())
-                        score['whisper_base_model_reference_wer'][engine] = model_reference_wer(
-                            reference, artifact['text']
-                        )
+                        text = reference_text(paths[recording['id']], recording, wav, engine)
+                        score['whisper_base_model_reference_wer'][engine] = model_reference_wer(reference, text)
             elapsed = time.monotonic() - began
             public.update(score)
             public.update(
@@ -192,9 +293,38 @@ def evaluate(manifest_path, *, device='cpu', dtype='float32', run_name='pr1', re
                     'centroid_decisions': len(decisions),
                     'elapsed_seconds': elapsed,
                     'rtf': elapsed / recording['dur'],
+                    'decoded_audio_seconds': captured_seconds,
+                    'declared_crop_seconds': recording['dur'],
                 }
             )
             scores.append(score)
+            if recording.get('enrollment_spans'):
+                try:
+                    if not wav.exists():
+                        crop_audio(recording, wav)
+                    rich = build_gallery(recording, wav, root / f'enrollment-{index}.json', base_gallery=gallery)
+                    rich_decisions = name_centroids(
+                        diarization.get('centroids', {}) if compatible else {}, rich['gallery']
+                    )
+                    # PR1 has no production batch naming seam: its persisted
+                    # output stays anonymous even with richer enrollment.
+                    diagnostic = score_recording(
+                        truth, persisted, rich['identity_table'], excluded_spans=rich['excluded_spans']
+                    )
+                    diagnostic.update(
+                        diagnostic_only=True,
+                        enrolled_voices=len(rich['gallery']),
+                        centroid_decisions=len(rich_decisions),
+                    )
+                    public['enrollment_rich'] = diagnostic
+                    rich_scores.append(diagnostic)
+                except Exception as error:
+                    traceback.print_exc()
+                    public['enrollment_rich'] = {
+                        'status': 'BLOCKED',
+                        'error_type': type(error).__name__,
+                        'diagnostic_only': True,
+                    }
             recordings.append(
                 {
                     'id': recording['id'],
@@ -225,7 +355,11 @@ def evaluate(manifest_path, *, device='cpu', dtype='float32', run_name='pr1', re
         'packages': model_versions,
         'peak_rss_native_units': resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
         'snapshot_enrolled_people': len(gallery) - int('user' in gallery),
-        'enrollment_rich': {'status': 'NOT_EVALUATED', 'diagnostic_only': True},
+        'enrollment_rich': {
+            'status': 'COMPLETE' if len(rich_scores) == len(manifest['recordings']) else 'BLOCKED',
+            'diagnostic_only': True,
+            'pooled': aggregate_scorecards(rich_scores) if rich_scores else None,
+        },
         'model_reference': 'model reference, not truth' if reference_files else 'NOT_EVALUATED',
         'firestore_reads': 0,
         'cloud_inference_calls': 0,
@@ -245,6 +379,7 @@ def main():
     parser.add_argument('--device', choices=['cpu', 'cuda:0'], default='cpu')
     parser.add_argument('--dtype', choices=['float32', 'bfloat16'], default='float32')
     parser.add_argument('--run-name', default='pr1')
+    parser.add_argument('--projection-python', type=Path, default=ROOT / '.venv' / 'bin' / 'python')
     parser.add_argument(
         '--reference-files', type=Path, help='Private JSON mapping recording IDs to model-reference files'
     )
@@ -263,6 +398,7 @@ def main():
                 dtype=args.dtype,
                 run_name=args.run_name,
                 reference_files=json.loads(args.reference_files.read_text()) if args.reference_files else None,
+                projection_python=args.projection_python,
             )
         except Exception as error:
             traceback.print_exc()
