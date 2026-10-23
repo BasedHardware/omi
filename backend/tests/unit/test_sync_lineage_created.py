@@ -106,6 +106,21 @@ def test_incomplete_lookup_is_unknown_not_clear(monkeypatch, caplog):
     ]
 
 
+def test_live_recording_stamp_survives_sync_revision_and_replaced_capture_evidence():
+    incoming = chunk('wal', 1000)
+    row = dict(
+        chunk('live', 1002),
+        sync_content_revision=7,
+        capture_evidence={'origin': 'sync_vad'},
+        external_data={'recording_origin_id': 'synthetic-origin'},
+    )
+    assert created_sync_row_observation([row], incoming, incoming, lookup_complete=True) == {
+        'outcome': 'created_overlap',
+        'checked_live_candidates_bucket': '1',
+        'lookup_complete': True,
+    }
+
+
 @pytest.mark.parametrize('admitted,s1', [(False, True), (True, False)])
 def test_non_admitted_or_unvalidated_intake_is_silent_and_has_identical_reads_writes(
     monkeypatch, caplog, admitted, s1, encoded_plans

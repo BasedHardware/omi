@@ -38,6 +38,8 @@ def created_sync_row_observation(rows: list[dict], result: dict, incoming: dict,
                 not row.get('sync_content_revision')
                 or row.get('sync_live_target')
                 or (row.get('capture_evidence') or {}).get('origin') == 'live'
+                or (row.get('external_data') or {}).get('recording_origin_id')
+                or (row.get('external_data') or {}).get('recording_session_id')
             )
             if not live:
                 continue
