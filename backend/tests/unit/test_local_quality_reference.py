@@ -130,3 +130,68 @@ def test_invalid_private_output_reports_only_aggregate_error(tmp_path, monkeypat
     report = json.loads(captured.out)
     assert report['status'] == 'BLOCKED'
     assert str(tmp_path) not in captured.out + captured.err
+
+
+def test_scorecard_refuses_stale_source_crop_engine_or_lock(tmp_path):
+    import copy
+    import wave
+    from scripts.diarization_eval.run_local import reference_text
+
+    source = tmp_path / 'source'
+    source.write_bytes(b'synthetic-source')
+    recording = {'id': 'synthetic-id', 'audio': str(source), 't0': 0, 'dur': 1}
+    root = tmp_path / 'reference'
+    (root / 'crops').mkdir(parents=True)
+    source_hash = reference.digest(source)
+    crop_id = reference.fingerprint({'audio': source_hash, 't0': 0, 'dur': 1})
+    crop = root / 'crops' / (crop_id + '.wav')
+    with wave.open(str(crop), 'wb') as audio:
+        audio.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        audio.writeframes(b'\0\0' * 16000)
+    engine = 'mlx-whisper-large-v3'
+    config = reference.ENGINES[engine]
+    lock = {'repo': config['repo'], 'revision': 'a' * 40, 'files': {'model': 'verified-digest'}}
+    (root / 'model-lock.json').write_text(json.dumps(lock))
+    provenance = {
+        'engine': engine,
+        'repo': lock['repo'],
+        'revision': lock['revision'],
+        'model_files': lock['files'],
+        'clock': 'crop',
+        'role': 'model_reference_not_truth',
+        'cloud_inference_calls': 0,
+        'decoding': config['decoding'],
+    }
+    baseline = {
+        'status': 'ok',
+        'id': recording['id'],
+        't0': 0,
+        'dur': 1,
+        'text': 'synthetic reference',
+        'audio_sha256': source_hash,
+        'crop_sha256': reference.digest(crop),
+        'provenance': provenance,
+    }
+    baseline['cache_key'] = reference.artifact_key(
+        source_hash=source_hash, crop_hash=baseline['crop_sha256'], recording=recording, provenance=provenance
+    )
+    artifact = root / 'recording.json'
+    artifact.write_text(json.dumps(baseline))
+    assert reference_text(artifact, recording, crop, engine) == 'synthetic reference'
+    for key, value in [
+        ('status', 'BLOCKED'),
+        ('id', 'other'),
+        ('dur', 2),
+        ('audio_sha256', 'wrong'),
+        ('crop_sha256', 'wrong'),
+    ]:
+        changed = copy.deepcopy(baseline)
+        changed[key] = value
+        artifact.write_text(json.dumps(changed))
+        with pytest.raises(ValueError, match='provenance_mismatch'):
+            reference_text(artifact, recording, crop, engine)
+    artifact.write_text(json.dumps(baseline))
+    lock['revision'] = 'b' * 40
+    (root / 'model-lock.json').write_text(json.dumps(lock))
+    with pytest.raises(ValueError, match='provenance_mismatch'):
+        reference_text(artifact, recording, crop, engine)

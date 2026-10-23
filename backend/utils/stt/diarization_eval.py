@@ -57,7 +57,11 @@ def _identity(row):
 
 
 def _voice(turn):
-    voice_id = turn.get('speaker_id') if turn.get('speaker_id') is not None else turn.get('speaker')
+    # Persisted integer IDs have already passed the conversation allocator.
+    # Unit scopes remain provenance and must not split a linked canonical ID.
+    if isinstance(turn.get('speaker_id'), int) and not isinstance(turn['speaker_id'], bool):
+        return ('conversation', str(turn['speaker_id']))
+    voice_id = turn.get('speaker')
     if voice_id is None:
         return None
     scope = turn.get('speaker_id_scope') or turn.get('speaker_scope') or turn.get('scope') or ''

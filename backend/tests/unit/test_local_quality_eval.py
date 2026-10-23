@@ -89,11 +89,18 @@ def test_all_excluded_never_passes():
 
 def test_voice_count_uses_scope_and_channel_not_person_name():
     truth = [word(i) for i in range(3)]
-    turns = [turn(i, speaker_id=0, speaker_id_scope=str(i), person_id='p') for i in range(3)]
+    turns = [turn(i, speaker_id=i, speaker_id_scope=str(i), person_id='p') for i in range(3)]
     result = score_recording(truth, turns, {'owner': {'person_id': 'p'}})
     assert result['predicted_voices'] == 3
     assert result['speaker_count_within_one'] is False
     assert result['engineering_gate'] == 'FAIL'
+
+
+def test_linked_canonical_voice_is_counted_once_across_original_unit_scopes():
+    turns = [turn(i, speaker_id=0, speaker_id_scope=str(i), is_user=True) for i in range(3)]
+    result = score_recording([word(i) for i in range(3)], turns, {'owner': {'is_user': True}})
+    assert result['predicted_voices'] == 1
+    assert result['engineering_gate'] == 'PASS'
 
 
 def test_model_reference_diagnostic_has_sdi_and_identical_normalization():

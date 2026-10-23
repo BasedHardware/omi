@@ -187,6 +187,10 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path,
     assert run_local.main() == 0
     capsys.readouterr()
     assert calls == ['crop', 'inference']
+    monkeypatch.setenv('BATCH_PIPELINE_WINDOW_SECONDS', '20')
+    assert run_local.main() == 0
+    capsys.readouterr()
+    assert calls == ['crop', 'inference', 'crop', 'inference']
 
 
 def test_declared_language_is_carried_in_existing_staging_envelope(tmp_path, monkeypatch):
