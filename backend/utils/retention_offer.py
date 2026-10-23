@@ -169,6 +169,9 @@ def accept(subscription_id: str) -> RetentionOffer:
     if not token:
         raise ValueError('in_progress')
     try:
+        # Decide only on state read under the lease: a request that read before another worker
+        # redeemed must see that redemption, not its stale copy.
+        sub = stripe.Subscription.retrieve(subscription_id, expand=['items.data.price', 'discounts'])
         customer = stripe.Customer.retrieve(customer_id)
         claimed_by = _get(_get(customer, 'metadata') or {}, USED_METADATA_KEY)
         if claimed_by and claimed_by != subscription_id:
@@ -199,7 +202,10 @@ def accept(subscription_id: str) -> RetentionOffer:
             discounts=[{'coupon': COUPON_ID}],
             cancel_at_period_end=False,
             metadata={APPLIED_METADATA_KEY: '1'},
-            idempotency_key=f'retention-apply-{subscription_id}',
+            # Fresh key per attempt: this runs only after the locked read showed no discount, and
+            # `discounts` replaces the list, so a repeat can never stack a second discount. A fixed
+            # key would replay a cached Stripe 5xx for 24h and strand a claimed customer.
+            idempotency_key=f'retention-apply-{subscription_id}-{uuid.uuid4().hex}',
         )
         return offer
     finally:
@@ -207,11 +213,26 @@ def accept(subscription_id: str) -> RetentionOffer:
 
 
 def _claim(customer_id: str, subscription_id: str) -> None:
+    """Record this subscription as the customer's one redemption.
+
+    The per-customer idempotency key blocks a stale worker from claiming for a second
+    subscription. Stripe also caches a 5xx under that key for 24h, so a failure is never retried
+    blind: the customer is re-read and the saved claim decides.
+    """
     try:
         stripe.Customer.modify(
             customer_id,
             metadata={USED_METADATA_KEY: subscription_id},
             idempotency_key=f'retention-claim-{customer_id}',
         )
+        return
     except stripe.IdempotencyError:
         raise ValueError('already_used')
+    except stripe.StripeError:
+        claimed_by = _get(_get(stripe.Customer.retrieve(customer_id), 'metadata') or {}, USED_METADATA_KEY)
+    if claimed_by == subscription_id:
+        return  # the write landed even though the response failed
+    if claimed_by:
+        raise ValueError('already_used')
+    # Nothing claimed and the key holds a cached failure: no claim, no discount; retry after it expires.
+    raise ValueError('unavailable')

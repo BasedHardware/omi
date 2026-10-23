@@ -93,6 +93,8 @@ class _FakeStripe:
         self.calls = []
         self.fail_customer_modify = False
         self.before_customer_read = None
+        self.cached_errors = {}  # idempotency key -> Stripe error replayed for the key's lifetime
+        self.fail_once = {}  # 'cus' | 'sub' -> 'before' (write lost) | 'after' (write landed, response lost)
         monkeypatch.setattr(ro.stripe.Subscription, 'retrieve', self.sub_retrieve)
         monkeypatch.setattr(ro.stripe.Subscription, 'modify', self.sub_modify)
         monkeypatch.setattr(ro.stripe.Customer, 'retrieve', self.cus_retrieve)
@@ -131,13 +133,31 @@ class _FakeStripe:
         self.idempotency[key] = params
         return False
 
+    def _maybe_fail(self, kind, kw, write):
+        key = kw.get('idempotency_key')
+        if key in self.cached_errors:
+            raise self.cached_errors[key]
+        mode = self.fail_once.pop(kind, None)
+        if not mode:
+            return False
+        if mode == 'after':
+            write()
+        error = ro.stripe.APIError('stripe 500')
+        if key:
+            self.cached_errors[key] = error
+        raise error
+
     def sub_retrieve(self, sid, **kw):
         return copy.deepcopy(self.subs[sid])
 
     def sub_modify(self, sid, **kw):
         self.calls.append(('sub', sid, kw))
+        self._maybe_fail('sub', kw, lambda: self._apply_sub(sid, kw))
         if self._idempotent(kw):
             return
+        self._apply_sub(sid, kw)
+
+    def _apply_sub(self, sid, kw):
         sub = self.subs[sid]
         if 'metadata' in kw:
             sub.setdefault('metadata', {}).update(kw['metadata'])
@@ -155,6 +175,7 @@ class _FakeStripe:
         self.calls.append(('cus', cid, kw))
         if self.fail_customer_modify:
             raise RuntimeError('stripe 500')
+        self._maybe_fail('cus', kw, lambda: self.customers[cid]['metadata'].update(kw['metadata']))
         if self._idempotent(kw):
             return
         self.customers[cid]['metadata'].update(kw['metadata'])
@@ -177,7 +198,7 @@ def test_accept_claims_customer_then_discounts_and_clears_cancel(monkeypatch):
     assert [c[0] for c in fake.calls] == ['cus', 'sub']  # claim before discount
     assert fake.customers['cus_1']['metadata'][ro.USED_METADATA_KEY] == 'sub_1'
     assert fake.subs['sub_1']['cancel_at_period_end'] is False and fake.discounted() == ['sub_1']
-    assert fake.calls[1][2]['idempotency_key'] == 'retention-apply-sub_1'
+    assert fake.calls[1][2]['idempotency_key'].startswith('retention-apply-sub_1-')
     assert fake.coupons[ro.COUPON_ID]['percent_off'] == 50 and fake.locks == {}
 
 
@@ -348,3 +369,66 @@ def test_real_lease_helpers_use_owner_token(monkeypatch):
     ro._release_lock('cus_1', token)
     assert calls[0][1:] == ('retention_offer:cus_1', token, ro.LOCK_TTL_SECONDS, True)
     assert calls[1] == ('eval', 'retention_offer:cus_1', token, True)
+
+
+def test_apply_cached_500_retry_discounts_once_with_a_fresh_key(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub()])
+    fake.fail_once['sub'] = 'before'
+    with pytest.raises(ro.stripe.APIError):
+        ro.accept('sub_1')
+    assert fake.customers['cus_1']['metadata'][ro.USED_METADATA_KEY] == 'sub_1' and fake.discounted() == []
+
+    assert ro.accept('sub_1').eligible
+    assert fake.discounted() == ['sub_1'] and len(fake.subs['sub_1']['discounts']) == 1
+    assert ro.accept('sub_1').reason == 'already_applied'
+
+
+def test_apply_landed_but_response_lost_does_not_stack(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub()])
+    fake.fail_once['sub'] = 'after'
+    with pytest.raises(ro.stripe.APIError):
+        ro.accept('sub_1')
+    assert ro.accept('sub_1').reason == 'already_applied'
+    assert len(fake.subs['sub_1']['discounts']) == 1
+
+
+def test_claim_landed_but_response_lost_continues_to_discount(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub()])
+    fake.fail_once['cus'] = 'after'
+    assert ro.accept('sub_1').eligible
+    assert fake.discounted() == ['sub_1']
+
+
+def test_claim_cached_500_leaves_nothing_redeemed_and_never_retries_blind(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub(), _sub(id='sub_2')])
+    fake.fail_once['cus'] = 'before'
+    with pytest.raises(ValueError, match='unavailable'):
+        ro.accept('sub_1')
+    # The same per-customer key replays the cached 500: still unclaimed, still undiscounted.
+    with pytest.raises(ValueError, match='unavailable'):
+        ro.accept('sub_1')
+    # Another subscription cannot slip through on the same key.
+    with pytest.raises(ValueError, match='already_used|unavailable'):
+        ro.accept('sub_2')
+    assert fake.discounted() == [] and not fake.customers['cus_1']['metadata'].get(ro.USED_METADATA_KEY)
+    assert fake.locks == {}
+
+
+def test_request_paused_after_its_first_read_sees_the_other_redemption(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub(cancel_at_period_end=True)])
+    real_acquire = fake.acquire
+    state = {}
+
+    def acquire_after_b_finishes(cid):
+        # A has done its unlocked subscription read; B redeems end to end and releases.
+        if 'b' not in state:
+            state['b'] = 'running'
+            monkeypatch.setattr(ro, '_acquire_lock', real_acquire)
+            state['b'] = ro.accept('sub_1').reason
+        return real_acquire(cid)
+
+    monkeypatch.setattr(ro, '_acquire_lock', acquire_after_b_finishes)
+    assert ro.accept('sub_1').reason == 'already_applied'  # request A
+    assert state['b'] == 'eligible'
+    assert sum(1 for c in fake.calls if c[0] == 'sub' and 'discounts' in c[2]) == 1
+    assert len(fake.subs['sub_1']['discounts']) == 1
