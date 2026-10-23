@@ -52,20 +52,31 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
     widget.onDone(connected);
   }
 
+  /// Back (button, system back or the iOS swipe) leaves as skipped; mid-connect it never claims a
+  /// connection or opens the walkthrough.
+  void _back() {
+    final devices = context.read<DeviceProvider>();
+    final onboarding = context.read<OnboardingProvider>();
+    _finish(devices.isConnected && devices.connectedDevice != null && !onboarding.isClicked);
+  }
+
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _back();
+      },
+      child: _scaffold(context),
+    );
+  }
+
+  Widget _scaffold(BuildContext context) {
     final l10n = context.l10n;
     return Scaffold(
       backgroundColor: OmiColors.surface0,
       appBar: AppBar(
-        leading: OmiBackButton(
-          onPressed: () {
-            final devices = context.read<DeviceProvider>();
-            final onboarding = context.read<OnboardingProvider>();
-            // Mid-connect, leaving never claims a connection or opens the walkthrough.
-            _finish(devices.isConnected && devices.connectedDevice != null && !onboarding.isClicked);
-          },
-        ),
+        leading: OmiBackButton(onPressed: _back),
       ),
       body: Consumer<OnboardingProvider>(
         builder: (context, onboardingProvider, child) {

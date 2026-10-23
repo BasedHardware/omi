@@ -130,9 +130,33 @@ class _PocketOnboardingFlowState extends State<PocketOnboardingFlow> {
     }
   }
 
+  /// System back and the iOS swipe step back one page and never leave the flow. Pairing owns its
+  /// own back (the same guarded skip as its visible button); permissions has nowhere to go.
+  void _systemBack() {
+    switch (_index) {
+      case kFoundOmiPage:
+        _show(kPairingPage);
+      case kPrimaryLanguagePage:
+        _show(kFoundOmiPage);
+      case kNamePage:
+        _show(kPrimaryLanguagePage);
+      default:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_index == kPairingPage) return _page(_index);
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _systemBack();
+      },
+      child: _index == kPairingPage ? _page(_index) : _stepPage(context),
+    );
+  }
+
+  Widget _stepPage(BuildContext context) {
     final media = MediaQuery.of(context);
     return Scaffold(
       body: Stack(
