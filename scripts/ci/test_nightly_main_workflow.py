@@ -105,6 +105,12 @@ class WorkflowTests(unittest.TestCase):
             baseline = subprocess.run(["git", "show", f"{base}:.github/workflows/{filename}"],
                                       cwd=ROOT, capture_output=True, text=True, check=True).stdout
             before, after = jobs(baseline), jobs((WORKFLOWS / filename).read_text())
+            if filename == "backend-hermetic-e2e.yml":
+                # Legacy-retire C11 (#22635) deletes Phase0A and its only job.
+                # Pin that exact retirement; every other job/budget stays fixed.
+                self.assertFalse((ROOT / "backend/testing/replay_harness_phase0a/runner.py").exists())
+                self.assertNotIn("replay-harness-phase0a-gauntlet", after)
+                before.pop("replay-harness-phase0a-gauntlet", None)
             self.assertEqual(set(before), set(after), filename)
             for name in before:
                 for field in ("runs-on", "timeout-minutes"):
