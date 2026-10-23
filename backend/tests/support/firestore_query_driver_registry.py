@@ -3485,7 +3485,7 @@ for _function in ('_source_read', '_source_iter_read'):
             },
         )
     )
-for _function in ('projected_stream_list', 'projected_stream_iter'):
+for _function in ('projected_stream_iter',):
     _add(
         DriverEntry(
             f'database.released_memory_projection.{_function}',

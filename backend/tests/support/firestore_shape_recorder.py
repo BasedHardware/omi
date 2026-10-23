@@ -294,7 +294,7 @@ def _calling_function() -> str:
         if not fallback and module and not module.startswith('tests.support'):
             fallback = f'{module}.{frame.f_code.co_qualname}'
         frame = frame.f_back
-    return transparent or fallback
+    return fallback or transparent
 
 
 @dataclass(frozen=True)
