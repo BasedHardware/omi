@@ -283,6 +283,18 @@ export function parsePlanCost(json: string): PlanCostHistory {
   return history;
 }
 
+/** Cost frames the health wall renders (`healthFrames` slices its daily
+ * backbone to this many days). */
+export const HEALTH_COST_DAYS = 60;
+
+/** The health frames end at the D−2 cutoff, so their oldest rendered day is
+ * today−61. Both the fee and the infra history reads below default to a
+ * window covering every rendered day plus one spare: a Mercury stripe_fees
+ * cash day outside the infra read is silently dropped from the wall when the
+ * measured fee line is dark (Luna r2 P2), and a fee day outside the fee read
+ * would hand its day to that cash fallback for no reason. */
+const HEALTH_HISTORY_DAYS = HEALTH_COST_DAYS + 2;
+
 /** Measured Stripe processing fees, read from the FinOps table the producer
  * creates on its first successful balance-transaction pull. Until the finops
  * Stripe key gains read scope for `GET /v1/balance_transactions`, the table
@@ -309,7 +321,7 @@ export interface StripeFeeHistory {
 
 export async function fetchStripeFeeHistory(
   today: string,
-  days = 40
+  days = HEALTH_HISTORY_DAYS
 ): Promise<StripeFeeHistory> {
   const bq = getGcpBillingClient();
   if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
@@ -389,7 +401,7 @@ export interface InfraHistory {
 
 export async function fetchInfraHistory(
   today: string,
-  days = 40
+  days = HEALTH_HISTORY_DAYS
 ): Promise<InfraHistory> {
   const bq = getGcpBillingClient();
   if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");

@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  fetchInfraHistory,
+  fetchStripeFeeHistory,
   FINOPS_INFRA_QUERY,
   FINOPS_MODULATE_MODELLED_QUERY,
   FINOPS_PLAN_COST_QUERY,
   FINOPS_STRIPE_FEE_QUERY,
   FINOPS_VENDOR_BALANCE_QUERY,
+  HEALTH_COST_DAYS,
   parseFinopsHistory,
   parseInfra,
   parsePlanCost,
@@ -25,6 +28,13 @@ import {
   sttLineFor,
   STT_MONTHLY_USD,
 } from "../wall-cost";
+
+const query = vi.hoisted(() => vi.fn());
+// Partial: wall-cost.ts also imports `isLlmService` from this module.
+vi.mock("@/lib/services/gcp-billing", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getGcpBillingClient: () => ({ query }),
+}));
 
 const day = (i: number) => `2026-09-${String(i).padStart(2, "0")}`;
 /** Flat GCP with a Coldline-migration-like Cloud Storage spike on Sep 20. */
@@ -660,6 +670,43 @@ describe("FinOps infra run-rate reader", () => {
     // A dark infra table must never fail the plan/STT/SaaS read (the fee-table
     // rule): it stays out of the plan-cost query.
     expect(FINOPS_PLAN_COST_QUERY).not.toContain("mercury_infra_non_gcp_daily");
+  });
+
+  it("defaults both history reads past the oldest health frame (Luna r2 P2)", async () => {
+    // The wall renders HEALTH_COST_DAYS frames ending at the D−2 cutoff, so
+    // its oldest day is today−61. Both reads must reach that day unprompted:
+    // with the fee source dark, an infra day outside the read silently drops
+    // its Mercury stripe_fees cash from the rendered series.
+    const today = "2026-10-15";
+    const oldest = "2026-08-15"; // today − 61
+    query.mockResolvedValueOnce([
+      [
+        {
+          history: JSON.stringify({
+            infra: [
+              {
+                day: oldest,
+                usd: 1,
+                stripe_fees_usd: 4,
+                annual_complete: true,
+              },
+            ],
+          }),
+        },
+      ],
+    ]);
+    const infra = await fetchInfraHistory(today);
+    const infraCall = query.mock.calls[0][0] as { params: { days: number } };
+    expect(infraCall.params.days).toBeGreaterThanOrEqual(HEALTH_COST_DAYS + 1);
+    expect(infra.infraStripeFeesCash[oldest]).toBe(4);
+
+    query.mockResolvedValueOnce([
+      [{ day: oldest, fee_usd: 5, foreign_transaction_count: 0 }],
+    ]);
+    const fees = await fetchStripeFeeHistory(today);
+    const feeCall = query.mock.calls[1][0] as { params: { days: number } };
+    expect(feeCall.params.days).toBeGreaterThanOrEqual(HEALTH_COST_DAYS + 1);
+    expect(fees.fees[oldest]).toBe(5);
   });
 });
 

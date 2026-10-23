@@ -46,6 +46,7 @@ import {
   fetchStripeFeeHistory,
   fetchVendorBalanceHistory,
   FinopsHistory,
+  HEALTH_COST_DAYS,
   InfraHistory,
   ModulateModelledDay,
   PlanCostHistory,
@@ -823,7 +824,10 @@ export function healthFrames(
     Object.keys(legs.fees?.fees || {})
       .sort()
       .at(-1) ?? null;
-  const cost = days.slice(-60).map((d) => {
+  // The fee/infra history reads cover every frame this renders (their shared
+  // window constant), so a fee-dark day keeps its Mercury stripe_fees cash
+  // however old it is.
+  const cost = days.slice(-HEALTH_COST_DAYS).map((d) => {
     const book = finopsMrr(legs.finops, new Date(ts(d.date)));
     return {
       date: ts(d.date),

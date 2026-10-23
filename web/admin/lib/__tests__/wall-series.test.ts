@@ -27,6 +27,7 @@ import {
 } from "../wall-series-store";
 import { isoDay, shiftDay, utcDay } from "../qualified-activity";
 import { INFRA_AS_OF, INFRA_MONTHLY_USD } from "../wall-cost";
+import { HEALTH_COST_DAYS } from "../wall-finops";
 
 const now = new Date("2026-10-15T12:00Z");
 const end = utcDay(now);
@@ -724,6 +725,40 @@ describe("margin by plan (allocated estimate)", () => {
       asOf: INFRA_AS_OF,
       stale: 0,
     });
+  });
+
+  it("counts the Mercury stripe_fees cash on every rendered frame while the fee line is dark (Luna r2 P2)", async () => {
+    const base = await legs();
+    // Cash on every frame the wall renders — the oldest included. The frames
+    // span the 60 days ending at the D−2 cutoff (days 61..2 here); a history
+    // read that stops 40 days back drops the cash from the oldest 19.
+    const cash = Object.fromEntries(
+      Array.from({ length: HEALTH_COST_DAYS }, (_, i) => [day(i + 2), 4])
+    );
+    const f = assembleSeries(
+      "health",
+      {
+        ...base,
+        infra: {
+          infraMeasured: {},
+          infraAnnualPartial: {},
+          infraStripeFeesCash: cash,
+        },
+      },
+      null,
+      now
+    );
+    expect(f.cost).toHaveLength(HEALTH_COST_DAYS);
+    expect(String(f.cost[0].date).slice(0, 10)).toBe(day(HEALTH_COST_DAYS + 1));
+    expect(String(f.cost.at(-1)!.date).slice(0, 10)).toBe(day(2));
+    // Every frame, the oldest first: the dated constant base plus the cash,
+    // the fee line dark — the money sits on exactly one line on every day.
+    const constant = INFRA_MONTHLY_USD / (365.25 / 12);
+    for (const r of f.cost) {
+      expect(r.infraFeesCashUsd).toBe(4);
+      expect(r.infra).toBeCloseTo(constant + 4, 6);
+      expect(r.feesUnavailable).toBe(1);
+    }
   });
 
   it("flags the cost frames once a manual estimate is older than 35 days", async () => {
