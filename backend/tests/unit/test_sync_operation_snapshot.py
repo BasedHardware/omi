@@ -142,6 +142,18 @@ def test_new_operation_refreshes_after_delete_redirect_or_source_mutation(world)
     assert len(reads) > 4
 
 
+@pytest.mark.parametrize('cid,max_hops', [('', 16), ('bad/path', 16), ('x' * 257, 16), ('valid', 0)])
+def test_invalid_redirect_never_constructs_a_client(world, monkeypatch, cid, max_hops):
+    conversations, _, reads, _ = world
+
+    def unavailable():
+        raise AssertionError('invalid ids must be rejected before client resolution')
+
+    monkeypatch.setattr(conversations, 'get_firestore_client', unavailable)
+    assert conversations.resolve_sync_conversation_redirect('u', cid, max_hops=max_hops) is None
+    assert reads == []
+
+
 def test_real_detail_route_has_identical_response_and_refreshes_deletion(world, monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient

@@ -1430,7 +1430,7 @@ def get_conversation_raw_snapshot(
 
 def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_hops: int = 16) -> Optional[str]:
     """Resolve an owner bridge; user deletion remains terminal at every hop."""
-    resolved = resolve_snapshot(uid, conversation_id, firestore_client=get_firestore_client(), max_hops=max_hops)
+    resolved = resolve_snapshot(uid, conversation_id, client_factory=get_firestore_client, max_hops=max_hops)
     return resolved.conversation_id if resolved is not None else None
 
 
@@ -1439,7 +1439,7 @@ def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_ho
 def _get_sync_redirected_conversation_snapshot(
     uid: str, conversation_id: str, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED
 ) -> Optional[dict]:
-    resolved = resolve_snapshot(uid, conversation_id, firestore_client=get_firestore_client())
+    resolved = resolve_snapshot(uid, conversation_id, client_factory=get_firestore_client)
     if resolved is None:
         return None
     record_document_read(read_site, FirestoreReadOutcome.HIT)

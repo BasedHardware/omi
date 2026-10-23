@@ -1,7 +1,7 @@
 """Detached, operation-local redirect snapshot; never a mutation authority."""
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from database.conversation_revisions import firestore_revision_datetime
 
@@ -22,20 +22,22 @@ class SyncConversationSnapshot:
 
 
 def resolve_snapshot(
-    uid: str, conversation_id: str, *, firestore_client: Any, max_hops: int = 16
+    uid: str, conversation_id: str, *, client_factory: Callable[[], Any], max_hops: int = 16
 ) -> SyncConversationSnapshot | None:
     """Check every deletion marker and owner/path before returning the survivor.
 
     A new invocation always reads fresh documents. Nothing is shared with a
     transaction, a later callback, or another operation.
     """
-    user = firestore_client.collection('users').document(uid)
+    user = None
     seen: set[str] = set()
     current_id = conversation_id
     for _ in range(max_hops):
         if current_id in seen or not current_id or '/' in current_id or len(current_id.encode()) > 256:
             return None
         seen.add(current_id)
+        if user is None:
+            user = client_factory().collection('users').document(uid)
         if user.collection('deleted_conversations').document(current_id).get().exists:
             return None
         document = user.collection('conversations').document(current_id).get()
