@@ -49,6 +49,12 @@ def verify_provenance(manifest):
     hashes alone authenticate an untrusted model runner.
     """
     value = deepcopy(manifest)
+    for key in ('crop_seconds', 'crop_start_seconds'):
+        item = value[key]
+        if type(item) not in (int, float) or not math.isfinite(item) or item < 0:
+            raise ValueError('invalid_frozen_crop_clock')
+    if value['crop_seconds'] == 0:
+        raise ValueError('empty_frozen_crop')
     if _digest(value['source_audio']) != value['source_sha256']:
         raise ValueError('frozen_source_hash_mismatch')
     crop_seconds, crop_hash = _pcm(value['crop_audio'], hashlib.sha256())
