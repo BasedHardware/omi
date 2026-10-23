@@ -50,7 +50,8 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
 }
 
 PendingWorkStore _stubPendingWork() => PendingWorkStore(
-      loadPending: () async => const ApiSuccess(PendingWorkSnapshot(enabled: false, items: [], attentionUnseenCount: 0)),
+      loadPending: () async =>
+          const ApiSuccess(PendingWorkSnapshot(enabled: false, items: [], attentionUnseenCount: 0)),
       loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
     );
 

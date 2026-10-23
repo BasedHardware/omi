@@ -19,8 +19,6 @@ class _ButtonPrefs implements SharedPreferencesUtil {
   @override
   int get tripleTapAction => 2;
   @override
-  bool get omiButtonActionsDisabled => false;
-  @override
   dynamic noSuchMethod(Invocation i) => null;
 }
 
