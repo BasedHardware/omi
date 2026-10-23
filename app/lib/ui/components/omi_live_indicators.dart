@@ -165,8 +165,8 @@ class _OmiLiveDotState extends State<OmiLiveDot> with SingleTickerProviderStateM
 }
 
 /// A small live dot with one thin ring breathing out of it, every 2.4 s. The quiet live mark for
-/// rows that sit among ordinary ones (Home's live episode). Grey and still when not [live], and
-/// still under Reduce Motion.
+/// rows that sit among ordinary ones (Home's live episode): the primary text colour, no green
+/// (David 2026-10-23). Grey and still when not [live], and still under Reduce Motion.
 class OmiBreathingDot extends StatefulWidget {
   const OmiBreathingDot({super.key, this.live = true, this.size = 6});
 
@@ -196,7 +196,7 @@ class _OmiBreathingDotState extends State<OmiBreathingDot> with SingleTickerProv
     } else if (_breath.isAnimating) {
       _breath.stop();
     }
-    final color = widget.live ? OmiColors.success : OmiColors.textTertiary;
+    final color = widget.live ? OmiColors.textPrimary : OmiColors.textTertiary;
     final dot = Container(
         width: widget.size, height: widget.size, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
     final extent = widget.size * 3;

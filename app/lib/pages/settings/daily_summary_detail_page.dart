@@ -836,7 +836,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         _buildSectionTitle(l10n.recapInTheBackground),
         const SizedBox(height: 12),
         Container(
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
           child: Column(
             children: [
               for (var i = 0; i < _background.length; i++)
@@ -867,11 +867,11 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: OmiColors.textSecondary, fontSize: 15),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
               ),
             ),
             const SizedBox(width: 12),
-            Text(length, style: TextStyle(color: OmiColors.textTertiary, fontSize: 13)),
+            Text(length, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
           ],
         ),
       ),
