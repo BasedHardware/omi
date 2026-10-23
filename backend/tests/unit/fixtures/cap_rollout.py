@@ -7,6 +7,7 @@ from config import stt_cap_dispatch as policy
 
 @pytest.fixture(autouse=True)
 def full_cap_dispatch_rollout(monkeypatch):
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false')
     monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'all')
     monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live,sync,batch')
     # Exercise existing enforcement paths; production readiness is tested without

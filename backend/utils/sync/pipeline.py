@@ -146,8 +146,9 @@ from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.stt.voiceprints import usable_person_voiceprint
-from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled, recovery_admission_enabled, LANES
-from utils.stt_cap_dispatch import sync_allowed, funded_allowance
+from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled, recovery_admission_enabled, LANES
+from utils.stt_cap_dispatch import sync_allowed, funded_allowance, CapAllowanceDenied
+from utils.observability.stt_cap_dispatch import DispatchPath
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.stt.pre_recorded import (
     get_prerecorded_service,
@@ -1283,8 +1284,10 @@ def _recover_empty_segment(
             # Positive VAD after multilingual double-empty is unresolved;
             # buying the same call again is not independent recovery.
             raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
-        if cap_enabled(uid, cap_dispatch_lane) and not sync_allowed(uid, lane=cap_dispatch_lane):
-            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate')
+        if cap_enabled(uid, cap_dispatch_lane) and not sync_allowed(
+            uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.MULTILINGUAL
+        ):
+            raise CapAllowanceDenied()
 
     def multilingual_once(audio: bytes, **kwargs: Any):
         def dispatch():
@@ -1515,7 +1518,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     language,
                     path,
                     selector=get_prerecorded_service,
-                    before_probe=lambda: not cap_enforced() or sync_allowed(uid, lane=cap_dispatch_lane),
+                    before_probe=lambda: not cap_enforced()
+                    or sync_allowed(uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.LANGUAGE_PROBE),
                     cohort_key=uid,
                 ),
             )
@@ -1559,7 +1563,17 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         speech_offset = 0.0
         while True:
             phase = 'provider_call'
-            if cap_recovery and not cap_enforced() or cap_enforced() and not sync_allowed(uid, lane=cap_dispatch_lane):
+            if (
+                cap_recovery
+                and not cap_enforced()
+                or cap_enforced()
+                and not sync_allowed(
+                    uid,
+                    provider=provider,
+                    lane=cap_dispatch_lane,
+                    path=DispatchPath.EMPTY_RETRY if empty_retried else DispatchPath.SYNC_SEGMENT,
+                )
+            ):
                 return hold_for_cap()
             if cap_enforced() and cap_recovery and deferred_outcome is not None:
                 # Explicit request-boundary signal survives later cap denial,
@@ -1849,6 +1863,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             ),
         )
         return True
+    except CapAllowanceDenied:
+        return hold_for_cap()
     except SyncAssignmentSuperseded:
         # Acknowledge user authority without failing the WAL or dropping siblings.
         # False excludes this segment from content usage; the zero-error job still
@@ -2693,6 +2709,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     wav_paths,
                     source,
                     receipts=cap_hold_receipts,
+                    dispatch_path=DispatchPath.SYNC_V2,
                     source_frame_maps=source_frame_maps,
                     target_conversation_id=target_conversation_id,
                     client_device_id=client_device_id,

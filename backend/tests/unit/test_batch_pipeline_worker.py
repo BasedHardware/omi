@@ -1083,3 +1083,21 @@ def test_gpu_batch_outside_lane_does_not_require_cap_authority(monkeypatch, lane
     worker, words, saved, _, _, failures = setup_worker()
     worker.process_batch([item('a', 2)])
     assert words.calls == [[2]] and set(saved) == {'a'} and not failures
+
+
+@pytest.mark.parametrize('kill', [False, True])
+@pytest.mark.parametrize('authorized', [False, True])
+def test_offline_default_rechecks_gpu_spend_outside_legacy_scope(monkeypatch, kill, authorized):
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if kill else 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
+    worker, words, saved, _, _, failures = setup_worker()
+    authorize = Mock(side_effect=lambda ids: ids if authorized else set())
+    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
+    if kill or authorized:
+        assert words.calls == [[2]] and set(saved) == {'a'}
+    else:
+        assert words.calls == [] and not saved
+        assert result == [batch_pipeline.HeldWork('a')]
+    assert not failures
+    assert authorize.call_count == int(not kill)
