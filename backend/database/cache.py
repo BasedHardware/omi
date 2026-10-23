@@ -6,6 +6,7 @@ Cleanup is handled automatically via atexit.
 """
 
 import atexit
+from threading import Lock
 from typing import List, Optional
 from database.cache_manager import InMemoryCacheManager
 from database.redis_pubsub import RedisPubSubManager
@@ -15,6 +16,7 @@ from database.redis_db import r
 _memory_cache: Optional[InMemoryCacheManager] = None
 _pubsub_manager: Optional[RedisPubSubManager] = None
 _initialized: bool = False
+_initialization_lock = Lock()
 
 
 def _invalidate_keys(keys: List[str]) -> None:
@@ -31,16 +33,21 @@ def _ensure_initialized() -> None:
     if _initialized:
         return
 
-    _memory_cache = InMemoryCacheManager(max_memory_mb=100)
-    _pubsub_manager = RedisPubSubManager(r)
+    # Redis subscription can release the GIL. Without this lock simultaneous
+    # first requests replace each other's cache and bypass single-flight.
+    with _initialization_lock:
+        if _initialized:
+            return
+        _memory_cache = InMemoryCacheManager(max_memory_mb=100)
+        _pubsub_manager = RedisPubSubManager(r)
 
-    # Register callbacks: when invalidation message received, clear memory cache
-    _pubsub_manager.register_callback('get_public_approved_apps_data*', _invalidate_keys)
-    _pubsub_manager.register_callback('get_popular_apps_data', _invalidate_keys)
+        # Register callbacks: when invalidation message received, clear memory cache
+        _pubsub_manager.register_callback('get_public_approved_apps_data*', _invalidate_keys)
+        _pubsub_manager.register_callback('get_popular_apps_data', _invalidate_keys)
 
-    # Start pub/sub subscription
-    _pubsub_manager.start()
-    _initialized = True
+        # Start pub/sub subscription
+        _pubsub_manager.start()
+        _initialized = True
 
 
 def get_memory_cache() -> InMemoryCacheManager:

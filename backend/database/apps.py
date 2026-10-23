@@ -7,8 +7,15 @@ from google.cloud.firestore import ArrayUnion, ArrayRemove
 
 from models.app import App, UsageHistoryType
 from .redis_db import get_generic_cache, set_generic_cache
-from ._client import db
+from database.cache import get_memory_cache
+from database.firestore_read_origin import read_origin
+from config.firestore_quick_reads import public_catalog_cache_enabled
+from copy import deepcopy
 import logging
+from redis.exceptions import RedisError
+from utils.observability.fallback import record_fallback
+
+from ._client import db
 
 logger = logging.getLogger(__name__)
 
@@ -73,18 +80,38 @@ def get_public_approved_apps_db() -> List[Dict[str, Any]]:
     return [_typed_doc(doc) for doc in public_apps]
 
 
+@read_origin('task:public_app_catalog')
 def get_public_approved_apps_cached_db() -> List[Dict[str, Any]]:
-    """The approved+public app set, read through the marketplace's shared 10-minute Redis cache.
+    """The approved+public app set, through shared Redis and 30-second single-flight.
 
     Same key, TTL, reduction and invalidation as `utils.apps.get_approved_available_apps`, so a
     reader here can never serve a staler view than the list the user just came from.
     """
-    cached = get_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
-    if cached:
-        return cast(List[Dict[str, Any]], cached)
-    reduced = [App.reduce_dict(app) for app in get_public_approved_apps_db()]
-    set_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY, reduced, 60 * 10)  # 10 minutes cached
-    return reduced
+
+    def fetch():
+        cached = get_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
+        if cached is not None:
+            return cast(List[Dict[str, Any]], cached)
+        reduced = [App.reduce_dict(app) for app in get_public_approved_apps_db()]
+        set_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY, reduced, 600)
+        return reduced
+
+    if not public_catalog_cache_enabled():
+        return deepcopy(fetch())
+    # Same key as list consumers and pub/sub invalidation; cache empty sets too.
+    try:
+        memory = get_memory_cache()
+    except RedisError:
+        record_fallback(
+            component='other',
+            from_mode='memory_cache',
+            to_mode='database',
+            reason='unavailable',
+            outcome='recovered',
+            log=logger,
+        )
+        return deepcopy(fetch())
+    return deepcopy(memory.get_or_fetch(PUBLIC_APPROVED_APPS_CACHE_KEY, fetch, ttl=30))
 
 
 def get_popular_apps_db() -> List[Dict[str, Any]]:

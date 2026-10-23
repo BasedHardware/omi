@@ -2169,7 +2169,11 @@ _add(
     DriverEntry(
         'database.smart_merge.find_preceding_conversations',
         base={'uid': UID, 'source': 'omi', 'created_before': T0},
-        domains={'discarded': [False, True], 'transaction': [None, ref_transaction()]},
+        domains={
+            'discarded': [False, True],
+            'transaction': [None, ref_transaction()],
+            'client_device_id': [None, 'pendant-1'],
+        },
         neutrals={'limit': _LIMIT_OPT},
     )
 )

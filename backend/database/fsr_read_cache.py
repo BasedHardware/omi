@@ -33,6 +33,7 @@ class RequestReads:
     values: dict = field(default_factory=dict)
     lock: Any = field(default_factory=threading.RLock)
     closed: bool = False
+    cohort_values: dict = field(default_factory=dict)
 
 
 _request: ContextVar[RequestReads | None] = ContextVar('s4_request_reads', default=None)
@@ -50,6 +51,7 @@ async def request_read_scope():
         with holder.lock:
             holder.closed = True
             holder.values.clear()
+            holder.cohort_values.clear()
         try:
             _request.reset(token)
         except ValueError:
@@ -112,6 +114,24 @@ def memo(uid, key, fetch):
         else:
             _event('request_read_dedupe', 'hit')
         return copy.deepcopy(holder.values[scoped_key])
+
+
+def cohort_memberships(uid, fetch):
+    """Bounded request-only membership snapshot; errors/unknowns are never cached."""
+    from config.firestore_quick_reads import cohort_request_cache_enabled
+
+    holder = _request.get()
+    if holder is None or holder.closed or _bypass.get() or not cohort_request_cache_enabled():
+        return fetch()
+    with holder.lock:
+        if holder.closed:
+            return fetch()
+        if uid in holder.cohort_values:
+            return copy.deepcopy(holder.cohort_values[uid])
+        value = fetch()
+        if value is not None and len(holder.cohort_values) < 64:
+            holder.cohort_values[uid] = copy.deepcopy(value)
+        return value
 
 
 def user_snapshot(uid, client, fields=None):
