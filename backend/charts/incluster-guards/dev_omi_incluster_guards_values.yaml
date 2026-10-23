@@ -1,0 +1,6 @@
+namespace: dev-omi-backend
+hpaName: dev-omi-parakeet
+prometheusUrl: http://dev-omi-kube-prometheus-s-prometheus.dev-omi-monitoring.svc:9090
+dryRun: true
+batch:
+  monitoringRelease: dev-omi-kube-prometheus-stack

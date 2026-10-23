@@ -214,6 +214,7 @@ def is_firestore_index_guard_path(path: str) -> bool:
 
 
 AREA_TESTS = (
+    (('backend/charts/incluster-guards/',), (), ('tests/unit/test_incluster_guards.py',)),
     (
         # Task-target routes whose expected retries must stay 409 (contract (d)). #22431 moved
         # FirstSummaryCallbackPending and a router edit could no longer see the stale EXPECTED_RETRIES
@@ -533,6 +534,8 @@ def is_selectable_backend_path(path: str) -> bool:
         return False
     if path.startswith('backend/docs/'):
         return False
+    if path.startswith('backend/charts/incluster-guards/'):
+        return True
     if path.startswith('backend/charts/'):
         monitoring_contract_prefixes = MONITORING_CONTRACT_SOURCES
         return any(
