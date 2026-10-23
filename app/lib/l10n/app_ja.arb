@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "ボタンを1回押して、スマートフォンの近くに置いてください。",
     "walkthroughBackgroundRecordingNote": "これで完了です。Omi はバックグラウンドで会話を記録し続けます。",
     "noThanks": "いいえ、結構です",
-    "recapInTheBackground": "バックグラウンド"
+    "recapInTheBackground": "バックグラウンド",
+    "retentionOfferAccept": "{percent}%オフで続ける",
+    "retentionOfferBody": "続ければ月額{price}、次の{months}か月間。",
+    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。"
 }

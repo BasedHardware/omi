@@ -14339,4 +14339,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get recapInTheBackground => '배경에서';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% 할인받고 계속 쓰기';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return '계속 쓰시면 월 $price, 앞으로 $months개월 동안.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return '완료되었습니다. $percent% 할인이 $months개월 동안 적용됩니다.';
+  }
 }

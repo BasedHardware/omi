@@ -14612,4 +14612,19 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'En segon pla';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Queda\'t amb un $percent% de descompte';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Queda\'t i paga $price al mes durant els propers $months mesos.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Fet. $percent% de descompte els propers $months mesos.';
+  }
 }

@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "按一下按钮，并放在手机附近。",
     "walkthroughBackgroundRecordingNote": "就这样。Omi 会在后台继续记录你的对话。",
     "noThanks": "不用了，谢谢",
-    "recapInTheBackground": "背景中"
+    "recapInTheBackground": "背景中",
+    "retentionOfferAccept": "享受 {percent}% 折扣继续使用",
+    "retentionOfferBody": "继续使用，每月只需 {price}，持续 {months} 个月。",
+    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。"
 }

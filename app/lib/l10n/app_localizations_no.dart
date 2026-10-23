@@ -14541,4 +14541,19 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'I bakgrunnen';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Bli med $percent % rabatt';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Bli og betal $price i måneden de neste $months månedene.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Ferdig. $percent % rabatt de neste $months månedene.';
+  }
 }

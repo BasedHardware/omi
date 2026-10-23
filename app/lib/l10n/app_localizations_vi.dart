@@ -14539,4 +14539,19 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Trong nền';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Ở lại với ưu đãi giảm $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Ở lại và chỉ trả $price mỗi tháng trong $months tháng tới.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Xong. Giảm $percent% trong $months tháng tới.';
+  }
 }

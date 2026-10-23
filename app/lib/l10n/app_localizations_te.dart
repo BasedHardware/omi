@@ -14597,4 +14597,19 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'నేపథ్యంలో';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% తగ్గింపుతో కొనసాగండి';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'కొనసాగండి, నెలకు $price చెల్లించండి, తదుపరి $months నెలలు.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'పూర్తైంది. $percent% తగ్గింపు, తదుపరి $months నెలలు.';
+  }
 }

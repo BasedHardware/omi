@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Prem el botó un cop i mantén-lo a prop del mòbil.",
     "walkthroughBackgroundRecordingNote": "Ja està. L'Omi continuarà gravant les teves converses en segon pla.",
     "noThanks": "No, gràcies",
-    "recapInTheBackground": "En segon pla"
+    "recapInTheBackground": "En segon pla",
+    "retentionOfferAccept": "Queda't amb un {percent}% de descompte",
+    "retentionOfferBody": "Queda't i paga {price} al mes durant els propers {months} mesos.",
+    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos."
 }

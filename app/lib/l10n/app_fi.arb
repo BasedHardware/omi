@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Paina painiketta kerran ja pidä se lähellä puhelinta.",
     "walkthroughBackgroundRecordingNote": "Siinä kaikki. Omi jatkaa keskustelujesi tallentamista taustalla.",
     "noThanks": "Ei kiitos",
-    "recapInTheBackground": "Taustalla"
+    "recapInTheBackground": "Taustalla",
+    "retentionOfferAccept": "Jatka {percent} % alennuksella",
+    "retentionOfferBody": "Jatka ja maksa {price} kuukaudessa seuraavat {months} kuukautta.",
+    "retentionOfferApplied": "Valmis. {percent} % alennus seuraavat {months} kuukautta."
 }

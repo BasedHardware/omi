@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Vajuta korra nuppu ja hoia telefoni lähedal.",
     "walkthroughBackgroundRecordingNote": "Ongi kõik. Omi salvestab su vestlusi taustal edasi.",
     "noThanks": "Ei, aitäh",
-    "recapInTheBackground": "Taustal"
+    "recapInTheBackground": "Taustal",
+    "retentionOfferAccept": "Jää {percent}% allahindlusega",
+    "retentionOfferBody": "Jää ja maksa {price} kuus järgmised {months} kuud.",
+    "retentionOfferApplied": "Valmis. {percent}% allahindlust järgmised {months} kuud."
 }

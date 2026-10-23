@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "बटन एक बार दबाएँ और फ़ोन के पास रखें।",
     "walkthroughBackgroundRecordingNote": "बस इतना ही। Omi बैकग्राउंड में आपकी बातचीत रिकॉर्ड करता रहेगा।",
     "noThanks": "नहीं, धन्यवाद",
-    "recapInTheBackground": "पृष्ठभूमि में"
+    "recapInTheBackground": "पृष्ठभूमि में",
+    "retentionOfferAccept": "{percent}% छूट के साथ बने रहें",
+    "retentionOfferBody": "बने रहें और हर महीने {price} दें, अगले {months} महीनों तक।",
+    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।"
 }

@@ -14457,4 +14457,19 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'في الخلفية';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'ابقَ بخصم $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'ابقَ وادفع $price شهريًا لمدة $months أشهر قادمة.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'تم. خصم $percent% لمدة $months أشهر قادمة.';
+  }
 }

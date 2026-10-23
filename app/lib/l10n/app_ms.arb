@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Tekan butang sekali dan letak dekat telefon.",
     "walkthroughBackgroundRecordingNote": "Itu sahaja. Omi akan terus merakam perbualan anda di latar belakang.",
     "noThanks": "Tidak, terima kasih",
-    "recapInTheBackground": "Di latar belakang"
+    "recapInTheBackground": "Di latar belakang",
+    "retentionOfferAccept": "Kekal dengan diskaun {percent}%",
+    "retentionOfferBody": "Kekal dan bayar {price} sebulan untuk {months} bulan akan datang.",
+    "retentionOfferApplied": "Selesai. Diskaun {percent}% untuk {months} bulan akan datang."
 }
