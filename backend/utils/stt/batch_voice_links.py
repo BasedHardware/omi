@@ -39,7 +39,7 @@ def decode_registry(value, uid):
         result = json.loads(decoded)
         if not isinstance(result, dict) or result.get('version') != 1:
             return {}
-        if len(json.dumps(result)) > MAX_REGISTRY_BYTES:
+        if len(json.dumps(result, separators=(',', ':')).encode()) > MAX_REGISTRY_BYTES:
             return {}
         if not isinstance(result.get('voices'), dict) or not isinstance(result.get('bindings'), dict):
             return {}
@@ -133,6 +133,8 @@ def link_unit_voices(
     if len(labels) > MAX_BINDINGS:
         return state
     provenance = evidence.get('provenance') or {}
+    if not isinstance(provenance, dict):
+        provenance = {}
     space = evidence.get('embedding_space')
     signature = [space, provenance.get('embedding_model'), provenance.get('embedding_revision')]
     compatible = all(isinstance(value, str) and 0 < len(value) <= 160 for value in signature)
