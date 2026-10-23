@@ -324,7 +324,6 @@ def get_conversations_tool(
     logger.info(f"   max_transcript_segments: {max_transcript_segments}")
     logger.info(f"   include_transcript: {include_transcript}")
     logger.info(f"   include_timestamps: {include_timestamps}")
-    # print(f"   config: {config}")
 
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
