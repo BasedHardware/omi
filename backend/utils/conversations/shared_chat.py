@@ -8,6 +8,7 @@ from typing import Any
 
 import database.conversations as conversations_db
 import database.redis_db as redis_db
+from utils.speaker_display import SpeakerLabeler, voice_key
 
 _TRANSCRIPT_TRUNCATION_MARKER = '[... transcript truncated at segment boundaries ...]'
 SUBJECT_MINUTE_LIMIT = 8
@@ -188,6 +189,7 @@ def build_bounded_transcript(segments: Sequence[object], *, max_chars: int) -> s
     available = max(0, max_chars - len(marker) - separator_budget)
     head_budget = int(available * 0.6)
     tail_budget = available - head_budget
+    labeler = SpeakerLabeler()
 
     full_blocks: list[str] = []
     full_used = 0
@@ -200,7 +202,7 @@ def build_bounded_transcript(segments: Sequence[object], *, max_chars: int) -> s
     truncated = False
 
     for ordinal, segment in enumerate(segments):
-        block, oversized = _render_segment_bounded(segment, max_chars=max_chars)
+        block, oversized = _render_segment_bounded(segment, max_chars=max_chars, labeler=labeler)
         if oversized:
             truncated = True
             full_fits = False
@@ -253,7 +255,7 @@ def build_bounded_transcript(segments: Sequence[object], *, max_chars: int) -> s
     return '\n'.join(selected)[:max_chars]
 
 
-def _render_segment_bounded(segment: object, *, max_chars: int) -> tuple[str, bool]:
+def _render_segment_bounded(segment: object, *, max_chars: int, labeler: SpeakerLabeler) -> tuple[str, bool]:
     if isinstance(segment, Mapping):
         data: Mapping[str, Any] = segment
     else:
@@ -270,7 +272,7 @@ def _render_segment_bounded(segment: object, *, max_chars: int) -> tuple[str, bo
         speaker = 'Owner'
     else:
         speaker_id = data.get('speaker_id')
-        speaker = f'Speaker {speaker_id}' if isinstance(speaker_id, int) else 'Speaker'
+        speaker = labeler.label(voice_key(data)) if isinstance(speaker_id, int) else 'Speaker'
     start = 0
     end = len(text)
     while start < end and text[start].isspace():

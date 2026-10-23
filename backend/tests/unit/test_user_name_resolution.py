@@ -170,7 +170,7 @@ def test_developer_conversation_http_response_resolves_owner(sources, monkeypatc
         response = client.get('/v1/dev/user/conversations/c1?include_transcript=true')
     assert response.status_code == 200, response.text
     segments = response.json()['transcript_segments']
-    assert [segment['speaker_name'] for segment in segments] == ['David', 'Speaker 1']
+    assert [segment['speaker_name'] for segment in segments] == ['David', 'Speaker A']
 
 
 def test_full_name_keeps_every_word_of_the_firebase_name_without_a_firestore_read(sources):
