@@ -155,7 +155,7 @@ from utils.stt.pre_recorded import (
     postprocess_words,
     prerecorded,
 )
-from utils.sync import empty_recovery, minimal_redrive
+from utils.sync import empty_recovery, empty_success_guard, minimal_redrive
 from utils.sync.empty_recovery_intent import dispatch_once as dispatch_empty_recovery_once
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -1605,6 +1605,12 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                         language = user_language if (single_language_mode and user_language) else recovered_language
                         recovered_via_retry = True
                         break
+                held, _guard_reason = empty_success_guard.settle(path, provider=provider)
+                if held:
+                    # Speech-positive audio that a degraded provider chain returned
+                    # empty stays retryable; completing it as silence is the
+                    # provider-failure-ends-as-success class (2026-10-23 soak).
+                    raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
                 _record_empty_segment_as_silence(
                     provider=provider,
                     model=model,
