@@ -30,7 +30,7 @@ import sys
 import time
 import types
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 import gc

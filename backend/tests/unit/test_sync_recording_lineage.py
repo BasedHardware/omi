@@ -1142,3 +1142,9 @@ async def test_every_live_generation_names_its_origin_recording(monkeypatch, fla
     assert harness.rows[generation_id]['external_data']['recording_session_id'] != 'original'
     origins = [harness.rows[cid]['external_data'].get('recording_origin_id') for cid in ('fresh', generation_id)]
     assert origins == (['fresh', 'original'] if flag == '' else [None, None])
+
+
+@pytest.fixture(autouse=True)
+def default_flag(monkeypatch):
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')

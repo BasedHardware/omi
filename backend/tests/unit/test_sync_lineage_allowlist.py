@@ -365,3 +365,27 @@ def test_all_gated_services_resolve_private_cohorts_without_manifest_allowlists(
     assert sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV not in str(prod['cloud_run'])
     assert _declared(prod, 'gke', 'backend-listen')
     assert all(_declared(dev, kind, service) in (None, '') for kind, service in GATED_SERVICES)
+
+
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
+
+    monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', 'off')
+
+
+@pytest.fixture(autouse=True)
+def no_real_firestore_client(monkeypatch):
+    import database._client
+    import database.conversations
+    import firebase_admin.firestore
+    from google.cloud import firestore
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError('real Firestore client construction is forbidden in this suite')
+
+    monkeypatch.setattr(database._client, 'get_firestore_client', forbidden)
+    monkeypatch.setattr(database.conversations, 'get_firestore_client', forbidden)
+    monkeypatch.setattr(firestore, 'Client', forbidden)
+    monkeypatch.setattr(firebase_admin.firestore, 'client', forbidden)

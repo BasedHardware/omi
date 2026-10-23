@@ -158,3 +158,9 @@ def test_http_boundary_rejection_is_identifiable_without_header_content(monkeypa
     )
     assert 'reason=parse_failed stage=http_boundary' in caplog.text
     assert 'SECRET' not in caplog.text
+
+
+@pytest.fixture(autouse=True)
+def env(monkeypatch):
+    monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
+    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.

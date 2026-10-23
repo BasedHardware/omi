@@ -651,3 +651,13 @@ def test_fully_deduped_stamp_gap_keeps_live_and_landed_sync_row_unchanged(monkey
     assert assigned['id'] == (landed['id'] if retry_anchor else LIVE_ID) and not created
     assert assigned['_sync_lineage_repeat_only'] is True
     assert assigned['_sync_lineage_stamp_gap_refused'] is True
+
+
+from config.sync_live_dedupe import SYNC_LINEAGE_LIVE_DEDUPE_ENV
+
+
+@pytest.fixture(autouse=True)
+def default_flags(monkeypatch):
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
+    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
+    monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
