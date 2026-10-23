@@ -1,4 +1,3 @@
 {
-  "change": "Added production-shell performance checks to catch scrolling regressions before release",
-  "platforms": ["ios", "android"]
+  "kind": "none"
 }

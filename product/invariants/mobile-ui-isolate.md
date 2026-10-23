@@ -50,6 +50,13 @@ Details and the measurement tools: [`app/docs/performance.md`](../../app/docs/pe
 - `app/test/unit/local_segment_store_test.dart` — the off-isolate transcript digest equals the
   inline one.
 
+- `app/test/perf/production_shell_gate_test.dart` — all eight seeded performance scenarios
+  mount the source-checked production shell with the iOS analytics arm enabled and accessibility
+  initially off; work-count budgets and zero semantics compile/share budgets block release
+  admission through Mobile App Checks. `bash app/tool/perf_gate.sh` repeats this three times.
+- `app/tool/perf_shell.py --check` — rejects production-shell drift instead of silently omitting
+  app-wide wrappers; `app/test/perf/perf_budget_test.dart` proves mutation/empty-evidence rejection.
+
 ## Path globs
 
 - `app/lib/**`
