@@ -784,9 +784,6 @@ overlay:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
-          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
-            value: 'false'
-            category: rollout
           SYNC_REPROCESS_COALESCE_ENABLED:
             value: 'true'
             category: rollout
@@ -1036,12 +1033,6 @@ overlay:
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'
             category: rollout
-          SYNC_BACKFILL_ORDER:
-            value: 'newest'
-            category: rollout
-          SYNC_BACKFILL_ORDER_PERCENT:
-            value: '100'
-            category: rollout
           SYNC_BACKFILL_ROUTING_ENABLED:
             value: 'true'
             category: rollout
@@ -1056,9 +1047,6 @@ overlay:
           SYNC_BACKFILL_TASKS_QUEUE:
             value: 'sync-backfill-fresh'
             category: reliability
-          SYNC_BACKFILL_UID_SEQUENCER:
-            value: 'on'
-            category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'
             category: rollout
@@ -1121,9 +1109,6 @@ overlay:
             value: '100'
           AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             value: '0'
-          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
-            value: 'false'
-            category: rollout
           SYNC_REPROCESS_COALESCE_ENABLED:
             value: 'true'
             category: rollout
@@ -1348,12 +1333,6 @@ overlay:
           SYNC_BACKFILL_MAX_AGE_SECONDS:
             value: '2592000'
             category: rollout
-          SYNC_BACKFILL_ORDER:
-            value: 'newest'
-            category: rollout
-          SYNC_BACKFILL_ORDER_PERCENT:
-            value: '0'
-            category: rollout
           SYNC_BACKFILL_ROUTING_ENABLED:
             value: 'true'
             category: rollout
@@ -1368,9 +1347,6 @@ overlay:
           SYNC_BACKFILL_TASKS_QUEUE:
             value: 'sync-backfill-fresh'
             category: reliability
-          SYNC_BACKFILL_UID_SEQUENCER:
-            value: 'on'
-            category: rollout
           SYNC_BACKFILL_USER_DAILY_HOURS:
             value: '4'
             category: rollout

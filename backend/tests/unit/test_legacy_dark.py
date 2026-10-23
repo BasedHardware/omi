@@ -256,21 +256,6 @@ def test_queue_spec_round_trips_to_gcloud_flags():
     assert set(legacy_queues.QUEUES) == set(legacy_dark.LEGACY_QUEUES)
 
 
-def test_sequencer_kick_and_sweep_are_inert_in_dark(monkeypatch):
-    from unittest.mock import MagicMock
-
-    from utils.sync import uid_sequencer
-
-    monkeypatch.setattr(uid_sequencer.registry, 'production_stage', lambda: True)
-    claim = MagicMock()
-    monkeypatch.setattr(uid_sequencer, '_claim_next', claim)
-    monkeypatch.setattr(uid_sequencer.registry, 'due_owners', claim)
-    monkeypatch.setattr(legacy_dark, 'current_mode', lambda: DARK)
-    assert uid_sequencer.kick('test-uid') is False
-    assert uid_sequencer.sweep() == {'legacy_dark': 1}
-    claim.assert_not_called()
-
-
 # --- M1 review (Grok) fixes ---
 
 

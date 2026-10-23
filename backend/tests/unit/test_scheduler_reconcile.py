@@ -92,7 +92,6 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "enrichment-maintenance",
         "frame-request-retention-hourly",
         "memory-maintenance-hourly",
-        "sync-backfill-uid-sequencer",
     }
     assert set(prod_jobs) == {
         "cap-hold-durable-redrive",
@@ -107,7 +106,6 @@ def test_manifest_declares_both_projects_and_frame_retention_jobs_without_retire
         "notifications-job-scheduler-trigger",
         "omi-admin-stats-precompute",
         "omi-tv-rollup-daily",
-        "sync-backfill-uid-sequencer",
     }
     for jobs in (dev_jobs, prod_jobs):  # C4: planned until /v2/enrichment/sweep serves on backend-integration
         assert jobs["enrichment-maintenance"]["lifecycle"] == "planned"
@@ -312,7 +310,6 @@ def test_owner_scheduler_checks_are_scoped_and_central_reconcile_remains_full_ma
 
     root = Path(__file__).resolve().parents[3]
     owner_checks = {
-        ".github/actions/sync-backfill-lifecycle/action.yml": "--check --jobs sync-backfill-uid-sequencer",
         ".github/workflows/gcp_day3_reengagement_email_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",
         ".github/workflows/gcp_day3_reengagement_email_job_auto_dev.yml": "--check --jobs \"$SCHEDULER_JOB\"",
         ".github/workflows/gcp_frame_request_retention_job.yml": "--check --jobs \"$SCHEDULER_JOB\"",

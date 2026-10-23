@@ -63,34 +63,30 @@ def _task_request(**extra):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('sequenced', [False, True])
-async def test_kill_switch_off_refuses_before_sequencer_lease_and_any_work(monkeypatch, sequenced):
+async def test_kill_switch_off_refuses_before_any_work(monkeypatch, sequenced):
     monkeypatch.setenv('SYNC_MINIMAL_REDRIVE_ENABLED', 'false')
+    monkeypatch.setattr(sync_router.sync_stage, 'production_stage', Mock(return_value=True))
     monkeypatch.setattr(
-        sync_router.uid_sequencer,
-        'production_fence_mode',
-        Mock(return_value=sync_router.SyncLedgerFenceMode.ACTIVE),
+        sync_router, 'get_sync_ledger_fence_mode', Mock(return_value=sync_router.SyncLedgerFenceMode.ACTIVE)
     )
     monkeypatch.setattr(sync_router, 'warm_rollout_cohorts', AsyncMock())
-    begin = Mock(return_value=True)
-    monkeypatch.setattr(sync_router.sync_backfill_sequencer, 'begin_job', begin)
     body = AsyncMock()
     monkeypatch.setattr(sync_router, '_run_sync_job_body', body)
+    # C10: a stale sequenced task is still refused by the kill switch first (retained, 409).
     extra = {'sequencer_epoch': 3} if sequenced else {}
 
     response = await sync_router.run_sync_job(_task_request(redrive_mode='minimal', **extra), task_retry_count=0)
 
     assert response.status_code == 409
     assert json.loads(response.body) == {'status': 'minimal_redrive_disabled'}
-    begin.assert_not_called()  # No sequencer lease is taken or renewed.
     body.assert_not_awaited()  # No lock, download or provider call.
 
 
 def test_redrive_mode_is_a_valid_optional_task_payload_key():
     from utils.cloud_tasks import SYNC_JOB_TASK_PAYLOAD_KEYS, sync_job_payload_keys_valid
 
-    # Budget replacements and sequencer re-dispatch revalidate the stored payload.
+    # Budget replacements revalidate the stored payload (C10 retired sequencer re-dispatch).
     assert sync_job_payload_keys_valid(SYNC_JOB_TASK_PAYLOAD_KEYS | {'redrive_mode'})
-    assert sync_job_payload_keys_valid(SYNC_JOB_TASK_PAYLOAD_KEYS | {'redrive_mode', 'sequencer_epoch'})
 
 
 @pytest.mark.asyncio
