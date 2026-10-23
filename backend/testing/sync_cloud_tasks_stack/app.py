@@ -9,8 +9,6 @@ isolated Redis, Firestore, and filesystem-backed staged blobs.
 from __future__ import annotations
 
 import os
-import time
-import wave
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -26,13 +24,13 @@ install_no_egress_guard()
 from .events import write_event  # noqa: E402
 from .storage import configure_storage_dir, patch_google_storage  # noqa: E402
 
-_ROLES = frozenset({'admission', 'worker', 'batch-serving'})
+_ROLES = frozenset({'admission', 'batch-serving'})
 
 
 def _role() -> str:
     value = os.getenv('OMI_SYNC_STACK_ROLE', '')
     if value not in _ROLES:
-        raise RuntimeError('OMI_SYNC_STACK_ROLE must be admission, worker, or batch-serving')
+        raise RuntimeError('OMI_SYNC_STACK_ROLE must be admission or batch-serving')
     return value
 
 
@@ -69,7 +67,7 @@ def _verify_local_oidc(token: str, _request: Any, *, audience: str | None = None
     for expected_audience, expected_identity in _local_oidc_bindings():
         if audience == expected_audience and token == local_oidc_token(expected_audience, expected_identity):
             write_event(
-                'worker' if ROLE == 'worker' else 'serving',
+                'serving',
                 {'event': 'local_oidc_verified', 'audience': audience, 'identity_verified': True},
             )
             return {'email': expected_identity, 'email_verified': True}
@@ -210,174 +208,3 @@ if ROLE == 'admission':
             conversation_id
         ).set(encoded_capture)
         return Response(status_code=204)
-
-elif ROLE == 'worker':
-    from models.conversation import Conversation  # noqa: E402
-    from models.conversation_enums import ConversationStatus  # noqa: E402
-    from models.structured import Structured  # noqa: E402
-    import utils.sync.pipeline as sync_pipeline  # noqa: E402
-    from utils.conversations import lifecycle as lifecycle_service  # noqa: E402
-    from routers import sync as sync_router  # noqa: E402
-
-    def _nonnegative_int(name: str) -> int:
-        raw = os.getenv(name, '0')
-        try:
-            value = int(raw)
-        except ValueError as error:
-            raise RuntimeError(f'{name} must be an integer') from error
-        if value < 0:
-            raise RuntimeError(f'{name} must be non-negative')
-        return value
-
-    _worker_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_WORKER_FAILURES')
-    _pre_ledger_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_PRE_LEDGER_FAILURES')
-    _post_ledger_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_POST_LEDGER_FAILURES')
-    _cleanup_failures_remaining = _nonnegative_int('OMI_SYNC_STACK_CLEANUP_FAILURES')
-    _process_persistence_fenced = os.getenv('OMI_SYNC_STACK_PROCESS_PERSISTENCE_FENCED', 'false').lower() == 'true'
-    _gate_dir_raw = os.getenv('OMI_SYNC_STACK_PROCESS_GATE_DIR', '').strip()
-    _gate_dir = Path(_gate_dir_raw) if _gate_dir_raw else None
-
-    def _job_id_from_path(path: str) -> str:
-        # Production paths are syncing/<uid>/<job-id>/<file>; never record path.
-        return Path(path).parent.name
-
-    def _local_vad(path: str, *, return_segments: bool = False, **_kwargs: Any) -> Any:
-        """External VAD leaf: prove the production decoder made readable WAV."""
-        with wave.open(path, 'rb') as wav_file:
-            duration = wav_file.getnframes() / float(wav_file.getframerate())
-        segments = [{'start': 0.0, 'end': min(duration, 1.0)}] if duration >= 1.0 else []
-        write_event(
-            'providers', {'event': 'vad_result', 'job_id': _job_id_from_path(path), 'segment_count': len(segments)}
-        )
-        return segments if return_segments else bool(segments)
-
-    def _local_prerecorded(audio_url: str, *, return_language: bool = False, **_kwargs: Any) -> Any:
-        """Deterministic STT leaf; it emits no transcript into evidence."""
-        job_id = audio_url.rsplit('/', 1)[-1]
-        write_event('providers', {'event': 'stt_completed', 'job_id': job_id, 'word_count': 1})
-        words = [
-            {
-                'timestamp': [0.0, 1.0],
-                'speaker': 'SPEAKER_00',
-                'text': os.getenv('OMI_SYNC_STACK_TRANSCRIPT_TOKEN', 'sync-stack-transcript'),
-            }
-        ]
-        return (words, 'en') if return_language else words
-
-    def _wait_for_process_gate(conversation_id: str) -> None:
-        if _gate_dir is None:
-            return
-        _gate_dir.mkdir(parents=True, exist_ok=True)
-        entered = _gate_dir / 'entered'
-        release = _gate_dir / 'release'
-        entered.write_text('entered', encoding='utf-8')
-        write_event('providers', {'event': 'processor_gate_entered', 'conversation_id': conversation_id})
-        deadline = time.monotonic() + 15.0
-        while not release.exists():
-            if time.monotonic() >= deadline:
-                raise RuntimeError('controlled Sync processor gate timed out')
-            time.sleep(0.01)
-
-    def _local_process_conversation(
-        uid: str,
-        language: str | None = None,
-        conversation: Any = None,
-        *,
-        language_code: str | None = None,
-        persistence_observer: Any = None,
-        **_kwargs: Any,
-    ) -> Conversation:
-        """Deterministic process leaf with real lifecycle-backed persistence."""
-        if conversation is None:
-            raise ValueError('Sync stack deterministic processor requires a conversation')
-        conversation_id = getattr(conversation, 'id', None)
-        if not isinstance(conversation_id, str) or not conversation_id:
-            raise ValueError('Sync stack processor requires a durable conversation id')
-        _wait_for_process_gate(conversation_id)
-        effective_language = language_code or language or 'en'
-        started_at = getattr(conversation, 'started_at', None) or datetime.now(timezone.utc)
-        finished_at = getattr(conversation, 'finished_at', None) or started_at
-        completed = Conversation(
-            id=conversation_id,
-            created_at=getattr(conversation, 'created_at', None) or started_at,
-            started_at=started_at,
-            finished_at=finished_at,
-            source=getattr(conversation, 'source', None),
-            language=effective_language,
-            structured=Structured(
-                title='Sync stack deterministic conversation',
-                overview='Deterministic local processor result.',
-                emoji='🧪',
-                category='other',
-            ),
-            transcript_segments=list(getattr(conversation, 'transcript_segments', [])),
-            private_cloud_sync_enabled=bool(getattr(conversation, 'private_cloud_sync_enabled', False)),
-            status=ConversationStatus.completed,
-            is_locked=bool(getattr(conversation, 'is_locked', False)),
-            client_device_id=getattr(conversation, 'client_device_id', None),
-            client_platform=getattr(conversation, 'client_platform', None),
-            # Preserve the ingest-owned revision the processor read, exactly as a
-            # real processor payload must: persist_processing_result_with_lifecycle
-            # fences writes whose revision no longer matches the stored transcript.
-            sync_content_revision=getattr(conversation, 'sync_content_revision', None),
-        )
-        persisted = (
-            False
-            if _process_persistence_fenced
-            else lifecycle_service.persist_processed_conversation(uid, completed.model_dump())
-        )
-        if persistence_observer is not None:
-            persistence_observer(persisted)
-        if not persisted:
-            write_event('providers', {'event': 'conversation_persistence_fenced', 'conversation_id': completed.id})
-            return completed
-        write_event('providers', {'event': 'conversation_persisted', 'conversation_id': completed.id})
-        return completed
-
-    def _delete_segment_blob_immediately(path: str, *_args: Any, **_kwargs: Any) -> None:
-        sync_pipeline.delete_syncing_temporal_file(path)
-
-    _original_delete_staged_blobs_async = sync_router._delete_staged_blobs_async
-    _original_run_full_pipeline = sync_router._run_full_pipeline_background_async
-    _original_mark_sync_content_completed = sync_pipeline.mark_sync_content_completed
-
-    async def _run_full_pipeline_with_controlled_worker_failure(*args: Any, **kwargs: Any) -> Any:
-        global _worker_failures_remaining
-        if _worker_failures_remaining:
-            _worker_failures_remaining -= 1
-            write_event('worker', {'event': 'intentional_worker_failure'})
-            raise RuntimeError('controlled Sync worker execution failure')
-        return await _original_run_full_pipeline(*args, **kwargs)
-
-    async def _delete_staged_blobs_with_controlled_failure(blob_paths: list[str]) -> None:
-        global _cleanup_failures_remaining
-        if _cleanup_failures_remaining:
-            _cleanup_failures_remaining -= 1
-            write_event('jobs', {'event': 'intentional_cleanup_failure', 'blob_count': len(blob_paths)})
-            raise RuntimeError('controlled Sync staged-cleanup failure')
-        await _original_delete_staged_blobs_async(blob_paths)
-
-    def _mark_sync_content_completed_with_controlled_failure(*args: Any, **kwargs: Any) -> Any:
-        global _pre_ledger_failures_remaining, _post_ledger_failures_remaining
-        if _pre_ledger_failures_remaining:
-            _pre_ledger_failures_remaining -= 1
-            write_event('worker', {'event': 'intentional_pre_ledger_failure'})
-            raise RuntimeError('controlled Sync failure before durable ledger completion')
-        completed = _original_mark_sync_content_completed(*args, **kwargs)
-        if completed and _post_ledger_failures_remaining:
-            _post_ledger_failures_remaining -= 1
-            write_event('worker', {'event': 'intentional_post_ledger_failure'})
-            raise RuntimeError('controlled Sync failure after durable ledger completion')
-        return completed
-
-    # Replace only external/provider leaves.  The decoder, staging/download,
-    # task route, fair-use policy/metering, Redis locks, ledger, and lifecycle
-    # owner remain production code.
-    sync_pipeline.vad_is_empty = _local_vad
-    sync_pipeline.get_prerecorded_service = lambda _language='en': ('parakeet', 'en', 'parakeet')
-    sync_pipeline.prerecorded = _local_prerecorded
-    sync_pipeline.process_conversation = _local_process_conversation
-    sync_pipeline.schedule_syncing_temporal_file_deletion = _delete_segment_blob_immediately
-    sync_pipeline.mark_sync_content_completed = _mark_sync_content_completed_with_controlled_failure
-    sync_router._run_full_pipeline_background_async = _run_full_pipeline_with_controlled_worker_failure
-    sync_router._delete_staged_blobs_async = _delete_staged_blobs_with_controlled_failure

@@ -14,16 +14,16 @@ import pytest
 
 from utils.sync import safety_wal_coverage as coverage
 from utils.sync.merge_dedupe import dedupe_segments_for_merge, fuzzy_live_match
-from tests.unit.test_sync_cross_job_assignment import independent_job_pipeline
-from tests.unit.test_wal_audio_coverage_pipeline import coordinator
+from tests.unit.test_sync_cross_job_assignment import independent_job_pipeline  # noqa: F401  (fixture)
 
 T = 1760000000.0
 
 
 @pytest.fixture(scope='module', autouse=True)
 def load_dependencies():
-    from utils.stt import pre_recorded
-    from utils.sync import assignment
+    from utils.sync import assignment  # noqa: F401
+    from utils.stt import pre_recorded  # noqa: F401
+    from utils.sync import legacy_segment_core  # noqa: F401  (real imports before the stub window)
 
 
 def pcm_envelope(seed, seconds=20):
@@ -520,21 +520,3 @@ def test_bad_wav_does_not_abort_other_job_files(tmp_path, storage, monkeypatch):
         )
     )
     assert outputs == [bad, good] and not generated
-
-
-@pytest.mark.asyncio
-async def test_empty_cut_cannot_acknowledge_a_fully_suppressed_job(coordinator, monkeypatch, tmp_path):
-    from unittest.mock import AsyncMock
-    from tests.unit.test_wal_audio_coverage_pipeline import _wire, _run_batch
-
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    monkeypatch.setenv('SYNC_SAFETY_WAL_DEDUPE_ENABLED', 'true')
-    monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', 'false')
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[])
-    cut = AsyncMock(return_value=([], set()))
-    monkeypatch.setattr(pipeline, 'apply_safety_wal_coverage', cut)
-    await _run_batch(module, stubs, tmp_path, claims=None, session=None)
-    cut.assert_awaited_once()
-    assert len(state.vad_seen) == 1 and len(state.processed) == 1
-    assert state.outcomes[-1].value == 'success'  # Only after actual VAD/STT intake.

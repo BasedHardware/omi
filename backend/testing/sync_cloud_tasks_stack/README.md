@@ -9,9 +9,9 @@ npm run test:sync-cloud-tasks-stack:emulator
 ```
 
 It needs the backend virtual environment, root Node dependencies, Redis, and
-Java 21+ for the Firestore emulator. Run one scenario family with
-`backend/testing/sync_cloud_tasks_stack/run.sh --only sync` or
-`--only batch` (the default, `--only all`, runs both; CI runs both). The runner gives Firebase a fresh
+Java 21+ for the Firestore emulator. Only the batch-lane family remains: the
+legacy Sync Cloud Tasks worker scenarios were deleted with legacy transcription
+(legacy-retire C11). The runner gives Firebase a fresh
 loopback port, starts a private loopback Redis, and starts **separate**
 admission and worker ASGI processes. Their environment is allowlisted and has
 an empty home/cloud configuration; it carries no cloud credentials, provider

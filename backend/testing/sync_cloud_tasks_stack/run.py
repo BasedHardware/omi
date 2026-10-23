@@ -1,16 +1,15 @@
 """Run the process-isolated Sync Cloud Tasks stack gauntlet.
 
 Invoke through ``run.sh`` so Firebase owns a fresh Firestore emulator.  The
-supervisor starts private Redis plus independent admission and worker ASGI
-processes; it never probes, reuses, or stops developer services.  The
-batch-lane scenarios (``batch.py``) add a serving ASGI process and a batch
-worker process; ``--only sync|batch`` selects one family.
+supervisor starts private Redis plus independent admission, serving and batch
+worker processes (``batch.py``); it never probes, reuses, or stops developer
+services.  The legacy Sync Cloud Tasks worker family was deleted with legacy
+transcription (legacy-retire C11).
 """
 
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import secrets
@@ -21,9 +20,7 @@ import struct
 import subprocess
 import sys
 import tempfile
-import threading
 import time
-import uuid
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -359,22 +356,6 @@ class Stack:
         if postgres_requested():
             self._start_postgres()
         self._start(
-            'worker',
-            [
-                str(PYTHON),
-                '-m',
-                'uvicorn',
-                'testing.sync_cloud_tasks_stack.worker_app:app',
-                '--host',
-                '127.0.0.1',
-                '--port',
-                str(self.worker_port),
-            ],
-            role='worker',
-        )
-        _wait_for_port(self.worker_port, label='Sync worker', timeout=120.0)
-        self._assert_health(self.worker_url, role='worker')
-        self._start(
             'admission',
             [
                 str(PYTHON),
@@ -505,124 +486,6 @@ def _seed_capture_conversation(stack: Stack, uid: str, conversation_id: str) -> 
         raise StackFailure(f'isolated capture provenance seed returned HTTP {response.status_code}')
 
 
-def _submit_and_capture_task(stack: Stack, uid: str) -> tuple[str, dict[str, Any]]:
-    stack.seed_user(uid)
-    filename = _fresh_pcm_filename()
-    audio = _pcm16_upload_bytes()
-    capture_conversation_id = f'sync-stack-capture-{uuid.uuid4().hex}'
-    _seed_capture_conversation(stack, uid, capture_conversation_id)
-    common_headers = {
-        **_auth_headers(uid),
-        'X-App-Platform': 'ios',
-        'X-Device-Id-Hash': DEVICE_HASH,
-    }
-    manifest_response = stack.http.post(
-        stack.admission_url + '/v2/sync-capture-manifest',
-        json={
-            'conversation_id': capture_conversation_id,
-            'files': [{'name': filename, 'sha256': hashlib.sha256(audio).hexdigest()}],
-        },
-        headers=common_headers,
-        timeout=10.0,
-    )
-    if manifest_response.status_code != 200:
-        raise StackFailure(f'fresh capture manifest returned HTTP {manifest_response.status_code}')
-    manifest_body = manifest_response.json()
-    manifest = manifest_body.get('manifest') if isinstance(manifest_body, dict) else None
-    if not isinstance(manifest, str) or not manifest:
-        raise StackFailure('fresh capture manifest response omitted its signed manifest')
-    response = stack.http.post(
-        stack.admission_url + f'/v2/sync-local-files?conversation_id={capture_conversation_id}',
-        files=[('files', (filename, audio, 'application/octet-stream'))],
-        headers={**common_headers, 'X-Omi-Sync-Capture-Manifest': manifest},
-        timeout=20.0,
-    )
-    if response.status_code != 202:
-        raise StackFailure(f'Sync admission returned HTTP {response.status_code}: {response.text[:160]}')
-    admitted = response.json()
-    job_id = admitted.get('job_id') if isinstance(admitted, dict) else None
-    if not isinstance(job_id, str) or admitted.get('status') != 'queued' or admitted.get('lane') != 'fresh':
-        raise StackFailure('Sync admission did not return one queued fresh job')
-
-    captured: dict[str, Any] = {}
-
-    def task_captured() -> bool:
-        nonlocal captured
-        try:
-            captured = stack.task_control(job_id)
-        except (httpx.HTTPError, StackFailure):
-            return False
-        return isinstance(captured.get('body'), dict)
-
-    _wait_until(task_captured, label=f'Cloud Tasks capture for job {job_id}', timeout=10.0)
-    _assert_task_contract(stack, job_id, uid, capture_conversation_id, captured)
-    _assert_unauthenticated_delivery_is_rejected(stack, uid, job_id, captured)
-    return job_id, captured
-
-
-def _assert_task_contract(stack: Stack, job_id: str, uid: str, conversation_id: str, captured: dict[str, Any]) -> None:
-    body = captured.get('body')
-    if not isinstance(body, dict):
-        raise StackFailure('captured task body is missing')
-    raw_paths = body.get('raw_blob_paths')
-    if (
-        body.get('job_id') != job_id
-        or body.get('uid') != uid
-        or body.get('conversation_id') != conversation_id
-        or body.get('geolocation') is not None
-        or body.get('client_device_id') != DEVICE_ID
-        or body.get('client_platform') != 'ios'
-        or body.get('lane') != 'fresh'
-        or body.get('capture_time_trust') != 'device_bound'
-        or body.get('ledger_fence_mode') != 'active'
-        or body.get('should_lock') is not False
-        or not isinstance(raw_paths, list)
-        or len(raw_paths) != 1
-        or not isinstance(raw_paths[0], str)
-        or not stack.staged_blob_path(raw_paths[0]).is_file()
-    ):
-        raise StackFailure('captured task did not preserve the fresh durable Sync worker contract')
-    recording_age_seconds = body.get('recording_age_seconds')
-    if (
-        not isinstance(recording_age_seconds, int)
-        or isinstance(recording_age_seconds, bool)
-        or not 0 <= recording_age_seconds <= 300
-    ):
-        raise StackFailure('fresh task did not preserve a recent device-bound recording age')
-    events = [
-        event
-        for event in stack.evidence_events('tasks')
-        if event.get('event') == 'task_captured' and event.get('task_id') == job_id
-    ]
-    if len(events) != 1:
-        raise StackFailure(f'expected one captured task event for {job_id}, saw {len(events)}')
-
-
-def _post_task(task: dict[str, Any], *, retry_count: int, include_auth: bool = True) -> httpx.Response:
-    body = task.get('body')
-    url = task.get('url')
-    if not isinstance(body, dict) or not isinstance(url, str):
-        raise StackFailure('task control response is malformed')
-    headers = {'X-CloudTasks-TaskRetryCount': str(retry_count)}
-    if include_auth:
-        headers['Authorization'] = f'Bearer {LOCAL_OIDC_TOKEN}'
-    with httpx.Client(timeout=35.0, trust_env=False) as client:
-        return client.post(url, json=body, headers=headers)
-
-
-def _deliver_task(task: dict[str, Any], *, retry_count: int) -> httpx.Response:
-    response = _post_task(task, retry_count=retry_count)
-    _record_job_event(
-        {
-            'event': 'worker_delivery',
-            'task_id': task.get('task_id'),
-            'retry_count': retry_count,
-            'http_status': response.status_code,
-        }
-    )
-    return response
-
-
 def _job_status(stack: Stack, uid: str, job_id: str) -> dict[str, Any]:
     response = stack.http.get(
         stack.admission_url + f'/v2/sync-local-files/{job_id}', headers=_auth_headers(uid), timeout=5.0
@@ -633,340 +496,6 @@ def _job_status(stack: Stack, uid: str, job_id: str) -> dict[str, Any]:
     if not isinstance(body, dict):
         raise StackFailure('Sync status poll returned a non-object')
     return body
-
-
-def _assert_unauthenticated_delivery_is_rejected(stack: Stack, uid: str, job_id: str, task: dict[str, Any]) -> None:
-    denied = _post_task(task, retry_count=0, include_auth=False)
-    if denied.status_code != 403:
-        raise StackFailure(f'unauthenticated worker delivery returned HTTP {denied.status_code}, expected 403')
-    if _job_status(stack, uid, job_id).get('status') != 'queued':
-        raise StackFailure('rejected worker delivery changed the queued Sync job state')
-
-
-def _poll_terminal_job(stack: Stack, uid: str, job_id: str, *, timeout: float = 20.0) -> dict[str, Any]:
-    result: dict[str, Any] = {}
-
-    def terminal() -> bool:
-        nonlocal result
-        result = _job_status(stack, uid, job_id)
-        return result.get('status') in {'completed', 'partial_failure', 'failed'}
-
-    _wait_until(terminal, label=f'terminal Sync job {job_id}', timeout=timeout)
-    return result
-
-
-def _assert_durable_success(stack: Stack, uid: str, job_id: str) -> str:
-    status = _poll_terminal_job(stack, uid, job_id)
-    result = status.get('result')
-    if status.get('status') != 'completed' or not isinstance(result, dict):
-        raise StackFailure(f'Sync worker did not publish a durable completed result for {job_id}')
-    conversations = [*(result.get('new_memories') or []), *(result.get('updated_memories') or [])]
-    if len(conversations) != 1 or not isinstance(conversations[0], str):
-        raise StackFailure('deterministic worker did not produce exactly one durable conversation id')
-    conversation_id = conversations[0]
-    response = stack.http.get(
-        stack.admission_url + f'/v1/conversations/{conversation_id}', headers=_auth_headers(uid), timeout=10.0
-    )
-    if response.status_code != 200:
-        raise StackFailure(f'durable conversation read returned HTTP {response.status_code}')
-    conversation = response.json()
-    segments = conversation.get('transcript_segments') if isinstance(conversation, dict) else None
-    if (
-        not isinstance(conversation, dict)
-        or conversation.get('status') != 'completed'
-        or not isinstance(segments, list)
-        or len(segments) != 1
-        or segments[0].get('text') != TRANSCRIPT_TOKEN
-    ):
-        raise StackFailure('durable conversation did not contain the deterministic worker result')
-    task = stack.task_control(job_id)
-    body = task.get('body')
-    if not isinstance(body, dict) or body.get('conversation_id') != conversation_id:
-        raise StackFailure('worker did not merge/reprocess the conversation selected during fresh admission')
-    content_id = body.get('content_id')
-    if not isinstance(content_id, str):
-        raise StackFailure('task content id is missing')
-    ledger = (
-        stack.firestore.collection('users')
-        .document(uid)
-        .collection('sync_content_ledger_offline')
-        .document(content_id)
-        .get()
-    )
-    ledger_data = ledger.to_dict() if ledger.exists else None
-    if not isinstance(ledger_data, dict) or ledger_data.get('status') != 'completed':
-        raise StackFailure('Firestore Sync content ledger was not durably completed')
-    _record_job_event(
-        {
-            'event': 'durable_job_verified',
-            'job_id': job_id,
-            'status': 'completed',
-            'conversation_id': conversation_id,
-            'ledger_status': 'completed',
-        }
-    )
-    return conversation_id
-
-
-def _stt_invocation_count(stack: Stack, job_id: str) -> int:
-    return sum(
-        1
-        for event in stack.evidence_events('providers')
-        if event.get('event') == 'stt_completed' and event.get('job_id') == job_id
-    )
-
-
-def _assert_metered_once(stack: Stack, uid: str) -> None:
-    if stack.fair_use_meter_ms(uid) != 1000:
-        raise StackFailure('fresh Sync task did not meter exactly one second once')
-
-
-def _assert_not_metered(stack: Stack, uid: str) -> None:
-    if stack.fair_use_meter_ms(uid) != 0:
-        raise StackFailure('worker failure before pipeline execution unexpectedly recorded speech usage')
-
-
-def _happy_path_and_terminal_duplicate(stack: Stack) -> None:
-    uid = stack.scenario_uid('duplicate')
-    job_id, task = _submit_and_capture_task(stack, uid)
-    first = _deliver_task(task, retry_count=0)
-    if first.status_code != 200 or first.json().get('status') != 'done':
-        raise StackFailure('first worker delivery did not complete through the separate worker route')
-    _assert_durable_success(stack, uid, job_id)
-    _assert_metered_once(stack, uid)
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('first completed worker delivery did not invoke STT exactly once')
-    duplicate = _deliver_task(task, retry_count=1)
-    if duplicate.status_code != 200 or duplicate.json().get('status') != 'acked':
-        raise StackFailure('terminal duplicate was not ACKed by the separate worker route')
-    _assert_metered_once(stack, uid)
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('terminal duplicate re-ran the provider pipeline')
-
-
-def _cleanup_retry_preserves_terminal_work(stack: Stack) -> None:
-    uid = stack.scenario_uid('cleanup-retry')
-    job_id, task = _submit_and_capture_task(stack, uid)
-    raw_path = task['body']['raw_blob_paths'][0]
-    staged_path = stack.staged_blob_path(raw_path)
-    first = _deliver_task(task, retry_count=0)
-    if first.status_code != 500:
-        raise StackFailure('controlled terminal cleanup failure did not request Cloud Tasks retry')
-    _assert_durable_success(stack, uid, job_id)
-    _assert_metered_once(stack, uid)
-    if not staged_path.is_file() or _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('terminal cleanup retry did not preserve staged material and one STT invocation')
-    retry = _deliver_task(task, retry_count=1)
-    if retry.status_code != 200 or retry.json().get('status') != 'acked':
-        raise StackFailure('terminal cleanup retry was not ACKed')
-    if staged_path.exists() or _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('terminal cleanup retry did not clean exact material without reprocessing')
-    _assert_metered_once(stack, uid)
-
-
-def _content_ledger_data(stack: Stack, uid: str, task: dict[str, Any]) -> dict[str, Any]:
-    body = task.get('body')
-    content_id = body.get('content_id') if isinstance(body, dict) else None
-    if not isinstance(content_id, str):
-        raise StackFailure('Sync task omitted durable content identity')
-    ledger = (
-        stack.firestore.collection('users')
-        .document(uid)
-        .collection('sync_content_ledger_offline')
-        .document(content_id)
-        .get()
-    )
-    ledger_data = ledger.to_dict() if ledger.exists else None
-    if not isinstance(ledger_data, dict):
-        raise StackFailure('Sync content ledger was not durably readable')
-    return ledger_data
-
-
-def _pre_ledger_failure_retries_once(stack: Stack) -> None:
-    uid = stack.scenario_uid('transient-retry')
-    job_id, task = _submit_and_capture_task(stack, uid)
-    first = _deliver_task(task, retry_count=0)
-    if first.status_code != 500 or first.json().get('status') != 'retry':
-        raise StackFailure('controlled pre-ledger failure did not request a durable retry')
-    if _job_status(stack, uid, job_id).get('status') != 'queued':
-        raise StackFailure('pre-ledger worker failure did not return the job to queued')
-    if not stack.staged_blob_path(task['body']['raw_blob_paths'][0]).is_file():
-        raise StackFailure('pre-ledger worker failure deleted staged input')
-    ledger_data = _content_ledger_data(stack, uid, task)
-    if ledger_data.get('status') != 'processing' or len(ledger_data.get('processed_segment_ids') or []) != 1:
-        raise StackFailure('pre-ledger retry did not preserve the durable processed-segment checkpoint')
-    _assert_metered_once(stack, uid)
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('pre-ledger failure did not execute the initial provider pipeline exactly once')
-    retry = _deliver_task(task, retry_count=1)
-    if retry.status_code != 200 or retry.json().get('status') != 'done':
-        raise StackFailure('pre-ledger retry did not complete the durable job')
-    _assert_durable_success(stack, uid, job_id)
-    _assert_metered_once(stack, uid)
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('pre-ledger retry re-ran a completed Sync segment')
-
-
-def _post_ledger_failure_converges_once(stack: Stack) -> None:
-    uid = stack.scenario_uid('post-ledger-retry')
-    job_id, task = _submit_and_capture_task(stack, uid)
-    first = _deliver_task(task, retry_count=0)
-    if first.status_code != 500 or first.json().get('status') != 'retry':
-        raise StackFailure('controlled post-ledger failure did not request a durable retry')
-    if _job_status(stack, uid, job_id).get('status') != 'queued':
-        raise StackFailure('post-ledger worker failure did not return the job to queued')
-    if not stack.staged_blob_path(task['body']['raw_blob_paths'][0]).is_file():
-        raise StackFailure('post-ledger worker failure deleted staged input')
-    if _content_ledger_data(stack, uid, task).get('status') != 'completed':
-        raise StackFailure('controlled retry did not fail after durable content-ledger completion')
-    _assert_metered_once(stack, uid)
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('post-ledger failure did not execute the initial provider pipeline exactly once')
-    retry = _deliver_task(task, retry_count=1)
-    if retry.status_code != 200 or retry.json().get('status') != 'done' or retry.json().get('reconciled') is not True:
-        raise StackFailure('post-ledger retry did not converge through the durable content ledger')
-    _assert_durable_success(stack, uid, job_id)
-    _assert_metered_once(stack, uid)
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('post-ledger retry re-ran a completed Sync segment')
-
-
-def _final_attempt_post_ledger_failure_converges(stack: Stack) -> None:
-    """A final task delivery must not overwrite its own completed ledger."""
-    uid = stack.scenario_uid('final-attempt-ledger')
-    job_id, task = _submit_and_capture_task(stack, uid)
-    first = _deliver_task(task, retry_count=0)
-    if first.status_code != 500 or first.json().get('status') != 'retry':
-        raise StackFailure('pre-pipeline first delivery did not request a durable retry')
-    if _job_status(stack, uid, job_id).get('status') != 'queued':
-        raise StackFailure('pre-pipeline first delivery did not return the job to queued')
-    _assert_not_metered(stack, uid)
-    if _stt_invocation_count(stack, job_id) != 0:
-        raise StackFailure('pre-pipeline first delivery unexpectedly invoked STT')
-
-    final = _deliver_task(task, retry_count=1)
-    if final.status_code != 200 or final.json().get('status') != 'done' or final.json().get('reconciled') is not True:
-        raise StackFailure('final delivery did not converge its completed durable content ledger')
-    _assert_durable_success(stack, uid, job_id)
-    _assert_metered_once(stack, uid)
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('final durable-ledger convergence re-ran the provider pipeline')
-    if stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
-        raise StackFailure('final durable-ledger convergence did not clean staged input')
-
-
-def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
-    uid = stack.scenario_uid('terminal-failure')
-    job_id, task = _submit_and_capture_task(stack, uid)
-    first = _deliver_task(task, retry_count=0)
-    if first.status_code != 500 or first.json().get('status') != 'retry':
-        raise StackFailure('first controlled worker failure did not request retry')
-    final = _deliver_task(task, retry_count=1)
-    if final.status_code != 200 or final.json().get('status') != 'failed_final':
-        raise StackFailure('retry-budget exhaustion did not terminalize through the worker route')
-    status = _poll_terminal_job(stack, uid, job_id)
-    if status.get('status') != 'failed':
-        raise StackFailure('retry-budget exhaustion did not publish truthful failed job state')
-    if stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
-        raise StackFailure('terminal failure did not release staged material')
-    _assert_not_metered(stack, uid)
-    duplicate = _deliver_task(task, retry_count=2)
-    if duplicate.status_code != 200 or duplicate.json().get('status') != 'acked':
-        raise StackFailure('terminal failed job was not safely ACKed on duplicate delivery')
-    _assert_not_metered(stack, uid)
-
-
-def _concurrent_delivery_is_lease_fenced(stack: Stack) -> None:
-    if stack.gate_dir is None:
-        raise StackFailure('concurrent scenario requires a processor gate')
-    uid = stack.scenario_uid('concurrent')
-    job_id, task = _submit_and_capture_task(stack, uid)
-    first_result: list[httpx.Response] = []
-
-    def first_delivery() -> None:
-        first_result.append(_deliver_task(task, retry_count=0))
-
-    thread = threading.Thread(target=first_delivery, daemon=True)
-    thread.start()
-    _wait_until(lambda: (stack.gate_dir / 'entered').exists(), label='first worker processor gate')
-    second = _deliver_task(task, retry_count=1)
-    if second.status_code != 409 or second.json().get('status') != 'locked':
-        raise StackFailure('concurrent worker delivery did not observe the real run lock')
-    (stack.gate_dir / 'release').write_text('release', encoding='utf-8')
-    thread.join(timeout=35.0)
-    if thread.is_alive() or len(first_result) != 1:
-        raise StackFailure('first gated worker delivery did not finish')
-    first = first_result[0]
-    if first.status_code != 200 or first.json().get('status') != 'done':
-        raise StackFailure('lease-owning worker delivery did not finish successfully')
-    _assert_durable_success(stack, uid, job_id)
-    _assert_metered_once(stack, uid)
-    if _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('concurrent delivery ran the provider pipeline more than once')
-
-
-def _nonprod_legacy_backfill_is_acked_before_worker_state(stack: Stack) -> None:
-    """A dev-style legacy backfill delivery cannot reach shared worker state."""
-    uid = stack.scenario_uid('nonprod-legacy-backfill')
-    job_id, task = _submit_and_capture_task(stack, uid)
-    body = task.get('body')
-    if not isinstance(body, dict):
-        raise StackFailure('captured backfill task body is missing')
-    backfill_task = {**task, 'body': {**body, 'lane': 'backfill'}}
-    slot_key = f'offline:sync_backfill:inflight:{uid}'
-    worker_redis = redis.Redis(host='127.0.0.1', port=stack.redis_port)
-    worker_redis.set(slot_key, job_id)
-    prod_sequencer_keys = set(worker_redis.keys('sync_backfill:uid_sequencer:*'))
-
-    first = _deliver_task(backfill_task, retry_count=0)
-    if first.status_code != 200 or first.json() != {'status': 'foreign_stage'}:
-        raise StackFailure('non-prod legacy backfill delivery was not ACKed before worker state')
-    if _job_status(stack, uid, job_id).get('status') != 'queued':
-        raise StackFailure('non-prod legacy backfill delivery changed the queued job')
-    if worker_redis.get(slot_key) != job_id.encode():
-        raise StackFailure('non-prod legacy backfill delivery touched the backfill slot')
-    if set(worker_redis.keys('sync_backfill:uid_sequencer:*')) != prod_sequencer_keys:
-        raise StackFailure('non-prod legacy backfill delivery wrote a production sequencer key')
-    if _stt_invocation_count(stack, job_id) != 0:
-        raise StackFailure('non-prod legacy backfill delivery entered the provider pipeline')
-
-    duplicate = _deliver_task(backfill_task, retry_count=1)
-    if duplicate.status_code != 200 or duplicate.json() != {'status': 'foreign_stage'}:
-        raise StackFailure('duplicate non-prod legacy backfill delivery was not ACKed')
-    if _stt_invocation_count(stack, job_id) != 0:
-        raise StackFailure('duplicate non-prod legacy backfill delivery entered the provider pipeline')
-
-
-def _ambiguous_enqueue_and_expired_blob(stack: Stack) -> None:
-    uid = stack.scenario_uid('lost-ack')
-    job_id, task = _submit_and_capture_task(stack, uid)
-    task_events = stack.evidence_events('tasks')
-    if sum(event.get('event') == 'task_captured' and event.get('task_id') == job_id for event in task_events) != 1:
-        raise StackFailure('lost create acknowledgement created more than one named task')
-    if not any(event.get('event') == 'task_ack_lost' and event.get('task_id') == job_id for event in task_events):
-        raise StackFailure('ambiguous enqueue scenario did not exercise the lost acknowledgement')
-    if not any(
-        event.get('event') == 'named_task_deduplicated' and event.get('task_id') == job_id for event in task_events
-    ):
-        raise StackFailure('ambiguous enqueue did not converge through named-task AlreadyExists')
-    if _job_status(stack, uid, job_id).get('status') != 'queued':
-        raise StackFailure('ambiguous named enqueue fell back or terminalized before delivery')
-    delivered = _deliver_task(task, retry_count=0)
-    if delivered.status_code != 200 or delivered.json().get('status') != 'done':
-        raise StackFailure('ambiguous named enqueue task did not later complete normally')
-    _assert_durable_success(stack, uid, job_id)
-
-    expired_uid = stack.scenario_uid('expired-blob')
-    expired_job, expired_task = _submit_and_capture_task(stack, expired_uid)
-    staged = stack.staged_blob_path(expired_task['body']['raw_blob_paths'][0])
-    staged.unlink()
-    expired = _deliver_task(expired_task, retry_count=0)
-    if expired.status_code != 200 or expired.json() != {'status': 'dropped', 'reason': 'staged_audio_expired'}:
-        raise StackFailure('missing staged blob did not take the durable expired-input path')
-    if _poll_terminal_job(stack, expired_uid, expired_job).get('status') != 'failed':
-        raise StackFailure('expired staged blob did not publish a failed Sync job')
-    if _stt_invocation_count(stack, expired_job) != 0:
-        raise StackFailure('expired staged blob unexpectedly invoked STT')
 
 
 def _assert_evidence_is_sanitized(stack: Stack) -> None:
@@ -989,46 +518,15 @@ def _assert_evidence_is_sanitized(stack: Stack) -> None:
                 raise StackFailure(f'non-object evidence event in {path.name}')
 
 
-def _run_scenario(
-    state_dir: Path,
-    *,
-    task_ack_failures: int = 0,
-    worker_failures: int = 0,
-    pre_ledger_failures: int = 0,
-    post_ledger_failures: int = 0,
-    cleanup_failures: int = 0,
-    hold_processor: bool = False,
-    process_persistence_fenced: bool = False,
-    scenario: Callable[[Stack], None],
-) -> None:
-    stack = Stack(
-        state_dir,
-        task_ack_failures=task_ack_failures,
-        worker_failures=worker_failures,
-        pre_ledger_failures=pre_ledger_failures,
-        post_ledger_failures=post_ledger_failures,
-        cleanup_failures=cleanup_failures,
-        hold_processor=hold_processor,
-        process_persistence_fenced=process_persistence_fenced,
-    )
-    try:
-        stack.start()
-        scenario(stack)
-        _assert_evidence_is_sanitized(stack)
-    finally:
-        stack.close()
-        stack.cleanup_workspace_files()
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--state-dir', type=Path, help='directory for sanitized evidence and private process logs')
     parser.add_argument('--keep', action='store_true', help='preserve state after a successful run')
     parser.add_argument(
         '--only',
-        choices=('all', 'sync', 'batch'),
+        choices=('all', 'batch'),
         default='all',
-        help='run only the legacy Sync Cloud Tasks scenarios or only the batch-lane scenarios',
+        help='the legacy Sync Cloud Tasks scenarios were deleted with legacy transcription (legacy-retire C11); both values run the batch-lane scenarios',
     )
     args = parser.parse_args()
     if not PYTHON.exists():
@@ -1038,34 +536,6 @@ def main() -> int:
     state_dir.mkdir(parents=True, exist_ok=True)
     succeeded = False
     try:
-        if args.only in {'all', 'sync'}:
-            _run_scenario(state_dir / 'happy-duplicate', scenario=_happy_path_and_terminal_duplicate)
-            _run_scenario(
-                state_dir / 'cleanup-retry', cleanup_failures=1, scenario=_cleanup_retry_preserves_terminal_work
-            )
-            _run_scenario(
-                state_dir / 'pre-ledger-retry', pre_ledger_failures=1, scenario=_pre_ledger_failure_retries_once
-            )
-            _run_scenario(
-                state_dir / 'post-ledger-retry', post_ledger_failures=1, scenario=_post_ledger_failure_converges_once
-            )
-            _run_scenario(
-                state_dir / 'final-attempt-ledger',
-                worker_failures=1,
-                post_ledger_failures=1,
-                scenario=_final_attempt_post_ledger_failure_converges,
-            )
-            _run_scenario(
-                state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully
-            )
-            _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
-            _run_scenario(
-                state_dir / 'nonprod-legacy-backfill',
-                scenario=_nonprod_legacy_backfill_is_acked_before_worker_state,
-            )
-            _run_scenario(
-                state_dir / 'lost-ack-expired', task_ack_failures=1, scenario=_ambiguous_enqueue_and_expired_blob
-            )
         if args.only in {'all', 'batch'}:
             from .batch import run_batch_scenarios
 

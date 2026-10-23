@@ -42,9 +42,6 @@ tests/unit/test_backend_runtime_env_validator.py::test_repo_parakeet_admission_d
 tests/unit/test_backend_runtime_env_validator.py::test_repo_rendered_cloud_run_artifact_matches_manifest
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_selected_without_endpoint_is_rejected_for_rendered_cloud_run_state
 tests/unit/test_backend_runtime_env_validator.py::test_repo_ilb_endpoints_use_http_scheme[prod]
-tests/unit/test_backend_runtime_env_validator.py::test_prod_rejects_jev_uid_allowlist_declared_on_every_host
-tests/unit/test_backend_runtime_env_validator.py::test_prod_rejects_jev_uid_allowlist_undeclared_in_chart
-tests/unit/test_backend_runtime_env_validator.py::test_prod_rejects_jev_uid_allowlist_undeclared_in_cloud_run_state
 tests/unit/test_backend_runtime_env_validator.py::test_parakeet_admission_deploy_contract_rejects_missing_or_invalid_values[PARAKEET_STREAM_CAPACITY-0-PARAKEET_STREAM_CAPACITY must be an integer >= 1]
 # Same group: each renders the desktop-backend compose contract end to end. Measured 0.10-0.13s
 # CPU on an idle host, i.e. already above the 0.1s target before any contention.
@@ -57,7 +54,6 @@ tests/unit/test_render_backend_runtime_env.py::test_render_prod_emits_memory_mai
 tests/unit/test_render_backend_runtime_env.py::test_render_prod_requires_vpc_env_vars_before_job_outputs
 tests/unit/test_render_backend_runtime_env.py::test_selected_job_rejects_unknown_name_without_emitting_partial_output
 # MEMORY_ENABLED product-flag tests parse the composed runtime manifest.
-tests/unit/test_memory_enabled_product_flag.py::test_dev_overlay_pins_memory_enabled_on_and_prod_stays_off
 tests/unit/test_memory_enabled_product_flag.py::test_memory_enabled_on_does_not_require_maintenance
 tests/unit/test_backend_runtime_env_validator.py::test_repo_ilb_endpoints_use_http_scheme[dev]
 tests/unit/test_backend_runtime_env_validator.py::test_scheduler_runtime_surfaces_declare_orphan_stale_setting[prod]
@@ -86,7 +82,6 @@ tests/unit/test_backend_runtime_env_validator.py::test_workflow_validation_uses_
 tests/unit/test_runtime_image_contracts.py::test_registered_runtime_image_sources_are_closed
 tests/unit/test_runtime_image_contracts.py::test_pusher_contract_rejects_omitted_shared_package
 tests/unit/test_runtime_image_contracts.py::test_pusher_dependency_probe_includes_jsonschema
-tests/unit/test_runtime_image_contracts.py::test_modal_contract_rejects_omitted_shared_package
 # Walk every registered import smoke's first-party closure through the AST; hermetic but CPU-bound.
 tests/unit/test_runtime_image_contracts.py::test_registered_import_smokes_declare_their_import_time_environment
 tests/unit/test_runtime_image_contracts.py::test_import_smoke_reaching_encryption_without_its_secret_is_rejected
@@ -103,38 +98,25 @@ tests/unit/test_backend_runtime_env_validator.py::test_cloud_run_workflow_valida
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_passes_for_repo_manifest
 # Each parameter renders and validates the complete runtime manifest after injecting the three
 # forbidden daily-sweep bindings; this is the same hermetic manifest path as the entries above.
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_and_posthog_bindings[dev]
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_and_posthog_bindings[prod]
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_empty_surface_allowlist
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_mismatched_surface_allowlist
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_missing_job
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_config
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_request_path_cron
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_wrong_dev_capacity_value
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_requires_gateway_luna_bindings_when_enabled
 tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_pinned_gateway_endpoint_when_enabled
-tests/unit/test_backend_runtime_env_validator.py::test_parakeet_selected_without_endpoint_is_rejected_for_all_cloud_run_validation_modes
 tests/unit/test_backend_runtime_env_validator.py::test_repo_prod_manifest_rejects_noncanonical_model_order_for_every_surface
 tests/unit/test_backend_runtime_env_validator.py::test_repo_cloud_run_workflows_match_manifest
 tests/unit/test_backend_runtime_env_validator.py::test_repo_gke_values_match_manifest
 tests/unit/test_backend_runtime_env_validator.py::test_repo_prod_cloud_run_workflows_match_manifest
 tests/unit/test_backend_runtime_env_validator.py::test_repo_prod_gke_values_match_manifest
-tests/unit/test_backend_runtime_env_validator.py::test_repo_rendered_cloud_run_matches_manifest
 tests/unit/test_verify_llm_gateway_serving.py::test_gateway_promotion_intent_tracks_runtime_and_helm_listener_surfaces
 tests/unit/test_byok_security_enrollment.py::TestBYOKActivationValidation::test_valid_activation_persists_fingerprints
 tests/unit/test_verify_pusher_config_references.py::test_dev_pusher_contract_requires_typesense_host_secret_clear
 tests/unit/test_verify_pusher_config_references.py::test_dev_pusher_literal_policy_rejects_stale_deepgram_model
 tests/unit/test_verify_pusher_config_references.py::test_rendered_dev_pusher_direct_bindings_match_source_contract
 tests/unit/test_byok_security_credentials.py::TestCacheKeyHashing::test_hash_key_returns_sha256
-tests/unit/test_byok_security_quota.py::TestChatQuotaBYOKBypass::test_enforce_chat_quota_bypasses_for_byok_with_openai_key
 tests/unit/test_byok_security_context.py::TestContextVarSafety::test_default_is_none
 tests/unit/test_byok_llm_logging.py::test_classify_byok_llm_error_authentication
-tests/unit/test_canonical_short_term_maintenance_cron.py::test_cohort_runner_noops_when_cron_disabled
-tests/unit/test_canonical_short_term_maintenance_cron.py::test_cohort_runner_uses_real_maintenance_with_fake_firestore
-tests/unit/test_canonical_short_term_maintenance_cron.py::test_daily_cadence_after_first_promotion_run
-tests/unit/test_canonical_short_term_maintenance_cron.py::test_first_cron_tick_does_not_mass_promote_below_batch_threshold
-tests/unit/test_canonical_short_term_maintenance_cron.py::test_first_cron_tick_promotes_at_batch_threshold
 tests/unit/test_chat_generate_reply_stateless.py::test_generate_reply_does_not_write_any_turn_to_chat_history
 tests/unit/test_chat_quota_counting_router.py::test_v2_messages_quota_exceeded_reply_does_not_record_quota_question
 tests/unit/test_chat_quota_counting_router.py::test_v2_messages_records_failure_when_the_production_stream_errors
@@ -168,21 +150,15 @@ tests/unit/test_desktop_transcribe.py::TestMultipartBudgetAggregation::test_mult
 tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_accepts_boundary_sample_rate_48000
 tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_accepts_boundary_sample_rate_8000
 tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_connects_and_receives_segments
-tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_dg_connection_failure_closes_1011
-tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_finalize_flushes_and_finalizes
 tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_rejects_channels_above_2
 tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_rejects_invalid_channels
 tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_rejects_sample_rate_above_48000
 tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_rejects_unsupported_codec
 tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_rejects_zero_sample_rate
-tests/unit/test_desktop_transcribe.py::TestTranscribeStreamWebSocket::test_ws_stereo_flush_accounts_for_channels
 tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeBoundary::test_octet_stream_accepts_boundary_sample_rate_48000
 tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeBoundary::test_octet_stream_accepts_boundary_sample_rate_8000
 tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeBoundary::test_octet_stream_channels_above_2_rejected
 tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeBoundary::test_octet_stream_sample_rate_above_48000_rejected
-tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeEndpoint::test_octet_stream_bad_channels_422
-tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeEndpoint::test_octet_stream_bad_sample_rate_422
-tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeEndpoint::test_octet_stream_channels_zero_422
 tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeEndpoint::test_octet_stream_empty_body_400
 tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeEndpoint::test_octet_stream_sample_rate_zero_400
 tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeEndpoint::test_multipart_browser_container_preserves_extension_for_prerecorded_stt[mp4-audio/mp4]
@@ -190,9 +166,6 @@ tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeEndpoint::test_
 tests/unit/test_desktop_transcribe.py::TestVoiceMessageTranscribeEndpoint::test_octet_stream_returns_transcript
 tests/unit/test_desktop_transcribe.py::TestVoiceMessagesBudgetHappyPath::test_voice_messages_budget_consumed_on_success
 tests/unit/test_dev_api_folder_filters.py::TestDevGetFolders::test_dev_get_folders_returns_folder_list
-tests/unit/test_dev_api_lock_bypass.py::TestDevApiMemoryLockEnforcement::test_delete_memory_allows_unlocked
-tests/unit/test_developer_memory_adapter.py::test_developer_create_route_checks_split_brain_guard_before_legacy_write
-tests/unit/test_developer_memory_adapter.py::test_developer_delete_route_checks_split_brain_guard_before_reads_and_legacy_delete
 tests/unit/test_dg_usage_batch.py::TestDgUsageBatchingBehavior::test_batched_60s_single_redis_write
 tests/unit/test_dg_usage_batch.py::TestDgUsageBatchingBehavior::test_large_accumulation_no_overflow
 tests/unit/test_dg_usage_batch.py::TestRedisOpsReduction::test_reduction_factor
@@ -202,7 +175,6 @@ tests/unit/test_fair_use_classifier.py::TestPrepareConversationSummaries::test_e
 tests/unit/test_google_calendar_auth_recovery.py::test_refresh_google_token_marks_missing_refresh_token_reauth_required
 tests/unit/test_high_priority_usage_tracking.py::TestExternalIntegrationsTracking::test_get_conversation_summary_sets_context
 tests/unit/test_high_priority_usage_tracking.py::TestKnowledgeGraphTracking::test_extract_knowledge_sets_context
-tests/unit/test_llm_gateway_client_config.py::test_perplexity_tool_uses_legacy_provider_when_gateway_feature_mode_off
 tests/unit/test_llm_gateway_client_config.py::test_gateway_langchain_client_uses_internal_gateway_base_url_and_auth
 tests/unit/test_llm_gateway_dependencies.py::test_provider_registry_is_cached_and_closed
 tests/unit/test_llm_gateway_executor.py::test_byok_missing_key_and_unsupported_provider_fail_without_fallback_or_lkg
@@ -236,10 +208,6 @@ tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_rele
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_noop_without_customer
 tests/unit/test_people_conversations_500s.py::TestGetPeopleDocIdInjection::test_get_people_injects_doc_id
 tests/unit/test_product_capability_synthetics.py::test_output_uses_required_status_vocabulary_and_json_formatting
-tests/unit/test_prompt_cache_integration.py::test_core_tools_has_26_tools
-tests/unit/test_prompt_cache_integration.py::test_llm_agent_model_kwargs_via_real_instantiation
-tests/unit/test_pusher_docker_context.py::test_pusher_image_layout_includes_backend_config_imports
-tests/unit/test_pusher_ghost_connections.py::TestTranscribeSupervisor::test_transcribe_supervisor_session_in_try_finally
 tests/unit/test_rate_limit_json_failopen.py::test_partial_cache_entry_fails_open
 tests/unit/test_rate_limiting.py::TestRouterWiring::test_developer_rate_limit_failures_log_without_request
 tests/unit/test_short_audio_embedding.py::TestGetWavDuration::test_different_sample_rates
@@ -256,25 +224,11 @@ tests/unit/test_sync_fair_use_gate.py::TestHardRestrictionRetryAfter::test_retur
 tests/unit/test_sync_fair_use_gate.py::TestSpeechDurationComputation::test_duration_from_raw_vad_segments
 tests/unit/test_sync_silent_failure.py::TestProcessSegmentReal::test_success_adds_to_new_memories
 tests/unit/test_sync_transcription_prefs.py::TestProcessSegmentPreferences::test_private_cloud_sync_flag_passed_to_new_conversation
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_decode_generic_exception_marks_failed
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_decode_http_exception_marks_failed
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_dg_budget_exhausted_marks_failed
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_dg_budget_not_exhausted_continues
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_empty_decode_completes_zero_segments
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_partial_segment_failure_completes
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_target_conversation_id_forwarded
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_vad_errors_mark_failed
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_zero_segments_after_vad_completes
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_404_expired_job
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_403_wrong_owner
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_completed_includes_result
 # Full-file isolation amortizes sync router/pipeline imports and Firestore fakes into these calls.
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_failed_includes_error
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_fresh_soft_caps_use_the_current_subscription_plan[unlimited]
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_retry_hydration_excludes_durably_fenced_conversation_from_audio_finalization
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_inline_renew_errors_cancel_before_capacity_admission_without_releasing_retry_material
-tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_content_completion_failure_cannot_publish_completed_job
-tests/unit/test_tools_rest_memory_runtime_adapter.py::test_tools_rest_get_memories_text_requests_legacy_safe_memory_decision
 tests/unit/test_tools_router.py::TestRouterEnvelope::test_ok_normal
 tests/unit/test_transcript_segment.py::test_forward_merge_on_short_incomplete_last_sentence
 tests/unit/test_translation_optimization.py::test_confident_language_detection_handles_short_fillers_and_real_text
@@ -282,8 +236,6 @@ tests/unit/test_upstream_boundary.py::TestExtractionSeamFanOut::test_fan_out_inv
 tests/unit/test_user_speaker_embedding.py::TestSetUserSpeakerEmbedding::test_stores_embedding_on_user_document
 tests/unit/test_user_speaker_embedding.py::TestSpeechProfileEmbeddingExtraction::test_extraction_called_after_upload
 tests/unit/test_user_speaker_embedding.py::TestSpeechProfileEmbeddingExtraction::test_extraction_failure_fails_the_request
-tests/unit/test_v3_real_router_default_off_f4.py::test_production_default_dependency_is_disabled_and_preserves_legacy_get_behavior
-tests/unit/test_v3_real_router_default_off_f4.py::test_router_logs_are_sanitized_and_mutating_route_dependencies_unchanged
 tests/unit/test_workstream_router_contract.py::test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_create
 tests/unit/test_vad_gate.py::TestVADStreamingGate::test_silence_produces_empty_output
 tests/unit/test_vertex_ai_system_role.py::test_apps_router_uses_langchain_messages_not_raw_dicts
@@ -294,12 +246,7 @@ tests/unit/test_verify_backend_release_vector.py::test_legacy_binding_migration_
 tests/unit/test_voice_duration_limiter.py::TestPCMDurationComputation::test_16khz_mono_1s
 tests/unit/test_workflow_contracts.py::test_workflow_contracts_static_check_accepts_current_allowlist
 tests/unit/test_workflow_contracts.py::test_workflow_contract_sources_select_adjacent_tests
-tests/unit/test_ws_b_short_term_lifecycle.py::test_promoted_item_readable_and_idempotent_on_second_run
-tests/unit/test_ws_b_short_term_lifecycle.py::test_promotion_fires_on_batch_threshold_via_apply
-tests/unit/test_ws_b_short_term_lifecycle.py::test_required_promotion_merges_multiple_sources_in_same_run
 tests/unit/test_ws_c_backfill.py::test_archive_hidden_long_term_visible_in_canonical_read
-tests/unit/test_ws_l_surface_routing.py::TestMcpSseLegacySearchParity::test_legacy_sse_search_uses_vector_order_and_full_firestore_docs
-tests/unit/test_sync_cloud_tasks.py::test_sync_post_enqueue_cleanup_does_not_unstage
 # File-isolation amortizes router/STT/VAD imports across different node IDs per run.
 tests/unit/test_sync_cloud_tasks.py
 tests/unit/test_legacy_dark_router.py
@@ -307,8 +254,6 @@ tests/unit/test_fallback_observability.py
 tests/unit/test_task_recommendations.py::test_no_production_branch_consumes_debug_summary_or_reason_codes
 tests/unit/test_utils_import_boundary.py::test_utils_modules_do_not_import_routers
 tests/unit/test_listen_session_bootstrap.py::test_project_listen_connect_decisions_pins_vocabulary_and_translation
-tests/unit/test_memory_replace_policy.py::test_legacy_reextract_failure_preserves_existing_memories[extractor_side_effect0]
-tests/unit/test_memory_replace_policy.py::test_legacy_reextract_failure_preserves_existing_memories[extractor_side_effect1]
 tests/unit/test_inv_mem_1_guard.py::TestInvMemSourceRatchet::test_no_non_canonical_product_tier_literals_in_memory_paths
 tests/unit/test_inv_mem_1_guard.py::TestInvMemSourceRatchet::test_default_read_paths_do_not_include_archive_without_explicit_mode
 tests/unit/test_task_intelligence_contract_freeze.py
@@ -316,14 +261,11 @@ tests/unit/test_lock_bypass_fixes.py
 tests/unit/test_byok_security_enrollment.py::TestCacheRouting::test_cached_openai_chat_no_raw_key_in_cache
 # Behavior test drives the real process_segment target-attach fallback (#10033/#10119 review ask);
 # it is the sole heavy test in its file, so it amortizes the sync pipeline import into its call phase.
-tests/unit/test_sync_merge_target_selection.py::test_sync_target_attach_fallback_to_closest
-tests/unit/test_bounded_firestore_list_reads.py::test_legacy_get_memories_no_first_page_5000_force
 # File-isolation amortizes llm_gateway app/provider imports into the first oracle call.
 tests/unit/test_replay_llm_gateway_fake_upstream_oracle.py::test_loopback_oracle_bypasses_ambient_proxy_configuration
 # File-isolation amortizes the merge_conversations import (models/database graph) into the first call.
 tests/unit/test_merge_audio_chunk_copy_failure.py::test_merge_propagates_custom_stt_marker_from_any_source
 tests/unit/test_merge_photo_read_failure.py::test_photo_read_failure_keeps_the_sources
-tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires
 # First test amortizes the file-isolated utils.llm.clients import into its call phase.
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
 # Suppressed-prefix expansion round walks 500 historical stubs with status batches;
@@ -359,8 +301,6 @@ tests/unit/test_client_processing_trust_boundary.py
 # (0.19-0.26s CPU), so they keep guard suppression against a busier host. Every
 # other runtime_env validator and rollout test touched by this change measured
 # under 0.10s CPU even saturated and stays guard-visible.
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[dev]
-tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[prod]
 # First route test in its file: amortizes the routers.users FastAPI/pydantic import into its call
 # phase. Structural (the file-isolation runner model), not a per-test regression.
 tests/unit/test_daily_summary_generation.py::test_create_route_happy_path
@@ -396,7 +336,7 @@ tests/unit/test_speaker_learning_round2.py::test_legacy_admission_bounds_candida
 # The SDK client graph is the cost, not a sleep or a network call. Measured 0.35-0.45s CPU
 # in the isolated-file runner (2026-10-06).
 tests/unit/test_shaped_agent.py::test_notes_transport_is_owned_per_worker_loop
-# First sync journey test in the file pays the utils.sync.pipeline import under file
+# First sync journey test in the file pays the utils.sync.legacy_segment_core import under file
 # isolation. Measured 0.38s CPU quiet and 0.62s during pre-push (2026-10-07).
 tests/unit/test_mobile_client_journeys.py::test_sync_visible_conversation_accepts_conversation_finalization_once
 # First live speaker-collapse test in the file pays the routers.listen.speakers
@@ -448,7 +388,6 @@ tests/unit/test_plan_quota_env_retirement.py::test_manifest_forbids_plan_quota_o
 # 2026-10-16: parses the full listen chart values plus rendered runtime env (0.30-0.34s CPU at load avg ~20 on the pre-push host). Assertions still run.
 tests/unit/test_backend_listen_helm_defaults.py::test_windowed_live_rollout_is_prod_canary_and_bounded
 # 2026-10-16: builds both Vertex cache request shapes through the provider boundary (0.30s CPU at load avg ~20). Assertions still run.
-tests/unit/test_vertex_content_cache.py::test_provider_boundary_caches_both_traffic_types[False-dedicated]
 # 2026-10-16: scripted 8-turn hunt with 26 proposals, verification and exact undo (0.32-0.41s CPU under load). Assertions still run.
 tests/unit/test_dream_replay.py::test_hunt_finds_90_summary_typos_resubmits_and_applies_25_with_exact_undo
 # 2026-10-17: parses runtime and fixture manifests to reject a false live-bucket validation claim (0.7-1.1s CPU under runner load). Assertions still run.
@@ -477,9 +416,8 @@ tests/unit/test_recovery_discard_pipeline.py::test_short_contentful_recovery_kee
 # 2026-10-17: parses deploy/runtime_env.yaml in the call phase (1.01s CPU under runner load, #22000). Assertions still run.
 # Product search through the HTTP surface on a short-term/archive fixture; measured 0.37-0.47s CPU on m5 (unchanged test, 2026-10-19).
 tests/unit/test_product_memory_router.py::test_product_search_endpoint_keeps_expired_unadjudicated_short_term_and_excludes_archive
-# First test to import utils.sync.files / utils.sync.pipeline in this file under file isolation (import graph, ~1s / ~7s CPU); hermetic.
+# First test to import utils.sync.files / utils.sync.legacy_segment_core in this file under file isolation (import graph, ~1s / ~7s CPU); hermetic.
 tests/unit/test_sync_input_limits.py::test_opus_disk_full_mid_file_raises_capacity_pressure_and_keeps_no_prefix
-tests/unit/test_sync_input_limits.py::test_batch_storage_pressure_removes_earlier_local_files_but_not_staged_objects
 # Builds the whole chat router's OpenAPI document in the call phase; measures 0.30-0.34s CPU locally, at the guard.
 tests/unit/test_chat_openapi_operation_ids.py::test_v1_chat_operation_ids_remain_compatible_after_handler_renames
 # Real FFmpeg: 48 per-target seeks plus loading the frames (~0.6s CPU); exercises the all-intra fallback.

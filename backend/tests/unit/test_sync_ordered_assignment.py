@@ -22,7 +22,7 @@ from typing import List
 import pytest
 
 SYNC_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
+PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'legacy_segment_core.py')
 
 
 def _read_sync_source():
@@ -39,14 +39,6 @@ def _function_body(source: str, name: str) -> str:
     start = source.index(f'def {name}(')
     next_def = source.index('\ndef ', start + 1)
     return source[start:next_def]
-
-
-def _async_function_body(source: str, name: str) -> str:
-    start = source.index(f'async def {name}(')
-    end = source.find('\nasync def ', start + 1)
-    end2 = source.find('\ndef ', start + 1)
-    candidates = [e for e in (end, end2) if e != -1]
-    return source[start : min(candidates)] if candidates else source[start:]
 
 
 def _load_turnstile_class():
@@ -156,17 +148,6 @@ class TestCallersUseOrderedAssignment:
         assert body.index('wait_turn') < body.index(
             'get_closest_conversation_to_timestamps'
         ), 'turn must be acquired before the closest-conversation lookup'
-
-    def test_v2_sorts_segments_and_passes_turnstile(self):
-        body = _async_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
-        assert 'sorted(segmented_paths, key=get_timestamp_from_path)' in body
-        assert '_OrderedTurnstile(' in body
-        assert 'assignment_turnstile,' in body, 'v2 must pass the turnstile to process_segment'
-
-    def test_both_pipelines_reprocess_merged_conversations(self):
-        source = _read_sync_source()
-        v2 = _async_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
-        assert '_reprocess_merged_conversations' in v2
 
     def test_merge_path_records_merged_conversation(self):
         body = _function_body(_read_pipeline_source(), 'process_segment')

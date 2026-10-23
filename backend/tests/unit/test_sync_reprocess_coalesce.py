@@ -169,10 +169,12 @@ def test_flags_default_off(monkeypatch):
 def pipeline():
     from pathlib import Path
     from testing.import_isolation import load_module_fresh, stub_modules
-    from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
+    from tests.unit._sync_pipeline_fakes import _build_pipeline_fakes
 
     with stub_modules(_build_pipeline_fakes()):
-        yield load_module_fresh('utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py')
+        yield load_module_fresh(
+            'utils.sync.legacy_segment_core', Path(__file__).resolve().parents[2] / 'utils/sync/legacy_segment_core.py'
+        )
 
 
 def test_pipeline_flags_off_eager_and_process_now_bypasses_coalescing(monkeypatch, pipeline):

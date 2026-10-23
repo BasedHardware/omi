@@ -1,7 +1,7 @@
 """Actual sync HTTP routing with local fake persistence/provider boundaries."""
 
 from types import SimpleNamespace
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import Mock
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -35,17 +35,9 @@ def client(monkeypatch):
     monkeypatch.setattr(
         router, 'resolve_transcription_allowance', lambda _: SimpleNamespace(reason='plan_allowance_exhausted')
     )
-    monkeypatch.setattr(router, 'retrieve_file_paths', lambda *_: ['synthetic.bin'])
     monkeypatch.setattr(router, 'archive_mobile_batch_raw_files', lambda *_: [])
-    monkeypatch.setattr(router, 'decode_files_to_wav', lambda _: ['1792152000.wav'])
     monkeypatch.setattr(router, '_cleanup_files', Mock())
 
-    async def held(*args, **kwargs):
-        kwargs['admission']['reason'] = router.resolve_transcription_allowance('synthetic').reason
-        return True
-
-    monkeypatch.setattr(router, 'hold_capture_if_exhausted', AsyncMock(side_effect=held))
-    monkeypatch.setattr(router, 'retrieve_vad_segments', Mock(side_effect=AssertionError('denied audio reached VAD')))
     app = FastAPI()
     app.include_router(router.router)
     app.dependency_overrides[router.auth.get_current_user_uid] = lambda: 'synthetic'

@@ -476,7 +476,7 @@ async def test_expected_enrichment_retries_are_409_and_unexpected_stay_500(monke
     # Importing the real sync pipeline costs seconds; the identity check below
     # pins its defining module and name instead.
     SyncConversationPersistenceFenced = type(
-        'SyncConversationPersistenceFenced', (RuntimeError,), {'__module__': 'utils.sync.pipeline'}
+        'SyncConversationPersistenceFenced', (RuntimeError,), {'__module__': 'utils.sync.legacy_segment_core'}
     )
 
     class StaleSnapshot(SyncConversationPersistenceFenced):

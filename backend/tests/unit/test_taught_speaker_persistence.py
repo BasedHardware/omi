@@ -19,7 +19,7 @@ from database import users
 from routers.listen import speakers
 from utils.audio import AudioRingBuffer
 from models.transcript_segment import TranscriptSegment
-from utils.sync import pipeline
+from utils.sync import legacy_segment_core as pipeline
 from utils.sync import speaker_identity
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

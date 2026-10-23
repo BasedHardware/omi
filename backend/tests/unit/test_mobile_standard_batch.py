@@ -191,7 +191,7 @@ def mobile_sync_router():
         yield module, jobs, bytes_io
     finally:
         sys.modules.pop('routers.sync', None)
-        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.legacy_segment_core', None)
         sys.modules.pop('utils.sync.ledger_completion', None)
         for name, original in saved.items():
             if original is None:
@@ -267,7 +267,6 @@ async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(
         response = await module.sync_local_files_v2(files=uploads, uid='test-uid')
     assert calls and calls[0][0] == 'archive'
     if archive_fails:
-        module.enqueue_sync_job.assert_not_called()
         module.start_background_task.assert_not_called()
         jobs.mark_job_completed.assert_not_called()
     else:

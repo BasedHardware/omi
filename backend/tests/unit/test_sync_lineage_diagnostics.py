@@ -1,23 +1,11 @@
-"""Bounded diagnostics for lineage resolution: stage counts, id probe, span buckets.
-
-The ``event=sync_lineage_resolve`` line reports how many returned candidate rows
-each filter stage dropped (never ids, text or field values), and a no-rows
-lookup may issue exactly one metadata-only document read on the recording id to
-say why that row could not be a candidate — without ever promoting it to a
-target. At assignment, a stamp-fallback live append reports only the bucketed
-extent growth of the live row. All ids and text are synthetic.
-"""
+"""Retained shared and recovery-core cases after legacy coordinator retirement."""
 
 import logging
-import sys
 from copy import deepcopy
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-
 import pytest
-
-import tests.unit.test_sync_v2 as sync_v2_harness
 from config import sync_lineage
 from config.sync_live_dedupe import SYNC_LINEAGE_LIVE_DEDUPE_ENV
 from tests.unit.test_sync_cross_job_assignment import intake
@@ -52,21 +40,9 @@ from utils.sync import assignment, recording_lineage
 from utils.sync.recording_lineage import resolve_segment_targets, select_segment_targets
 
 SENTINEL_ID = 'SECRET-ROW-ID-9'
+
+
 SENTINEL_TEXT = 'synthetic secret probe text never logged'
-
-
-@pytest.fixture(autouse=True)
-def default_flags(monkeypatch):
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, '')
-    monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
-
-
-def rejected_row(mutation):
-    row = generation(L)
-    row['id'] = SENTINEL_ID
-    row.update(mutation)
-    return row
 
 
 def test_every_provenance_rejection_counts_only_its_first_stage():
@@ -523,7 +499,7 @@ def test_dedupe_off_persistence_is_unchanged(monkeypatch):
 @pytest.fixture(scope='module')
 def pipeline_module():
     from database import conversations  # noqa: F401
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     return pipeline
 
@@ -552,125 +528,6 @@ def test_dedupe_off_emits_no_lineage_append_or_stamp_event(pipeline_module, monk
     dedupe = [r.getMessage() for r in caplog.records if 'event=sync_lineage_append ' in r.getMessage()]
     assert stamp == []
     assert dedupe == []
-
-
-@pytest.fixture
-def coordinator():
-    module, stubs = sync_v2_harness.TestAsyncCoordinatorBehavioral._load_sync_module()
-    try:
-        yield module, stubs
-    finally:
-        sync_v2_harness.TestAsyncCoordinatorBehavioral._cleanup(stubs['saved_modules'])
-
-
-@pytest.mark.asyncio
-async def test_coordinator_forwards_stamp_fallback_to_assignment(coordinator, monkeypatch):
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-
-    chunks = [sync_chunk(gen_start(L) + 61, gen_start(L) + 69, SENTINEL_TEXT)]
-    paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
-    pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
-    pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors, **_kwargs: segmented.update(paths)
-    pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
-    pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
-    pipeline.users_db = MagicMock()
-    pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-    pipeline.build_person_embeddings_cache = MagicMock(return_value={})
-    pipeline.record_usage = MagicMock()
-    captured = {}
-
-    def capture(path, uid, response, lock, errors, source, is_locked, prefs, cache, target, *args, **kwargs):
-        captured[paths[path]['id']] = (target, kwargs.get('lineage_binding'))
-        response['updated_memories'].add(target or 'sync-row')
-        return True
-
-    pipeline.process_segment = capture
-    monkeypatch.setattr(
-        sys.modules[pipeline.plan_segment_targets.__module__],
-        '_load_lineage',
-        lambda *_args, **_kwargs: ([], None, False),
-    )
-    monkeypatch.setattr(
-        sys.modules[pipeline.resolve_recording_session_sync_target.__module__],
-        '_candidate_rows',
-        lambda *_args, **_kwargs: [generation(0)],
-    )
-    claims = {
-        'f.opus': {
-            'capture_root': '12345678-1234-4234-8234-123456789abc',
-            'clock_epoch': 0,
-            'source_frame_start': 0,
-            'frame_count': 1,
-            'rate_hz': 16000,
-            'channel': 'mono',
-            'codec': 'opus',
-        }
-    }
-
-    async def observed_maps(_uid, _source, _lock, _device, _session, _claims, wav_paths, _frames, **_kwargs):
-        return (
-            wav_paths,
-            {path: {'claim': claims['f.opus'], 'offsets': [0, 16000], 'incomplete': False} for path in wav_paths},
-            False,
-        )
-
-    monkeypatch.setattr(pipeline, 'apply_sync_wal_audio_coverage', observed_maps)
-    kwargs = SimpleNamespace(
-        capture_evidence_claims=claims,
-        target_conversation_id='STAMP',
-        client_device_id='pendant',
-        recording_session_id=ORIGIN,
-        audio_start_seconds=chunks[0]['started_at'].timestamp() - 8,
-        audio_end_seconds=chunks[-1]['finished_at'].timestamp(),
-    )
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
-    )
-    assert captured[chunks[0]['id']] == ('STAMP', 'stamp_fallback')
-
-
-@pytest.mark.asyncio
-async def test_coordinator_lineage_off_passes_no_binding_kwarg(coordinator, monkeypatch):
-    monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, 'off')
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    chunks = [sync_chunk(gen_start(L) + 61, gen_start(L) + 69, SENTINEL_TEXT)]
-    paths = {f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav": chunk for chunk in chunks}
-    pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/job-lineage/w.wav'])
-    pipeline._cleanup_files = MagicMock()
-    pipeline.retrieve_vad_segments = lambda _path, segmented, _errors: segmented.update(paths)
-    pipeline.get_timestamp_from_path = lambda path: paths[path]['started_at'].timestamp()
-    pipeline.get_wav_duration = lambda path: (paths[path]['finished_at'] - paths[path]['started_at']).total_seconds()
-    pipeline.users_db = MagicMock()
-    pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
-    pipeline.build_person_embeddings_cache = MagicMock(return_value={})
-    pipeline.record_usage = MagicMock()
-    captured = {}
-
-    def capture(path, uid, response, lock, errors, source, is_locked, prefs, cache, target, *args, **kwargs):
-        captured[paths[path]['id']] = (target, 'lineage_binding' in kwargs)
-        response['updated_memories'].add(target or 'sync-row')
-        return True
-
-    pipeline.process_segment = capture
-    monkeypatch.setattr(
-        sys.modules[pipeline.resolve_recording_session_sync_target.__module__],
-        '_candidate_rows',
-        lambda *_args, **_kwargs: [],
-    )
-    kwargs = SimpleNamespace(
-        target_conversation_id='STAMP',
-        client_device_id='pendant',
-        recording_session_id=ORIGIN,
-        audio_start_seconds=chunks[0]['started_at'].timestamp() - 8,
-        audio_end_seconds=chunks[-1]['finished_at'].timestamp(),
-    )
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
-    )
-    assert captured[chunks[0]['id']] == (None, False)
 
 
 @pytest.mark.parametrize('status', ['in_progress', 'completed'])

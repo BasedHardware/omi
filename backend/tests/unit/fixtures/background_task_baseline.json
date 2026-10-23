@@ -260,18 +260,11 @@
       "why": "reviewed safe: telemetry-only vendor sample; losing it only leaves the gauge stale and has no listen-request or admission effect"
     },
     {
-      "path": "utils/sync/pipeline.py",
+      "path": "utils/sync/legacy_segment_core.py",
       "function": "_reprocess_conversation_after_update",
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/sync/pipeline.py",
-      "function": "_run_full_pipeline_background_async",
-      "kind": "start_background_task",
-      "count": 2,
-      "why": "pre-existing; unreviewed; one site is the inline lease heartbeat (awaited in finally, safe); the other is the fair-use soft-cap classifier (advisory LLM)"
     },
     {
       "path": "utils/sync/playback.py",

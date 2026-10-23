@@ -169,21 +169,3 @@ def test_unknown_blob_size_falls_through_to_the_capped_read(tmp_path, monkeypatc
     with pytest.raises(limits.BackfillInputLimitExceeded):
         mod.download_syncing_temporal_file(str(big), max_bytes=1024)
     assert not big.exists()
-
-
-def test_batch_storage_pressure_removes_earlier_local_files_but_not_staged_objects(tmp_path, monkeypatch):
-    from utils.sync import pipeline
-
-    first = tmp_path / 'first.bin'
-    second = tmp_path / 'second.bin'
-
-    def download(path, max_bytes=None):
-        if path == str(first):
-            first.write_bytes(b'ok')
-            return True
-        raise limits.BackfillStoragePressure('full')
-
-    monkeypatch.setattr(pipeline, 'download_syncing_temporal_file', download)
-    with pytest.raises(limits.BackfillStoragePressure):
-        pipeline._download_staged_files([str(first), str(second)], bounded_backfill=True)
-    assert not first.exists()
