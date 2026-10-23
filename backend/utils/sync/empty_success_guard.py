@@ -22,10 +22,9 @@ from __future__ import annotations
 import logging
 import os
 
-from prometheus_client import Counter
-
 from config.batch_pipeline import LONG_SPEECH_HANDOFF_SECONDS
 from config.refactor_switches import default_on as rollout_default_on
+from utils.metrics import OMI_SYNC_EMPTY_SUCCESS_GUARD_TOTAL
 from utils.stt.outcomes import bounded_provider
 
 logger = logging.getLogger(__name__)
@@ -46,12 +45,11 @@ PRIOR_PROVIDER_FAILURE_TAG = 'prior_provider_failure'
 # healthy.
 PROVIDER_CLASS_OUTCOMES = frozenset(('upstream_error', 'timeout', 'provider_budget_exhausted', 'empty_unexpected'))
 
-
-GUARD_TOTAL = Counter(
-    'omi_sync_empty_success_guard_total',
-    'Zero-word sync segment dispositions at the silence decision, by provider and reason',
-    ['provider', 'reason'],
-)
+# The collector lives in utils.metrics (the metric-owner module that outlives
+# per-test stub windows): this module is imported alongside the sync pipeline,
+# which isolated test harnesses re-execute, and an import-time Counter here
+# re-registers as a duplicated timeseries.
+GUARD_TOTAL = OMI_SYNC_EMPTY_SUCCESS_GUARD_TOTAL
 
 HELD_PROVIDER_ERROR = 'held_provider_error'
 HELD_CREDIT_AUTH = 'held_credit_auth'
