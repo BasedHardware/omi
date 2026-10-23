@@ -8,6 +8,7 @@ import pytest
 
 from scripts.diarization_eval import local_artifacts
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
+from utils.batch_pipeline import projection  # Import-pure dependency setup precedes the timed real projection call.
 
 
 @pytest.fixture

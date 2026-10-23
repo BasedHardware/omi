@@ -4,11 +4,10 @@ import hashlib
 import pytest
 
 from scripts.diarization_eval import revision_audit as module
+from diarizer.batch_pipeline_startup import DIARIZER_REVISION
 
 
 def test_audit_target_matches_serving_pin():
-    from diarizer.batch_pipeline_startup import DIARIZER_REVISION
-
     assert module.DIARIZER_REVISION == DIARIZER_REVISION
 
 
