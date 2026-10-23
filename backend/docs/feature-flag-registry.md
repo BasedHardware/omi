@@ -417,6 +417,10 @@ and an explicit empty literal renders as `''`.
 | `FAIR_USE_ENABLED` | Enforce fair-use metering; set false to stop enforcement | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | keep | — | unowned |
 | `FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY` | Skip shared retention when independent job is healthy | backend | env | closed | false | false | false | — | keep | keep | — | unowned |
+| `FSR_COHORT_REQUEST_CACHE` | Default on; share membership snapshots within one request, bounded to 64 users; off restores process TTL lookup on every check | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `FSR_KG_CITATION_INDEX` | Default on; query native reverse citations for KG node pruning; off restores the node scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `FSR_PUBLIC_CATALOG_CACHE` | Default on; public catalog search and review variants share the 30-second base single-flight; off restores the Redis read-through path | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `FSR_SMART_MERGE_PARTITION` | Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `JOBSTORE_SHADOW_WRITES` | Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `LISTEN_FINALIZATION_BYOK_ABANDONMENT_ENABLED` | Abandon finalization after BYOK failure | backend | env | open | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | keep | keep | — | unowned |
 | `LISTEN_FINALIZATION_DURABLE_ATTEMPT_CAP_ENABLED` | Cap durable listen worker attempts while retaining transcript-only conversations | backend | env | open | — | — | true | — | keep | keep | — | dazheng |
@@ -782,6 +786,10 @@ their code default (`fail` tells you which way a missing value resolves).
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FIRST_SUMMARY_DEADLINE_SECONDS` — First required summary dispatch budget; default 120 seconds, bounded 60 to 120 (fail: closed)
 - `FIRST_SUMMARY_UID_ALLOWLIST` — Optional summary canary owner allowlist; empty admits only the positive percentage cohort when global gate is on (fail: closed)
+- `FSR_COHORT_REQUEST_CACHE` — Default on; share membership snapshots within one request, bounded to 64 users; off restores process TTL lookup on every check (fail: open)
+- `FSR_KG_CITATION_INDEX` — Default on; query native reverse citations for KG node pruning; off restores the node scan (fail: open)
+- `FSR_PUBLIC_CATALOG_CACHE` — Default on; public catalog search and review variants share the 30-second base single-flight; off restores the Redis read-through path (fail: open)
+- `FSR_SMART_MERGE_PARTITION` — Default on; partition the unbounded smart-merge discarded-barrier scan by explicit device; off restores the original scan (fail: open)
 - `HELD_CONTENT_COHORT` — Fallback tokens uid:<uid>,pct:<0-100> or explicit all, used only after rollout_cohorts/held-content is confirmed absent; empty, unset, or malformed admits nobody (fail: closed)
 - `HELD_CONTENT_ENABLED` — Default-off at-cap choice API; additionally requires X-Omi-Held-Content: 1. Capture custody and recovery must ship before enablement. (fail: closed)
 - `JOBSTORE_SHADOW_WRITES` — Default on unless 0/false/off/no; off stops the A2 Postgres shadow mirror (and its parity reads) while BATCH_JOBSTORE_MODE=shadow (fail: open)

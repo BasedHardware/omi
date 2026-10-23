@@ -387,6 +387,7 @@ def sdk_world(monkeypatch):
         source = next((value for op, value in filters.get('source', []) if op == 'EQUAL'), None)
         statuses = next((value for op, value in filters.get('status', []) if op == 'IN'), None)
         created_before = next((value for op, value in filters.get('created_at', []) if op == 'LESS_THAN'), None)
+        device = next((value for op, value in filters.get('client_device_id', []) if op == 'EQUAL'), None)
         docs = []
         for path, row in world.store.rows.items():
             if path[:3] != ('users', UID, 'conversations'):
@@ -394,6 +395,8 @@ def sdk_world(monkeypatch):
             if discarded is not None and row.get('discarded') is not discarded:
                 continue
             if source is not None and row.get('source') != source:
+                continue
+            if device is not None and row.get('client_device_id') != device:
                 continue
             if statuses is not None and row.get('status') not in statuses:
                 continue

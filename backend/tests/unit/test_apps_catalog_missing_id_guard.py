@@ -21,6 +21,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 import pytest  # noqa: E402
 
 from utils import apps as apps_utils  # noqa: E402
+from database import apps as apps_db  # noqa: E402
 
 
 class _PassThroughCache:
@@ -58,13 +59,17 @@ def _unreachable_db():
 def _patch_public_set(monkeypatch, records, *, from_cache):
     """Serve `records` from Redis or from Firestore, never both, so each branch is proven alone."""
     monkeypatch.setattr(apps_utils, 'get_memory_cache', _PassThroughCache)
+    monkeypatch.setattr(apps_db, 'get_memory_cache', _PassThroughCache)
+    monkeypatch.setattr(apps_db, 'set_generic_cache', lambda *a, **kw: None)
     monkeypatch.setattr(apps_utils, 'set_generic_cache', lambda *a, **kw: None)
     if from_cache:
+        monkeypatch.setattr(apps_db, 'get_generic_cache', lambda _key: [dict(r) for r in records])
+        monkeypatch.setattr(apps_db, 'get_public_approved_apps_db', _unreachable_db)
         monkeypatch.setattr(apps_utils, 'get_generic_cache', lambda _key: [dict(r) for r in records])
-        monkeypatch.setattr(apps_utils, 'get_public_approved_apps_db', _unreachable_db)
     else:
+        monkeypatch.setattr(apps_db, 'get_generic_cache', lambda _key: None)
+        monkeypatch.setattr(apps_db, 'get_public_approved_apps_db', lambda: [dict(r) for r in records])
         monkeypatch.setattr(apps_utils, 'get_generic_cache', lambda _key: None)
-        monkeypatch.setattr(apps_utils, 'get_public_approved_apps_db', lambda: [dict(r) for r in records])
     monkeypatch.setattr(apps_utils, 'get_apps_installs_count', lambda ids: {})
     monkeypatch.setattr(apps_utils, 'get_apps_reviews', lambda ids: {})
 

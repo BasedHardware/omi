@@ -28,6 +28,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from database import apps as apps_db  # noqa: E402
 from routers import apps as apps_mod  # noqa: E402
+from database.cache_manager import InMemoryCacheManager
 
 UID = 'uid-apps-search'
 
@@ -95,6 +96,8 @@ def env(monkeypatch):
     docs = [_app_doc('a1', 'Todoist'), _app_doc('a2', 'Grok'), _app_doc('a3', 'Calendar Sync')]
     firestore = _FakeFirestore(docs)
     cache: dict[str, object] = {}
+    memory = InMemoryCacheManager()
+    monkeypatch.setattr(apps_db, 'get_memory_cache', lambda: memory)
 
     monkeypatch.setattr(apps_db, 'db', firestore)
     # raising=False so the control run against the pre-fix source still executes and fails on the

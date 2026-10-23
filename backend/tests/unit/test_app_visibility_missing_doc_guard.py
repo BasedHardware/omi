@@ -52,6 +52,9 @@ _mod("ulid", ULID=lambda: "01HZZTESTULID")
 _mod("models.app", App=MagicMock(), UsageHistoryType=MagicMock())
 _mod("database._client", db=MagicMock())
 _mod("database.redis_db", get_generic_cache=MagicMock(), set_generic_cache=MagicMock())
+_mod("database.cache", get_memory_cache=MagicMock())
+_mod("database.firestore_read_origin", read_origin=lambda _origin: lambda function: function)
+_mod("utils.observability.fallback", record_fallback=MagicMock())
 
 
 def _load():

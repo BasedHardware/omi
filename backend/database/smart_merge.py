@@ -23,14 +23,21 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
+from google.api_core.exceptions import FailedPrecondition
 
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
 from database._client import get_firestore_client, run_transactional
-from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
+from database.firestore_index_registry import (
+    CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY,
+    CONVERSATIONS_SMART_MERGE_PARTITION_QUERY,
+)
 from database.people_stats_cache import invalidate_people_stats_cache
 from config import merge_ancestry
 from config.conversation_smart_merge import smart_merge_flatten_enabled
+from config.firestore_quick_reads import smart_merge_partition_enabled
+from database.firestore_read_origin import read_origin
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -104,6 +111,7 @@ def find_preceding_conversations(
     discarded: bool = False,
     transaction: Any = None,
     firestore_client: Any = None,
+    client_device_id: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     """Newest-first rows of one source and discard flag created before ``created_before``.
 
@@ -127,13 +135,53 @@ def find_preceding_conversations(
     query = query.order_by('created_at', direction=firestore.Query.DESCENDING).select(list(_PRECEDING_FIELDS))
     if limit is not None:
         query = query.limit(limit)
-    stream = query.stream(transaction=transaction) if transaction is not None else query.stream()
-    rows = []
-    for snapshot in stream:
-        data = snapshot.to_dict() or {}
-        data['id'] = snapshot.id
-        rows.append(data)
-    return rows
+
+    def collect(selected):
+        stream = selected.stream(transaction=transaction) if transaction is not None else selected.stream()
+        rows = []
+        for snapshot in stream:
+            data = snapshot.to_dict() or {}
+            data['id'] = snapshot.id
+            rows.append(data)
+        return rows
+
+    # A filter before a finite limit changes the global six-row window. Keep
+    # that lookup unchanged; the expensive discarded-barrier scan is unbounded.
+    # Missing device fields are not matched by equality-to-null in Firestore.
+    if limit is None and isinstance(client_device_id, str) and client_device_id and smart_merge_partition_enabled():
+        with read_origin('task:smart_merge_partition_lookup'):
+            try:
+                partition_query = (
+                    CONVERSATIONS_SMART_MERGE_PARTITION_QUERY.build(
+                        _collection(client, uid),
+                        {
+                            'discarded': discarded,
+                            'source': source,
+                            'statuses': list(_ALL_STATUSES),
+                            'created_before': created_before,
+                            'client_device_id': client_device_id,
+                        },
+                        field_filter_factory=FieldFilter,
+                    )
+                    .order_by('created_at', direction=firestore.Query.DESCENDING)
+                    .select(list(_PRECEDING_FIELDS))
+                )
+                return collect(partition_query)
+            except FailedPrecondition as error:
+                if 'index' not in str(error).lower():
+                    raise
+                # The lead reconciles the index before shipping, but a rolling
+                # deploy must remain correct while the index is still building.
+                record_fallback(
+                    component='other',
+                    from_mode='indexed_query',
+                    to_mode='legacy_query',
+                    reason='unavailable',
+                    outcome='recovered',
+                    log=logger,
+                )
+                return collect(query)
+    return collect(query)
 
 
 def _epoch(value: Any) -> Optional[float]:
@@ -204,6 +252,7 @@ def has_intervening_discarded(
         discarded=True,
         transaction=transaction,
         firestore_client=firestore_client,
+        client_device_id=donor.get('client_device_id'),
     ):
         if row.get('client_device_id') != donor.get('client_device_id'):
             continue
