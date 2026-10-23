@@ -1,0 +1,3 @@
+{
+  "change": "Fixed \"Load older conversations\" skipping a conversation after deleting or unstarring a loaded row"
+}
