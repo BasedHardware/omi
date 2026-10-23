@@ -9,9 +9,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/live_episode_clock.dart';
 
-/// Handoff probes for shared files outside the Home lane's edit ownership.
-/// These report deterministic work and check content; the owning lane can turn
-/// the printed observations into performance guards when it implements a fix.
+/// Counts element reads without using shared-host wall-clock timings.
 class _Segments extends ListBase<TranscriptSegment> {
   final items = List.generate(
       2000,
@@ -41,6 +39,33 @@ class _Segments extends ListBase<TranscriptSegment> {
 }
 
 void main() {
+  test('off-limits page identity signature scans the entire history on every notify', () {
+    final rows = _Segments();
+    int identitySignature(Iterable<Object> values) => Object.hashAll(values.map(identityHashCode));
+    final initial = identitySignature(rows);
+    rows.reads = 0;
+    for (var i = 0; i < 20; i++) {
+      expect(identitySignature(rows), initial);
+    }
+    debugPrint('HOME PAGE SIGNATURE COPY: 2000 rows, 20 no-op notifies, reads=${rows.reads}');
+    expect(rows.reads, 40000);
+  });
+
+  test('duration must observe same-length segment replacement and timestamp mutation', () {
+    final segments = _Segments();
+    final c = ServerConversation(
+      id: 'mutable',
+      createdAt: DateTime(2020),
+      structured: Structured('Title', ''),
+      transcriptSegments: segments,
+    );
+    expect(c.getDurationInSeconds(), 2000);
+    segments.items.last.end = 3000;
+    expect(c.getDurationInSeconds(), 3000);
+    segments.items.last = segments.items.first;
+    expect(c.getDurationInSeconds(), 1999);
+  });
+
   testWidgets('handoff: saved row title and duration traversal counts', (tester) async {
     final segments = _Segments();
     final c = ServerConversation(
@@ -66,29 +91,49 @@ void main() {
     }
   });
 
-  testWidgets('handoff: hidden live episode clock rebuild count', (tester) async {
-    var builds = 0;
-    final semantics = tester.ensureSemantics();
-    try {
-      await tester.pumpWidget(MaterialApp(
-          home: TickerMode(
-        enabled: false,
-        child: LiveEpisodeClock(
-            clock: () => DateTime(2020),
-            builder: (_, now) {
-              builds++;
-              return const Text('Clock remains mounted');
-            }),
-      )));
-      builds = 0;
-      for (var i = 0; i < 5; i++) {
-        await tester.pump(const Duration(seconds: 1));
+  for (final semanticsEnabled in [false, true]) {
+    testWidgets('live episode clock stops hidden ticks and catches up (semantics=$semanticsEnabled)', (tester) async {
+      var builds = 0;
+      var enabled = false;
+      var now = DateTime(2020);
+      late StateSetter changeVisibility;
+      final semantics = semanticsEnabled ? tester.ensureSemantics() : null;
+      final clock = LiveEpisodeClock(
+        clock: () => now,
+        builder: (_, time) {
+          builds++;
+          return Text(time.toIso8601String());
+        },
+      );
+      try {
+        await tester.pumpWidget(MaterialApp(home: StatefulBuilder(builder: (context, setState) {
+          changeVisibility = setState;
+          return TickerMode(enabled: enabled, child: clock);
+        })));
+        builds = 0;
+        for (var i = 0; i < 5; i++) {
+          now = now.add(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+        }
+        final hiddenBuilds = builds;
+        changeVisibility(() => enabled = true);
+        await tester.pump();
+        expect(find.text(now.toIso8601String()), findsOneWidget, reason: 'catch up before another tick');
+        builds = 0;
+        for (var i = 0; i < 5; i++) {
+          now = now.add(const Duration(seconds: 1));
+          await tester.pump(const Duration(seconds: 1));
+        }
+        final visibleBuilds = builds;
+        debugPrint(
+            'HOME SHARED CLOCK: semantics=$semanticsEnabled, 5 ticks, hidden=$hiddenBuilds visible=$visibleBuilds');
+        expect(hiddenBuilds, 0);
+        expect(visibleBuilds, 5);
+        await tester.pumpWidget(const SizedBox.shrink());
+      } finally {
+        await tester.pumpWidget(const SizedBox.shrink());
+        semantics?.dispose();
       }
-      debugPrint('HOME SHARED CLOCK: hidden semantics=true, 5 ticks, clockBuilds=$builds');
-      expect(find.text('Clock remains mounted'), findsOneWidget);
-      await tester.pumpWidget(const SizedBox.shrink());
-    } finally {
-      semantics.dispose();
-    }
-  });
+    });
+  }
 }
