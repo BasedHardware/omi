@@ -1,0 +1,118 @@
+{
+  "description": "Synthetic weekly sync (no real user data). The owner and one remote participant whose name appears only on the call tile; the model looks at the screenshot, then submits.",
+  "owner_name": "Riley Tan",
+  "frame": {
+    "frame_id": "frame-tile-1",
+    "offset_label": "00:02"
+  },
+  "segments": [
+    [
+      "s001",
+      0,
+      "Thanks for jumping on, let's go through the pilot pricing first."
+    ],
+    [
+      "s002",
+      1,
+      "Sure. For Quorbi I was thinking forty dollars a seat for the first fifty seats."
+    ],
+    [
+      "s003",
+      0,
+      "I'd rather do usage based pricing so smaller teams can start cheaply."
+    ],
+    [
+      "s004",
+      1,
+      "Okay, let's not decide today, I'll model both options and send them over by Friday."
+    ],
+    [
+      "s005",
+      0,
+      "Great. On hardware, the next batch is waiting on the firmware fix."
+    ],
+    [
+      "s006",
+      1,
+      "Right, the factory said they can ship a week after the fix lands."
+    ],
+    [
+      "s007",
+      0,
+      "I'll check the firmware fix status with the team tomorrow."
+    ]
+  ],
+  "repeat": 12,
+  "turns": [
+    {
+      "tool_calls": [
+        {
+          "name": "view_screenshot",
+          "arguments": {
+            "frame_id": "frame-tile-1"
+          }
+        },
+        {
+          "name": "search_people",
+          "arguments": {
+            "query": "Maya"
+          }
+        }
+      ]
+    },
+    {
+      "tool_calls": [
+        {
+          "name": "submit_notes",
+          "arguments": {
+            "title": "Maya Okafor: Quorbi pilot pricing and hardware timing",
+            "overview": "Riley and Maya compared pilot pricing options and the next hardware batch.",
+            "emoji": "💼",
+            "category": "business",
+            "participants": [
+              {
+                "name": "Maya Okafor",
+                "speaker": "1",
+                "evidence_kind": "screen",
+                "evidence": "Zoom tile in screenshot frame-tile-1"
+              }
+            ],
+            "sections": [
+              {
+                "heading": "Pilot pricing",
+                "body_markdown": "- Two pricing options for the Quorbi pilot\n  - Maya proposed $40 per seat for the first 50 seats\n  - Riley preferred usage-based pricing; no decision yet",
+                "source_segment_ids": [
+                  "s002",
+                  "s003"
+                ]
+              },
+              {
+                "heading": "Hardware timeline",
+                "body_markdown": "- Next batch waits on the firmware fix\n  - The factory can ship a week after the fix lands",
+                "source_segment_ids": [
+                  "s005",
+                  "s006"
+                ]
+              }
+            ],
+            "action_items": [
+              {
+                "description": "Check the firmware fix status with the team",
+                "owner_name": "Riley Tan",
+                "capture_owner": "user",
+                "source_segment_ids": [
+                  "s007"
+                ]
+              },
+              {
+                "description": "Follow up on Quorbi pilot pricing",
+                "owner_name": "Riley Tan",
+                "capture_owner": "user"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

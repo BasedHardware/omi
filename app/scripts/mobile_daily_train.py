@@ -52,6 +52,7 @@ from typing import Callable, Iterable, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import mobile_capture_health as capture_health  # noqa: E402
 import mobile_store_promote as promote  # noqa: E402
 
 APP_ID = promote.APP_ID
@@ -127,6 +128,18 @@ def _gate_receipt_dt(name: str) -> datetime | None:
 
 class TrainError(Exception):
     pass
+
+
+def capture_health_hold(platform: str, *, build: str | None) -> str | None:
+    """Why a rollout hop must hold on capture health, or None to proceed.
+
+    Read-only PostHog check (mobile_capture_health.py), mirroring the operator
+    gate's judge per (platform, build): the Android version code, or the iOS
+    build attached to the live App Store version. No build holds. Fails closed; TRAIN_CAPTURE_HEALTH_OVERRIDE=<reason> lets a hop through.
+    """
+    verdict = capture_health.check_rollout(platform, build=build)
+    log(f"{platform} capture health: {verdict.reason}")
+    return verdict.reason if verdict.hold else None
 
 
 def log(message: str) -> None:
@@ -420,6 +433,27 @@ def ios_phased_release(live_version_id: str) -> dict[str, object] | None:
     return payload["data"]
 
 
+def ios_version_build_number(version_id: str) -> str | None:
+    """The build number (CFBundleVersion) attached to an App Store version, or None.
+
+    Reads GET /v1/appStoreVersions/{id}/build. The capture-health hold judges
+    the exact store build, never a same-version TestFlight sibling; an
+    unreadable build returns None, and the hold then fails closed.
+    """
+    try:
+        token = _asc_rest_token()
+        url = f"https://api.appstoreconnect.apple.com/v1/appStoreVersions/{version_id}/build"
+        request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = json.load(response)
+        data = payload.get("data") if isinstance(payload, dict) else None
+        number = _attributes(data).get("version") if isinstance(data, dict) else None
+    except Exception as exc:  # noqa: BLE001 - any failure, including a malformed body, means "unknown build", which holds
+        log(f"App Store Connect build lookup failed for {version_id}: {exc}")
+        return None
+    return str(number) if isinstance(number, (str, int)) and str(number).isdigit() else None
+
+
 def ios_phased_release_paused(live_version_id: str) -> bool:
     """Whether the live version's phased rollout is PAUSED (the operator brake)."""
     phased = ios_phased_release(live_version_id)
@@ -443,6 +477,8 @@ def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | 
     never jumps; any other state (COMPLETE, INACTIVE, or one Apple adds later)
     is not a live rollout to advance. Anything unreadable fails closed (False
     with the reason — never True on an error).
+    The jump also waits on capture health for the live version's exact build
+    (ios_version_build_number, capture_health_hold).
     """
     now = now or datetime.now(timezone.utc)
     try:
@@ -464,6 +500,9 @@ def ios_phased_release_should_complete(live_version_id: str, *, now: datetime | 
     age_hours = (now - started).total_seconds() / 3600
     if age_hours < IOS_PHASED_JUMP_HOURS:
         return False, f"phased rollout is {age_hours:.1f}h old (< {IOS_PHASED_JUMP_HOURS:g}h observation window)"
+    hold = capture_health_hold("ios", build=ios_version_build_number(live_version_id))
+    if hold:
+        return False, f"phased rollout is {age_hours:.1f}h old; held on capture health: {hold}"
     return True, f"phased rollout is {age_hours:.1f}h old; releasing to everyone"
 
 
@@ -821,7 +860,17 @@ def run_ios(*, dry_run: bool, release_date: str, advance_only: bool = False, asc
                     f"ios=dry-run:release-approved {pending.version} "
                     "(attach the phased rollout, then POST appStoreVersionReleaseRequests)"
                 )
-            _attach_phased_release(pending.id)
+            try:
+                _attach_phased_release(pending.id)
+            except TrainError as exc:
+                # Same read-back as the submit path: this train's own submit
+                # already attached the phased rollout (or a retry follows an
+                # attach that landed before the release request failed), so
+                # Apple rejects the duplicate. Release only when a phased
+                # rollout is confirmed attached; otherwise keep failing closed.
+                if ios_phased_release(pending.id) is None:
+                    raise TrainError(f"phased rollout is not attached to approved {pending.version}: {exc}") from exc
+                log(f"phased rollout already attached to {pending.version}; the create was rejected as a duplicate")
             _release_approved_version(pending.id, pending.version)
             log(f"released approved {pending.version} with the phased rollout attached (day 1 = 1%)")
             return f"ios={plan.action}: released approved {pending.version} (phased rollout attached)"
@@ -1022,24 +1071,61 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
             return f"android=staged-halted {staged_version} {codes[0]}"
         receipt = _gate_receipt_dt(str(staged.get("name") or ""))
         now = datetime.now(timezone.utc)
-        if receipt is not None:
-            age_hours = (now - receipt).total_seconds() / 3600
-            if age_hours < ROLLOUT_HOP_MIN_HOURS:
-                # This rollout was advanced inside its observation window
-                # (today's gate, or a same-day retry of a train whose other
-                # platform failed — main() runs both platforms before exiting
-                # nonzero). One advancing action per window keeps the exposure
-                # ladder's observation gap real.
-                log(
-                    f"Android production staged {staged_version} {codes[0]} was advanced "
-                    f"{age_hours:.1f}h ago; holding at {current:.0%} until the "
-                    f"{ROLLOUT_HOP_MIN_HOURS:g}h observation window closes"
+        if receipt is None:
+            # No receipt means no proof of when this fraction was reached: a
+            # rollout started before receipts existed, or a name edited in Play
+            # Console. Hopping now could expand exposure minutes after the last
+            # step, so fail closed: stamp a receipt at the current fraction
+            # (no exposure change) and let the next advance after the
+            # observation window take the hop.
+            log(
+                f"Android production staged {staged_version} {codes[0]} at {current:.0%} has no gate receipt; "
+                f"stamping one and holding for the {ROLLOUT_HOP_MIN_HOURS:g}h observation window"
+            )
+            try:
+                notes = _staged_release_notes(staged) or promote.require_notes(
+                    ensure_release_notes(staged_version, release_date, write=False), staged_version, "android"
                 )
-                return (
-                    f"android=staged {staged_version} {codes[0]} @{current:.0%} "
-                    f"(advanced {age_hours:.1f}h ago; window {ROLLOUT_HOP_MIN_HOURS:g}h)"
+            except promote.PromotionError as exc:
+                raise TrainError(f"staged {staged_version} has no usable What's-New text: {exc}") from exc
+            if dry_run:
+                return f"android=dry-run:staged-stamp {staged_version} {codes[0]} @{current:.0%} (no gate receipt; would stamp and hold)"
+            try:
+                promote.submit_android(
+                    client,
+                    edit_id,
+                    staged_version,
+                    codes[0],
+                    notes,
+                    status="inProgress",
+                    user_fraction=current,
+                    extra_codes=codes[1:],
+                    base_release=staged,
+                    release_name=_staged_name_with_receipt(staged_version),
                 )
-            log(f"Android staged {staged_version} last advanced {age_hours:.1f}h ago; window has closed")
+            except promote.PromotionError as exc:
+                raise TrainError(str(exc)) from exc
+            return (
+                f"android=staged {staged_version} {codes[0]} @{current:.0%} "
+                f"(no gate receipt; stamped, holding {ROLLOUT_HOP_MIN_HOURS:g}h)"
+            )
+        age_hours = (now - receipt).total_seconds() / 3600
+        if age_hours < ROLLOUT_HOP_MIN_HOURS:
+            # This rollout was advanced inside its observation window
+            # (today's gate, or a same-day retry of a train whose other
+            # platform failed — main() runs both platforms before exiting
+            # nonzero). One advancing action per window keeps the exposure
+            # ladder's observation gap real.
+            log(
+                f"Android production staged {staged_version} {codes[0]} was advanced "
+                f"{age_hours:.1f}h ago; holding at {current:.0%} until the "
+                f"{ROLLOUT_HOP_MIN_HOURS:g}h observation window closes"
+            )
+            return (
+                f"android=staged {staged_version} {codes[0]} @{current:.0%} "
+                f"(advanced {age_hours:.1f}h ago; window {ROLLOUT_HOP_MIN_HOURS:g}h)"
+            )
+        log(f"Android staged {staged_version} last advanced {age_hours:.1f}h ago; window has closed")
         if candidate is not None:
             # A newer internal build exists, but Play allows only one staged
             # release at a time, so it starts only after this rollout
@@ -1050,6 +1136,9 @@ def run_android(*, dry_run: bool, release_date: str, advance_only: bool = False)
                 f"newer candidate {candidate.version} ({candidate.version_code}) waits for staged "
                 f"{staged_version} to complete; continuing the ladder"
             )
+        hold = capture_health_hold("android", build=codes[0])
+        if hold:
+            return f"android=staged {staged_version} {codes[0]} @{current:.0%} held on capture health ({hold})"
         next_hops = [hop for hop in STAGED_ROLLOUT_LADDER if hop > current + 1e-9]
         if not next_hops:
             log(f"Android production staged {staged_version} at {current:.0%} is at or past the ladder top; nothing to do")

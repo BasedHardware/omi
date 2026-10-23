@@ -1,3 +1,0 @@
-{
-  "change": "Memory screens use the single released read view; retired belief-history selectors and memory-use feedback are no longer exposed. Existing memories are unchanged."
-}

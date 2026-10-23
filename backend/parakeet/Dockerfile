@@ -76,6 +76,7 @@ COPY backend/parakeet/ .
 # NeMo already imports a top-level `utils` package, so this module cannot live at
 # /app/utils or the process loads NeMo's package and never sees logging_config.
 COPY backend/utils/logging_config.py ./omi_logging_config.py
+COPY backend/utils/speakers/policy.py ./omi_speaker_policy.py
 COPY backend/tests/container/ tests/container/
 
 ENV NVIDIA_VISIBLE_DEVICES=all

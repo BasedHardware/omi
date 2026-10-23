@@ -32,7 +32,10 @@ access lines. Parakeet, diarizer, and vad set `uvicorn.access` to WARNING:
 each has an internal HTTP load balancer that already logs the request.
 
 `configure_split_stream_logging` sends INFO/DEBUG to stdout and WARNING and
-above to stderr. Pusher, backend/listen, parakeet, diarizer, and vad call it.
+above to stderr. Parakeet and vad call it; backend/listen, pusher and
+llm-gateway get the same split from `omi_logging.configure_logging` in text
+mode (`structured-logging-rollout.md`), which also drops Cloud Run access
+lines and successful probe lines.
 Without that split, GKE stores Python INFO written to stderr as severity
 ERROR. NeMo does not use the root logger: `nemo_logger` has `propagate=False`
 and its own handlers. `quiet_repetitive_nemo_logs` drops only the per-batch

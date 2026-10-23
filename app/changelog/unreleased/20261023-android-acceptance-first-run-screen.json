@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Android emulator acceptance harness and tests only; no store-build behavior change"
+}

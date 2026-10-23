@@ -102,6 +102,36 @@ class BudgetTests(unittest.TestCase):
         data["jobs"]["fixture.yml/setup"] = setup
         self.assertEqual(totals(data)[1], 8)
 
+    def test_additional_nightly_frequency_preserves_pr_total_and_caps(self):
+        data = copy.deepcopy(self.base)
+        row = data["jobs"]["fixture.yml/test"]
+        before = totals(data)
+        row["expected_runs_per_day"] += 1
+        row["expected_nightly_runs_per_day"] = 1
+        row["rationale"] = "One additional nightly, separate from the unchanged PR forecast"
+        self.save(data)
+        self.assertEqual(totals(data), before)
+        self.assertEqual(validate(self.root, self.base), [])
+        self.assertEqual(refresh(self.root)["jobs"]["fixture.yml/test"]["expected_nightly_runs_per_day"], 1)
+        reseeded = refresh(self.root, reseed=True)
+        self.assertEqual(reseeded["jobs"]["fixture.yml/test"]["expected_runs_per_day"], 2)
+        self.assertEqual(totals(reseeded), before)
+
+    def test_nightly_attribution_cannot_hide_existing_pr_cost(self):
+        data = copy.deepcopy(self.base)
+        row = data["jobs"]["fixture.yml/test"]
+        row["expected_nightly_runs_per_day"] = 1
+        row["rationale"] = "Attempted reclassification of existing PR frequency"
+        self.save(data)
+        self.assertIn("cannot reduce the PR forecast", " ".join(validate(self.root, self.base)))
+
+    def test_invalid_nightly_frequency_is_rejected(self):
+        for value in (-1, 100, "1"):
+            data = copy.deepcopy(self.base)
+            data["jobs"]["fixture.yml/test"]["expected_nightly_runs_per_day"] = value
+            self.save(data)
+            self.assertIn("nightly frequency", " ".join(validate(self.root, self.base)))
+
 
 if __name__ == "__main__":
     unittest.main()

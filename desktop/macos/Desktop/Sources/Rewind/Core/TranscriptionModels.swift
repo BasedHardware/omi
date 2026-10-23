@@ -335,6 +335,7 @@ struct TranscriptionSegmentRecord: Codable, FetchableRecord, PersistableRecord, 
   var speakerLabel: String?  // Speaker label (e.g., "SPEAKER_00")
   var isUser: Bool  // Whether this segment is from the user
   var personId: String?  // Associated person ID (if identified)
+  var speakerLabelSource: String? = nil
   var translationsJson: String?  // JSON-encoded [TranscriptTranslation]
 
   static let databaseTableName = "transcription_segments"

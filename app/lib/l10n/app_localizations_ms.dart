@@ -13424,9 +13424,6 @@ class AppLocalizationsMs extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Teruskan dengan pelan percuma';
-
-  @override
   String get paywallTrialCancelNote => 'Batal bila-bila masa. Tiada yuran, tiada penalti.';
 
   @override
@@ -14416,6 +14413,178 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi masih merakam';
+
+  @override
+  String get episodeNow => 'Sekarang';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Langsung · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count detik',
+      one: '1 detik',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Detik';
+
+  @override
+  String get episodeSoFar => 'Setakat ini';
+
+  @override
+  String get episodeUpdatedJustNow => 'Baru dikemas kini · nota penuh apabila tamat';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Dikemas kini $minutes min lalu · nota penuh apabila tamat';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Nota muncul selepas beberapa minit pertama perbualan.';
+
+  @override
+  String get episodeOpenAll => 'Buka Semua';
+
+  @override
+  String get episodeWrapUpNow => 'Selesaikan Sekarang';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi menyelesaikannya apabila anda beralih';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Tugasan dikesan: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Peringatan dikesan: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Tugasan disimpan: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'menambah $duration daripada Omi anda';
+  }
+
+  @override
+  String get episodeListeningNow => 'Sedang mendengar';
+
+  @override
+  String get deviceHeardToday => 'Didengar hari ini';
+
+  @override
+  String get deviceToSync => 'untuk disegerakkan';
+
+  @override
+  String get deviceRightNow => 'Sekarang';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Episod langsung · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Mengejar';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done daripada $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Baru-baru ini';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Terputus selama $duration';
+  }
+
+  @override
+  String get deviceControls => 'Kawalan';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Juga: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Tekan butang pada Omi anda';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Satu tekanan pendek. Kemudian tanya apa sahaja.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Tanya soalan anda';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Sebut dengan kuat. Omi sedang mendengar.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Selesai? Tekan butang sekali lagi untuk menghantar.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Anda dapat $days hari percuma';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days hari Omi Pro percuma daripada kami. Kami ingatkan sebelum dicaj. Batal bila-bila masa.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Dapatkan percubaan $days hari';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Mulakan percubaan percuma $days hari';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Hidupkan Omi anda';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Tekan butang sekali dan letak dekat telefon.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'Itu sahaja. Omi akan terus merakam perbualan anda di latar belakang.';
+
+  @override
+  String get noThanks => 'Tidak, terima kasih';
+
+  @override
+  String get recapInTheBackground => 'Di latar belakang';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Kekal dengan diskaun $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Kekal dan bayar $price sebulan untuk $months bulan akan datang.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Selesai. Diskaun $percent% untuk $months bulan akan datang.';
+  }
 
   @override
   String get consentShortMessage =>

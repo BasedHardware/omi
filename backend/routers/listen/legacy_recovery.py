@@ -136,6 +136,7 @@ async def rebuild_stt_socket_locked(self: Any) -> bool:
     owner.record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
     owner.logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
     if previous is not None:
+        owner.note_stream_close_intent(previous, owner.US_FAILOVER)
         try:
             previous.finish()
         except Exception:

@@ -13,6 +13,8 @@ import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/pages/conversations/recording_blocks.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -150,8 +152,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     return _syncedWalsCache!;
   }
 
-  /// Terminally unavailable recordings. They remain reachable for review or
-  /// deletion, but never count as retryable pending work.
+  /// Recordings excluded from automatic uploads. Request refusals can be
+  /// explicitly re-armed; confirmed audio/window failures stay terminal.
   List<Wal> get corruptedWals {
     _ensureFilteredCaches();
     return _corruptedWalsCache!;
@@ -243,11 +245,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             s == WalSyncDisplayState.uploadRejected,
       );
 
-  /// The part of [needsAttentionWalsCount] a retry can still upload: the
-  /// automatic budget ([walMaxAutoRetries]) is spent, the recording is still
-  /// pending. The rest are terminal and no sync can move them.
+  /// Spent retry budgets and request refusals can be explicitly retried.
+  /// Missing files and permanent audio/lookback verdicts remain excluded.
   List<Wal> get retryableAttentionWals =>
-      _allWals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+      _allWals.where((w) => !w.onDeviceOnly && isRetryableSyncState(w.syncDisplayState)).toList();
 
   /// Retry every recording in [retryableAttentionWals]. The automatic drain
   /// skips a recording once its budget is spent, so a plain [syncWals] from
@@ -255,9 +256,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// fresh budget a per-recording Retry gives ([syncWal]) before draining.
   Future<void> retryNeedsAttentionWals() async {
     for (final wal in retryableAttentionWals) {
-      wal
-        ..retryCount = 0
-        ..lastRetryAt = 0;
+      wal.prepareManualRetry();
     }
     await syncWals();
   }
@@ -510,6 +509,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         onTransferStarted: _keepAlive.acquire,
         onTransferFinished: _keepAlive.release,
         onConnectivityRestored: _walService.getSyncs().phone.resetExhaustedAutoRetries,
+        networkChanges: ConnectivityService().onNetworkChange,
+        hasPendingWork: () => pendingWals.any((wal) => !wal.holdForUser) || uploadedWals.isNotEmpty,
+        onPassTimedOut: _onTransferPassTimedOut,
       );
       _periodicSync?.dispose();
       _periodicSync = PeriodicRecordingSync(
@@ -521,6 +523,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     } catch (e) {
       Logger.debug('SyncProvider: attach recording transfer coordinator failed: $e');
     }
+  }
+
+  /// The abandoned pass may still hold a BLE storage read or an upload; cancel
+  /// it so the next pass does not contend with it.
+  void _onTransferPassTimedOut(WakeTrigger trigger, Duration limit) {
+    _walService.getSyncs().cancelSync();
+    unawaited(DebugLogManager.logWarning('transfer_pass_stuck', {'trigger': trigger.name, 'limit_s': limit.inSeconds}));
+    const TypedEvents().emit(CaptureRecoveryObserved(
+      kind: CaptureRecoveryObservedKind.transferPassTimedOut,
+      trigger: trigger == WakeTrigger.periodic
+          ? CaptureRecoveryObservedTrigger.periodic
+          : CaptureRecoveryObservedTrigger.other,
+    ));
   }
 
   /// Called by the reconciler when a background job finished and produced
@@ -570,7 +585,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     }
 
     final nowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final eligibleWals = missingWals.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)).toList();
+    final eligibleWals = missingWals
+        .where((wal) => !wal.holdForUser && (!liveCaptureOnly || isLiveCaptureWal(wal, nowSeconds)))
+        .toList();
     final hadEligibleWals = eligibleWals.isNotEmpty;
     if (!hadEligibleWals) return const RecordingTransferDrainResult.skipped();
 
@@ -624,6 +641,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   static bool _isUploadStallCandidate(Wal wal) =>
       wal.storage == WalStorage.disk &&
       !wal.onDeviceOnly &&
+      !wal.holdForUser &&
       wal.status == WalStatus.miss &&
       (wal.isSyncing || wal.retryCount < walMaxAutoRetries);
 
@@ -759,13 +777,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> syncWal(Wal wal) async {
     final generation = _sessionGeneration;
+    wal.prepareManualRetry();
     // UI Sync/Auto Sync still call syncWal for a single row, but must not
     // race a coordinator drain (or device download) on the same WAL stack.
     if (_startBackgroundSync && _isTransferSeamBusy()) {
       // Coalescing this tap into the running drain must not silently drop it:
       // the drain skips recordings whose auto-upload budget is spent, so grant
       // the same fresh budget the direct path gives.
-      wal.retryCount = 0;
       await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }
@@ -988,16 +1006,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> retrySync() async {
     final generation = _sessionGeneration;
+    final failedWal = _syncState.failedWal;
+    if (failedWal != null && (failedWal.status == WalStatus.miss || failedWal.status == WalStatus.uploadRejected)) {
+      await syncWal(failedWal);
+      return;
+    }
+    if (retryableAttentionWals.isNotEmpty) {
+      await retryNeedsAttentionWals();
+      return;
+    }
     if (_startBackgroundSync) {
       await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }
-    final failedWal = _syncState.failedWal;
-    if (failedWal != null) {
-      await syncWal(failedWal);
-    } else {
-      await _syncWalsDirect(generation);
-    }
+    await _syncWalsDirect(generation);
   }
 
   void clearSyncResult() {

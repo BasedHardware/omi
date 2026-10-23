@@ -15,6 +15,84 @@
       "scope": "normalized-omi-consumer-source-review"
     },
     {
+      "expression": "sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m]))",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_transcription_job_total"
+      ],
+      "owner_title": "Sync jobs - a failure reason is running above 3x its 7-day rate",
+      "owner_uid": "omi-sync-failure-reason-step",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))) / clamp_min((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[7d] offset 60m))) or ((sum by (namespace, outcome) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / on (namespace) group_left () sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))) * 0), 0.0001)",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_transcription_job_total"
+      ],
+      "owner_title": "Sync jobs - a failure reason is running above 3x its 7-day rate",
+      "owner_uid": "omi-sync-failure-reason-step",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m])))) / on (namespace) clamp_min((min by (namespace) (label_replace((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[7d] offset 60m)) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[7d] offset 60m))), \"baseline\", \"rolling\", \"\", \"\") or label_replace(label_replace(vector(0.0064), \"namespace\", \"backend-sync-backfill\", \"\", \"\"), \"baseline\", \"pinned\", \"\", \"\"))) or (((sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m])))) * 0), 0.0001)",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_transcription_job_total"
+      ],
+      "owner_title": "Sync jobs - a failure reason is running above 3x its 7-day rate",
+      "owner_uid": "omi-sync-failure-reason-step",
+      "panel": null,
+      "pointer": "/data/2/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome!=\"success\",outcome!=\"expected_silence\"}[60m])) / sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_transcription_job_total"
+      ],
+      "owner_title": "Sync jobs - a sync service is failing more than 8% of jobs",
+      "owner_uid": "omi-sync-total-failure-share-ceiling",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "sum by (namespace) (increase(omi_sync_transcription_job_total{job=\"cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\"}[60m]))",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_transcription_job_total"
+      ],
+      "owner_title": "Sync jobs - a sync service is failing more than 8% of jobs",
+      "owner_uid": "omi-sync-total-failure-share-ceiling",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "explicit-bridge"
+    },
+    {
+      "expression": "sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome=\"provider_budget_exhausted\"}[15m]))",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_transcription_job_total"
+      ],
+      "owner_title": "Sync STT - provider out of credits/budget (top up)",
+      "owner_uid": "omi-sync-provider-budget-exhausted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "count({job=\"cloud-run-application-metrics\", __name__=~\"stackdriver_.*_omi_.*\"}) or vector(0)",
       "file": "alerts/cloud-run-ingestion.json",
       "issues": [
@@ -346,62 +424,6 @@
       "owner_uid": "omi-stt-single-leg-risk",
       "panel": null,
       "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
-      "file": "alerts/live-stt.json",
-      "issues": [],
-      "metrics": [
-        "omi_soniox_month_ceiling_usd",
-        "omi_soniox_usage_sample_timestamp_seconds"
-      ],
-      "owner_title": "Soniox monthly spend at 70% \u2014 top up Soniox",
-      "owner_uid": "omi-soniox-runway-70",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
-      "file": "alerts/live-stt.json",
-      "issues": [],
-      "metrics": [
-        "omi_soniox_month_ceiling_usd",
-        "omi_soniox_month_spend_usd"
-      ],
-      "owner_title": "Soniox monthly spend at 70% \u2014 top up Soniox",
-      "owner_uid": "omi-soniox-runway-70",
-      "panel": null,
-      "pointer": "/data/1/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}) * (max(time() - omi_soniox_usage_sample_timestamp_seconds{job=\"backend-listen-metrics\"}) < bool 7200)",
-      "file": "alerts/live-stt.json",
-      "issues": [],
-      "metrics": [
-        "omi_soniox_month_ceiling_usd",
-        "omi_soniox_usage_sample_timestamp_seconds"
-      ],
-      "owner_title": "Soniox monthly spend at 90% \u2014 top up Soniox",
-      "owner_uid": "omi-soniox-runway-90",
-      "panel": null,
-      "pointer": "/data/0/model/expr",
-      "scope": "normalized-omi-consumer-source-review"
-    },
-    {
-      "expression": "max(omi_soniox_month_spend_usd{job=\"backend-listen-metrics\"}) / clamp_min(max(omi_soniox_month_ceiling_usd{job=\"backend-listen-metrics\"}), 1)",
-      "file": "alerts/live-stt.json",
-      "issues": [],
-      "metrics": [
-        "omi_soniox_month_ceiling_usd",
-        "omi_soniox_month_spend_usd"
-      ],
-      "owner_title": "Soniox monthly spend at 90% \u2014 top up Soniox",
-      "owner_uid": "omi-soniox-runway-90",
-      "panel": null,
-      "pointer": "/data/1/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -899,6 +921,73 @@
       ],
       "owner_title": "Live STT - provider terminal failures per leg are high",
       "owner_uid": "omi-stt-provider-terminal-failure-ratio",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - sessions exhausting the provider chain above 8% for an hour",
+      "owner_uid": "omi-stt-chain-exhausted-ratio",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[60m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[60m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total",
+        "omi_stt_chain_exhausted_total"
+      ],
+      "owner_title": "Live STT - sessions exhausting the provider chain above 8% for an hour",
+      "owner_uid": "omi-stt-chain-exhausted-ratio",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "(count((min by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) == 100) or (max by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) != max by (target) (omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}))) or vector(0)) and on () (count(omi_stt_cost_routing_stage{job=\"backend-listen-metrics\"}) > 0)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_stt_cost_routing_stage"
+      ],
+      "owner_title": "Live STT - no provider at stage 100 (router availability escape)",
+      "owner_uid": "omi-stt-no-full-stage-target",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - local delivery deaths exhausting live sessions",
+      "owner_uid": "omi-stt-local-delivery-exhausted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_live_session\",reason=~\"send_queue_full|replay_send_stalled|delivery_expired\",outcome=\"exhausted\"}[15m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - local delivery deaths exhausting live sessions",
+      "owner_uid": "omi-stt-local-delivery-exhausted",
       "panel": null,
       "pointer": "/data/1/model/expr",
       "scope": "normalized-omi-consumer-source-review"
@@ -3026,8 +3115,8 @@
     }
   ],
   "counts": {
-    "explicit_bridge": 21,
-    "query_consumers": 198
+    "explicit_bridge": 23,
+    "query_consumers": 205
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

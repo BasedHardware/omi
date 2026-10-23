@@ -71,7 +71,7 @@ class _MobileAppState extends State<MobileApp> {
             },
           );
         } else {
-          // Signed out: straight to sign-in, the first onboarding step.
+          // Signed out: the sign-in screen is the first screen (no separate welcome page).
           return const OnboardingWrapper();
         }
       },

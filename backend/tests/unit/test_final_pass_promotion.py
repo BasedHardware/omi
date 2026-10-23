@@ -10,9 +10,12 @@ from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, St
 
 
 @pytest.mark.parametrize(
-    'fence', ['current', 'corrected', 'revision', 'deleted', 'account_deleting', 'locked', 'flag_off']
+    'fence', ['current', 'corrected', 'revision', 'deleted', 'account_deleting', 'locked', 'flag_off', 'rehomed']
 )
 def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(monkeypatch, fence):
+    """``rehomed``: the race with a still-live final pass. The upload path moved the owner to
+    batch_sync_v1 while this pass ran; its promotion is refused even at the revision it expects,
+    so batch and the pass never both own the transcript (final_pass_rehome)."""
     uid, cid = 'synthetic-user', 'synthetic-conversation'
     revision = datetime(2026, 1, 1, tzinfo=timezone.utc)
     other = datetime(2026, 1, 2, tzinfo=timezone.utc)
@@ -64,6 +67,8 @@ def test_promotion_is_atomic_preserves_manual_edits_and_fences_current_revision(
         data['deleted'] = True
     if fence == 'locked':
         data['is_locked'] = True
+    if fence == 'rehomed':
+        data['record_lane_owner'] = 'batch_sync_v1'
     path = ('users', uid, 'conversations', cid)
     client = StrictFirestore({path: data})
     if fence == 'account_deleting':

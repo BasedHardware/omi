@@ -9,7 +9,7 @@ Omi has two separate features for people who want to use their own providers:
 | | Bring Your Own Keys (BYOK) | Custom transcription |
 |---|---|---|
 | **App** | Omi for Mac | Omi phone app (iOS and Android) |
-| **What it changes** | Mac requests use your OpenAI, Anthropic, Gemini, OpenRouter or Deepgram key instead of Omi's | Live transcription runs on your phone, on your own server, or with your own provider key |
+| **What it changes** | Mac requests use your OpenAI, Anthropic, Gemini or OpenRouter key instead of Omi's (Deepgram keys are no longer used — retired 2026-08-27) | Live transcription runs on your phone, on your own server, or with your own provider key |
 | **Where** | Settings → AI & Automation → Advanced → Model Provider Keys | Settings → Developer Settings → Transcription |
 
 Neither one makes Omi fully local. Summaries, titles, memories and chat are still produced by Omi's servers. The sections below cover what each feature does and does not change.
@@ -19,7 +19,7 @@ Neither one makes Omi fully local. Summaries, titles, memories and chat are stil
 Open **Settings → AI & Automation**, expand **Advanced**, and find **Model Provider Keys**.
 
 - **Language model key** (OpenAI, Anthropic, Gemini or OpenRouter) is used for supported memory and insight features. Desktop chat uses **Anthropic** keys; other language model keys do not remove Omi's chat limit.
-- **Deepgram key** is used for transcription. Without it, transcription counts toward your Omi plan. Adding a Deepgram key later does not unlock conversations that were already locked when your allowance ran out.
+- **Deepgram keys are retired** (2026-08-27): Omi no longer routes transcription through Deepgram, so an enrolled Deepgram key no longer changes anything. Transcription uses Omi's providers and counts toward your plan.
 - Keys are saved on your Mac and sent with each request. Omi's servers keep only a fingerprint to check that a request uses the key you enrolled; they never store the key itself.
 - When you sign in, the Mac app re-checks your saved keys with the provider and with Omi. BYOK stays active for 7 days after the last successful check, and a key the provider rejects turns it off.
 

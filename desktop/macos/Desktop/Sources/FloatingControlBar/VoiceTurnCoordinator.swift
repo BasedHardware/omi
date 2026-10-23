@@ -517,19 +517,11 @@ final class VoiceTurnCoordinator {
             + "reason=\(terminal.reason.rawValue) route=\(Self.routeLabel(terminal.route))")
         effectHandler?(effect)
       case .staleEventDropped(let turnID, let event):
-        DesktopDiagnosticsManager.shared.recordVoiceTurnAnomaly(
-          kind: "stale_event",
-          phase: model.turn.map { Self.phaseLabel($0.phase) } ?? "idle",
-          route: model.turn.map { Self.routeLabel($0.route) } ?? "none")
         log(
           "VoiceTurnCoordinator: dropped stale event turn=\(turnID?.description ?? "none") event=\(event.prefix(160))"
         )
         effectHandler?(effect)
       case .invalidTransition(let turnID, let event, let phase):
-        DesktopDiagnosticsManager.shared.recordVoiceTurnAnomaly(
-          kind: "invalid_transition",
-          phase: phase.map(Self.phaseLabel) ?? "idle",
-          route: model.turn.map { Self.routeLabel($0.route) } ?? "none")
         log(
           "VoiceTurnCoordinator: invalid transition turn=\(turnID?.description ?? "none") "
             + "phase=\(phase.map(Self.phaseLabel) ?? "idle") event=\(event.prefix(160))")

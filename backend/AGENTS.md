@@ -23,7 +23,7 @@ When intentionally changing backend Python dependencies, edit the relevant `requ
 
 By default, the lock refresh preserves already-locked package versions so unrelated transitive upgrades do not sneak into infrastructure changes. Set `PYLOCK_UPGRADE=1` only when intentionally refreshing dependency versions.
 
-Key env vars: `OPENAI_API_KEY` (LLM calls), `HOSTED_PARAKEET_API_URL` / `MODULATE_API_KEY` (default STT), `DEEPGRAM_API_KEY` with its self-hosted endpoint, `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` (desktop chat), `ENCRYPTION_SECRET` (tests), and `REDIS_DB_HOST` (fail-open rate limiting). `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are default Firebase Admin credentials; never commit them. When `SERVICE_ACCOUNT_JSON` is set, Firestore (and GCS) pin that customer-data SA and its `project_id` so GKE Workload Identity / a compute-project `GOOGLE_CLOUD_PROJECT` cannot silently win user-doc reads. Dev desktop-backend keeps ADC on the compute project for GCE/`agentVm`; quota and `llm_usage` use `get_customer_firestore_client()` from the Auth SA file (`FIREBASE_AUTH_CREDENTIALS_PATH`) so Beta sees production `based-hardware` entitlements without writing `agentVm` there.
+Key env vars: `OPENAI_API_KEY` (LLM calls), `HOSTED_PARAKEET_API_URL` / `MODULATE_API_KEY` / `SONIOX_API_KEY` (default STT; Deepgram retired 2026-08-27), `GEMINI_API_KEY` / `ANTHROPIC_API_KEY` (desktop chat), `ENCRYPTION_SECRET` (tests), and `REDIS_DB_HOST` (fail-open rate limiting). `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are default Firebase Admin credentials; never commit them. When `SERVICE_ACCOUNT_JSON` is set, Firestore (and GCS) pin that customer-data SA and its `project_id` so GKE Workload Identity / a compute-project `GOOGLE_CLOUD_PROJECT` cannot silently win user-doc reads. Dev desktop-backend keeps ADC on the compute project for GCE/`agentVm`; quota and `llm_usage` use `get_customer_firestore_client()` from the Auth SA file (`FIREBASE_AUTH_CREDENTIALS_PATH`) so Beta sees production `based-hardware` entitlements without writing `agentVm` there.
 
 Chat SSE deadlines: `AGENT_STREAM_SETUP_TIMEOUT_SECONDS` / `AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS` default `25`; heartbeat/max/cancel grace default `20`/`150`/`2`. Mobile opts into typed errors via `X-Omi-Chat-Failure-Protocol: 1`; missing/unknown headers keep legacy `done`. App/persona prompts add identity/style while preserving tools, safety, retrieval, memory and file guidance. Provider retries: `AGENT_STREAM_PROVIDER_MAX_ATTEMPTS` (3) with backoff/`MIN_RETRY_HEADROOM_SECONDS`. Managed agentic/desktop chat uses gateway Luna (`omi:auto:chat-agent`) only when **both** `OMI_LLM_GATEWAY_FEATURE_MODE=gateway` and `OMI_LLM_CHAT_AGENT_ROUTE=gateway` (aliases `luna`/`on`); `CHAT_AGENT_ROUTE=direct` is the chat-only kill switch. Authorized desktop public-web turns stay on the gateway `omi:auto:web-search` lane (Perplexity `sonar-pro`) instead of leaving the gateway for Anthropic server-side search; a tainted or unauthorized request stays on the chat-agent lane without search. Gateway silent-interval: `OMI_LLM_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS` (15) — no per-request `timeout=`. `desktop-backend` is a **separate** Cloud Run release with env declared inline in `.github/workflows/desktop_backend_*.yml`; backend-wide rollouts do not reach it, and an unset feature mode routes managed desktop chat direct to Anthropic. Public shared chat: `PUBLIC_SHARED_CONVERSATION_CHAT_MODE=off|gateway` (default off) + frontend OIDC. Detail: `backend/docs/runbooks/llm-gateway-fallback.md`.
 
@@ -66,7 +66,7 @@ backend/
                           #   app generation, fair-use classification, usage tracking
       clients.py          #     Model instances: OpenAI (Luna/Nano), leftover Anthropic (desktop),
                           #     OpenRouter (gemini-flash), with prompt caching and usage callbacks
-    stt/                  #   Speech-to-text (7 files): Parakeet/Modulate and explicit self-hosted Deepgram streaming, VAD gating, speech profiles,
+    stt/                  #   Speech-to-text (7 files): Parakeet/Modulate/Soniox streaming (Deepgram retired 2026-08-27), VAD gating, speech profiles,
                           #   pre-recorded batch transcription, speaker embeddings
     conversations/        #   Conversation lifecycle (6 files): ingestion, memory extraction, action items,
                           #   merge, post-processing, search
@@ -104,7 +104,7 @@ backend (main.py)
   ├── ──────► vad (modal/)
   ├── ──────► parakeet (parakeet/)
   ├── ──────► modulate (managed API)
-  ├── ──────► Deepgram cloud / BYOK (Omi self-hosted fleet retired)
+  ├── ──────► (Deepgram retired 2026-08-27; absent from stt_provider_policy)
   ├── ──────► nllb-translation (nllb_translation/)
   └── ──────► llm-gateway (llm_gateway/main.py)
 
@@ -128,7 +128,7 @@ Helm charts: `backend/charts/`.
 
 STT policy: `config/stt_provider_policy.py`. Windowed live rollout: `docs/operational/windowed-live-stt.md`.
 
-- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection (`utils/stt/vad.py`). Live STT prefers Deepgram (`DEEPGRAM_API_KEY`), falling back to Modulate then Parakeet; self-hosted Deepgram replaces the hosted endpoint when `DEEPGRAM_SELF_HOSTED_*` is set (`utils/stt/streaming.py`). Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
+- **backend** (`main.py`) — REST API. Streams audio to pusher via WebSocket (`utils/pusher.py`). Calls diarizer for speaker embeddings (`utils/stt/speaker_embedding.py`). Calls vad for voice activity detection (`utils/stt/vad.py`). Live STT serves Parakeet/Modulate/Soniox per `STT_SERVICE_MODELS` and `config/stt_provider_policy.py` (`utils/stt/streaming.py`). Deepgram retired 2026-08-27: no policy admission, `dg-*` slots refused, batch client raises. Calls NLLB translation when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected (`utils/translation.py`).
 - **hosted MCP OAuth** (`routers/mcp_sse.py`) — Provider-neutral OAuth for `/v1/mcp/sse`. Configure public or confidential clients with `MCP_OAUTH_CLIENTS_JSON`; allowlist the exact connector callback URI from the provider. The temporary `MCP_OAUTH_CHATGPT_*` envs still define the legacy confidential ChatGPT test client, and `MCP_OAUTH_PUBLIC_*` can expose a no-secret PKCE public client. Also set `MCP_AUTHORIZATION_SERVER_URL`, optional `MCP_RESOURCE_URL`, and token TTL env vars.
 - **llm-gateway** (`llm_gateway/main.py`) — Internal FastAPI service for Omi-managed LLM auto lanes. Called by backend with service auth for `omi:auto:*` chat-completions routes; not exposed to clients. Public shared-conversation chat uses only the dedicated `omi:auto:public-shared-conversation-chat` lane and returns unavailable on every gateway fault. Also owns the `/v1/embeddings` surface and the company-paid desktop-Vertex lanes (see `docs/llm/model_endpoint_inventory.yaml`).
 - Conversation notes v2 is on for every processing host; the legacy branch still hosts the gateway shadow gates. Calendar/OCR context reads are dev-on/prod-off. Generated `docs/feature-flag-registry.md` catalogs declarations, not an enablement lever.
@@ -138,7 +138,7 @@ STT policy: `config/stt_provider_policy.py`. Windowed live rollout: `docs/operat
 - **pusher** (`pusher/main.py`) — Receives audio via binary WebSocket protocol. Calls diarizer and the configured Parakeet/Modulate STT provider for speaker sample extraction (`utils/speaker_identification.py` → `utils/speaker_sample.py`).
 - **diarizer** (`diarizer/main.py`) — `/v2/embedding`, `/v2/diarization`. Batch seam: `utils/stt/diarization.py`; naming: `utils/stt/speaker_match.py`. Backend/pusher use `HOSTED_SPEAKER_EMBEDDING_API_URL`.
 - **vad** (`modal/main.py`) — GPU. `/v1/vad`. Called by backend only.
-- **Deepgram** — Cloud/BYOK remains supported. Omi self-hosted overlays are retired; [fleet retirement](docs/runbooks/audio-fleet.md#self-hosted-deepgram-retirement) requires a clean post-deploy caller audit before resource deletion.
+- **Deepgram** — Retired 2026-08-27. Absent from `config/stt_provider_policy.py`, no `DEEPGRAM_*` env in serving manifests, self-hosted chart deleted ([fleet retirement](docs/runbooks/audio-fleet.md#self-hosted-deepgram-retirement)). Do not route or add keys.
 - **parakeet** (`parakeet/`) — GPU STT service for streaming and pre-recorded transcription. Called by backend when `HOSTED_PARAKEET_API_URL` is set and Parakeet is selected. Clients must not call it directly — they go through the authed backend proxy `POST /v1/stt/transcribe` (`routers/stt.py`).
 - **modulate** — Managed STT provider for configured languages. Called by backend when `MODULATE_API_KEY` is configured and Modulate is selected.
 - **nllb-translation** (`nllb_translation/`) — GPU translation service. Called by backend when `HOSTED_TRANSLATION_API_URL` is set and NLLB is selected.
@@ -177,6 +177,7 @@ Runtime-selected providers must keep model-token parsing and required environmen
 ### Firestore queries and indexes
 
 See [Firestore queries and indexes](../.github/agent-docs/firestore-queries-and-indexes.md) for query-driver, index-declaration, deployment, oracle, and alert-response workflow.
+Change checklist (driver registry, Dream drivers, `BODY_DIGEST` re-pin, index declaration, enforcing guard tests): [docs/firestore-query-checklist.md](docs/firestore-query-checklist.md).
 
 The changed-file backend unit selector runs the Firestore guard set for every serving-query inventory Python source change, including router/helper changes, and for manifest, registry, and guard-support changes. `Backend unit suite` is not a required branch-protection status check today; making it required is an owner decision. The readiness-gate workflow callsites are listed and discoverable in the linked Firestore guide.
 

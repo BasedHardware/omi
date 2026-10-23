@@ -103,6 +103,25 @@ def test_unknown_active_inactive_and_immediate_recovery():
     assert vr.observed_state(OLD, observations, now=2802)[0] == vr.State.ACTIVE
 
 
+def test_moved_order_can_revert_active_until_old_success_expires():
+    observations = {OLD: failures(), NEW: vr.Evidence(success_at=2800)}
+    assert vr.observed_state(OLD, observations, now=2801) == (vr.State.INACTIVE, 'exclusive_order_moved')
+    # Keep successor proof fresh: it cannot retire the old order alone once
+    # failure continuity expires. The old success remains valid for 24 hours.
+    for now in (3701, 100 + vr.ACTIVE_FRESH_SECONDS):
+        observations[NEW] = vr.Evidence(success_at=now)
+        assert vr.observed_state(OLD, observations, now=now) == (vr.State.ACTIVE, 'dedicated_success')
+        states = {model: vr.observed_state(model, observations, now=now)[0] for model in (OLD, NEW)}
+        assert ptr.managed_generation_action(OLD, states) == vr.Action('dedicated', OLD)
+    now = 101 + vr.ACTIVE_FRESH_SECONDS
+    observations[NEW] = vr.Evidence(success_at=now)
+    assert vr.observed_state(OLD, observations, now=now) == (vr.State.UNKNOWN, 'insufficient_evidence')
+    # UNKNOWN old + ACTIVE target already skips 2.5; loss of both observations
+    # retains the deliberate attempt-then-fallback behavior.
+    assert ptr.managed_generation_action(OLD, {OLD: vr.State.UNKNOWN, NEW: vr.State.ACTIVE}) == vr.LUNA
+    assert ptr.managed_generation_action(OLD, {}) == vr.Action('dedicated', OLD)
+
+
 @pytest.mark.parametrize('initial_success', [0, 100])
 def test_absent_and_saturated_429s_are_indistinguishable_and_never_confirm_absence_alone(initial_success):
     e = vr.Evidence(success_at=initial_success)

@@ -43,7 +43,6 @@
   "app/lib/pages/chat/widgets/content_blocks/task_card_block.dart": 1,
   "app/lib/pages/chat/widgets/jump_to_latest_button.dart": 1,
   "app/lib/pages/chat/widgets/voice_recorder_widget.dart": 1,
-  "app/lib/pages/conversation_capturing/page.dart": 10,
   "app/lib/pages/conversation_detail/page.dart": 19,
   "app/lib/pages/conversation_detail/test_prompts.dart": 2,
   "app/lib/pages/conversation_detail/widgets.dart": 23,

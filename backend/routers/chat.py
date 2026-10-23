@@ -75,11 +75,13 @@ from utils.chat import (
     transcribe_pcm_bytes,
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
+from routers import chat_video
 from utils.stt.streaming import STTService, connect_stt_socket_with_fallback, drain_stt_socket
 from utils.stt.streaming import get_stt_service_for_language, process_audio_modulate, process_audio_parakeet
 from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
+from models.transcription_wire import TranscriptionOutcome as WireTranscriptionOutcome
 from config.stt_provider_policy import MODULATE_PROVIDER, STTServingSurface, provider_for_service
 from utils.stt.outcomes import TranscriptionFailure, bounded_provider, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
@@ -142,12 +144,14 @@ class VoiceMessageTranscriptionResponse(BaseModel):
     language: Optional[str] = None
     stt_provider: Optional[str] = None
     stt_model: Optional[str] = None
-    outcome: Optional[TranscriptionOutcome] = None
+    # Wire vocabulary frozen by the released app-client contract; internal-only
+    # outcome values map onto their public counterpart (models/transcription_wire).
+    outcome: Optional[WireTranscriptionOutcome] = None
 
 
 class TranscriptionErrorDetail(BaseModel):
     error: str
-    outcome: TranscriptionOutcome
+    outcome: WireTranscriptionOutcome
     provider: str
     retryable: bool
     message: str
@@ -1462,6 +1466,7 @@ def upload_file_chat(
     thumbs_name = []
     thumb_source_by_name = {}
     files_chat = []
+    stored_videos: dict[int, FileChat] = {}  # by upload position; answered in that order
     for file in files:
         # Use a UUID-based temp file name to prevent path traversal via user-controlled filename
         safe_suffix = Path(file.filename).name if file.filename else "upload"
@@ -1469,6 +1474,12 @@ def upload_file_chat(
         try:
             with temp_file.open("wb") as buffer:
                 shutil.copyfileobj(file.file, buffer)
+
+            if chat_video.is_video_upload(safe_suffix, file.content_type):
+                stored_videos[len(files_chat) + len(stored_videos)] = chat_video.store_uploaded_clip(
+                    uid, temp_file, safe_suffix
+                )
+                continue
 
             try:
                 result = FileChatTool.upload(temp_file, file_name=safe_suffix)
@@ -1512,7 +1523,10 @@ def upload_file_chat(
 
     chat_db.add_multi_files(uid, files_chat_dict)
 
-    response = [fc.model_dump() for fc in files_chat]
+    ordered = iter(files_chat)
+    response = [
+        (stored_videos.get(i) or next(ordered)).client_dump() for i in range(len(files_chat) + len(stored_videos))
+    ]
 
     return response
 

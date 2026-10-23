@@ -176,12 +176,70 @@ CLOUD_RUN_EXPORTER_FILTER = (
 # them. One release cannot do both: the exporter ANDs every filter whose prefix
 # matches, and Cloud Monitoring rejects OR across resource.labels with HTTP 400.
 SYNC_NAMESPACES = ('backend-sync', 'backend-sync-backfill', 'backend-integration')
+# The main release imports only families an in-cluster consumer can read from
+# job=cloud-run-application-metrics: a query with an explicit job match, a job
+# regex that includes it, or no job selector at all. The blanket omi_ prefix
+# imported 188 families / ~54k live series on 2026-10-21, 156 of them read by
+# nothing in-cluster, re-created once per Cloud Run instance replacement
+# (~380k of the 2.27M-series Prometheus head). A trailing slash pins exactly
+# one family. Extend this list only together with the consumer that reads the
+# family from the backend/desktop-backend/notifications-job namespaces, and
+# mirror the change into both <env>_omi_cloud_run_metrics_exporter.yaml files.
+CLOUD_RUN_EXPORTER_PREFIXES = [
+    'prometheus.googleapis.com/omi_capture_finalization_failures_total/',
+    'prometheus.googleapis.com/omi_capture_finalization_reconciliations_total/',
+    'prometheus.googleapis.com/omi_chat_search_tool_outcomes_total/',
+    'prometheus.googleapis.com/omi_client_app_startup_duration_seconds/',
+    'prometheus.googleapis.com/omi_client_events_total/',
+    'prometheus.googleapis.com/omi_client_journey_accepted_total/',
+    'prometheus.googleapis.com/omi_client_journey_duration_seconds/',
+    'prometheus.googleapis.com/omi_client_journey_issues_total/',
+    'prometheus.googleapis.com/omi_client_journey_terminal_total/',
+    'prometheus.googleapis.com/omi_client_telemetry_rejected_total/',
+    'prometheus.googleapis.com/omi_conversation_duration_seconds/',
+    'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/',
+    'prometheus.googleapis.com/omi_daily_summary_resumed_cohort_age_seconds/',
+    'prometheus.googleapis.com/omi_fallback_total/',
+    'prometheus.googleapis.com/omi_firestore_documents_per_operation/',
+    'prometheus.googleapis.com/omi_firestore_read_operations_total/',
+    'prometheus.googleapis.com/omi_journey_accepted_total/',
+    'prometheus.googleapis.com/omi_journey_latency_seconds/',
+    'prometheus.googleapis.com/omi_journey_terminal_total/',
+    'prometheus.googleapis.com/omi_listen_audio_decode_failures_total/',
+    'prometheus.googleapis.com/omi_listen_demand_failure_detail_total/',
+    'prometheus.googleapis.com/omi_live_session_transcript_outcome_total/',
+    'prometheus.googleapis.com/omi_owner_recognition_conversations_total/',
+    'prometheus.googleapis.com/omi_product_event_total/',
+    'prometheus.googleapis.com/omi_queue_oldest_ready_age_seconds/',
+    'prometheus.googleapis.com/omi_queue_oldest_ready_sample_unknown/',
+    'prometheus.googleapis.com/omi_stt_chain_exhausted_total/',
+    'prometheus.googleapis.com/omi_stt_provider_circuit_open/',
+    'prometheus.googleapis.com/omi_stt_provider_connect_total/',
+    'prometheus.googleapis.com/omi_stt_provider_retired/',
+    'prometheus.googleapis.com/omi_stt_stream_close_total/',
+    'prometheus.googleapis.com/omi_subscription_events_total/',
+    'prometheus.googleapis.com/omi_translation_cache_ops_total/',
+    'prometheus.googleapis.com/omi_translation_chars_total/',
+    'prometheus.googleapis.com/omi_translation_errors_total/',
+    'prometheus.googleapis.com/omi_translation_latency_seconds/',
+    'prometheus.googleapis.com/omi_translation_requests_total/',
+    'prometheus.googleapis.com/omi_translation_skip_total/',
+    'prometheus.googleapis.com/omi_vertex_managed_25_attempts_total/',
+    'prometheus.googleapis.com/omi_vertex_managed_25_on_demand_responses_total/',
+    'prometheus.googleapis.com/omi_vertex_non_dream_flash_after_cutover_attempts_total/',
+]
 CLOUD_RUN_SYNC_EXPORTER_FILTER = (
     'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND '
     'resource.labels.namespace=one_of("backend-sync","backend-sync-backfill","backend-integration")'
 )
+# omi_sync_ is pinned to its consumed families: omi_sync_phase_* (no in-cluster
+# consumer, read from GMP by the rightsizing runbook) alone re-created ~13k live
+# series per backend-sync instance generation through this release.
 CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
-    'prometheus.googleapis.com/omi_sync_',
+    'prometheus.googleapis.com/omi_sync_dispatch_attempts_total/',
+    'prometheus.googleapis.com/omi_sync_upload_total/',
+    'prometheus.googleapis.com/omi_sync_transcription_job_total/',
+    'prometheus.googleapis.com/omi_sync_intake',
     'prometheus.googleapis.com/omi_journey_',
     'prometheus.googleapis.com/omi_client_journey_',
     'prometheus.googleapis.com/omi_owner_recognition_conversations_total/',
@@ -189,6 +247,8 @@ CLOUD_RUN_SYNC_EXPORTER_PREFIXES = [
     'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/',
     'prometheus.googleapis.com/omi_firestore_documents_per_operation/',
     'prometheus.googleapis.com/omi_capture_finalization_',
+    'prometheus.googleapis.com/omi_held_content_',
+    'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/',
     'prometheus.googleapis.com/omi_queue_oldest_ready_',
 ]
 
@@ -208,13 +268,15 @@ def test_cloud_run_metrics_exporter_is_scoped_and_rate_limited(path, project_id,
     values = yaml.safe_load(path.read_text(encoding='utf-8'))
     metrics = values['stackdriver']['metrics']
     assert values['stackdriver']['projectIds'] == [project_id]
-    assert metrics['prefixes'] == ['prometheus.googleapis.com/omi_', 'custom.googleapis.com/omi_sync_phase_']
+    assert metrics['prefixes'] == CLOUD_RUN_EXPORTER_PREFIXES
+    # stackdriver_exporter silently drops a prefix that starts with another listed one.
+    for prefix in metrics['prefixes']:
+        assert not any(other != prefix and prefix.startswith(other) for other in metrics['prefixes'])
+    # The custom-metric omi_sync_phase_ import left with its filter: nothing in-cluster reads it.
+    assert not any(prefix.startswith('custom.googleapis.com/') for prefix in metrics['prefixes'])
     assert metrics['interval'] == '10m'
     assert metrics['offset'] == '1m'
-    assert metrics['filters'] == [
-        CLOUD_RUN_EXPORTER_FILTER,
-        'custom.googleapis.com/omi_sync_phase_:resource.labels.job=one_of("backend-sync","backend-sync-backfill")',
-    ]
+    assert metrics['filters'] == [CLOUD_RUN_EXPORTER_FILTER]
     assert values['serviceAccount'] == {
         'create': False,
         'name': service_account,

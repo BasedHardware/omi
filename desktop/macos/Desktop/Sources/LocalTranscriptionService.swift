@@ -36,7 +36,8 @@ private final class MusicTally: NSObject, SNResultsObserving {
 /// existing UI / DB pipeline (`handleBackendSegments`) is unchanged.
 ///
 /// Enabled via `OMI_LOCAL_STT=1` (or `defaults write <bundle> useLocalSTT -bool true`). No network,
-/// no Deepgram. Model weights (~600 MB–1.2 GB) download from HuggingFace on first run and are cached.
+/// no Deepgram. Model weights (~600 MB–1.25 GB) download from HuggingFace on first run and are cached.
+/// The model follows the language (`STTLanguageCapability`): en → v2, ja → tdtJa, European → v3.
 final class LocalTranscriptionService: @unchecked Sendable {
 
   typealias SegmentsHandler = @MainActor ([TranscriptionService.BackendSegment]) -> Void
@@ -48,7 +49,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
     let durSec: Double
   }
 
-  private let language: String
+  private let language: STTLanguageCapability.Selection
   /// Source-based diarization: mic = the user ("You"), system audio = another speaker.
   private let isUser: Bool
   private let speakerLabel: String
@@ -107,7 +108,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
 
   private var pumpTask: Task<Void, Never>?
 
-  init(language: String = "en", isUser: Bool = true) {
+  init(language: STTLanguageCapability.Selection = .english, isUser: Bool = true) {
     self.language = language
     self.isUser = isUser
     self.speakerLabel = isUser ? "SPEAKER_00" : "SPEAKER_01"
@@ -133,8 +134,13 @@ final class LocalTranscriptionService: @unchecked Sendable {
             domain: "LocalTranscriptionService", code: -1,
             userInfo: [NSLocalizedDescriptionKey: "forced model-load failure (OMI_FORCE_PARAKEET_FAIL)"])
         }
-        // v2 = English-only (better recall); v3 = 25 European languages.
-        let version: AsrModelVersion = self.language.hasPrefix("en") ? .v2 : .v3
+        // `resolveMode` routes uncovered languages to cloud; a mid-session language change can
+        // still re-arm this service, so fail to cloud rather than decode with the wrong model.
+        guard let version = Self.modelVersion(for: self.language) else {
+          throw NSError(
+            domain: "LocalTranscriptionService", code: -2,
+            userInfo: [NSLocalizedDescriptionKey: "no on-device model for language \(self.language.effective)"])
+        }
         let started = Date()
         let models = try await AsrModels.downloadAndLoad(version: version)
         let manager = AsrManager()
@@ -163,6 +169,18 @@ final class LocalTranscriptionService: @unchecked Sendable {
       }
     }
   }
+
+  static func modelVersion(for language: STTLanguageCapability.Selection) -> AsrModelVersion? {
+    switch language.onDeviceModel {
+    case .englishV2: return .v2
+    case .europeanV3: return .v3
+    case .japanese: return .tdtJa
+    case nil: return nil
+    }
+  }
+
+  /// v3's script filter keeps e.g. Polish out of Cyrillic tokens; v2 and tdtJa ignore the hint.
+  private var decodeHint: Language? { language.decodeHint.flatMap(Language.init(rawValue:)) }
 
   /// Feed 16 kHz mono Int16 little-endian PCM — the same `Data` the WebSocket path sends.
   func appendAudio(_ data: Data) {
@@ -287,7 +305,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
       // windows makes the transducer decoder drift — it starts looping ("...AND AND AND"),
       // Title-Casing every word, and emitting gibberish. Independent per-window decode is stable.
       var ds = try TdtDecoderState()
-      let result = try await snapshot.manager.transcribe(snapshot.window, decoderState: &ds, language: nil)
+      let result = try await snapshot.manager.transcribe(snapshot.window, decoderState: &ds, language: decodeHint)
 
       var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
       // Silence makes the TDT decoder emit just "." / "..." — drop windows with no real speech.

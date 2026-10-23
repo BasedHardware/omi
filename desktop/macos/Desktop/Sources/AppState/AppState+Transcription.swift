@@ -112,16 +112,15 @@ extension AppState {
 
     do {
       // Get effective language from settings (handles auto-detect vs single language)
-      let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
+      let languageSelection = AssistantSettings.shared.transcriptionLanguageSelection
       log(
-        "Transcription: Using language=\(effectiveLanguage) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(AssistantSettings.shared.transcriptionLanguage))"
+        "Transcription: Using language=\(languageSelection.effective) (autoDetect=\(AssistantSettings.shared.transcriptionAutoDetect), selected=\(languageSelection.primary), onDevice=\(String(describing: languageSelection.onDeviceModel)))"
       )
 
       // Desktop transcribes on-device with Parakeet by default on Apple Silicon — no Deepgram.
-      // Intel Macs (no Neural Engine) fall back to the cloud path. Force cloud for debugging with
-      // OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`.
-      // Pendant BLE used to force cloud; identified basic now matches mic (local, unnamed).
-      // Cache miss / unknown plan fail open to the previous BLE→cloud path; prefetch warms the next start.
+      // Intel Macs and languages no on-device model covers use the cloud path. Force cloud for debugging
+      // with OMI_FORCE_CLOUD_STT=1 or `defaults write <bundle> forceCloudSTT -bool true`. Identified basic
+      // BLE matches mic (local, unnamed); cache miss / unknown plan fail open to BLE→cloud.
       let debugForceCloud = STTSessionState.debugForceCloudSTT(
         environmentForceCloud: ProcessInfo.processInfo.environment["OMI_FORCE_CLOUD_STT"] == "1",
         userDefaultsForceCloud: UserDefaults.standard.bool(forKey: "forceCloudSTT")
@@ -134,7 +133,8 @@ extension AppState {
         isAppleSilicon: Self.isAppleSilicon,
         debugForceCloud: debugForceCloud,
         wakeWordNeedsRecognizableName: AssistantSettings.shared.wakeWordNeedsRecognizableName,
-        preferLocalOnBasic: preferLocalOnBasic
+        preferLocalOnBasic: preferLocalOnBasic,
+        language: languageSelection
       )
       let clientConversationId = UUID().uuidString.lowercased()
       currentClientConversationId = sttSession.useLocalSTT ? nil : clientConversationId
@@ -151,16 +151,16 @@ extension AppState {
           self?.handleLocalSTTModelLoadFailure()
         }
         // Mic = the user; system audio = another speaker. Transcribed separately for diarization.
-        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
+        let mic = LocalTranscriptionService(language: languageSelection, isUser: true)
         mic.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localMicService = mic
-        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
+        let system = LocalTranscriptionService(language: languageSelection, isUser: false)
         system.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localSystemService = system
       } else {
         // Always streaming via Python backend /v4/listen
         transcriptionService = try TranscriptionService(
-          language: effectiveLanguage,
+          language: languageSelection.effective,
           clientConversationId: clientConversationId,
           conversationRole: currentConversationRole
         )
@@ -313,7 +313,7 @@ extension AppState {
           guard recordingGeneration == sessionGeneration else { return }
           let sessionId = try await TranscriptionStorage.shared.startSession(
             source: currentConversationSource.rawValue,
-            language: effectiveLanguage,
+            language: languageSelection.effective,
             timezone: TimeZone.current.identifier,
             inputDeviceName: recordingInputDeviceName,
             clientConversationId: sttSession.useLocalSTT ? nil : clientConversationId,
@@ -751,7 +751,7 @@ extension AppState {
         mode: mode,
         meetingStateReady: meetingStateReady,
         shouldCapture: shouldCapture,
-        segmentCount: totalSegmentCount,
+        segmentCount: totalSegmentCount, conversationRole: currentConversationRole,
         hasSpeakerSegments: !speakerSegments.isEmpty
       )
     {
@@ -766,7 +766,7 @@ extension AppState {
             mode: self.audioRecordingMode,
             meetingStateReady: self.meetingDetector?.hasObservedState == true,
             shouldCapture: self.meetingDetector?.isMeetingActive == true,
-            segmentCount: self.totalSegmentCount,
+            segmentCount: self.totalSegmentCount, conversationRole: self.currentConversationRole,
             hasSpeakerSegments: !self.speakerSegments.isEmpty
           )
         else {
@@ -1250,7 +1250,7 @@ extension AppState {
     let nextClientConversationId = sttSession.useLocalSTT ? nil : UUID().uuidString.lowercased()
     currentClientConversationId = nextClientConversationId
     do {
-      let effectiveLanguage = AssistantSettings.shared.effectiveTranscriptionLanguage
+      let languageSelection = AssistantSettings.shared.transcriptionLanguageSelection
       if sttSession.useLocalSTT {
         // On-device mode: re-arm fresh local Parakeet instances (mic + system) for the next
         // conversation — do NOT reconnect the cloud WebSocket. Stopping the old ones flushes
@@ -1265,10 +1265,10 @@ extension AppState {
         let onModelLoadFailed: @MainActor () -> Void = { [weak self] in
           self?.handleLocalSTTModelLoadFailure()
         }
-        let mic = LocalTranscriptionService(language: effectiveLanguage, isUser: true)
+        let mic = LocalTranscriptionService(language: languageSelection, isUser: true)
         mic.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localMicService = mic
-        let system = LocalTranscriptionService(language: effectiveLanguage, isUser: false)
+        let system = LocalTranscriptionService(language: languageSelection, isUser: false)
         system.start(onSegments: onLocalSegments, onModelLoadFailed: onModelLoadFailed)
         localSystemService = system
         // CoreAudio callbacks capture their local transcription sinks when the
@@ -1281,7 +1281,7 @@ extension AppState {
         log("Transcription: Re-armed on-device Parakeet (mic + system) for next conversation")
       } else {
         transcriptionService = try TranscriptionService(
-          language: effectiveLanguage,
+          language: languageSelection.effective,
           clientConversationId: nextClientConversationId,
           conversationRole: nextConversationRole ?? currentConversationRole
         )

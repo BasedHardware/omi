@@ -1,0 +1,7 @@
+{
+  "version": "0.12.522",
+  "date": "2026-10-22",
+  "changes": [
+    "Removed the Sentry crash/error reporter; Report an Issue now saves your note plus redacted diagnostics locally on this Mac instead of sending anything"
+  ]
+}

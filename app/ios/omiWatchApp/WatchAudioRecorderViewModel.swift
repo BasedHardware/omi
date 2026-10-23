@@ -7,6 +7,18 @@ import AVFoundation
 class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
     @Published var isRecording: Bool = false
     @Published private(set) var recordingStartedAt: Date?
+    @Published private(set) var pendingRecoverySegments = 0
+    @Published private(set) var recoveryError: String?
+    private var archive: WatchRecordingStore?
+    private var recoveryTimer: Timer?
+    private var lastTransferAttempt: [String: TimeInterval] = [:]
+    private var recordingGeneration = UUID()
+    private var archiveSessionID = ""
+    private var isStarting = false
+    private var lastCapturedUptime: TimeInterval = 0
+    private var captureHealthTimer: Timer?
+    private var interruptionObserver: NSObjectProtocol?
+
 
     var session: WCSession
     private var audioEngine: AVAudioEngine?
@@ -28,28 +40,68 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         self.session = session
         super.init()
         self.session.delegate = self
+        let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("OmiWatchRecordings", isDirectory: true)
+        do { archive = try WatchRecordingStore(directory: directory) }
+        catch { recoveryError = String(localized: "watch.recovery.storageError") }
         session.activate()
+        captureHealthTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.checkCaptureHealth() }
+        }
+        recoveryTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.drainRecoveryTransfers() }
+        }
         
         BatteryManager.shared.startBatteryMonitoring()
         BatteryManager.shared.sendWatchInfo()
     }
 
     func startRecording() {
-        guard !isRecording else {
-            return
-        }
+        guard !isRecording, !isStarting else { return }
+        isStarting = true
+        let attempt = UUID()
+        recordingGeneration = attempt
 
         // Check microphone permissions and setup audio session
         checkMicrophonePermissionAndSetup { [weak self] success in
-            guard let self = self else {
-                return
-            }
+            guard let self, self.isStarting, self.recordingGeneration == attempt else { return }
+            defer { self.isStarting = false }
 
             if success {
-                self.setupAudioStreaming()
-                self.recordingStartedAt = Date()
-                self.isRecording = true
-                self.session.sendMessage(["method": "startRecording"], replyHandler: nil)
+                let now = Date()
+                let owner = UserDefaults.standard.string(forKey: "omiOwnerUID")
+                    ?? self.session.receivedApplicationContext["omiOwnerUID"] as? String ?? ""
+                guard !owner.isEmpty else {
+                    self.recoveryError = String(localized: "watch.recovery.openPhone")
+                    return
+                }
+                do {
+                    guard let archive = self.archive else { throw WatchRecordingError.storageFull }
+                    self.archiveSessionID = try archive.begin(ownerUID: owner, startedAt: CheckedIntegerConversion.epochMs(now) / 1000)
+                    guard self.setupAudioStreaming() else {
+                        try archive.finish()
+                        self.recoveryError = String(localized: "watch.recovery.captureError")
+                        return
+                    }
+                    self.recoveryError = nil
+                    self.recordingStartedAt = now
+                    self.lastCapturedUptime = ProcessInfo.processInfo.systemUptime
+                    self.isRecording = true
+                    self.interruptionObserver = NotificationCenter.default.addObserver(
+                        forName: AVAudioSession.interruptionNotification, object: nil, queue: nil
+                    ) { [weak self] notification in
+                        guard let value = notification.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                              AVAudioSession.InterruptionType(rawValue: value) == .began else { return }
+                        Task { @MainActor in
+                            guard let self, self.recordingGeneration == attempt else { return }
+                            self.stopRecording()
+                            self.recoveryError = String(localized: "watch.recovery.captureStopped")
+                        }
+                    }
+                    self.session.sendMessage(["method": "startRecording"], replyHandler: nil)
+                } catch {
+                    self.recoveryError = String(localized: "watch.recovery.storageError")
+                }
             } else {
                 self.session.sendMessage(["method": "recordingError", "error": "Microphone permission denied"], replyHandler: nil)
             }
@@ -58,12 +110,17 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
 
     func stopRecording() {
         guard isRecording else {
+            isStarting = false
+            recordingGeneration = UUID()
             return
         }
 
         isRecording = false
+        if let interruptionObserver { NotificationCenter.default.removeObserver(interruptionObserver) }
+        interruptionObserver = nil
         recordingStartedAt = nil
         isStreaming = false
+        recordingGeneration = UUID()
 
         // Stop audio streaming
         inputNode?.removeTap(onBus: 0)
@@ -83,6 +140,9 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         chunkBuffer = Data()
         bufferStartTime = nil
 
+        do { try archive?.finish() }
+        catch { recoveryError = String(localized: "watch.recovery.storageError") }
+        drainRecoveryTransfers()
         session.sendMessage(["method": "stopRecording"], replyHandler: nil)
     }
 
@@ -229,7 +289,7 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         }
     }
 
-    private func setupAudioStreaming() {
+    private func setupAudioStreaming() -> Bool {
 
         do {
             audioEngine = AVAudioEngine()
@@ -244,62 +304,87 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
             // Store the detected sample rate
             self.detectedSampleRate = hardwareSampleRate
 
-            guard let inputFormat = inputFormat else {
+            guard let inputFormat = inputFormat, hardwareSampleRate.isFinite, hardwareSampleRate > 0 else {
                 print("Failed to get input format")
-                return
+                return false
             }
             self.inputFormat = inputFormat
 
             // Create target format for 16kHz resampling
             guard let targetFormat = AVAudioFormat(standardFormatWithSampleRate: 16000.0, channels: 1) else {
                 print("Failed to create target format")
-                return
+                return false
             }
             self.targetFormat = targetFormat
 
             // Create audio converter for resampling
             guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
                 print("Failed to create audio converter")
-                return
+                return false
             }
             self.audioConverter = converter
 
             let bufferSize: AVAudioFrameCount = 512
 
+            let generation = recordingGeneration
+            let archive = self.archive
+            let archiveSession = self.archiveSessionID
             inputNode?.installTap(onBus: 0, bufferSize: bufferSize, format: inputFormat) { [weak self] (buffer, time) in
-                self?.processAudioBuffer(buffer)
+                guard let bytes = Self.convertAudioBuffer(buffer, converter: converter, targetFormat: targetFormat,
+                                                          detectedSampleRate: hardwareSampleRate) else { return }
+                do { try archive?.append(bytes, sessionID: archiveSession) }
+                catch {
+                    Task { @MainActor in
+                        guard let self, self.recordingGeneration == generation else { return }
+                        self.stopRecording()
+                        self.recoveryError = String(localized: "watch.recovery.storageError")
+                    }
+                    return
+                }
+                Task { @MainActor in
+                    guard let self, self.isStreaming, self.recordingGeneration == generation else { return }
+                    self.lastCapturedUptime = ProcessInfo.processInfo.systemUptime
+                    self.bufferAndSendAudioData(bytes)
+                }
             }
 
             try audioEngine?.start()
             isStreaming = true
             chunkIndex = 0
+            return true
 
         } catch {
+            inputNode?.removeTap(onBus: 0)
+            audioEngine?.stop()
             print("Error details: \(error.localizedDescription)")
+            return false
         }
     }
 
-    private func processAudioBuffer(_ buffer: AVAudioPCMBuffer) {
-        guard isStreaming else { return }
+    nonisolated private static func convertAudioBuffer(_ buffer: AVAudioPCMBuffer, converter: AVAudioConverter?,
+        targetFormat: AVAudioFormat?, detectedSampleRate: Double) -> Data? {
 
         // Validate buffer
         let frameLength = Int(buffer.frameLength)
         guard frameLength > 0 else {
             print("Buffer has zero frames")
-            return
+            return nil
         }
 
         // Resample audio to 16kHz
         let processedBuffer: AVAudioPCMBuffer
-        if let converter = audioConverter, let targetFormat = targetFormat {
+        if let converter, let targetFormat {
             let outputFrameCapacity = AVAudioFrameCount(ceil(Double(frameLength) * 16000.0 / detectedSampleRate))
             guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: outputFrameCapacity) else {
                 print("Failed to create output buffer for resampling")
-                return
+                return nil
             }
 
             var error: NSError?
+            var suppliedInput = false
             let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
+                guard !suppliedInput else { outStatus.pointee = .noDataNow; return nil }
+                suppliedInput = true
                 outStatus.pointee = .haveData
                 return buffer
             }
@@ -308,7 +393,7 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
 
             if let error = error {
                 print("Audio conversion error: \(error)")
-                return
+                return nil
             }
 
             processedBuffer = outputBuffer
@@ -320,44 +405,118 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         let channelData = processedBuffer.floatChannelData?[0]
 
         var pcmData = [Int16]()
-        var hasNonZeroData = false
 
         if let channelData = channelData {
             let processedFrameLength = Int(processedBuffer.frameLength)
             for i in 0..<processedFrameLength {
                 let sample = channelData[i]
 
-                if abs(sample) > 0.01 { hasNonZeroData = true }
 
                 let pcmSample = Int16(max(-32768, min(32767, sample * 32767)))
                 pcmData.append(pcmSample)
             }
         } else {
             print("No channel data available")
-            return
+            return nil
         }
 
+        guard !pcmData.isEmpty else { return nil }
         let byteData = pcmData.withUnsafeBufferPointer { buffer in
             return Data(buffer: buffer)
         }
 
-        // Buffer audio data for target-duration chunks
-        bufferAndSendAudioData(byteData)
+        return byteData
+    }
+
+    private func checkCaptureHealth() {
+        guard isRecording, ProcessInfo.processInfo.systemUptime - lastCapturedUptime > 10 else { return }
+        stopRecording()
+        recoveryError = String(localized: "watch.recovery.captureStopped")
+    }
+
+    func retryRecoveryTransfers() {
+        checkCaptureHealth()
+        lastTransferAttempt.removeAll()
+        if session.activationState == .notActivated { session.activate() }
+        drainRecoveryTransfers()
+    }
+
+    private func drainRecoveryTransfers() {
+        guard let archive else { return }
+        do {
+            pendingRecoverySegments = try archive.pending().count
+            if archive.recoveryFailures > 0, !isRecording {
+                recoveryError = String(localized: "watch.recovery.savedAudioError")
+            }
+            guard session.activationState == .activated else { return }
+            let inFlight = Set(session.outstandingFileTransfers.map { $0.file.fileURL.lastPathComponent })
+            try archive.pruneAcknowledged(excluding: inFlight)
+            let files = try archive.pending()
+            pendingRecoverySegments = files.count
+            lastTransferAttempt = lastTransferAttempt.filter { entry in files.contains { $0.0.lastPathComponent == entry.key } }
+            let owner = UserDefaults.standard.string(forKey: "omiOwnerUID") ?? ""
+            let uptime = ProcessInfo.processInfo.systemUptime
+            let candidates = WatchRecoveryTransferQueue.candidates(files, ownerUID: owner,
+                inFlight: inFlight, attempts: lastTransferAttempt, uptime: uptime)
+            for (url, metadata) in candidates {
+                session.transferFile(url, metadata: ["method": "watchRecordingFile", "recording": try JSONEncoder().encode(metadata)])
+                lastTransferAttempt[url.lastPathComponent] = uptime
+            }
+        } catch {
+            recoveryError = String(localized: "watch.recovery.storageError")
+        }
+    }
+
+    private func receiveRecoveryReceipt(_ message: [String: Any]) {
+        guard let name = message["fileName"] as? String, let digest = message["digest"] as? String else { return }
+        do {
+            try archive?.acknowledge(fileName: name, digest: digest)
+            drainRecoveryTransfers()
+        } catch { recoveryError = String(localized: "watch.recovery.storageError") }
     }
 }
 
 extension WatchAudioRecorderViewModel: WCSessionDelegate {
 #if os(iOS)
-    public func sessionDidBecomeInactive(_ session: WCSession) { }
-    public func sessionDidDeactivate(_ session: WCSession) { }
+    nonisolated public func sessionDidBecomeInactive(_ session: WCSession) { }
+    nonisolated public func sessionDidDeactivate(_ session: WCSession) { }
 #endif
-    func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: (any Error)?) {}
+    nonisolated func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: (any Error)?) {
+        Task { @MainActor in drainRecoveryTransfers() }
+    }
+
+    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
+        Task { @MainActor in drainRecoveryTransfers() }
+    }
+
+    nonisolated func session(_ session: WCSession, didFinish fileTransfer: WCSessionFileTransfer, error: Error?) {
+        // Keep the source until a matching durable iPhone receipt, including OS-success.
+        Task { @MainActor in drainRecoveryTransfers() }
+    }
+
+    nonisolated func session(_ session: WCSession, didReceiveApplicationContext applicationContext: [String: Any]) {
+        Task { @MainActor in
+            if let owner = applicationContext["omiOwnerUID"] as? String {
+                try? SafeDefaults.store(.string(owner), forKey: "omiOwnerUID")
+            }
+            if let method = applicationContext["method"] as? String {
+                if method == "stopRecording" { stopRecording() }
+                if method == "startRecording" { startRecording() }
+            }
+            drainRecoveryTransfers()
+        }
+    }
     
-    func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
-        Task {
+    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
+        Task { @MainActor in
             guard let method = message["method"] as? String else { return }
             switch method {
+            case "watchRecordingReceipt":
+                self.receiveRecoveryReceipt(message)
             case "startRecording":
+                if let owner = message["omiOwnerUID"] as? String {
+                    try? SafeDefaults.store(.string(owner), forKey: "omiOwnerUID")
+                }
                 self.startRecording()
             case "stopRecording":
                 self.stopRecording()
@@ -373,10 +532,14 @@ extension WatchAudioRecorderViewModel: WCSessionDelegate {
         }
     }
     
-    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any]) {
-        Task {
+    nonisolated func session(_ session: WCSession, didReceiveUserInfo userInfo: [String : Any]) {
+        Task { @MainActor in
             guard let method = userInfo["method"] as? String else { return }
             switch method {
+            case "watchRecordingReceipt":
+                self.receiveRecoveryReceipt(userInfo)
+            case "stopRecording":
+                self.stopRecording()
             case "requestBattery":
                 BatteryManager.shared.sendBatteryLevel()
             case "requestWatchInfo":

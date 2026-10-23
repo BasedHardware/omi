@@ -12,6 +12,7 @@ from abc import ABC, abstractmethod
 from typing import Any, Callable, ContextManager
 
 from config import live_stt_state
+from config.live_stt_resilience import escape_trial_votes_enabled
 from config.live_stt_registry import DEFAULT_TARGETS, Target, registry, assigned
 from utils.stt.live_gate import GateState, begin_trial, transition
 from utils.stt.live_metrics import (
@@ -26,6 +27,7 @@ from utils.stt.live_metrics import (
     COST_SETTLEMENTS,
     COST_VOTES,
     COST_ALL_DEGRADED,
+    COST_ESCAPE_VOTES,
     MANAGED_LEGS_OPENED,
     MANAGED_LEGS_SETTLED,
     MANAGED_LEGS_OPEN,
@@ -57,6 +59,19 @@ class _RedisCallFailed(RuntimeError):
 
 class _CostStateContention(RuntimeError):
     """The bounded CAS loop lost all retries without a Redis call failure."""
+
+
+def trial_minimum_share(uid: str, entry: Target) -> int:
+    """Smallest trial stage whose re-entry cohort holds this user (100: none).
+
+    A vote is dropped while ``0 < stage < minimum_share``; 0 admits it at
+    every trial stage (used while the escape serves the user).
+    """
+    if not assigned(uid, entry.id, entry.ramp()):
+        return 100
+    if assigned(uid, 'stt-reentry:' + entry.id, 5):
+        return 5
+    return 25 if assigned(uid, 'stt-reentry:' + entry.id, 25) else 100
 
 
 COST_CACHE_CAP = 4096
@@ -132,7 +147,7 @@ class CostHealthMixin(ABC):
                 failed = provider_observation('text' if reason == 'text' else 'failover', reason)
                 outcome = 'censored' if failed is None else 'provider_failure' if failed else 'success'
                 COST_OBSERVATIONS.labels(target=target.id, outcome=outcome, reason=reason)
-                for boundary in ('client_gone', 'owner_teardown'):
+                for boundary in ('client_gone', 'owner_teardown', 'pod_draining'):
                     COST_IGNORED_DEATHS.labels(target=target.id, reason=reason, boundary=boundary)
                 for path in ('close', 'failover', 'connect'):
                     COST_SETTLEMENTS.labels(target=target.id, outcome=outcome, reason=reason, path=path)
@@ -256,6 +271,45 @@ class CostHealthMixin(ABC):
                 raise CostHealthUnavailable('unread language cost state; restore configured order', states=result)
         return result
 
+    def _effective_stages(self, uid: str, language: str) -> dict[str, int]:
+        """Gate stage of every registry target that could serve this user.
+
+        Mirrors ``live_router.select``'s escape test without capacity: a target
+        counts when it is capable of the language and the user is inside its
+        config ramp. Uses the same conservative global/language view.
+        """
+        try:
+            targets = registry()
+        except (ValueError, TypeError):
+            return {}
+        try:
+            # A malformed ramp (e.g. strict window percent) proves nothing:
+            # keep the cohort-only rule rather than guess an escape.
+            servable = [
+                target for target in targets if target.capable(language) and assigned(uid, target.id, target.ramp())
+            ]
+        except (ValueError, TypeError):
+            return {}
+        now = self._clock()
+        stages: dict[str, int] = {}
+        with self._lock:
+            for target in servable:
+                stage = 100
+                for lang in ('all', language):
+                    key = (target.id, lang)
+                    stage = min(stage, self._cost_view(key, self._cost_is_fresh(key, now)).stage)
+                stages[target.id] = stage
+        return stages
+
+    def cost_stage(self, target: str, language: str) -> int:
+        """Conservative (global/language minimum) gate stage; no side effects."""
+        now = self._clock()
+        with self._lock:
+            return min(
+                self._cost_view((target, lang), self._cost_is_fresh((target, lang), now)).stage
+                for lang in ('all', language)
+            )
+
     def prefer_recovery(self, target: str, language: str) -> None:
         self._check_identity()
         with self._lock:
@@ -293,14 +347,20 @@ class CostHealthMixin(ABC):
         ).inc()
         if failed is None:
             return True
-        minimum_share = (
-            5
-            if assigned(uid, 'stt-reentry:' + target, 5)
-            else 25 if assigned(uid, 'stt-reentry:' + target, 25) else 100
-        )
-        if not assigned(uid, target, entry.ramp()):
-            minimum_share = 100
+        minimum_share = trial_minimum_share(uid, entry)
         now = self._clock()
+        if minimum_share > 0 and escape_trial_votes_enabled() and assigned(uid, target, entry.ramp()):
+            stages = self._effective_stages(uid, language)
+            if stages and all(stage < 100 for stage in stages.values()):
+                # No stage-100 target serves this user: the escape routed
+                # them here regardless of the re-entry cohort, so their
+                # outcome is real trial evidence. Dropping it starved
+                # promotion for hours (2026-10-20: 240 dropped vs 4 counted).
+                if 0 < stages.get(target, 100) < minimum_share:
+                    safe_counter_increment(
+                        COST_ESCAPE_VOTES, metric_name='omi_stt_cost_routing_escape_votes_total', target=target
+                    )
+                minimum_share = 0
         with self._lock:
             for lang in ('all', language):
                 key = (target, lang)

@@ -122,7 +122,9 @@ stages a candidate):
   (`1.0.554 (gate 2026-10-17-1307)`; legacy date-only receipts still parse).
   A retry inside the window reads the receipt and holds position instead of
   hopping twice; receipts live in server-side Play state and survive
-  ephemeral build machines.
+  ephemeral build machines. A staged release with no receipt (renamed in
+  Play Console, or in flight from before receipts) is not hopped: the train
+  stamps a receipt at the current fraction and holds for the window.
 
 Audited-candidate pins: the operator release gate audits a specific
 platform/version/build before dispatching. Those identifiers travel with the
@@ -155,7 +157,8 @@ listing only returns live versions):
   1.0.564 — Apple honors the endpoint for COMPLETE review submissions even
   though it refuses to cancel them, 409), so the version starts at day-1 1%
   exposure with the pause brake available, and the newer candidate can then
-  be submitted. A paused live phased rollout defers the release (plain hold).
+  be submitted. As on submit, a duplicate-attach rejection is tolerated only
+  when the read-back confirms the phased resource exists. A paused live phased rollout defers the release (plain hold).
   A pending version newer than every TestFlight build, or two pending
   versions, stops the train.
 - Submission: `builds submit-to-app-store` with

@@ -13325,9 +13325,6 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'ใช้แผนฟรีต่อไป';
-
-  @override
   String get paywallTrialCancelNote => 'ยกเลิกได้ทุกเมื่อ ไม่มีค่าธรรมเนียม ไม่มีค่าปรับ';
 
   @override
@@ -14308,6 +14305,177 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi ยังคงบันทึกอยู่';
+
+  @override
+  String get episodeNow => 'ตอนนี้';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'สด · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ช่วง',
+      one: '1 ช่วง',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'ช่วงเวลา';
+
+  @override
+  String get episodeSoFar => 'จนถึงตอนนี้';
+
+  @override
+  String get episodeUpdatedJustNow => 'อัปเดตเมื่อครู่ · บันทึกฉบับเต็มเมื่อจบ';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'อัปเดตเมื่อ $minutes นาทีที่แล้ว · บันทึกฉบับเต็มเมื่อจบ';
+  }
+
+  @override
+  String get episodeNotesSoon => 'บันทึกจะแสดงหลังจากพูดคุยไปสองสามนาทีแรก';
+
+  @override
+  String get episodeOpenAll => 'เปิดทั้งหมด';
+
+  @override
+  String get episodeWrapUpNow => 'สรุปตอนนี้';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi จะสรุปให้เมื่อคุณไปทำอย่างอื่น';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'พบงาน: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'พบการเตือน: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'บันทึกงานแล้ว: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'กำลังเพิ่ม $duration จาก Omi ของคุณ';
+  }
+
+  @override
+  String get episodeListeningNow => 'กำลังฟัง';
+
+  @override
+  String get deviceHeardToday => 'ได้ยินวันนี้';
+
+  @override
+  String get deviceToSync => 'รอซิงค์';
+
+  @override
+  String get deviceRightNow => 'ขณะนี้';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'ตอนสด · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'กำลังตามให้ทัน';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done จาก $total นาที';
+  }
+
+  @override
+  String get deviceRecently => 'ล่าสุด';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'ตัดการเชื่อมต่อ $duration';
+  }
+
+  @override
+  String get deviceControls => 'การควบคุม';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'นอกจากนี้: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'กดปุ่มบน Omi ของคุณ';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'กดสั้นๆ หนึ่งครั้ง แล้วถามอะไรก็ได้';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'ถามคำถามของคุณ';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'พูดออกมาเลย Omi กำลังฟังอยู่';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'เสร็จแล้ว? กดปุ่มอีกครั้งเพื่อส่ง';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'คุณได้รับฟรี $days วัน';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return 'Omi Pro ฟรี $days วัน เราจะเตือนก่อนเรียกเก็บเงิน ยกเลิกได้ทุกเมื่อ';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'รับทดลองใช้ $days วัน';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'เริ่มทดลองใช้ฟรี $days วัน';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'เปิด Omi ของคุณ';
+
+  @override
+  String get pairingPowerOnSubtitle => 'กดปุ่มหนึ่งครั้งและวางไว้ใกล้โทรศัพท์';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'เรียบร้อย Omi จะบันทึกบทสนทนาของคุณต่อไปในพื้นหลัง';
+
+  @override
+  String get noThanks => 'ไม่เป็นไร ขอบคุณ';
+
+  @override
+  String get recapInTheBackground => 'ในเบื้องหลัง';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'อยู่ต่อพร้อมส่วนลด $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'อยู่ต่อและจ่ายเดือนละ $price ใน $months เดือนถัดไป';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'เรียบร้อย ส่วนลด $percent% ใน $months เดือนถัดไป';
+  }
 
   @override
   String get consentShortMessage => 'Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ';

@@ -44,7 +44,6 @@ let package = Package(
   dependencies: [
     .package(url: "https://github.com/firebase/firebase-ios-sdk.git", from: "11.0.0"),
     .package(url: "https://github.com/PostHog/posthog-ios.git", from: "3.0.0"),
-    .package(url: "https://github.com/getsentry/sentry-cocoa.git", exact: "8.58.0"),
     .package(url: "https://github.com/groue/GRDB.swift.git", from: "6.24.0"),
     .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.9.0"),
     .package(
@@ -108,7 +107,6 @@ let package = Package(
         .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "PostHog", package: "posthog-ios"),
-        .product(name: "Sentry", package: "sentry-cocoa"),
         .product(name: "GRDB", package: "GRDB.swift"),
         .product(name: "Sparkle", package: "Sparkle"),
         .product(name: "onnxruntime", package: "onnxruntime-swift-package-manager"),

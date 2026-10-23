@@ -50,6 +50,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   List<BtDevice> savedDeviceList = [];
   Timer? _didNotMakeItTimer;
   Timer? _connectSettleTimer;
+
+  /// A tap-to-connect is connected and in its settle, before it persists the device and calls
+  /// goNext. [isConnected] stays true afterwards, so it cannot tell a settling attempt apart.
+  bool get isSettlingConnection => _connectSettleTimer != null;
   int _scanEpoch = 0;
   bool _reportNativeScanBlocks = false;
   final OnboardingPermissionDecisionLog _permissionDecisions = OnboardingPermissionDecisionLog();

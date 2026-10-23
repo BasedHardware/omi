@@ -8,10 +8,11 @@ below its percentage. Missing, malformed or out-of-range values mean off.
 
 # LIFECYCLE: permanent
 
-import hashlib
 import json
 import logging
 import os
+
+from config.policy.batch import cohort_bucket
 from functools import lru_cache
 from typing import Dict, Optional
 
@@ -38,6 +39,10 @@ KNOWN_LEVERS = frozenset(
         'ledger_purge_coalesce',
         'people_scan_dedupe',
         'queue_age_sample_budget',
+        'memory_list_index_window',
+        'mcp_conversation_cards_cache',
+        'canonical_statuses_dedupe',
+        'batch_privacy_memoize',
     }
 )
 
@@ -83,5 +88,4 @@ def lever_enabled(name: str, key: Optional[str] = None) -> bool:
         return True
     if pct <= 0 or not key:
         return False
-    digest = hashlib.sha256(f'{name}:{key}'.encode()).digest()
-    return int.from_bytes(digest[:8], 'big') % 100 < pct
+    return cohort_bucket(key, name, bits=64, formula='modulo') < pct

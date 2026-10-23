@@ -15,12 +15,12 @@ from utils.batch_pipeline.contracts import ProjectionBinding, WorkResult
 from utils.batch_pipeline.scheduler import Scheduler
 
 
-def setup(monkeypatch, *, fresh=False):
+def setup(monkeypatch, *, fresh=False, priority=None, lane=None):
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
     store = MemoryStore()
     work = replace(
-        item('segment', owner='synthetic-owner', priority=0 if fresh else 2),
+        item('segment', owner='synthetic-owner', priority=priority if priority is not None else 0 if fresh else 2),
         privacy_generation=0,
         requires_compute_admission=True,
     )
@@ -34,6 +34,7 @@ def setup(monkeypatch, *, fresh=False):
         intake={
             'owner_id': work.owner_id,
             'total_audio_seconds': 3600,
+            **({'lane': lane} if lane else {}),
         },
     )
     queue = Scheduler(store)
@@ -56,6 +57,24 @@ def test_backfill_reserves_content_upper_bound_and_seals_matching_lease(monkeypa
     assert receipt['allowed'] == ['segment']
     reserve.assert_called_once_with('synthetic-owner', 'content', 3_600_000)
     assert queue.complete(WorkResult('segment', 'gs://synthetic/result'), lease.token, 2)
+
+
+def test_fresh_lane_catch_up_at_recent_priority_keeps_fresh_fair_use_checks(monkeypatch):
+    store, queue, lease, reserve = setup(monkeypatch, priority=1, lane='fresh')
+    admission.get_hard_restriction_status.return_value = (True, 900)
+    assert admission.authorize(store, tokens(lease), now=1) == {'allowed': [], 'retry_after': {'segment': 900}}
+    reserve.assert_not_called()
+    admission.get_hard_restriction_status.return_value = (False, None)
+    admission.is_daily_audio_ceiling_exceeded.return_value = True
+    assert admission.authorize(store, tokens(lease), now=1)['allowed'] == []
+    reserve.assert_not_called()
+
+
+def test_backfill_lane_reserves_whatever_the_priority(monkeypatch):
+    store, queue, lease, reserve = setup(monkeypatch, priority=1, lane='backfill')
+    assert admission.authorize(store, tokens(lease), now=1)['allowed'] == ['segment']
+    reserve.assert_called_once_with('synthetic-owner', 'content', 3_600_000)
+    admission.get_hard_restriction_status.assert_not_called()
 
 
 def test_refusal_defers_without_spending_provider_failure_budget(monkeypatch):
@@ -157,6 +176,25 @@ def test_ladder_rechecked_at_execution_after_queue_admission(monkeypatch, dispat
     assert receipt == {'allowed': [], 'retry_after': {'segment': 60}}
     assert 'compute_admission_token' not in store.rows['jobs', 'segment']
     reserve.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'policy, held',
+    [(None, True), ({}, True), ({'provider_reason': 'none'}, True), ({'provider_reason': 'byok'}, False)],
+)
+def test_byok_admission_is_not_re_held_at_dispatch(monkeypatch, policy, held):
+    store, _, lease, _ = setup(monkeypatch, fresh=True)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'true')
+    if policy is not None:
+        store.rows['jobs', 'segment']['policy'] = policy
+    gate = Mock(return_value=False)  # no funded consent or allowance for this owner
+    monkeypatch.setattr(admission, 'sync_allowed', gate)
+    receipt = admission.authorize(store, tokens(lease), now=1)
+    if held:
+        assert receipt == {'allowed': [], 'retry_after': {'segment': 60}}
+    else:
+        assert receipt['allowed'] == ['segment']
+        gate.assert_not_called()
 
 
 @pytest.mark.parametrize('ladder', [False, True])

@@ -19,6 +19,8 @@ from utils.batch_pipeline.admission import authorize
 from utils.batch_pipeline.enrichment import run_enrichment
 from utils.batch_pipeline.serving import serving_for_stage
 from utils.executors import db_executor, postprocess_executor, run_blocking, sync_executor
+from utils.observability.reasons import RetryReason
+from utils.workers.retry import retry_response
 from utils.sync.stage import current_stage, require_http_stage
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,9 @@ ENRICHMENT_RETRIES = Counter(
 # Deliberate retain-and-retry signals, matched by defining module and name so
 # this router does not import the sync pipeline at startup.
 EXPECTED_RETRIES = {
-    ('utils.sync.reprocess', 'FirstSummaryCallbackPending'): 'callback_pending',
+    # Keyed by the defining module: utils.sync.reprocess is only an alias of utils.enrichment.outbox (#22431).
+    ('utils.enrichment.outbox', 'FirstSummaryCallbackPending'): 'callback_pending',
+    ('utils.enrichment.callback', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
     ('utils.sync.pipeline', 'SyncConversationPersistenceFenced'): 'persistence_fenced',
 }
 
@@ -42,7 +46,19 @@ def expected_retry_reason(error: BaseException) -> str | None:
         reason = EXPECTED_RETRIES.get((cls.__module__, cls.__qualname__))
         if reason is not None:
             return reason
+    if dependency_failure(error):
+        return RetryReason.DEPENDENCY_WARMING.value
     return None
+
+
+def dependency_failure(error: BaseException) -> bool:
+    """Conversation processing's HTTP contract for a failed dependency (LLM/provider step or app), not a bug.
+
+    ``process_conversation`` raises 429 (BYOK rate limit or quota), 500 (generic processing failure) or
+    502 (selected app failed). Inside a task delivery these are transient dependency outages: answering
+    500 would make Cloud Tasks system-throttle the queue (contract (d)). Other 4xx stay unexpected.
+    """
+    return isinstance(error, HTTPException) and (error.status_code == 429 or error.status_code >= 500)
 
 
 def verify_worker(request: Request) -> int:
@@ -54,6 +70,10 @@ def verify_worker(request: Request) -> int:
     if request.url.path == '/v2/batch-pipeline/recover-quarantine':
         audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
         invoker = os.getenv('SYNC_TASKS_INVOKER_SA', '').strip()
+    elif request.url.path == '/v2/batch-pipeline/shadow-recover':
+        # Same CPU role/policy as paid record recovery, with the GPU worker's
+        # existing service principal rather than the Cloud Tasks invoker.
+        audience = os.getenv('BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE', '').strip()
     return verify_configured_cloud_tasks_oidc(
         request,
         audience=audience,
@@ -162,7 +182,8 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
     """
     service = body.service()
     if not service.recovery:
-        raise HTTPException(status_code=503, detail='Recovery disabled on this host')
+        # Contract (d): a switched-off target answers 409, never 503 (fast 5xx throttles the queue).
+        return retry_response(RetryReason.KILL_SWITCH_OFF)
     job = await run_blocking(db_executor, service.store.run, lambda tx: tx.get('jobs', body.segment_id))
     if not job:
         return {'status': 'held'}
@@ -179,7 +200,7 @@ async def recover_quarantine(body: RedriveRequest, request: Request):
         except Exception:
             pass  # The lease still expires; the sweep repairs the wake then.
     if outcome == 'disabled':
-        raise HTTPException(status_code=503, detail='Recovery disabled for this owner')
+        return retry_response(RetryReason.KILL_SWITCH_OFF)
     if outcome in {'recovered', 'reconciled'}:
         await service.reconcile_async(owner_id=job['owner_id'], recovered=body.segment_id)
     return {'status': outcome}
@@ -192,6 +213,18 @@ async def redrive_dead(body: RedriveRequest):
     except BatchPrivacyBlocked:
         accepted = False
     return {'accepted': accepted}
+
+
+@router.post('/shadow-recover', include_in_schema=False)
+async def shadow_recover(body: RedriveRequest):
+    from database.batch_pipeline_shadow import ShadowStore
+    from utils.batch_pipeline.intake import artifacts_for
+    from utils.batch_pipeline.shadow_recovery import recover
+
+    store = body.service().store
+    artifacts = await run_blocking(sync_executor, artifacts_for, store)
+    outcome = await run_blocking(sync_executor, recover, ShadowStore(store), artifacts, body.segment_id)
+    return {'status': outcome}
 
 
 @router.post('/gpu-idle', include_in_schema=False)
@@ -236,6 +269,15 @@ async def enrichment_response(payload: dict):
     if not reprocess.owns_runtime():
         return JSONResponse(status_code=200, content={'status': 'foreign_runtime'})
     try:
+        from config.enrichment import route
+
+        if route() == 'enrichment_queue':
+            # C3: one state machine. Rows still bound to /v2/sync-jobs/run drain through the same
+            # consumer as /v2/enrichment/run; the route lever flips both together.
+            from routers.enrichment import consume
+            from utils.workers.consumer import http_response
+
+            return http_response(await run_blocking(postprocess_executor, consume, document_id, token))
         # Summaries must not queue behind long transcription jobs. Reuse the
         # conversation-processing bulkhead; the master flag restores the old pool.
         executor = postprocess_executor if summary_deadline_enabled() else sync_executor

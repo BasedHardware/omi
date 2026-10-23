@@ -41,7 +41,16 @@ fi
 
 if [[ -n "${CM_COMMIT:-}" ]]; then
   [[ "$CM_COMMIT" =~ ^[0-9a-f]{40}$ ]] || die "invalid CM_COMMIT='$CM_COMMIT' (want 40 lowercase hex characters)"
-  [[ "$sha" == "$CM_COMMIT" ]] || die "CM_COMMIT does not match checked-out HEAD ($sha)"
+  if [[ "$sha" != "$CM_COMMIT" ]]; then
+    # checkout_release_source_pin.sh detaches HEAD to the dispatcher's pin when
+    # main moved past it before the clone, and records the cloned tip. Accept
+    # exactly that: HEAD is the pin, the recorded tip is CM_COMMIT, and the pin
+    # is an ancestor of it. Every other mismatch still fails.
+    [[ -n "$repo_root" && -n "${OMI_RELEASE_SOURCE_SHA:-}" && "$sha" == "$OMI_RELEASE_SOURCE_SHA" \
+      && "${OMI_RELEASE_PIN_CLONED_TIP:-}" == "$CM_COMMIT" ]] \
+      && git -C "$repo_root" merge-base --is-ancestor "$sha" "$CM_COMMIT" 2>/dev/null \
+      || die "CM_COMMIT does not match checked-out HEAD ($sha)"
+  fi
 fi
 if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
   [[ "$OMI_RELEASE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]] || die "invalid OMI_RELEASE_SOURCE_SHA (want 40 lowercase hex characters)"

@@ -173,7 +173,9 @@ def test_normal_double_empty_keeps_selection_and_paid_recovery(monkeypatch):
     ok, _, _ = _run_segment()
     assert ok is False
     pipeline.get_prerecorded_service.assert_called_once()
-    assert all('selected_service' not in call.kwargs for call in stt.call_args_list)
+    # Ordinary unknown-language dispatch pins the provider selected after LID;
+    # minimal mode's independent Parakeet pin remains separate above.
+    assert all(call.kwargs['selected_service'] == ('modulate', 'multi', 'velma-2') for call in stt.call_args_list)
     recover.assert_called_once()
     silence.assert_called_once()
 

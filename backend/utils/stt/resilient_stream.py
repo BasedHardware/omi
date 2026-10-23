@@ -35,6 +35,7 @@ from utils.stt.replay_delivery import (
 )
 from utils.stt.provider_resilience import fallback_socket_is_serving
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
+from utils.stt.live_reason import LOCAL_DELIVERY_REPLAY_SEND_STALLED
 from utils.stt.socket import release_live_stt_socket
 
 RING_SECONDS = 15
@@ -538,13 +539,15 @@ async def replay_chunks(
         if not expired and await_writes and not await await_frozen_writes(socket, end):
             expired = True
         if expired:
+            # The replay prefix did not deliver within its wall budget on any
+            # successor: the socket's own local bound, never vendor capacity.
             fail = getattr(socket, 'fail', None)
             if callable(fail):
-                fail('capacity_full')
+                fail(LOCAL_DELIVERY_REPLAY_SEND_STALLED)
             else:
                 mark = getattr(socket, '_mark_dead', None)
                 if callable(mark):
-                    mark('replay wall budget exhausted', typed_reason='capacity_full')
+                    mark('replay wall budget exhausted', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
             return position
         if soniox is not None:
             for start, data in accepted_chunks:

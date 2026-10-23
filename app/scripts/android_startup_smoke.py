@@ -13,6 +13,13 @@ from android_emulator import Emulator, sha256_file
 
 PACKAGES = {"com.friend.ios", "com.friend.ios.dev"}
 
+# The rendered-screen signal for a fresh signed-out install: the sign-in card's
+# heading (app/lib/pages/onboarding/auth.dart, l10n speakTranscribeSummarize).
+# Since #23352 the sign-in screen is the first-run screen and the "Get Started"
+# welcome page no longer exists. The heading renders in every build profile,
+# unlike the local-dev-only sign-in button beside it.
+FIRST_RUN_SCREEN = "speak. transcribe. summarize."
+
 
 def apk_identity(apk, aapt):
     output = subprocess.run(
@@ -29,7 +36,7 @@ def assert_healthy(log, package, pid, current_pid, boot_id, current_boot, ui):
         raise ValueError("Startup process died/restarted or emulator rebooted.")
     if f"Process: {package}, PID:" in log or f"ANR in {package}" in log or "Unhandled Exception" in log:
         raise ValueError("Startup reported a fatal exception or ANR.")
-    if "get started" not in ui.lower():
+    if FIRST_RUN_SCREEN not in ui.lower():
         raise ValueError("First-run screen did not render; a surviving process alone is insufficient.")
 
 
@@ -94,7 +101,7 @@ def run_smoke(device, apk, output, *, aapt, rounds=3, observe_seconds=20):
                         dump = device.run("shell", "am", "instrument", "-w", "com.omi.fgsprobe/.StartupScreenProbe")
                         (output / f"{number}-accessibility.log").write_text(dump)
                         ui = screen_from_instrumentation(dump, package)
-                        if "get started" in ui.lower() and time.monotonic() - start >= observe_seconds:
+                        if FIRST_RUN_SCREEN in ui.lower() and time.monotonic() - start >= observe_seconds:
                             break
                         if device.run("shell", f"pidof {package} || true") != pid:
                             break

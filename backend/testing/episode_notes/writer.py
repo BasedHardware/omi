@@ -3,7 +3,7 @@
 from types import SimpleNamespace
 
 from testing.episode_notes.prompts import candidate_request
-from utils.llm.episode_writer import episode_budget_exceeded
+from testing.episode_notes.writer_runtime import episode_budget_exceeded
 
 
 def routed_candidate_request(episode, arm, settings, items, candidate_prompt=None):

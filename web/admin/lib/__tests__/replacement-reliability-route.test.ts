@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { testIdentity } from "./support/test-identity";
 
 const posthogResults = vi.hoisted(() => vi.fn());
 const fetchTelemetryAggregates = vi.hoisted(() => vi.fn());
-const verifyAdmin = vi.hoisted(() => vi.fn());
+const requireScope = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/auth", () => ({ verifyAdmin }));
+vi.mock("@/lib/auth", () => ({ requireScope }));
 vi.mock("@/lib/posthog", () => ({ posthogResults }));
 vi.mock("@/lib/telemetry/client", () => ({ fetchTelemetryAggregates }));
 vi.mock("@/lib/firebase/admin", () => ({
@@ -28,7 +29,7 @@ describe("response reliability route", () => {
     vi.resetModules();
     posthogResults.mockReset();
     fetchTelemetryAggregates.mockReset();
-    verifyAdmin.mockResolvedValue({ uid: "admin-1" });
+    requireScope.mockResolvedValue(testIdentity(undefined, "admin-1"));
     process.env.POSTHOG_PERSONAL_API_KEY = "ph";
     process.env.POSTHOG_PROJECT_ID = "1";
     delete process.env.RELIABILITY_REPLACEMENT_READER;
@@ -44,7 +45,7 @@ describe("response reliability route", () => {
   });
 
   it("rejects non-admins before reading telemetry", async () => {
-    verifyAdmin.mockResolvedValueOnce(
+    requireScope.mockResolvedValueOnce(
       NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     );
     const { GET } = await import(

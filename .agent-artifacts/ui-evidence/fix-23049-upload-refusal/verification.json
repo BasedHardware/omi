@@ -1,0 +1,42 @@
+{
+  "transport": "synthetic uploader; production SyncProvider, LocalWalSyncImpl and AutoSyncPage",
+  "request_file_counts": [
+    3,
+    1,
+    1,
+    1
+  ],
+  "statuses": [
+    "synced",
+    "synced",
+    "uploadRejected"
+  ],
+  "files_retained": true,
+  "synthetic_wav_exports": [
+    {
+      "seconds": 60.0,
+      "sample_rate": 16000,
+      "channels": 1
+    }
+  ],
+  "platform": "iPhone 16 Pro simulator, iOS 26.5",
+  "physical_device": false,
+  "native_build": "flutter run --debug --no-pub --flavor dev --dart-define=OMI_APP_PROFILE=local_dev -d <dedicated-simulator> -t integration_test/offline_sync_refusal_capture.dart",
+  "base_sha": "46fc217185f9dd5e0c7aed4cd40fd6cfa4c6aee0",
+  "source_sha256": {
+    "app/lib/services/wals/local_wal_sync.dart": "9290ed1d803475d846033c0e95e4e2fef8baa0feb74d76eb0ce662408a9eaa59",
+    "app/lib/services/wals/wal.dart": "4ab2024d358f5460d0fb5570301fe693b0762ad84825d9214741281a7a3a2710",
+    "app/lib/providers/sync_provider.dart": "db31b8c40e5adb354fa64ea99406c101b8a7c30cb571146262e29faff4e6f5fe",
+    "app/lib/pages/conversations/auto_sync_page.dart": "c36cb9ac23e6c221b48368acbf8a0334c2e8d82fd68fe6d6e49050690f5685c9",
+    "app/lib/pages/conversations/sync_page.dart": "0363a61c366d341b00d2f83c501b2838ef82d54ab9fbb312c7d1e209d8f6fdbd",
+    "app/integration_test/offline_sync_refusal_capture.dart": "456210ae39107aaa723a1d33bcb921157ea7292ac6bf370686e7d7b618ab8792"
+  },
+  "local_checks": {
+    "focused_regressions_passed": 84,
+    "full_app_tests_passed": 7016,
+    "full_app_tests_skipped": 9,
+    "spine_tests_passed": 138,
+    "preflight_checks_passed": 25,
+    "analyzer": "passed; original baseline unchanged"
+  }
+}

@@ -8,7 +8,7 @@ parent owns that gate. Fixture equality does not prove it.
 
 ## Reader
 
-- `GET /v1/telemetry/client/aggregates` is read server-side after `verifyAdmin`,
+- `GET /v1/telemetry/client/aggregates` is read server-side after `requireScope`,
   with `X-Admin-Key` and `X-Admin-User`. The browser token is not forwarded.
 - `RELIABILITY_REPLACEMENT_READER` defaults off. It turns on only with the
   exact value `on` and a valid `RELIABILITY_REPLACEMENT_CUTOVER` UTC day.
@@ -25,7 +25,7 @@ parent owns that gate. Fixture equality does not prove it.
 - Shadow and retirement flags are not read here.
 
 The in-tree aggregates route requires `X-Admin-Key` and optional
-`X-Admin-User`, the same headers this reader sends after `verifyAdmin`.
+`X-Admin-User`, the same headers this reader sends after `requireScope`.
 A 503 body may be FastAPI `detail.code` (`telemetry_query_truncated` or
 `telemetry_unavailable`). Missing key, base URL, or an unusable response
 fails closed to unavailable. Live activation stays with the parent.
