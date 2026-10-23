@@ -351,15 +351,11 @@ def get_conversations_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Cap max_transcript_segments at 1000 to prevent flooding LLM context
+    # Coerce numeric arguments
     try:
         max_transcript_segments = int(max_transcript_segments)
     except (TypeError, ValueError):
         return f"Error: Invalid max_transcript_segments format: {max_transcript_segments}"
-    if max_transcript_segments != -1:
-        max_transcript_segments = min(max_transcript_segments, 1000)
-        logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
-
     try:
         limit = int(limit)
     except (TypeError, ValueError):
@@ -368,6 +364,11 @@ def get_conversations_tool(
         offset = int(offset)
     except (TypeError, ValueError):
         return f"Error: Invalid offset format: {offset}"
+
+    # Apply limits
+    if max_transcript_segments != -1:
+        max_transcript_segments = min(max_transcript_segments, 1000)
+    limit = min(limit, 5000)
 
     # Parse dates if provided (always in UTC)
     start_dt = None
@@ -392,8 +393,6 @@ def get_conversations_tool(
             logger.info("Parsed conversation end_date")
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
-
-    limit = min(limit, 5000)
 
     # Parse statuses if provided
     status_list: List[str] = []
@@ -634,19 +633,20 @@ def search_conversations_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Cap max_transcript_segments at 1000 to prevent flooding LLM context
+    # Coerce numeric arguments
     try:
         max_transcript_segments = int(max_transcript_segments)
     except (TypeError, ValueError):
         return f"Error: Invalid max_transcript_segments format: {max_transcript_segments}"
-    if max_transcript_segments != -1:
-        max_transcript_segments = min(max_transcript_segments, 1000)
-        logger.info(f"📊 max_transcript_segments capped at: {max_transcript_segments}")
-
     try:
         limit = int(limit)
     except (TypeError, ValueError):
         return f"Error: Invalid limit format: {limit}"
+
+    # Apply limits
+    if max_transcript_segments != -1:
+        max_transcript_segments = min(max_transcript_segments, 1000)
+    limit = min(limit, 20)
 
     # Parse dates to timestamps if provided
     starts_at = None
@@ -675,9 +675,6 @@ def search_conversations_tool(
             ends_at = int(dt.timestamp())
         except ValueError as e:
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
-
-    # Limit to reasonable max
-    limit = min(limit, 20)
 
     scoped_id = (scope or {}).get("conversation_id") if scope else None
     if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
