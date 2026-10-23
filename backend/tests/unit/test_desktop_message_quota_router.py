@@ -103,7 +103,7 @@ def _cleanup(saved):
         sys.modules[name] = module
 
 
-def test_desktop_human_message_records_quota_once_after_persistence_acceptance():
+def test_desktop_human_message_persistence_does_not_record_quota():
     client, module, saved = _make_client()
     try:
         response = client.post(
@@ -125,14 +125,7 @@ def test_desktop_human_message_records_quota_once_after_persistence_acceptance()
             message_source='desktop_chat',
             journal_revision=None,
         )
-        module.llm_usage_db.record_chat_quota_question.assert_called_once_with(
-            'test-uid',
-            idempotency_key='desktop_messages:client-msg-1',
-            source='desktop_messages',
-            message_id='client-msg-1',
-            chat_session_id=None,
-            platform='macos',
-        )
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
     finally:
         _cleanup(saved)
 
@@ -228,7 +221,7 @@ def test_desktop_reconcile_rejects_invalid_owner_scoped_cursor():
         _cleanup(saved)
 
 
-def test_desktop_duplicate_human_message_retries_idempotent_quota_record():
+def test_desktop_duplicate_human_message_does_not_record_quota():
     client, module, saved = _make_client()
     try:
         module.chat_db.save_message.return_value = {
@@ -253,14 +246,7 @@ def test_desktop_duplicate_human_message_retries_idempotent_quota_record():
             message_source='desktop_chat',
             journal_revision=None,
         )
-        module.llm_usage_db.record_chat_quota_question.assert_called_once_with(
-            'test-uid',
-            idempotency_key='desktop_messages:client-msg-1',
-            source='desktop_messages',
-            message_id='client-msg-1',
-            chat_session_id=None,
-            platform=None,
-        )
+        module.llm_usage_db.record_chat_quota_question.assert_not_called()
     finally:
         _cleanup(saved)
 

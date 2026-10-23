@@ -4423,6 +4423,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get continueText => 'ادامه';
 
   @override
+  String get checkoutExistingSubscription =>
+      'شما از قبل اشتراک دارید. به‌جای شروع اشتراک جدید، اشتراک فعلی خود را مدیریت کنید.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'برای تغییر طرح، ابتدا دوباره مشترک شوید.';
 
   @override
@@ -14481,5 +14485,70 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'همچنین: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'دکمه Omi را فشار دهید';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'یک فشار کوتاه. سپس هر چیزی بپرسید.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'سؤال خود را بپرسید';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'بلند بگویید. Omi گوش می‌دهد.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'تمام شد؟ برای ارسال دوباره دکمه را فشار دهید.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'به $days روز رایگان ارتقا یافتید';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days روز Omi Pro مهمان ما. قبل از هر پرداختی یادآوری می‌کنیم. هر زمان لغو کنید.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'دریافت آزمایشی $days روزه';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'آزمایش رایگان $days روزه را شروع کنید';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Omi را روشن کنید';
+
+  @override
+  String get pairingPowerOnSubtitle => 'یک بار دکمه را فشار دهید و نزدیک گوشی نگه دارید.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'همین. Omi به ضبط مکالمات شما در پس‌زمینه ادامه می‌دهد.';
+
+  @override
+  String get noThanks => 'نه، ممنون';
+
+  @override
+  String get recapInTheBackground => 'در پس‌زمینه';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'با $percent% تخفیف بمانید';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'بمانید و ماهانه $price بپردازید، برای $months ماه آینده.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'انجام شد. $percent% تخفیف برای $months ماه آینده.';
   }
 }

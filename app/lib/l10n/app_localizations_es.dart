@@ -4422,6 +4422,10 @@ class AppLocalizationsEs extends AppLocalizations {
   String get continueText => 'Continuar';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Ya tienes una suscripción. Gestiona tu suscripción actual en lugar de iniciar una nueva.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Vuelve a suscribirte primero para cambiar de plan.';
 
   @override
@@ -14530,5 +14534,70 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'También: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Pulsa el botón de tu Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Una pulsación corta. Luego pregunta lo que quieras.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Haz tu pregunta';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Dilo en voz alta. Omi te escucha.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => '¿Listo? Pulsa el botón otra vez para enviar.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Te ampliamos a $days días gratis';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days días de Omi Pro por nuestra cuenta. Te avisaremos antes de cobrar. Cancela cuando quieras.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Quiero mi prueba de $days días';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Empieza tu prueba gratis de $days días';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Enciende tu Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Pulsa el botón una vez y mantenlo cerca del móvil.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Ya está. Omi seguirá grabando tus conversaciones en segundo plano.';
+
+  @override
+  String get noThanks => 'No, gracias';
+
+  @override
+  String get recapInTheBackground => 'En segundo plano';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Quédate con un $percent% de descuento';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Quédate y paga $price al mes durante los próximos $months meses.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Listo. $percent% de descuento los próximos $months meses.';
   }
 }

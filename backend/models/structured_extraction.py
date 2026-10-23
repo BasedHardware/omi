@@ -289,9 +289,10 @@ class ExtractedInsight(BaseModel):
 
 Salience = Literal['highlight', 'background']
 SALIENCE_DESCRIPTION = (
-    "'highlight' when the person would want this as its own entry (time with people, a meeting or call, plans, "
-    "decisions, ideas, tasks); 'background' when it is worth keeping but not a highlight (media or TV playing, "
-    "ambient chatter, a passing remark, a trivial errand)"
+    "'highlight' for owner-engaged back-and-forth with another person, whatever the topic, including chores "
+    "and casual home conversations, or meetings, calls, plans, ideas and tasks. 'background' only when the owner "
+    "is not engaged: media/TV, ambient chatter, other people talking or an isolated passing remark. "
+    "Uncertain owner engagement stays 'highlight'."
 )
 
 

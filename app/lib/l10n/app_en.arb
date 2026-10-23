@@ -5204,6 +5204,10 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "You already have a subscription. Manage your current subscription instead of starting a new one.",
+    "@checkoutExistingSubscription": {
+        "description": "Checkout is blocked because an existing subscription must be managed, not purchased a second time. Not the pending-cancellation upgrade error."
+    },
     "resubscribeFirstToChangePlans": "Resubscribe first to change plans.",
     "@resubscribeFirstToChangePlans": {
         "description": "Why another price is refused while cancellation is pending"
@@ -17675,6 +17679,115 @@
         "placeholders": {
             "items": {
                 "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingPressButtonTitle": "Press the button on your Omi",
+    "@deviceOnboardingPressButtonTitle": {
+        "description": "Device walkthrough, Ask Omi step: PressButtonTitle"
+    },
+    "deviceOnboardingPressButtonSubtitle": "One short press. Then ask anything.",
+    "@deviceOnboardingPressButtonSubtitle": {
+        "description": "Device walkthrough, Ask Omi step: PressButtonSubtitle"
+    },
+    "deviceOnboardingAskNowTitle": "Ask your question",
+    "@deviceOnboardingAskNowTitle": {
+        "description": "Device walkthrough, Ask Omi step: AskNowTitle"
+    },
+    "deviceOnboardingAskNowSubtitle": "Say it out loud. Omi is listening.",
+    "@deviceOnboardingAskNowSubtitle": {
+        "description": "Device walkthrough, Ask Omi step: AskNowSubtitle"
+    },
+    "deviceOnboardingPressAgainHint": "Done? Press the button again to send.",
+    "@deviceOnboardingPressAgainHint": {
+        "description": "Device walkthrough, Ask Omi step: PressAgainHint"
+    },
+    "trialUpsellTitle": "You've been upgraded to {days} days free",
+    "@trialUpsellTitle": {
+        "description": "Pocket onboarding arm: trialUpsellTitle",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "trialUpsellBody": "{days} days of Omi Pro, on us. We'll remind you before anything is charged. Cancel anytime.",
+    "@trialUpsellBody": {
+        "description": "Pocket onboarding arm: trialUpsellBody",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "trialUpsellClaim": "Claim my {days}-day trial",
+    "@trialUpsellClaim": {
+        "description": "Pocket onboarding arm: trialUpsellClaim",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "settingsUpgradeTrialSubtitle": "Start your {days}-day free trial",
+    "@settingsUpgradeTrialSubtitle": {
+        "description": "Pocket onboarding arm: settingsUpgradeTrialSubtitle",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "pairingPowerOnTitle": "Power on your Omi",
+    "@pairingPowerOnTitle": {
+        "description": "Pocket onboarding arm: pairingPowerOnTitle"
+    },
+    "pairingPowerOnSubtitle": "Press the button once and keep it near your phone.",
+    "@pairingPowerOnSubtitle": {
+        "description": "Pocket onboarding arm: pairingPowerOnSubtitle"
+    },
+    "walkthroughBackgroundRecordingNote": "That's it. Omi will keep recording your conversations in the background.",
+    "@walkthroughBackgroundRecordingNote": {
+        "description": "Pocket onboarding arm: walkthroughBackgroundRecordingNote"
+    },
+    "noThanks": "No thanks",
+    "@noThanks": {
+        "description": "Pocket onboarding arm: noThanks"
+    },
+    "recapInTheBackground": "In the background",
+    "@recapInTheBackground": {
+        "description": "Daily recap section listing the day's background conversations, which Home no longer shows"
+    },
+    "retentionOfferAccept": "Stay for {percent}% off",
+    "@retentionOfferAccept": {
+        "description": "Primary button on the last cancel step: keep the subscription with a discount",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "retentionOfferBody": "Stay and pay {price} a month for the next {months} months.",
+    "@retentionOfferBody": {
+        "description": "Offer shown on the last cancel step; price is the discounted monthly price",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            },
+            "months": {
+                "type": "int"
+            }
+        }
+    },
+    "retentionOfferApplied": "Done. {percent}% off your next {months} months.",
+    "@retentionOfferApplied": {
+        "description": "Toast after accepting the stay offer",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "months": {
+                "type": "int"
             }
         }
     }

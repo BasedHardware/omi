@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "آپ کے پاس پہلے سے سبسکرپشن ہے۔ نئی شروع کرنے کے بجائے اپنی موجودہ سبسکرپشن کا نظم کریں۔",
     "resubscribeFirstToChangePlans": "پلان بدلنے کے لیے پہلے دوبارہ رکنیت حاصل کریں۔",
     "resubscribe": "دوبارہ رکنیت حاصل کریں",
     "@resubscribe": {
@@ -11833,5 +11834,22 @@
     "deviceRecently": "حال ہی میں",
     "deviceDisconnectedFor": "{duration} تک منقطع",
     "deviceControls": "کنٹرولز",
-    "homeBackgroundLine": "نیز: {items}"
+    "homeBackgroundLine": "نیز: {items}",
+    "deviceOnboardingPressButtonTitle": "اپنے Omi کا بٹن دبائیں",
+    "deviceOnboardingPressButtonSubtitle": "ایک مختصر دباؤ۔ پھر کچھ بھی پوچھیں۔",
+    "deviceOnboardingAskNowTitle": "اپنا سوال پوچھیں",
+    "deviceOnboardingAskNowSubtitle": "بلند آواز میں کہیں۔ Omi سن رہا ہے۔",
+    "deviceOnboardingPressAgainHint": "ہو گیا؟ بھیجنے کے لیے بٹن دوبارہ دبائیں۔",
+    "trialUpsellTitle": "آپ کو {days} دن مفت مل گئے",
+    "trialUpsellBody": "{days} دن Omi Pro ہماری طرف سے۔ کسی بھی چارج سے پہلے یاد دلائیں گے۔ کبھی بھی منسوخ کریں۔",
+    "trialUpsellClaim": "میرا {days} دن کا ٹرائل لیں",
+    "settingsUpgradeTrialSubtitle": "اپنا {days} دن کا مفت ٹرائل شروع کریں",
+    "pairingPowerOnTitle": "اپنا Omi آن کریں",
+    "pairingPowerOnSubtitle": "بٹن ایک بار دبائیں اور فون کے قریب رکھیں۔",
+    "walkthroughBackgroundRecordingNote": "بس اتنا ہی۔ Omi پس منظر میں آپ کی گفتگو ریکارڈ کرتا رہے گا۔",
+    "noThanks": "نہیں، شکریہ",
+    "recapInTheBackground": "پس منظر میں",
+    "retentionOfferAccept": "{percent}% رعایت کے ساتھ رہیں",
+    "retentionOfferBody": "رہیں اور ہر ماہ {price} ادا کریں، اگلے {months} مہینے۔",
+    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔"
 }

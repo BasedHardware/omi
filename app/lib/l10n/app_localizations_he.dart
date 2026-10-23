@@ -4390,6 +4390,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get continueText => 'המשך';
 
   @override
+  String get checkoutExistingSubscription => 'כבר יש לך מנוי. אפשר לנהל את המנוי הקיים במקום להתחיל מנוי חדש.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'הירשמו מחדש קודם כדי לשנות תוכנית.';
 
   @override
@@ -14384,5 +14387,70 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'גם: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'לחץ על הכפתור ב‑Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'לחיצה קצרה אחת. ואז שאל מה שתרצה.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'שאל את השאלה שלך';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'אמור זאת בקול. Omi מקשיב.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'סיימת? לחץ שוב על הכפתור כדי לשלוח.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'שודרגת ל‑$days ימים חינם';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days ימים של Omi Pro עלינו. נזכיר לך לפני כל חיוב. ביטול בכל עת.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'קבל ניסיון של $days ימים';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'התחל ניסיון חינם של $days ימים';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'הפעל את ה‑Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'לחץ פעם אחת על הכפתור והשאר אותו קרוב לטלפון.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'זהו. Omi ימשיך להקליט את השיחות שלך ברקע.';
+
+  @override
+  String get noThanks => 'לא, תודה';
+
+  @override
+  String get recapInTheBackground => 'ברקע';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'הישארו עם $percent% הנחה';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'הישארו ושלמו $price לחודש ב-$months החודשים הבאים.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'בוצע. $percent% הנחה ב-$months החודשים הבאים.';
   }
 }

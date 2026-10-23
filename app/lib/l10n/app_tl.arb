@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "May subscription ka na. Pamahalaan ang kasalukuyan mong subscription sa halip na magsimula ng bago.",
     "resubscribeFirstToChangePlans": "Mag-subscribe muna ulit para magpalit ng plan.",
     "resubscribe": "Mag-subscribe Muli",
     "@resubscribe": {
@@ -11833,5 +11834,22 @@
     "deviceRecently": "Kamakailan",
     "deviceDisconnectedFor": "Nadiskonekta nang {duration}",
     "deviceControls": "Mga Kontrol",
-    "homeBackgroundLine": "Gayundin: {items}"
+    "homeBackgroundLine": "Gayundin: {items}",
+    "deviceOnboardingPressButtonTitle": "Pindutin ang button sa iyong Omi",
+    "deviceOnboardingPressButtonSubtitle": "Isang maikling pindot. Pagkatapos, magtanong ng kahit ano.",
+    "deviceOnboardingAskNowTitle": "Itanong ang iyong tanong",
+    "deviceOnboardingAskNowSubtitle": "Sabihin nang malakas. Nakikinig si Omi.",
+    "deviceOnboardingPressAgainHint": "Tapos na? Pindutin muli ang button para ipadala.",
+    "trialUpsellTitle": "Na-upgrade ka sa {days} araw na libre",
+    "trialUpsellBody": "{days} araw ng Omi Pro, libre mula sa amin. Paalalahanan ka namin bago masingil. Kanselahin anumang oras.",
+    "trialUpsellClaim": "Kunin ang {days}-araw na trial",
+    "settingsUpgradeTrialSubtitle": "Simulan ang {days}-araw na libreng trial",
+    "pairingPowerOnTitle": "I-on ang iyong Omi",
+    "pairingPowerOnSubtitle": "Pindutin nang isang beses ang button at ilapit sa iyong phone.",
+    "walkthroughBackgroundRecordingNote": "Ayan na. Patuloy na irerekord ni Omi ang iyong mga usapan sa background.",
+    "noThanks": "Hindi, salamat",
+    "recapInTheBackground": "Sa background",
+    "retentionOfferAccept": "Manatili nang may {percent}% diskwento",
+    "retentionOfferBody": "Manatili at magbayad ng {price} kada buwan sa susunod na {months} buwan.",
+    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan."
 }

@@ -4457,6 +4457,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get continueText => 'Συνέχεια';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Έχετε ήδη συνδρομή. Διαχειριστείτε την τρέχουσα συνδρομή σας αντί να ξεκινήσετε μια νέα.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Επανεγγραφείτε πρώτα για να αλλάξετε πρόγραμμα.';
 
   @override
@@ -14580,5 +14584,71 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'Επίσης: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Πάτησε το κουμπί στο Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Ένα σύντομο πάτημα. Μετά ρώτα ό,τι θέλεις.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Κάνε την ερώτησή σου';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Πες το δυνατά. Το Omi ακούει.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Τελείωσες; Πάτησε ξανά το κουμπί για αποστολή.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Αναβαθμίστηκες σε $days ημέρες δωρεάν';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days ημέρες Omi Pro κερασμένες. Θα σε ειδοποιήσουμε πριν από κάθε χρέωση. Ακύρωση ανά πάσα στιγμή.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Θέλω τη δοκιμή $days ημερών';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Ξεκίνα τη δωρεάν δοκιμή $days ημερών';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Άναψε το Omi σου';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Πάτησε μία φορά το κουμπί και κράτα το κοντά στο κινητό.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'Αυτό ήταν. Το Omi θα συνεχίσει να ηχογραφεί τις συζητήσεις σου στο παρασκήνιο.';
+
+  @override
+  String get noThanks => 'Όχι, ευχαριστώ';
+
+  @override
+  String get recapInTheBackground => 'Στο παρασκήνιο';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Μείνε με $percent% έκπτωση';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Μείνε και πλήρωνε $price τον μήνα για τους επόμενους $months μήνες.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Έγινε. $percent% έκπτωση για τους επόμενους $months μήνες.';
   }
 }

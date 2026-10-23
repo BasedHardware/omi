@@ -4353,6 +4353,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get continueText => '続ける';
 
   @override
+  String get checkoutExistingSubscription => 'すでにサブスクリプションがあります。新規契約ではなく、現在のサブスクリプションを管理してください。';
+
+  @override
   String get resubscribeFirstToChangePlans => 'プランを変更するには、先に再購読してください。';
 
   @override
@@ -14282,5 +14285,70 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'その他: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Omi のボタンを押してください';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => '短く1回押します。あとは何でも聞いてください。';
+
+  @override
+  String get deviceOnboardingAskNowTitle => '質問をどうぞ';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => '声に出して話してください。Omi が聞いています。';
+
+  @override
+  String get deviceOnboardingPressAgainHint => '話し終えたら、もう一度ボタンを押して送信します。';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return '$days日間無料にアップグレードされました';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return 'Omi Pro を $days 日間無料で。請求前にお知らせします。いつでもキャンセルできます。';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days日間の無料トライアルを使う';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '$days日間の無料トライアルを始める';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Omi の電源を入れてください';
+
+  @override
+  String get pairingPowerOnSubtitle => 'ボタンを1回押して、スマートフォンの近くに置いてください。';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'これで完了です。Omi はバックグラウンドで会話を記録し続けます。';
+
+  @override
+  String get noThanks => 'いいえ、結構です';
+
+  @override
+  String get recapInTheBackground => 'バックグラウンド';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent%オフで続ける';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return '続ければ月額$price、次の$monthsか月間。';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return '完了しました。$percent%オフが$monthsか月続きます。';
   }
 }

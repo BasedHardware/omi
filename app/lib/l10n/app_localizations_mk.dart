@@ -4442,6 +4442,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get continueText => 'Продолжи';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Веќе имате претплата. Управувајте со тековната претплата наместо да започнете нова.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Прво претплатете се повторно за да го смените планот.';
 
   @override
@@ -14551,5 +14555,70 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'Исто така: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Притиснете го копчето на Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Едно кратко притискање. Потоа прашајте што било.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Постави го прашањето';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Кажете го гласно. Omi слуша.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Готово? Притиснете го копчето повторно за да испратите.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Добивте $days дена бесплатно';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days дена Omi Pro на наша сметка. Ќе ве потсетиме пред наплата. Откажете кога сакате.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Земи проба од $days дена';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Започнете бесплатна проба од $days дена';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Вклучете го Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Притиснете го копчето еднаш и држете го блиску до телефонот.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Тоа е сè. Omi ќе продолжи да ги снима вашите разговори во заднина.';
+
+  @override
+  String get noThanks => 'Не, благодарам';
+
+  @override
+  String get recapInTheBackground => 'Во позадина';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Остани со $percent% попуст';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Остани и плаќај $price месечно во следните $months месеци.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Готово. $percent% попуст за следните $months месеци.';
   }
 }

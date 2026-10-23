@@ -4398,6 +4398,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get continueText => 'जारी रखें';
 
   @override
+  String get checkoutExistingSubscription =>
+      'आपके पास पहले से सदस्यता है। नई सदस्यता शुरू करने के बजाय अपनी मौजूदा सदस्यता प्रबंधित करें।';
+
+  @override
   String get resubscribeFirstToChangePlans => 'प्लान बदलने के लिए पहले पुनः सदस्यता लें।';
 
   @override
@@ -14470,5 +14474,70 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'साथ ही: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'अपने Omi का बटन दबाएँ';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'एक छोटा सा प्रेस। फिर कुछ भी पूछें।';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'अपना सवाल पूछें';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'ज़ोर से बोलें। Omi सुन रहा है।';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'हो गया? भेजने के लिए बटन फिर दबाएँ।';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'आपको $days दिन मुफ़्त मिल गए';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days दिन Omi Pro हमारी तरफ़ से। किसी भी शुल्क से पहले याद दिलाएँगे। कभी भी रद्द करें।';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'मेरा $days दिन का ट्रायल लें';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'अपना $days दिन का मुफ़्त ट्रायल शुरू करें';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'अपना Omi चालू करें';
+
+  @override
+  String get pairingPowerOnSubtitle => 'बटन एक बार दबाएँ और फ़ोन के पास रखें।';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'बस इतना ही। Omi बैकग्राउंड में आपकी बातचीत रिकॉर्ड करता रहेगा।';
+
+  @override
+  String get noThanks => 'नहीं, धन्यवाद';
+
+  @override
+  String get recapInTheBackground => 'पृष्ठभूमि में';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% छूट के साथ बने रहें';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'बने रहें और हर महीने $price दें, अगले $months महीनों तक।';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'हो गया। $percent% छूट, अगले $months महीनों तक।';
   }
 }

@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "Већ имате претплату. Управљајте постојећом претплатом уместо покретања нове.",
     "resubscribeFirstToChangePlans": "Прво се поново претплати да промениш план.",
     "resubscribe": "Претплати се поново",
     "@resubscribe": {
@@ -11833,5 +11834,22 @@
     "deviceRecently": "Недавно",
     "deviceDisconnectedFor": "Без везе {duration}",
     "deviceControls": "Контроле",
-    "homeBackgroundLine": "Такође: {items}"
+    "homeBackgroundLine": "Такође: {items}",
+    "deviceOnboardingPressButtonTitle": "Pritisnite dugme na Omiju",
+    "deviceOnboardingPressButtonSubtitle": "Jedan kratak pritisak. Zatim pitajte bilo šta.",
+    "deviceOnboardingAskNowTitle": "Postavite pitanje",
+    "deviceOnboardingAskNowSubtitle": "Recite naglas. Omi sluša.",
+    "deviceOnboardingPressAgainHint": "Gotovo? Pritisnite dugme ponovo da pošaljete.",
+    "trialUpsellTitle": "Dobili ste {days} dana besplatno",
+    "trialUpsellBody": "{days} dana Omi Pro na naš račun. Podsetićemo vas pre naplate. Otkažite bilo kada.",
+    "trialUpsellClaim": "Preuzmi probu od {days} dana",
+    "settingsUpgradeTrialSubtitle": "Započnite besplatnu probu od {days} dana",
+    "pairingPowerOnTitle": "Uključite svoj Omi",
+    "pairingPowerOnSubtitle": "Pritisnite dugme jednom i držite ga blizu telefona.",
+    "walkthroughBackgroundRecordingNote": "To je to. Omi će nastaviti da snima vaše razgovore u pozadini.",
+    "noThanks": "Ne, hvala",
+    "recapInTheBackground": "У позадини",
+    "retentionOfferAccept": "Остани уз {percent}% попуста",
+    "retentionOfferBody": "Остани и плаћај {price} месечно наредних {months} месеца.",
+    "retentionOfferApplied": "Готово. {percent}% попуста наредних {months} месеца."
 }

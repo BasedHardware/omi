@@ -109,17 +109,14 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
   @visibleForTesting
   Future<void> debugStopConversation(CaptureProvider provider) => _stopConversation(provider);
 
-  /// Finish (and Wrap Up Now): the one stop. No confirmation: it is explicit, and it processes the
-  /// conversation (a phone recording stops first; a pendant it paused resumes afterwards). With an
-  /// episode, the server closes it once that conversation's notes are done.
+  /// Finish (and Wrap Up Now): the one stop. No confirmation: it is explicit. It processes the
+  /// conversation (a phone recording stops first), Home shows it as a processing row, and the live
+  /// episode closes while a fresh one starts counting from now. It never pauses the pendant: with
+  /// nothing new since the last boundary there is nothing to process, and the clock still restarts.
   Future<void> _stopConversation(CaptureProvider provider) async {
     final hadContent = provider.segments.isNotEmpty || provider.photos.isNotEmpty;
-    final episodes = _episodes;
-    if (episodes != null && episodes.enabled && episodes.live != null) {
-      final conversationId = hadContent ? (widget.topConversationId ?? provider.topConversationId) : null;
-      unawaited(episodes.wrapUp(conversationId: conversationId));
-    }
     if (hadContent) {
+      // Ending the capture fires the shared finalize hook, which closes the episode.
       await provider.finishCapture();
       if (!mounted) return;
       switchHomeToConversationsTab(context);
@@ -127,9 +124,9 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
       final source = provider.liveCaptureSource;
       if (source == null || source == ConversationSource.phone.name) {
         await provider.stopStreamRecording();
-      } else if (EpisodePresentation.canPause(provider) && !provider.isPaused) {
-        await provider.pauseCapture();
       }
+      final episodes = _episodes;
+      if (episodes != null && episodes.enabled) episodes.onLiveFinalized();
     }
     if (!mounted) return;
     // A swipe back during the finish has already popped this route; it only stays mounted while it
@@ -263,7 +260,9 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
           ),
         ],
       ),
-      bottomNavigationBar: hasCapture ? _wrapUpBar(context, episodes) : null,
+      bottomNavigationBar: hasCapture
+          ? _wrapUpBar(context, episodes, paused: context.select<CaptureProvider, bool>((c) => c.isPaused))
+          : null,
     );
   }
 
@@ -382,7 +381,16 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
     return _participantsCache!;
   }
 
-  Widget _wrapUpBar(BuildContext context, EpisodeProvider episodes) {
+  Future<void> _resume(CaptureProvider provider) async {
+    try {
+      await provider.resumeCapture();
+    } catch (_) {
+      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    }
+  }
+
+  /// Wrap up, or while paused one tap to resume first, with Wrap up beneath it.
+  Widget _wrapUpBar(BuildContext context, EpisodeProvider episodes, {required bool paused}) {
     final l10n = context.l10n;
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -402,10 +410,20 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                 style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
               ),
               const SizedBox(height: OmiSpacing.xs),
+              if (paused) ...[
+                OmiButton(
+                  key: const Key('episode_resume_button'),
+                  label: l10n.resume,
+                  expand: true,
+                  onPressed: () => _resume(context.read<CaptureProvider>()),
+                ),
+                const SizedBox(height: OmiSpacing.xs),
+              ],
               OmiButton(
                 key: const Key('episode_wrap_up_button'),
                 label: l10n.episodeWrapUpNow,
                 expand: true,
+                variant: paused ? OmiButtonVariant.secondary : OmiButtonVariant.primary,
                 isLoading: episodes.wrappingUp,
                 onPressed: () => _stopConversation(context.read<CaptureProvider>()),
               ),

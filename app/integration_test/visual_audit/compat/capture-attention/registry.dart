@@ -26,7 +26,6 @@ import 'scenarios/search.dart';
 import 'scenarios/settings.dart';
 import 'scenarios/settings_pages.dart';
 import 'scenarios/speaker_labels.dart';
-import 'scenarios/speaker_prompts.dart';
 import 'scenarios/tasks.dart';
 
 final auditSuite = AuditSuite(
@@ -42,7 +41,6 @@ final auditSuite = AuditSuite(
     ...deviceScenarios,
     ...conversationsScenarios,
     ...offlineProcessingScenarios,
-    ...speakerPromptScenarios,
     ...speakerLabelScenarios,
     ...reviewScenarios,
     ...conversationDetailScenarios,

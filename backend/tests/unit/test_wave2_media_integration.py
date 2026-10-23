@@ -77,7 +77,7 @@ def test_classification_persists_minimum_and_restore_clears_marker(monkeypatch, 
     from utils.conversations import llm_input_dedupe
 
     monkeypatch.setattr(pc, 'quiet_minimum', lambda *a, **k: None)
-    monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *a, **k: (None, None, False, []))
+    monkeypatch.setattr(pc, 'rich_notes_inputs', lambda *a, **k: (None, None, False, [], 0))
     monkeypatch.setattr(pc, 'conversation_transcripts_for_llm', lambda *a, **k: ('w0 w1 w2', 'w0 w1 w2', {}))
     monkeypatch.setattr(pc, 'has_structural_wake_word_marker', lambda *_: False)
     monkeypatch.setattr(pc, '_fetch_dedup_candidates_for_query', lambda *a: [])

@@ -4433,6 +4433,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get continueText => 'Продолжить';
 
   @override
+  String get checkoutExistingSubscription =>
+      'У вас уже есть подписка. Управляйте текущей подпиской вместо оформления новой.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Сначала оформите подписку снова, чтобы сменить план.';
 
   @override
@@ -14535,5 +14539,70 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'Также: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Нажмите кнопку на Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Одно короткое нажатие. Потом спросите что угодно.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Задайте вопрос';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Скажите вслух. Omi слушает.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Готово? Нажмите кнопку ещё раз, чтобы отправить.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Вам продлили бесплатный период до $days дней';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days дней Omi Pro за наш счёт. Напомним перед списанием. Отмена в любой момент.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Получить $days дней пробно';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Начните бесплатный период на $days дней';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Включите Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Нажмите кнопку один раз и держите рядом с телефоном.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Готово. Omi продолжит записывать ваши разговоры в фоне.';
+
+  @override
+  String get noThanks => 'Нет, спасибо';
+
+  @override
+  String get recapInTheBackground => 'На фоне';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Остаться со скидкой $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Оставайтесь и платите $price в месяц следующие $months месяца.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Готово. Скидка $percent% на следующие $months месяца.';
   }
 }

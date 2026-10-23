@@ -4354,6 +4354,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get continueText => '계속';
 
   @override
+  String get checkoutExistingSubscription => '이미 구독 중입니다. 새 구독을 시작하는 대신 현재 구독을 관리하세요.';
+
+  @override
   String get resubscribeFirstToChangePlans => '플랜을 변경하려면 먼저 다시 구독하세요.';
 
   @override
@@ -14288,5 +14291,70 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return '그 외: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Omi 버튼을 누르세요';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => '짧게 한 번 누르세요. 그다음 무엇이든 물어보세요.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => '질문하세요';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => '소리 내어 말하세요. Omi가 듣고 있어요.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => '다 말했나요? 버튼을 다시 눌러 보내세요.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return '$days일 무료로 업그레이드되었어요';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return 'Omi Pro $days일 무료. 결제 전에 알려드려요. 언제든 취소할 수 있어요.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days일 무료 체험 받기';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '$days일 무료 체험 시작하기';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Omi 전원을 켜세요';
+
+  @override
+  String get pairingPowerOnSubtitle => '버튼을 한 번 누르고 휴대폰 가까이에 두세요.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => '끝이에요. Omi가 백그라운드에서 대화를 계속 녹음해요.';
+
+  @override
+  String get noThanks => '괜찮아요';
+
+  @override
+  String get recapInTheBackground => '배경에서';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% 할인받고 계속 쓰기';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return '계속 쓰시면 월 $price, 앞으로 $months개월 동안.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return '완료되었습니다. $percent% 할인이 $months개월 동안 적용됩니다.';
   }
 }

@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "আপনার ইতিমধ্যেই একটি সাবস্ক্রিপশন আছে। নতুনটি শুরু না করে বর্তমান সাবস্ক্রিপশন পরিচালনা করুন।",
     "resubscribeFirstToChangePlans": "প্ল্যান বদলাতে আগে পুনরায় সাবস্ক্রাইব করুন।",
     "resubscribe": "পুনরায় সাবস্ক্রাইব করুন",
     "@resubscribe": {
@@ -11833,5 +11834,22 @@
     "deviceRecently": "সম্প্রতি",
     "deviceDisconnectedFor": "{duration} ধরে সংযোগ বিচ্ছিন্ন",
     "deviceControls": "নিয়ন্ত্রণ",
-    "homeBackgroundLine": "এছাড়াও: {items}"
+    "homeBackgroundLine": "এছাড়াও: {items}",
+    "deviceOnboardingPressButtonTitle": "আপনার Omi-র বোতাম টিপুন",
+    "deviceOnboardingPressButtonSubtitle": "একবার ছোট করে টিপুন। তারপর যা খুশি জিজ্ঞেস করুন।",
+    "deviceOnboardingAskNowTitle": "আপনার প্রশ্ন করুন",
+    "deviceOnboardingAskNowSubtitle": "জোরে বলুন। Omi শুনছে।",
+    "deviceOnboardingPressAgainHint": "শেষ? পাঠাতে আবার বোতাম টিপুন।",
+    "trialUpsellTitle": "আপনাকে {days} দিনের ফ্রি ট্রায়ালে আপগ্রেড করা হয়েছে",
+    "trialUpsellBody": "{days} দিন Omi Pro আমাদের খরচে। চার্জের আগে মনে করিয়ে দেব। যেকোনো সময় বাতিল করুন।",
+    "trialUpsellClaim": "{days} দিনের ট্রায়াল নিন",
+    "settingsUpgradeTrialSubtitle": "আপনার {days} দিনের ফ্রি ট্রায়াল শুরু করুন",
+    "pairingPowerOnTitle": "আপনার Omi চালু করুন",
+    "pairingPowerOnSubtitle": "একবার বোতাম টিপুন এবং ফোনের কাছে রাখুন।",
+    "walkthroughBackgroundRecordingNote": "এটুকুই। Omi ব্যাকগ্রাউন্ডে আপনার কথোপকথন রেকর্ড করতে থাকবে।",
+    "noThanks": "না, ধন্যবাদ",
+    "recapInTheBackground": "পটভূমিতে",
+    "retentionOfferAccept": "{percent}% ছাড়ে থাকুন",
+    "retentionOfferBody": "থাকুন এবং মাসে {price} দিন, পরের {months} মাস।",
+    "retentionOfferApplied": "হয়ে গেছে। {percent}% ছাড়, পরের {months} মাস।"
 }

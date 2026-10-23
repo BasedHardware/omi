@@ -454,3 +454,46 @@ def test_separate_route_is_sticky_and_idempotent(monkeypatch):
     assert router.separate_conversation_from_capture_group('desktop', uid=UID).status == 'ok'
     assert router.separate_conversation_from_capture_group('desktop', uid=UID).status == 'unchanged'
     assert calls[0] == ((UID, 'desktop'), {'sticky': True})
+
+
+@pytest.mark.parametrize('stale_external', [None, {}, {'integration': 'kept'}])
+def test_from_segments_repersist_keeps_the_link_written_during_processing(store, seam, monkeypatch, stale_external):
+    # from-segments: process_conversation links the upload, then the router merges its
+    # pre-link in-memory conversation (external_data None for a desktop upload) again.
+    store.rows.update({path('pendant'): row('pendant', 'omi'), path('desktop'): row('desktop', 'desktop', 100, 590)})
+    policy.link_duplicate_captures(UID, Conversation(**store.rows[path('desktop')]))
+    linked = deepcopy(store.rows[path('desktop')]['external_data'])
+    assert linked['duplicate_capture_of'] == 'pendant'
+    monkeypatch.setattr(conversations_db, 'db', store)
+    original_set = StrictFirestoreTransaction.set
+
+    def merge_set(self, ref, data, merge=False):
+        # Top-level merge: a dumped external_data replaces the stored map, the worst case.
+        return original_set(self, ref, {**store.rows.get(ref.path, {}), **data} if merge else data)
+
+    monkeypatch.setattr(StrictFirestoreTransaction, 'set', merge_set)
+    monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(conversations_db, '_reapply_current_manual_assignments', lambda *a: None)
+    stale = {
+        'id': 'desktop',
+        'status': 'completed',
+        'data_protection_level': 'standard',
+        'external_data': deepcopy(stale_external),
+        'structured': {'title': 'x'},
+    }
+    assert conversations_db.persist_processing_result_with_lifecycle(UID, stale)
+    external = store.rows[path('desktop')]['external_data']
+    assert {key: external[key] for key in groups_db.DUPLICATE_HINT_FIELDS} == {
+        key: linked[key] for key in groups_db.DUPLICATE_HINT_FIELDS
+    }
+    assert external.get('integration') == (stale_external or {}).get('integration')
+    assert store.rows[path('desktop')]['structured'] == {'title': 'x'}
+
+
+def test_hint_preservation_leaves_writes_without_external_data_alone():
+    write = {'id': 'desktop'}
+    groups_db.preserve_duplicate_hint(write, {'external_data': {'duplicate_capture_of': 'pendant'}})
+    assert write == {'id': 'desktop'}
+    write = {'external_data': None}
+    groups_db.preserve_duplicate_hint(write, {'external_data': {}})
+    assert write == {'external_data': None}

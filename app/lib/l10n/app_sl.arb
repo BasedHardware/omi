@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "Naročnino že imate. Namesto nove upravljajte obstoječo naročnino.",
     "resubscribeFirstToChangePlans": "Najprej se ponovno naročite, da zamenjate načrt.",
     "resubscribe": "Ponovno se prijavite",
     "@resubscribe": {
@@ -11833,5 +11834,22 @@
     "deviceRecently": "Nedavno",
     "deviceDisconnectedFor": "Prekinjeno {duration}",
     "deviceControls": "Kontrolniki",
-    "homeBackgroundLine": "Tudi: {items}"
+    "homeBackgroundLine": "Tudi: {items}",
+    "deviceOnboardingPressButtonTitle": "Pritisni gumb na Omiju",
+    "deviceOnboardingPressButtonSubtitle": "En kratek pritisk. Nato vprašaj karkoli.",
+    "deviceOnboardingAskNowTitle": "Zastavi vprašanje",
+    "deviceOnboardingAskNowSubtitle": "Povej na glas. Omi posluša.",
+    "deviceOnboardingPressAgainHint": "Končano? Pritisni gumb še enkrat za pošiljanje.",
+    "trialUpsellTitle": "Dobil si {days} dni brezplačno",
+    "trialUpsellBody": "{days} dni Omi Pro na naš račun. Opomnimo te pred plačilom. Prekliči kadarkoli.",
+    "trialUpsellClaim": "Vzemi {days}-dnevni preizkus",
+    "settingsUpgradeTrialSubtitle": "Začni {days}-dnevni brezplačni preizkus",
+    "pairingPowerOnTitle": "Vklopi Omi",
+    "pairingPowerOnSubtitle": "Enkrat pritisni gumb in ga imej blizu telefona.",
+    "walkthroughBackgroundRecordingNote": "To je to. Omi bo še naprej snemal tvoje pogovore v ozadju.",
+    "noThanks": "Ne, hvala",
+    "recapInTheBackground": "V ozadju",
+    "retentionOfferAccept": "Ostani s {percent} % popustom",
+    "retentionOfferBody": "Ostanite in plačujte {price} na mesec naslednje {months} mesece.",
+    "retentionOfferApplied": "Končano. {percent} % popusta naslednje {months} mesece."
 }

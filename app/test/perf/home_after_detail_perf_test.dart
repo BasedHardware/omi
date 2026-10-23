@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/folder.dart';
@@ -24,7 +25,6 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart' show ConversationDetailPage;
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/conversations/widgets/background_day_line.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -44,6 +44,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -235,11 +236,12 @@ ServerConversation _conversation(int i, {int segmentCount = 0, String? salience}
   final created = _seedNow.subtract(Duration(hours: 3 * i));
   return ServerConversation(
     id: 'conv-$i',
+    speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
     createdAt: created,
     startedAt: created,
     finishedAt: created.add(const Duration(minutes: 22)),
     structured: Structured('Conversation $i', 'Overview $i.', emoji: '🧠', category: 'other', salience: salience),
-    transcriptSegments: [for (var j = 0; j < segmentCount; j++) _segment(j)],
+    transcriptSegments: [for (var j = 0; j < segmentCount; j++) _segment(j)..isUser = salience != 'background'],
   );
 }
 
@@ -431,28 +433,30 @@ void main() {
     VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 500);
   });
 
-  testWidgets('background conversations fold into one line under their day and open on tap', (tester) async {
+  testWidgets('a conversation the person just ended shows as a processing row under the live row', (tester) async {
+    final home = await _pumpHome(tester);
+    home.conversations.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    await tester.pump();
+    final row = find.byKey(const Key('home_processing_row'));
+    expect(row, findsOneWidget);
+    expect(find.descendant(of: row, matching: find.text('Processing…')), findsOneWidget);
+    expect(tester.getTopLeft(row).dy, greaterThan(tester.getTopLeft(find.byType(LiveEpisodeRow)).dy));
+    expect(tester.getTopLeft(row).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('conv-0'))).dy));
+    // The server's row replaces it, then the finished conversation takes its own row.
+    home.conversations.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+    await tester.pump();
+    expect(find.byKey(const Key('home_processing_row')), findsNothing);
+    await _drainAndUnmount(tester);
+  });
+
+  testWidgets('background conversations leave Home for the daily recap, with no line or toggle', (tester) async {
     // Today holds conv-0 (12:30), conv-1 (09:30), conv-2 (06:30) and conv-3 (03:30).
     await _pumpHome(tester, background: {1, 2});
-    expect(find.byType(BackgroundDayLine), findsOneWidget);
-    final line = tester.widget<Text>(find.descendant(of: find.byType(BackgroundDayLine), matching: find.byType(Text)));
-    // Two short transcript lines each, under a minute, so no length.
-    expect(line.data, 'Also: Conversation 1 · Conversation 2');
     expect(find.byKey(const ValueKey('conv-1')), findsNothing);
+    expect(find.byKey(const ValueKey('conv-2')), findsNothing);
     expect(find.byKey(const ValueKey('conv-0')), findsOneWidget);
-    // The line sits under today's header, below the live episode row.
-    expect(tester.getTopLeft(find.byType(BackgroundDayLine)).dy,
-        greaterThan(tester.getTopLeft(find.byType(LiveEpisodeRow)).dy));
-    expect(tester.getTopLeft(find.byType(BackgroundDayLine)).dy,
-        lessThan(tester.getTopLeft(find.byKey(const ValueKey('conv-0'))).dy));
-
-    await tester.tap(find.byType(BackgroundDayLine));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('conv-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('conv-2')), findsOneWidget);
-    await tester.tap(find.byType(BackgroundDayLine));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('conv-1')), findsNothing);
+    expect(find.byKey(const ValueKey('conv-3')), findsOneWidget);
+    expect(find.textContaining('Also:'), findsNothing);
     await _drainAndUnmount(tester);
   });
 

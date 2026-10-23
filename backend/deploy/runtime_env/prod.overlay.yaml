@@ -545,7 +545,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '25'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -859,7 +859,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '25'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1208,7 +1208,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '25'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1494,7 +1494,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '25'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'

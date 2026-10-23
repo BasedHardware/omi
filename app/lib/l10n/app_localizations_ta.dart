@@ -4458,6 +4458,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get continueText => 'தொடரவும்';
 
   @override
+  String get checkoutExistingSubscription =>
+      'உங்களிடம் ஏற்கனவே சந்தா உள்ளது. புதியதைத் தொடங்குவதற்குப் பதிலாக தற்போதைய சந்தாவை நிர்வகிக்கவும்.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.';
 
   @override
@@ -14584,5 +14588,71 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'மேலும்: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'உங்கள் Omi பொத்தானை அழுத்துங்கள்';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'ஒரு சிறு அழுத்தம். பிறகு எதையும் கேளுங்கள்.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'உங்கள் கேள்வியைக் கேளுங்கள்';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'சத்தமாகச் சொல்லுங்கள். Omi கேட்கிறது.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'முடிந்ததா? அனுப்ப மீண்டும் பொத்தானை அழுத்துங்கள்.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'உங்களுக்கு $days நாள் இலவசம்';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days நாள் Omi Pro எங்கள் செலவில். கட்டணத்திற்கு முன் நினைவூட்டுவோம். எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days நாள் சோதனையைப் பெறுங்கள்';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '$days நாள் இலவச சோதனையைத் தொடங்குங்கள்';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'உங்கள் Omi-ஐ ஆன் செய்யுங்கள்';
+
+  @override
+  String get pairingPowerOnSubtitle => 'பொத்தானை ஒருமுறை அழுத்தி, ஃபோனுக்கு அருகில் வைத்திருங்கள்.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'அவ்வளவுதான். Omi பின்னணியில் உங்கள் உரையாடல்களைப் பதிவு செய்து கொண்டே இருக்கும்.';
+
+  @override
+  String get noThanks => 'வேண்டாம், நன்றி';
+
+  @override
+  String get recapInTheBackground => 'பின்னணியில்';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% தள்ளுபடியுடன் தொடருங்கள்';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'தொடருங்கள், மாதம் $price செலுத்துங்கள், அடுத்த $months மாதங்களுக்கு.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'முடிந்தது. $percent% தள்ளுபடி, அடுத்த $months மாதங்களுக்கு.';
   }
 }

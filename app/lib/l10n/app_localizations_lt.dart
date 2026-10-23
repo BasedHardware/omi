@@ -4421,6 +4421,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get continueText => 'Tęsti';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Jau turite prenumeratą. Užuot pradėję naują, tvarkykite esamą prenumeratą.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Norėdami pakeisti planą, pirmiausia užsiprenumeruokite iš naujo.';
 
   @override
@@ -14510,5 +14514,70 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return 'Taip pat: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Paspauskite Omi mygtuką';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Vienas trumpas paspaudimas. Tada klauskite bet ko.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Užduokite klausimą';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Pasakykite garsiai. Omi klauso.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Baigėte? Paspauskite mygtuką dar kartą, kad išsiųstumėte.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Gavote $days dienas nemokamai';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dienos Omi Pro mūsų sąskaita. Priminsime prieš nuskaitymą. Atšaukite bet kada.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Gauti $days dienų bandymą';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Pradėkite $days dienų nemokamą bandymą';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Įjunkite Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Paspauskite mygtuką vieną kartą ir laikykite prie telefono.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Tiek. Omi toliau įrašinės jūsų pokalbius fone.';
+
+  @override
+  String get noThanks => 'Ne, ačiū';
+
+  @override
+  String get recapInTheBackground => 'Fone';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Likti su $percent% nuolaida';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Likite ir mokėkite $price per mėnesį ateinančius $months mėnesius.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Atlikta. $percent% nuolaida ateinančius $months mėnesius.';
   }
 }

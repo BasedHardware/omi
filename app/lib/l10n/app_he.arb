@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "כבר יש לך מנוי. אפשר לנהל את המנוי הקיים במקום להתחיל מנוי חדש.",
     "resubscribeFirstToChangePlans": "הירשמו מחדש קודם כדי לשנות תוכנית.",
     "resubscribe": "הירשם מחדש",
     "@resubscribe": {
@@ -11833,5 +11834,22 @@
     "deviceRecently": "לאחרונה",
     "deviceDisconnectedFor": "מנותק למשך {duration}",
     "deviceControls": "פקדים",
-    "homeBackgroundLine": "גם: {items}"
+    "homeBackgroundLine": "גם: {items}",
+    "deviceOnboardingPressButtonTitle": "לחץ על הכפתור ב‑Omi",
+    "deviceOnboardingPressButtonSubtitle": "לחיצה קצרה אחת. ואז שאל מה שתרצה.",
+    "deviceOnboardingAskNowTitle": "שאל את השאלה שלך",
+    "deviceOnboardingAskNowSubtitle": "אמור זאת בקול. Omi מקשיב.",
+    "deviceOnboardingPressAgainHint": "סיימת? לחץ שוב על הכפתור כדי לשלוח.",
+    "trialUpsellTitle": "שודרגת ל‑{days} ימים חינם",
+    "trialUpsellBody": "{days} ימים של Omi Pro עלינו. נזכיר לך לפני כל חיוב. ביטול בכל עת.",
+    "trialUpsellClaim": "קבל ניסיון של {days} ימים",
+    "settingsUpgradeTrialSubtitle": "התחל ניסיון חינם של {days} ימים",
+    "pairingPowerOnTitle": "הפעל את ה‑Omi",
+    "pairingPowerOnSubtitle": "לחץ פעם אחת על הכפתור והשאר אותו קרוב לטלפון.",
+    "walkthroughBackgroundRecordingNote": "זהו. Omi ימשיך להקליט את השיחות שלך ברקע.",
+    "noThanks": "לא, תודה",
+    "recapInTheBackground": "ברקע",
+    "retentionOfferAccept": "הישארו עם {percent}% הנחה",
+    "retentionOfferBody": "הישארו ושלמו {price} לחודש ב-{months} החודשים הבאים.",
+    "retentionOfferApplied": "בוצע. {percent}% הנחה ב-{months} החודשים הבאים."
 }

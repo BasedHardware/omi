@@ -4349,6 +4349,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get continueText => '继续';
 
   @override
+  String get checkoutExistingSubscription => '您已有订阅。请管理现有订阅，而不要开始新的订阅。';
+
+  @override
   String get resubscribeFirstToChangePlans => '请先重新订阅再更改套餐。';
 
   @override
@@ -14262,5 +14265,70 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String homeBackgroundLine(String items) {
     return '另外：$items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => '按一下 Omi 上的按钮';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => '短按一下，然后随便问。';
+
+  @override
+  String get deviceOnboardingAskNowTitle => '说出你的问题';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => '大声说出来，Omi 正在听。';
+
+  @override
+  String get deviceOnboardingPressAgainHint => '说完了？再按一下按钮发送。';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return '已升级为 $days 天免费';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return 'Omi Pro 免费 $days 天。扣费前会提醒你。随时可取消。';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '领取 $days 天试用';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '开始 $days 天免费试用';
+  }
+
+  @override
+  String get pairingPowerOnTitle => '打开 Omi 电源';
+
+  @override
+  String get pairingPowerOnSubtitle => '按一下按钮，并放在手机附近。';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => '就这样。Omi 会在后台继续记录你的对话。';
+
+  @override
+  String get noThanks => '不用了，谢谢';
+
+  @override
+  String get recapInTheBackground => '背景中';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '享受 $percent% 折扣继续使用';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return '继续使用，每月只需 $price，持续 $months 个月。';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return '完成。$percent% 折扣，持续 $months 个月。';
   }
 }

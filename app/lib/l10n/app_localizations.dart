@@ -8433,6 +8433,12 @@ abstract class AppLocalizations {
   /// **'Continue'**
   String get continueText;
 
+  /// Checkout is blocked because an existing subscription must be managed, not purchased a second time. Not the pending-cancellation upgrade error.
+  ///
+  /// In en, this message translates to:
+  /// **'You already have a subscription. Manage your current subscription instead of starting a new one.'**
+  String get checkoutExistingSubscription;
+
   /// Why another price is refused while cancellation is pending
   ///
   /// In en, this message translates to:
@@ -25634,6 +25640,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Also: {items}'**
   String homeBackgroundLine(String items);
+
+  /// Device walkthrough, Ask Omi step: PressButtonTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button on your Omi'**
+  String get deviceOnboardingPressButtonTitle;
+
+  /// Device walkthrough, Ask Omi step: PressButtonSubtitle
+  ///
+  /// In en, this message translates to:
+  /// **'One short press. Then ask anything.'**
+  String get deviceOnboardingPressButtonSubtitle;
+
+  /// Device walkthrough, Ask Omi step: AskNowTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Ask your question'**
+  String get deviceOnboardingAskNowTitle;
+
+  /// Device walkthrough, Ask Omi step: AskNowSubtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Say it out loud. Omi is listening.'**
+  String get deviceOnboardingAskNowSubtitle;
+
+  /// Device walkthrough, Ask Omi step: PressAgainHint
+  ///
+  /// In en, this message translates to:
+  /// **'Done? Press the button again to send.'**
+  String get deviceOnboardingPressAgainHint;
+
+  /// Pocket onboarding arm: trialUpsellTitle
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ve been upgraded to {days} days free'**
+  String trialUpsellTitle(int days);
+
+  /// Pocket onboarding arm: trialUpsellBody
+  ///
+  /// In en, this message translates to:
+  /// **'{days} days of Omi Pro, on us. We\'ll remind you before anything is charged. Cancel anytime.'**
+  String trialUpsellBody(int days);
+
+  /// Pocket onboarding arm: trialUpsellClaim
+  ///
+  /// In en, this message translates to:
+  /// **'Claim my {days}-day trial'**
+  String trialUpsellClaim(int days);
+
+  /// Pocket onboarding arm: settingsUpgradeTrialSubtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Start your {days}-day free trial'**
+  String settingsUpgradeTrialSubtitle(int days);
+
+  /// Pocket onboarding arm: pairingPowerOnTitle
+  ///
+  /// In en, this message translates to:
+  /// **'Power on your Omi'**
+  String get pairingPowerOnTitle;
+
+  /// Pocket onboarding arm: pairingPowerOnSubtitle
+  ///
+  /// In en, this message translates to:
+  /// **'Press the button once and keep it near your phone.'**
+  String get pairingPowerOnSubtitle;
+
+  /// Pocket onboarding arm: walkthroughBackgroundRecordingNote
+  ///
+  /// In en, this message translates to:
+  /// **'That\'s it. Omi will keep recording your conversations in the background.'**
+  String get walkthroughBackgroundRecordingNote;
+
+  /// Pocket onboarding arm: noThanks
+  ///
+  /// In en, this message translates to:
+  /// **'No thanks'**
+  String get noThanks;
+
+  /// Daily recap section listing the day's background conversations, which Home no longer shows
+  ///
+  /// In en, this message translates to:
+  /// **'In the background'**
+  String get recapInTheBackground;
+
+  /// Primary button on the last cancel step: keep the subscription with a discount
+  ///
+  /// In en, this message translates to:
+  /// **'Stay for {percent}% off'**
+  String retentionOfferAccept(int percent);
+
+  /// Offer shown on the last cancel step; price is the discounted monthly price
+  ///
+  /// In en, this message translates to:
+  /// **'Stay and pay {price} a month for the next {months} months.'**
+  String retentionOfferBody(String price, int months);
+
+  /// Toast after accepting the stay offer
+  ///
+  /// In en, this message translates to:
+  /// **'Done. {percent}% off your next {months} months.'**
+  String retentionOfferApplied(int percent, int months);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

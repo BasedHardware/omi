@@ -322,6 +322,9 @@ void main() {
       SettingsDestination.helpGroup,
       // Hidden for now (PhoneCallsFeature.visible); the destination stays wired for when it returns.
       if (!PhoneCallsFeature.visible) SettingsDestination.phoneCalls,
+      // Shown on the sheet only to trial-eligible free readers (settings_upgrade_row_test.dart covers
+      // both states); this walk runs without a subscription, so the row is absent here.
+      SettingsDestination.upgrade,
     };
     expect(covered, SettingsDestination.values.toSet(), reason: 'a destination is missing from this walk');
 

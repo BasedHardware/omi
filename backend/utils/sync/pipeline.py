@@ -155,7 +155,7 @@ from utils.stt.pre_recorded import (
     postprocess_words,
     prerecorded,
 )
-from utils.sync import empty_recovery, minimal_redrive
+from utils.sync import empty_recovery, empty_success_guard, minimal_redrive
 from utils.sync.empty_recovery_intent import dispatch_once as dispatch_empty_recovery_once
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -416,6 +416,14 @@ def _record_sync_segment_failure(
     exception: BaseException | str | None = None,
     attempt_ref: str | None = None,
 ) -> None:
+    if job_id and failure.outcome.value in empty_success_guard.PROVIDER_CLASS_OUTCOMES:
+        # Durable per-job provider-failure evidence for the empty-success guard:
+        # survives Cloud Tasks redelivery onto another instance. Best effort —
+        # the failure recording itself must never depend on the marker.
+        try:
+            try_mark_once(job_id, empty_success_guard.PRIOR_PROVIDER_FAILURE_TAG)
+        except Exception:
+            logger.warning('event=sync_transcription_metric outcome=marker_failed kind=prior_provider_failure')
     if record_metric:
         _record_sync_segment_outcome(
             failure.outcome,
@@ -1029,14 +1037,14 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
     if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
-        canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
         if context is not None:
+            canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
             # The outbox transfers custody atomically before acknowledging this donor.
             context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
             return
-        if canonical:
-            conversation_id = canonical
-            conversation_data = conversations_db.get_conversation(uid, canonical)
+        conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        if conversation_data:
+            conversation_id = conversation_data['id']
     if not conversation_data or conversation_data.get('deleted'):
         if context is not None:
             if conversation_data and conversation_data.get('deleted'):
@@ -1605,6 +1613,12 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                         language = user_language if (single_language_mode and user_language) else recovered_language
                         recovered_via_retry = True
                         break
+                held, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
+                if held:
+                    # Speech-positive audio that a degraded provider chain returned
+                    # empty stays retryable; completing it as silence is the
+                    # provider-failure-ends-as-success class (2026-10-23 soak).
+                    raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
                 _record_empty_segment_as_silence(
                     provider=provider,
                     model=model,
@@ -1621,6 +1635,11 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         # refactor: superseded by utils.stt.transcript_admission when MEDIA_NOISE_MODE=serve
         transcript_segments = admit_segments(uid, transcript_segments, origin='sync')
         if not transcript_segments:
+            held_after_admission, _guard_reason = empty_success_guard.settle(path, provider=provider, job_id=job_id)
+            if held_after_admission:
+                # Admission discarded every word on speech-positive audio after a
+                # degraded chain; completing as silence hides the same loss.
+                raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
             _record_empty_segment_as_silence(
                 provider=provider,
                 model=model,

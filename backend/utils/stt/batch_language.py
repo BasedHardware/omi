@@ -23,6 +23,7 @@ from config.prerecorded_language import (
 )
 from config.stt_provider_policy import MODULATE_SUPPORTED_LANGUAGES, normalized_stt_language
 from utils.stt import language_gate
+from utils.stt.prerecorded_health import CREDIT_AUTH, PROVIDER_ERROR, note_provider_failure
 from utils.stt.vendor_guard import (
     ENDPOINT_LID,
     breaker_allows,
@@ -143,6 +144,7 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             or not 0 <= confidence <= 1
         ):
             outcome = 'invalid_response'
+            note_provider_failure('modulate', PROVIDER_ERROR)
             return decision
         decision = LanguageDecision(code.lower(), float(confidence), 'audio_lid', seconds)
         return decision
@@ -152,6 +154,9 @@ def detect(audio: bytes, *, before_probe=None, **audio_options) -> LanguageDecis
             record_breaker_quota_error(ENDPOINT_LID)
         elif sent:
             record_breaker_other_failure(ENDPOINT_LID)
+        # Observability only; the routing decision above is unchanged. A failed
+        # probe is the degradation the sync empty-success guard needs to see.
+        note_provider_failure('modulate', CREDIT_AUTH if outcome == 'quota' else PROVIDER_ERROR)
         return decision
     finally:
         try:

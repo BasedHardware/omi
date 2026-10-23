@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "У вас ужо ёсць падпіска. Замест новай падпіскі кіруйце бягучай.",
     "resubscribeFirstToChangePlans": "Спачатку падпішыцеся зноў, каб змяніць план.",
     "resubscribe": "Падпішыцеся яшчэ раз",
     "@resubscribe": {
@@ -11833,5 +11834,22 @@
     "deviceRecently": "Нядаўна",
     "deviceDisconnectedFor": "Адключаны на {duration}",
     "deviceControls": "Кіраванне",
-    "homeBackgroundLine": "Таксама: {items}"
+    "homeBackgroundLine": "Таксама: {items}",
+    "deviceOnboardingPressButtonTitle": "Націсніце кнопку на Omi",
+    "deviceOnboardingPressButtonSubtitle": "Адзін кароткі націск. Потым спытайце што заўгодна.",
+    "deviceOnboardingAskNowTitle": "Задайце пытанне",
+    "deviceOnboardingAskNowSubtitle": "Скажыце ўслых. Omi слухае.",
+    "deviceOnboardingPressAgainHint": "Гатова? Націсніце кнопку яшчэ раз, каб адправіць.",
+    "trialUpsellTitle": "Вам падоўжылі бясплатны перыяд да {days} дзён",
+    "trialUpsellBody": "{days} дзён Omi Pro за наш кошт. Нагадаем перад спісаннем. Адмяніць можна ў любы момант.",
+    "trialUpsellClaim": "Атрымаць {days} дзён пробна",
+    "settingsUpgradeTrialSubtitle": "Пачніце бясплатны перыяд на {days} дзён",
+    "pairingPowerOnTitle": "Уключыце Omi",
+    "pairingPowerOnSubtitle": "Націсніце кнопку адзін раз і трымайце побач з тэлефонам.",
+    "walkthroughBackgroundRecordingNote": "Гатова. Omi будзе запісваць вашы размовы ў фоне.",
+    "noThanks": "Не, дзякуй",
+    "recapInTheBackground": "У фоне",
+    "retentionOfferAccept": "Застацца са зніжкай {percent}%",
+    "retentionOfferBody": "Застаньцеся і плаціце {price} у месяц на працягу {months} месяцаў.",
+    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы."
 }
