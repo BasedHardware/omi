@@ -20,21 +20,39 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Iterator
 
 from prometheus_client import Counter
 
 from config.batch_pipeline import LONG_SPEECH_HANDOFF_SECONDS
 from config.refactor_switches import default_on as rollout_default_on
 from utils.stt.outcomes import bounded_provider
-from utils.stt.prerecorded_health import CREDIT_AUTH, PROVIDER_ERROR, recent_provider_failure
-from utils.stt.vendor_guard import (
-    ENDPOINT_LID,
-    ENDPOINT_STT,
-    breaker_budget_exhausted,
-    quota_failures_in_window,
-)
 
 logger = logging.getLogger(__name__)
+
+# Vocabulary shared with utils.stt.prerecorded_health (imported lazily so the
+# sync pipeline stays importable under the router isolation harness, where
+# utils.stt is a non-package stub).
+CREDIT_AUTH = 'credit_auth'
+PROVIDER_ERROR = 'provider_error'
+
+# A Cloud Tasks redelivery proves a prior attempt failed somewhere — often the
+# provider error this guard exists for — on an instance whose in-memory state
+# this one cannot see. Durable per-unit degradation evidence.
+_prior_failed_attempt: ContextVar[bool] = ContextVar('sync_prior_failed_attempt', default=False)
+
+
+@contextmanager
+def prior_failed_attempt(value: bool) -> Iterator[None]:
+    """Mark this coordinator attempt as a redelivery of a failed attempt."""
+    token = _prior_failed_attempt.set(bool(value))
+    try:
+        yield
+    finally:
+        _prior_failed_attempt.reset(token)
+
 
 GUARD_TOTAL = Counter(
     'omi_sync_empty_success_guard_total',
@@ -71,12 +89,22 @@ def enabled() -> bool:
 
 
 def chain_degradation() -> str | None:
-    """The strongest in-window degradation signal from this process's vendor chain.
+    """The strongest degradation signal for this unit's chain.
 
     Credit/auth outranks a generic provider error: an out-of-credits refusal is
     deterministic until the account is funded, and both the vendor guard's
-    recorded refusals and the adapters' typed budget failures carry it.
+    recorded refusals and the adapters' typed budget failures carry it. A Cloud
+    Tasks redelivery follows: the prior attempt failed somewhere — possibly on
+    another instance whose failure state left no trace here.
     """
+    from utils.stt.prerecorded_health import recent_provider_failure
+    from utils.stt.vendor_guard import (
+        ENDPOINT_LID,
+        ENDPOINT_STT,
+        breaker_budget_exhausted,
+        quota_failures_in_window,
+    )
+
     if (
         breaker_budget_exhausted(ENDPOINT_STT)
         or breaker_budget_exhausted(ENDPOINT_LID)
@@ -84,6 +112,8 @@ def chain_degradation() -> str | None:
         or quota_failures_in_window(ENDPOINT_LID)
     ):
         return CREDIT_AUTH
+    if _prior_failed_attempt.get():
+        return PROVIDER_ERROR
     return recent_provider_failure()
 
 

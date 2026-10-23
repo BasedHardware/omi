@@ -215,6 +215,7 @@ from utils.sync.capture_manifest import (
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
 from utils.sync import backfill_cutover, legacy_dark, legacy_fresh, stage as sync_stage, uid_sequencer
 from config.sync_owner_concurrency import preparation_width
+from utils.sync import empty_success_guard
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
@@ -3332,7 +3333,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             # The in-request budget (see _run_sync_job_body) wraps this whole
             # attempt; on expiry the coordinator is cancelled like a lease loss
             # and the wrapper preserves the run lock for the redelivery.
-            with historical_scan_memo_scope(uid):
+            with historical_scan_memo_scope(uid), empty_success_guard.prior_failed_attempt(task_retry_count > 0):
                 await _run_full_pipeline_background_async(
                     job_id,
                     uid,

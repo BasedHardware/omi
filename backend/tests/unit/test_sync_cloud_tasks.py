@@ -1203,9 +1203,11 @@ def _load_sync_router_for_fast_path():
     from pydantic import BaseModel
     from database.sync_jobs import SyncLedgerFenceMode
     from utils.stt import outcomes as actual_outcomes
+    from utils.stt import prerecorded_health as actual_prerecorded_health
     from utils.stt import speaker_match as actual_speaker_match
     from utils.stt import speaker_identity as actual_speaker_identity
     from utils.stt import transcript_admission as actual_transcript_admission
+    from utils.stt import vendor_guard as actual_vendor_guard
     from utils import manual_speaker_assignments as actual_manual_assignments
     from utils.sync import lanes as actual_sync_lanes, rate_limit as actual_rl
     from utils import capture_evidence as actual_capture_evidence
@@ -1465,6 +1467,13 @@ def _load_sync_router_for_fast_path():
     )
     sys.modules['utils.conversation_shape'] = shape_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
+    # Keep the empty-success guard's vendor-state reads real (stdlib+prometheus
+    # only): the guard resolves them lazily at call time, and a MagicMock
+    # parent for utils.stt is not a package.
+    saved_modules['utils.stt.prerecorded_health'] = sys.modules.get('utils.stt.prerecorded_health')
+    saved_modules['utils.stt.vendor_guard'] = sys.modules.get('utils.stt.vendor_guard')
+    sys.modules['utils.stt.prerecorded_health'] = actual_prerecorded_health
+    sys.modules['utils.stt.vendor_guard'] = actual_vendor_guard
     # Keep the decision policy real (pure, dependency-free): the sync pipeline now
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
     # decision whose fields blow up the %.3f log formatting even on an empty match set.

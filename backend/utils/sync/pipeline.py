@@ -1627,6 +1627,11 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         # refactor: superseded by utils.stt.transcript_admission when MEDIA_NOISE_MODE=serve
         transcript_segments = admit_segments(uid, transcript_segments, origin='sync')
         if not transcript_segments:
+            held_after_admission, _guard_reason = empty_success_guard.settle(path, provider=provider)
+            if held_after_admission:
+                # Admission discarded every word on speech-positive audio after a
+                # degraded chain; completing as silence hides the same loss.
+                raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
             _record_empty_segment_as_silence(
                 provider=provider,
                 model=model,

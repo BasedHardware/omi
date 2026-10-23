@@ -62,6 +62,34 @@ def test_credit_auth_failure_holds_speech_positive_segment(tmp_path, monkeypatch
     assert (held, reason) == (True, empty_success_guard.HELD_CREDIT_AUTH)
 
 
+def test_prior_failed_attempt_holds_across_instances(tmp_path, monkeypatch):
+    """A Cloud Tasks redelivery is durable degradation evidence when this
+    instance has no in-memory failure state of its own."""
+    path = _speech(tmp_path, monkeypatch)
+    with empty_success_guard.prior_failed_attempt(True):
+        held, reason = settle(path, provider='modulate')
+    assert (held, reason) == (True, empty_success_guard.HELD_PROVIDER_ERROR)
+    # Outside the redelivery scope the same clean chain stays unchanged.
+    held, reason = settle(path, provider='modulate')
+    assert (held, reason) == (False, empty_success_guard.SPEECH_POSITIVE_HEALTHY_CHAIN)
+
+
+def test_failed_lid_probe_notes_provider_health(monkeypatch, tmp_path):
+    """A transport-failed LID probe leaves the degradation marker the guard reads."""
+    import httpx
+
+    import utils.stt.batch_language as batch_language
+
+    def refuse_post(*args, **kwargs):
+        raise httpx.ConnectError('transport refused')
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'test-key')
+    monkeypatch.setattr(httpx.Client, 'post', refuse_post)
+    decision = batch_language.detect(_wav(tmp_path / 'probe.wav', seconds=2))
+    assert decision.evidence == 'unavailable'
+    assert prerecorded_health.recent_provider_failure() == 'provider_error'
+
+
 def test_healthy_chain_speech_positive_unchanged(tmp_path, monkeypatch):
     """A healthy chain keeps today's behavior, counted for the lead's follow-up."""
     path = _speech(tmp_path, monkeypatch)
@@ -107,9 +135,15 @@ def test_health_window_expires(tmp_path, monkeypatch):
 
 
 def test_pipeline_holds_before_silence_record():
-    """The guard sits at the double-empty silence decision, raising the existing outcome."""
+    """Both silence decisions (double-empty and post-admission) hold, never launder."""
     source = Path(_PIPELINE).read_text(encoding='utf-8')
-    guard_call = source.index('empty_success_guard.settle(path, provider=provider)')
-    raise_between = source.index('raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED', guard_call)
-    silence_call = source.index('_record_empty_segment_as_silence(', raise_between)
-    assert guard_call < raise_between < silence_call
+    silence_calls = [i for i in range(len(source)) if source.startswith('_record_empty_segment_as_silence(', i)]
+    assert len(silence_calls) >= 3  # definition site plus the two call sites
+    guard_calls = [
+        i for i in range(len(source)) if source.startswith('empty_success_guard.settle(path, provider=provider)', i)
+    ]
+    assert len(guard_calls) == 2
+    for guard_call in guard_calls:
+        raise_between = source.index('raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED', guard_call)
+        silence_call = source.index('_record_empty_segment_as_silence(', raise_between)
+        assert guard_call < raise_between < silence_call
