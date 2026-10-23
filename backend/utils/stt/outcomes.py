@@ -159,6 +159,12 @@ def sync_failure_from_exception(error: BaseException, *, provider: str | None = 
         failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider, retryable=True)
         failure.error_code = 'destructive_operation_in_progress'
         return failure
+    from database._client import is_document_size_limit_error
+
+    if is_document_size_limit_error(error):
+        failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider, retryable=False)
+        failure.error_code = 'sync_persistence_failed'
+        return failure
     return failure_from_exception(error, provider=provider)
 
 

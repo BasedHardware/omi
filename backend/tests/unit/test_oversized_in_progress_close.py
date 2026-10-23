@@ -240,3 +240,148 @@ def test_typed_firestore_exceptions_are_classified_by_contract_not_type():
     # generation the same payload can land on.
     assert not is_permanent_firestore_write_rejection(NotFound('no such document'))
     assert not is_permanent_firestore_write_rejection(AlreadyExists('already exists'))
+
+
+def test_dead_letter_terminal_falls_back_to_status_only_at_the_ceiling():
+    from database.conversation_terminal_title import dead_letter_conversation_updates
+
+    row = _at_ceiling(status='processing')
+    ref = _Ref(_Snapshot(row, _NOW))
+    updates = dead_letter_conversation_updates('uid-1', row, ref, _Transaction(), 'document_size_limit', None)
+    assert updates == {'status': 'completed'}
+
+
+def test_summary_delivery_refuses_oversized_conversation_and_sync_failure_is_non_retryable():
+    from utils.conversations import summary_delivery
+    from utils.stt.outcomes import sync_failure_from_exception
+    from utils.sync.failure_reason import persistence_failure_fingerprint
+
+    row = _at_ceiling(
+        status='completed',
+        summary_title_provenance='server_minimum',
+        summary_output_present=False,
+    )
+    assert summary_delivery.refusal(row) == 'document_size_limit'
+
+    size_err = InvalidArgument(
+        "Document 'projects/p/databases/(default)/documents/users/uid-1/conversations/conv-1' cannot be "
+        'written because its size (1,048,684 bytes) exceeds the maximum allowed size of 1,048,576 bytes.'
+    )
+    assert persistence_failure_fingerprint(size_err, 'finalize') == 'persistence:document_size_limit'
+    failure = sync_failure_from_exception(size_err, provider='deepgram')
+    assert failure.retryable is False
+    assert failure.error_code == 'sync_persistence_failed'
+
+
+def test_enrichment_outbox_and_consumer_retire_oversized_conversation_obligation(monkeypatch):
+    from database.outbox import Claim, OutboxKind, Outcome
+    from utils.enrichment import consumer as consumer_mod
+    from utils.enrichment import outbox as outbox_mod
+    from utils.observability.reasons import ConsumerReason
+
+    size_err = InvalidArgument(
+        "Document 'projects/p/databases/(default)/documents/users/uid-1/conversations/conv-1' cannot be "
+        'written because its size (1,048,684 bytes) exceeds the maximum allowed size of 1,048,576 bytes.'
+    )
+
+    state = {
+        'document_id': 'doc-1',
+        'uid': 'uid-1',
+        'conversation_id': 'conv-1',
+        'language': 'en',
+        'version': 2,
+        'due_at': 100.0,
+        'task_due_at': 100.0,
+        'task_token': 'tok-1',
+        'lease_until': 0.0,
+        'summary_seen': True,
+    }
+
+    def fake_mutate(doc_id, op):
+        nonlocal state
+        state, result = op(state)
+        return result
+
+    monkeypatch.setattr(outbox_mod, '_mutate', fake_mutate)
+    monkeypatch.setattr('utils.conversations.demand_processing.admit', lambda *a, **kw: True)
+
+    def raise_size_limit(uid, cid, lang):
+        raise size_err
+
+    outcome = outbox_mod.run('doc-1', 'tok-1', raise_size_limit, now=200.0)
+    assert outcome == 'held'
+    assert state['held_reason'] == 'document_size_limit'
+
+    claim = Claim(
+        kind=OutboxKind.ENRICHMENT,
+        row_id='doc-1',
+        owner_id='uid-1',
+        wake_token='tok-1',
+        lease_token='lease-1',
+        lease_until=300.0,
+        attempt=1,
+        policy_id='enrichment_v1',
+        payload={'conversation_id': 'conv-1', 'language': 'en', 'summary_seen': True},
+    )
+    res = consumer_mod.EnrichmentConsumer(outbox=object(), process=raise_size_limit).process(claim, lambda: True)
+    assert res.outcome == Outcome.DISCARDED
+    assert res.reason == ConsumerReason.SUPERSEDED
+
+
+def test_durable_finalization_worker_dead_letters_oversized_conversation_immediately(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import conversation_finalization as worker
+    from utils.conversations.finalizer import ConversationFinalizationError
+
+    size_err = InvalidArgument(
+        "Document 'projects/p/databases/(default)/documents/users/uid-1/conversations/conv-1' cannot be "
+        'written because its size (1,048,684 bytes) exceeds the maximum allowed size of 1,048,576 bytes.'
+    )
+
+    monkeypatch.setattr('utils.conversations.demand_processing.admit', lambda *a, **kw: True)
+    monkeypatch.setattr(worker, 'try_acquire_job_run_lock', lambda *a, **kw: 'lock-1')
+    monkeypatch.setattr(worker, 'release_job_run_lock', lambda *a, **kw: None)
+    monkeypatch.setattr(
+        worker.jobs_db,
+        'claim_finalization_job',
+        lambda *a, **kw: {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 0},
+    )
+    monkeypatch.setattr(
+        worker.jobs_db,
+        'get_finalization_job',
+        lambda *a, **kw: {'uid': 'uid-1', 'conversation_id': 'conv-1', 'fanout_status': 'pending'},
+    )
+    monkeypatch.setattr(worker, 'should_skip_background_account_mutation', lambda *a, **kw: False)
+    closed = []
+    monkeypatch.setattr(
+        worker.lifecycle_service,
+        'close_oversized_in_progress_conversation',
+        lambda uid, cid, **kw: closed.append((uid, cid)) or 'not_in_progress',
+    )
+    dead_lettered = []
+    monkeypatch.setattr(
+        worker,
+        'final_attempt_failed',
+        lambda jid, gen, epoch, attempt, failure_code='final_attempt_failed': (
+            dead_lettered.append((jid, gen, epoch, attempt, failure_code)) or True
+        ),
+    )
+
+    async def fail_finalize(*a, **kw):
+        raise ConversationFinalizationError('boom') from size_err
+
+    monkeypatch.setattr(worker, 'finalize_persisted_conversation', fail_finalize)
+
+    app = FastAPI()
+    app.include_router(worker.router)
+    app.dependency_overrides[worker.verify_listen_finalization_cloud_tasks_oidc] = lambda: 0
+    with TestClient(app) as client:
+        resp = client.post(
+            '/v1/conversation-finalization-jobs/run',
+            json={'job_id': 'job-1', 'dispatch_generation': 1},
+        )
+    assert resp.status_code == 200
+    assert resp.json() == {'status': 'dead_letter'}
+    assert closed == [('uid-1', 'conv-1')]
+    assert dead_lettered == [('job-1', 1, 1, 1, 'document_size_limit')]

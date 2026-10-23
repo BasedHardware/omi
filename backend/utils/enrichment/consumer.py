@@ -87,6 +87,7 @@ class EnrichmentConsumer:
         from database._client import get_firestore_client
         from database.summary_processing import record_empty_failure
         from utils.conversations import summary_delivery
+        from utils.conversations.finalization_failure import classify_finalization_failure
         from utils.enrichment import outbox as rows
         from utils.enrichment.callback import SyncConversationPersistenceFenced
 
@@ -97,8 +98,14 @@ class EnrichmentConsumer:
         if row.get('effects_only'):
             from utils.conversations.lazy_enrichment import enrich_settled
 
-            with _beating(heartbeat, self.heartbeat_seconds, None) as lost:
-                enrich_settled(uid, conversation_id, language)
+            try:
+                with _beating(heartbeat, self.heartbeat_seconds, None) as lost:
+                    enrich_settled(uid, conversation_id, language)
+            except Exception as error:
+                if not classify_finalization_failure(error, conversation_id).conversation_at_size_limit:
+                    raise
+                logger.warning('event=sync_reprocess outcome=document_size_limit conversation=%s', conversation_id)
+                return Result(Outcome.DISCARDED, ConsumerReason.SUPERSEDED)
             if lost.is_set():
                 return Result(Outcome.STALE, ConsumerReason.STALE_TOKEN)
             return Result(Outcome.DONE, ConsumerReason.PROCESSED)
@@ -155,6 +162,11 @@ class EnrichmentConsumer:
             ):
                 return Result(Outcome.RETRY, RetryReason.CALLBACK_PENDING, available_at=now)
             empty_blocked = True
+        except Exception as error:
+            if not classify_finalization_failure(error, conversation_id).conversation_at_size_limit:
+                raise
+            logger.warning('event=sync_reprocess outcome=document_size_limit conversation=%s', conversation_id)
+            superseded, retry_revision = True, None
         finally:
             ADMITTED_OWNER.reset(tokens[4])
             summary_delivery.REPAIR_CONTEXT.reset(tokens[3])

@@ -15,8 +15,10 @@ from typing import Any, Mapping, cast
 
 from prometheus_client import Counter, Gauge, Histogram
 from config.summary_guarantee import deadline_seconds, enabled
+from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 
 Row = dict[str, Any]
+_SUMMARY_SIZE_HEADROOM_BYTES = 65_536
 
 RECEIPTS = Counter(
     'omi_summary_terminal_total', 'Fenced durable summary outcomes', ['lane', 'reason', 'structured_present']
@@ -135,6 +137,8 @@ def refusal(row: Row) -> str | None:
         return 'unknown_provenance'
     if row.get('finalization_job_id') or row.get('finalization_status') == 'blocked_byok':
         return 'generation_owned'
+    if estimate_firestore_document_bytes(row, None) + _SUMMARY_SIZE_HEADROOM_BYTES > FIRESTORE_MAX_DOCUMENT_BYTES:
+        return 'document_size_limit'
     return None
 
 

@@ -189,3 +189,41 @@ async def test_span_cap_accepts_all_persisted_timestamp_formats(monkeypatch, enc
     )
     assert controller._occasion_span_exceeded({'started_at': value})
     assert not controller._occasion_span_exceeded({'started_at': 'invalid'})
+
+
+@pytest.mark.anyio
+async def test_the_byte_size_and_segment_count_caps_stop_joining_and_roll_the_occasion_over(monkeypatch):
+    harness = CaptureHarness(monkeypatch)
+    first = await _open(harness, 'rec-a')
+    cid = first.host.state.current_conversation_id
+    row = harness.rows[cid]
+
+    # Segment-count cap triggers rollover even inside the 3-hour span window.
+    row['transcript_segments'] = [{'text': 'seg'}] * config.OCCASION_MAX_TRANSCRIPT_SEGMENTS
+    assert config.occasion_size_exceeded(row) is True
+    assert first._occasion_span_exceeded(row) is True
+    harness.now += timedelta(minutes=1)
+    second = await _open(harness, 'rec-b')
+    assert second.host.state.current_conversation_id != cid
+
+    # Byte-size cap triggers rollover when serialized payload reaches OCCASION_MAX_DOCUMENT_BYTES.
+    cid_b = second.host.state.current_conversation_id
+    row_b = harness.rows[cid_b]
+    row_b['transcript_segments'] = [{'text': 'x' * config.OCCASION_MAX_DOCUMENT_BYTES}]
+    assert config.occasion_size_exceeded(row_b) is True
+    assert second._occasion_span_exceeded(row_b) is True
+    harness.now += timedelta(minutes=1)
+    third = await _open(harness, 'rec-c')
+    assert third.host.state.current_conversation_id != cid_b
+
+
+@pytest.mark.anyio
+async def test_the_lifecycle_loop_rolls_a_size_capped_conversation_over_before_1mib(monkeypatch):
+    harness = CaptureHarness(monkeypatch)
+    controller = await _open(harness, 'rec-a', enabled=False)
+    cid = controller.host.state.current_conversation_id
+    harness.rows[cid]['transcript_segments'] = [{'text': 'x' * config.OCCASION_MAX_DOCUMENT_BYTES}]
+    controller.host.wait = AsyncMock(side_effect=[False, True])
+    await controller.lifecycle_loop()
+    assert controller.host.state.current_conversation_id != cid
+    assert harness.creates == 2

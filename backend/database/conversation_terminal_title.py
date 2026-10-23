@@ -169,17 +169,29 @@ def fit_document_limit(
     ``base_update`` is the terminal's own status write, which the caller has
     always committed. ``extras`` (title, retry marker) are optional growth: an
     oversized update aborts the whole transaction and would strand the row on
-    ``processing``, so they are dropped rather than risk that.
+    ``processing``, so they are dropped rather than risk that. When the row is
+    already so close to 1 MiB that optional fields in ``base_update`` would
+    also exceed the ceiling, fall back to the status-only write.
     """
-    combined = {**base_update, **extras}
-    if not extras:
-        return combined
-    after = {**conversation, **combined}
     path = getattr(conversation_ref, 'path', None)
-    estimated = estimate_firestore_document_bytes(after, path if isinstance(path, str) else None)
-    if estimated + TERMINAL_SIZE_HEADROOM_BYTES > FIRESTORE_MAX_DOCUMENT_BYTES:
-        return dict(base_update)
-    return combined
+    doc_path = path if isinstance(path, str) else None
+    combined = {**base_update, **extras}
+    if extras:
+        after = {**conversation, **combined}
+        if (
+            estimate_firestore_document_bytes(after, doc_path) + TERMINAL_SIZE_HEADROOM_BYTES
+            <= FIRESTORE_MAX_DOCUMENT_BYTES
+        ):
+            return combined
+    base = dict(base_update)
+    if len(base) > 1 and 'status' in base:
+        after_base = {**conversation, **base}
+        if (
+            estimate_firestore_document_bytes(after_base, doc_path) + TERMINAL_SIZE_HEADROOM_BYTES
+            > FIRESTORE_MAX_DOCUMENT_BYTES
+        ):
+            return {'status': base['status']}
+    return base
 
 
 def _has_described_photo(conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any) -> bool:

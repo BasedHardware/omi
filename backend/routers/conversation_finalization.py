@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import timedelta
 import logging
 import os
 from typing import Any
@@ -22,6 +23,7 @@ from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations import quiet_finalization
+from utils.conversations.finalization_failure import classify_finalization_failure
 from utils.conversations.processing_trigger import trigger_for_finalization_job
 from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
@@ -103,6 +105,57 @@ async def _retry_or_dead_letter(
     )
     LISTEN_FINALIZATION_RETRIES_TOTAL.inc()
     return False
+
+
+async def _terminalize_oversized_finalization_job(
+    job: dict[str, Any],
+    job_id: str,
+    dispatch_generation: int,
+    claimed_lease_epoch: int,
+    this_attempt: int,
+) -> JSONResponse:
+    """Close a durable finalization job whose conversation hit Firestore's 1 MiB ceiling."""
+    if job.get('fanout_status') == 'completed':
+        completed = await run_blocking(
+            db_executor,
+            jobs_db.mark_finalization_completed,
+            job_id,
+            dispatch_generation,
+            claimed_lease_epoch,
+        )
+        if not completed:
+            return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+        return JSONResponse(status_code=200, content={'status': 'done'})
+    try:
+        await run_blocking(
+            db_executor,
+            lifecycle_service.close_oversized_in_progress_conversation,
+            job['uid'],
+            job['conversation_id'],
+            quiet_for=timedelta(0),
+        )
+    except Exception:
+        logger.warning(
+            'listen finalization oversized in_progress close skipped job_hash=%s',
+            finalization_diagnostic_id(job_id),
+        )
+    terminal = await run_blocking(
+        db_executor,
+        final_attempt_failed,
+        job_id,
+        dispatch_generation,
+        claimed_lease_epoch,
+        this_attempt,
+        failure_code='document_size_limit',
+    )
+    if not terminal:
+        return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+    logger.warning(
+        'listen finalization document size limit terminal job_hash=%s dispatch_generation=%s',
+        finalization_diagnostic_id(job_id),
+        dispatch_generation,
+    )
+    return JSONResponse(status_code=200, content={'status': 'dead_letter'})
 
 
 @router.post('/v1/conversation-finalization-jobs/run', include_in_schema=False)
@@ -273,6 +326,17 @@ async def run_listen_finalization_job(
                 >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )
         except ConversationFinalizationError as error:
+            if (
+                error.__cause__ is not None
+                and classify_finalization_failure(error.__cause__, job['conversation_id']).conversation_at_size_limit
+            ):
+                return await _terminalize_oversized_finalization_job(
+                    job,
+                    job_id,
+                    dispatch_generation,
+                    claimed_lease_epoch,
+                    max(task_retry_count, failed_attempts) + 1,
+                )
             if recovery_minimum_terminal_enabled() and isinstance(error.__cause__, RecoveryStructureUnavailableError):
                 # A completed fanout wins even if its worker failed before
                 # acknowledging the job. The lease-fenced transaction also
@@ -352,6 +416,25 @@ async def run_listen_finalization_job(
         logger.warning('listen finalization handler cancelled job=%s; preserving run lock until TTL', job_id)
         raise
     except Exception as error:
+        if (
+            claimed_lease_epoch is not None
+            and job is not None
+            and isinstance(job.get('conversation_id'), str)
+            and classify_finalization_failure(error, job['conversation_id']).conversation_at_size_limit
+        ):
+            try:
+                return await _terminalize_oversized_finalization_job(
+                    job,
+                    job_id,
+                    dispatch_generation,
+                    claimed_lease_epoch,
+                    max(task_retry_count, failed_attempts) + 1,
+                )
+            except Exception:
+                logger.error(
+                    'listen finalization oversized terminal update failed job=%s',
+                    job_id,
+                )
         logger.warning(
             'listen finalization worker failed stage=handler exception_type=%s job_hash=%s dispatch_generation=%s',
             type(error).__name__,

@@ -1998,6 +1998,15 @@ def _reprocess_merged_conversations(
                 on_fenced()
             logger.info('event=sync_conversation_reprocess outcome=fenced conversation_id=%s', conversation_id)
         except Exception as e:
+            if _firestore_error_class(e) == 'document_size_limit' and _firestore_doc_kind(e) in (
+                'conversation',
+                'unknown',
+            ):
+                logger.warning(
+                    'event=sync_conversation_reprocess outcome=document_size_limit conversation_id=%s',
+                    conversation_id,
+                )
+                continue
             if coalescing or user_selected or is_destructive_operation_in_progress(e):
                 raise
             logger.error(f'sync: failed to reprocess merged conversation {conversation_id}: {e}')
