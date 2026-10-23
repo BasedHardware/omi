@@ -350,8 +350,10 @@ def clear_user_data(uid: str):
     # including when an erasure test already removed the root before teardown.
     user_path = ('users', uid)
     db._written_docs.difference_update({path for path in db._written_docs if path[:2] == user_path})
-    # Finalize-time erasure tests write this authority outside the user tree.
-    db.collection("account_deletions").document(uid).delete()
+    # Account erasure and memory deletion leave authorities outside the user
+    # tree. Neither may leak into the next live-account scenario.
+    for collection in ("account_deletions", "legal_hold_deletion_gates"):
+        db.collection(collection).document(uid).delete()
     # The maintenance inventory is deliberately outside the user document so
     # account cleanup must remove its content-free marker separately.
     try:
