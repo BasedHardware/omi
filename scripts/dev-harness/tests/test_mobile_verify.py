@@ -4,6 +4,7 @@ import argparse
 import json
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -376,6 +377,13 @@ def test_resolve_evidence_dir_absolute_is_unchanged(tmp_path: Path) -> None:
     assert mv.resolve_evidence_dir(str(target), cwd=Path("/does/not/matter")) == target
 
 
+def _redirect_tempdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep the default mkdtemp evidence dir inside tmp_path, apart from the cwd under test."""
+    temp_root = tmp_path / "tmp"
+    temp_root.mkdir()
+    monkeypatch.setattr(tempfile, "tempdir", str(temp_root))
+
+
 def test_fast_default_evidence_dir_is_a_temp_dir_not_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -386,6 +394,7 @@ def test_fast_default_evidence_dir_is_a_temp_dir_not_cwd(
     fail-closes as zero-execution even though all tests passed.
     """
     monkeypatch.chdir(tmp_path)
+    _redirect_tempdir(tmp_path, monkeypatch)
     monkeypatch.setenv("OMI_VERIFY_EVIDENCE_DIR", "")
     runner = _fake_runner(tmp_path, exit_code=0, receipt_factory="pass")
     code = mv.cmd_fast(REPO_ROOT, _fast_args(""), runner_path=runner)
@@ -438,6 +447,7 @@ def test_fast_bare_entrypoint_without_evidence_dir_flag_uses_temp_dir(
     `--evidence-dir`, no env override. argparse default is None, not "".
     """
     monkeypatch.chdir(tmp_path)
+    _redirect_tempdir(tmp_path, monkeypatch)
     monkeypatch.delenv("OMI_VERIFY_EVIDENCE_DIR", raising=False)
     runner = _fake_runner(tmp_path, exit_code=0, receipt_factory="pass")
     args = _fast_args(tmp_path, all=True, paths=[])

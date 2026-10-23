@@ -1,3 +1,0 @@
-{
-  "change": "Retry saved recordings after an upload refusal, and keep one rejected upload from blocking other audio"
-}
