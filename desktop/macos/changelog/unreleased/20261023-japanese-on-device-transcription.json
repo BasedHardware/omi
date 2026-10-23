@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Japanese meetings being transcribed in the wrong language: Japanese now uses an on-device Japanese model, and languages without an on-device model use cloud transcription"
-}
