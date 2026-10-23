@@ -13,4 +13,6 @@ def test_production_producers_and_workers_share_the_first_summary_deadline():
         env = hosts[name]['env']
         assert env['FIRST_SUMMARY_DEADLINE_ENABLED']['value'] == 'true', name
         assert env['FIRST_SUMMARY_DEADLINE_PERCENT']['value'] == '100', name
-    assert hosts['backend-sync']['env']['SUMMARY_DEBT_REPAIR_ENABLED']['value'] == 'true'
+    # Debt repair is held off in prod (deferred by David 2026-10-20; before this, every train had
+    # to restore it by hand). The overlay records the live value so deploys stop reverting it.
+    assert hosts['backend-sync']['env']['SUMMARY_DEBT_REPAIR_ENABLED']['value'] == 'false'

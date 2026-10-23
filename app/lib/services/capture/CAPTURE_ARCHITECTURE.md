@@ -10,6 +10,8 @@ Related documents:
 
 - `OWNERSHIP.md` — the C1 seam contract and injectable fakes.
 - `CAPTURE_POLICY.md` — the durable capture-policy (mute) admission contract.
+- `../../../docs/transcription-connectivity-recovery.md` — connectivity generations,
+  transcription settings and recording-preserving recovery checks.
 - `capture_session_owner.dart` — generation/foreground/recovery authority.
   The coordinator deliberately does **not** duplicate it: `CaptureSessionOwner`
   stays the fence for stale callbacks and app-lifecycle recovery.

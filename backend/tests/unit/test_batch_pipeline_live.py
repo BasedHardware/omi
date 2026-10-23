@@ -250,10 +250,12 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
             return SimpleNamespace(reload=lambda **kwargs: None, metadata={})
 
     monkeypatch.setattr(live, 'create_storage_client', Client)
+    listings = []
     monkeypatch.setattr(
         live,
         'list_audio_chunks',
-        lambda *args, **kwargs: [
+        lambda *args, **kwargs: listings.append(kwargs)
+        or [
             {
                 'path': 'chunks/synthetic/record/audio.batch.bin',
                 'generation': 1,
@@ -290,6 +292,8 @@ async def test_native_admission_stages_references_and_drains_after_rollback(monk
     assert store.rows['jobs', segment]['state'] == 'ready'
     assert manifests[0]['references'][0]['generation'] == 1
     assert store.rows['jobs', segment]['projection_binding']['native_record']
+    # A slow raw-archive listing must raise and retry, never admit a short capture.
+    assert listings == [{'max_count': 4096, 'require_archive': True}]
 
 
 @pytest.mark.parametrize('language,admitted', [('en', True), ('vi', False), ('multi', False)])

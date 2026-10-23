@@ -11,22 +11,36 @@ fullnameOverride: "dev-omi-cloud-run-sync-metrics-exporter"
 # Cloud Run services. Both are scraped as job cloud-run-application-metrics.
 #
 # Add a family here only with the consumer that reads it from these services:
-#   omi_sync_*                          backend-sync alerts, fleet telemetry, resilience
+#   omi_sync_{dispatch_attempts,upload,transcription_job,intake}  backend-sync alerts, Core Features, resilience-fallbacks
 #   omi_journey_*, omi_client_journey_* journey SLO alerts, Core Features
 #   omi_owner_recognition_conversations owner-recognition alerts (surface="sync")
 #   omi_conversation_duration_seconds,
 #   omi_conversation_summary_vector_upserts  Core Features
 #   omi_firestore_documents_per_operation    Firestore read-amplification alert
 #   omi_capture_finalization_*          resilience alert, Core Features
+#   omi_held_content_*                  held-content ramp gates (#22840 runbook)
+#   omi_stt_cap_recovery_reconciliation_total  cap-hold recovery outcomes
 #   omi_queue_oldest_ready_*            resilience queue-age alert
 # A trailing slash pins one family (types are prometheus.googleapis.com/<name>/<kind>).
-# Measured with these prefixes: 43 types, ~6.1k series per collection.
+# Measured 2026-10-16 with the omi_sync_ blanket prefix: 43 types, ~6.1k series
+# per collection; the omi_sync_ pin above removed omi_sync_phase_* (13.2k live
+# series on 2026-10-21) and ~5k live series of other unconsumed omi_sync_*,
+# while keeping every family the pinned list below documents a consumer for.
 stackdriver:
   projectIds:
     - "based-hardware-dev"
   metrics:
     prefixes:
-      - 'prometheus.googleapis.com/omi_sync_'
+      # omi_sync_phase_* is deliberately absent: no in-cluster alert, dashboard
+      # or adapter rule reads it (checked 2026-10-21), the rightsizing runbook
+      # queries it from GMP, and both import paths (this sidecar copy per
+      # exported_instance and the custom-metric copy per instance uuid in the
+      # main release) were re-creating ~13k live series per instance generation
+      # -- 158k of the 2.27M-series Prometheus head on 2026-10-21.
+      - 'prometheus.googleapis.com/omi_sync_dispatch_attempts_total/'
+      - 'prometheus.googleapis.com/omi_sync_upload_total/'
+      - 'prometheus.googleapis.com/omi_sync_transcription_job_total/'
+      - 'prometheus.googleapis.com/omi_sync_intake'
       - 'prometheus.googleapis.com/omi_journey_'
       - 'prometheus.googleapis.com/omi_client_journey_'
       - 'prometheus.googleapis.com/omi_owner_recognition_conversations_total/'
@@ -34,6 +48,8 @@ stackdriver:
       - 'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/'
       - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'
       - 'prometheus.googleapis.com/omi_capture_finalization_'
+      - 'prometheus.googleapis.com/omi_held_content_'
+      - 'prometheus.googleapis.com/omi_stt_cap_recovery_reconciliation_total/'
       - 'prometheus.googleapis.com/omi_queue_oldest_ready_'
     filters:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend-sync","backend-sync-backfill","backend-integration")'

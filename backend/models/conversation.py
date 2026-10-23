@@ -17,6 +17,7 @@ from models.chat import Message
 from models.client_processing import ClientProcessing
 from models.conversation_enums import (
     CategoryEnum,
+    ContentKind,
     ConversationProcessingState,
     ConversationSource,
     ConversationStatus,
@@ -604,6 +605,7 @@ class Conversation(BaseModel):
     # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
     capture_group: Optional[CaptureGroup] = None
 
+    content_kind: Optional[ContentKind] = None
     discarded: bool = False
     # True for conversations created via an external data import (e.g. Limitless ZIP).
     # Distinct from source=limitless, which also covers pendant/sync uploads of Limitless audio.
@@ -626,6 +628,11 @@ class Conversation(BaseModel):
     processing_deferred: bool = False
     data_protection_level: Optional[str] = None
     folder_id: Optional[str] = Field(default=None, description="ID of the folder this conversation belongs to")
+    is_call: Optional[bool] = None
+    call_platform: Optional[str] = None
+    calendar_event_id: Optional[str] = None
+    geolocation_scope: Optional[Literal['owner']] = None
+    other_participants_location: Optional[Literal['remote']] = None
     call_id: Optional[str] = Field(default=None, description="Twilio call SID for phone call conversations")
 
     # Calendar event link - set when conversation overlaps with a Google Calendar event
@@ -769,6 +776,15 @@ class ConversationSyncConflictResponse(BaseModel):
 
 
 class CreateConversation(BaseModel):
+    content_kind: SkipJsonSchema[Optional[ContentKind]] = None
+
+    @field_validator('content_kind', mode='before')
+    @classmethod
+    def ignore_client_content_kind(cls, value):
+        # Only the server evidence authority may classify a capture. Assignment
+        # after validation carries that decision through the existing conversion.
+        return None
+
     started_at: datetime
     finished_at: datetime
     transcript_segments: List[TranscriptSegment]
@@ -804,6 +820,15 @@ class CreateConversation(BaseModel):
 
 
 class ExternalIntegrationCreateConversation(BaseModel):
+    content_kind: SkipJsonSchema[Optional[ContentKind]] = None
+
+    @field_validator('content_kind', mode='before')
+    @classmethod
+    def ignore_client_content_kind(cls, value):
+        # Only the server evidence authority may classify a capture. Assignment
+        # after validation carries that decision through the existing conversion.
+        return None
+
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     text: str

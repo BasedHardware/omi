@@ -11,7 +11,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 
 /// Variant `trial`: a free-trial paywall shown once right after sign-up. A feature carousel, a
 /// timeline of what happens on which date, the Unlimited feature list, month/year, and a
-/// "Start for $0.00" button that opens the shared Stripe checkout with a trial. Light canvas on
+/// "Try for $0.00" button that opens the shared Stripe checkout with a trial. Light canvas on
 /// purpose: it sits between the light onboarding steps. Prices come from the catalog.
 class TrialPaywallPage extends StatefulWidget {
   const TrialPaywallPage({super.key, required this.source, this.offer, this.checkout, this.now});
@@ -290,13 +290,6 @@ class _TrialPaywallPageState extends State<TrialPaywallPage> {
                         label: l10n.paywallTrialCta(zero),
                         busy: _busy,
                         onPressed: offer == null || _busy ? null : () => _purchase(offer),
-                      ),
-                      const SizedBox(height: 10),
-                      _Button(
-                        key: const Key('trial_paywall_free'),
-                        label: l10n.paywallTrialSecondary,
-                        kind: _ButtonKind.outline,
-                        onPressed: _dismiss,
                       ),
                       const SizedBox(height: 10),
                       Text(
@@ -906,29 +899,21 @@ class _PlanCard extends StatelessWidget {
   }
 }
 
-enum _ButtonKind { primary, outline }
-
 class _Button extends StatelessWidget {
-  const _Button(
-      {super.key, required this.label, required this.onPressed, this.kind = _ButtonKind.primary, this.busy = false});
+  const _Button({super.key, required this.label, required this.onPressed, this.busy = false});
 
   final String label;
   final VoidCallback? onPressed;
-  final _ButtonKind kind;
   final bool busy;
 
   @override
   Widget build(BuildContext context) {
-    final primary = kind == _ButtonKind.primary;
     final radius = BorderRadius.circular(OmiRadius.pill);
     return Opacity(
       opacity: onPressed == null && !busy ? 0.35 : 1,
       child: Material(
-        color: primary ? _Paper.accent : Colors.transparent,
-        shape: RoundedRectangleBorder(
-          borderRadius: radius,
-          side: primary ? BorderSide.none : const BorderSide(color: _Paper.border),
-        ),
+        color: _Paper.accent,
+        shape: RoundedRectangleBorder(borderRadius: radius),
         child: InkWell(
           borderRadius: radius,
           onTap: onPressed,
@@ -939,8 +924,7 @@ class _Button extends StatelessWidget {
                   ? const OmiSpinner(size: OmiSpinnerSize.small, color: _Paper.onAccent)
                   : Text(
                       label,
-                      style: _Paper.label(
-                          size: 17, color: primary ? _Paper.onAccent : _Paper.text, weight: FontWeight.w600),
+                      style: _Paper.label(size: 17, color: _Paper.onAccent, weight: FontWeight.w600),
                     ),
             ),
           ),

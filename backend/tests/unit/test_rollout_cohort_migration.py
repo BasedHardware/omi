@@ -68,7 +68,8 @@ def test_verify_compares_sets_not_counts_and_never_writes(monkeypatch, capsys, e
     factory = MagicMock()
     result = migration.migrate(args(environment, verify=True), client_factory=factory, live_reader=lambda *_: sources())
     # Telegram is globally open and membership does not consult per-UID Firestore.
-    assert result == (0 if name == 'messaging-telegram' else 1)
+    # The shadow cohort is legacy-all, so extra grants match and only denials would narrow it.
+    assert result == (0 if name in {'messaging-telegram', 'batch-pipeline-shadow'} else 1)
     factory.return_value.batch.assert_not_called()
     output = capsys.readouterr().out
     assert 'private-one' not in output and 'private-two' not in output
@@ -88,8 +89,8 @@ def test_seed_atomic_leaf_merge_and_rerun_is_idempotent(monkeypatch, environment
         assert call.kwargs == {'merge': True}
         assert set(call.args[1]['cohorts']) == {environment}
         flags = call.args[1]['cohorts'][environment]
-        assert 'messaging-telegram' not in flags
-        assert set(flags) == set(migration.COHORT_ENVS) - {'messaging-telegram'}
+        assert 'messaging-telegram' not in flags and 'batch-pipeline-shadow' not in flags
+        assert set(flags) == set(migration.COHORT_ENVS) - {'messaging-telegram', 'batch-pipeline-shadow'}
         assert set(flags.values()) == {True}
     batch.commit.assert_called_once_with(timeout=15.0, retry=None)
 

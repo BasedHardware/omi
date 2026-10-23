@@ -7,7 +7,9 @@ from unittest.mock import Mock
 
 import pytest
 
+from database import firestore_read_metrics  # noqa: F401 - retain metric ownership across isolated handler loads
 from testing.import_isolation import load_module_fresh, stub_modules
+from utils.mcp_memories import parse_mcp_bool
 
 BACKEND = Path(__file__).resolve().parents[2]
 
@@ -38,6 +40,7 @@ def core():
     with stub_modules(
         {
             'database.conversations': db,
+            'database.users': module('database.users', get_user_profile=Mock(return_value={'time_zone': 'UTC'})),
             'database.vector_db': vector,
             'database.mcp_conversation_pages': module('database.mcp_conversation_pages'),
             'utils.conversations.search': search,
@@ -49,6 +52,7 @@ def core():
             ),
             'utils.mcp_memories': module(
                 'utils.mcp_memories',
+                parse_mcp_bool=parse_mcp_bool,
                 parse_mcp_int=lambda value, field, default, minimum, maximum: max(
                     minimum, min(int(value if value is not None else default), maximum)
                 ),

@@ -24,6 +24,11 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 import routers.sync as routers_sync
 
 
+@pytest.fixture(autouse=True)
+def empty_playback_cache(monkeypatch):
+    monkeypatch.setattr(routers_sync.playback_build, 'get_conversation_playback_manifest', lambda *_: None)
+
+
 def _install_real_gcs_write_fence(monkeypatch):
     """Run mark_* / upload_* through the real owner gate and raise the fence.
 
@@ -118,9 +123,9 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=deleted_conv
         ), patch.object(
-            routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build
+            routers_sync.playback_build, 'build_conversation_playback_artifact', mock_build
         ), patch.object(
-            routers_sync, 'upload_conversation_playback_artifact', mock_upload
+            routers_sync.playback_build, 'upload_conversation_playback_artifact', mock_upload
         ), patch.object(
             routers_sync.conversations_db, 'update_conversation', mock_update
         ):
@@ -150,7 +155,7 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=None
         ), patch.object(
-            routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build
+            routers_sync.playback_build, 'build_conversation_playback_artifact', mock_build
         ):
 
             resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
@@ -177,7 +182,7 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ), patch.object(routers_sync, 'should_skip_background_account_mutation', return_value=False), patch.object(
             routers_sync.conversations_db, 'get_conversation', return_value=conv_no_audio
         ), patch.object(
-            routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build
+            routers_sync.playback_build, 'build_conversation_playback_artifact', mock_build
         ):
 
             resp = await routers_sync._run_conversation_merge_job(payload, task_retry_count=0)
@@ -210,9 +215,9 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ), patch.object(
             routers_sync, 'get_conversation_playback_signed_url', return_value=None
         ), patch.object(
-            routers_sync.sync_playback, 'build_conversation_playback_artifact', mock_build
+            routers_sync.playback_build, 'build_conversation_playback_artifact', mock_build
         ), patch.object(
-            routers_sync, 'upload_conversation_playback_artifact', mock_upload
+            routers_sync.playback_build, 'upload_conversation_playback_artifact', mock_upload
         ), patch.object(
             routers_sync.conversations_db, 'update_conversation', mock_update
         ):
@@ -252,11 +257,11 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ), patch.object(
             routers_sync, 'get_conversation_playback_signed_url', return_value=None
         ), patch.object(
-            routers_sync.sync_playback,
+            routers_sync.playback_build,
             'build_conversation_playback_artifact',
             return_value=(b'fake_mp3', [{'len': 1.0, 'wall_offset': 0.0}]),
         ), patch.object(
-            routers_sync, 'upload_conversation_playback_artifact', mock_upload
+            routers_sync.playback_build, 'upload_conversation_playback_artifact', mock_upload
         ), patch.object(
             routers_sync.conversations_db, 'update_conversation', mock_update
         ), patch.object(
@@ -290,7 +295,7 @@ class TestV2ConversationAudioMergeTombstoneGuard:
         ), patch.object(
             routers_sync, 'compute_audio_files_fingerprint', return_value='fp-active'
         ), patch.object(
-            routers_sync.sync_playback,
+            routers_sync.playback_build,
             'build_conversation_playback_artifact',
             return_value=(b'fake_mp3', [{'len': 1.0, 'wall_offset': 0.0}]),
         ), patch.object(
@@ -322,7 +327,7 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         payload = {
             'uid': 'user-1',
             'conversation_id': 'conv-del-v1',
-            'audio_file_id': 'file-1',
+            'audio_file_id': 'af1',
             'timestamps': [100.0],
         }
         mock_build = MagicMock()
@@ -348,7 +353,7 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         payload = {
             'uid': 'user-1',
             'conversation_id': 'conv-nonexistent',
-            'audio_file_id': 'file-1',
+            'audio_file_id': 'af1',
             'timestamps': [100.0],
         }
         mock_build = MagicMock()
@@ -375,7 +380,7 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         payload = {
             'uid': 'user-1',
             'conversation_id': 'conv-active',
-            'audio_file_id': 'file-1',
+            'audio_file_id': 'af1',
             'timestamps': [100.0],
         }
         fence_uids, uploads = _install_real_gcs_write_fence(monkeypatch)
@@ -403,7 +408,7 @@ class TestV1SingleFileAudioMergeTombstoneGuard:
         payload = {
             'uid': 'user-1',
             'conversation_id': 'conv-active',
-            'audio_file_id': 'file-1',
+            'audio_file_id': 'af1',
             'timestamps': [100.0],
         }
         fence_uids, uploads = _install_real_gcs_write_fence(monkeypatch)

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/audio_sources/audio_source.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
@@ -120,6 +121,69 @@ void main() {
       LiveMarkNotification(ringId: ringId, ringSeq: ringSeq, liveIndex: liveIndex);
 
   Future<void> pump() => Future<void>.delayed(const Duration(milliseconds: 60));
+
+  for (final nextCodec in [BleAudioCodec.opus, BleAudioCodec.opusFS320]) {
+    test('a source switch to $nextCodec binds arriving frames to the new pendant custody', () async {
+      final custody = manager();
+      final oldConnection = _FakeCustodyConn()..info = info(42);
+      final newConnection = _FakeCustodyConn()
+        ..epoch = 2
+        ..info = info(43);
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      var holdWrite = false;
+      final sync = LocalWalSyncImpl(
+        _MockListener(),
+        custody: custody,
+        connectionResolver: (id) async => id == 'old-pendant' ? oldConnection : newConnection,
+        freeDiskBytes: () async => 1 << 40,
+        persistWals: (wals) async {
+          if (holdWrite) {
+            holdWrite = false;
+            entered.complete();
+            await release.future;
+          }
+          expect(await WalFileManager.saveWals(wals), isTrue);
+        },
+      );
+      addTearDown(() async {
+        if (!release.isCompleted) release.complete();
+        await sync.stop();
+      });
+      sync.setDeviceInfo('old-pendant', 'Omi A');
+      sync.start();
+      await sync.walReady;
+      await custody.beginConnection('old-pendant', 1, info(42), effectiveCaps: 0x0F);
+      custody.setLivePersistEnabled('old-pendant', 1, true);
+      await custody.beginConnection('new-pendant', 2, info(43), effectiveCaps: 0x0F);
+      custody.setLivePersistEnabled('new-pendant', 2, true);
+      for (var i = 0; i < 10; i++) {
+        sync.onFrameCaptured(frame(i));
+      }
+
+      holdWrite = true;
+      final switching = sync.onAudioCodecChanged(nextCodec, deviceInfo: (id: 'new-pendant', model: 'Omi B'));
+      await entered.future;
+      for (var i = 0; i < 10; i++) {
+        sync.onFrameCaptured(frame(i));
+      }
+      expect(sync.testFrames, hasLength(10));
+      expect(sync.testFrames.map((f) => f.liveRingId), everyElement(43));
+      expect(sync.testFrames.map((f) => f.connectionEpoch), everyElement(2));
+      expect(sync.testFrames.map((f) => f.liveOrdinal), orderedEquals(List<int>.generate(10, (i) => i)));
+      release.complete();
+      await switching;
+      await sync.stop();
+      // Connection epochs are process-local evidence, not serialized state.
+      expect(sync.testWals.map((w) => w.liveConnectionEpoch), [1, 2]);
+
+      final index = await WalFileManager.loadWals();
+      expect(index.map((w) => w.device), ['old-pendant', 'new-pendant']);
+      expect(index.map((w) => w.codec), [BleAudioCodec.opus, nextCodec]);
+      expect(index.map((w) => w.totalFrames), [10, 10]);
+      expect(index.map((w) => w.liveRingId), [42, 43]);
+    });
+  }
 
   test('#20376: live frames prove custody only after the WAL index save completes', () async {
     final custody = manager();

@@ -13383,9 +13383,6 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Fortsæt med gratisplanen';
-
-  @override
   String get paywallTrialCancelNote => 'Opsig når som helst. Ingen gebyrer, ingen straf.';
 
   @override
@@ -14374,4 +14371,176 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi optager stadig';
+
+  @override
+  String get episodeNow => 'Nu';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Live · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count øjeblikke',
+      one: '1 øjeblik',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Øjeblikke';
+
+  @override
+  String get episodeSoFar => 'Indtil videre';
+
+  @override
+  String get episodeUpdatedJustNow => 'Opdateret lige nu · fulde noter når det slutter';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Opdateret for $minutes min. siden · fulde noter når det slutter';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Noterne vises efter de første minutters snak.';
+
+  @override
+  String get episodeOpenAll => 'Åbn alle';
+
+  @override
+  String get episodeWrapUpNow => 'Afslut nu';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi afslutter dette, når du går videre';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Opgave fanget: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Påmindelse fanget: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Opgave gemt: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'tilføjer $duration fra din Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Lytter nu';
+
+  @override
+  String get deviceHeardToday => 'Hørt i dag';
+
+  @override
+  String get deviceToSync => 'mangler synk';
+
+  @override
+  String get deviceRightNow => 'Lige nu';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Live-episode · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Indhenter';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done af $total min';
+  }
+
+  @override
+  String get deviceRecently => 'For nylig';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Afbrudt i $duration';
+  }
+
+  @override
+  String get deviceControls => 'Betjening';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Også: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Tryk på knappen på din Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Ét kort tryk. Spørg derefter om hvad som helst.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Stil dit spørgsmål';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Sig det højt. Omi lytter.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Færdig? Tryk på knappen igen for at sende.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Du har fået $days dage gratis';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dage Omi Pro på os. Vi minder dig om det før betaling. Opsig når som helst.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Få min prøveperiode på $days dage';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Start din gratis prøveperiode på $days dage';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Tænd din Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Tryk én gang på knappen og hold den tæt på din telefon.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'Det var det. Omi bliver ved med at optage dine samtaler i baggrunden.';
+
+  @override
+  String get noThanks => 'Nej tak';
+
+  @override
+  String get recapInTheBackground => 'I baggrunden';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Bliv for $percent% rabat';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Bliv og betal $price om måneden de næste $months måneder.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Færdig. $percent% rabat de næste $months måneder.';
+  }
 }

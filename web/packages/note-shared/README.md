@@ -8,7 +8,14 @@ or package build step. Import the two entries through the package exports:
 - `@omi/note-shared/note-citations.mjs`
 - `@omi/note-shared/note-sources.mjs`
 
-Each entry exposes its `.d.mts` types. The language-neutral fixture remains at
+Each entry exposes its `.d.mts` types. `note-sources.mjs` also carries the display
+helpers every client uses: `presentableNoteSection` (repair a section and promote the
+inline citations it removed to source IDs, as macOS `presentableSection` does),
+`presentableNoteText` (titles, action items, events) and `noteTranscriptIDs`.
+
+The Windows/Linux desktop app (`desktop/windows`) bundles this package from source
+through a Vite/TypeScript alias rather than a lockfile dependency; its CI triggers on
+`web/packages/note-shared/**`. The language-neutral fixture remains at
 `contracts/note_citation_contract.json`.
 
 Both Dockerfiles copy this package into the dependency-install stage. Bun 1.3.14 installs

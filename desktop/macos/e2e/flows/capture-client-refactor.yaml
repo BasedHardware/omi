@@ -1,0 +1,34 @@
+version: 2
+name: capture-client-refactor
+tier: manual
+description: Verify client serving cohorts preserve speaker identity, long recording segments and additive meeting boundary evidence against a local fixture backend
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/CaptureRefactor/AppState+SpeakerEvidence.swift
+  - desktop/macos/Desktop/Sources/CaptureRefactor/ClientRefactorFlags.swift
+  - desktop/macos/Desktop/Sources/CaptureRefactor/LegacySegmentCompaction.swift
+  - desktop/macos/Desktop/Sources/CaptureRefactor/MeetingBoundaryEvidence.swift
+  - desktop/macos/Desktop/Sources/CaptureRefactor/SegmentContinuationUpload.swift
+  - desktop/macos/Desktop/Sources/CaptureRefactor/TranscriptionStorage+SpeakerLabels.swift
+preconditions:
+  - auth_ready
+  - backend_reachable
+steps:
+  - id: S1
+    name: Configure an isolated client cohort
+    do: "Use a named omi-* test bundle with a local fixture backend and synthetic account. Resolve clients_refactor, clients_from_segments_chunks and clients_boundary_evidence true for that test identity, and the fixture continuation mode serve. Run xcrun swift test --package-path Desktop --filter ClientCaptureRefactor as the hermetic prerequisite. Do not use production accounts or change a production cohort."
+  - id: S2
+    name: Resolve and retract a live owner
+    do: "Begin a synthetic capture. Have the fixture send speaker_label_suggestion with explicit is_user true and an empty person_id, then the legacy user sentinel without is_user. Each must show You in the live transcript and persist isUser true. Retract the automatic assignment: the live map must remove the entry, SQLite must clear the owner/person label, and an explicitly manual assignment must survive."
+  - id: S3
+    name: Refresh by segment identity
+    do: "Refresh a saved fixture conversation with reordered segment ids and a server-resolved person. A manual label for a removed backend id must not transfer by position. A server label must replace an automatic local label at the same id, while a manual local label at that same id survives."
+  - id: S4
+    name: Retry a long recording without losing speakers
+    do: "Finalize a synthetic local recording with 1201 alternating-speaker segments. Inspect fixture requests: chunk sizes 500, 500, 201, indices 0, 1, 2 and one client_session_id. Fail a chunk, retry, and verify one deterministic conversation with all segment timings and speaker identities. No MIXED compaction occurs. Switching accounts between chunks must stop the upload."
+  - id: S5
+    name: Send meeting observations without changing local rotation
+    do: "Drive a meeting start, a back-to-back call change and an end through the local detector. The fixture must receive desktop_meeting BoundarySignals: the closing signal retains its opening external_id, the next call has a new id, and timestamps include offsets. Today's local conversation rotation still runs."
+  - id: S6
+    name: Prove rollback and fail-closed upload behavior
+    do: "Resolve the client flags false or unreadable and repeat a short capture: legacy label/compaction behavior remains. With client chunking on and server continuation off, the fixture returns 409 and the local recording remains retryable. This catalogued manual flow is separate from the hermetic XCTest receipt; record a named-bundle run before expanding a real cohort."

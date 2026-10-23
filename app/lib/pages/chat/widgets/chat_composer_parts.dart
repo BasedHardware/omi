@@ -4,6 +4,7 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/chat_video_sampler.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -204,7 +205,10 @@ class ChatSelectedFilesStrip extends StatelessWidget {
             itemCount: provider.selectedFiles.length,
             itemBuilder: (context, index) {
               final file = provider.selectedFiles[index];
-              final isImage = provider.selectedFileTypes[index] == 'image';
+              final isImage = provider.selectedFileTypes[index] == 'image' && !isChatVideo(file.path);
+              // A video shows its poster frame once the upload has sampled it.
+              final poster = provider.videoPosterFor(file);
+              final preview = isImage ? file : poster;
               return Container(
                 margin: const EdgeInsets.only(right: OmiSpacing.xs),
                 width: 60,
@@ -212,11 +216,20 @@ class ChatSelectedFilesStrip extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: OmiColors.surface2,
                   borderRadius: OmiRadius.lgAll,
-                  image: isImage ? DecorationImage(image: FileImage(file), fit: BoxFit.cover) : null,
+                  image: preview != null
+                      ? DecorationImage(image: FileImage(preview), fit: BoxFit.cover, onError: (_, __) {})
+                      : null,
                 ),
                 child: Stack(
                   children: [
-                    if (!isImage) Center(child: Icon(Icons.insert_drive_file, color: OmiColors.textPrimary, size: 24)),
+                    if (preview == null)
+                      Center(
+                        child: Icon(
+                          provider.selectedFileTypes[index] == 'video' ? Icons.videocam : Icons.insert_drive_file,
+                          color: OmiColors.textPrimary,
+                          size: 24,
+                        ),
+                      ),
                     if (provider.isFileUploading(file.path))
                       Container(
                         decoration: BoxDecoration(

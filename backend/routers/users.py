@@ -40,6 +40,7 @@ from database.redis_db import (
     enable_user_webhook_db,
     user_webhook_status_db,
     set_user_preferred_app,
+    clear_user_preferred_app,
     set_user_data_protection_level,
     get_generic_cache,
     set_generic_cache,
@@ -59,7 +60,7 @@ from utils import screen_vector_entitlements
 from utils.observability.fallback import record_fallback
 from config.daily_summary_depth import DEFAULT_DAILY_SUMMARY_DEPTH, DailySummaryDepth
 from utils.sync.held_audio_summary import attach_subscription_held_audio
-from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled
+from config.stt_cap_dispatch import any_execution_admission_enabled as funded_processing_enabled, recovery_cohort_admits
 from utils.generated_compute import require_generated_compute, generated_compute_configured
 from models.users import ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
@@ -1080,6 +1081,18 @@ def set_preferred_app_for_user(
     return {"status": "ok", "message": f"App {app_id_to_set} set as preferred app for user {uid}."}
 
 
+@router.delete('/v1/users/preferences/app', tags=['v1'], response_model=UserStatusResponse)
+def clear_preferred_app_for_user(uid: str = Depends(auth.get_current_user_uid)):
+    """Clears the user's preferred app: future processing uses Omi's own summary. Idempotent."""
+    try:
+        clear_user_preferred_app(uid)
+    except Exception as e:
+        logger.error(f"Failed to clear preferred app in Redis for user {uid}: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Failed to clear app preference.")
+
+    return {"status": "ok", "message": "Preferred app cleared."}
+
+
 # **************************************
 # *********** Training Data ************
 # **************************************
@@ -1305,7 +1318,7 @@ def process_waiting_recordings(
     uid: str = Depends(auth.get_current_user_uid),
     idempotency_key: str = Header(..., alias='Idempotency-Key', min_length=8, max_length=128),
 ):
-    if not funded_processing_enabled(uid):
+    if not recovery_cohort_admits(uid) or not funded_processing_enabled(uid):
         raise HTTPException(status_code=404, detail='Not found')
     from utils import processing_backlog
 

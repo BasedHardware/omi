@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "listen-edge.fullname" . }}
+  labels:
+    {{- include "listen-edge.labels" . | nindent 4 }}
+{{- with .Values.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  # ClusterIP only: listen-edge must be reachable from backend-listen pods
+  # only. Never add a cloud.google.com/neg annotation (a standalone NEG can be
+  # attached to a load balancer) or type LoadBalancer/NodePort here.
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "listen-edge.selectorLabels" . | nindent 4 }}

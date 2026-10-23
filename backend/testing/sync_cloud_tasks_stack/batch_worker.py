@@ -55,6 +55,45 @@ def _loopback_send(serving_origin: str):
     return send
 
 
+def _record_lease_transitions(scheduler_class: Any) -> None:
+    """Evidence for every lease this replica was granted or refunded.
+
+    The job row's ``attempt`` is a retry budget, not a grant count: a refund
+    (``defer``) decrements it, and it cannot attribute grants to replicas. The
+    two-replica scenario bounds compute by these grant events instead.
+    """
+    pull, defer = scheduler_class.pull, scheduler_class.defer
+
+    def recorded_pull(self: Any, *args: Any, **kwargs: Any) -> Any:
+        leases = pull(self, *args, **kwargs)
+        for lease in leases:
+            write_event(
+                'providers',
+                {
+                    'event': 'lease_granted',
+                    'segment_id': lease.item.segment_id,
+                    'attempt': lease.attempt,
+                    'worker_name': WORKER_NAME,
+                },
+            )
+        return leases
+
+    def recorded_defer(self: Any, segment_id: str, *args: Any, **kwargs: Any) -> Any:
+        refunded = defer(self, segment_id, *args, **kwargs)
+        write_event(
+            'providers',
+            {
+                'event': 'lease_refunded',
+                'segment_id': segment_id,
+                'refunded': bool(refunded),
+                'worker_name': WORKER_NAME,
+            },
+        )
+        return refunded
+
+    scheduler_class.pull, scheduler_class.defer = recorded_pull, recorded_defer
+
+
 def main() -> int:
     storage_root = os.getenv('OMI_SYNC_STACK_STORAGE_DIR', '').strip()
     serving_origin = os.getenv('OMI_BATCH_STACK_SERVING_ORIGIN', '').strip()
@@ -83,6 +122,7 @@ def main() -> int:
         scheduler_module.LEASE_SECONDS = float(lease_seconds)
     if heartbeat_seconds:
         pump_module.HEARTBEAT_SECONDS = float(heartbeat_seconds)
+    _record_lease_transitions(scheduler_module.Scheduler)
 
     namespace = os.environ['BATCH_PIPELINE_NAMESPACE']
     store = FirestoreStore(namespace)

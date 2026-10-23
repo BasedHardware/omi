@@ -19,11 +19,13 @@ import '../helpers/summary_fixtures.dart';
 /// Records reprocess calls; each waits on [gate] when set.
 class _Reprocess {
   final List<String?> appIds = [];
+  final List<bool> forcedOmi = [];
   Completer<ReprocessResult>? gate;
   ReprocessResult result = const ReprocessFailed();
 
-  Future<ReprocessResult> call(String id, {String? appId, bool requireSpeakerReceipt = false}) {
+  Future<ReprocessResult> call(String id, {String? appId, bool requireSpeakerReceipt = false, bool forceOmi = false}) {
     appIds.add(appId);
+    forcedOmi.add(forceOmi);
     return gate?.future ?? Future.value(result);
   }
 }
@@ -80,6 +82,7 @@ void main() {
       await tester.tap(find.text(l10n.summaryWithOmi));
       await tester.pump();
       expect(reprocess.appIds, [null]);
+      expect(reprocess.forcedOmi, [true], reason: 'a server preferred template must not run in place of Omi');
       expect(find.text(l10n.summarySheetTitle), findsNothing);
       // One progress surface, in the tab.
       expect(find.text(l10n.summarySummarizingWith(l10n.omiAppName)), findsOneWidget);
@@ -214,6 +217,7 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 500));
       expect(reprocess.appIds, [null]);
+      expect(reprocess.forcedOmi, [true]);
       expect(find.byKey(const Key('summary_template_confirm')), findsNothing, reason: 'the sheet closes');
       reprocess.gate!.complete(const ReprocessBusy());
       await tester.pump();
@@ -238,6 +242,7 @@ void main() {
       await tester.tap(find.byKey(const Key('summary_template_confirm')));
       await tester.pump();
       expect(reprocess.appIds, ['pg']);
+      expect(reprocess.forcedOmi, [false]);
       expect(provider.defaultSummaryTemplateAppId, 'pg');
       expect(SharedPreferencesUtil().lastUsedSummarizationAppId, 'pg');
       reprocess.gate!.complete(const ReprocessBusy());

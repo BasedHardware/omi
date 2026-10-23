@@ -4313,15 +4313,15 @@ final class DesktopAutomationActionRegistry {
     }
 
     // SET-02: assemble the exact payload FeedbackView.submitFeedback() would
-    // attach — the report title plus a redacted incident diagnostics attachment —
-    // WITHOUT calling SentrySDK. The dry-run uses the same builders as the real
-    // submit path, so a harness can secret-scan the attachment without a cloud
-    // side effect and cannot drift toward a raw-log upload.
+    // record — the report title plus a redacted incident diagnostics attachment —
+    // without any cloud submission. The dry-run uses the same builders as the
+    // real submit path, so a harness can secret-scan the attachment and cannot
+    // drift toward a raw-log upload.
     register(
       name: "dump_feedback_payload_dryrun",
       effects: [.localArtifact],
       summary:
-        "Assemble the feedback report payload (title + redacted desktop_diagnostics.json) without submitting to Sentry; returns the diagnostics JSON for secret-scanning. Non-prod only.",
+        "Assemble the feedback report payload (title + redacted desktop_diagnostics.json) without submitting anywhere; returns the diagnostics JSON for secret-scanning. Non-prod only.",
       params: ["message"]
     ) { params in
       guard AppBuild.isNonProduction else {
@@ -4329,10 +4329,10 @@ final class DesktopAutomationActionRegistry {
       }
       let message = (params["message"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
       var detail: [String: String] = [
-        "sentry_message": feedbackReportTitle(for: message),
+        "report_title": feedbackReportTitle(for: message),
         "diagnostics_filename": feedbackDiagnosticsAttachmentFilename,
-        "sentry_capture_invoked": "false",
-        "would_submit_to_sentry": "false",
+        "cloud_submission_invoked": "false",
+        "would_submit_to_cloud": "false",
       ]
 
       if let url = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(

@@ -43,6 +43,7 @@ import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/on_device/phone_power_source.dart';
 import 'package:omi/ui/ui.dart';
 
+import '../helpers/sfpro_font_fixtures.dart';
 import '../support/on_device_fakes.dart';
 
 /// On-device copy renders. `--dart-define=OMI_ON_DEVICE_UX_EVIDENCE_DIR=<dir>` writes 1179×2556 PNGs.
@@ -765,17 +766,14 @@ void _rejectForbiddenCopy(WidgetTester tester) {
 
 Future<void> _loadEvidenceFonts() async {
   final fonts = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List<dynamic>;
-  final sfAssets = <String>{};
   for (final entry in fonts) {
     final loader = FontLoader(entry['family'] as String);
     for (final font in entry['fonts'] as List<dynamic>) {
-      final asset = font['asset'] as String;
-      if (asset.contains('SFPRODISPLAY')) sfAssets.add(asset);
-      loader.addFont(rootBundle.load(asset));
+      loader.addFont(rootBundle.load(font['asset'] as String));
     }
     await loader.load();
   }
-  final semibold = _uprightWeight(_packageAsset('omi', 'assets/fonts/SFPRODISPLAYBOLD.OTF'), 600);
+  final semibold = _uprightWeight(_packageAsset('omi', 'test/fonts/SFPRODISPLAYBOLD.OTF'), 600);
   for (final family in const [
     'Roboto',
     'CupertinoSystemText',
@@ -787,8 +785,8 @@ Future<void> _loadEvidenceFonts() async {
     'SF Pro Display',
   ]) {
     final loader = FontLoader(family);
-    for (final asset in sfAssets) {
-      loader.addFont(rootBundle.load(asset));
+    for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
+      loader.addFont(sfProFont('SFPRODISPLAY$font.OTF'));
     }
     if (semibold != null) {
       loader.addFont(Future.value(ByteData.sublistView(Uint8List.fromList(semibold))));

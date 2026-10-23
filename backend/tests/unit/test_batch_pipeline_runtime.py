@@ -355,3 +355,49 @@ def test_cap_audio_counter_is_exported_by_the_worker_metrics_registry(monkeypatc
     finally:
         server.shutdown()
         server.server_close()
+
+
+@pytest.mark.parametrize('mode', ['shadow', 'firestore'])
+def test_a2_shadow_parity_counter_is_exported_by_the_worker_metrics_registry(monkeypatch, mode):
+    # The A2 sample gate reads omi_jobstore_shadow_parity_total; the worker serves a private registry.
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', mode)
+    state = runtime.RuntimeState()
+    registry = CollectorRegistry()
+    server = runtime.health_server(state, registry, 0)
+    try:
+        if mode == 'shadow':
+            from database.jobstore.dual_store import SHADOW_PARITY_TOTAL
+
+            SHADOW_PARITY_TOTAL.labels(table='jobs', op='read', outcome='match').inc()
+            from database.jobstore.dual_store import SHADOW_CONVERGENCE_SECONDS, SHADOW_CONVERGENCE_TOTAL
+
+            SHADOW_CONVERGENCE_TOTAL.labels(table='control', outcome='converged').inc()
+            SHADOW_CONVERGENCE_SECONDS.labels(table='control').observe(0.3)
+        body = urllib.request.urlopen(f'http://127.0.0.1:{server.server_port}/metrics').read().decode()
+        assert ('omi_jobstore_shadow_parity_total' in body) is (mode == 'shadow')
+        if mode == 'shadow':
+            assert 'op="read"' in body and 'outcome="match"' in body
+            assert (
+                'omi_jobstore_shadow_convergence_total' in body
+                and 'omi_jobstore_shadow_convergence_seconds_bucket' in body
+            )
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_a2_parity_collector_failure_keeps_the_worker_metrics(monkeypatch):
+    import builtins
+
+    real_import = builtins.__import__
+
+    def refuse(name, *args, **kwargs):
+        if name == 'database.jobstore.dual_store':
+            raise ImportError('driver_missing')
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setenv('BATCH_JOBSTORE_MODE', 'shadow')
+    monkeypatch.setattr(builtins, '__import__', refuse)
+    from database.batch_pipeline_shadow_hook import shadow_parity_collectors
+
+    assert shadow_parity_collectors() == ()

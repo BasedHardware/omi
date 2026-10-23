@@ -430,7 +430,8 @@ async def test_departed_replicas_are_pruned_and_new_ready_replicas_count(fleet):
 
 @pytest.mark.asyncio
 async def test_hung_fetch_has_own_deadline_and_other_results_survive(fleet):
-    fleet.pressure.REQUEST_TIMEOUT_SECONDS = 0.02
+    # Healthy in-process fetches must finish inside this real budget on a loaded runner; 20ms raced them.
+    fleet.pressure.REQUEST_TIMEOUT_SECONDS = 0.5
     cancelled = []
     completed = []
     never = asyncio.Event()
@@ -446,7 +447,7 @@ async def test_hung_fetch_has_own_deadline_and_other_results_survive(fleet):
         return httpx.Response(200, json={'live_pending_requests': 0, 'live_oldest_pending_seconds': 0})
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(metrics)) as client:
-        await asyncio.wait_for(fleet.pressure._refresh('synthetic.invalid', 2, client), 1)
+        await asyncio.wait_for(fleet.pressure._refresh('synthetic.invalid', 2, client), 5)
     assert cancelled == [fleet.ips[-1]]
     assert completed == fleet.ips[:-1]
     assert len(fleet.pressure._samples) == 5

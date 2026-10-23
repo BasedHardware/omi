@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import pytest
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -216,3 +217,58 @@ def test_ordinary_stale_or_pending_observations_are_not_semantically_promoted():
     ]
     db = _db_for(items)
     assert [row.to_dict()["memory_id"] for row in _required_intake_page(UID, db_client=db)] == ["visible"]
+
+
+class _CursorDb(_Db):
+    def __init__(self, rows):
+        super().__init__(rows)
+        from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+        self.store = StrictFirestore()
+
+    def document(self, path):
+        return self.store.document(path)
+
+    def transaction(self):
+        return self.store.transaction()
+
+
+def test_observation_recovery_rotates_bounded_pages_and_ignores_expiry():
+    from utils.memory.canonical_consolidation import _pending_observation_ids
+
+    db = _CursorDb(_db_for([_item(f'a{i:02}', captured_at=NOW - timedelta(days=5)) for i in range(30)]).rows)
+    first = _pending_observation_ids(UID, db_client=db)
+    second = _pending_observation_ids(UID, db_client=db)
+    assert first == [f'a{i:02}' for i in range(25)]
+    assert second == [f'a{i:02}' for i in range(25, 30)]
+    assert _pending_observation_ids(UID, db_client=db) == first
+    assert db.stream_limit == 100
+
+
+def test_observation_recovery_scans_past_a_page_of_review_rows():
+    from utils.memory.canonical_consolidation import _pending_observation_ids
+
+    reviews = [
+        _item(f'r{i:03}', captured_at=NOW - timedelta(days=5), promotion={'route': 'review'}) for i in range(100)
+    ]
+    ordinary = _item('z-pending', captured_at=NOW - timedelta(days=4))
+    db = _CursorDb(_db_for([*reviews, ordinary]).rows)
+    assert _pending_observation_ids(UID, db_client=db) == []
+    assert _pending_observation_ids(UID, db_client=db) == [ordinary.memory_id]
+
+
+def test_recovery_checkpoint_cannot_recreate_metadata_during_account_deletion(monkeypatch):
+    from utils.memory import canonical_consolidation as intake
+
+    db = _CursorDb(_db_for([_item('pending', captured_at=NOW)]).rows)
+    page = intake._required_intake_page
+
+    def deletion_after_scan(*args, **kwargs):
+        rows = page(*args, **kwargs)
+        db.store.rows[('account_deletions', UID)] = {'wipe_status': 'completed'}
+        return rows
+
+    monkeypatch.setattr(intake, '_required_intake_page', deletion_after_scan)
+    with pytest.raises(RuntimeError, match='deletion_fenced'):
+        intake._pending_observation_ids(UID, db_client=db)
+    assert ('users', UID, 'memory_runs', 'observation_intake_cursor') not in db.store.rows

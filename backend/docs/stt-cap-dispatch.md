@@ -15,8 +15,9 @@ Use `uid:<COORDINATOR_TEST_UID>` (replace the placeholder before deployment),
 comma-separated UID tokens, `pct:1`, or a union such as `uid:<UID>,pct:5`.
 `all` is the explicit universal cohort. The token grammar and stable
 `sha256("free-tier-cohort:" + uid)[:8] % 100` bucket come from the retired free-tier
-parser, now shared in pure `config/rollout_cohorts.py`; no PostHog or Firestore
-membership call is added. Malformed tokens invalidate the whole cohort.
+parser, now shared in pure `config/rollout_cohorts.py`. The runtime token
+document below replaces the env cohort when present; no per-user membership
+read is added for this rollout. Malformed tokens invalidate the whole cohort.
 
 `STT_CAP_DISPATCH_LANES` accepts comma-separated `live,sync,batch`. Unset, empty
 or whitespace-only values select **live only**. Unknown tokens or empty tokens
@@ -88,11 +89,78 @@ it never finishes to waiting-choice solely because excluded rows remain.
 Custody sealing/cleanup stays active during rollback because it is
 owed persistence, not permission to dispatch STT.
 
+### Shared recovery pacing
+
+Every new provider intent in `utils/sync/cap_hold_recovery.py` spends a shared
+audio-second token budget and an intent token, including the second persisted
+application attempt. Cached provider results and settlement spend no tokens.
+`held_single_attempt` continues to suppress adapter-local retries on recovery.
+The intent ceiling conservatively counts pieces/retries, so a multi-piece hold
+spends more than one token. Denials create no provider receipt or metered charge;
+the worker retains its existing chosen-allowance reservation for the same item.
+
+Plain env config, read per intent (no new rollout flag):
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `CAP_HOLD_RECOVERY_AUDIO_HOURS_PER_HOUR` | `60` | 60 audio seconds per wall second |
+| `CAP_HOLD_RECOVERY_HOLDS_PER_HOUR` | `12000` | Maximum sustained provider intents/hour |
+
+Both must be finite and positive. Invalid/zero config refuses new work. Apply
+identical values and the same `REDIS_DB_*` endpoint to every API/sync recovery
+host before activation; different settings sharing a bucket are unsupported.
+No deployment/activation is performed by this change.
+
+The repo already uses Redis Lua for cross-pod rate limiting (`redis_db`), rather
+than a hot Firestore counter. Recovery uses one atomic script/key
+`rl:cap-hold-recovery:v1:global` and a dedicated lazy client with two-second
+connect/read timeouts, with no fail-open fallback. Redis's clock owns refill.
+Both dimensions must fit before either is spent. Capacity is one minute of
+refill (default 3,600 audio seconds and 200 intents); a token bucket bounds
+traffic over interval T by rate*T plus that burst, rather than enforcing a
+calendar-hour window. Missing/evicted state starts **empty**. The fixed key has
+no TTL and cannot grow with users. Ambiguous Redis replies or failed intent
+writes may waste tokens; never refund uncertain capacity.
+
+On capacity denial, the fenced hold checkpoint writes `next_attempt_at` from
+the larger deficit/refill interval and retains `pacing_deferred_since`. Redis
+unavailability, invalid config/cost or a piece exceeding the burst envelope
+refuses and defers for 60 seconds. Release preserves the deadline; claim will
+not take the hold early. Normal VAD pieces cap at 300 seconds by default.
+Oversized legacy frozen pieces need operator diagnosis/replanning; they stay
+held, without silently overriding the rate or issuing a paid call.
+
+The sweep's existing persisted owner cursor advances before awaited work,
+including past blocked owners. Five selected owners now take one newest-first
+candidate each per round, up to 100 candidates/owner and 900 seconds total,
+instead of letting a fast owner consume 100 before peers get another turn.
+Deferred owners stop for that sweep; other owners proceed. A hold's pieces
+remain one fenced application unit, so rotation is by candidate, not equal
+audio shares. Request-triggered wakes keep their existing UID leases/cooldown.
+Sealing and cleanup run before recovery and never acquire pacing tokens.
+
+Metrics use only `outcome=granted|deferred|refused`:
+`omi_held_recovery_pacing_intents_total` counts decisions and
+`omi_held_recovery_pacing_audio_seconds_total` counts requested audio tokens by
+decision. Only `granted` represents spent tokens. The histogram
+`omi_held_recovery_pacing_deferred_age_seconds` samples time since the first
+durable pacing deferral on each subsequent deferral. It measures observed
+deferred backlog age, not a fleet maximum or an unvisited population; use it
+with the existing authoritative fleet pending/oldest-age gauges. No user,
+hold, provider or free-form reason labels are emitted.
+
+Pacing is shipped on whenever recovery admission is active. Rollback is the
+existing execution-admission kill switch/cohort rollback; do not bypass this
+limiter to recover throughput. Deployment acceptance still requires API/sync
+activation, explicit-consent/restart and unsupported-language checks, and
+measured recovery throughput under ordinary peak live load before widening
+the STT cap to 100%.
+
 ### Controlled expansion and rollback
 
 Both dev and prod runtime manifests bind enforcement `false`, cohort `''`, lanes
 `live`. These are inert configuration declarations, not activation. The first
-cohort requires the same values on listen and the CPU recovery/sync hosts:
+cohort requires the same env defaults on listen and the CPU recovery/sync hosts:
 
 ```text
 STT_CAP_DISPATCH_ENFORCEMENT=true
@@ -114,7 +182,7 @@ Ramp owner **dazheng**: coordinator test accounts -> `pct:1` -> `pct:5` held for
 backlog stalls, live STT error rate and client 5xx against the pre-ramp baseline;
 advance only with no unexplained regression and a synthetic consented live hold
 recovering across instance replacement. Dazheng owns each expansion and the
-**2026-10-19 18:00 UTC** decision/checkpoint; a missed checkpoint or an incomplete
+**2026-10-27** completion checkpoint (runtime ramp brief, 2026-10-20); a missed checkpoint or an incomplete
 three-hour soak is a blocker to report, never authority to skip a stage. Keep
 `STT_CAP_DISPATCH_LANES=live` throughout. Sync and batch require the separate
 batch-authorize-outside-GPU-lock change (blocked by Nemotron **#22352**) and explicit
@@ -131,6 +199,88 @@ configuration to all hosts and drain old sessions when changing scope. No new
 Scheduler jobs or Firestore indexes are introduced here; the existing durability
 job/index prerequisites below remain independently owned.
 
+### Runtime cohort (no restart)
+
+Once this code rides the next listen deploy (Nemotron owns listen deployment),
+**dazheng** owns runtime ramp writes through the **prod-operator** tier with
+Firestore write permission. No deployment or production write is performed by
+this PR. All serving hosts must run the resolver before expanding the doc.
+
+The existing independent ladder-only activation is preserved: setting
+`STT_CAP_DISPATCH_ENFORCEMENT=false` blocks legacy cap admission but does not
+turn off `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED=true`. Both use this same cohort.
+This is a deliberate deviation from making the legacy switch a new master kill
+switch, which would disable the separately ratified ladder-only path. To stop
+both immediately for new admissions, use an empty runtime cohort; the deploy
+rollback still sets both admission switches false.
+
+The data-plane Firestore document is
+`projects/based-hardware/databases/(default)/documents/rollout_cohorts/stt-cap-dispatch`:
+
+```json
+{"environment": "prod", "tokens": "pct:1"}
+```
+
+`environment` is required and must exactly match `OMI_ENV_STAGE` (`prod`, `dev`,
+`local`, or `offline`). This is a control document, separate from the existing
+`rollout_cohorts/{uid}` membership schema. Do not write it with the per-user
+`rollout_cohort.py` command. A mismatched environment is a denial, never an
+activation. Dev experiments should use the dev data project so they cannot
+replace this prod control document. No query or new index is needed.
+
+A present valid document overrides `STT_CAP_DISPATCH_COHORT`. A missing document
+uses the env tokens, retaining the private-secret test cohort. An empty token
+string explicitly denies. Missing/wrong-type fields, malformed tokens, or an
+environment mismatch explicitly deny and log once per invalid episode. They do
+**not** fall back to env: doing so could undo an intentional runtime rollback.
+Read/scheduling errors retain the last snapshot (including denial); without a
+snapshot they retain today's env behavior. A successful deletion restores env,
+so **do not delete the doc as a rollback** unless that fallback is intended.
+
+The process cache uses a 60-second TTL and one in-flight read, with a one-second
+Firestore deadline and SDK retries disabled, on the bounded rollout executor.
+Listen and pusher poll in startup-owned background tasks; other configured hosts
+refresh lazily on scope checks. Cold and expired checks return env/last snapshot
+immediately while the read runs. The existing auth warm path schedules the same
+refresh without an extra await. There is no Firestore IO at session admission or
+per audio frame. Read errors also back off for 60 seconds. Expect roughly one
+read per active process per minute (40 single-worker pods: ~57,600 reads/day;
+multiple processes multiply that), independent of users and frame rate. Idle
+lazy hosts refresh at their next scope check. Existing live sessions retain
+their admitted state until reconnect; this does not force a reconnect or drain.
+
+Run from the repository root, after owner approval of the ramp step:
+
+```sh
+source ~/.local/bin/gcp-agent-env.sh prod-operator
+backend/.venv/bin/python backend/scripts/stt_cap_cohort.py \
+  --project based-hardware --environment prod --pct 5 --apply
+```
+
+Omit `--apply` for a hermetic validation-only dry run. Use `--pct 1`, then
+`--pct 5` for **3 hours**, then `--pct 25`, then `--all` by **2026-10-27**, with
+all earlier health/consent gates. Keep lanes `live`. Tokens use the unchanged
+stable UID hash, so percentage membership is identical between doc and env.
+For a private test cohort use `--tokens-file /private/path/to/tokens`; the file
+contains token grammar, never commit it or include its content in a PR/command.
+The writer prints neither tokens nor SDK exceptions.
+
+Runtime rollback uses the same command with `--deny` (empty tokens), or
+`--tokens-file` containing only the private test cohort. Do not roll forward if
+any pod's refresh-failure counter is rising: stale pods retain their previous
+cohort, so a Firestore outage can delay rollback. The existing deployment kill
+switches remain the emergency path; setting env enforcement false requires a
+deploy. Retain the existing custody/redrive processes during rollback.
+
+Verify per-pod `omi_stt_cap_cohort_source{source="doc|env|none"}` (one hot),
+`omi_stt_cap_cohort_percent` (0 for explicit-UID-only or denied cohorts, 100 for
+`all`), and `omi_stt_cap_cohort_refresh_failures_total{reason="read|schedule"}`.
+Source `doc` with pct 0 can be an intentional or invalid denial. Source `none`
+means no valid env cohort or no admission switch enabled. Changes emit
+`event=stt_cap_cohort_changed source=... pct=...`; invalid documents emit
+`event=stt_cap_cohort_invalid outcome=denied`. No tokens, UIDs, hashes or raw SDK
+errors are logged. The shared fallback metric also records refresh failures.
+
 ## Boundaries
 
 Live receiver creation installs one funded admission state for the session.
@@ -139,7 +289,15 @@ that state, including direct registry endpoints and fallback/recovery legs.
 The state debits accepted PCM seconds across channels, replay and successors.
 The existing 60-second usage flush refreshes legacy funded allowance; ladder
 units use the bounded cadence below.
-Root counters retain their received-audio semantics. Timestamp adapters suppress
+Root counters retain their received-audio semantics, except for held audio. The
+receiver records the wall-clock receipt span of every frame it denies at receipt
+(merged, so channels and bursts count arrival time once). The usage flush
+subtracts the overlap of those spans with its billable window from
+`transcription_seconds`, and so from the shadow units derived from it. Held audio
+is metered once, when recovery transcribes it. Provider-pump suppression of audio
+the receiver already admitted is not subtracted: its receipt window may already be
+billed, so that bounded race bills as before rather than undercounting a later
+window. Sessions without an admission, or that never hold, meter unchanged. Timestamp adapters suppress
 before recording accepted-provider spans. Denial is a policy pause, not provider
 death: receiving, pusher audio and existing private-cloud/raw archive paths
 continue. Accepted provider queues drain. When dispatch enforcement pauses managed live audio, the server retains that
@@ -226,7 +384,21 @@ The original full audio remains retained throughout.
 `process_segment` explicitly reports `provider_called`, set immediately before
 `prerecorded`, never inferred from an error class. A known non-call atomically
 removes its intent (or reverts an unspent second attempt). The next claim retries
-normally. If a call may have happened, the piece waits 30 minutes. Then:
+normally. A reply the provider completed with **no words** is fenced into the
+receipt as `provider_empty` with `provider_completed_at`; recovery settles that
+piece as `transcribed` with no content, zero seconds and no usage charge
+(`settled_empty`), whether the same pass observes the checkpoint or a later pass
+resumes a `dispatched` receipt that carries it. It is never re-dispatched. A hold
+whose pieces all settle empty finalizes, settles its content ledger and purges
+like any fully successful recovery. Only a validated success-shaped reply earns
+that checkpoint: the prerecorded adapters raise on a 2xx body that is not the
+provider's success shape (Parakeet without both `text` and `segments`; Modulate
+without an `utterances` list, or with an empty one and neither `text` as a
+string nor `duration_ms` as a number beside it), so a JSON error envelope or
+partial payload is a provider failure with no completion checkpoint, and the
+dispatch stays ambiguous.
+If a call may have happened but no completion
+checkpoint exists, the piece waits 30 minutes. Then:
 
 1. A proof written in the **same transaction as conversation ingestion** identifies
    the hold, piece and deterministic conversation lineage. Recovery marks that
@@ -253,7 +425,7 @@ application TTL or is silently erased. Ordinary fully successful recovery delete
 source and frozen pieces only after content/usage settlement.
 
 `omi_stt_cap_recovery_reconciliation_total{outcome}` counts `cleared_noncall`,
-`reconciled_ingested`, `redispatched`, and `failed`. Structured
+`reconciled_ingested`, `redispatched`, `failed`, and `settled_empty`. Structured
 `event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
 content. Metric labels contain no uid, hold id or piece name. New recovery and
 its signals are inert when both dispatch and ladder enforcement are off. WS-only and inactive
@@ -436,3 +608,48 @@ Local migration verification (loopback Firestore only):
 firebase emulators:exec --only firestore --project demo-held-audio \
   'backend/.venv/bin/python backend/scripts/held_audio_summary_emulator_test.py'
 ```
+
+
+## Recovery-only probe narrowing
+
+`STT_CAP_RECOVERY_COHORT` optionally intersects **effective** dispatch membership
+(including the runtime `rollout_cohorts/stt-cap-dispatch` resolver), enforcement
+and original execution lane. It uses the same `uid:`, `pct:N`, and sole `all`
+token grammar. It cannot admit an owner outside dispatch scope. **Absent** means
+no extra restriction; empty, whitespace or malformed values deny all recovery,
+with one process-local warning that contains neither tokens nor owner identity.
+Listen-side hold admission and backlog display stay unchanged.
+
+The intersection gates manual/upgrade consent creation, the backlog process API,
+redrive owner visits, worker entry, direct recovery wakes, selected manifests and
+each new provider dispatch (including sync pipeline retries). Excluded owners'
+persisted consent and holds are preserved. Staging seal/cleanup and fleet metrics
+continue independently of recovery membership. The one-hot gauge
+`omi_stt_cap_recovery_cohort_narrowed{state="unset|set|malformed"}` reports only
+configuration state; it does not prove which private owner is configured.
+
+For qualification, the deploy lead sets `uid:<test>` through the **private-values
+path**, never a committed manifest, on every API/sync recovery executor. Verify
+all serving revisions and scheduler targets carry the restriction **before**
+activating recovery. Staging is data-isolated (`FIRESTORE_DATABASE_ID=staging`
+in `based-hardware-dev`, in-cluster Redis, and the data-plane fence in
+`database/_client.py`), so on staging the restriction is defence in depth; in
+prod it is the guard that keeps other consented owners asleep. Keep the
+shared dispatch document and listen configuration unchanged, and verify the
+test account is already in the effective dispatch cohort. First qualify staging
+(`backend-staging`, `backend-sync-staging`), then one separately authorized prod
+receipt. Record running release SHA, fresh `state="set"` metric, held-to-published
+receipt, exactly-once usage/replay, source cleanup and normal-load error/backlog
+metrics. Use only the agent-owned test account; no other owners' data reads or
+consent changes. A stale qualification driver that insists the shared dispatch
+cohort itself is probe-only must be updated to attest this intersection before
+execution; do not alter the shared document to satisfy it.
+
+Owner: dazheng / subscription rollout lead. Ramp: staging probe, single prod
+receipt, then **remove the variable** to reach the full existing dispatch cohort
+by **2026-10-23**, after clean capture-integrity/reconciliation, no backlog stalls
+or sync 5xx regression, and reviewed receipts. Emptying it is a fail-closed stop,
+not widening. A missed deadline is a blocker; no automatic expansion. Widening
+can resume other owners' already-consented holds. To stop new recovery, set the narrowing to `pct:0` on every API/sync executor
+while keeping custody redrive on and listen admission unchanged; accepted provider
+calls can still finish.

@@ -1,0 +1,42 @@
+[package]
+name = "omi-edge"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.99"
+publish = false
+description = "listen-edge: Rust websocket edge in front of backend-listen (D1 passthrough, D2 decode+VAD shadow; not deployed)"
+
+[[bin]]
+name = "listen-edge"
+path = "src/main.rs"
+
+[[bin]]
+name = "edge-shadow-replay"
+path = "src/bin/edge_shadow_replay.rs"
+
+[dependencies]
+bytes = "1"
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+http-body-util = "0.1"
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+# Thread CPU clock for the shadow's per-stage CPU accounting.
+libc = "0.2"
+# libopus (pkg-config, else the bundled source via cmake).
+opus = "0.3"
+# ONNX Runtime for Silero; prebuilt static runtime downloaded at build time.
+ort = { version = "=2.0.0-rc.10", default-features = false, features = ["std", "download-binaries"] }
+prometheus = { version = "0.14", default-features = false }
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "sync", "signal"] }
+tokio-tungstenite = { version = "0.30", default-features = false, features = ["connect", "handshake"] }
+tokio-util = { version = "0.7", features = ["rt"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt", "env-filter", "json", "ansi"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "time", "sync", "signal", "io-util"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4

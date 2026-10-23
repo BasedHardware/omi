@@ -5,6 +5,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -17,12 +18,14 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
     required this.messageProvider,
     required this.peopleProvider,
     required this.usageProvider,
+    this.episodeProvider,
   });
 
   final ConversationProvider conversationProvider;
   final MessageProvider messageProvider;
   final PeopleProvider peopleProvider;
   final UsageProvider usageProvider;
+  final EpisodeProvider? episodeProvider;
 
   /// The proxy provider rebuilds this adapter on every upstream notify. Two
   /// adapters over the same provider instances behave identically, so the
@@ -33,11 +36,12 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
       identical(other.conversationProvider, conversationProvider) &&
       identical(other.messageProvider, messageProvider) &&
       identical(other.peopleProvider, peopleProvider) &&
-      identical(other.usageProvider, usageProvider);
+      identical(other.usageProvider, usageProvider) &&
+      identical(other.episodeProvider, episodeProvider);
 
   @override
   int get hashCode => Object.hash(identityHashCode(conversationProvider), identityHashCode(messageProvider),
-      identityHashCode(peopleProvider), identityHashCode(usageProvider));
+      identityHashCode(peopleProvider), identityHashCode(usageProvider), identityHashCode(episodeProvider));
 
   @override
   bool? get isOutOfCredits => usageProvider.isOutOfCredits;
@@ -93,6 +97,9 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
 
   @override
   void clearEmptyRecordingExplanation() => conversationProvider.clearEmptyRecordingExplanation();
+
+  @override
+  void onLiveFinalized() => episodeProvider?.onLiveFinalized();
 
   @override
   Future<Person?> createPerson(String name) {

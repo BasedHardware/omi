@@ -13452,9 +13452,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Continuă cu planul gratuit';
-
-  @override
   String get paywallTrialCancelNote => 'Anulează oricând. Fără taxe, fără penalități.';
 
   @override
@@ -14446,4 +14443,175 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi încă înregistrează';
+
+  @override
+  String get episodeNow => 'Acum';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Live · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count momente',
+      one: '1 moment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Momente';
+
+  @override
+  String get episodeSoFar => 'Până acum';
+
+  @override
+  String get episodeUpdatedJustNow => 'Actualizat acum · notițe complete la final';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Actualizat acum $minutes min · notițe complete la final';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Notițele apar după primele minute de conversație.';
+
+  @override
+  String get episodeOpenAll => 'Deschide tot';
+
+  @override
+  String get episodeWrapUpNow => 'Încheie acum';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi încheie asta când treci mai departe';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Sarcină detectată: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Memento detectat: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Sarcină salvată: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'se adaugă $duration de pe Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Ascultă acum';
+
+  @override
+  String get deviceHeardToday => 'Auzit azi';
+
+  @override
+  String get deviceToSync => 'de sincronizat';
+
+  @override
+  String get deviceRightNow => 'Chiar acum';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Episod live · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Recuperare';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done din $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Recent';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Deconectat timp de $duration';
+  }
+
+  @override
+  String get deviceControls => 'Comenzi';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'De asemenea: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Apasă butonul de pe Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'O apăsare scurtă. Apoi întreabă orice.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Pune întrebarea';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Spune cu voce tare. Omi ascultă.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Gata? Apasă din nou butonul pentru a trimite.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Ai primit $days de zile gratuit';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days de zile de Omi Pro din partea noastră. Te anunțăm înainte de orice plată. Anulezi oricând.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Vreau perioada de probă de $days de zile';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Începe perioada gratuită de $days zile';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Pornește Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Apasă butonul o dată și ține-l aproape de telefon.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Gata. Omi va continua să-ți înregistreze conversațiile în fundal.';
+
+  @override
+  String get noThanks => 'Nu, mulțumesc';
+
+  @override
+  String get recapInTheBackground => 'În fundal';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Rămâi cu $percent% reducere';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Rămâi și plătești $price pe lună în următoarele $months luni.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Gata. $percent% reducere în următoarele $months luni.';
+  }
 }

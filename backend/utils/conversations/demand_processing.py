@@ -21,6 +21,8 @@ from config.demand_processing import (
     OPEN_LEASE_SECONDS,
     RECENT_SECONDS,
     CEILING_HEADROOM_SECONDS,
+    BLOCKED_WAIT_SECONDS,
+    OPEN_PROMOTE_LIMIT,
 )
 
 logger = logging.getLogger(__name__)
@@ -235,8 +237,9 @@ def observe_surface(uid: str, session: str, payload: dict, *, now: float | None 
         p.expire(base + ':surfaces', OPEN_LEASE_SECONDS * 2)
         p.execute()
         if foreground and not was_open:
-            # All indexed pending work, including older debt; newest is woken first.
-            promote(uid, hours=48, limit=None, now=now)
+            # Newest indexed work, including older debt, bounded per open edge: an
+            # unbounded wake is a Cloud Task per obligation and a tier-0 backlog.
+            promote(uid, hours=48, limit=OPEN_PROMOTE_LIMIT, now=now)
     except Exception:
         _fallback()
 
@@ -261,11 +264,15 @@ def admit(obligation: str, *, now: float | None = None, token: str | int | None 
         if token is not None and token != payload.get('dispatch_generation', payload.get('task_token')):
             return True  # Let the durable worker acknowledge the stale delivery.
 
-        def postpone():
+        def postpone(blocked=False):
             from utils.cloud_tasks import enqueue_named_task
 
             binding = row['binding']
             wake_at = max(now + 5, row['due_at'])
+            if blocked:
+                # Each wait is a new named task: back off, clamped to the escape.
+                escape = row['started_at'] + CEILING_HEADROOM_SECONDS
+                wake_at = max(wake_at, min(now + BLOCKED_WAIT_SECONDS, escape))
             enqueue_named_task(
                 binding['queue'],
                 binding['handler'],
@@ -289,7 +296,7 @@ def admit(obligation: str, *, now: float | None = None, token: str | int | None 
             ready = prefix() + f'ready:{priority}'
             r.zremrangebyscore(ready, '-inf', now - TTL)
             if priority < row['tier'] and r.zcount(ready, '-inf', now) and not overdue:
-                return postpone()
+                return postpone(blocked=True)
         p = r.pipeline()
         for priority in range(3):
             p.zrem(prefix() + f'queue:{priority}', obligation)

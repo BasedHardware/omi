@@ -18,11 +18,14 @@ Pure module: stdlib only, flags read at the call boundary, never at import.
 from __future__ import annotations
 
 import os
+
+from config.refactor_switches import default_on as rollout_default_on
 from enum import Enum
 
 SMART_MERGE_MODE_ENV = 'CONVERSATION_SMART_MERGE_MODE'
 SMART_MERGE_AUDIT_ENV = 'CONVERSATION_SMART_MERGE_AUDIT_ENABLED'
 SMART_MERGE_FLATTEN_ENV = 'CONVERSATION_SMART_MERGE_FLATTEN_ENABLED'
+SMART_MERGE_FLATTEN_CHAIN_REPAIR_ENV = 'CONVERSATION_SMART_MERGE_FLATTEN_CHAIN_REPAIR'
 _ON = frozenset({'true', 'on', '1', 'yes'})
 
 
@@ -57,7 +60,7 @@ def smart_merge_audit_enabled() -> bool:
     typo in the kill switch therefore turns the audit off, never the merge.
     """
     raw = os.getenv(SMART_MERGE_AUDIT_ENV, '').strip().lower()
-    return not raw or raw in _ON
+    return rollout_default_on(SMART_MERGE_AUDIT_ENV, not raw or raw in _ON)
 
 
 def smart_merge_flatten_enabled() -> bool:
@@ -70,7 +73,20 @@ def smart_merge_flatten_enabled() -> bool:
     after the flag is turned off: completing queued work is not new permission.
     """
     raw = os.getenv(SMART_MERGE_FLATTEN_ENV, '').strip().lower()
-    return not raw or raw in _ON
+    return rollout_default_on(SMART_MERGE_FLATTEN_ENV, not raw or raw in _ON)
+
+
+def smart_merge_flatten_chain_repair_enabled() -> bool:
+    """Unset or blank is on; only an explicit on-value keeps it on, anything else is off.
+
+    Ordinary sync absorbs re-point only the rows they match, so a canonical's
+    cumulative ``sync_merged_from`` can hold ancestors that still redirect to an
+    intermediate hop inside that same lineage. On, the flatten accepts such a
+    chain and re-points every hop at the survivor; off restores the strict
+    one-hop check, which rejects the whole absorb.
+    """
+    raw = os.getenv(SMART_MERGE_FLATTEN_CHAIN_REPAIR_ENV, '').strip().lower()
+    return rollout_default_on(SMART_MERGE_FLATTEN_CHAIN_REPAIR_ENV, not raw or raw in _ON)
 
 
 # Sources the benchmark measured. Pendant pairs were 113 of 138; desktop recall
@@ -82,7 +98,7 @@ ELIGIBLE_SOURCES = frozenset({'omi'})
 MERGE_THRESHOLD = 0.35
 
 # Ask only inside this gap window. The minimum is the live split itself
-# (``utils/conversation_continuity.DEFAULT_GAP_SECONDS``); both the recorded gap
+# (``models/conversation_continuity.DEFAULT_GAP_SECONDS``); both the recorded gap
 # and the speech gap must reach it, which also skips sync shards whose start
 # drifted. Above one hour only 2 of 9 pairs were continuations.
 MIN_GAP_SECONDS = 120

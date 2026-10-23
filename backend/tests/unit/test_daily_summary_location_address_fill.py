@@ -49,6 +49,7 @@ def ext():
         "models": _real_pkg("models", "models"),
         "database": _real_pkg("database", "database"),
         "database.action_items": _leaf("database.action_items"),
+        "database.screen_activity": _leaf("database.screen_activity"),
         "database.daily_summaries": _leaf("database.daily_summaries"),
         "database.memories": _leaf("database.memories"),
         "database.users": _leaf("database.users"),
@@ -98,6 +99,8 @@ def _configure(ext, geocoder):
     ext.users_db.get_people_by_ids = MagicMock(return_value=[])
     ext.action_items_db.get_action_items = MagicMock(return_value=[])
     ext.memories_db.count_memories_created = MagicMock(return_value=0)
+    ext.daily_summaries_db.get_day_recording_count = MagicMock(return_value=0)
+    ext.screen_activity_db.get_screen_activity = MagicMock(return_value=[])
     ext.daily_summaries_db.get_desktop_daily_usage = MagicMock(
         return_value={
             "watching_seconds": 0,

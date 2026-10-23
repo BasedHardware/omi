@@ -7,6 +7,14 @@ import XCTest
 
 @MainActor
 final class ConversationDetailAutomationStateTests: XCTestCase {
+  func testCitationFocusDoesNotPublishAnotherOpenRequest() {
+    let state = ConversationDetailAutomationState()
+    state.prepareCitationFocus(conversationId: "conversation-1", transcriptSegmentIds: ["segment-2"])
+
+    XCTAssertNil(state.takePendingOpenRequest())
+    XCTAssertTrue(state.syncPresentedDetail(conversationId: "conversation-1", transcriptDrawerOpen: false))
+    XCTAssertEqual(state.focusedTranscriptSegmentIds, ["segment-2"])
+  }
   func testProcessingBannerReservesSpaceAboveConversationMetadata() {
     let idle = ConversationDetailProcessingLayout(isProcessing: false) {
       Color.red.frame(height: 32)

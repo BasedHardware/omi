@@ -297,7 +297,7 @@ def test_default_off_projection_uses_one_existing_read_and_no_claim(monkeypatch)
     projector._project = Mock(return_value={'outcome': 'success'})
     assert projector.project('synthetic-segment') == {'outcome': 'success'}
     projector.store.read.assert_called_once_with('synthetic-segment')
-    projector._project.assert_called_once_with('synthetic-segment', job, entry, binding)
+    projector._project.assert_called_once_with('synthetic-segment', job, entry, binding, hint=None)
     claim.assert_not_called()
 
 
@@ -349,7 +349,7 @@ def test_phase_timing_preserves_playback_retry_and_never_logs_private_error(bind
 
     monkeypatch.setenv('BATCH_PIPELINE_PROJECTION_TIMING_ENABLED', str(enabled).lower())
     policy = resolve_stage_policy(binding.owner_id, 'projection')
-    monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_: 'synthetic-conversation')
+    monkeypatch.setattr(bridge, 'finish_sync_bridges', lambda *_, **kw: 'synthetic-conversation')
     playback = Mock(side_effect=ValueError('private-error-must-never-be-logged'))
     projector = projection.Projector(Mock(), Mock(), playback=playback)
     receipt = {
@@ -494,3 +494,42 @@ def test_non_privacy_errors_log_no_fence_reason(caplog):
                 raise ValueError('private')
     assert 'exception_type=ValueError' in caplog.text
     assert 'fence_reason' not in caplog.text
+
+
+def test_stamp_gap_reroute_reports_lineage_telemetry_after_batch_commit(binding, monkeypatch, caplog):
+    from utils.batch_pipeline.contracts import WorkItem, Priority
+
+    item = WorkItem('segment', binding.owner_id, 0, 'gs://synthetic/audio', 1, Priority.DEEP)
+    payload = {
+        'words': [{'word': 'Fixture.', 'timestamp': [0, 1]}],
+        'audio_seconds': 1,
+        'speech_seconds': 1,
+        'diarization': {'turns': []},
+    }
+    projector = projection.Projector(Mock(), Mock(return_value=payload))
+    projector.store = Mock()
+    session = projector.store.session.return_value
+    monkeypatch.setattr(
+        projection,
+        'build_incoming',
+        lambda *a, **k: {
+            'started_at': Mock(timestamp=lambda: 0),
+            'finished_at': Mock(timestamp=lambda: 1),
+            'transcript_segments': [{'speaker_id_scope': 'sync:fixture'}],
+        },
+    )
+    monkeypatch.setattr(projection.conversations_db, 'get_closest_conversation_to_timestamps', lambda *a: None)
+    assigned = {'id': 'synthetic-neighbour', '_sync_lineage_stamp_gap_refused': True}
+
+    def committed(*args, after_assign, **kwargs):
+        planned = (assigned, False, [])
+        after_assign(Mock(), planned)
+        return planned
+
+    monkeypatch.setattr(projection.conversations_db, 'assign_sync_conversation', committed)
+    with caplog.at_level(logging.INFO):
+        projector.assign_parts(item, {'result': {'result_uri': 'fixture'}}, binding, finish=False)
+    session.persist.assert_called_once()
+    assert 'event=sync_lineage_stamp_append outcome=stamp_gap_refused span_delta_bucket=0' in caplog.text
+    assert 'synthetic-neighbour' not in caplog.text
+    assert '_sync_lineage_stamp_gap_refused' not in assigned

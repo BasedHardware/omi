@@ -32,7 +32,7 @@ enum StorageFailureDiagnostics {
       "sqlite_result_code": sqlite.map { $0.resultCode.rawValue } ?? -1,
       "sqlite_extended_result_code": sqlite.map { $0.extendedResultCode.rawValue } ?? -1,
     ]
-    // Keep this allow-list explicit. It is the scrub boundary for Sentry context.
+    // Keep this allow-list explicit. It is the scrub boundary for diagnostics context.
     values = values.filter { key, _ in
       [
         "path_class", "volume_free_bytes", "volume_total_bytes", "database_file_size_bytes",

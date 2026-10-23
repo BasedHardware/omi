@@ -46,6 +46,26 @@ while read -r local_ref local_oid remote_ref remote_oid; do
   PUSH_UPDATES+=("$local_oid:$remote_oid:$remote_ref")
 done
 
+# Fast-forwarding a branch to a SHA that GitHub CI already certified re-ran the
+# whole local suite against an unchanged tree (~55 min per rollout sync). Skip
+# only that duplicate: pre_push_ci_verified.py asks GitHub about every pushed
+# SHA and fails closed. It reads no environment, so it is not a skip hatch.
+if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
+  declare -a PUSH_OIDS=()
+  for update in "${PUSH_UPDATES[@]}"; do
+    PUSH_OIDS+=("${update%%:*}")
+  done
+  PUSH_REMOTE_URL="${2:-$(git remote get-url "$PUSH_REMOTE" 2>/dev/null || true)}"
+  if "$PYTHON_BIN" scripts/pre_push_ci_verified.py \
+    --remote-url "$PUSH_REMOTE_URL" \
+    --log-file "$(git rev-parse --git-common-dir)/omi-pre-push-ci-verified.log" \
+    "${PUSH_OIDS[@]}"
+  then
+    echo "Every pushed SHA already passed terminal-green CI on GitHub; the local pre-push suite would only repeat it."
+    exit 0
+  fi
+fi
+
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
   echo "Running bounded pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
 else
@@ -187,6 +207,20 @@ fi
 if ci_prediction_selected "windows-kgworker-native-closure"; then
   ci_prediction_note_deferred "Windows packaged build and real asar worker proof"
 fi
+
+# Runs first: a missing local prerequisite (unresolved app dependencies, no
+# backend/.venv, a SwiftPM .build whose recorded artifacts are gone) otherwise
+# surfaces only when its phase runs, minutes in, one push attempt per problem.
+check_worktree_env() {
+  if [ "${PRE_PUSH_SKIP_ENV_DOCTOR:-}" = "1" ]; then
+    echo "Skipping worktree env doctor because PRE_PUSH_SKIP_ENV_DOCTOR=1."
+    return
+  fi
+
+  "$PYTHON_BIN" scripts/worktree_env_doctor.py \
+    --changed-files "$CHANGED_FILES_LIST" \
+    --selection "$CI_PREDICTION_SELECTION"
+}
 
 check_pr_preflight() {
   local has_supplied_pr_body=0
@@ -818,6 +852,7 @@ check_gauntlet_evidence_if_needed() {
   desktop/macos/scripts/check-gauntlet-evidence-at-head.sh warn
 }
 
+run_step check_worktree_env
 run_step check_pr_preflight
 run_step "$PYTHON_BIN" .github/scripts/check-desktop-prod-promotion-policy.py
 run_step "$PYTHON_BIN" .github/scripts/check-deployment-concurrency.py --self-test

@@ -22,8 +22,8 @@ from utils.observability.fallback import record_fallback
 from utils.conversations.render import redact_conversation_for_list
 from utils.external_read_contract import utc_window
 from utils.memory.product_authorization import ProductAuthorizationContext
-from utils.mcp_data import end_of_day_utc
-from utils.mcp_memories import parse_mcp_int
+from utils.mcp_dates import local_date_window, localize_timestamps
+from utils.mcp_memories import parse_mcp_int, parse_mcp_bool
 from utils.mcp_server.constants import (
     MCP_CONVERSATION_BATCH_MAX_IDS,
     MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS,
@@ -39,13 +39,14 @@ from utils.mcp_server.cursors import (
     conversation_keyset_position,
     decode_cursor,
     encode_cursor,
+    offset_position,
     serialize_timestamp,
 )
 from utils.mcp_server.errors import ToolExecutionError, raise_conversation_index_error
 from utils.mcp_server.helpers import (
     bounded_transcript_segments,
     conversation_card,
-    parse_mcp_date,
+    select_card_fields,
 )
 from utils.mcp_server.payloads import tool_response_serialized_chars
 
@@ -194,14 +195,7 @@ def get_conversations(
     except ValueError as e:
         raise ToolExecutionError(str(e), code=-32602)
 
-    start_dt = parse_mcp_date(start_date, "start_date")
-    end_dt = parse_mcp_date(end_date, "end_date")
-    if end_dt is not None:
-        # Include the entire end day, matching the integration-router convention.
-        end_dt = end_of_day_utc(end_dt)
-
-    if start_dt is not None and end_dt is not None and start_dt > end_dt:
-        raise ToolExecutionError("start_date must be on or before end_date", code=-32602)
+    start_dt, end_dt, zone = local_date_window(uid, start_date, end_date, arguments.get('timezone'))
 
     valid_categories: List[str] = []
     for cat in categories_list:
@@ -222,13 +216,16 @@ def get_conversations(
     )
 
     result: Dict[str, Any] = {
-        "conversations": [conversation_card(conversation) for conversation in page],
+        "conversations": [
+            select_card_fields(conversation_card(conversation), arguments.get("fields")) for conversation in page
+        ],
         "has_more": next_cursor is not None,
         "effective_limit": limit,
     }
     if next_cursor is not None:
         result["next_cursor"] = next_cursor
-    return result
+    result["timezone"] = str(zone)
+    return localize_timestamps(result, zone)
 
 
 def get_conversation_by_id(
@@ -246,7 +243,10 @@ def get_conversation_by_id(
 
     conversation = fetch_conversation_for_detail(uid, conversation_id)
     if conversation is None:
-        raise ToolExecutionError("Conversation not found", code=-32001)
+        raise ToolExecutionError(
+            "Conversation not found. Use the full id from get_conversations; shortened id prefixes are not document ids.",
+            code=-32001,
+        )
 
     if conversation.get('is_locked', False):
         raise ToolExecutionError("A paid plan is required to access this conversation.", code=-32002)
@@ -257,8 +257,16 @@ def get_conversation_by_id(
         max_chars=max_chars,
     )
     result = conversation_card(conversation)
-    result["transcript_segments"] = transcript_segments
-    return {"conversation": result, "truncated": truncated}
+    try:
+        summary_only = parse_mcp_bool(arguments.get("summary_only"), "summary_only", default=False)
+    except ValueError as exc:
+        raise ToolExecutionError(str(exc), code=-32602) from exc
+    if not summary_only:
+        result["transcript_segments"] = transcript_segments
+    return {
+        "conversation": select_card_fields(result, arguments.get("fields")),
+        "truncated": truncated and not summary_only,
+    }
 
 
 def _conversation_fetch_bounds(arguments: Dict[str, Any]) -> tuple[int, int]:
@@ -288,17 +296,10 @@ def get_conversations_by_ids(
     arguments: Dict[str, Any],
     auth_context: Optional[ProductAuthorizationContext] = None,
 ) -> Dict[str, Any]:
-    """Fetch several conversations in one bounded read.
+    """Fetch up to twenty details with fair budgets and explicit omissions.
 
-    One ``get_all`` Firestore batch read serves the whole id list. Each
-    returned item mirrors ``get_conversation_by_id`` (card + bounded
-    transcript + per-item ``truncated``); a locked conversation yields a
-    per-item paid-plan error so its transcript never reaches the response,
-    and ids that resolve to nothing land in ``not_found``. Items are appended
-    in request order until the serialized response would exceed
-    ``MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS`` — later items are then
-    omitted (NOT marked not_found) and the top-level ``truncated`` flag is
-    set so the caller can retry the remainder with tighter bounds.
+    The released nested detail and additive flat card share one projection.
+    Missing, locked, clipped and omitted records are accounted independently.
     """
     raw_ids = arguments.get("conversation_ids")
     if not isinstance(raw_ids, list):
@@ -334,40 +335,108 @@ def get_conversations_by_ids(
     by_id = {str(conversation.get("id")): conversation for conversation in conversations}
     not_found = [conversation_id for conversation_id in conversation_ids if conversation_id not in by_id]
 
-    items: List[Dict[str, Any]] = []
-    truncated_response = False
-    for conversation_id in conversation_ids:
-        conversation = by_id.get(conversation_id)
-        if conversation is None:
-            continue
-        if conversation.get("is_locked", False):
-            item: Dict[str, Any] = {
-                "id": conversation_id,
-                "error": {
-                    "code": "paid_plan_required",
-                    "message": "A paid plan is required to access this conversation.",
-                },
-            }
-        else:
-            transcript_segments, truncated = bounded_transcript_segments(
-                conversation.get("transcript_segments"),
-                max_segments=max_segments,
-                max_chars=max_chars,
-            )
-            card = conversation_card(conversation)
-            card["transcript_segments"] = transcript_segments
-            item = {"id": conversation_id, "conversation": card, "truncated": truncated}
-        # The transport emits the result twice (text + structuredContent)
-        # inside the JSON-RPC envelope, so the budget is measured against the
-        # largest serialized form, not the inner object. `truncated: false`
-        # serializes one char wider than `true`, keeping the probe safe.
-        candidate = {"conversations": items + [item], "not_found": not_found, "truncated": False}
-        if tool_response_serialized_chars(candidate) > MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS:
-            truncated_response = True
-            break
-        items.append(item)
+    filters = {
+        'ids': conversation_ids,
+        'max_segments': max_segments,
+        'max_chars': max_chars,
+        'fields': arguments.get('fields'),
+        'summary_only': arguments.get('summary_only', False),
+    }
+    offset = 0
+    if arguments.get('cursor') is not None:
+        offset = offset_position(
+            decode_cursor(arguments['cursor'], kind='get_conversations_by_ids', uid=uid, filters=filters)
+        )
+    try:
+        summary_only = parse_mcp_bool(arguments.get('summary_only'), 'summary_only', default=False)
+    except ValueError as exc:
+        raise ToolExecutionError(str(exc), code=-32602) from exc
+    found_positions = [(pos, cid) for pos, cid in enumerate(conversation_ids) if pos >= offset and cid in by_id]
+    found_ids = [cid for _pos, cid in found_positions]
 
-    return {"conversations": items, "not_found": not_found, "truncated": truncated_response}
+    def build_items(char_budget: int, segment_budget: int, card_budget: int) -> List[Dict[str, Any]]:
+        items = []
+        for cid in found_ids:
+            conversation = by_id[cid]
+            if conversation.get('is_locked', False):
+                items.append(
+                    {
+                        'id': cid,
+                        'error': {
+                            'code': 'paid_plan_required',
+                            'message': 'A paid plan is required to access this conversation.',
+                        },
+                    }
+                )
+                continue
+            card = conversation_card(conversation)
+            clipped_fields = []
+            for key, value in card['structured'].items():
+                if isinstance(value, str) and len(value) > card_budget:
+                    card['structured'][key] = value[:card_budget]
+                    clipped_fields.append('structured.' + key)
+            segments, clipped = bounded_transcript_segments(
+                conversation.get('transcript_segments'), max_segments=segment_budget, max_chars=char_budget
+            )
+            if not summary_only:
+                card['transcript_segments'] = segments
+            card = select_card_fields(card, arguments.get('fields'))
+            # Keep the released nested detail and add the same flat card as list/search.
+            items.append(
+                {
+                    **card,
+                    'conversation': card,
+                    'truncated': bool((clipped and not summary_only) or clipped_fields),
+                    'truncated_fields': clipped_fields,
+                }
+            )
+        return items
+
+    def envelope(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        remaining = found_positions[len(items) :]
+        omitted = [cid for _pos, cid in remaining]
+        result: Dict[str, Any] = {
+            'conversations': items,
+            'not_found': not_found,
+            'omitted_ids': omitted,
+            'next_ids': omitted,
+            'truncated': bool(omitted) or any(item.get('truncated', False) for item in items),
+        }
+        if any(len(cid) == 8 for cid in not_found):
+            result['not_found_hint'] = (
+                'Use the full id from get_conversations; shortened id prefixes are not document ids.'
+            )
+        if omitted:
+            result['next_cursor'] = encode_cursor(
+                kind='get_conversations_by_ids',
+                uid=uid,
+                position={'offset': remaining[0][0]},
+                filters=filters,
+            )
+        return result
+
+    char_budget, segment_budget, card_budget = max_chars, max_segments, 4000
+    while True:
+        items = build_items(char_budget, segment_budget, card_budget)
+        result = envelope(items)
+        if tool_response_serialized_chars(result) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS:
+            return result
+        if char_budget == segment_budget == card_budget == 1:
+            break
+        char_budget = max(1, char_budget // 2)
+        segment_budget = max(1, segment_budget // 2)
+        card_budget = max(1, card_budget // 2)
+    # Pathological metadata (e.g. thousands of participants) can still exceed the
+    # bound. Account for every missing item, and bind continuation to this request.
+    while items and tool_response_serialized_chars(envelope(items)) > MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS:
+        items.pop()
+    result = envelope(items)
+    if not items and found_ids:
+        raise ToolExecutionError(
+            'Conversation metadata exceeds the response budget. Retry with fields=id,structured and summary_only=true.',
+            code=-32602,
+        )
+    return result
 
 
 def search_conversations_core(
@@ -476,12 +545,7 @@ def search_conversations(
     start_date = arguments.get("start_date")
     end_date = arguments.get("end_date")
 
-    # Parse dates to epoch for vector search (UTC-anchored so the filter matches the
-    # vector index's UTC epoch created_at; end bound includes the full end day).
-    start_dt = parse_mcp_date(start_date, "start_date")
-    end_dt = parse_mcp_date(end_date, "end_date")
-    if end_dt is not None:
-        end_dt = end_of_day_utc(end_dt)
+    start_dt, end_dt, zone = local_date_window(uid, start_date, end_date, arguments.get('timezone'))
 
     conversations = search_conversations_core(
         uid,
@@ -514,6 +578,9 @@ def search_conversations(
             )
         card = conversation_card(conv)
         card["match_snippets"] = snippets
-        results.append(card)
+        results.append(select_card_fields(card, arguments.get("fields")))
 
-    return {"conversations": results, "search_coverage": "summary_vectors_with_keyword_recovery"}
+    return localize_timestamps(
+        {"conversations": results, "search_coverage": "summary_vectors_with_keyword_recovery", "timezone": str(zone)},
+        zone,
+    )
