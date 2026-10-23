@@ -677,15 +677,16 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider5<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+            EpisodeProvider, CaptureProvider>(
           create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
-          update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
+          update: (BuildContext context, conversation, message, people, usage, episodes, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(
               conversationProvider: conversation,
               messageProvider: message,
               peopleProvider: people,
               usageProvider: usage,
+              episodeProvider: episodes,
             );
             return (previous?..updateExternalActions(externalActions)) ??
                 composeProductionCaptureProvider(

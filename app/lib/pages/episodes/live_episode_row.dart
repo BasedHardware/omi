@@ -85,7 +85,8 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final title = named.isEmpty ? l10n.episodeListeningNow : named;
     final topics = named.isEmpty ? EpisodePresentation.topics(episode) : '';
     final speakers = _speakerCount(capture);
-    final status = listening ? l10n.episodeLiveFor(elapsed) : '${captureStateLabel(l10n, state)} · $elapsed';
+    // Paused (or waiting) shows no clock: a time that keeps counting while nothing listens misleads.
+    final status = listening ? l10n.episodeLiveFor(elapsed) : captureStateLabel(l10n, state);
     final rest = [
       status,
       if (speakers >= 2) l10n.peopleCount(speakers),
