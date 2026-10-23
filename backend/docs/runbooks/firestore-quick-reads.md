@@ -60,8 +60,11 @@ at each check. Long-lived background contexts cannot reuse a closed holder.
 
 ## Grading
 
-Compare absolute caller totals as well as origins: predecessor lookup remains
-`find_preceding_conversations`; KG remains `prune_memory_citations_from_kg` with
-the added helper's query reads. Count the new origins together with their old
-caller baseline so relabelling cannot look like savings. Fleet savings require
-the reads loop's complete service coverage and billing confirmation.
+Compare absolute caller totals as well as origins. The SDK probe attributes the
+new inner collector to `smart_merge:collect` (including the unchanged finite
+window) and indexed node lookups to `knowledge_graph:_citation_nodes`; the
+remaining graph sweeps stay under `knowledge_graph:prune_memory_citations_from_kg`.
+Grade those callers together against the old `smart_merge:find_preceding_conversations`
+and `knowledge_graph:prune_memory_citations_from_kg` baselines. Count new origins
+together with the old callers so relabelling cannot look like savings. Fleet
+savings require complete service coverage and billing confirmation.
