@@ -21,7 +21,17 @@ SOURCE_COLLECTIONS = frozenset({'memory_items', 'memories', 'memory_historical_o
 def owners(writes: Any) -> set[tuple[str, str]]:
     result: set[tuple[str, str]] = set()
     for write in writes:
-        path = write.delete or write.update.name or write.transform.document
+        if isinstance(write, dict):
+            update = write.get('update') or {}
+            transform = write.get('transform') or {}
+            path = (
+                write.get('delete')
+                or (update.get('name') if isinstance(update, dict) else update.name)
+                or (transform.get('document') if isinstance(transform, dict) else transform.document)
+                or ''
+            )
+        else:
+            path = write.delete or write.update.name or write.transform.document
         parts = path.split('/')
         if len(parts) == 9 and parts[4:6] == ['documents', 'users'] and parts[7] in SOURCE_COLLECTIONS:
             result.add(('/'.join(parts[:5]), parts[6]))
@@ -39,10 +49,15 @@ def head_write(root: str, uid: str, *, blocked: bool = False) -> Write:
     )
 
 
-def augment_commit(request: Any) -> tuple[CommitRequest, int]:
+def augment_commit(request: Any) -> tuple[Any, int]:
+    writes = (request.get('writes') if isinstance(request, dict) else request.writes) or ()
+    count = len(writes)
+    affected = owners(writes)
+    if not affected:
+        # Do not copy large transcript/conversation commits on this hot path.
+        return request, count
     prepared = CommitRequest(request)
-    count = len(prepared.writes)
-    for root, uid in sorted(owners(prepared.writes)):
+    for root, uid in sorted(affected):
         prepared.writes.append(head_write(root, uid))
     return prepared, count
 

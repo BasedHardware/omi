@@ -47,6 +47,19 @@ def test_one_head_per_owner_per_commit_and_no_heads_for_unrelated_data():
     assert len(prepared.writes) == 6
 
 
+def test_unrelated_commits_are_not_copied_or_rewritten():
+    request = {'writes': [{'update': {'name': f'{ROOT}/users/u/conversations/a'}}]}
+    prepared, count = head.augment_commit(request)
+    assert prepared is request and count == 1
+
+
+def test_gapic_dictionary_writes_receive_the_same_atomic_head():
+    request = {'writes': [{'delete': f'{ROOT}/users/u/memories/a'}]}
+    prepared, count = head.augment_commit(request)
+    assert count == 1 and len(prepared.writes) == 2
+    assert prepared.writes[0].delete == request['writes'][0]['delete']
+
+
 def test_sync_commit_preserves_source_results_and_transport_options():
     calls = []
 
