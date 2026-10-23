@@ -27,6 +27,7 @@ from config.episodes import (
     MOMENT_TEXT_MAX_CHARS,
 )
 from config.refactor_modes import serving_for, shadow_or_serve
+from database.auth import get_user_name
 from utils.episodes.moment_render import render_segments
 from utils.llm.notes_packet import get_evidence
 from utils.llm.notes_refactor_metrics import shadow
@@ -35,6 +36,7 @@ from utils.episodes.state import IncrementalUpdate, parse_update
 from utils.llm.clients import get_llm
 from utils.llm.jev_client import ask_jev
 from utils.llm.usage_tracker import track_usage
+from utils.speaker_display import SpeakerLabeler, voice_key
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +51,11 @@ _MOMENT_RULES = """- "bullets": the whole episode so far, at most 8 short lines,
 - "title": a short topic for the whole episode (at most 6 words), not for this moment only.
 - "moment_heading": at most 4 words naming what this newest moment was about.
 - "people": names of the people taking part or addressed, never "Speaker 2".
+- Dialogue labels like "You", "Speaker A" or "Speaker B" are voice markers, not names. NEVER copy a
+  "Speaker" label or any number from one into any field; call that person "a speaker" or "another
+  speaker" until their name is known, and never invent one.
+- "title" and "moment_heading" must say what the speech was about; never a placeholder such as
+  "New moment", "Conversation" or "Talking".
 - "open_questions": at most 4 things left unresolved, or [].
 - "items": only tasks or reminders someone (usually the owner) committed to, or that the owner asked
   Omi for. Each: {"id": existing id when you are editing an existing item, omitted for a new one,
@@ -57,6 +64,8 @@ _MOMENT_RULES = """- "bullets": the whole episode so far, at most 8 short lines,
   Do not list an existing item again unless you change it. Never invent a commitment.
 - "drop_ids": ids of existing items the new speech cancels or shows are already done.
 - Speech can be noisy transcription. Ignore filler, ads, TV and background talk.
+- The "You" label (or the owner's own name) marks the person wearing Omi; report their words and
+  actions in the third person, like everyone else's.
 
 Reply with one JSON object only:
 {"title": "", "moment_heading": "", "bullets": [], "people": [], "open_questions": [], "items": [], "drop_ids": []}
@@ -97,14 +106,27 @@ class MomentText:
     words: int
 
 
-def speaker_label(segment: Mapping[str, Any]) -> str:
+def speaker_label(segment: Mapping[str, Any], labeler: SpeakerLabeler, owner_name: str) -> str:
+    """The owner by name, named people by name, every other voice a dense per-moment label.
+
+    The raw diarization id never reaches the prompt: summarizer models copy
+    ``Speaker 379``-style labels verbatim into user-visible bullets (#23381).
+    """
     if segment.get('is_user'):
-        return 'Owner'
+        return owner_name
     name = segment.get('person_name') or segment.get('speaker_name')
     if isinstance(name, str) and name.strip() and not name.strip().lower().startswith('speaker'):
         return name.strip()
-    speaker_id = segment.get('speaker_id')
-    return f'Speaker {speaker_id}' if speaker_id is not None else 'Speaker'
+    return labeler.label(voice_key(segment))
+
+
+def _resolve_owner_name(uid: str | None) -> str | None:
+    if not uid:
+        return None
+    try:
+        return get_user_name(uid, use_default=False)
+    except Exception:
+        return None
 
 
 def render_moment(
@@ -112,22 +134,25 @@ def render_moment(
     *,
     uid: str | None = None,
     conversation_id: str | None = None,
+    owner_name: str | None = None,
 ) -> MomentText:
     """Speaker-labelled lines, consecutive lines from one voice joined, head and tail kept."""
-    legacy = _legacy_moment(segments)
+    owner = owner_name or _resolve_owner_name(uid) or 'You'
+    legacy = _legacy_moment(segments, owner)
     if shadow_or_serve('NOTES_PACKET_V2_MODE'):
         serving = serving_for('NOTES_PACKET_V2_MODE', uid)
         # Shadow compares renderers without the evidence read; only the serving cohort pays for it.
         evidence = get_evidence(uid, conversation_id) if serving else None
-        text, words = render_segments(segments, evidence=evidence)
+        text, words = render_segments(segments, evidence=evidence, owner_name=owner)
         shadow('moment_render', 'agree' if text == legacy[0] else 'disagree', rendered_chars=len(text), words=words)
         if serving:
             return MomentText(_bounded_moment(text), words)
     return MomentText(_bounded_moment(legacy[0]), legacy[1])
 
 
-def _legacy_moment(segments: Sequence[Mapping[str, Any]]) -> tuple[str, int]:
+def _legacy_moment(segments: Sequence[Mapping[str, Any]], owner_name: str) -> tuple[str, int]:
     # refactor: superseded by moment_render.render_segments when NOTES_PACKET_V2_MODE=serve
+    labeler = SpeakerLabeler()
     lines: list[list[str]] = []
     words = 0
     for segment in segments:
@@ -135,7 +160,7 @@ def _legacy_moment(segments: Sequence[Mapping[str, Any]]) -> tuple[str, int]:
         if not text:
             continue
         words += len(text.split())
-        label = speaker_label(segment)
+        label = speaker_label(segment, labeler, owner_name)
         if lines and lines[-1][0] == label:
             lines[-1][1] += ' ' + text
         else:
