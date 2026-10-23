@@ -165,6 +165,18 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.caption)
             .foregroundColor(Ink.secondary)
           }
+
+          if AppState.isAppleSilicon && !selectedLanguageIsCoveredOnDevice {
+            HStack(spacing: OmiSpacing.sm) {
+              Image(systemName: "cloud")
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+
+              Text("This language isn't available on-device, so Omi transcribes meetings in the cloud.")
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(Ink.secondary)
+            }
+          }
         }
       }
 
@@ -365,6 +377,14 @@ extension SettingsContentView {
   /// tick, and transcribed in the single language anyway — a state you could neither see nor leave.
   var autoDetectIsActive: Bool {
     transcriptionAutoDetect && autoDetectSupported
+  }
+
+  /// Mirrors `AssistantSettings.transcriptionLanguageSelection` from this pane's live state.
+  var selectedLanguageIsCoveredOnDevice: Bool {
+    STTLanguageCapability.Selection(
+      effective: autoDetectIsActive ? STTLanguageCapability.autoDetect : transcriptionLanguage,
+      primary: transcriptionLanguage
+    ).isCoveredOnDevice
   }
 
   /// Persists a Single-Language selection to the account in the one order that survives a reload.
