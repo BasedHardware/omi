@@ -219,15 +219,6 @@ def accept(subscription_id: str) -> RetentionOffer:
         _release_lock(customer_id, token)
 
 
-def stripe_cancel_at_period_end(subscription_id: str) -> Optional[bool]:
-    """Stripe's current cancel_at_period_end, or None when it cannot be read."""
-    try:
-        return bool(_get(stripe.Subscription.retrieve(subscription_id), 'cancel_at_period_end'))
-    except Exception as exc:  # noqa: BLE001 - reconciliation is best effort; webhooks also sync it
-        logger.warning('retention offer: cancel state unavailable: %s', type(exc).__name__)
-        return None
-
-
 def _apply(subscription_id: str) -> None:
     """Discount the subscription and keep it renewing, at most once per subscription.
 

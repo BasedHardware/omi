@@ -549,7 +549,9 @@ def test_endpoint_repeat_after_cancel_keeps_stripe_and_firestore_cancelled(monke
     monkeypatch.setattr(router.users_db, 'update_user_subscription', lambda uid, data: stored.update(data))
 
     assert router.accept_retention_offer_endpoint(uid='uid').eligible
-    assert fake.subs['sub_1']['cancel_at_period_end'] is False and stored['cancel_at_period_end'] is False
+    assert fake.subs['sub_1']['cancel_at_period_end'] is False
+    assert stored['cancel_at_period_end'] is True  # the endpoint never writes it; the webhook syncs
+    stored['cancel_at_period_end'] = False  # Stripe's customer.subscription.updated webhook
 
     # The reader cancels again: Stripe and Firestore both record it.
     fake.subs['sub_1']['cancel_at_period_end'] = True

@@ -56,15 +56,7 @@ def accept_retention_offer_endpoint(uid: str = Depends(auth.get_current_user_uid
     except Exception as e:
         logger.error(f"Error applying retention offer: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Could not apply the offer. Please try again.")
-    # Mirror Stripe's actual cancellation state onto the current record, never this request's
-    # earlier snapshot: a stale or repeated acceptance may have been replayed by Stripe after
-    # the reader cancelled again, and that later cancellation must stay recorded here too.
-    stripe_cancel = retention_offer.stripe_cancel_at_period_end(subscription.stripe_subscription_id)
-    if stripe_cancel is not None:
-        current = users_db.get_user_subscription(uid)
-        if current and current.stripe_subscription_id == subscription.stripe_subscription_id:
-            if current.cancel_at_period_end != stripe_cancel:
-                current.cancel_at_period_end = stripe_cancel
-                users_db.update_user_subscription(uid, current.model_dump())
+    # Firestore's cancel_at_period_end is written only by Stripe's customer.subscription.updated
+    # webhook, which fires for this write too. Writing it here could race a later cancellation.
     logger.info(f"Retention offer accepted uid={uid}")
     return _response(offer)
