@@ -1,6 +1,7 @@
 // Test-only fault injection. Never change production wrappers for mutation tests.
 import 'dart:io';
 import 'package:flutter/widgets.dart';
+import 'package:flutter/semantics.dart';
 
 Widget injectPerfMutation(Widget child) =>
     Platform.environment['PERF_GATE_MUTATION'] == 'held_semantics' ? _HeldSemantics(child: child) : child;

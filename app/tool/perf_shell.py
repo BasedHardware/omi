@@ -37,7 +37,7 @@ def generate(source):
     digest = hashlib.sha256(source.encode()).hexdigest()
     return f'''// Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
 // Source shell SHA256: {digest}
-// ignore_for_file: unused_import
+// ignore_for_file: unused_import, unnecessary_import
 {imports}
 import 'package:omi/main.dart' show MyApp, CustomErrorWidget;
 

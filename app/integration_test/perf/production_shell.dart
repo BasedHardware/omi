@@ -1,6 +1,6 @@
 // Derived by python3 tool/perf_shell.py from main.dart. Do not hand edit.
 // Source shell SHA256: f4e55403124c6a2b3cb0bfafc9d431d57c9432b41954aa2a3acb175ebc08adb8
-// ignore_for_file: unused_import
+// ignore_for_file: unused_import, unnecessary_import
 import 'package:omi/services/on_device/on_device_background.dart';
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'package:omi/env/physical_qualification.dart';
