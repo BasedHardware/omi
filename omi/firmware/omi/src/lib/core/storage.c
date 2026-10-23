@@ -139,7 +139,6 @@ static int64_t sync_checkpoint_deadline_ms;
 static atomic_t storage_status_used_bytes = ATOMIC_INIT(0);
 static atomic_t storage_status_unread_packets = ATOMIC_INIT(0);
 static atomic_t storage_status_free_bytes = ATOMIC_INIT(0);
-static atomic_t storage_status_rtc_valid = ATOMIC_INIT(0);
 static int64_t storage_status_refresh_deadline_ms;
 
 typedef enum {
@@ -203,7 +202,6 @@ static void storage_status_cache_set(const sd_ring_info_t *info)
     atomic_set(&storage_status_used_bytes, (atomic_val_t) MIN(used_bytes, (uint64_t) UINT32_MAX));
     atomic_set(&storage_status_unread_packets, (atomic_val_t) MIN(unread_packets, (uint64_t) UINT32_MAX));
     atomic_set(&storage_status_free_bytes, (atomic_val_t) MIN(free_bytes, (uint64_t) UINT32_MAX));
-    atomic_set(&storage_status_rtc_valid, rtc_is_valid() ? 1 : 0);
 }
 
 static void storage_status_cache_refresh(void)
@@ -612,7 +610,7 @@ static ssize_t storage_read_characteristic(struct bt_conn *conn,
         (uint32_t) atomic_get(&storage_status_used_bytes),
         (uint32_t) atomic_get(&storage_status_unread_packets),
         (uint32_t) atomic_get(&storage_status_free_bytes),
-        (uint32_t) atomic_get(&storage_status_rtc_valid),
+        (uint32_t) (rtc_is_trusted() ? 1U : 0U),
     };
 
     return bt_gatt_attr_read(conn, attr, buf, len, offset, payload, sizeof(payload));
