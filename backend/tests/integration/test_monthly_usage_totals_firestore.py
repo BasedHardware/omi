@@ -12,7 +12,11 @@ from google.api_core.exceptions import Aborted
 from google.cloud import firestore
 import pytest
 
-from database import monthly_usage_totals as totals, user_usage
+from database import legal_holds, monthly_usage_totals as totals, user_usage
+from database.batch_pipeline_projection import ProjectionStore
+from database.hourly_usage_updates import prepare_hourly_usage_updates
+from database.sync_ledger import BATCH_PARTIAL_STATUS
+from scripts.admin.reset_transcription_usage import ResetPlan, apply_reset
 
 pytestmark = pytest.mark.integration
 NOW = datetime(2026, 10, 23, 15, tzinfo=timezone.utc)
@@ -28,7 +32,9 @@ def lane(monkeypatch):
     monkeypatch.setenv('FIRESTORE_READ_LEVERS', '{"usage_month_total":100}')
     monkeypatch.setattr(user_usage, 'db', client)
     monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *a, **k: 'free')
-    return client, uid, client.collection('users').document(uid)
+    user = client.collection('users').document(uid)
+    user.set({'synthetic': True})
+    return client, uid, user
 
 
 def source_stats(user, date, start=None):
@@ -85,8 +91,6 @@ def test_concurrent_duplicate_receipt_and_cold_seeding(lane):
 
 
 def test_absolute_overwrite_and_admin_reset_invalidate_atomically(lane):
-    from scripts.admin.reset_transcription_usage import ResetPlan, apply_reset
-
     client, uid, user = lane
     user_usage.update_hourly_usage(
         uid, NOW, {'transcription_seconds': 20, 'words_transcribed': 10}, firestore_client=client
@@ -125,10 +129,6 @@ def test_aborted_transaction_retries_source_receipt_and_total_together(lane, mon
 
 
 def test_partial_projection_charges_only_delta_then_completion_replay_is_noop(lane):
-    from database.batch_pipeline_projection import ProjectionStore
-    from database.hourly_usage_updates import prepare_hourly_usage_updates
-    from database.sync_ledger import BATCH_PARTIAL_STATUS
-
     client, uid, user = lane
     store = ProjectionStore(SimpleNamespace(client=client))
     ledger_ref = user.collection('sync_content_ledger').document('partial')
@@ -190,3 +190,81 @@ def test_invalid_source_payload_cannot_partially_commit_total(lane):
         batch.set(user.collection('hourly_usage').document('bad'), {'unsupported': object()})
         batch.commit()
     assert not totals.month_ref(user, NOW).get().exists
+
+
+@pytest.mark.parametrize('status', ['pending', 'completed'])
+def test_cold_seed_respects_account_deletion_without_changing_legacy_read(lane, status):
+    client, uid, user = lane
+    user.collection('hourly_usage').document('2026-10-23-15').set(
+        {'id': '2026-10-23-15', 'year': 2026, 'month': 10, 'transcription_seconds': 9}
+    )
+    client.collection('account_deletions').document(uid).set({'wipe_status': status})
+    assert totals.read_monthly_totals(uid, NOW, firestore_client=client) is None
+    assert not totals.month_ref(user, NOW).get().exists
+    assert user_usage.get_monthly_usage_stats(uid, NOW)['transcription_seconds'] == 9
+
+
+def test_cold_seed_does_not_recreate_data_beneath_a_missing_user(lane):
+    client, uid, user = lane
+    user.delete()
+    assert totals.read_monthly_totals(uid, NOW, firestore_client=client) is None
+    assert not totals.month_ref(user, NOW).get().exists
+    assert user_usage.get_monthly_usage_stats(uid, NOW)['transcription_seconds'] == 0
+
+
+def test_cold_seed_respects_existing_destructive_gate_then_recovers(lane):
+    client, uid, user = lane
+    user.collection('hourly_usage').document('2026-10-23-15').set(
+        {'id': '2026-10-23-15', 'year': 2026, 'month': 10, 'transcription_seconds': 9}
+    )
+    token = uuid4().hex
+    legal_holds.acquire_destructive_operation(
+        uid, kind='explicit_memory_deletion', token=token, firestore_client=client
+    )
+    try:
+        assert totals.read_monthly_totals(uid, NOW, firestore_client=client) is None
+        assert not totals.month_ref(user, NOW).get().exists
+        assert user_usage.get_monthly_usage_stats(uid, NOW)['transcription_seconds'] == 9
+    finally:
+        legal_holds.finish_destructive_operation(
+            uid, kind='explicit_memory_deletion', token=token, outcome='completed', firestore_client=client
+        )
+    assert totals.read_monthly_totals(uid, NOW, firestore_client=client)['transcription_seconds'] == 9
+
+
+def test_deletion_inventory_cannot_miss_a_racing_cold_seed(lane, monkeypatch):
+    client, uid, user = lane
+    # A pre-contract hour exists, but no monthly document does yet.
+    user.collection('hourly_usage').document('2026-10-23-15').set(
+        {'id': '2026-10-23-15', 'year': 2026, 'month': 10, 'transcription_seconds': 9}
+    )
+    scanned, release, marked = threading.Event(), threading.Event(), threading.Event()
+    original = totals._month_rows
+
+    def pause_after_scan(*args):
+        yield from original(*args)
+        scanned.set()
+        assert release.wait(20), 'seeder release timed out'
+
+    monkeypatch.setattr(totals, '_month_rows', pause_after_scan)
+
+    def erase():
+        client.collection('account_deletions').document(uid).set({'wipe_status': 'pending'})
+        inventory = list(user.collections())
+        marked.set()
+        for collection in inventory:
+            for snapshot in collection.stream():
+                snapshot.reference.delete()
+        user.delete()
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        seed = pool.submit(totals.read_monthly_totals, uid, NOW, firestore_client=client)
+        assert scanned.wait(20), 'seeder scan timed out'
+        erased = pool.submit(erase)
+        try:
+            marked.wait(0.25)
+        finally:
+            release.set()
+        assert seed.result(timeout=20)['transcription_seconds'] == 9
+        erased.result(timeout=20)
+    assert not totals.month_ref(user, NOW).get().exists, 'derived usage survived the wipe inventory'

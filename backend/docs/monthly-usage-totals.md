@@ -19,8 +19,14 @@ transaction reads the monthly document before scanning and replaces its entire
 baseline. Every concurrent writer touches that monthly document, so a cold seed,
 reset, duplicate receipt, retry or backdated increment cannot silently lose or
 double-apply a contribution. There is no periodic scan or background backfill.
-An empty month is also a valid baseline. The initialization scan is the old read
-plus two document lookups; warm reads use one document regardless of hour count.
+An empty month is also a valid baseline. Because initialization materializes
+derived user data, it takes the existing transactional `external_write_fence`
+and requires an existing user root. Deletion/destructive-operation authorities
+are read before the monthly counter and source query, so deletion cannot
+inventory the subtree before the new counter lands. A blocked initialization
+retains the old read path. Initialization adds five point reads to the old source
+scan (outer total, transaction authorities/user/total); warm reads use one
+document regardless of hour count.
 
 Since-date reads retain the existing UTC **day** cutoff (even if the supplied
 date includes hours/minutes). A prior-month cutoff includes the entire month;

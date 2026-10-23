@@ -17,6 +17,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from config.firestore_read_levers import lever_enabled
 from database._client import get_firestore_client
 from database.firestore_read_origin import read_origin
+from database.legal_holds import external_write_fence
 from utils.observability.fallback import record_fallback
 
 FIELDS = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memories_created', 'speech_seconds')
@@ -82,46 +83,52 @@ def _month_rows(user_ref: Any, date: datetime, transaction: Any) -> Any:
 
 @firestore.transactional
 @read_origin('job:usage_month_total_rebuild')
-def _rebuild(transaction: Any, user_ref: Any, date: datetime, epoch: str) -> dict | None:
+def _rebuild(transaction: Any, user_ref: Any, date: datetime, epoch: str, *, firestore_client: Any) -> dict | None:
     """Source scan and publication share a snapshot and conflict with ALL writers."""
-    ref = month_ref(user_ref, date)
-    current = ref.get(transaction=transaction).to_dict() or {}
-    if _ready(current, epoch, date):
-        return current
-    totals = dict.fromkeys(FIELDS, 0)
-    days: dict[str, dict] = {}
-    for snap in _month_rows(user_ref, date, transaction):
-        row = snap.to_dict() or {}
-        # The original since query filters on the stored id, not the document
-        # name or day field. Refuse anomalies rather than silently omit them.
-        try:
-            stamp = datetime.strptime(snap.id, '%Y-%m-%d-%H')
-        except (TypeError, ValueError):
+    # A read now materializes derived user data. Use the existing transaction
+    # fence so deletion cannot inventory the subtree before this write lands.
+    # Read authorities before the counter, matching fenced source writers.
+    with external_write_fence(user_ref.id, firestore_client=firestore_client, transaction=transaction):
+        if not user_ref.get(transaction=transaction).exists:
             return None
-        if (
-            snap.id != stamp.strftime('%Y-%m-%d-%H')
-            or row.get('id') != snap.id
-            or stamp.year != date.year
-            or stamp.month != date.month
-            or not _numeric_stats(row)
-        ):
-            return None
-        day = days.setdefault(f'{stamp.day:02d}', dict.fromkeys(FIELDS, 0))
-        for key in FIELDS:
-            totals[key] += row.get(key, 0)
-            day[key] += row.get(key, 0)
-    data = {
-        'schema_version': SCHEMA_VERSION,
-        'epoch': epoch,
-        'ready': True,
-        'totals': totals,
-        'days': days,
-        'rebuilt_at': datetime.now(timezone.utc),
-    }
-    # Replace: a reset may have invalidated stale daily fields, and concurrent
-    # increments must conflict/retry rather than merge into an old baseline.
-    transaction.set(ref, data)
-    return data
+        ref = month_ref(user_ref, date)
+        current = ref.get(transaction=transaction).to_dict() or {}
+        if _ready(current, epoch, date):
+            return current
+        totals = dict.fromkeys(FIELDS, 0)
+        days: dict[str, dict] = {}
+        for snap in _month_rows(user_ref, date, transaction):
+            row = snap.to_dict() or {}
+            # The original since query filters on the stored id, not the document
+            # name or day field. Refuse anomalies rather than silently omit them.
+            try:
+                stamp = datetime.strptime(snap.id, '%Y-%m-%d-%H')
+            except (TypeError, ValueError):
+                return None
+            if (
+                snap.id != stamp.strftime('%Y-%m-%d-%H')
+                or row.get('id') != snap.id
+                or stamp.year != date.year
+                or stamp.month != date.month
+                or not _numeric_stats(row)
+            ):
+                return None
+            day = days.setdefault(f'{stamp.day:02d}', dict.fromkeys(FIELDS, 0))
+            for key in FIELDS:
+                totals[key] += row.get(key, 0)
+                day[key] += row.get(key, 0)
+        data = {
+            'schema_version': SCHEMA_VERSION,
+            'epoch': epoch,
+            'ready': True,
+            'totals': totals,
+            'days': days,
+            'rebuilt_at': datetime.now(timezone.utc),
+        }
+        # Replace: a reset may have invalidated stale daily fields, and concurrent
+        # increments must conflict/retry rather than merge into an old baseline.
+        transaction.set(ref, data)
+        return data
 
 
 @read_origin('job:usage_month_total_read')
@@ -140,7 +147,7 @@ def read_monthly_totals(
         user_ref = firestore_client.collection('users').document(uid)
         data = month_ref(user_ref, date).get().to_dict() or {}
         if not _ready(data, epoch, date):
-            data = _rebuild(firestore_client.transaction(), user_ref, date, epoch)
+            data = _rebuild(firestore_client.transaction(), user_ref, date, epoch, firestore_client=firestore_client)
         if data is not None:
             if start_date is None or (start_date.year, start_date.month) < (date.year, date.month):
                 return {key: data['totals'].get(key, 0) for key in FIELDS}

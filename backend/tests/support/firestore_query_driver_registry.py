@@ -139,7 +139,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
-    'database.monthly_usage_totals._rebuild': '01c7deb943e45fd805bfa2311dc960df5a5ea124a501494630557ba2078d3782',
+    'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': '3be03e458c8e65c535fed1475cbfae9c97421970c89dc751e2f4eaa4a46a4467',
     'database.batch_pipeline_shadow.ShadowStore.reap': 'e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
     'database.batch_ramp.ramp_admission_policy': 'af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
@@ -2667,11 +2667,16 @@ def _monthly_total_transaction_boundary(client):
     return unittest.mock.patch.object(module, '_rebuild', module._rebuild.to_wrap)
 
 
+def _monthly_total_user(client, combo, trial):
+    client.documents[f'users/{UID}'] = {'synthetic': True}
+
+
 _add(
     DriverEntry(
         'database.monthly_usage_totals.read_monthly_totals',
         base={'uid': UID, 'date': T0},
         domains={'start_date': [None, T0]},
+        setup=_monthly_total_user,
         patchers=(
             _stub('database.monthly_usage_totals.lever_enabled', True),
             _stub('database.monthly_usage_totals._epoch', 'v1'),
