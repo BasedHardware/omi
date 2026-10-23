@@ -343,6 +343,38 @@ def test_account_wipe_drops_a_late_index_document(monkeypatch):
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
     user_data_deletion.purge_user_subtree(UID, client, lambda *a, **k: None)
     assert ('memory_state', msi.DOC) in deleted
+    assert ('memory_state', user_data_deletion.RELEASED_MEMORY_CHANGE_HEAD) in deleted
+
+
+@pytest.mark.parametrize('root_exists', [False, True])
+def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, root_exists):
+    from database import batch_pipeline_purge, user_data_deletion
+
+    monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
+    monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
+    head = user_data_deletion.RELEASED_MEMORY_CHANGE_HEAD
+    rows = {head: {'token': 'before'}}
+    events = []
+    user_ref = SimpleNamespace(
+        get=lambda: SimpleNamespace(exists=root_exists),
+        collections=lambda: [SimpleNamespace(id='memory_state'), SimpleNamespace(id='memories')],
+        collection=lambda name: SimpleNamespace(
+            document=lambda doc: SimpleNamespace(delete=lambda: rows.pop(doc, None))
+        ),
+        delete=lambda: events.append('root'),
+    )
+
+    def erase(sub, **kwargs):
+        events.append(sub.id)
+        if sub.id == 'memory_state':
+            rows.clear()
+        else:
+            rows[head] = {'token': 'source-delete-commit'}
+
+    client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
+    assert user_data_deletion.purge_user_subtree(UID, client, erase)['status'] == 'ok'
+    assert rows == {}
+    assert events == ['memory_state', 'memories'] + (['root'] if root_exists else [])
 
 
 def test_scan_inside_a_memo_scope_reads_fresh_pages(world, monkeypatch):

@@ -13,6 +13,8 @@ bulk mutation, its owner head is permanently marked `blocked=true`; failure to
 write that barrier stops the bulk request. Ordinary commits preserve the block.
 Blocked owners always use the source paths. Do not clear a block while a bulk
 writer might remain active. No automated unblock or backfill is provided.
+Account erasure removes the head in its existing final metadata cleanup, after
+all source deletes, so visiting `memory_state` first cannot leave a late head.
 
 The token keys bounded, process-local **raw query snapshot projections**.
 Canonical, historical, list-window and status-pair readers reuse only the exact
