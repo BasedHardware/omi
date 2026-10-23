@@ -21,6 +21,9 @@ first scheduled Job and state ConfigMap before retiring the existing Parakeet
 laptop owner. A fresh install/identity starts a full 15-minute arming period.
 
 `dry_run=true` suppresses HPA writes but retains state and decision evidence.
+CronJob value changes apply to new Jobs; an already running Job retains its
+startup settings for at most its 240s deadline. Verify active Job termination
+when an immediate stop is required.
 `enabled=false` removes the guard resources. Both use the same dispatch path.
 Revert the PR or uninstall this independent release to remove it. Neither kill
 switch undoes an already applied rollback; that requires a separately approved
