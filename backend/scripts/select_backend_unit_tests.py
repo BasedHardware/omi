@@ -214,7 +214,14 @@ def is_firestore_index_guard_path(path: str) -> bool:
 
 
 AREA_TESTS = (
-    (('backend/charts/incluster-guards/',), (), ('tests/unit/test_incluster_guards.py',)),
+    (
+        ('backend/charts/incluster-guards/',),
+        (
+            'backend/charts/monitoring/prometheus-adapter/*_omi_prometheus_adapter.yaml',
+            'backend/charts/parakeet/*_omi_parakeet_values.yaml',
+        ),
+        ('tests/unit/test_incluster_guards.py',),
+    ),
     (
         # Task-target routes whose expected retries must stay 409 (contract (d)). #22431 moved
         # FirstSummaryCallbackPending and a router edit could no longer see the stale EXPECTED_RETRIES

@@ -259,7 +259,13 @@ def test_helm_rbac_and_cpu_placement(environment):
     objs = render(environment)
     assert set(objs) == {'ServiceAccount', 'Role', 'RoleBinding', 'ConfigMap', 'CronJob', 'PodMonitor'}
     assert objs['PodMonitor']['spec']['selector']['matchLabels'] == {'app.kubernetes.io/name': 'batch-pipeline-worker'}
-    assert objs['PodMonitor']['metadata']['labels']['release'] == f'{environment}-omi-kube-prometheus-stack'
+    parakeet_values = yaml.safe_load(
+        (ROOT / f'backend/charts/parakeet/{environment}_omi_parakeet_values.yaml').read_text()
+    )
+    assert (
+        objs['PodMonitor']['metadata']['labels']['release']
+        == parakeet_values['metrics']['serviceMonitor']['labels']['release']
+    )
     assert not objs['ServiceAccount']['metadata'].get('annotations')
     assert objs['Role']['rules'] == [
         {
@@ -295,7 +301,13 @@ def test_helm_rbac_and_cpu_placement(environment):
     assert '@sha256:' in container['image']
     env = {item['name']: item['value'] for item in container['env']}
     assert env['DRY_RUN'] == ('true' if environment == 'dev' else 'false')
-    assert env['PROMETHEUS_URL'].endswith(f'.{environment}-omi-monitoring.svc:9090')
+    adapter = yaml.safe_load(
+        (ROOT / f'backend/charts/monitoring/prometheus-adapter/{environment}_omi_prometheus_adapter.yaml').read_text()
+    )
+    expected_url = (
+        adapter['prometheus']['url'].replace('{{ .Release.Namespace }}', f'{environment}-omi-monitoring') + ':9090'
+    )
+    assert env['PROMETHEUS_URL'] == expected_url
     assert not render(environment, '--set', 'enabled=false')
 
 
