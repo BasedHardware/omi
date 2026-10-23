@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Drücke einmal die Taste und halte ihn nah ans Handy.",
     "walkthroughBackgroundRecordingNote": "Das war's. Omi nimmt deine Gespräche weiter im Hintergrund auf.",
     "noThanks": "Nein, danke",
-    "recapInTheBackground": "Im Hintergrund"
+    "recapInTheBackground": "Im Hintergrund",
+    "retentionOfferAccept": "Bleiben mit {percent}% Rabatt",
+    "retentionOfferBody": "Bleib und zahle {price} pro Monat für die nächsten {months} Monate.",
+    "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate."
 }

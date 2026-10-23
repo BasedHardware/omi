@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Raz stlačte tlačidlo a držte ho pri telefóne.",
     "walkthroughBackgroundRecordingNote": "To je všetko. Omi bude ďalej nahrávať vaše rozhovory na pozadí.",
     "noThanks": "Nie, ďakujem",
-    "recapInTheBackground": "V pozadí"
+    "recapInTheBackground": "V pozadí",
+    "retentionOfferAccept": "Zostať so zľavou {percent} %",
+    "retentionOfferBody": "Zostaňte a plaťte {price} mesačne počas ďalších {months} mesiacov.",
+    "retentionOfferApplied": "Hotovo. Zľava {percent} % na ďalšie {months} mesiace."
 }

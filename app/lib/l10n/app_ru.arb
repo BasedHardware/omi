@@ -4456,5 +4456,8 @@
     "pairingPowerOnSubtitle": "Нажмите кнопку один раз и держите рядом с телефоном.",
     "walkthroughBackgroundRecordingNote": "Готово. Omi продолжит записывать ваши разговоры в фоне.",
     "noThanks": "Нет, спасибо",
-    "recapInTheBackground": "На фоне"
+    "recapInTheBackground": "На фоне",
+    "retentionOfferAccept": "Остаться со скидкой {percent}%",
+    "retentionOfferBody": "Оставайтесь и платите {price} в месяц следующие {months} месяца.",
+    "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца."
 }

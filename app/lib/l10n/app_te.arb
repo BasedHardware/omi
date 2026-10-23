@@ -11847,5 +11847,8 @@
     "pairingPowerOnSubtitle": "బటన్‌ను ఒకసారి నొక్కి ఫోన్ దగ్గర ఉంచండి.",
     "walkthroughBackgroundRecordingNote": "అంతే. Omi బ్యాక్‌గ్రౌండ్‌లో మీ సంభాషణలను రికార్డ్ చేస్తూనే ఉంటుంది.",
     "noThanks": "వద్దు, ధన్యవాదాలు",
-    "recapInTheBackground": "నేపథ్యంలో"
+    "recapInTheBackground": "నేపథ్యంలో",
+    "retentionOfferAccept": "{percent}% తగ్గింపుతో కొనసాగండి",
+    "retentionOfferBody": "కొనసాగండి, నెలకు {price} చెల్లించండి, తదుపరి {months} నెలలు.",
+    "retentionOfferApplied": "పూర్తైంది. {percent}% తగ్గింపు, తదుపరి {months} నెలలు."
 }

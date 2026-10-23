@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Πάτησε μία φορά το κουμπί και κράτα το κοντά στο κινητό.",
     "walkthroughBackgroundRecordingNote": "Αυτό ήταν. Το Omi θα συνεχίσει να ηχογραφεί τις συζητήσεις σου στο παρασκήνιο.",
     "noThanks": "Όχι, ευχαριστώ",
-    "recapInTheBackground": "Στο παρασκήνιο"
+    "recapInTheBackground": "Στο παρασκήνιο",
+    "retentionOfferAccept": "Μείνε με {percent}% έκπτωση",
+    "retentionOfferBody": "Μείνε και πλήρωνε {price} τον μήνα για τους επόμενους {months} μήνες.",
+    "retentionOfferApplied": "Έγινε. {percent}% έκπτωση για τους επόμενους {months} μήνες."
 }

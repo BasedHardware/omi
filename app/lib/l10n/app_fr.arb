@@ -4456,5 +4456,8 @@
     "pairingPowerOnSubtitle": "Appuie une fois sur le bouton et garde-le près du téléphone.",
     "walkthroughBackgroundRecordingNote": "C'est tout. Omi continue d'enregistrer tes conversations en arrière-plan.",
     "noThanks": "Non merci",
-    "recapInTheBackground": "En arrière-plan"
+    "recapInTheBackground": "En arrière-plan",
+    "retentionOfferAccept": "Rester avec {percent} % de réduction",
+    "retentionOfferBody": "Restez et payez {price} par mois pendant les {months} prochains mois.",
+    "retentionOfferApplied": "C'est fait. {percent} % de réduction pendant les {months} prochains mois."
 }

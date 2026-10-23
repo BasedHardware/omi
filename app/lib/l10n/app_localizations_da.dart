@@ -14528,4 +14528,19 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'I baggrunden';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Bliv for $percent% rabat';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Bliv og betal $price om måneden de næste $months måneder.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Færdig. $percent% rabat de næste $months måneder.';
+  }
 }

@@ -14551,4 +14551,19 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Di latar belakang';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Tetap dengan diskon $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Tetap dan bayar $price per bulan selama $months bulan ke depan.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Selesai. Diskon $percent% untuk $months bulan ke depan.';
+  }
 }

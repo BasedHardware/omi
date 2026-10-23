@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Nospiediet pogu vienreiz un turiet tuvu tālrunim.",
     "walkthroughBackgroundRecordingNote": "Tas arī viss. Omi turpinās ierakstīt jūsu sarunas fonā.",
     "noThanks": "Nē, paldies",
-    "recapInTheBackground": "Fonā"
+    "recapInTheBackground": "Fonā",
+    "retentionOfferAccept": "Palikt ar {percent}% atlaidi",
+    "retentionOfferBody": "Paliec un maksā {price} mēnesī nākamos {months} mēnešus.",
+    "retentionOfferApplied": "Gatavs. {percent}% atlaide nākamos {months} mēnešus."
 }

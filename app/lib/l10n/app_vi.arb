@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Nhấn nút một lần và giữ gần điện thoại.",
     "walkthroughBackgroundRecordingNote": "Xong rồi. Omi sẽ tiếp tục ghi lại các cuộc trò chuyện của bạn ở chế độ nền.",
     "noThanks": "Không, cảm ơn",
-    "recapInTheBackground": "Trong nền"
+    "recapInTheBackground": "Trong nền",
+    "retentionOfferAccept": "Ở lại với ưu đãi giảm {percent}%",
+    "retentionOfferBody": "Ở lại và chỉ trả {price} mỗi tháng trong {months} tháng tới.",
+    "retentionOfferApplied": "Xong. Giảm {percent}% trong {months} tháng tới."
 }

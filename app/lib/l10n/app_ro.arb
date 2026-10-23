@@ -4421,5 +4421,8 @@
     "pairingPowerOnSubtitle": "Apasă butonul o dată și ține-l aproape de telefon.",
     "walkthroughBackgroundRecordingNote": "Gata. Omi va continua să-ți înregistreze conversațiile în fundal.",
     "noThanks": "Nu, mulțumesc",
-    "recapInTheBackground": "În fundal"
+    "recapInTheBackground": "În fundal",
+    "retentionOfferAccept": "Rămâi cu {percent}% reducere",
+    "retentionOfferBody": "Rămâi și plătești {price} pe lună în următoarele {months} luni.",
+    "retentionOfferApplied": "Gata. {percent}% reducere în următoarele {months} luni."
 }

@@ -14537,4 +14537,19 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Na pozadí';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Zůstat se slevou $percent %';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Zůstaňte a plaťte $price měsíčně po dobu dalších $months měsíců.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Hotovo. Sleva $percent % na dalších $months měsíců.';
+  }
 }
