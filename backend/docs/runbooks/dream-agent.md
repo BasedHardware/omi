@@ -307,3 +307,38 @@ Rollback is the kill switch plus the previous image. Keep correction overlays
 and receipts intact; an older image may lack their display projection. Do not
 rewrite captured speech or erase reservations to simulate rollback. A kill switch
 is operational containment; changing source alone is not deployed recovery.
+
+
+## Dream cohort read failures
+
+Unreadable Dream membership is distinct from revocation. Declared `all` and
+paid percentage/entitlement admission continue without an allowlist override;
+unknown membership never grants on-demand authority. Allowlist-only admission
+waits and retains the due row on an unavailable membership read. Empty discovery
+and read failures emit `event=dream_cohort_health` and shared fallback metrics.
+Do not change `allowlist` to `all` as an outage workaround.
+
+
+## Memory intake is independent of Dream cleanup
+
+Ordinary compatibility-mode observations receive a bounded canonical intake
+route after extraction commits, for free and paid owners alike. The maintenance
+worker rotates through pending observations to retry failures, including rows
+past their former TTL. Explicit submissions retain their required-processing
+receipt path. Ledger-mode accounts retain the daily sweep as their formation
+owner. Intake uses the existing memory L2 gateway lane (Flex on maintenance),
+not the Dream reasoning/capacity/paid-cohort budget.
+`MEMORY_OBSERVATION_INTAKE_ENABLED` defaults on; false stops both observation
+entrypoints before DB/model work, leaving capture and required intake intact. Dream still owns verified
+retrospective cleanup. A promotion admission receipt binds the canonical
+content, evidence and graph plan; it is not a Dream session receipt.
+
+`MEMORY_UNDECIDED_VISIBLE` defaults on. Undecided and Review observations remain
+Short-term and TTL maintenance cannot reject them for age alone. Historical
+active Review archives project as Short-term in default lists without rewriting
+their audit records. Explicit owner rejection, source/privacy tombstones,
+processing blocks, sensitivity policy and third-party grants still apply. Set
+it to `false` to restore TTL handling and archive routing for new Review outcomes;
+expired active Short-term reads remain visible pending TTL adjudication.
+See [memory decision recovery](memory-decision-recovery.md) for incident evidence,
+backfill bounds and post-deployment verification.

@@ -45,6 +45,7 @@ from utils.conversations.process_conversation import (
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.lifecycle_clocks import overlap_snapshot
 from utils.episodes.client_gate import client_seen as episode_client_seen
+from utils.episodes.finalize import close_now as close_episode_now
 from utils.conversations.summary_delivery import finalization_pending
 from utils.executors import db_executor, lifecycle_executor, run_blocking
 from utils.metrics import OMI_CONVERSATION_SUMMARY_VECTOR_UPSERTS_TOTAL
@@ -108,6 +109,7 @@ def _save_summary_vector_fail_soft(uid: str, conversation) -> None:
 
 
 EPISODE_FINALIZE_TIMEOUT_SECONDS = 30.0
+EPISODE_CLOSE_TIMEOUT_SECONDS = 5.0
 
 
 def record_episode_finalized(uid: str, conversation_id: str, row: Any, **kwargs: Any) -> str:
@@ -148,6 +150,19 @@ async def _episode_after_finalization(
         )
     except Exception as error:
         logger.warning('event=episode_finalize outcome=error exception_type=%s', type(error).__name__)
+
+
+async def _episode_at_finalization_start(uid: str, conversation_id: str, row: Any, trigger: ProcessingTrigger) -> None:
+    """Close the live episode when the finalize starts; bounded, and never affects finalization."""
+    if not row or not episodes_enabled_for(uid):
+        return
+    try:
+        await asyncio.wait_for(
+            run_blocking(db_executor, close_episode_now, uid, conversation_id, trigger, row.get('source')),
+            timeout=EPISODE_CLOSE_TIMEOUT_SECONDS,
+        )
+    except Exception as error:
+        logger.warning('event=episode_finalize_close outcome=error exception_type=%s', type(error).__name__)
 
 
 async def _episode_after_absorb(uid: str, donor_id: str, trigger: ProcessingTrigger) -> None:
@@ -206,6 +221,7 @@ async def finalize_persisted_conversation(
     )
     if fenced is not None:
         return fenced
+    await _episode_at_finalization_start(uid, conversation_id, conversation_data, trigger)
 
     silent_backfill = trigger is ProcessingTrigger.SILENT_BACKFILL
 

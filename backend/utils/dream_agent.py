@@ -26,7 +26,7 @@ from config.dream_agent import (
     FINISH_MARGIN_SECONDS,
 )
 from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
-from config.rollout_cohorts import warm_rollout_cohorts
+from config.rollout_cohorts import warm_rollout_cohorts, RolloutCohortUnavailable
 from database.dream_dirty import dream_writing
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive
 from models.agent_tools import HarnessQuestion
@@ -715,7 +715,25 @@ async def run_pass(
     await warm_rollout_cohorts(uid)
     # Reject stale queue entries before capacity waits or owner-data loading.
     # Synthetic canaries have separate, authoritative admission in acquire().
-    if not canary and not may_be_eligible(uid):
+    try:
+        owner_eligible = canary or may_be_eligible(uid)
+    except RolloutCohortUnavailable:
+        # Keep the due row: an unreadable cohort is retryable, not a revocation.
+        from utils.observability.fallback import record_fallback
+
+        logger.error('event=dream_admission outcome=waiting reason=eligibility_unavailable')
+        record_fallback(
+            component='agent_tools',
+            from_mode='dream_admission',
+            to_mode='retry_eligibility',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        report = {'status': 'waiting', 'reason': 'eligibility_unavailable'}
+        record_pass(report)
+        return report
+    if not owner_eligible:
         report = {'status': 'not_admitted', 'reason': 'ineligible'}
         record_pass(report)
         if not dry_run:

@@ -157,6 +157,20 @@ def breaker_budget_exhausted(endpoint: str) -> bool:
         return state.opened_at is not None and state.budget
 
 
+def quota_failures_in_window(endpoint: str) -> int:
+    """Quota failures inside the breaker window; pure read, never opens or acquires.
+
+    A single refusal does not open the breaker, but it is still the credit/auth
+    degradation signal the empty-success guard needs.
+    """
+    if not vendor_fail_fast_enabled():
+        return 0
+    state = _breaker_for(endpoint)
+    with state.lock:
+        state.evict(_clock())
+        return len(state.failures)
+
+
 def record_breaker_other_failure(endpoint: str) -> None:
     """A non-quota failure proves nothing about credits: release a half-open trial, keep the breaker open."""
     if not vendor_fail_fast_enabled():
