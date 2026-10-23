@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "May subscription ka na. Pamahalaan ang kasalukuyan mong subscription sa halip na magsimula ng bago.",
     "resubscribeFirstToChangePlans": "Mag-subscribe muna ulit para magpalit ng plan.",
     "resubscribe": "Mag-subscribe Muli",
     "@resubscribe": {

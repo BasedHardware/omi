@@ -4413,6 +4413,10 @@ class AppLocalizationsPt extends AppLocalizations {
   String get continueText => 'Continuar';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Você já tem uma assinatura. Gerencie sua assinatura atual em vez de iniciar uma nova.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Assine novamente antes de mudar de plano.';
 
   @override

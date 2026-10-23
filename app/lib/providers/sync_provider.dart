@@ -495,9 +495,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       final phone = _walService.getSyncs().phone;
       await _waitForWalReady(phone);
       if (!_isCurrent(generation)) return;
-      SyncReconciler.instance.attach(phone, _onReconciledConversations);
       RecordingTransferCoordinator.instance.configure(
-        reconcile: SyncReconciler.instance.poke,
+        reconcile: _reconcileAdmittedWals,
         discover: _discoverPendingWals,
         refreshPending: () => _refreshWals(_admittedWorkGeneration),
         drain: _drainEligibleWals,
@@ -506,9 +505,12 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             !SharedPreferencesUtil().useCustomStt && SharedPreferencesUtil().autoSyncOfflineRecordings,
         connectivityChanges: ConnectivityService().onConnectionChange,
         initiallyConnected: ConnectivityService().isConnected,
+        onTransferAdmitted: () => _admittedWorkGeneration = _isDisposed ? -1 : _sessionGeneration,
         onTransferStarted: _keepAlive.acquire,
         onTransferFinished: _keepAlive.release,
-        onConnectivityRestored: _walService.getSyncs().phone.resetExhaustedAutoRetries,
+        onConnectivityRestored: () async {
+          if (_isCurrent(_admittedWorkGeneration)) await phone.resetExhaustedAutoRetries();
+        },
         networkChanges: ConnectivityService().onNetworkChange,
         hasPendingWork: () => pendingWals.any((wal) => !wal.holdForUser) || uploadedWals.isNotEmpty,
         onPassTimedOut: _onTransferPassTimedOut,
@@ -528,6 +530,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// The abandoned pass may still hold a BLE storage read or an upload; cancel
   /// it so the next pass does not contend with it.
   void _onTransferPassTimedOut(WakeTrigger trigger, Duration limit) {
+    if (!_isCurrent(_admittedWorkGeneration)) return;
     _walService.getSyncs().cancelSync();
     unawaited(DebugLogManager.logWarning('transfer_pass_stuck', {'trigger': trigger.name, 'limit_s': limit.inSeconds}));
     const TypedEvents().emit(CaptureRecoveryObserved(
@@ -538,10 +541,19 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     ));
   }
 
+  Future<void> _reconcileAdmittedWals() async {
+    final generation = _admittedWorkGeneration;
+    if (!_isCurrent(generation)) return;
+    SyncReconciler.instance.attach(
+      _walService.getSyncs().phone,
+      (result) => _onReconciledConversations(result, generation),
+    );
+    await SyncReconciler.instance.poke();
+  }
+
   /// Called by the reconciler when a background job finished and produced
   /// conversations. Surfaces them without disturbing an active sync.
-  Future<void> _onReconciledConversations(SyncLocalFilesResponse result) async {
-    final generation = _admittedWorkGeneration;
+  Future<void> _onReconciledConversations(SyncLocalFilesResponse result, int generation) async {
     if (!_isCurrent(generation)) return;
     final conversations = await ConversationSyncUtils.processConversationIds(
       newConversationIds: result.newConversationIds,
@@ -576,7 +588,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   }
 
   Future<RecordingTransferDrainResult> _drainWals({required bool liveCaptureOnly}) async {
-    final generation = _sessionGeneration;
+    final generation = _admittedWorkGeneration;
     if (!_isCurrent(generation) || _syncState.isProcessing) {
       return const RecordingTransferDrainResult.contended();
     }

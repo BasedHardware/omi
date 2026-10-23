@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Перевірте з’єднання та спробуйте ще раз.",
     "useFreePlan": "Використати безкоштовний план",
     "continueText": "Продовжити",
+    "checkoutExistingSubscription": "У вас уже є підписка. Керуйте поточною підпискою замість оформлення нової.",
     "resubscribeFirstToChangePlans": "Спочатку підпишіться знову, щоб змінити план.",
     "resubscribe": "Підписатися знову",
     "couldNotOpenPaymentSettings": "Не вдалося відкрити налаштування оплати. Будь ласка, спробуйте ще раз.",
