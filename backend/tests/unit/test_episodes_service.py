@@ -653,3 +653,126 @@ def test_moment_render_receives_account_and_conversation_and_language_reaches_up
     assert render.call_args.kwargs == {'uid': UID, 'conversation_id': moment.conversation_id}
     assert update.call_args.kwargs['conversation_language'] == 'en'
     assert len(model.calls) == 1
+
+
+# --------------------------------------------------------------------------- offline-sync finalize
+
+
+def _wal_row(conversation_id='c-wal', *, minutes=0.5, text=LONG, source='omi', **extra):
+    started = T0 + timedelta(minutes=minutes)
+    return {
+        'id': conversation_id,
+        'source': source,
+        'started_at': started,
+        'finished_at': started + timedelta(minutes=1),
+        'transcript_segments': _segments(text),
+        **extra,
+    }
+
+
+def test_a_sync_finalized_conversation_joins_the_live_episode_covering_it():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    # A pendant's safety-WAL conversation, finalized by offline sync inside the live span.
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    assert (
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(), trigger='sync_update', collaborators=c) == 'joined'
+    )
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['id'] == episode['id'] and after['status'] == 'live'
+    assert after['conversation_ids'] == ['c-live', 'c-wal']
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store)['id'] == episode['id']
+    # A parallel capture: no model call, and its duplicate text never feeds the notes.
+    assert len(model.calls) == 1
+    assert after['applied'].keys() == {'c-live'} and [m['conversation_id'] for m in after['moments']] == ['c-live']
+    # A later WAL chunk re-runs the hook and feeds nothing either.
+    assert (
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(), trigger='sync_update', collaborators=c)
+        == 'finalized'
+    )
+    replay = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert replay['applied'].keys() == {'c-live'} and len(model.calls) == 1
+
+
+def test_a_sync_finalized_conversation_never_reopens_a_closed_episode():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    assert service.close_on_finalize(UID, 'c-live', trigger='client_finalize', collaborators=c) == 'closed'
+    # The WAL row's span sits inside the closed episode: it stays an ordinary row.
+    assert (
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(), trigger='sync_update', collaborators=c)
+        == 'no_episode'
+    )
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store) is None
+    closed = episodes_db.get_episode(UID, episode['id'], firestore_client=store)
+    assert closed['status'] == 'closed' and closed['conversation_ids'] == ['c-live']
+
+
+def test_a_discarded_sync_conversation_never_joins():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    assert (
+        service.on_conversation_finalized(
+            UID, 'c-wal', _wal_row(discarded=True), trigger='sync_update', collaborators=c
+        )
+        == 'skipped_discarded'
+    )
+    # The live occasion goes on untouched.
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['id'] == episode['id'] and after['status'] == 'live' and after['conversation_ids'] == ['c-live']
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store) is None
+
+
+def test_an_ambiguous_or_stale_sync_row_stays_an_ordinary_row():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    service.record_moment(UID, _moment('c-live'), _collaborators(model, now=T0 + timedelta(minutes=1), store=store))
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    c = _collaborators(model, now=T0 + timedelta(minutes=13), store=store)
+    # Twelve minutes after the last speech sits in Jev's zone: not a basis to join,
+    # and never a basis to close the occasion.
+    assert (
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(minutes=12), trigger='sync_update', collaborators=c)
+        == 'no_episode'
+    )
+    assert episodes_db.get_episode(UID, episode['id'], firestore_client=store)['status'] == 'live'
+    # Audio older than the episode belongs to an occasion already over.
+    _attach(store, 'c-next', minutes=60, now_minutes=60)
+    current = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert (
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(minutes=59), trigger='sync_update', collaborators=c)
+        == 'no_episode'
+    )
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after['id'] == current['id'] and 'c-wal' not in after['conversation_ids']
+
+
+def test_sync_finalize_with_no_live_episode_creates_nothing_but_capture_end_still_opens_one():
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Lunch', 'bullets': ['A']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=2), store=store)
+    # No live occasion: a late WAL row never mints an episode for itself.
+    assert (
+        service.on_conversation_finalized(UID, 'c-wal', _wal_row(), trigger='sync_update', collaborators=c)
+        == 'no_episode'
+    )
+    assert episodes_db.get_current_episode(UID, firestore_client=store) is None
+    assert episodes_db.get_episode_for_conversation(UID, 'c-wal', firestore_client=store) is None
+    # An existing trigger keeps today's behavior: the tail opens the episode.
+    assert service.on_conversation_finalized(
+        UID, 'c-cap', _wal_row('c-cap'), trigger='capture_end', collaborators=c
+    ) in {
+        'finalized',
+        'reconciled',
+    }
+    opened = episodes_db.get_episode_for_conversation(UID, 'c-cap', firestore_client=store)
+    assert opened is not None and 'c-cap' in opened['conversation_ids']

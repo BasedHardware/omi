@@ -14,7 +14,9 @@ Entry points (all synchronous, fail-open, run on a worker thread by callers):
 - ``on_conversation_finalized``: the conversation's normal processing has
   completed. Apply any trailing text the live stream did not deliver, then
   reconcile the provisional items heard in it against the tasks that
-  processing saved (the shadow precision metric).
+  processing saved (the shadow precision metric). A sync-finalized
+  conversation that never attached (no realtime stream carried it) joins the
+  live episode covering its span here, as a parallel capture.
 - ``close_on_finalize``: a conversation just ended (a client finalize, or the
   server ending an occasion conversation). Its live episode closes at once, and
   the next words open a new one. The ended conversation never reopens it or
@@ -47,8 +49,9 @@ from utils.episodes.state import apply_update, clean_text, provisional_items, re
 
 logger = logging.getLogger(__name__)
 
-RECONCILE_TRIGGERS = frozenset({'capture_end', 'client_finalize', 'server_recovery'})
+RECONCILE_TRIGGERS = frozenset({'capture_end', 'client_finalize', 'server_recovery', 'sync_update'})
 CLIENT_FINALIZE = 'client_finalize'
+SYNC_UPDATE = 'sync_update'
 # A finalization tail this short only costs a call when it might hold a request to Omi.
 FINALIZE_MIN_WORDS = 8
 
@@ -677,8 +680,12 @@ def _finalize_closes(uid: str, trigger: str, source: Any) -> bool:
 
     An occasion conversation (``config/occasion_conversations.py``) spans the whole occasion, so its
     end by silence or recovery is the episode's end. Other conversations (desktop capture) still
-    split on short silences and keep their episode until the boundary rules close it.
+    split on short silences and keep their episode until the boundary rules close it. A sync
+    conversation is never a boundary: its finalize is when offline sync processed it, not when
+    its speech ended.
     """
+    if trigger == SYNC_UPDATE:
+        return False
     return trigger == CLIENT_FINALIZE or client_gate.occasion_mode(uid, source)
 
 
@@ -702,6 +709,57 @@ def _close_for_finalize(
     return 'closed'
 
 
+def _attach_synced(uid: str, conversation_id: str, row: Mapping[str, Any], c: Collaborators) -> str:
+    """A sync-finalized conversation joins the live episode that covers it, and nothing else.
+
+    Offline-sync (WAL) conversations never attach at first words: no realtime
+    stream carries them. When one finalizes inside the live episode's span it
+    joins as a parallel capture — a member, so Home folds it under the live row,
+    whose text the live stream already fed, so no moment and no reconcile. A
+    sync conversation is never an occasion boundary: it cannot close the live
+    episode, cannot open one, and a closed covering episode stays closed.
+    """
+    started = policy.utc(row.get('started_at')) or policy.utc(row.get('created_at'))
+    if started is None:
+        return 'no_episode'
+    now = _now(c)
+    episode = _close_stale_current(
+        uid, episodes_db.get_current_episode(uid, firestore_client=c.firestore_client), c, now
+    )
+    if episode is None or conversation_id in (episode.get('conversation_ids') or []):
+        return 'no_episode' if episode is None else 'attached'
+    episode_started = policy.utc(episode.get('started_at'))
+    if episode_started is not None and started < episode_started:
+        # Older audio than this episode: it belongs to an occasion already over.
+        return 'no_episode'
+    source = str(row.get('source') or '') or None
+    facts = policy.MomentFacts(
+        conversation_id=conversation_id,
+        source=source,
+        started_at=started,
+        ended_at=policy.utc(row.get('finished_at')) or started,
+        calendar_identity=_calendar_identity(row),
+        speakers=frozenset(),
+    )
+    decision = boundary_runtime.decision(
+        uid, episode, facts, policy.boundary(episode, facts), firestore_client=c.firestore_client
+    )
+    if decision.action != policy.CONTINUE:
+        # An ambiguous gap, a different calendar event or the hard cap is no basis for a
+        # late WAL row to join the occasion: it stays an ordinary Home row.
+        return 'no_episode'
+    metrics.record_boundary('parallel' if decision.parallel else 'continue')
+    episodes_db.commit_moment(
+        uid,
+        expected_episode_id=str(episode['id']),
+        expected_version=episode.get('state_version'),
+        updates=_with_conversation(episode, conversation_id, source),
+        link_conversation_ids=[conversation_id],
+        firestore_client=c.firestore_client,
+    )
+    return 'joined'
+
+
 def _on_finalized(
     uid: str,
     conversation_id: str,
@@ -721,7 +779,12 @@ def _on_finalized(
     if absorbed_from and episode:
         _repoint_absorbed(uid, episode, absorbed_from, conversation_id, c)
         episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client)
-    if segments and not absorbed_from:
+    if episode is None and trigger == SYNC_UPDATE:
+        return _attach_synced(uid, conversation_id, row, c)
+    if segments and not absorbed_from and trigger != SYNC_UPDATE:
+        # A sync conversation never feeds text: its transcript is a second capture
+        # of speech the live stream already carried (``_attach_synced``), and each
+        # WAL chunk re-finalizes it, so the applied offsets dedupe nothing.
         ended = policy.utc(row.get('finished_at')) or _wall(started, max(_segment_end(s) for s in segments))
         tail = MomentInput(
             conversation_id=conversation_id,
