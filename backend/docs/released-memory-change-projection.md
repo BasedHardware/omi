@@ -24,8 +24,9 @@ decrypted historical content, policy-filtered results or incomplete streams.
 Policy, device/archive visibility, lineage, suppression, identity validation and
 decryption still run in their original callers on every read.
 
-Entries expire after 60 seconds and are bounded to 128 entries / 16 MiB, with
-a 2 MiB per-entry ceiling. Small queries with fewer than three returned rows
+Reuse expires after 60 seconds; eviction is lazy on the next projection read.
+Storage is bounded to 128 entries / 16 MiB, with a 2 MiB per-entry ceiling.
+Small queries with fewer than three returned rows
 use the source path: two head reads would not save money. The small-query hint
 only disables reuse and does not suppress any source query. No Redis dependency,
 polling change, field/index migration or recurring scan is introduced.
