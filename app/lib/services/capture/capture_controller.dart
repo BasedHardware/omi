@@ -2031,6 +2031,12 @@ class CaptureController extends ChangeNotifier
     }
 
     void handleAction(int action, {required String gesture}) {
+      // Guard: ignore if a previous mute/unmute button action is still in flight
+      if (_isProcessingButtonEvent) {
+        Logger.debug("Button action ($gesture): already processing, ignoring");
+        return;
+      }
+
       if (action == 1) {
         // Pause/resume recording
         Logger.debug("Button action: toggling pause/mute");
@@ -2039,7 +2045,8 @@ class CaptureController extends ChangeNotifier
           if (gesture == 'double_tap') {
             PlatformManager.instance.analytics.omiDoubleTap(feature: 'unmute');
           } else {
-            PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'unmute'});
+            PlatformManager.instance.analytics
+                .track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'unmute'});
           }
           resumeDeviceRecording().then((_) {
             _isProcessingButtonEvent = false;
@@ -2051,7 +2058,8 @@ class CaptureController extends ChangeNotifier
           if (gesture == 'double_tap') {
             PlatformManager.instance.analytics.omiDoubleTap(feature: 'mute');
           } else {
-            PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'mute'});
+            PlatformManager.instance.analytics
+                .track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'mute'});
           }
           pauseDeviceRecording().then((_) {
             _isProcessingButtonEvent = false;
@@ -2068,7 +2076,8 @@ class CaptureController extends ChangeNotifier
           if (gesture == 'double_tap') {
             PlatformManager.instance.analytics.omiDoubleTap(feature: 'star_conversation');
           } else {
-            PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'star_conversation'});
+            PlatformManager.instance.analytics
+                .track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'star_conversation'});
           }
           HapticFeedback.mediumImpact();
         } else {
@@ -2077,7 +2086,8 @@ class CaptureController extends ChangeNotifier
           if (gesture == 'double_tap') {
             PlatformManager.instance.analytics.omiDoubleTap(feature: 'unstar_conversation');
           } else {
-            PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'unstar_conversation'});
+            PlatformManager.instance.analytics
+                .track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'unstar_conversation'});
           }
           HapticFeedback.lightImpact();
         }
@@ -2087,7 +2097,8 @@ class CaptureController extends ChangeNotifier
         if (gesture == 'double_tap') {
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'ask_question');
         } else {
-          PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'ask_question'});
+          PlatformManager.instance.analytics
+              .track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'ask_question'});
         }
         if (_voiceCommandSession == null) {
           final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
@@ -2119,7 +2130,8 @@ class CaptureController extends ChangeNotifier
         if (gesture == 'double_tap') {
           PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
         } else {
-          PlatformManager.instance.analytics.track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'process_conversation'});
+          PlatformManager.instance.analytics
+              .track('Omi Button Action', properties: {'gesture': gesture, 'feature': 'process_conversation'});
         }
         HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
         forceProcessingCurrentConversation();
