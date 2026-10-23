@@ -13,6 +13,8 @@ from utils.stt.parakeet_window import (
     RawSegment,
     WindowedParakeetSocket,
 )
+from utils.stt import live_session
+from utils.stt import streaming as st
 
 
 @pytest.mark.anyio
@@ -92,7 +94,6 @@ async def test_production_callback_deduplication_against_last_end(monkeypatch):
     segments are trimmed or dropped against session.last_end without generating degenerate segments.
     """
     from types import SimpleNamespace
-    from utils.stt import live_session, streaming as st
     from tests.unit.test_live_speaker_carry import _managed_receiver
 
     callbacks = []
@@ -203,7 +204,6 @@ async def test_new_window_socket_axis_not_contaminated_by_session_last_end(monke
     ensuring that a successor socket preserves its own stream clock boundary at 0.0.
     """
     from types import SimpleNamespace
-    from utils.stt import live_session
     from tests.unit.test_live_speaker_carry import _managed_receiver
 
     created_sockets = []
