@@ -852,6 +852,11 @@ def delete_empty_recording_conversation(
     return deleted
 
 
+def _is_residual_audio_sweep(error: BaseException) -> bool:
+    """Recognize the purge verifier's torn-purge signal by its identity."""
+    return isinstance(error, RuntimeError) and 'owner storage purge left' in str(error)
+
+
 def _discard_unreferenced_audio(
     uid: str,
     conversation_id: str,
@@ -876,7 +881,22 @@ def _discard_unreferenced_audio(
         return
     try:
         delete_conversation_audio_files(uid, conversation_id)
-    except Exception:
+    except Exception as error:
+        if _is_residual_audio_sweep(error):
+            # The Firestore row this sweep belonged to is already gone, and a
+            # generation without registered audio can only leave chunks nothing
+            # references any more. One residual object is the boundary between
+            # this sweep and a same-key late upload or the storage's own
+            # delete-propagation read; it converges under the next reclamation,
+            # so it keeps the retained-audio classification — INFO, no traceback,
+            # no degradation event — instead of reclassifying the committed
+            # delete as a failed write.
+            logger.info(
+                'Retained unreferenced audio behind a late writer uid=%s conversation_id=%s',
+                uid,
+                conversation_id,
+            )
+            return
         # The row is already gone, so there is nothing left to keep consistent
         # with; a failed sweep just leaves the orphan this call meant to reclaim.
         logger.exception(

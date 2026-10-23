@@ -169,15 +169,33 @@ def _owner_uid_from_sync_path(file_path: str) -> Optional[str]:
     return None
 
 
+_OWNER_PURGE_SETTLE_ATTEMPTS = 2
+
+
 def _delete_owner_bucket_prefix(bucket: Any, prefix: str) -> int:
-    """Delete and verify one owner prefix, failing closed on a torn purge."""
+    """Delete and verify one owner prefix, settling one torn delete before giving up.
+
+    The verify re-list races the storage's own delete propagation and, for the
+    conversation sweeps, a same-key late chunk upload: an object the first
+    listing already saw can still answer one read after its delete committed,
+    and an upload admitted in the delete's blind spot lands fresh under the
+    prefix. Both leave exactly the residue this check exists to catch, so one
+    observation is not evidence of a torn purge — the second pass re-attacks
+    whatever the re-list still shows (a lost delete fails a second time; an
+    in-memory test fake converges immediately). Only residue that survives a
+    fresh delete of itself is the fail-closed signal the account-wipe caller
+    needs.
+    """
 
     listing_kwargs = {'versions': True} if _uses_real_gcs_bucket(bucket) else {}
-    blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
     deleted = 0
-    for blob in blobs:
-        blob.delete()
-        deleted += 1
+    for _ in range(_OWNER_PURGE_SETTLE_ATTEMPTS):
+        blobs = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
+        if not blobs:
+            return deleted
+        for blob in blobs:
+            blob.delete()
+            deleted += 1
     remaining = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
     if remaining:
         raise RuntimeError(f'owner storage purge left {len(remaining)} objects under {prefix}')

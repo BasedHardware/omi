@@ -761,6 +761,24 @@ beforehand races the pusher's own registration write, and losing that race in
 the other direction would delete a recording that had just become
 referenceable.
 
+The sweep itself deletes and verifies one owner prefix at a time
+(`_delete_owner_bucket_prefix`). Its verify re-list races the storage's own
+delete propagation and, on this seam, a same-key late chunk upload: an object
+the listing already saw can still answer one more read after its delete
+committed, and an upload admitted inside the delete's blind spot lands fresh
+under the prefix. One residual observation therefore proves nothing, so the
+verifier re-attacks the residue once before its fail-closed verdict
+(`owner storage purge left N objects`) — an account-wipe caller still gets a
+torn-purge refusal, but a converged race no longer produces one. That verdict
+arrives at `_discard_unreferenced_audio` after the conversation row is already
+gone, so it cannot retroactively fail the delete: a residual signal keeps the
+retained-audio classification (`Retained unreferenced audio behind a late
+writer`, INFO, no traceback, no `omi_fallback_total` degradation event), while
+a genuine storage fault keeps the failed-write classification (`Failed to
+reclaim unreferenced audio` with its traceback and degradation event). The
+racing object survives until the next reclamation attempt sweeps it — the
+generation is already terminal, so no serving path reads it.
+
 When the private-cloud flush writes `audio_files` onto a conversation that a
 mid-session delete removes between the flush's existence read and its commit,
 `update_conversation` reports the owner as gone (returns `False`) instead of
