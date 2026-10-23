@@ -98,3 +98,19 @@ exclusions for every case. Each split must retain the unsplit denominator,
 single-unit engineering gate and at most two percentage points of automatic
 identity loss. This adapter does not substitute for the Firestore emulator's
 transaction/receipt and deletion tests.
+
+Split qualification also requires immutable inference provenance. The manifest
+names `source_audio` plus frozen `source_sha256`, `crop_audio` (canonical PCM WAV)
+plus frozen `crop_pcm_sha256`, `crop_start_seconds`, and the complete pinned
+`inference_config` mapping. Every unit also names its canonical PCM `audio` WAV
+and its `receipt` JSON written when inference completed. Receipt fields are:
+`source_sha256`, `crop_pcm_sha256`, `crop_start_seconds`, `offset`,
+`duration_seconds`, `input_pcm_sha256`, `payload_sha256`, and
+`inference_config_sha256`. The config digest uses sorted, compact JSON. PCM
+digests cover decoded mono16kHz16-bit frames, excluding WAV/container metadata.
+
+The evaluator checks actual payload bytes and PCM hashes, exact receipt clocks,
+common model/config digests, and that concatenated unit PCM equals the frozen
+whole-crop PCM for every case. Missing or stale provenance is `BLOCKED` before
+projection/scoring. Receipts establish local cache provenance; they do not
+cryptographically authenticate an untrusted inference runner.

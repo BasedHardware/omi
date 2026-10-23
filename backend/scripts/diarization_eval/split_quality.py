@@ -11,12 +11,78 @@ import argparse
 from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
 import json
+import hashlib
+import wave
 import math
 import os
 from pathlib import Path
 import secrets
 import traceback
 import sys
+
+
+def _digest(path):
+    digest = hashlib.sha256()
+    with Path(path).open('rb') as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _pcm(path, digest):
+    with wave.open(str(path), 'rb') as handle:
+        if (handle.getframerate(), handle.getnchannels(), handle.getsampwidth()) != (16000, 1, 2):
+            raise ValueError('split_requires_canonical_pcm')
+        duration = handle.getnframes() / 16000
+        own = hashlib.sha256()
+        while block := handle.readframes(65536):
+            digest.update(block)
+            own.update(block)
+    return duration, own.hexdigest()
+
+
+def verify_provenance(manifest):
+    """Bind saved inference receipts to actual PCM, offsets and result bytes.
+
+    The receipts must be written when inference completes, never synthesized
+    after scoring. They establish cache provenance; they are not a claim that
+    hashes alone authenticate an untrusted model runner.
+    """
+    value = deepcopy(manifest)
+    if _digest(value['source_audio']) != value['source_sha256']:
+        raise ValueError('frozen_source_hash_mismatch')
+    crop_seconds, crop_hash = _pcm(value['crop_audio'], hashlib.sha256())
+    if crop_hash != value['crop_pcm_sha256'] or abs(crop_seconds - value['crop_seconds']) > 1 / 16000:
+        raise ValueError('frozen_crop_pcm_mismatch')
+    config = value['inference_config']
+    if not isinstance(config, dict) or not config:
+        raise ValueError('frozen_inference_config_required')
+    config_hash = hashlib.sha256(
+        json.dumps(config, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()
+    ).hexdigest()
+    for units in [value['unsplit'], *value['cases']]:
+        combined = hashlib.sha256()
+        for unit in units:
+            duration, audio_hash = _pcm(unit['audio'], combined)
+            receipt = json.loads(Path(unit['receipt']).read_text())
+            expected = {
+                'source_sha256': value['source_sha256'],
+                'crop_pcm_sha256': crop_hash,
+                'crop_start_seconds': value['crop_start_seconds'],
+                'offset': unit['offset'],
+                'duration_seconds': duration,
+                'input_pcm_sha256': audio_hash,
+                'payload_sha256': _digest(unit['payload']),
+                'inference_config_sha256': config_hash,
+            }
+            if not isinstance(receipt, dict) or any(receipt.get(key) != item for key, item in expected.items()):
+                raise ValueError('split_inference_receipt_mismatch')
+            unit['payload'] = json.loads(Path(unit['payload']).read_text())
+            if abs(unit['payload']['audio_seconds'] - duration) > 1 / 16000:
+                raise ValueError('split_result_duration_mismatch')
+        if combined.hexdigest() != crop_hash:
+            raise ValueError('split_pcm_differs_from_frozen_crop')
+    return value
 
 
 def validate_units(units, crop_seconds):
@@ -97,7 +163,9 @@ def project_units(units, *, snapshot=None, persist=None):
     return segments
 
 
-def qualify(manifest, *, project=project_units, scorer=None):
+def qualify(manifest, *, project=project_units, scorer=None, provenance_verified=False):
+    if not provenance_verified:
+        return {'split_gate': 'BLOCKED', 'reason': 'split_provenance_unverified'}
     if scorer is None:
         from utils.stt.diarization_eval import score_recording
 
@@ -169,10 +237,7 @@ def main():
     descriptor = os.open(log, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
     try:
         with os.fdopen(descriptor, 'w') as handle, redirect_stdout(handle), redirect_stderr(handle):
-            manifest = json.loads(args.manifest.read_text())
-            for units in [manifest['unsplit'], *manifest['cases']]:
-                for unit in units:
-                    unit['payload'] = json.loads(Path(unit['payload']).read_text())
+            manifest = verify_provenance(json.loads(args.manifest.read_text()))
             snapshot = None
             if manifest.get('snapshot'):
                 from utils.stt.batch_naming import NamingSnapshot
@@ -196,7 +261,11 @@ def main():
                 with os.fdopen(fd, 'w') as output:
                     json.dump(value, output, default=str)
 
-            score = qualify(manifest, project=lambda units: project_units(units, snapshot=snapshot, persist=persist))
+            score = qualify(
+                manifest,
+                project=lambda units: project_units(units, snapshot=snapshot, persist=persist),
+                provenance_verified=True,
+            )
         print(json.dumps(score))
         return 0 if score['split_gate'] == 'PASS' else 1
     except Exception:
