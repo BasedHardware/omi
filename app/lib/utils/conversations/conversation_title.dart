@@ -63,7 +63,8 @@ String conversationDisplayTitle(
 /// [title] (default: the stored title) with citation debris repaired against the conversation's
 /// transcript, trimmed. Display only: never save it as the user's title.
 String presentableConversationTitle(ServerConversation conversation, {String? title}) {
-  final knownIDs = conversation.transcriptSegments.map((segment) => segment.id).where((id) => id.isNotEmpty);
+  // Keep this lazy: citation repair materializes only matching IDs for an ordinary title.
+  final knownIDs = conversation.transcriptSegments.map((segment) => segment.id);
   return presentableNoteTitle(title ?? conversation.structured.title, knownIDs).trim();
 }
 
