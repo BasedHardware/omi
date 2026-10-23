@@ -17668,5 +17668,90 @@
     "deviceControls": "Controls",
     "@deviceControls": {
         "description": "Device page section: controls such as pausing recording."
+    },
+    "homeBackgroundLine": "Also: {items}",
+    "@homeBackgroundLine": {
+        "description": "Home, under a day header: one line listing that day's background conversations (TV playing, a passing remark), each as its title and length, joined by ' · '. Tapping it shows them. Episodes beta only.",
+        "placeholders": {
+            "items": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingPressButtonTitle": "Press the button on your Omi",
+    "@deviceOnboardingPressButtonTitle": {
+        "description": "Device walkthrough, Ask Omi step: PressButtonTitle"
+    },
+    "deviceOnboardingPressButtonSubtitle": "One short press. Then ask anything.",
+    "@deviceOnboardingPressButtonSubtitle": {
+        "description": "Device walkthrough, Ask Omi step: PressButtonSubtitle"
+    },
+    "deviceOnboardingAskNowTitle": "Ask your question",
+    "@deviceOnboardingAskNowTitle": {
+        "description": "Device walkthrough, Ask Omi step: AskNowTitle"
+    },
+    "deviceOnboardingAskNowSubtitle": "Say it out loud. Omi is listening.",
+    "@deviceOnboardingAskNowSubtitle": {
+        "description": "Device walkthrough, Ask Omi step: AskNowSubtitle"
+    },
+    "deviceOnboardingPressAgainHint": "Done? Press the button again to send.",
+    "@deviceOnboardingPressAgainHint": {
+        "description": "Device walkthrough, Ask Omi step: PressAgainHint"
+    },
+    "trialUpsellTitle": "You've been upgraded to {days} days free",
+    "@trialUpsellTitle": {
+        "description": "Pocket onboarding arm: trialUpsellTitle",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "trialUpsellBody": "{days} days of Omi Pro, on us. We'll remind you before anything is charged. Cancel anytime.",
+    "@trialUpsellBody": {
+        "description": "Pocket onboarding arm: trialUpsellBody",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "trialUpsellClaim": "Claim my {days}-day trial",
+    "@trialUpsellClaim": {
+        "description": "Pocket onboarding arm: trialUpsellClaim",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "settingsUpgradeTrialSubtitle": "Start your {days}-day free trial",
+    "@settingsUpgradeTrialSubtitle": {
+        "description": "Pocket onboarding arm: settingsUpgradeTrialSubtitle",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "pairingPowerOnTitle": "Power on your Omi",
+    "@pairingPowerOnTitle": {
+        "description": "Pocket onboarding arm: pairingPowerOnTitle"
+    },
+    "pairingPowerOnSubtitle": "Press the button once and keep it near your phone.",
+    "@pairingPowerOnSubtitle": {
+        "description": "Pocket onboarding arm: pairingPowerOnSubtitle"
+    },
+    "walkthroughBackgroundRecordingNote": "That's it. Omi will keep recording your conversations in the background.",
+    "@walkthroughBackgroundRecordingNote": {
+        "description": "Pocket onboarding arm: walkthroughBackgroundRecordingNote"
+    },
+    "noThanks": "No thanks",
+    "@noThanks": {
+        "description": "Pocket onboarding arm: noThanks"
+    },
+    "recapInTheBackground": "In the background",
+    "@recapInTheBackground": {
+        "description": "Daily recap section listing the day's background conversations, which Home no longer shows"
     }
 }

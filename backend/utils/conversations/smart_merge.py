@@ -57,6 +57,7 @@ from database.firestore_read_metrics import FirestoreReadSite
 from database.legal_holds import DestructiveOperationInProgress, LegalHoldActive, LegalHoldAuthorityUnavailable
 from database.sync_bridges import mark_sync_bridge_cleaned
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.episodes.boundaries import merge_allowed
 from utils.conversations.action_item_refresh import transfer_donor
 from utils.conversations.factory import deserialize_conversation
 from config.merge_ancestry import flatten_updates
@@ -86,7 +87,7 @@ from utils.conversations.smart_merge_policy import (
     valid_fragment_id,
 )
 from utils.conversations.smart_merge_state import QUESTION_NAME, QUESTIONS, build_state, state_sha256
-from utils.executors import postprocess_executor, run_blocking
+from utils.executors import lifecycle_executor, run_blocking
 from utils.llm.jev_client import ask_jev
 from utils.metrics import (
     record_conversation_smart_merge,
@@ -130,13 +131,13 @@ async def smart_merge_step(
     if initial_row.get('record_lane_owner') in {'batch_live_v1', 'batch_sync_v1'}:
         return False
     if is_donor(initial_row):
-        await run_blocking(postprocess_executor, finish_absorb, uid, conversation_id, owner=owner, resumed=True)
+        await run_blocking(lifecycle_executor(uid), finish_absorb, uid, conversation_id, owner=owner, resumed=True)
         return True
     mode = smart_merge_mode()
     if mode is SmartMergeMode.OFF:
         return False
     return await run_blocking(
-        postprocess_executor, decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
+        lifecycle_executor(uid), decide_and_apply, uid, conversation_id, mode=mode, trigger=trigger, owner=owner
     )
 
 
@@ -359,6 +360,9 @@ def _decide(
         return None
     survivor = dict(survivor, id=survivor_id)
     survivor_segments = _segments(survivor)
+    if not merge_allowed(uid, survivor, new_row):
+        _skip(mode, 'boundary', uid, conversation_id)
+        return None
     if smart_merge_db.has_intervening_discarded(uid, survivor, new_row):
         _skip(mode, SkipReason.INTERVENING_DISCARDED, uid, conversation_id)
         return None

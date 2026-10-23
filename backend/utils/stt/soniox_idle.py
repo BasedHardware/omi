@@ -15,10 +15,11 @@ from typing import Any, Awaitable, Callable
 
 from utils.stt.soniox_wire_ledger import capture_spans, observed_audio
 from config.soniox_idle import (
+    IdleCohortSettings,
     VAD_HANGOVER_SECONDS,
-    idle_max_closes_per_hour,
+    cohort_armed,
     idle_no_frames_seconds,
-    idle_rearm_seconds,
+    idle_settings_for,
 )
 from utils.async_tasks import create_named_task
 from utils.stt.socket import STTSocket
@@ -36,13 +37,48 @@ _sleep = asyncio.sleep  # Seam for deterministic watchdog tests.
 
 
 class SonioxIdleBudget:
-    """Session-owned churn limits, retained through leg rotation/recovery."""
+    """Session-owned churn limits, retained through leg rotation/recovery.
 
-    def __init__(self):
-        self.rearm_seconds = idle_rearm_seconds()
-        self.max_closes_per_hour = idle_max_closes_per_hour()
+    The arm and effective values resolve once, on first use, so the live
+    receiver can hand identity over lazily (``uid_provider``): the provider is
+    consulted at most once and only while the cohort knobs can assign an arm
+    (``cohort_armed``), so identity-bypass and unauthenticated paths never
+    touch ``request.uid`` and a provider-less budget is plain control.
+    """
+
+    def __init__(self, uid: str | None = None, uid_provider: Callable[[], str | None] | None = None):
+        self._uid = uid
+        self._uid_provider = uid_provider
+        self._settings: IdleCohortSettings | None = None
         self.rearm_at = 0.0
         self.close_times: deque[float] = deque()
+
+    def _resolve(self) -> IdleCohortSettings:
+        if self._settings is None:
+            uid = self._uid
+            if uid is None and self._uid_provider is not None and cohort_armed():
+                try:
+                    uid = self._uid_provider()
+                except AttributeError:
+                    uid = None  # host without identity: control, no arm requirement
+            self._settings = idle_settings_for(uid)
+        return self._settings
+
+    @property
+    def arm(self) -> str:
+        return self._resolve().arm
+
+    @property
+    def close_seconds(self) -> float:
+        return self._resolve().close_seconds
+
+    @property
+    def rearm_seconds(self) -> float:
+        return self._resolve().rearm_seconds
+
+    @property
+    def max_closes_per_hour(self) -> int:
+        return self._resolve().max_closes_per_hour
 
     def reserve_close(self, now: float) -> bool:
         """Spend one rolling-hour slot shared by every planned-close trigger.
@@ -241,7 +277,9 @@ class IdleSonioxSocket(STTSocket):
             # Avoided time starts only after the transport is actually closed.
             self._idle_closed_at = time.monotonic()
             self._metrics.closes.inc()
+            self._metrics.cohort_closes.labels(arm=self._idle_budget.arm).inc()
             self._metrics.closes_by_trigger.labels(trigger=self._close_trigger).inc()
+            self._metrics.cohort_closes_by_trigger.labels(arm=self._idle_budget.arm, trigger=self._close_trigger).inc()
 
     def send(self, data: bytes, start_sample: int | None = None) -> bool:
         self._last_frame_at = time.monotonic()
@@ -342,6 +380,7 @@ class IdleSonioxSocket(STTSocket):
             if accepted:
                 self._resumed_audio = data
                 self._metrics.reopens.inc()
+                self._metrics.cohort_reopens.labels(arm=self._idle_budget.arm).inc()
                 self._start_watchdog()
                 record_stt_provider_connect(provider='soniox', outcome=CONNECT_SUCCESS)
             return accepted
@@ -352,13 +391,18 @@ class IdleSonioxSocket(STTSocket):
             from utils.stt.live_chain import failure_reason
 
             self._metrics.failures.inc()
+            self._metrics.cohort_failures.labels(arm=self._idle_budget.arm).inc()
             self._dead = True
-            self._reason = normalize_live_stt_reason(self._reason, failure_reason(error), default='other')
+            # A reopen failure the classifier cannot name degrades to typed
+            # connection_lost, never the ``other`` metric token: this latch is
+            # the leg's death reason on every later failover hop (P59).
+            self._reason = normalize_live_stt_reason(self._reason, failure_reason(error), default='connection_lost')
             self.idle_reopen_failed = True
             record_stt_provider_connect(provider='soniox', outcome=CONNECT_FAILURE, reason=self._reason)
             return False
         finally:
             self._metrics.latency.observe(time.monotonic() - started)
+            self._metrics.cohort_latency.labels(arm=self._idle_budget.arm).observe(time.monotonic() - started)
 
     def _socket_callback(self, offset: float, epoch: int) -> Any:
         def callback(segments: list[dict[str, Any]]) -> None:
@@ -403,7 +447,9 @@ class IdleSonioxSocket(STTSocket):
 
     def _account_avoided(self) -> None:
         if self._idle_closed_at is not None:
-            self._metrics.avoided.inc(max(0.0, time.monotonic() - self._idle_closed_at))
+            avoided = max(0.0, time.monotonic() - self._idle_closed_at)
+            self._metrics.avoided.inc(avoided)
+            self._metrics.cohort_avoided.labels(arm=self._idle_budget.arm).inc(avoided)
             self._idle_closed_at = time.monotonic()
 
     def enable_writer_pacing(self, *args: Any) -> None:

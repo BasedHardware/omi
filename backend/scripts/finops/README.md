@@ -127,10 +127,16 @@ BigQuery `based-hardware.omi_finops` (location US, same as the billing export, s
 | `unit_cost_reconciliation` | date × pool | `pool_usd` vs `allocated_usd` vs `delta_pct` |
 | `plan_revenue_daily` | date × plan | Stripe **snapshot**; carries `snapshot_date` because Stripe is not replayable per historical day |
 | `unit_cost_user_day` | date × `uid_hash` | hashed uids only (`sha256[:16]`) |
+| `mercury_vendor_spend_daily`, `mercury_saas_daily`, `mercury_infra_non_gcp_daily` | date × vendor / date | Mercury aggregates (`load_mercury`; dark while Mercury is off) |
+| `stripe_fee_daily` | date | measured Stripe processing fees (dark while the fee scope is missing) |
+| `vendor_balance_snapshot` | ts × vendor | Soniox prepaid-balance snapshots (dark while the org key is off) |
+| `vendor_balance_spend_daily` | date × vendor | daily spend derived from consecutive snapshots (gap/reset flagged) |
+| `stt_modulate_modelled_daily` | date | modelled Modulate STT cost: Prometheus seconds × committed rate-card price |
 
 All four are partitioned by `date` and clustered. Loads are **idempotent per date**: the run's
 dates are deleted and re-inserted inside one BigQuery transaction, so re-running a date replaces
-it rather than doubling it.
+it rather than doubling it. A column added to a loader's `SCHEMAS` is added to the live table
+automatically (nullable, before the load); any other schema change needs a migration.
 
 ## Validation
 
@@ -428,15 +434,28 @@ threshold. It seeds explicit known vendor aliases and generic category rules;
 rule-classified aggregates use the synthetic vendor labels `mercury_category`
 and `category_data`, never raw counterparty names. Google Workspace has a separate
 alias from Google Cloud, while `Google Payment Corp` maps to GCP; ambiguous
-`Google` remains uncategorized. Annual cadence is deliberately not inferred from
-the merchant name: set `annual: true` only after confirming a vendor's actual
-billing cadence.
+`Google` remains uncategorized. Yearly cadence is **detected from charge
+history** (`detect_annual_charges`), never inferred from a merchant name: a
+charge is an annual bill when it repeats about every 12 months (gap 304–426 days
+to its neighbour), when it is ≥5× that vendor's other-charge median, or — for a
+vendor seen exactly once — as an ambiguous one-off amortized ÷12 and reported as
+`estimated`. `annual: true` in the map is only a manual correction that forces
+the annual treatment (SaaS vendors only); `annual: false` means auto-detect, the
+default. Ledger evidence 2026-07-04..2026-10-19 (read 2026-10-22,
+`mercury_vendor_spend_daily`): shopify, posthog, nevercode and pinecone all
+bill monthly (same-day-of-month repeats), so the "single annual payment"
+reading of the 2026-10-22 wall audit was wrong — detection classifies that
+pattern monthly, which is why the committed map carries no `annual: true`
+override. A 2026-10-23 read-only 13-month Mercury check found real once-a-year
+postings outside the ledger window (for example a $12,000 wire on 2026-01-08 to
+`Modal Group, Inc.`, plus once-each software bills); that evidence drives the
+completeness gate below, not the cadence of any named vendor.
 
 | Category | Treatment |
 | --- | --- |
 | `saas` | Non-GCP software subscriptions; drives the TV SaaS line |
-| `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs |
-| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend, including outgoing Stripe fees; separate from SaaS |
+| `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs. Anthropic maps to `saas` since 2026-10-22: its Mercury cash is Claude team seats, not per-customer API spend |
+| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend (Modal, AWS, Runpod, …), including outgoing Stripe fees; drives the TV "Infra (non-GCP)" line. The run-rate table's `amount_usd` excludes the `stripe_fees` vendor (that cash is measured on the `stripe_fee_daily` line; the two must never stack) but carries its own run rate in `stripe_fees_usd`, so the TV can count it on the infra line only on a day the measured fee line is unavailable — never on both lines, never on neither |
 | `gcp` | Excluded from TV addition; already covered by GCP billing |
 | `marketing`, `fulfillment`, `hardware_cogs`, `travel_meals`, `professional_services`, `facilities`, `other_opex` | Reconciliation categories only; never included in the SaaS line |
 | `excluded` | Payroll, internal/treasury transfers, card repayments, expense reimbursements, taxes, refunds/credits and explicitly excluded hardware categories; collapsed to vendor `excluded` |
@@ -444,11 +463,18 @@ billing cadence.
 
 Category rules reconcile common advertising, shipping, travel, meal, hardware,
 professional-service and office spend without claiming those expenses are SaaS.
-`Software` / `Software & Subscriptions` map to `saas` after vendor aliases and
-Mercury categories have been checked. Thus an Advertising transaction remains
-marketing even if its accounting category says Software & Subscriptions. Vendor
-aliases remain the most specific source: `Google Payment Corp` stays GCP and
-Shopify stays SaaS even when the category fields disagree.
+`Software` / `Software & Subscriptions` / `Software Costs` map to `saas` after
+vendor aliases and Mercury categories have been checked. Thus an Advertising
+transaction remains marketing even if its accounting category says Software &
+Subscriptions. Vendor aliases remain the most specific source: `Google Payment
+Corp` stays GCP and Shopify stays SaaS even when the category fields disagree.
+Aliases added from the 2026-10-23 read-only 13-month check (company vendors
+only, never person names): `modal group` (Modal's compute wire →
+`infra_non_gcp`, not SaaS), `www deepgram com` (annual-scale STT cash wire →
+`stt_vendor`), and named SaaS entries for the Software-category posters seen
+once in 12 months (`vanta`, `mintlify`) plus monthly `greptile`, so cadence
+detection reads each vendor's own series instead of the blended
+`mercury_category` aggregate.
 
 Incoming credits/refunds are outside this outgoing-spend feed and are not netted
 against bills. External ACH/wire transfers are **not** blanket-excluded: they may
@@ -463,13 +489,26 @@ monthly/annual bills for one canonical vendor need separate verified aliases.
 
 ### BigQuery and TV contract
 
-The existing `load_bigquery.py` path loads two new date-partitioned aggregate tables:
+The existing `load_bigquery.py` path loads three date-partitioned aggregate tables:
 
 - `based-hardware.omi_finops.mercury_vendor_spend_daily`: `date`, `vendor`, `category`,
   `amount_usd` (NUMERIC, positive outgoing spend), `transaction_count`, `run_id`, `computed_at`.
 - `based-hardware.omi_finops.mercury_saas_daily`: `date`, `vendor='all'`, `category='saas'`,
-  **`amount_usd`** (daily TV line), `annual_monthly_usd`, `unmapped_usd`, `unmapped_count`,
-  `coverage_days`, `annual_history_complete`, `inputs_complete`, `run_id`, `computed_at`.
+  **`amount_usd`** (daily TV line), `annual_monthly_usd`, `annual_estimated_usd`
+  (the ÷12 portion from ambiguous one-off vendors), `unmapped_usd`, `unmapped_count`,
+  `coverage_days`, `annual_history_complete`, `annual_history_reason`,
+  `inputs_complete`, `run_id`, `computed_at`.
+- `based-hardware.omi_finops.mercury_infra_non_gcp_daily`: the SaaS run-rate
+  schema plus a `stripe_fees_usd` column, at `category='infra_non_gcp'` — the
+  same run-rate treatment as SaaS over non-GCP infrastructure cash (Modal, AWS,
+  Runpod, …), feeding the TV "Infra (non-GCP)" cost line. The `stripe_fees`
+  vendor is kept out of `amount_usd` (measured on `stripe_fee_daily` instead)
+  and reported separately in `stripe_fees_usd`, which the TV counts on the
+  infra line only on a day the measured fee line is unavailable. The table is
+  created whole from `SCHEMAS` on its first load (every produced field has a
+  column, pinned by test) and stays dark until then, so the wall shows an
+  unavailable line, never a guess. Reconciling an OLDER live table against the
+  current schema is #23354's job, not this loader's.
 
 Every successful refresh replaces **all 90 dates**, including zero-spend dates,
 through the existing per-table delete/insert transaction. The daily unmapped row
@@ -480,38 +519,86 @@ Late corrections older than 90 days require an explicit backfill.
 
 TV `amount_usd` = `(non-annual SaaS paid over [date-29,date] + active annual bills/12) / 30.4375`.
 Annual bills remain active from posted day through the day before their 12-month
-anniversary (Feb 29 clamps to Feb 28). Known annual aggregates continue contributing
-after they age out of the 90-day API refresh. NUMERIC outputs round to nine decimal
-places. SaaS never includes GCP, LLM, STT, other infrastructure or excluded spend.
+anniversary (Feb 29 clamps to Feb 28); a bill is annual by detected cadence
+(yearly repeat, ≥5× the vendor's monthly-median outlier, ambiguous one-off, or a
+manual `annual: true` override), and one-off amortization is broken out in
+`annual_estimated_usd` so the `estimated` label is visible in the data. Known
+annual aggregates continue contributing after they age out of the 90-day API
+refresh. NUMERIC outputs round to nine decimal places. SaaS never includes GCP,
+LLM, STT, other infrastructure or excluded spend.
 
-`inputs_complete` requires all 30 posted days, annual-history coverage when an
-annual vendor is configured, and no more than `max_uncategorized_usd` of
-uncategorized spend in the rolling 30-day window. The map defaults that threshold
+`inputs_complete` requires all 30 posted days and no more than
+`max_uncategorized_usd` of uncategorized spend in the rolling 30-day window
+(2026-10-22: the cash-window gate; see below for the separate annual-history
+signal). The map defaults that threshold
 to `$2,500`. The existing BigQuery fields `unmapped_usd` and `unmapped_count`
 retain their names for loader/admin compatibility; they now mean uncategorized
 USD and transaction count. Unlabelled wires/ACH are `other_opex`, so the
 residual is mostly unlabelled card spend; anything above the threshold (for
 example a kind with no rule) blocks completeness while it remains in the 30-day
 window, then ages out; it is never added to SaaS. Add a category or vendor map rule when its nature is known.
-When annual vendors are configured, a full preceding year of coverage is still
-required, but annual uncategorized spend blocks only when its total exceeds the
-same threshold. This prevents an initial 90-day pull from claiming to know older
-annual bills while allowing small residuals to reconcile.
+`annual_history_complete` is its own signal and now requires a full preceding
+365 covered days **regardless of configured annual vendors** — an empty
+override map no longer implies complete (2026-10-23, Luna r3 finding 4: the
+2026-07-04 ledger start is ~109 days and cannot rule out yearly bills; the
+13-month read-only check confirmed such charges exist outside the window).
+Annual uncategorized spend above the same threshold also blocks it. While
+incomplete, `annual_history_reason` names the gate — `history_under_12_months`
+or `uncategorized_above_threshold` — and the value still amortizes every annual
+bill and one-off the seeded history contains.
 The reader should require `inputs_complete=true` and fresh `computed_at` (for
-example within 3 days), prefer this USD value over `SAAS_MONTHLY_USD/30.4375`, and
-use the dated `SAAS_AS_OF` estimate with a missing/incomplete label otherwise.
-Preserve an explicit measured zero. `wall-cost.ts` currently has the measured STT
-argument; add an analogous SaaS date-map hook in the admin lane and propagate a
-`saasMeasured` source label/snapshot override. That frontend wiring is separate
-from this producer PR.
+example within 3 days), prefer this USD value over `SAAS_MONTHLY_USD/30.4375`,
+and use the dated `SAAS_AS_OF` estimate only when no complete fresh row exists.
+Treat `annual_history_complete=false` as a disclosed partial labelled with its
+reason, not as an unavailable line: the wall shows the amortized value and
+appends the partial note.
+Preserve an explicit measured zero. The admin wall reads this table through
+`wall-finops.ts` (`saasMeasured` + `saasAnnualPartial`), which is in place.
+
+The infra run rate keeps the SaaS read gates but not the SaaS display rule:
+while `annual_history_complete=false` the run rate is a **floor**, not a
+measurement — the cadence treatment amortizes only charges the ledger holds,
+so an annual bill posted before the ledger starts (the 2026-01-08 Modal wire)
+contributes nothing, and a first-seen charge is an ambiguous one-off ÷12. The
+wall shows max(measured, dated `INFRA_MONTHLY_USD` fallback), still labelled
+partial with the producer's reason, so a fresh-but-short row never drops the
+known Modal bill from the all-in total; once the history is complete the
+measured value stands alone. `stripe_fees_usd` is counted on the infra line
+only on a day the measured fee line is unavailable, so those fees are never on
+both lines and never on neither.
 
 Bank posting dates and prepayments differ from provider usage days. Reconcile
 `mercury_vendor_spend_daily` by vendor/month against every non-GCP invoice and the
 unmapped total, allowing timing, credits and prepaid-balance differences; do not
 replace daily usage invoices with same-day bank debits or sum both.
 
-To seed complete annual history, the orchestrator can pull at most 400 days into
-an existing complete FinOps run's raw directory, then invoke the existing loader:
+To seed complete annual history, run the deployed producer once with a widened
+window. `pull_mercury.py` reads `FINOPS_MERCURY_BACKFILL_DAYS` (91..400) from
+the environment because the Cloud Run job invokes it with fixed arguments; the
+env var widens that one run's Mercury pull to N posted days ending at the run's
+D-2 date. The one-time deploy step for the lead:
+
+```bash
+# 1. Add the var to the deployed job. The workflow deploys the job with a fixed
+#    env list, so --set-env-vars must repeat all of it (project: based-hardware).
+gcloud run jobs update finops-unit-cost-job --region us-central1 \
+  --set-env-vars=FINOPS_LOCK_BUCKET=based-hardware-finops-runs,FINOPS_AUTH=cloudrun,FINOPS_WRITER_SA=finops-writer@based-hardware.iam.gserviceaccount.com,FINOPS_MERCURY_ENABLED=true,FINOPS_MERCURY_BACKFILL_DAYS=400
+# 2. Execute once (gap-fill loads the frontier date; Mercury pulls 400 days).
+gcloud run jobs execute finops-unit-cost-job --region us-central1 --wait
+# 3. Remove the var: re-run step 1 without FINOPS_MERCURY_BACKFILL_DAYS, or
+#    redeploy the job from the workflow, which resets the env list.
+```
+
+The backfill is idempotent on (date, vendor): the aggregate artifact is keyed
+(date, vendor, category) — duplicate keys are rejected — and the loader's
+per-date delete/insert transaction replaces exactly the window's dates, never
+appending, so re-running the backfill re-derives the same rows. A 400-day window
+covers 13 months, after which `annual_history_complete` can turn true for
+current dates (subject to the uncategorized year-window gate).
+
+The manual in-image path stays available for an explicit window, pulling into
+an existing complete FinOps run's raw directory, then invoking the existing
+loader:
 
 ```bash
 # Inside the producer image, writer runtime identity, access/mount/flag already ready.
@@ -522,3 +609,128 @@ python /app/monorepo/backend/scripts/finops/pull_mercury.py --end 2026-10-15 --b
 The raw directory must belong to a fully assembled FinOps run; do not invoke the
 normal loader with only Mercury inputs. No backfill, database write or deployment
 was run as part of this implementation.
+
+## Subscription book rules (2026-10-22, round 3)
+
+The same `pull_stripe.py` run writes the book first (`raw/stripe_plan_mrr.json`):
+
+* **Currency scale follows the price**: zero-decimal currencies (JPY, KRW, VND,
+  … — <https://docs.stripe.com/currencies#zero-decimal>) are NOT divided by 100;
+  three-decimal currencies (BHD, JOD, KWD, OMR) divide by 1000. A JPY ¥1,200
+  price is 1,200 major units, never "$12".
+* **`mrr_usd` is USD only.** A non-USD price is never booked as dollars (no
+  implicit FX): its customer still counts as paying, its native monthly amount
+  is reported per currency (`non_usd_mrr_native` in the artifact), and
+  `non_usd_paying_subs` lets the wall label the figure partial.
+* **Customers, not items.** `paying_subs` counts a customer once per plan,
+  never per subscription item; `paying_customers` (new nullable
+  `plan_revenue_daily` column, added to a live table automatically by the
+  loader's schema reconcile) is the book-wide distinct customer
+  count repeated on every plan row — the wall takes MAX per snapshot day, not
+  the plan-row sum, and falls back to the sum (labelled item-based) on rows
+  written before the column existed. Old artifacts load with NULL.
+
+## Measured Stripe processing fees
+
+`pull_stripe.py --end <date>` refreshes the trailing 90 posted UTC days of
+balance transactions into `raw/stripe_fee_daily.json`: per day the signed `fee`
+sum across **all** transaction types, gross `charge`/`payment` volume, the row
+count, and how many rows were non-USD (counted, never summed — no implicit FX).
+Fee semantics follow the documented contract
+(<https://docs.stripe.com/api/balance_transactions/object>): `fee` is
+"Represented as a positive integer when assessed", the funds direction lives in
+`amount`, and a refund hands the previously assessed fee back as negative
+`fee_details` entries (type `stripe_fee`) matching a negative `fee` — so summing
+the API's signed `fee` nets refunds on the refund's own day. When `fee_details`
+is present it is authoritative: a breakdown that does not sum to `fee` is a
+shape failure, never a guessed number. A charge converted into the account's
+USD balance already arrives as a `usd` row (`exchange_rate` set, per the docs'
+EUR example), so the non-USD count covers only balances held in other
+currencies; the wall labels the fee line partial while that count is non-zero.
+Only aggregates are persisted; no transaction or customer ids.
+The loader writes `omi_finops.stripe_fee_daily` (date-partitioned, idempotent
+per date, replaced with each refresh) and is **dark while the fee source is
+unavailable**: a restricted Stripe key without balance-transaction read scope
+gets 401/403, the artifact is written with `status=skipped` and the exact
+grant needed (Read on the "Balance" category, `GET /v1/balance_transactions`),
+no table is created or read, and the daily job is unaffected. Transport or
+shape failures also skip (`reason=error`) rather than publish a guessed number
+or lose the subscription book, which is written first.
+
+The TV reads it through `wall-finops.ts` (`fetchStripeFeeHistory`, carrying
+`foreign_transaction_count` so the wall can label coverage), kept
+outside the plan-cost query so a dark fee table can never fail the plan/STT/SaaS
+legs; the wall shows the fee line as unavailable with the missing scope until
+the first successful pull creates the table.
+
+## Vendor balance snapshots: the measured Soniox day-rate (2026-10-22)
+
+The Soniox **organization** key (`FINOPS_SONIOX_ORG_KEY`) has no usage, invoice
+or billing API — every such path returns 404. The one readable endpoint is
+`GET https://api.soniox.com/v1/organization/balance` (`Authorization: Bearer`),
+which returns `used_balance_usd` (cumulative, a string), `available_balance_usd`
+and `invoice_billing_enabled`. `pull_vendor_balance.py` snapshots those parsed
+numbers once per daily run into `raw/vendor_balance_snapshot.json`; the pull
+logs and artifact carry parsed numbers only — never the key and never the raw
+response body.
+
+The loader writes two dark-able tables:
+
+- `omi_finops.vendor_balance_snapshot` — one row per successful pull
+  (`date`, `ts`, `vendor`, `used_usd`, `available_usd`,
+  `invoice_billing_enabled`), idempotent per (date, vendor).
+- `omi_finops.vendor_balance_spend_daily` — the **derived day rate**: each
+  interval between consecutive snapshots belongs to the UTC days strictly
+  after the previous snapshot's day through the current snapshot's day
+  (daily runs ⇒ exactly the snapshot's own day). A run gap spreads the delta
+  evenly over the missed days and flags them `gap_spread` (an assumption, not
+  a measurement). A lower `used` value is a recharge/reset: that day is
+  unmeasured (`usd` NULL, flag `baseline_reset`) and the new value becomes
+  the next interval's baseline. The whole trailing window is recomputed from
+  the snapshot table on every run, so the spread/reset rules can change
+  without backfilling.
+
+Optional by design: a missing key, a 401/403, or a transport/shape failure
+writes `status=skipped` with a reason and never fails the daily job. The TV
+(`fetchVendorBalanceHistory`) shows Soniox as **measured** with its as-of
+date only once **≥2 snapshots** exist; before that the labelled, dated
+console constant (read 2026-10-16, STALE after 14 days) stays as the
+fallback, and a dark table is an explicit unavailable line, never a guess.
+
+Secret wiring: `cloudrun.secret('soniox_org')` resolves the
+`FINOPS_SONIOX_ORG_KEY` file mount (added to the deploy workflow's
+`--set-secrets` on 2026-10-22; the secret is readable by
+`finops-writer@based-hardware.iam.gserviceaccount.com`). Local runs use the
+`FINOPS_SONIOX_ORG_KEY` env var. The separate `SONIOX_API_KEY` mount and its
+usage-summary leg are unchanged; the balance series supersedes that line on
+the wall once live.
+
+## Modelled Modulate STT cost (no vendor API exists)
+
+Modulate exposes no usage or balance API — every GET path probed returns 404 —
+so its line can never be measured. `pull_prometheus.py` additionally pulls
+`sum by (provider) (increase(omi_live_stt_audio_seconds_total[1d]))` (VAD
+speech seconds flushed to backend-provider live sessions; the `modulate`
+series is the measured volume), and `pull_modulate_modelled.py` multiplies it
+by the **committed, dated unit price** from `backend/config/rate_card_v2.json`
+(committed 2026-10-18 @ f6a358902db): **$0.06 per audio hour** — Modulate
+"Multilingual Transcription" streaming WebSocket list price,
+platform.modulate.ai (100 credits = $1, so $0.06/h is 6 credits/h); live SKU
+`velma-2-stt-streaming`, not Velma Triage. Every row is `method=modelled`.
+The rate card is SHA-pinned by backend tests; a price change is a reviewed
+commit that updates the pinned expectations and this line's as-of date.
+
+Coverage caveat, surfaced by the reconciliation rather than hidden: the
+Prometheus series meters backend live/PTT streaming sessions; any Modulate
+batch-REST volume outside that counter appears as reconciliation variance
+against Mercury cash. The wall computes the trailing-30-day variance between
+the modelled line and Mercury `modulate` cash (`stt_vendor` in the vendor
+map) and prints it on the STT line. When the modelled line is unavailable
+(missing series or missing card) the wall falls back to labelled Mercury
+Modulate cash, exactly as before.
+
+The loader writes `omi_finops.stt_modulate_modelled_daily` (date, audio
+seconds, usd, price, price as-of, `method='modelled'`), dark while skipped.
+The Modulate ORG key binding (`FINOPS_MODULATE_ORG_KEY`) is mounted for a
+future vendor API; **no code calls a Modulate endpoint with it**, pinned by
+test.

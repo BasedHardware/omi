@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from uuid import uuid4
 
-from config.vertex_reservations import RESERVATIONS, State
+from config.vertex_reservations import PROBE_TIMEOUT_SECONDS, RESERVATIONS, State
 from llm_gateway.gateway.providers import VertexAccessTokenSupplier
 from utils.http_client import get_desktop_gemini_client, get_llm_gateway_client, get_llm_gateway_semaphore
 from utils.llm.gateway_client import get_llm_gateway_base_url, llm_gateway_headers
@@ -98,7 +98,7 @@ async def _probe(model, location):
                         'reasoning_effort': 'none',
                         'google': {'dream_capacity_mode': 'reserved', 'dream_reserved_only': True},
                     },
-                    timeout=30,
+                    timeout=PROBE_TIMEOUT_SECONDS,
                 )
             logger.info('dream_capacity_probe source=gateway model=%s status=%d', model, response.status_code)
             failure = None
@@ -116,7 +116,8 @@ async def _probe(model, location):
             outcome = await probe_reservation(
                 get_desktop_gemini_client(), _vertex_tokens().get_access_token, model, location
             )
-    except Exception:
+    except Exception as exc:
+        logger.info('dream_capacity_probe error=%s model=%s', type(exc).__name__, model)
         outcome = 'inconclusive'
     if outcome == 'capacity_error':
         await mark_saturated(model)
@@ -145,21 +146,34 @@ async def available_model(*, mode='reserved', owner_allowlisted=False):
     local = _local()
     if local.cooldowns.get(DREAM_MODEL, 0) > time.monotonic():
         return _decision(DREAM_MODEL, 'saturated', waiting=True, source='local_cooldown')
+    stage = 'client'
     try:
         if reservation_state.client() is None:
             return _decision(DREAM_MODEL, 'no_client', waiting=True)
-        states = await reservation_state.refresh(_probe, apply_overrides=False)
-        if states.get(DREAM_MODEL) != State.ACTIVE:
-            return _decision(DREAM_MODEL, 'no_states' if not states else 'no_active_model', waiting=True)
         fresh_seconds = float(os.getenv('DREAM_RESERVATION_FRESH_SECONDS', '900'))
         utilization_limit = float(os.getenv('DREAM_DEDICATED_UTILIZATION_LIMIT', '0.7'))
         if not 0 < fresh_seconds <= 900 or not 0 < utilization_limit <= 1:
             return _decision(DREAM_MODEL, 'invalid_headroom_policy', waiting=True)
+        stage = 'refresh'
+        states = await reservation_state.refresh(
+            _probe if gateway_probe_enabled() else None,
+            apply_overrides=False,
+            probe_model=DREAM_MODEL,
+            fresh_seconds=fresh_seconds,
+        )
+        if states.get(DREAM_MODEL) != State.ACTIVE:
+            return _decision(DREAM_MODEL, 'no_states' if not states else 'no_active_model', waiting=True)
+        stage = 'headroom'
         reason = await reservation_state.dream_headroom(
             DREAM_MODEL, fresh_seconds=fresh_seconds, utilization_limit=utilization_limit
         )
-    except Exception:
-        reason = 'probe_failed'
+    except Exception as exc:
+        # The probe callable cannot raise into this frame: _probe converts its
+        # own failures to 'inconclusive' and refresh runs it as a background
+        # task, so every exception here is a shared-state read/transaction
+        # error. Payload-free class/stage only; messages can embed private bodies.
+        reason = 'state_error'
+        logger.warning('dream_capacity_state_error model=%s stage=%s exc=%s', DREAM_MODEL, stage, type(exc).__name__)
     return _decision(DREAM_MODEL, reason or 'fresh_reservation_saturation_clear', waiting=reason is not None)
 
 

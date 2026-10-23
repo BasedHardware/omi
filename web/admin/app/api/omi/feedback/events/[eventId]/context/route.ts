@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import {
   FeedbackApiError,
   getEventContext,
@@ -15,7 +15,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ eventId: string }> }
 ) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "users:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const { eventId } = await params;
@@ -23,13 +23,13 @@ export async function GET(
     request.nextUrl.searchParams.get("report_date") || undefined;
 
   try {
-    return NextResponse.json(
+    return authResult.json(
       await getEventContext(authResult.uid, eventId, reportDate)
     );
   } catch (error) {
     const status = error instanceof FeedbackApiError ? error.status : 502;
     console.error("Feedback context fetch error:", error);
-    return NextResponse.json(
+    return authResult.json(
       {
         error:
           error instanceof Error ? error.message : "Failed to fetch context",

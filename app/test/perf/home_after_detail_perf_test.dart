@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/folder.dart';
@@ -230,15 +231,16 @@ TranscriptSegment _segment(int i) => TranscriptSegment(
       end: i * 8.0 + 7,
     );
 
-ServerConversation _conversation(int i, {int segmentCount = 0}) {
+ServerConversation _conversation(int i, {int segmentCount = 0, String? salience}) {
   final created = _seedNow.subtract(Duration(hours: 3 * i));
   return ServerConversation(
     id: 'conv-$i',
+    speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
     createdAt: created,
     startedAt: created,
     finishedAt: created.add(const Duration(minutes: 22)),
-    structured: Structured('Conversation $i', 'Overview $i.', emoji: '🧠', category: 'other'),
-    transcriptSegments: [for (var j = 0; j < segmentCount; j++) _segment(j)],
+    structured: Structured('Conversation $i', 'Overview $i.', emoji: '🧠', category: 'other', salience: salience),
+    transcriptSegments: [for (var j = 0; j < segmentCount; j++) _segment(j)..isUser = salience != 'background'],
   );
 }
 
@@ -260,6 +262,10 @@ Episode _liveEpisode() => Episode(
 /// row), 30 conversations as the list endpoint projects them (two lines each),
 /// and the detail endpoint hydrating an opened one with its full transcript.
 class _Home {
+  _Home({this.background = const {}});
+
+  /// Conversations whose notes call them background (Episodes M3).
+  final Set<int> background;
   DateTime now = _seedNow;
   late final _LiveCapture capture = _LiveCapture();
   late final EpisodeProvider episodes = EpisodeProvider(
@@ -270,7 +276,10 @@ class _Home {
     clock: () => now,
   );
   late final ConversationProvider conversations = ConversationProvider(isSignedIn: () => false)
-    ..conversations = [for (var i = 0; i < 30; i++) _conversation(i, segmentCount: 2)]
+    ..conversations = [
+      for (var i = 0; i < 30; i++)
+        _conversation(i, segmentCount: 2, salience: background.contains(i) ? 'background' : null),
+    ]
     ..groupConversationsByDate()
     ..conversationDetailsFetcherOverride = (id) async => hydrated(int.parse(id.substring('conv-'.length)));
 
@@ -334,12 +343,12 @@ Widget _app(_Home home) {
   );
 }
 
-Future<_Home> _pumpHome(WidgetTester tester) async {
+Future<_Home> _pumpHome(WidgetTester tester, {Set<int> background = const {}}) async {
   tester.view.physicalSize = const Size(800, 1600);
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final home = _Home();
+  final home = _Home(background: background);
   await tester.pumpWidget(_app(home));
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 300));
@@ -421,6 +430,17 @@ void main() {
   tearDown(() {
     AnalyticsManager.resetForTesting();
     VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 500);
+  });
+
+  testWidgets('background conversations leave Home for the daily recap, with no line or toggle', (tester) async {
+    // Today holds conv-0 (12:30), conv-1 (09:30), conv-2 (06:30) and conv-3 (03:30).
+    await _pumpHome(tester, background: {1, 2});
+    expect(find.byKey(const ValueKey('conv-1')), findsNothing);
+    expect(find.byKey(const ValueKey('conv-2')), findsNothing);
+    expect(find.byKey(const ValueKey('conv-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('conv-3')), findsOneWidget);
+    expect(find.textContaining('Also:'), findsNothing);
+    await _drainAndUnmount(tester);
   });
 
   testWidgets('opening a row hands the scheduler no idle task while Home animates, and still reports the open',

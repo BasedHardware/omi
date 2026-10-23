@@ -11,6 +11,7 @@ from utils.firebase_admin_runtime import (
     install_google_adc_guard,
 )
 from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
+from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 install_google_adc_guard()
@@ -154,7 +155,7 @@ paths_timeout = {
     "/v2/cap-hold-recovery/sweep": 1710,  # Await bounded redrive under Scheduler's 1740s deadline.
     "/v2/batch-pipeline/recover-quarantine": 1500,  # Await paid STT and durable settlement within the task request.
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
-    "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
+    "/v2/dream-agent/sweep": 150,  # Enabled Dream routes use the 1710s cap in TimeoutMiddleware.
     "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
     "/v2/dream-agent/canary": 90,
     "/v1/dream/runs": 90,
@@ -362,12 +363,13 @@ def _drain_abandoned_byok_finalization_jobs():
         logger.error(f"Startup byok-abandonment reconciliation failed: {e}")
 
 
-def _listen_finalization_reconcile_interval_seconds() -> int:
+def _listen_finalization_reconcile_interval_seconds(*, quiet_checks: bool = True) -> int:
     """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
+    default_seconds = 60 if quiet_checks and quiet_finalization_enabled() else 300
     try:
-        seconds = int(os.getenv('LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS', '300'))
+        seconds = int(os.getenv('LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS', str(default_seconds)))
     except ValueError:
-        seconds = 300
+        seconds = default_seconds
     return max(1, seconds)
 
 
@@ -446,7 +448,7 @@ async def _periodic_durable_queue_age_publish(interval_seconds: int | None = Non
     from utils.other.fsr_leader_lease import poll_delay, singleton_loops_enabled
 
     if interval_seconds is None:
-        interval_seconds = _listen_finalization_reconcile_interval_seconds()
+        interval_seconds = _listen_finalization_reconcile_interval_seconds(quiet_checks=False)
     while True:
         if singleton_loops_enabled():
             try:

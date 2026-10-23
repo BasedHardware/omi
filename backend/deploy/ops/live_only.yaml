@@ -31,7 +31,6 @@ prod:
     CLICKUP_CLIENT_ID: [backend, backend-integration]
     CLICKUP_CLIENT_SECRET: [backend, backend-integration]
     CONVERSATION_SUMMARIZED_APP_IDS: [backend, backend-integration, backend-sync, backend-sync-backfill]
-    DEEPGRAM_API_KEY: [backend, backend-integration, backend-sync, backend-sync-backfill]
     DREAM_AGENT_CANARY_UID: [backend-sync-backfill]
     DREAM_AGENT_DAILY_USD: [backend-sync-backfill]
     DREAM_AGENT_FEEDBACK_SALT: [backend-sync-backfill]

@@ -1,12 +1,22 @@
 """Explicit conversation merge moves correction anchors and their Undo receipts atomically."""
 
 from copy import deepcopy
+from datetime import datetime, timezone
 from google.cloud import firestore
 from database import review_store as store
 from utils.agent_capabilities.transcripts import original_fingerprint, apply_entries
 
 
-def transfer(uid, source_ids, destination_id, *, placements: list[list[int]] | None = None, firestore_client=None):
+def transfer(
+    uid,
+    source_ids,
+    destination_id,
+    *,
+    placements: list[list[int]] | None = None,
+    firestore_client=None,
+    merge_job_id: str | None = None,
+    merge_lease_epoch: int = 0
+):
     """``placements[k][i]`` is the destination index of segment ``i`` of ``source_ids[k]``.
 
     The merge sorts its transcript by time, so overlapping sources interleave. Without
@@ -22,6 +32,21 @@ def transfer(uid, source_ids, destination_id, *, placements: list[list[int]] | N
 
         if database.collection('account_deletions').document(uid).get(transaction=tx).exists:
             raise store.ReviewConflict('Account deletion fences correction transfer')
+        merge_ref = None
+        if merge_job_id is not None:
+            from database import conversation_merge_jobs
+
+            merge_ref = database.collection(conversation_merge_jobs.COLLECTION).document(merge_job_id)
+            job = merge_ref.get(transaction=tx).to_dict() or {}
+            if not conversation_merge_jobs.owned(job, merge_lease_epoch, datetime.now(timezone.utc)):
+                raise store.ReviewConflict('Merge lease expired before correction transfer')
+            if job.get('merge_target_id') != destination_id or job.get('uid') != uid:
+                raise store.ReviewConflict('Merge target does not match admission')
+
+        def seal():
+            if merge_ref is not None:
+                tx.update(merge_ref, {'phase': 'source_cleanup', 'updated_at': datetime.now(timezone.utc)})
+
         raw_target = target.get(transaction=tx).to_dict()
         if not raw_target or raw_target.get('deleted') or raw_target.get('is_locked'):
             raise store.ReviewConflict('Merged correction destination unavailable')
@@ -33,6 +58,10 @@ def transfer(uid, source_ids, destination_id, *, placements: list[list[int]] | N
         for source_index, source_id in enumerate(source_ids):
             source_ref = owner.collection('conversations').document(source_id)
             source = source_ref.get(transaction=tx).to_dict() or {}
+            if merge_job_id is not None and (
+                source.get('merge_job_id') != merge_job_id or source.get('status') != 'merging'
+            ):
+                raise store.ReviewConflict('Merge source binding changed')
             if source.get('deleted') or source.get('is_locked'):
                 raise store.ReviewConflict('Merge source unavailable')
             if source.get('transcript_corrections_moved_to'):
@@ -83,6 +112,7 @@ def transfer(uid, source_ids, destination_id, *, placements: list[list[int]] | N
                         'dream_duplicate_of': destination_id,
                     },
                 )
+            seal()
             return True
         apply_entries(segments, combined)  # Strict validation before any writes.
         for change_id, (ref, data) in journals.items():
@@ -125,6 +155,7 @@ def transfer(uid, source_ids, destination_id, *, placements: list[list[int]] | N
             )
         for ref, data in journals.values():
             tx.set(ref, store.encode_doc(uid, data))
+        seal()
         return True
 
     return commit(database.transaction())

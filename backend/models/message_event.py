@@ -192,6 +192,7 @@ class SpeakerLabelSuggestionEvent(MessageEvent):
     person_id: str
     person_name: str
     segment_id: str
+    is_user: bool = False
     # Set only with an empty person_id: a pinned person this voice nearly matched (a question, never a label).
     suggested_person_id: Optional[str] = None
     retracted: bool = False

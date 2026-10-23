@@ -79,6 +79,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         return str(uuid.UUID(bytes=seed_hash[:16], version=4))
 
     client_mod.document_id_from_seed = _document_id_from_seed
+    client_mod.run_transactional = MagicMock()
     add("database._client", client_mod)
 
     vector_db = add("database.vector_db", AutoMockModule("database.vector_db"))
@@ -1335,15 +1336,14 @@ def test_first_party_only_never_runs_or_reads_the_preferred_app():
     conv = _make_trigger_conversation()
     conv.apps_results = _prior_results()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps(
             'user-omi', conv, is_reprocess=True, replace_selected_result=True, first_party_only=True
         )
 
     app_result_mock.assert_not_called()
-    suggestion_mock.assert_not_called()
     sys.modules["database.redis_db"].get_user_preferred_app.assert_not_called()
     # Omi becomes the canonical summary for released clients (first non-empty app result wins).
     assert conv.apps_results == []
@@ -1353,8 +1353,8 @@ def test_first_party_only_rejects_an_explicit_app():
     selected = _make_mock_app('selected-app', 'SelectedApp')
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
-    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    with p1, p2, p3, p4, p5, p6:
+    _app_result, p2, p4, p5, p6 = _trigger_apps_context()
+    with p2, p4, p5, p6:
         with pytest.raises(ValueError):
             process_conversation.trigger_conversation_apps(
                 'user-omi', conv, app_id=selected.id, explicit_app=selected, first_party_only=True

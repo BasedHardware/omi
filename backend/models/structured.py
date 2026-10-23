@@ -29,7 +29,7 @@ except ModuleNotFoundError:
         'interview', 'intro', 'sales', 'customer', 'one_on_one', 'team_sync', 'planning', 'demo', 'social', 'other'
     ]
 
-    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims', 'title_provenance')
+    _OMIT_WHEN_UNSET = ('meeting_type', 'participants', 'insights', 'note_claims', 'title_provenance', 'salience')
 
     def _drop_unset_fields(model: BaseModel, data: dict, fields: tuple) -> dict:
         for field_name in fields:
@@ -196,6 +196,12 @@ except ModuleNotFoundError:
         insights: List[Insight] = Field(
             default_factory=list,
             description='Insights connecting supplied background context to this conversation; empty without background',
+        )
+        salience: Optional[Literal['highlight', 'background']] = Field(
+            default=None,
+            description=(
+                "'highlight' when the person would want this as its own entry (time with people, a meeting or call, plans, decisions, ideas, tasks); 'background' when it is worth keeping but not a highlight (media or TV playing, ambient chatter, a passing remark, a trivial errand). Absent on legacy notes"
+            ),
         )
 
         @model_serializer(mode='wrap')

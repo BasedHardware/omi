@@ -86,7 +86,7 @@ environments:
         region: us-central1
         schedule: "0 * * * *"
         time_zone: Etc/UTC
-        state: ENABLED
+        state: PAUSED
         target:
           type: http
           uri: https://run.googleapis.com/v2/projects/based-hardware-dev/locations/us-central1/jobs/memory-maintenance-job:run

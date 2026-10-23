@@ -127,7 +127,7 @@ void main() {
 
   test('re-binding the same providers into DeviceProvider does not notify', () {
     final capture = CaptureProvider();
-    final recordings = LocalRecordingsProvider();
+    final recordings = LocalRecordingsProvider(initialize: false);
     final device = DeviceProvider();
     addTearDown(capture.dispose);
     addTearDown(device.dispose);

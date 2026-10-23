@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 from typing import Any, Callable
 
 COLLECTION = 'rollout_cohorts'
+
+
+class RolloutCohortUnavailable(RuntimeError):
+    """Membership is unknown, rather than an authoritative negative grant."""
+
+
 # Literal env reads keep the migration fallbacks visible to the flag registry.
 COHORT_ENVS = {
     'batch-pipeline-shadow': lambda: '',
@@ -78,13 +83,21 @@ def legacy_membership(uid, name, *, legacy_members=None, legacy_all=False) -> bo
 
 
 def in_rollout_cohort(uid: str, name: str, *, legacy_members=None, legacy_all=False) -> bool:
-    if not valid_uid(uid) or name not in COHORT_ENVS or _membership_resolver is None:
+    if not valid_uid(uid) or name not in COHORT_ENVS:
+        return False
+    if _membership_resolver is None:
+        if name == 'dream-agent':
+            raise RolloutCohortUnavailable('dream cohort resolver is unbound')
         return False
     return _membership_resolver(uid, name, legacy_members=legacy_members, legacy_all=legacy_all)
 
 
 def rollout_cohort_members(name: str) -> tuple[str, ...]:
-    if name not in COHORT_ENVS or _members_resolver is None:
+    if name not in COHORT_ENVS:
+        return ()
+    if _members_resolver is None:
+        if name == 'dream-agent':
+            raise RolloutCohortUnavailable('dream cohort discovery is unbound')
         return ()
     return _members_resolver(name)
 
@@ -155,7 +168,10 @@ def parse_cohort(raw: str | None) -> tuple[frozenset[str], int] | None:
 
 def cohort_bucket(uid: str) -> int:
     """Existing free-tier-cohort salt/bucket; stable across hosts and widening."""
-    return int(hashlib.sha256(('free-tier-cohort:' + uid).encode()).hexdigest()[:8], 16) % 100
+    # Lazy import: policy.batch also imports runtime_percent from this module.
+    from config.policy.batch import cohort_bucket as bucket
+
+    return int(bucket(uid, 'free-tier-cohort', formula='modulo'))
 
 
 def cohort_admits(uid: str, raw: str | None) -> bool:

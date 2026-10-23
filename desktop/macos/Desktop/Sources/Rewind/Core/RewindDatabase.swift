@@ -2466,7 +2466,7 @@ actor RewindDatabase {
     SiriMemoryExpirySchema.registerMigration(on: &migrator)
     LocalEmbeddingStore.registerMigration(on: &migrator)
     ProactivityRetirementMigration.registerMigration(on: &migrator)
-    return migrator
+    return addingSpeakerLabelSourceMigration(migrator)
   }
 
   /// Kept as one callable migration boundary so a populated legacy table can be exercised in a

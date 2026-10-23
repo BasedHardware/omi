@@ -11,7 +11,7 @@ from datetime import timedelta
 from typing import Any, Callable, Optional
 
 from database import conversations as conversations_db
-from utils.conversation_continuity import DEFAULT_GAP_SECONDS
+from models.conversation_continuity import DEFAULT_GAP_SECONDS
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.relevance import (
     RELEVANCE_DECISION_FIELD,

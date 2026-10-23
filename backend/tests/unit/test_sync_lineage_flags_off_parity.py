@@ -44,6 +44,8 @@ def _load(name, source, monkeypatch, namespace=None):
     # The immutable snapshot predates graduation. Pin its removed recovery
     # switch to the shipped ON behavior without restoring a production API.
     source = source.replace('from config.sync_assignment_recovery import sync_assignment_recovery_enabled\n', '')
+    # Adapt only the import path after verifying the immutable snapshot hash.
+    source = source.replace('from utils.conversation_continuity import', 'from models.conversation_continuity import')
     module.sync_assignment_recovery_enabled = lambda: True
     module.capture_evidence_dark_write_enabled = lambda: True
     exec(compile(source, name, 'exec', flags=0x1000000), module.__dict__)
@@ -315,7 +317,13 @@ def test_process_segment_saved_rows_results_finish_and_log_bytes_match_main(
                         'response': response,
                         'rows': _rows(store),
                         'finish': calls,
-                        'logs': [record.getMessage() for record in caplog.records],
+                        # Shadow comparison telemetry is new; serving events,
+                        # persisted rows and results must retain their old bytes.
+                        'logs': [
+                            record.getMessage()
+                            for record in caplog.records
+                            if not record.getMessage().startswith('event=refactor_shadow ')
+                        ],
                     }
                 )
             )

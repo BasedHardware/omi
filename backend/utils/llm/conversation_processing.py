@@ -1,3 +1,4 @@
+from dataclasses import replace
 import asyncio
 import json
 import logging
@@ -39,9 +40,7 @@ if TYPE_CHECKING:
 
 from utils.llm.conversation_notes_prompts import (
     ACTION_ITEM_EXTRACTION_RULES,
-    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
-    conversation_note_density,
 )
 from utils.conversations.wake_word import (
     WAKE_WORD_DISCARD_PROMPT_RULES,
@@ -52,7 +51,6 @@ from utils.conversations.relevance_rules import KEEP_WORD_COUNT, transcript_word
 from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.action_item_normalization import normalize_action_item_due_dates as _normalize_action_item_due_dates
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
-from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
 from utils.llm.conversation_title_people import general_title_static_instructions, title_people_block
 from utils.llm.meeting_notes_presentation import (
     enforce_conversation_note_presentation,
@@ -65,7 +63,12 @@ from utils.llm.meeting_notes_validation import (
     validate_rich_meeting_notes,
     validate_structured_source_segment_ids,
 )
+from config.refactor_modes import serving_for
+from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
+from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
+from utils.llm.notes_output import NotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
+from utils.llm.notes_effort import bind_notes_effort
 
 try:
     from utils.llm.notes_agent_serving import agentic_notes_payload as _serve_agentic_notes
@@ -269,21 +272,6 @@ Content:
 # =============================================
 
 
-def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
-    """Render the capture time as the user's local wall-clock for prompt date context (#4773).
-
-    The LLM is unreliable at converting UTC to the user's timezone, which mislabels the time of day
-    in titles and overviews. Convert deterministically here instead. Naive datetimes are treated as
-    UTC; a missing or invalid timezone falls back to UTC.
-    """
-    try:
-        user_tz = ZoneInfo(tz) if tz else timezone.utc
-    except Exception:  # noqa: BLE001 - any unknown/invalid tz falls back to UTC
-        user_tz = timezone.utc
-    aware = started_at if started_at.tzinfo is not None else started_at.replace(tzinfo=timezone.utc)
-    return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
-
-
 # Notes must use the foreground structure budget, not the gateway's background
 # first-byte deadline. The owning feature route declares it in model_config.
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
@@ -455,6 +443,9 @@ def _get_shaped_conversation_notes(
     if not prefix.has_usable_content and not frames:
         return Structured()
     mount = notes_mount()
+    from utils.llm.action_item_v2 import instructions_for
+
+    mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
     evidence = [
         {
             'role': 'user',
@@ -475,6 +466,13 @@ def _get_shaped_conversation_notes(
             ),
         }
     ]
+    legacy_packet = json.loads(evidence[0]['content'])
+    packet = select_notes_packet(
+        legacy_packet, prefix=prefix, uid=uid, capture_evidence=context, words=words, inputs=kwargs
+    )
+    if serving_for('NOTES_PACKET_V2_MODE', uid):
+        evidence[0]['content'] = json.dumps(packet, ensure_ascii=False, default=str)
+        mount = replace(mount, instructions=mount.instructions + '\n\n' + PACKET_RULES + '\n\n' + OUTPUT_RULES)
     if frames:
         evidence.append(screen_frames_message(frames))
     # The notes lane can be Anthropic (main default); it rejects both
@@ -489,12 +487,22 @@ def _get_shaped_conversation_notes(
     )
     if agent_payload is not None:
         return _finish_shaped_notes(
-            AgentNotesSubmission.model_validate(agent_payload).to_structured(), prefix, rich_mode, kwargs['tz']
+            (NotesOutput if serving_for('NOTES_PACKET_V2_MODE', uid) else AgentNotesSubmission)
+            .model_validate(agent_payload)
+            .to_structured(),
+            prefix,
+            rich_mode,
+            kwargs['tz'],
+            uid=uid,
+            words=words,
+            inputs=kwargs,
         )
-    extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
+    extraction_parser = PydanticOutputParser(
+        pydantic_object=NotesOutput if serving_for('NOTES_PACKET_V2_MODE', uid) else StructuredExtraction
+    )
     format_instructions = extraction_parser.get_format_instructions()
     static_instructions = mount.instructions + '\n\n' + format_instructions
-    if not rich_mode:
+    if not rich_mode and not serving_for('NOTES_PACKET_V2_MODE', uid):
         static_instructions = general_title_static_instructions(mount.instructions, format_instructions)
     mount = Mount(
         instructions=static_instructions,
@@ -503,14 +511,9 @@ def _get_shaped_conversation_notes(
 
     async def invoke():
         async with isolated_notes_model(model) as isolated_model:
-            # After isolation so the cloner still sees the notes model. Unsupported
-            # models stay unbound and keep their own options. Lazy import: the
-            # episode writer module is heavy and some file-loading test harnesses
-            # exec this module with stubbed dependencies.
+            # Isolate first so the cloner sees the notes model; unsupported models keep their options.
             if escalated:
-                from utils.llm.episode_writer import bind_episode_effort
-
-                call_model = bind_episode_effort(isolated_model, 'xhigh')
+                call_model = bind_notes_effort(isolated_model, 'xhigh')
             else:
                 call_model = isolated_model
 
@@ -524,16 +527,23 @@ def _get_shaped_conversation_notes(
             return await run_loop(mount, evidence, model_turn)
 
     result = asyncio.run(invoke())
-    structured = StructuredExtraction.model_validate(result.value).to_structured()
-    return _finish_shaped_notes(structured, prefix, rich_mode, kwargs['tz'])
+    output_schema = NotesOutput if serving_for('NOTES_PACKET_V2_MODE', uid) else StructuredExtraction
+    structured = output_schema.model_validate(result.value).to_structured()
+    return _finish_shaped_notes(structured, prefix, rich_mode, kwargs['tz'], uid=uid, words=words, inputs=kwargs)
 
 
 def _finish_shaped_notes(
-    structured: Structured, prefix: ConversationPromptPrefix, rich_mode: bool, tz: Optional[str]
+    structured: Structured,
+    prefix: ConversationPromptPrefix,
+    rich_mode: bool,
+    tz: Optional[str],
+    *,
+    uid: Optional[str] = None,
+    words: int = 0,
+    inputs: Optional[dict] = None,
 ) -> Structured:
-    # A one-turn mount cannot buy the legacy presentation revision call.
-    enforce_static_conversation_note_presentation(
-        structured, prefix.transcript_segment_ids, title_people=() if rich_mode else prefix.title_people
+    structured = finish_notes_contract(
+        structured, prefix=prefix, uid=uid, words=words, rich_mode=rich_mode, inputs=inputs or {}
     )
     now = datetime.now(timezone.utc)
     try:

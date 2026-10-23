@@ -88,6 +88,11 @@ abstract class LocalWalSync implements IWalSync {
   /// of local copies removed.
   Future<int> applySyncedCopyRetention();
 
+  /// Deletes every local recording (index entry and file) owned by [uid],
+  /// whether active, retired or foreign. Called when that account is deleted
+  /// from this phone. Returns the number of records removed.
+  Future<int> purgeAccountWals(String uid);
+
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot});

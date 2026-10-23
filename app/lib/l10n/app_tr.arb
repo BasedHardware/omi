@@ -4441,5 +4441,20 @@
     "deviceCatchingUpProgress": "{done}/{total} dk",
     "deviceRecently": "Son zamanlarda",
     "deviceDisconnectedFor": "{duration} bağlantı kesildi",
-    "deviceControls": "Kontroller"
+    "deviceControls": "Kontroller",
+    "homeBackgroundLine": "Ayrıca: {items}",
+    "deviceOnboardingPressButtonTitle": "Omi'nin düğmesine bas",
+    "deviceOnboardingPressButtonSubtitle": "Kısa bir basış. Sonra istediğini sor.",
+    "deviceOnboardingAskNowTitle": "Sorunu sor",
+    "deviceOnboardingAskNowSubtitle": "Yüksek sesle söyle. Omi dinliyor.",
+    "deviceOnboardingPressAgainHint": "Bitti mi? Göndermek için düğmeye tekrar bas.",
+    "trialUpsellTitle": "{days} gün ücretsiz kazandın",
+    "trialUpsellBody": "{days} gün Omi Pro bizden. Ücret alınmadan önce hatırlatırız. İstediğin zaman iptal et.",
+    "trialUpsellClaim": "{days} günlük denemeyi al",
+    "settingsUpgradeTrialSubtitle": "{days} günlük ücretsiz denemeyi başlat",
+    "pairingPowerOnTitle": "Omi'ni aç",
+    "pairingPowerOnSubtitle": "Düğmeye bir kez bas ve telefonunun yanında tut.",
+    "walkthroughBackgroundRecordingNote": "Bu kadar. Omi konuşmalarını arka planda kaydetmeye devam edecek.",
+    "noThanks": "Hayır, teşekkürler",
+    "recapInTheBackground": "Arka planda"
 }

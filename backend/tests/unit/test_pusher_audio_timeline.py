@@ -107,7 +107,6 @@ def env(monkeypatch):
     monkeypatch.setattr(pusher.users_db, 'get_data_protection_level', lambda uid: 'standard')
     monkeypatch.setattr(pusher, 'PUSHER_ACTIVE_WS_CONNECTIONS', MagicMock())
     monkeypatch.setattr(pusher, 'PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS', MagicMock())
-    monkeypatch.setattr(pusher, 'is_audio_merge_dispatch_enabled', lambda: False)
     monkeypatch.setattr(pusher.ReadinessGate, 'is_serving', lambda: True)
 
     def upload(chunks, uid, cid, level=None, **_kwargs):

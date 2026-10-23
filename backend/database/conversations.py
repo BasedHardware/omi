@@ -1,5 +1,6 @@
 from database import conversation_visibility_counts, processing_backlog
-from utils.conversations import summary_delivery
+from utils.conversations import summary_delivery, lifecycle_clocks
+from config.refactor_modes import serving_for, shadow_or_serve
 import copy
 import hashlib
 import json
@@ -44,6 +45,7 @@ from utils.manual_speaker_assignments import (
     normalize_rejection,
     remap_absorbed_receipt,
 )
+from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
@@ -52,8 +54,6 @@ from .audio_timeline import group_chunks_by_coverage
 from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
-    MCP_CONVERSATION_CARD_QUERY_SPECS,
-    STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
 )
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
@@ -76,7 +76,6 @@ from config.transcription_final_pass import authoritative_for
 import config.speaker_match_scores as match_scores
 import config.owner_recognition_diagnostics as owner_diagnostics
 import utils.firestore_document_size as document_size
-from config.repeat_work import playback_on_demand
 from utils.other.playback_identity import source_fingerprint, retain_aliases
 from utils.other.storage import list_audio_chunks
 from utils.observability.fallback import record_fallback
@@ -98,34 +97,6 @@ _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
 _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
 _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
 _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
-MCP_CONVERSATION_CARD_FIELD_PATHS = (
-    'id',
-    'status',
-    'discarded',
-    'deleted',
-    'dream_duplicate_of',
-    'relevance_decision',
-    'sync_relevance_user_kept',
-    'has_photos',
-    'starred',
-    'folder_user_set',
-    'created_at',
-    'started_at',
-    'finished_at',
-    'language',
-    'is_locked',
-    'data_protection_level',
-    'user_title',
-    'structured.title',
-    'structured.overview',
-    'structured.category',
-    'structured.emoji',
-)
-_MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = MCP_CONVERSATION_CARD_FIELD_PATHS + (
-    'transcript_segments',
-    'transcript_segments_compressed',
-    'has_transcript_corrections',
-)
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -1254,7 +1225,7 @@ def persist_processing_result_with_lifecycle(
             ):
                 raise RecoveryStructureUnavailableError('server recovery discard lost to protected content')
         decision = write_data.get('relevance_decision')
-        if isinstance(decision, dict) and decision.get('trigger') == 'server_recovery':
+        if isinstance(decision, dict) and decision.get('trigger') in {'server_recovery', 'silent_backfill'}:
             # Recovery enriches the durable capture; neither model normalization
             # nor a stale snapshot owns its encoding, audio, or speaker metadata.
             for field in (
@@ -1924,7 +1895,7 @@ def get_mcp_conversations_by_id(
     conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
     field_paths = list(
-        _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else MCP_CONVERSATION_CARD_FIELD_PATHS
+        MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else MCP_CONVERSATION_CARD_FIELD_PATHS
     )
     if extra_field_paths:
         field_paths.extend(extra_field_paths)
@@ -2009,7 +1980,7 @@ def update_conversation(
         if owner in {'batch_live_v1', 'batch_sync_v1'}:
             record_owner_out[conversation_id] = owner
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-    if playback_on_demand() and isinstance(update_data.get('audio_files'), list):
+    if isinstance(update_data.get('audio_files'), list):
         update_data = {
             **update_data,
             'audio_files': retain_aliases(update_data['audio_files'], doc_snapshot.to_dict().get('audio_files') or []),
@@ -2133,7 +2104,7 @@ def create_audio_files_from_chunks(
         List of AudioFile objects
     """
     # Get all chunks for this conversation
-    chunks = list_audio_chunks(uid, conversation_id)
+    chunks = list_audio_chunks(uid, conversation_id, source_identity=True)
     if not chunks:
         return []
 
@@ -2167,7 +2138,7 @@ def _finalize_audio_file_group(
         return None
 
     # Generate file ID
-    source_hash = source_fingerprint(chunk_group) if playback_on_demand() else None
+    source_hash = source_fingerprint(chunk_group)
     file_id = (
         str(uuid.uuid5(uuid.NAMESPACE_OID, f'{uid}/{conversation_id}/{source_hash}'))
         if source_hash
@@ -2616,48 +2587,6 @@ def get_processing_conversations(uid: str):
     return conversations
 
 
-def select_stale_in_progress(conversations, cutoff: datetime, limit: int):
-    """Oldest-first bounded selection of orphaned in-progress conversations (#9809).
-
-    A conversation owned by any live session refreshes `finished_at` on every
-    segment and that session's lifecycle loop processes it within the
-    conversation timeout, so anything idle past the cutoff has no owner.
-    Missing or non-datetime `finished_at` is excluded: without a trustworthy
-    idle clock the row cannot be proven orphaned.
-    """
-    stale = []
-    for conversation in conversations:
-        if is_soft_deleted(conversation):
-            continue
-        finished_at = conversation.get('finished_at')
-        if isinstance(finished_at, datetime) and finished_at < cutoff:
-            stale.append(conversation)
-    stale.sort(key=lambda conversation: conversation['finished_at'])
-    return stale[:limit]
-
-
-def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, limit: int = 10, firestore_client=None):
-    """In-progress conversations whose last activity predates the cutoff (#9809).
-
-    The composite index orders by the last activity clock, so the bounded read
-    always reaches the oldest candidates. Without that ordering, an arbitrary
-    first page could keep old orphaned rows beyond it invisible forever.
-    """
-    client = firestore_client or get_firestore_client()
-    user_ref = client.collection('users').document(uid)
-    conversations_ref = (
-        STALE_IN_PROGRESS_CONVERSATIONS_QUERY.build(
-            user_ref.collection(conversations_collection),
-            {'status': ConversationStatus.in_progress.value},
-            field_filter_factory=FieldFilter,
-        )
-        .order_by('finished_at', direction=firestore.Query.ASCENDING)
-        .limit(limit)
-    )
-    cutoff = datetime.now(timezone.utc) - timedelta(seconds=older_than_seconds)
-    return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
-
-
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_conversations_finished_after(
     uid: str,
@@ -2727,7 +2656,10 @@ def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict
         for row, expected in ((primary_row, primary), (secondary_row, secondary)):
             if not row or row.get('discarded') or row.get('deleted') or row.get('status') != 'completed':
                 return False
-            if any(row.get(field) != getattr(expected, field) for field in ('started_at', 'finished_at', 'source')):
+            compared = lifecycle_clocks.overlap_fields(uid, row)
+            if any(
+                compared.get(field) != getattr(expected, field) for field in ('started_at', 'finished_at', 'source')
+            ):
                 return False
         external_data = dict(secondary_row.get('external_data') or {})
         if external_data.get('duplicate_capture_of') or (primary_row.get('external_data') or {}).get(
@@ -2757,14 +2689,14 @@ def claim_conversation_status(
     expected_status: ConversationStatus,
     claimed_status: ConversationStatus,
     extra_updates: Optional[Dict[str, Any]] = None,
+    *,
+    expected_fields: Optional[Dict[str, Any]] = None,
+    allow_discarded: bool = False,
 ) -> bool:
-    """Atomically transition a conversation status when the current status matches.
+    """CAS the status and optional privacy/job-generation guards.
 
-    Projection fields in ``extra_updates`` bind to the transactional snapshot's
-    stored transcript. A T1-validated candidate is dropped on T2 without
-    failing the status claim — the conversation still finalizes.
-    ``extra_updates_with_bound_client_processing`` reports whether a submitted
-    projection survived (attribute and optional attached bind report).
+    Projection updates bind to this transaction's stored transcript. A stale
+    hash-bound projection is dropped without failing the status claim.
     """
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
@@ -2775,7 +2707,12 @@ def claim_conversation_status(
         if not snapshot.exists:
             raise NotFound(f'Conversation {conversation_id} not found')
         current = snapshot.to_dict() or {}
-        if current.get('discarded') or current.get('status') != expected_status.value:
+        if (current.get('discarded') and not allow_discarded) or current.get('status') != expected_status.value:
+            return False
+        if any(
+            (bool(current.get(k)) if isinstance(v, bool) else current.get(k)) != v
+            for k, v in (expected_fields or {}).items()
+        ):
             return False
         updates = {'status': claimed_status.value}
         if extra_updates:
@@ -2797,6 +2734,8 @@ def claim_conversation_status(
     claimed = run_transactional(db, _claim)
     if claimed:
         invalidate_people_stats_cache(uid)
+        if serving_for('LIFECYCLE_V2_MODE', uid):
+            _sync_conversation_search_index(uid, conversation_id)
     return claimed
 
 
@@ -3067,9 +3006,11 @@ def get_action_items(
 def update_conversation_finished_at(uid: str, conversation_id: str, finished_at: datetime):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_ref.update({'finished_at': finished_at})
+    conversation_ref.update({'finished_at': finished_at, **lifecycle_clocks.activity_updates(uid, {}, finished_at)})
     invalidate_people_stats_cache(uid)
-    _sync_conversation_search_index(uid, conversation_id)
+    # refactor: superseded by status-change indexing when LIFECYCLE_V2_MODE=serve
+    if not serving_for('LIFECYCLE_V2_MODE', uid):
+        _sync_conversation_search_index(uid, conversation_id)
 
 
 def clear_client_processing(payload: Dict[str, Any]) -> None:
@@ -3508,29 +3449,13 @@ def update_conversation_segments(
     segment_update_fields: Optional[tuple[str, ...]] = None,
     owner_recognition_diagnostics: Optional[dict] = None,
 ):
-    """Write a transcript using an explicit segment-set ownership mode.
+    """Merge live speech transactionally against the current receipt and pinned timeline.
 
-    ``live_segments`` plans fresh speech against this transaction's receipt;
-    LiveTranscriptMerge owns storage/client deltas. ``segments`` and ``segment_update_fields``
-    patch identities only. ``live_capture_proofs`` never enters storage.
-
-    ``invalidate_client_processing`` defaults to TRUE, and that default is the
-    point. This function's whole job is replacing the transcript, and a stored
-    client projection is bound by digest to the transcript it described — so a
-    caller that changes the segments and keeps the projection is displaying a
-    summary of text that no longer exists. Opt-in invalidation would leave
-    every existing and future call site carrying that bug silently; three
-    separate leaks in this shard came from exactly that shape of default.
-    Pass ``False`` to skip the *unconditional* ``DELETE_FIELD`` sentinel (the
-    live-capture write loop). The transaction still clears a projection that
-    is actually present on the document, so a finalize overlapping capture cannot
-    leave a hash-bound summary of text that then changed.
-
-    Audio-timeline v2: ``audio_timeline`` is the fenced provenance pin. The
-    marker and the projected first-audio ``started_at`` apply atomically only
-    while the document has no marker yet, so a late receiver can never reset an
-    origin already emitted to clients. Once the marker exists, a ``started_at``
-    argument is ignored — the origin is pinned for the recording's life.
+    Field-only writes preserve stored text/spans. Live writes return the durable
+    merge and clear any hash-bound client projection that the new transcript
+    invalidates. ``invalidate_client_processing=False`` avoids a redundant clear
+    only when no projection is stored. The first audio-timeline marker and its
+    origin pin atomically; later callers cannot move that origin.
     """
     if live_segments is not None and segment_update_fields is not None:
         raise ValueError('Live merge and field-only segment updates are mutually exclusive')
@@ -3678,6 +3603,9 @@ def update_conversation_segments(
             )
         if finished_at:
             update_payload['finished_at'] = finished_at
+            update_payload.update(
+                lifecycle_clocks.segment_activity_updates(uid, current, finished_at, live_segments, started_at)
+            )
         pinned_timeline = isinstance(current.get('audio_timeline'), dict) and current.get('audio_timeline')
         if audio_timeline is not None and not pinned_timeline:
             # Fenced compare-and-set: the marker and the projected first-audio
@@ -4264,8 +4192,7 @@ def assign_sync_conversation(
     def assign(transaction, full_ids=frozenset()):
         clock.attempt()
         score_snapshots.clear()
-        # Optional batch projection hooks share the exact legacy transaction.
-        # Guards/plan validation may only read; after_assign may only write.
+        # Projection guards only read; after_assign only writes in this transaction.
         if before_assign is not None:
             with clock.timed('fence'):
                 before_assign(transaction)
@@ -4292,7 +4219,7 @@ def assign_sync_conversation(
                 live_candidate_ids=live_candidate_ids,
                 absorbed=absorbed,
             )
-        # The commit runs after this returns; remember which row it would grow.
+        # Remember the candidate before the transaction commits.
         attempted['canonical'] = planned[0]['id']
         if after_assign is not None:
             with clock.timed('persist'):
@@ -4301,7 +4228,9 @@ def assign_sync_conversation(
         return planned
 
     with clock.call():
-        if not target_id and incoming.get('client_device_id') and live_overlap_enabled():
+        if not target_id and (
+            (incoming.get('client_device_id') and live_overlap_enabled()) or shadow_or_serve('CAPTURE_COVERAGE_MODE')
+        ):
             with clock.timed('live_overlap'):
                 live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
         with clock.timed('transaction'):
@@ -4311,8 +4240,7 @@ def assign_sync_conversation(
             )
         conversation = result[0]
         if defer_index is not None:
-            # The caller coalesces per conversation, so the full lineage (which
-            # retries a failed or lost donor delete) is paid once per flush.
+            # Coalesce the lineage's retryable donor deletes once per flush.
             clock.donors = len(absorbed)
             defer_index(uid, conversation['id'], sorted({*(conversation.get('sync_merged_from') or []), *absorbed}))
         else:

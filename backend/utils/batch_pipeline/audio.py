@@ -16,6 +16,7 @@ class AudioUnit:
     capture_at: float
     wav: bytes
     duration_seconds: float
+    coverage_runs: tuple[dict, ...] = ()
 
 
 def audio_unit(capture_at: float, pcm: bytes) -> AudioUnit:

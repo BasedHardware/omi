@@ -46,6 +46,14 @@ class ChannelTurnError(RuntimeError):
         self.reason = reason
 
 
+class TurnSuperseded(Exception):
+    """A newer user message arrived before any of this reply reached the user."""
+
+
+# How often a running reply checks for a newer message that replaces it.
+SUPERSEDE_POLL_SECONDS = 2.0
+
+
 def _worker_shutting_down():
     task = asyncio.current_task()
     return task is not None and task.cancelling()
@@ -453,9 +461,34 @@ class Gateway:
                                 message,
                                 quoted_text=quote or 'Quoted message is outside the available chat context.',
                             )
+
+                        async def superseded():
+                            return await run_blocking(db_executor, self.store.superseding_pending, path)
+
                         await self._turn(
-                            uid, session, message, link, Principal(uid), reply_sink=sink, turn_guard=turn_guard
+                            uid,
+                            session,
+                            message,
+                            link,
+                            Principal(uid),
+                            reply_sink=sink,
+                            turn_guard=turn_guard,
+                            superseded=superseded,
                         )
+            except TurnSuperseded:
+                # Nothing reached the user and nothing was changed: stop quietly (no
+                # apology) and free the chat, so the newer message is answered next with
+                # this one still in its history.
+                from utils.messaging.metrics import TURNS
+
+                await stop_typing()
+                TURNS.labels(self.adapter.channel, 'superseded').inc()
+                logging.getLogger(__name__).info('Messaging turn superseded provider=%s', self.adapter.provider)
+                assert session is not None  # a turn only runs after its session and lease exist
+                try:
+                    await run_blocking(db_executor, self.store.complete, path)
+                finally:
+                    await run_blocking(db_executor, self.store.release, uid, session['surface'], token)
             except BaseException as error:
                 # Keep the inbox row running: its effects still need reconciliation.
                 # A task that is still cancelling may have executor work in flight,
@@ -581,7 +614,19 @@ class Gateway:
             await run_blocking(db_executor, self.store.release, principal.uid, session['surface'], token)
             await self._wake_pending(message)
 
-    async def _turn(self, uid, session, message, link, principal, *, event=None, reply_sink=None, turn_guard=None):
+    async def _turn(
+        self,
+        uid,
+        session,
+        message,
+        link,
+        principal,
+        *,
+        event=None,
+        reply_sink=None,
+        turn_guard=None,
+        superseded=None,
+    ):
         def guard():
             self._assert_link(message, link)
             if turn_guard is not None:
@@ -637,6 +682,7 @@ class Gateway:
         )
         context_token = surface_runtime.set(runtime)
         stream = None
+        frames = None
         terminal = False
         turn_error = False
         reply_event = None
@@ -651,7 +697,8 @@ class Gateway:
                 sink,
                 principal=principal,
             )
-            async for frame in stream:
+            frames = _frames_until_superseded(stream, superseded, lambda: _replaceable(sink, runtime))
+            async for frame in frames:
                 if frame.startswith('data: '):
                     await sink.text(frame[6:].removesuffix('\n\n').replace('__CRLF__', '\n'))
                 elif frame.startswith('done: '):
@@ -690,6 +737,18 @@ class Gateway:
             # terminal yield. Close in this task's context, before resetting it.
             # Cancellation injects CancelledError at the next await; catch it so
             # the indicator still stops and the context token is always reset.
+            if frames is not None:
+                # Stops the supersede watcher when the loop body raised mid-stream.
+                try:
+                    await frames.aclose()
+                except asyncio.CancelledError:
+                    pass
+                except Exception as error:
+                    logging.getLogger(__name__).warning(
+                        'Messaging frame wrapper close failed provider=%s error_type=%s',
+                        self.adapter.provider,
+                        type(error).__name__,
+                    )
             if stream is not None and hasattr(stream, 'aclose'):
                 try:
                     await stream.aclose()
@@ -891,3 +950,51 @@ async def _try_typing(sink, active=True):
             outcome='degraded',
         )
         logging.getLogger(__name__).warning('Messaging typing failed error_type=%s', type(error).__name__)
+
+
+def _replaceable(sink, runtime):
+    """A reply may be replaced only while the user has seen none of it and no tool changed anything."""
+    return (
+        not sink.finished
+        and not sink.delivered_ids
+        and not getattr(sink, 'drafted', False)
+        and not runtime.action_receipts
+    )
+
+
+async def _frames_until_superseded(stream, superseded, replaceable):
+    """Yield the turn's frames, raising TurnSuperseded once a newer message replaces it.
+
+    A side task checks every SUPERSEDE_POLL_SECONDS and the turn stops at its next
+    frame. Frames are consumed in this task, never a helper task, so context variables
+    set inside the reply stream stay in one context. Without ``superseded`` it is a
+    plain pass-through.
+    """
+    if superseded is None:
+        async for frame in stream:
+            yield frame
+        return
+    replaced = asyncio.Event()
+
+    async def watch():
+        while not replaced.is_set():
+            await asyncio.sleep(SUPERSEDE_POLL_SECONDS)
+            try:
+                if replaceable() and await superseded():
+                    replaced.set()
+            except Exception as error:
+                logging.getLogger(__name__).warning(
+                    'Messaging supersede check failed error_type=%s', type(error).__name__
+                )
+
+    watcher = asyncio.create_task(watch())
+    try:
+        async for frame in stream:
+            # A terminal frame is delivered as before: its answer is already persisted.
+            terminal = frame.startswith('done: ') or frame.startswith('error: ')
+            if not terminal and replaced.is_set() and replaceable():
+                raise TurnSuperseded()
+            yield frame
+    finally:
+        watcher.cancel()
+        await asyncio.gather(watcher, return_exceptions=True)

@@ -130,7 +130,11 @@ that file can stay under the line ratchet; the functions keep one-line
 pointers back to this section.
 
 `connect_stt_socket_with_fallback` connects the selected primary before audio
-starts, walking the configured fallbacks. `STT_SERVICE_MODELS` states an ordered
+starts, walking the configured fallbacks. Deepgram is retired (2026-08-27, no
+contract): it is absent from `config/stt_provider_policy.py`, selection never
+admits a `dg-*` model, and startup logs an error if a chain still lists one.
+The incident narratives below that name Deepgram are history.
+`STT_SERVICE_MODELS` states an ordered
 preference, so a primary that cannot open a socket must advance to the next
 configured provider instead of failing the session — a Deepgram account
 rejecting every connect with HTTP 402 otherwise takes the whole deployment's

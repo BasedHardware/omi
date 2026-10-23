@@ -1416,13 +1416,67 @@
       "budget_p50_minutes": 5,
       "display_name": "apply_field_exemptions",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'field-exemptions' && github.event.inputs.environment == 'prod'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/plan_pr_indexes": {
+      "budget_p50_minutes": 1,
+      "display_name": "plan_pr_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.base.ref == 'main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend schema maintainers",
+      "rationale": "Credential-free JSON diff on registry/manifest PR events; two index PR updates/day budget.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/prebuild_pr_development_indexes": {
+      "budget_p50_minutes": 2,
+      "display_name": "prebuild_pr_development_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "plan_pr_indexes",
+      "owner": "Backend schema maintainers",
+      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Automatic development schema writer.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
+    "gcp_firestore_indexes.yml/prebuild_pr_prod_indexes": {
+      "budget_p50_minutes": 2,
+      "display_name": "prebuild_pr_prod_indexes",
+      "expected_runs_class": "planned-index-prs",
+      "expected_runs_per_day": 2,
+      "if": "needs.plan_pr_indexes.outputs.eligible == 'true'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": "plan_pr_indexes",
+      "owner": "Backend schema maintainers",
+      "rationale": "P65: start only additive PR index builds asynchronously, two updates/day; no runner polling for READY. Existing deploy readiness enforces READY after merge. Required prod Environment approval.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1434,13 +1488,13 @@
       "budget_p50_minutes": 5,
       "display_name": "reconcile_composite_indexes",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event.inputs.operation == 'composite-indexes')",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1452,13 +1506,13 @@
       "budget_p50_minutes": 5,
       "display_name": "reconcile_development_composite_indexes",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'push'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -1470,13 +1524,13 @@
       "budget_p50_minutes": 5,
       "display_name": "reject_nonprod_field_exemptions",
       "expected_runs_class": "non-pr-or-unsampled",
-      "expected_runs_per_day": 0,
+      "expected_runs_per_day": 0.1,
       "if": "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && github.event.inputs.operation == 'field-exemptions' && github.event.inputs.environment != 'prod'",
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "Unobserved in one-day PR sample; conservative 5-minute placeholder",
+      "rationale": "No executable PR path: existing event/ref conditions remain main/manual-only. The workflow-level budget validator requires a positive PR sentinel for every job once a PR trigger exists; 0.1/day conservatively accounts for these skipped jobs.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -4563,7 +4617,7 @@
     "gcp_backend_pusher_auto_deploy.yml": {
       "name": "Auto Deploy Backend Pusher to GKE (Development)",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added — a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure",
+      "rationale": "Initial workflow inventory. 2026-10-21 plan B B2: backend/omi_logging.py added to the pusher source-closure paths. 2026-10-22 plan B B3: backend/Dockerfile.roles added \u2014 a qualification may name the backend-pusher role image, so its image definition joins the bake trigger closure",
       "triggers": {
         "push": {
           "branches": [
@@ -4789,8 +4843,22 @@
     "gcp_firestore_indexes.yml": {
       "name": "Reconcile Firestore Indexes",
       "owner": "CI maintainers",
-      "rationale": "Initial workflow inventory",
+      "rationale": "P65: prebuild additive same-repository index PRs during review; main/manual reconciliation and required prod approval remain. No new images or vendor calls.",
       "triggers": {
+        "pull_request": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "backend/database/firestore_index_registry.py",
+            "firestore.indexes.json"
+          ],
+          "types": [
+            "opened",
+            "synchronize",
+            "reopened"
+          ]
+        },
         "push": {
           "branches": [
             "main"

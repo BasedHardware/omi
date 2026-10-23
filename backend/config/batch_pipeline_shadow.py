@@ -1,8 +1,9 @@
 """Independent, fail-closed shadow cohort and spend controls (runtime reads)."""
 
-import hashlib
 import math
 import os
+
+from config.policy.batch import cohort_bucket
 
 from config.rollout_cohorts import in_rollout_cohort, valid_uid
 
@@ -19,7 +20,7 @@ def selected(uid: str, policy) -> bool:
     percent = shadow_percent()
     if not percent or not valid_uid(uid) or policy.batch_enabled or in_rollout_cohort(uid, 'batch-pipeline'):
         return False
-    bucket = int(hashlib.sha256(('batch-pipeline-shadow:' + uid).encode()).hexdigest()[:8], 16) / 2**32 * 100
+    bucket = cohort_bucket(uid, 'batch-pipeline-shadow')
     return bucket < percent and in_rollout_cohort(uid, 'batch-pipeline-shadow', legacy_all=True)
 
 

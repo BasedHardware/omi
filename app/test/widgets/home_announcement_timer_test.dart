@@ -126,7 +126,7 @@ List<SingleChildWidget> _homeProviders() {
   return [
     ChangeNotifierProvider(create: (_) => AuthenticationProvider(initializeListeners: false)),
     ChangeNotifierProvider(create: (_) => CaptureProvider(localSegmentStore: LocalSegmentStore.disabled())),
-    ChangeNotifierProvider(create: (_) => LocalRecordingsProvider()),
+    ChangeNotifierProvider(create: (_) => LocalRecordingsProvider(initialize: false)),
     ChangeNotifierProvider(
       create: (_) => DeviceProvider(
         bleDiagnosticsLoader: (_) async => throw StateError('fixture: BLE diagnostics unused'),

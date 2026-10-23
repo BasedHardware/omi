@@ -4441,5 +4441,20 @@
     "deviceCatchingUpProgress": "{done} dari {total} mnt",
     "deviceRecently": "Baru-baru ini",
     "deviceDisconnectedFor": "Terputus selama {duration}",
-    "deviceControls": "Kontrol"
+    "deviceControls": "Kontrol",
+    "homeBackgroundLine": "Juga: {items}",
+    "deviceOnboardingPressButtonTitle": "Tekan tombol di Omi kamu",
+    "deviceOnboardingPressButtonSubtitle": "Satu tekanan singkat. Lalu tanyakan apa saja.",
+    "deviceOnboardingAskNowTitle": "Ajukan pertanyaanmu",
+    "deviceOnboardingAskNowSubtitle": "Ucapkan dengan lantang. Omi mendengarkan.",
+    "deviceOnboardingPressAgainHint": "Selesai? Tekan tombol lagi untuk mengirim.",
+    "trialUpsellTitle": "Kamu dapat {days} hari gratis",
+    "trialUpsellBody": "{days} hari Omi Pro gratis dari kami. Kami ingatkan sebelum ada tagihan. Batalkan kapan saja.",
+    "trialUpsellClaim": "Ambil uji coba {days} hari",
+    "settingsUpgradeTrialSubtitle": "Mulai uji coba gratis {days} hari",
+    "pairingPowerOnTitle": "Nyalakan Omi kamu",
+    "pairingPowerOnSubtitle": "Tekan tombol sekali dan dekatkan ke ponsel.",
+    "walkthroughBackgroundRecordingNote": "Selesai. Omi akan terus merekam percakapanmu di latar belakang.",
+    "noThanks": "Tidak, terima kasih",
+    "recapInTheBackground": "Di latar belakang"
 }

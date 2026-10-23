@@ -4406,5 +4406,20 @@
     "deviceCatchingUpProgress": "{done} / {total} min",
     "deviceRecently": "Hiljuti",
     "deviceDisconnectedFor": "Ühendus puudus {duration}",
-    "deviceControls": "Juhtimine"
+    "deviceControls": "Juhtimine",
+    "homeBackgroundLine": "Lisaks: {items}",
+    "deviceOnboardingPressButtonTitle": "Vajuta Omi nuppu",
+    "deviceOnboardingPressButtonSubtitle": "Üks lühike vajutus. Siis küsi mida iganes.",
+    "deviceOnboardingAskNowTitle": "Esita oma küsimus",
+    "deviceOnboardingAskNowSubtitle": "Ütle see valjusti. Omi kuulab.",
+    "deviceOnboardingPressAgainHint": "Valmis? Vajuta nuppu uuesti, et saata.",
+    "trialUpsellTitle": "Said {days} päeva tasuta",
+    "trialUpsellBody": "{days} päeva Omi Pro meie kulul. Tuletame enne tasu võtmist meelde. Tühista igal ajal.",
+    "trialUpsellClaim": "Võta {days}-päevane proov",
+    "settingsUpgradeTrialSubtitle": "Alusta {days}-päevast tasuta proovi",
+    "pairingPowerOnTitle": "Lülita Omi sisse",
+    "pairingPowerOnSubtitle": "Vajuta korra nuppu ja hoia telefoni lähedal.",
+    "walkthroughBackgroundRecordingNote": "Ongi kõik. Omi salvestab su vestlusi taustal edasi.",
+    "noThanks": "Ei, aitäh",
+    "recapInTheBackground": "Taustal"
 }
