@@ -113,7 +113,7 @@ def test_mercury_load_proceeds_after_the_reconcile(loader, monkeypatch, tmp_path
     result = mercury.load(
         tmp_path, "run-1", "2026-10-16T00:00:00Z", loader.ensure_table, loader.load_replace, loader.bq
     )
-    assert set(result) == {"mercury_vendor_spend_daily", "mercury_saas_daily"}
+    assert set(result) == {"mercury_vendor_spend_daily", "mercury_saas_daily", "mercury_infra_non_gcp_daily"}
     alters = [i for c, i in cmds if c == "query" and i and "ADD COLUMN IF NOT EXISTS" in i]
     assert len(alters) == 1
     assert "annual_estimated_usd NUMERIC" in alters[0]
