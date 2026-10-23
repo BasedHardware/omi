@@ -192,6 +192,7 @@ class PerfWorld {
   late DeviceProvider device;
 
   Future<void> seed() async {
+    _liveSegmentCounter = 0;
     mockCommonPlatformChannels();
     nativeDirectory = await Directory.systemTemp.createTemp('omi-perf-native-');
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -616,6 +617,7 @@ Future<void> _flingBothEnds(WidgetTester tester, PerfWorld world, Finder scrolla
       if (direction < 0 ? pos.pixels >= pos.maxScrollExtent - 1 : pos.pixels <= pos.minScrollExtent + 1) break;
       if (n == 99) fail('$label did not reach scroll endpoint');
     }
+    await pumpFrames(tester, 120);
   }
   expect(state.position.pixels, closeTo(state.position.minScrollExtent, 1));
 }
