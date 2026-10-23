@@ -10,7 +10,9 @@ MultiOn session.
 The guard accepts the app-level secret via ``Authorization: Bearer`` or
 the ``multion_token`` query parameter. It fails closed with 503 when the
 secret is not configured, so a missing deployment variable can never
-silently leave the mutating surface open.
+silently leave the mutating surface open. Deployments must set
+``MULTION_WEBHOOK_SECRET`` before this ships; rotating it invalidates
+tokens already handed to callers.
 """
 
 import hmac
