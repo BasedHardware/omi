@@ -11,9 +11,7 @@ from uuid import uuid4
 from fastapi import Request, Response
 from prometheus_client import Counter
 
-from database._client import get_firestore_client
 from database.action_items_cache import if_none_match_matches
-from database.list_projection_head import initialize_head
 from config.list_projection import STATE_COLLECTION, writer_enabled
 from utils.observability.fallback import record_fallback
 
@@ -32,10 +30,15 @@ ORIGINS = {
 
 def _version(uid: str, family: str) -> str | None:
     try:
+        # Keep optional version I/O out of router import-time dependencies.
+        from database._client import get_firestore_client
+
         client = get_firestore_client()
         reference = client.collection('users').document(uid).collection(STATE_COLLECTION).document(family)
         snapshot = reference.get(timeout=1.0, retry=None)
         if not snapshot.exists:
+            from database.list_projection_head import initialize_head
+
             return initialize_head(uid, family, firestore_client=client)
         value = (snapshot.to_dict() or {}).get('version') if snapshot.exists else None
         return value if isinstance(value, str) and len(value) == 32 else None

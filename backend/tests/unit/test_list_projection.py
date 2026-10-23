@@ -14,7 +14,7 @@ from google.cloud.firestore_v1 import _helpers
 from google.cloud.firestore_v1.async_client import AsyncClient
 from google.cloud.firestore_v1.types import CommitResponse, DocumentTransform, WriteResult, Write
 
-from database import list_projection as projection, action_item_versions
+from database import _client, list_projection as projection, action_item_versions
 from database import list_projection_head, legal_holds, user_data_deletion, batch_pipeline_purge, users
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils import list_version_check as checks
@@ -389,7 +389,7 @@ def test_production_version_lookup_bounds_io_and_falls_back(monkeypatch):
             assert kwargs == {'timeout': 1.0, 'retry': None}
             return SimpleNamespace(exists=True, to_dict=lambda: {'version': 'a' * 32})
 
-    monkeypatch.setattr(checks, 'get_firestore_client', Reference)
+    monkeypatch.setattr(_client, 'get_firestore_client', Reference)
     assert checks._version('synthetic-owner', 'conversations') == 'a' * 32
     assert calls == ['users', 'synthetic-owner', projection.STATE_COLLECTION, 'conversations']
     monkeypatch.setattr(Reference, 'get', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('offline')))
