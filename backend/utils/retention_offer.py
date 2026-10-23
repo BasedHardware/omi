@@ -5,6 +5,7 @@ live subscription and clears any scheduled cancellation, so the reader stays sub
 """
 
 import logging
+import uuid
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -16,7 +17,8 @@ COUPON_ID = 'omi-retention-50off-3mo'
 PERCENT_OFF = 50
 DURATION_MONTHS = 3
 USED_METADATA_KEY = 'omi_retention_offer_subscription'  # the subscription that claimed it
-LOCK_TTL_SECONDS = 30
+APPLIED_METADATA_KEY = 'omi_retention_offer_applied'  # on the subscription, written with the discount
+LOCK_TTL_SECONDS = 120
 
 _ELIGIBLE_STATUSES = frozenset({'active', 'past_due'})
 
@@ -66,6 +68,8 @@ def evaluate(sub: Any, customer: Any) -> RetentionOffer:
         return _ineligible('no_subscription')
     if _get(sub, 'status') not in _ELIGIBLE_STATUSES:
         return _ineligible('status')
+    if _get(_get(sub, 'metadata') or {}, APPLIED_METADATA_KEY):
+        return _ineligible('already_used')
     if _get(sub, 'schedule'):
         return _ineligible('scheduled_change')
     if _has_discount(sub):
@@ -127,60 +131,87 @@ def _ensure_coupon() -> None:
         )
 
 
-def _acquire_lock(customer_id: str) -> bool:
+_RELEASE_IF_OWNER = "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
+
+
+def _acquire_lock(customer_id: str) -> Optional[str]:
+    """Per-customer lease; returns the owner token, or None when another worker holds it."""
     from database.redis_db import r
 
-    return bool(r.set(f'retention_offer:{customer_id}', '1', ex=LOCK_TTL_SECONDS, nx=True))
+    token = uuid.uuid4().hex
+    return token if r.set(f'retention_offer:{customer_id}', token, ex=LOCK_TTL_SECONDS, nx=True) else None
 
 
-def _release_lock(customer_id: str) -> None:
+def _release_lock(customer_id: str, token: str) -> None:
+    """Deletes the lease only if this worker still owns it."""
     from database.redis_db import r
 
-    r.delete(f'retention_offer:{customer_id}')
+    r.eval(_RELEASE_IF_OWNER, 1, f'retention_offer:{customer_id}', token)
 
 
 def accept(subscription_id: str) -> RetentionOffer:
     """Claim the offer for this customer, then discount the subscription and keep it renewing.
 
-    One redemption per Stripe customer: a per-customer lock serializes workers, and the claim
-    (customer metadata naming this subscription) is written before the discount, so a retry
-    after any partial failure finishes the same redemption instead of starting another.
-    Raises ValueError(reason) when the offer does not apply.
+    One redemption per Stripe customer, ever:
+    - a per-customer lease serializes workers in the normal case;
+    - the claim (customer metadata naming this subscription) uses a per-customer Stripe
+      idempotency key, so even a worker that outlived its lease cannot claim for a second
+      subscription (Stripe rejects the same key with different parameters);
+    - the discount write also stamps the subscription as applied, so the offer never returns
+      after the 3 discounted months end.
+    A retry after any partial failure finishes the same redemption. Raises ValueError(reason).
     """
     sub, _ = _retrieve(subscription_id)
     customer_id = _get(sub, 'customer')
     if not customer_id:
         raise ValueError('no_customer')
-    if not _acquire_lock(customer_id):
+    token = _acquire_lock(customer_id)
+    if not token:
         raise ValueError('in_progress')
     try:
         customer = stripe.Customer.retrieve(customer_id)
         claimed_by = _get(_get(customer, 'metadata') or {}, USED_METADATA_KEY)
         if claimed_by and claimed_by != subscription_id:
             raise ValueError('already_used')
-        if _has_retention_coupon(sub):
+        applied = bool(_get(_get(sub, 'metadata') or {}, APPLIED_METADATA_KEY))
+        if applied or _has_retention_coupon(sub):
+            if not _has_retention_coupon(sub):
+                raise ValueError('already_used')  # redeemed earlier and the discount has ended
             # Retry after a lost response: finish the bookkeeping, never reapply.
             if not claimed_by:
-                stripe.Customer.modify(customer_id, metadata={USED_METADATA_KEY: subscription_id})
+                _claim(customer_id, subscription_id)
+            updates = {}
+            if not applied:
+                updates['metadata'] = {APPLIED_METADATA_KEY: '1'}
             if _get(sub, 'cancel_at_period_end'):
-                stripe.Subscription.modify(subscription_id, cancel_at_period_end=False)
+                updates['cancel_at_period_end'] = False
+            if updates:
+                stripe.Subscription.modify(subscription_id, **updates)
             return RetentionOffer(eligible=True, reason='already_applied')
         offer = evaluate(sub, customer)
         if not offer.eligible:
             raise ValueError(offer.reason)
         if not claimed_by:
-            stripe.Customer.modify(
-                customer_id,
-                metadata={USED_METADATA_KEY: subscription_id},
-                idempotency_key=f'retention-claim-{subscription_id}',
-            )
+            _claim(customer_id, subscription_id)
         _ensure_coupon()
         stripe.Subscription.modify(
             subscription_id,
             discounts=[{'coupon': COUPON_ID}],
             cancel_at_period_end=False,
+            metadata={APPLIED_METADATA_KEY: '1'},
             idempotency_key=f'retention-apply-{subscription_id}',
         )
         return offer
     finally:
-        _release_lock(customer_id)
+        _release_lock(customer_id, token)
+
+
+def _claim(customer_id: str, subscription_id: str) -> None:
+    try:
+        stripe.Customer.modify(
+            customer_id,
+            metadata={USED_METADATA_KEY: subscription_id},
+            idempotency_key=f'retention-claim-{customer_id}',
+        )
+    except stripe.error.IdempotencyError:
+        raise ValueError('already_used')

@@ -3,6 +3,7 @@
 import copy
 import os
 import threading
+import uuid
 
 import pytest
 
@@ -86,7 +87,8 @@ class _FakeStripe:
         self.subs = {s['id']: s for s in subs}
         self.customers = {'cus_1': {'id': 'cus_1', 'metadata': {ro.USED_METADATA_KEY: used_by} if used_by else {}}}
         self.coupons = {}
-        self.locks = set()
+        self.locks = {}
+        self.idempotency = {}
         self.lock_guard = threading.Lock()
         self.calls = []
         self.fail_customer_modify = False
@@ -98,21 +100,47 @@ class _FakeStripe:
         monkeypatch.setattr(ro.stripe.Coupon, 'retrieve', self.coupon_retrieve)
         monkeypatch.setattr(ro.stripe.Coupon, 'create', lambda **kw: self.coupons.setdefault(kw['id'], kw))
         monkeypatch.setattr(ro, '_acquire_lock', self.acquire)
-        monkeypatch.setattr(ro, '_release_lock', lambda cid: self.locks.discard(cid))
+        monkeypatch.setattr(ro, '_release_lock', self.release)
 
     def acquire(self, cid):
         with self.lock_guard:
             if cid in self.locks:
-                return False
-            self.locks.add(cid)
+                return None
+            token = uuid.uuid4().hex
+            self.locks[cid] = token
+            return token
+
+    def release(self, cid, token):
+        with self.lock_guard:
+            if self.locks.get(cid) == token:
+                del self.locks[cid]
+
+    def expire_lease(self, cid):
+        with self.lock_guard:
+            self.locks.pop(cid, None)
+
+    def _idempotent(self, kw):
+        key = kw.get('idempotency_key')
+        if not key:
+            return False
+        params = {k: v for k, v in kw.items() if k != 'idempotency_key'}
+        if key in self.idempotency:
+            if self.idempotency[key] != params:
+                raise ro.stripe.error.IdempotencyError('Keys for idempotent requests can only be used with the same parameters')
             return True
+        self.idempotency[key] = params
+        return False
 
     def sub_retrieve(self, sid, **kw):
         return copy.deepcopy(self.subs[sid])
 
     def sub_modify(self, sid, **kw):
         self.calls.append(('sub', sid, kw))
+        if self._idempotent(kw):
+            return
         sub = self.subs[sid]
+        if 'metadata' in kw:
+            sub.setdefault('metadata', {}).update(kw['metadata'])
         if 'discounts' in kw:
             sub['discounts'] = [{'id': 'di_' + sid, 'source': {'coupon': {'id': kw['discounts'][0]['coupon']}}}]
         if 'cancel_at_period_end' in kw:
@@ -127,6 +155,8 @@ class _FakeStripe:
         self.calls.append(('cus', cid, kw))
         if self.fail_customer_modify:
             raise RuntimeError('stripe 500')
+        if self._idempotent(kw):
+            return
         self.customers[cid]['metadata'].update(kw['metadata'])
 
     def coupon_retrieve(self, cid):
@@ -148,7 +178,7 @@ def test_accept_claims_customer_then_discounts_and_clears_cancel(monkeypatch):
     assert fake.customers['cus_1']['metadata'][ro.USED_METADATA_KEY] == 'sub_1'
     assert fake.subs['sub_1']['cancel_at_period_end'] is False and fake.discounted() == ['sub_1']
     assert fake.calls[1][2]['idempotency_key'] == 'retention-apply-sub_1'
-    assert fake.coupons[ro.COUPON_ID]['percent_off'] == 50 and fake.locks == set()
+    assert fake.coupons[ro.COUPON_ID]['percent_off'] == 50 and fake.locks == {}
 
 
 def test_second_subscription_of_same_customer_is_refused(monkeypatch):
@@ -190,7 +220,7 @@ def test_concurrent_redemptions_for_one_customer_discount_only_one(monkeypatch):
 
 def test_lock_held_by_another_worker_refuses_without_writes(monkeypatch):
     fake = _FakeStripe(monkeypatch, [_sub()])
-    fake.locks.add('cus_1')
+    fake.locks['cus_1'] = 'other-worker'
     with pytest.raises(ValueError, match='in_progress'):
         ro.accept('sub_1')
     assert fake.calls == []
@@ -207,11 +237,11 @@ def test_retry_after_discount_failure_finishes_the_same_claim(monkeypatch):
     with pytest.raises(RuntimeError):
         ro.accept('sub_1')
     assert fake.customers['cus_1']['metadata'][ro.USED_METADATA_KEY] == 'sub_1' and fake.discounted() == []
-    assert fake.locks == set()
+    assert fake.locks == {}
 
     monkeypatch.setattr(ro.stripe.Subscription, 'modify', real_modify)
     assert ro.accept('sub_1').eligible and fake.discounted() == ['sub_1']
-    assert ro.get_offer('sub_1').reason == 'already_discounted'
+    assert ro.get_offer('sub_1').reason == 'already_used'
 
 
 def test_retry_after_claim_write_failure_recovers(monkeypatch):
@@ -219,7 +249,7 @@ def test_retry_after_claim_write_failure_recovers(monkeypatch):
     fake.fail_customer_modify = True
     with pytest.raises(RuntimeError):
         ro.accept('sub_1')
-    assert fake.discounted() == [] and fake.locks == set()
+    assert fake.discounted() == [] and fake.locks == {}
 
     fake.fail_customer_modify = False
     assert ro.accept('sub_1').eligible and fake.discounted() == ['sub_1']
@@ -239,6 +269,15 @@ def test_discounted_without_claim_reconciles_the_claim(monkeypatch):
     assert ro.accept('sub_1').reason == 'already_applied'
     assert fake.customers['cus_1']['metadata'][ro.USED_METADATA_KEY] == 'sub_1'
     assert fake.subs['sub_1']['cancel_at_period_end'] is False
+    assert fake.subs['sub_1']['metadata'][ro.APPLIED_METADATA_KEY] == '1'
+
+    # The coupon expires later: no second redemption.
+    fake.subs['sub_1']['discounts'] = []
+    fake.calls.clear()
+    assert ro.get_offer('sub_1').reason == 'already_used'
+    with pytest.raises(ValueError, match='already_used'):
+        ro.accept('sub_1')
+    assert fake.calls == [] and fake.discounted() == []
 
 
 def test_claimed_by_another_subscription_is_refused_without_writes(monkeypatch):
@@ -246,3 +285,66 @@ def test_claimed_by_another_subscription_is_refused_without_writes(monkeypatch):
     with pytest.raises(ValueError, match='already_used'):
         ro.accept('sub_1')
     assert fake.calls == []
+
+
+def test_offer_never_returns_after_the_discount_ends(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub()])
+    ro.accept('sub_1')
+    # Three months later Stripe removes the expired discount; the claim is this same subscription.
+    fake.subs['sub_1']['discounts'] = []
+    fake.subs['sub_1']['cancel_at_period_end'] = True
+    assert ro.get_offer('sub_1').reason == 'already_used'
+    fake.calls.clear()
+    with pytest.raises(ValueError, match='already_used'):
+        ro.accept('sub_1')
+    assert fake.calls == []
+
+
+def test_worker_that_outlives_its_lease_cannot_claim_a_second_subscription(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub(), _sub(id='sub_2')])
+    slow = {}
+
+    def slow_read():
+        # Worker A has read the unclaimed customer, then stalls past its lease while B redeems.
+        if 'done' not in slow:
+            slow['done'] = True
+            fake.before_customer_read = None
+            fake.expire_lease('cus_1')
+            slow['b'] = ro.accept('sub_2').reason
+
+    fake.before_customer_read = slow_read
+    with pytest.raises(ValueError, match='already_used'):
+        ro.accept('sub_1')  # A's claim hits the per-customer idempotency key with other params
+
+    assert slow['b'] == 'eligible'
+    assert fake.discounted() == ['sub_2']
+    assert fake.customers['cus_1']['metadata'][ro.USED_METADATA_KEY] == 'sub_2'
+
+
+def test_release_only_deletes_the_owners_lease(monkeypatch):
+    fake = _FakeStripe(monkeypatch, [_sub()])
+    token = fake.acquire('cus_1')
+    fake.expire_lease('cus_1')
+    other = fake.acquire('cus_1')
+    fake.release('cus_1', token)
+    assert fake.locks == {'cus_1': other}
+
+
+def test_real_lease_helpers_use_owner_token(monkeypatch):
+    calls = []
+
+    class FakeRedis:
+        def set(self, key, value, ex, nx):
+            calls.append(('set', key, value, ex, nx))
+            return True
+
+        def eval(self, script, n, key, token):
+            calls.append(('eval', key, token, 'ARGV[1]' in script))
+
+    import database.redis_db as redis_db
+
+    monkeypatch.setattr(redis_db, 'r', FakeRedis())
+    token = ro._acquire_lock('cus_1')
+    ro._release_lock('cus_1', token)
+    assert calls[0][1:] == ('retention_offer:cus_1', token, ro.LOCK_TTL_SECONDS, True)
+    assert calls[1] == ('eval', 'retention_offer:cus_1', token, True)
