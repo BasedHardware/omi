@@ -37,14 +37,15 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
   }
 
   /// The pendant already connected, or a saved one reconnecting on its own while the step is open,
-  /// completes pairing once. A tap-to-connect is left to [OnboardingProvider.handleTap]: it calls
-  /// goNext itself after its settle and persistence, and marks [OnboardingProvider.isConnected].
+  /// completes pairing once. A tap-to-connect still connecting or settling is left to
+  /// [OnboardingProvider.handleTap], which calls goNext itself after its settle and persistence. A
+  /// tap that finished after the reader left (Not now) advances here when they come back.
   void _maybeAdvanceOnReconnect() {
     if (_done || _advanceScheduled) return;
     final devices = context.read<DeviceProvider>();
     final onboarding = context.read<OnboardingProvider>();
     if (!devices.isConnected || devices.connectedDevice == null) return;
-    if (onboarding.isClicked || onboarding.connectingToDeviceId != null || onboarding.isConnected) return;
+    if (onboarding.isClicked || onboarding.connectingToDeviceId != null || onboarding.isSettlingConnection) return;
     _advanceScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _advanceScheduled = false;
@@ -52,7 +53,11 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
       // Re-check after the frame: the pendant may have dropped, or a tap may have started.
       final d = context.read<DeviceProvider>();
       final o = context.read<OnboardingProvider>();
-      if (d.isConnected && d.connectedDevice != null && !o.isClicked && o.connectingToDeviceId == null) {
+      if (d.isConnected &&
+          d.connectedDevice != null &&
+          !o.isClicked &&
+          o.connectingToDeviceId == null &&
+          !o.isSettlingConnection) {
         _finish(true);
       }
     });
