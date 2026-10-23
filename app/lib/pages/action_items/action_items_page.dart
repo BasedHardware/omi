@@ -653,7 +653,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         builder: (context, candidateData, rejectedData) {
           return AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: Colors.transparent,
               borderRadius: OmiRadius.mdAll,
             ),
