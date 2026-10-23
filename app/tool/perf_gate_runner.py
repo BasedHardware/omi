@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bound the entire repeated gate to 9m30s, kill its process group on timeout."""
 import argparse
+import json
 import os
 from pathlib import Path
 import signal
@@ -38,9 +39,11 @@ def main():
     source_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=APP, text=True).strip()
     env['PERF_SOURCE_SHA'] = source_sha
     status = 0
+    outcomes = []
     for run in range(1, repeats + 1):
         print(f'PERF GATE run {run}/{repeats}', flush=True)
         command = ['nice', '-n', '10', 'flutter', 'test', '--no-pub', '--concurrency=1', '--dart-define=OMI_APP_PROFILE=local_dev', '--dart-define=PERF_GATE_INNER_REPEATS=1', 'test/perf/production_shell_gate_test.dart', *args.flutter_args]
+        started = time.monotonic()
         log_path = artifacts / f'run-{run}.log'
         log = log_path.open('w')
         print(f'Flutter output: {log_path}', flush=True)
@@ -57,12 +60,15 @@ def main():
             print('PERF RED: gate exceeded 9m30s; partial evidence is not admission', flush=True)
             log.close()
             status = 1
+            outcomes.append({'run': run, 'exit_code': 124, 'elapsed_seconds': time.monotonic() - started})
             break
         finally:
             log.close()
         if code:
             print(''.join(log_path.read_text(errors='replace').splitlines(keepends=True)[-70:]), flush=True)
+        outcomes.append({'run': run, 'exit_code': code, 'elapsed_seconds': time.monotonic() - started})
         status = status or code
+    (artifacts / 'run-status.json').write_text(json.dumps({'source_sha': source_sha, 'runs': outcomes}, indent=2) + '\n')
     report = subprocess.run([sys.executable, str(APP / 'tool/perf_gate_report.py'), str(artifacts), '--expected-runs', str(repeats)])
     print(f'PERF {"RED" if status or report.returncode else "GREEN"}: {artifacts}', flush=True)
     return bool(status or report.returncode)

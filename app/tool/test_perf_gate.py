@@ -32,7 +32,7 @@ class PerfGateTests(unittest.TestCase):
 
     def test_complete_repeats_report_variance_and_budget_failure(self):
         def card(value, violations):
-            return {'schema': 'omi-mobile-perf/v2', 'complete': True, 'scenarios': {
+            return {'schema': 'omi-mobile-perf/v2', 'complete': True, 'test_failure_count': 0, 'scenarios': {
                 name: {'work_counts': {'rebuilds': value}, 'total_ms': {'p90': value * 100},
                        'ui_phase_shares': {'SEMANTICS': 0}, 'gate_violations': violations}
                 for name in SCENARIOS}}
@@ -42,7 +42,7 @@ class PerfGateTests(unittest.TestCase):
         self.assertTrue(summarize([card(12, ['regression'])], 1)[1])
 
     def test_missing_scenario_fails(self):
-        self.assertTrue(summarize([{'schema': 'omi-mobile-perf/v2', 'complete': True, 'scenarios': {}}], 1)[1])
+        self.assertTrue(summarize([{'schema': 'omi-mobile-perf/v2', 'complete': True, 'test_failure_count': 0, 'scenarios': {}}], 1)[1])
 
 
 class RunnerTests(unittest.TestCase):

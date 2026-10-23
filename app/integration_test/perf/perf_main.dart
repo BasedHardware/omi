@@ -63,6 +63,7 @@ void main() {
   });
   group('profile', () {
     testWidgets('emit scorecard even when a gate fails', (tester) async {
+      final testFailures = binding.failureMethodsDetails;
       final scorecard = <String, Object?>{
         'schema': 'omi-mobile-perf/v2',
         'lane': 'host_flutter_tester',
@@ -71,7 +72,12 @@ void main() {
         'shell': 'source_checked_production_ios_analytics',
         'gate': 'deterministic_work_and_semantics_share',
         'scenarios': results,
-        'complete': results.length == scenarioNames.length,
+        'test_failure_count': testFailures.length,
+        'test_failures': [
+          for (final failure in testFailures)
+            failure.details.length > 2000 ? failure.details.substring(0, 2000) : failure.details
+        ],
+        'complete': results.length == scenarioNames.length && testFailures.isEmpty,
       };
       final directory = Directory(Platform.environment['PERF_SCORECARD_DIR'] ?? '/tmp/omi-perf');
       directory.createSync(recursive: true);

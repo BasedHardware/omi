@@ -14,6 +14,8 @@ def summarize(cards, expected_runs):
     if len(cards) != expected_runs:
         errors.append(f'expected {expected_runs} scorecards, found {len(cards)}; partial/stale evidence is invalid')
     for card in cards:
+        if card.get('test_failure_count') != 0:
+            errors.append(f"test framework failures or missing failure evidence: {card.get('test_failure_count')}")
         if card.get('schema') != 'omi-mobile-perf/v2' or card.get('complete') is not True:
             errors.append('missing or incomplete v2 scorecard')
         if set(card.get('scenarios', {})) != set(SCENARIOS):
@@ -46,6 +48,13 @@ def main():
     args = parser.parse_args()
     cards = [json.loads(p.read_text()) for p in sorted(args.directory.glob('scorecard-*.json'))]
     rows, errors = summarize(cards, args.expected_runs)
+    status_path = args.directory / 'run-status.json'
+    if not status_path.is_file():
+        errors.append('missing process exit evidence (run-status.json)')
+    else:
+        statuses = json.loads(status_path.read_text()).get('runs', [])
+        if len(statuses) != args.expected_runs or any(type(run.get('exit_code')) is not int or run['exit_code'] != 0 for run in statuses):
+            errors.append('failed or incomplete Flutter processes; measured counts alone are not admission')
     print('SCENARIO             REBUILDS min..max  LAYOUTS min..max  SEMANTICS max  HOST p90 ms (diagnostic)')
     for row in rows:
         work = row['work']
