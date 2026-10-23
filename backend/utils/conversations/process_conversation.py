@@ -69,6 +69,7 @@ from config.refactor_modes import serving_for
 from utils.conversations.relevance import content_minimum
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.llm.notes_short_clip import quiet_minimum
+from utils.llm.notes_output_contract import finish_home_salience
 from utils.llm.output_language import resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
@@ -652,13 +653,11 @@ def _get_conversation_obj(
     conversation_id: Optional[str] = None,
     *,
     relevance_discarded: Optional[bool] = None,
+    user_kept: bool = False,
 ) -> Conversation:
+    structured = finish_home_salience(uid, structured, conversation, user_kept=user_kept)
     if relevance_discarded is False and not structured.title.strip():
-        # A kept conversation must never become an empty-title row merely
-        # because structure generation returned a partial object. Use the same
-        # deterministic, model-free title as the minimum-processing path. An
-        # explicit relevance discard keeps its empty title: that remains the
-        # durable discard verdict and is hidden by default at the list boundary.
+        # Give kept partial outputs a deterministic title; explicit discards keep theirs empty.
         structured.title = deterministic_minimum_title(
             conversation,
             tz_name_provider=lambda: notification_db.get_user_time_zone(uid),
@@ -668,9 +667,6 @@ def _get_conversation_obj(
         if relevance_discarded is not None
         else structured.title == '' and not is_release_probe_uid(uid)
     )
-    # The empty-title fallback is the discard gate's second verdict and is
-    # covered by the same release-probe exemption as the LLM discard above:
-    # an LLM mood must not terminalize the probe lane's synthetic capture.
     if isinstance(conversation, CreateConversation):
         conversation_dict = conversation.dict()
         # Store calendar context in external_data if available
@@ -2698,6 +2694,7 @@ def process_conversation(
         conversation,
         conversation_id=generated_conversation_id,
         relevance_discarded=discarded,
+        user_kept=user_kept,
     )
     _attach_client_projection(conversation, client_projection)
     relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
@@ -2746,9 +2743,12 @@ def process_conversation(
     payload = _normal_persist_payload(conversation, clear_terminal_marker=clear_stale_terminal_marker)
     if serving_for('MEDIA_NOISE_MODE', uid):
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True if content_excluded else None
-    payload.update(llm_hashes)
     from config.sync_reprocess import dedupe_enabled
-    from utils.conversations.llm_input_dedupe import NOTES_HASH, NOTES_OUTPUT_HASH, L1_HASH
+    from utils.conversations.llm_input_dedupe import NOTES_HASH, NOTES_OUTPUT_HASH, L1_HASH, output_fingerprint
+
+    if NOTES_OUTPUT_HASH in llm_hashes:
+        llm_hashes[NOTES_OUTPUT_HASH] = output_fingerprint(structured)
+    payload.update(llm_hashes)
 
     if not dedupe_enabled() and not is_initial_creation:
         # Rollback keeps generating normally; clear server-only checkpoints in

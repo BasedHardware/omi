@@ -7,6 +7,7 @@ import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/action_item.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/backend/schema/memory_review.dart';
@@ -253,6 +254,7 @@ void main() {
       final start = DateTime(2026, 7, 15, 9);
       return ServerConversation(
         id: id,
+        speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
         createdAt: start,
         structured: Structured(title, '', salience: salience),
         startedAt: start,
@@ -270,7 +272,7 @@ void main() {
           summary: _summary(locations: const []),
           dayConversationsFetcher: ({required endDate, limit = 50, offset = 0, required startDate}) async => (
             items: [
-              convo('a', 'Laundry and a spa day', salience: 'background', minutes: 29),
+              convo('a', 'TV in the background', salience: 'background', minutes: 29),
               convo('b', 'Planning the offsite', salience: 'highlight'),
             ],
             ok: true,
@@ -284,7 +286,7 @@ void main() {
     await tester.scrollUntilVisible(find.byKey(const ValueKey('recap_background_section')), 200);
 
     expect(find.text('In the background'), findsOneWidget);
-    expect(find.text('Laundry and a spa day'), findsOneWidget);
+    expect(find.text('TV in the background'), findsOneWidget);
     expect(find.text('29m'), findsOneWidget);
     expect(find.text('Planning the offsite'), findsNothing);
   });

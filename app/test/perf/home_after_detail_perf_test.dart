@@ -10,6 +10,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/episode.dart';
 import 'package:omi/backend/schema/folder.dart';
@@ -234,11 +235,12 @@ ServerConversation _conversation(int i, {int segmentCount = 0, String? salience}
   final created = _seedNow.subtract(Duration(hours: 3 * i));
   return ServerConversation(
     id: 'conv-$i',
+    speakerResolution: const ConversationSpeakers(status: 'resolved', participantSpeakerIds: [0]),
     createdAt: created,
     startedAt: created,
     finishedAt: created.add(const Duration(minutes: 22)),
     structured: Structured('Conversation $i', 'Overview $i.', emoji: '🧠', category: 'other', salience: salience),
-    transcriptSegments: [for (var j = 0; j < segmentCount; j++) _segment(j)],
+    transcriptSegments: [for (var j = 0; j < segmentCount; j++) _segment(j)..isUser = salience != 'background'],
   );
 }
 
