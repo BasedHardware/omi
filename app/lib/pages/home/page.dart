@@ -740,7 +740,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               context.read<ConversationProvider>().upsertConversation(row);
               unawaited(context.read<LocalRecordingsProvider>().refresh());
             },
-            recordings: () => context.read<LocalRecordingsProvider>().recordings,
           );
           unawaited(_onDeviceRunner!.start());
         }

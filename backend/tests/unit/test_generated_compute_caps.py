@@ -220,7 +220,9 @@ def test_new_feature_get_llm_cannot_bypass_uid_or_budget(gate, monkeypatch):
     [
         (
             'utils/other/notifications.py',
-            '_generate_and_store_daily_summary',
+            # The wrapper delegates to the cohort producer; this is the retained
+            # legacy budget entrypoint, isolated from all database dependencies.
+            '_legacy_generate_and_store_daily_summary',
             ('user', 'date', None, None),
             (None, False, 'usage_budget_exhausted'),
         ),

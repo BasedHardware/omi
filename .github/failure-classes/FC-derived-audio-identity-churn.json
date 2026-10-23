@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-derived-audio-identity-churn",
+  "violated_contract": "Unchanged source objects must retain playback identity across metadata refreshes. A retry after artifact publication must reuse the same object rather than re-encode or overwrite it; live chunk flushes must not repeatedly encode the growing conversation.",
+  "canonical_prevention": "Derive part IDs from immutable source manifests independently of rollout flags, retain client aliases, remove the Pusher flush rebuild trigger, and publish fingerprint-keyed conversation artifacts with create-only GCS preconditions and a recoverable spans manifest. Exercise unchanged sources, changed generations, concurrent publication and post-upload retry.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_playback_idempotency.py",
+    "backend/tests/unit/test_repeat_work_cuts.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/other/playback_cache.py", "backend/utils/sync/playback_build.py"],
+  "status": "open"
+}

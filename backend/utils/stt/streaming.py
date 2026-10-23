@@ -856,6 +856,12 @@ def validate_streaming_stt_env(env: Any = None) -> None:
             'STT_SERVICE_MODELS lists soniox but SONIOX_API_KEY is empty; '
             'remove soniox from the serving chain or set the key'
         )
+    # Deepgram retired 2026-08-27 (no contract); do not route or add keys. A
+    # legacy dg-* slot is inert (policy refuses to admit it), so this is a loud
+    # startup error rather than a crash: remove the slot.
+    retired = [model for model in listed if model.startswith('dg-')]
+    if retired:
+        logger.error('STT_SERVICE_MODELS lists retired Deepgram models %s; remove the slot', retired)
 
 
 def modulate_is_configured_fallback(language: Optional[str]) -> bool:

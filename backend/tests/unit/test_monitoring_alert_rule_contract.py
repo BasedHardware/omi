@@ -1862,6 +1862,29 @@ def test_live_stt_capacity_full_and_provider_terminal_alerts_are_per_target_and_
         assert term["C"]["expression"] == "$A >= 30 && $B > 0.75", export_name
 
 
+def test_local_delivery_and_sync_budget_siblings_cover_reasons_the_capacity_rules_lost():
+    # 2026-10-22: P34 (#23074) moved Soniox/Modulate local delivery deaths off
+    # capacity_full, and Modulate's 429 "Insufficient credits" paged nothing
+    # until #23234 typed it provider_budget_exhausted on sync jobs.
+    for export_name, rules in _all_rule_exports().items():
+        local = rules["omi-stt-local-delivery-exhausted"]
+        assert local["labels"]["severity"] == "warning", export_name
+        assert local["for"] == "30m", export_name
+        nodes = {node["refId"]: node["model"] for node in local["data"]}
+        assert (
+            'reason=~"send_queue_full|replay_send_stalled|delivery_expired",outcome="exhausted"' in nodes["B"]["expr"]
+        ), export_name
+        assert nodes["C"]["expression"] == "$A >= 100 && $B > 0.02", export_name
+        budget = rules["omi-sync-provider-budget-exhausted"]
+        assert budget["labels"]["severity"] == "critical", export_name
+        assert budget["for"] == "5m", export_name
+        assert budget["data"][0]["datasourceUid"] == "gmp-cloud-run", export_name
+        nodes = {node["refId"]: node["model"] for node in budget["data"]}
+        assert 'outcome="provider_budget_exhausted"' in nodes["A"]["expr"], export_name
+        assert "backend-sync|backend-sync-backfill" in nodes["A"]["expr"], export_name
+        assert nodes["C"]["expression"] == "$A >= 3", export_name
+
+
 def test_chat_journey_rules_require_a_failure_floor_before_firing():
     # 2026-10-19: ~22 chat terminals in a quiet half hour with 4 provider
     # rejects drove success to 0.81; the floor keeps that from paging.

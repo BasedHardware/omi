@@ -14596,4 +14596,9 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get deviceControls => 'Commandes';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Aussi : $items';
+  }
 }

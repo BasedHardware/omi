@@ -4502,5 +4502,6 @@
     "deviceCatchingUpProgress": "{done}/{total} perc",
     "deviceRecently": "Nemrég",
     "deviceDisconnectedFor": "{duration} szétkapcsolva",
-    "deviceControls": "Vezérlők"
+    "deviceControls": "Vezérlők",
+    "homeBackgroundLine": "Továbbá: {items}"
 }

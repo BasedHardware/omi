@@ -20,6 +20,7 @@ import time
 from typing import Optional
 
 from config.episodes import CLIENT_SEEN_REFRESH_SECONDS, CLIENT_SEEN_TTL_SECONDS, episodes_enabled_for
+from config.occasion_conversations import occasion_conversations_enabled, occasion_source
 from database import episodes_client_seen as marker_db
 
 _MEMO_MAX = 50_000
@@ -97,6 +98,23 @@ def client_seen_cached(uid: str, *, now: Optional[float] = None) -> bool:
             _seen_cache.clear()
             _seen_cache[uid] = (seen, wall)
     return seen
+
+
+def occasion_mode(uid: str, source: object = 'omi') -> bool:
+    """Occasion conversations (config/occasion_conversations.py) for this user's session from ``source``.
+
+    Blocking (Redis), fails closed. The capability marker is per user, so the source check keeps a
+    cohort user's desktop capture on today's boundaries.
+    """
+    try:
+        return (
+            occasion_conversations_enabled()
+            and occasion_source(source)
+            and episodes_enabled_for(uid)
+            and client_seen_cached(uid)
+        )
+    except Exception:
+        return False
 
 
 def episode_work_enabled(uid: str) -> bool:

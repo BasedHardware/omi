@@ -53,7 +53,11 @@ export VECLIB_MAXIMUM_THREADS="${VECLIB_MAXIMUM_THREADS:-1}"
 export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
 export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
 
-pytest_args=(-v)
+# LangSmith's pytest integration is for live evaluation/upload, which this
+# hermetic suite does not use. Local startup measurements saved ~0.17s per
+# process before collection; file isolation pays this cost hundreds of times.
+# Keep the other plugins active.
+pytest_args=(-p no:langsmith_plugin -v)
 
 marker_expr="${BACKEND_PYTEST_MARK_EXPR:-not integration and not slow}"
 if [[ -n "$marker_expr" ]]; then

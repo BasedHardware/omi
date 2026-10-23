@@ -1,5 +1,6 @@
 from database import sync_redrive
-from utils.sync import minimal_redrive, redrive_policy
+from utils.sync import minimal_redrive, redrive_policy, playback_build
+from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
@@ -89,7 +90,6 @@ from utils.other.storage import (
     mark_playback_unavailable,
     compute_audio_files_fingerprint,
     get_conversation_playback_signed_url,
-    upload_conversation_playback_artifact,
     mark_conversation_playback_unavailable,
 )
 from utils.byok import has_byok_keys
@@ -140,7 +140,12 @@ from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll,
 from utils.sync.retired_handle_ack import acknowledge_retired_handle
 from config.repeat_work import playback_on_demand
 from contextlib import nullcontext
-from utils.sync.repeat_work_metrics import PLAYBACK_BUILD_SECONDS, PLAYBACK_BUILDS, record_playback_ready
+from utils.sync.repeat_work_metrics import (
+    PLAYBACK_WRITES,
+    PLAYBACK_BUILD_SECONDS,
+    PLAYBACK_BUILDS,
+    record_playback_ready,
+)
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
@@ -234,6 +239,7 @@ async def _offer_shadow_upload(**kwargs) -> None:
 
 
 router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
+router.include_router(coverage_router)
 
 
 @router.post('/v2/sync-capture-manifest', response_model=SyncCaptureManifestResponse)
@@ -1861,7 +1867,6 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     if job and job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
     # A read can reconcile a proven content completion without rewriting Redis,
-    # binding a run lease or competing with the worker's terminal authority.
     from utils.sync.completed_status import get_completed_legacy_status
 
     try:
@@ -3293,7 +3298,6 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
         ):
             # Pure future downloads share this instance with a possible next
             # task. They hold no Cloud Tasks slot, job lock, ledger claim, or
-            # conversation authority. A cross-instance delivery simply misses.
             start_background_task(
                 run_blocking(storage_executor, warm_owner, uid, job_id, sequencer_epoch),
                 name='sync:owner-prefetch',
@@ -3664,12 +3668,17 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
         if not conversation or conversation.get('deleted', False):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'deleted_conversation'})
 
+        if conversation.get('audio_files') and not any(
+            af.get('id') == audio_file_id for af in conversation['audio_files']
+        ):
+            PLAYBACK_WRITES.labels('skipped').inc()
+            return JSONResponse(status_code=200, content={'status': 'superseded'})
+
         existing = await run_blocking(
             storage_executor, get_playback_artifact_signed_url, uid, conversation_id, audio_file_id
         )
         if existing:
-            if playback_on_demand():
-                PLAYBACK_BUILDS.labels('file', 'reused').inc()
+            PLAYBACK_WRITES.labels('cache_hit').inc()
             return JSONResponse(status_code=200, content={'status': 'exists'})
 
         try:
@@ -3680,7 +3689,11 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                     uid,
                     conversation_id,
                     timestamps,
-                    **({'source_fingerprint': payload.get('source_fingerprint')} if payload.get('on_demand') else {}),
+                    **(
+                        {'source_fingerprint': payload.get('source_fingerprint')}
+                        if payload.get('source_fingerprint')
+                        else {}
+                    ),
                 )
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
@@ -3821,20 +3834,30 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         else:
             fingerprint = compute_audio_files_fingerprint(audio_files)
         if payload_fingerprint and payload_fingerprint != fingerprint:
+            PLAYBACK_WRITES.labels('skipped').inc()
             return JSONResponse(status_code=200, content={'status': 'superseded'})
 
+        artifact_fingerprint = compute_audio_files_fingerprint(
+            audio_files, origin=conversation.get('started_at') or conversation.get('created_at'), source_identity=True
+        )
         stamp = conversation.get('conversation_audio') or {}
-        if stamp.get('audio_files_fingerprint') == fingerprint:
+        if stamp.get('audio_files_fingerprint') in (fingerprint, artifact_fingerprint) and (
+            not conversation.get('conversation_audio_artifact_fingerprint')
+            or conversation['conversation_audio_artifact_fingerprint'] == artifact_fingerprint
+        ):
             existing = await run_blocking(
                 storage_executor,
                 get_conversation_playback_signed_url,
                 uid,
                 conversation_id,
-                **({'fingerprint': fingerprint} if demand else {}),
+                **(
+                    {'fingerprint': conversation.get('conversation_audio_artifact_fingerprint') or fingerprint}
+                    if demand or conversation.get('conversation_audio_artifact_fingerprint')
+                    else {}
+                ),
             )
             if existing:
-                if demand:
-                    PLAYBACK_BUILDS.labels('conversation', 'reused').inc()
+                PLAYBACK_WRITES.labels('cache_hit').inc()
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
         started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
@@ -3846,14 +3869,15 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 
         try:
             with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if demand else nullcontext():
-                mp3_data, spans = await run_blocking(
+                mp3_size, spans = await run_blocking(
                     sync_executor,
-                    sync_playback.build_conversation_playback_artifact,
+                    playback_build.ensure_conversation_artifact,
                     uid,
                     conversation_id,
                     audio_files,
                     started_at_ts,
-                    **({'strict_sources': True} if demand else {}),
+                    artifact_fingerprint,
+                    strict_sources=demand,
                 )
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
@@ -3898,51 +3922,6 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
-        try:
-            await run_blocking(
-                storage_executor,
-                upload_conversation_playback_artifact,
-                uid,
-                conversation_id,
-                mp3_data,
-                **({'fingerprint': fingerprint} if demand else {}),
-            )
-        except Exception as e:
-            if isinstance(e, DestructiveOperationInProgress):
-                deferred = await _defer_merge_for_destructive_operation(payload)
-                if deferred is not None:
-                    return deferred
-            # Same contract as the build: a destructive-operation fence on the
-            # upload must retry (or mark unavailable on the final attempt)
-            # instead of escaping as an unhandled legal_holds traceback. The
-            # marker write is fenced too, so a second fence is logged and the
-            # task still completes as failed_final.
-            max_attempts = get_sync_tasks_max_attempts()
-            if task_retry_count >= max_attempts - 1:
-                logger.error(f'audio_merge_failed_final conversation artifact conv={conversation_id}: {e}')
-                try:
-                    await run_blocking(
-                        storage_executor,
-                        mark_conversation_playback_unavailable,
-                        uid,
-                        conversation_id,
-                        fingerprint,
-                        'merge_failed',
-                    )
-                except DestructiveOperationInProgress:
-                    logger.info(
-                        f'audio_merge: unavailable marker deferred reason=destructive_operation conv={conversation_id}'
-                    )
-                return JSONResponse(status_code=200, content={'status': 'failed_final'})
-            logger.warning(
-                f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}'
-            )
-            return JSONResponse(status_code=500, content={'status': 'retry'})
-        if demand:
-            PLAYBACK_BUILDS.labels('conversation', 'built').inc()
-        mp3_size = len(mp3_data)
-        del mp3_data
-
         captured_duration = round(sum(s['len'] for s in spans), 3)
         wall_duration = round(spans[-1]['wall_offset'] + spans[-1]['len'], 3)
         await run_blocking(
@@ -3951,14 +3930,15 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             uid,
             conversation_id,
             {
+                'conversation_audio_artifact_fingerprint': artifact_fingerprint,
                 'conversation_audio': {
-                    'audio_files_fingerprint': fingerprint,
+                    'audio_files_fingerprint': artifact_fingerprint,
                     'duration': wall_duration,
                     'captured_duration': captured_duration,
                     'spans': spans,
                     'content_type': 'audio/mpeg',
                     'built_at': datetime.now(timezone.utc),
-                }
+                },
             },
         )
         if demand:

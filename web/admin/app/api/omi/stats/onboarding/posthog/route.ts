@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import { POSTHOG_SERVED_MAX_ROWS, withRowLimit } from "@/lib/posthog";
 import {
@@ -155,7 +155,7 @@ export async function computeOnboarding(days: number) {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "analytics:read");
   if (authResult instanceof NextResponse) return authResult;
 
   const searchParams = request.nextUrl.searchParams;
@@ -167,15 +167,15 @@ export async function GET(request: NextRequest) {
       Awaited<ReturnType<typeof computeOnboarding>>
     >(key);
     if (cached) {
-      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+      return authResult.json(withFreshness(cached.data, cached.freshAt));
     }
 
     const payload = await computeOnboarding(days);
     await setPayload(key, payload);
-    return NextResponse.json(withFreshness(payload, Date.now()));
+    return authResult.json(withFreshness(payload, Date.now()));
   } catch (error) {
     if (error instanceof PostHogError) {
-      return NextResponse.json(
+      return authResult.json(
         { error: `PostHog API error: ${error.status}` },
         { status: 502 }
       );
@@ -184,13 +184,13 @@ export async function GET(request: NextRequest) {
       error instanceof Error &&
       error.message === "PostHog credentials not configured"
     ) {
-      return NextResponse.json(
+      return authResult.json(
         { error: "PostHog credentials not configured" },
         { status: 500 }
       );
     }
     console.error("Error fetching PostHog onboarding funnel:", error);
-    return NextResponse.json(
+    return authResult.json(
       { error: "Failed to fetch PostHog onboarding funnel data" },
       { status: 500 }
     );

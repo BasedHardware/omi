@@ -14495,4 +14495,9 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kontroller';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Ayrıca: $items';
+  }
 }

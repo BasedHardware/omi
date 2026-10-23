@@ -521,7 +521,11 @@ async def test_selection_skips_the_benched_modulate_primary_on_the_next_connect(
     async def _connect_fallback():
         return healthy_fallback
 
-    with patch('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.02):
+    with patch('utils.stt.provider_resilience.STT_FALLBACK_LIVENESS_GRACE_SECONDS', 0.02), patch(
+        # Deepgram retired 2026-08-27; this walker regression pins a listed slot.
+        'utils.stt.streaming.stt_service_models',
+        ['modulate-velma-2', 'soniox', 'dg-nova-3'],
+    ):
         socket, service = await connect_stt_socket_with_fallback(
             primary_service=STTService.modulate,
             connect_primary=_refuse_primary,

@@ -6,6 +6,11 @@ Index-only requirements stay explicit until callers migrate to query specs.
 from __future__ import annotations
 
 from typing import Any
+from database.mcp_read_queries import (
+    MCP_DAILY_RECORDINGS_QUERY,
+    MCP_MEMORY_FILTER_QUERIES,
+    MCP_CONVERSATION_CARD_QUERY_SPECS,
+)
 from database.review_queries import REVIEW_QUERY_SPECS
 from database.sync_pipeline_indexes import SYNC_PIPELINE_INDEX_REQUIREMENTS
 from database.messaging_queries import MESSAGING_INDEX_REQUIREMENTS, MESSAGING_FIELD_REQUIREMENTS
@@ -1472,35 +1477,6 @@ CONVERSATIONS_COUNT_CREATED_RANGE_QUERY = FirestoreQuerySpec(
     index_fields=(_asc('discarded'), _asc('created_at'), _asc('__name__')),
 )
 
-MCP_CONVERSATION_CARD_QUERY_SPECS: dict[tuple[bool, bool, bool], FirestoreQuerySpec] = {}
-for _has_categories in (False, True):
-    for _has_start_date in (False, True):
-        for _has_end_date in (False, True):
-            _suffixes = []
-            _filters = [
-                FirestoreQueryFilter('discarded', '==', 'discarded'),
-                FirestoreQueryFilter('status', '==', 'status'),
-            ]
-            _index_fields = [_asc('discarded'), _asc('status')]
-            if _has_categories:
-                _suffixes.append('category')
-                _filters.append(FirestoreQueryFilter('structured.category', 'in', 'categories'))
-                _index_fields.append(_asc('structured.category'))
-            if _has_start_date:
-                _suffixes.append('start')
-                _filters.append(FirestoreQueryFilter('created_at', '>=', 'start_date'))
-            if _has_end_date:
-                _suffixes.append('end')
-                _filters.append(FirestoreQueryFilter('created_at', '<=', 'end_date'))
-            _variant = '_'.join(_suffixes) or 'all'
-            MCP_CONVERSATION_CARD_QUERY_SPECS[(_has_categories, _has_start_date, _has_end_date)] = FirestoreQuerySpec(
-                identifier=f'mcp_conversation_cards_{_variant}',
-                collection_group='conversations',
-                query_scope='COLLECTION',
-                filters=tuple(_filters),
-                index_fields=tuple((*_index_fields, _desc('created_at'), _desc('__name__'))),
-            )
-
 # Sync safety-WAL binding: the newest rollover generations of one recording that
 # started before the upload's audio ends (utils/sync/recording_lineage.py).
 SYNC_RECORDING_LINEAGE_QUERY = FirestoreQuerySpec(
@@ -1938,6 +1914,8 @@ CONVERSATION_PHOTOS_NAME_RANGE_QUERY = FirestoreQuerySpec(
 )
 
 QUERY_SPECS = (
+    MCP_DAILY_RECORDINGS_QUERY,
+    *MCP_MEMORY_FILTER_QUERIES.values(),
     *REVIEW_QUERY_SPECS,
     ACTION_ITEMS_CANONICAL_COMPLETION_COUNT_QUERY,
     CONVERSATION_PHOTOS_NAME_RANGE_QUERY,

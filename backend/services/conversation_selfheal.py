@@ -390,6 +390,7 @@ def run_selfheal_tick(
             )
             counters['scanned'] = int(scan.get('scanned') or 0)
             exhausted = bool(scan.get('exhausted'))
+            resume_after_path = scan.get('resume_after_path')
             eligible: list[Mapping[str, Any]] = []
             for row in scan.get('rows') or []:
                 if (
@@ -398,6 +399,13 @@ def run_selfheal_tick(
                 ):
                     if len(eligible) < MAX_ELIGIBLE_PER_TICK:
                         eligible.append(row)
+                    elif content_due_scan:
+                        # A refused lease prefix stays in this query. Resume
+                        # after the considered window instead of the scan tail
+                        # so those rows cannot starve a due row behind the cap.
+                        resume_after_path = eligible[-1]['path']
+                        exhausted = False
+                        break
             pending_before = len(pending)
             pending = _act_on_eligible(
                 eligible,
@@ -420,7 +428,7 @@ def run_selfheal_tick(
                 try:
                     advanced = cursor_advancer(
                         int(cursor.get('generation') or 0),
-                        scan.get('resume_after_path'),
+                        resume_after_path,
                         pending_verifications=pending,
                         firestore_client=firestore_client,
                     )

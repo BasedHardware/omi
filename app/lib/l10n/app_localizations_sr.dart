@@ -14489,4 +14489,9 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deviceControls => 'Контроле';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Такође: $items';
+  }
 }

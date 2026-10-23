@@ -7,6 +7,7 @@ import logging
 import math
 import time
 import uuid
+from utils.speakers.context import name_only_allowed
 from collections import deque
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
@@ -17,7 +18,9 @@ from config.translation import resolve_ondemand_config
 from routers.listen.capture_merges import snapshot_proofs, acknowledge_proofs
 from models.capture_window_proof import CaptureWindowProof
 from config.live_capture import capture_window_reason
-from utils.capture_evidence import unknown_envelope
+from routers.listen.coverage import publish_committed, committed_snapshot
+from utils.stt.transcript_admission import AdmissionState, admit_segments
+from config.refactor_modes import serving_for
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 
 
@@ -141,6 +144,7 @@ class ConversationCache:
 class TranscriptProcessor:
     def __init__(self, host: Any):
         self.host = host
+        self.media_admission = AdmissionState()
         self.segment_buffer: deque[Dict[str, Any]] = deque(maxlen=host.limits.max_segment_buffer_size)
         self.photo_buffer: deque[ConversationPhoto] = deque(maxlen=host.limits.max_photo_buffer_size)
         self.cache = ConversationCache(self._load_conversation)
@@ -307,6 +311,8 @@ class TranscriptProcessor:
         for raw in segments:
             if not raw.get('id'):
                 raw['id'] = str(uuid.uuid4())
+        # refactor: superseded by utils.stt.transcript_admission when MEDIA_NOISE_MODE=serve
+        segments = admit_segments(self.host.request.uid, segments, origin='live', state=self.media_admission)
         if not getattr(self.host.state, 'capture_timeline_v2', False):
             self.segment_buffer.extend(segments)
             return
@@ -466,16 +472,7 @@ class TranscriptProcessor:
             fresh = [segment.model_dump() for segment in segments]
             self._capture_merge_tails = getattr(self, "_capture_merge_tails", {})
             source_map = self.host.state.source_position_map
-            capture_evidence = None
-            if source_map is not None:
-                capture_evidence = source_map.committed_snapshot(conversation.id, segments) or unknown_envelope(
-                    'missing_source_position', origin='live'
-                )
-            else:
-                capture_evidence = unknown_envelope(
-                    'multichannel_mix' if self.host.is_multi_channel else 'missing_source_position',
-                    origin='live',
-                )
+            capture_evidence = committed_snapshot(self.host, conversation.id, segments)
             written = await self.host.persistence.call(
                 conversations_db.update_conversation_segments,
                 self.host.request.uid,
@@ -487,6 +484,7 @@ class TranscriptProcessor:
                 started_at=started_at,
                 audio_timeline=audio_timeline,
                 capture_evidence=capture_evidence,
+                finished_at=finished_at if update_finished_at else None,
                 data_protection_level=self.cache.protection_level,
                 invalidate_client_processing=False,
             )
@@ -522,6 +520,7 @@ class TranscriptProcessor:
                     OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='version', reason=attribution).inc()
                     if sid in written.created_ids:
                         OMI_LIVE_AUDIO_CAPTURE_ATTRIBUTION_TOTAL.labels(population='segment', reason=attribution).inc()
+            await publish_committed(self.host, conversation.id, capture_evidence)
             if source_map is not None:
                 source_map.acknowledge(conversation.id, capture_evidence)
             conversation.transcript_segments = list(by_id.values())
@@ -554,7 +553,8 @@ class TranscriptProcessor:
                         conversation.id,
                         {'source': conversation.source},
                     )
-        if update_finished_at:
+        # refactor: superseded by the segment transaction when LIFECYCLE_V2_MODE=serve
+        if update_finished_at and not (segments and serving_for('LIFECYCLE_V2_MODE', self.host.request.uid)):
             await self.host.persistence.call(
                 conversations_db.update_conversation_finished_at, self.host.request.uid, conversation.id, finished_at
             )
@@ -1545,6 +1545,8 @@ class TranscriptProcessor:
             detection = detect_speaker_introduction(segment.text, language=self.host.language)
             if not detection:
                 continue
+            if not name_only_allowed(self.host.request.uid):
+                continue
             if not await speaker.named_speakers_allowed():
                 continue
             name = detection.name
@@ -1575,6 +1577,7 @@ class TranscriptProcessor:
                     speaker_id=cast(int, segment.speaker_id),
                     person_id=person_id_for_client(person_id, self.host.request.speaker_auto_assign_enabled),
                     person_name=name,
+                    is_user=False,  # Contact-only; owner decisions use the owner wire adapter.
                     segment_id=segment_id,
                 )
             )

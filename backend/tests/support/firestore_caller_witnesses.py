@@ -409,12 +409,24 @@ def _run_daily_summary_generation(monkeypatch: pytest.MonkeyPatch, capture: Help
     )
     trial(
         capture,
-        notifications_utils._generate_and_store_daily_summary,
+        notifications_utils._legacy_generate_and_store_daily_summary,
         'u1',
         '2026-01-15',
         FROZEN_NOW,
         FROZEN_LATER,
     )
+
+
+def _run_completed_day_generation(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
+    from utils.other import daily_recap
+
+    monkeypatch.setenv('CALLS_RECAP_MODE', 'serve')
+    _stub(monkeypatch, notifications_utils, 'generated_compute_allowed', lambda *_: True)
+    _stub(monkeypatch, notifications_utils, 'try_acquire_daily_summary_lock', lambda *_: True)
+    _stub(monkeypatch, notifications_utils, 'release_daily_summary_lock', lambda *_: None)
+    _stub(monkeypatch, notifications_utils.daily_summaries_db, 'get_daily_summary_by_date', lambda *_: None)
+    _stub(monkeypatch, notifications_utils.daily_summaries_db, 'create_daily_summary', lambda _uid, row: row['id'])
+    trial(capture, daily_recap.generate, 'u1', '2026-01-15', FROZEN_NOW, FROZEN_LATER, legacy=lambda *_: None)
 
 
 def _run_tool_service(monkeypatch: pytest.MonkeyPatch, capture: HelperCapture) -> None:
@@ -670,7 +682,15 @@ WITNESSES: dict[str, CallerWitness] = {
             _run_goal_context,
         ),
         CallerWitness(
-            'utils/other/notifications.py:_generate_and_store_daily_summary:database.conversations.get_conversations',
+            'utils/other/daily_recap.py:generate:database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            'database.conversations.get_conversations',
+            ('daily-summary-generation',),
+            1,
+            _run_completed_day_generation,
+        ),
+        CallerWitness(
+            'utils/other/notifications.py:_legacy_generate_and_store_daily_summary:database.conversations.get_conversations',
             'database.conversations.get_conversations',
             'database.conversations.get_conversations',
             ('daily-summary-generation',),

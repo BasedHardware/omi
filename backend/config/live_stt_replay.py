@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from config.refactor_switches import default_on as rollout_default_on
+
 import math
 import os
 from dataclasses import dataclass
@@ -34,7 +36,10 @@ NONWINDOW_REPLAY_SETTLE_ENV = 'LISTEN_NONWINDOW_REPLAY_SETTLE_ENABLED'
 def nonwindow_replay_settle_enabled() -> bool:
     """Kill switch, default on: a non-window replacement leg whose provider has
     nothing pending settles horizon-aged quiet capture instead of failing over."""
-    return os.getenv(NONWINDOW_REPLAY_SETTLE_ENV, 'true').strip().lower() not in {'false', '0', 'off'}
+    return rollout_default_on(
+        NONWINDOW_REPLAY_SETTLE_ENV,
+        os.getenv(NONWINDOW_REPLAY_SETTLE_ENV, 'true').strip().lower() not in {'false', '0', 'off'},
+    )
 
 
 SESSION_LOCAL_EXCLUSION_RELEASE_ENV = 'LISTEN_SESSION_LOCAL_EXCLUSION_RELEASE_ENABLED'
@@ -42,7 +47,7 @@ NONWINDOW_EMITTED_TEXT_ACCOUNTING_ENV = 'LISTEN_NONWINDOW_EMITTED_TEXT_ACCOUNTIN
 
 
 def _default_on(name: str) -> bool:
-    return os.getenv(name, 'true').strip().lower() not in {'false', '0', 'off'}
+    return rollout_default_on(name, os.getenv(name, 'true').strip().lower() not in {'false', '0', 'off'})
 
 
 def session_local_exclusion_release_enabled() -> bool:

@@ -101,7 +101,10 @@ def test_retry_preserves_requested_language(reply):
         'ok',
     ],
 )
-def test_response_without_utterances_list_raises_after_retries(http, reply, body):
+def test_response_without_utterances_list_raises_after_retries(monkeypatch, http, reply, body):
+    # Legacy retry contract, retained behind the kill switch; fail-fast ON bounds
+    # the same case to 2 POSTs (see test_prerecorded_vendor_fail_fast.py).
+    monkeypatch.setenv('STT_PRERECORDED_VENDOR_FAIL_FAST', 'false')
     reply.json.return_value = body
     with pytest.raises(RuntimeError, match='Modulate transcription failed after 3 attempts'):
         stt.modulate_prerecorded_from_bytes(b'wave', return_language=True)
@@ -124,7 +127,10 @@ def test_response_without_utterances_list_raises_after_retries(http, reply, body
         {'utterances': [{'text': ' ', 'language': 'en', 'duration_ms': 120, 'start_ms': 0}], 'text': 'hello'},
     ],
 )
-def test_empty_utterances_without_text_or_duration_raises_after_retries(http, reply, body):
+def test_empty_utterances_without_text_or_duration_raises_after_retries(monkeypatch, http, reply, body):
+    # Legacy retry contract, retained behind the kill switch; fail-fast ON bounds
+    # the same case to 2 POSTs (see test_prerecorded_vendor_fail_fast.py).
+    monkeypatch.setenv('STT_PRERECORDED_VENDOR_FAIL_FAST', 'false')
     reply.json.return_value = body
     with pytest.raises(RuntimeError, match='Modulate transcription failed after 3 attempts'):
         stt.modulate_prerecorded_from_bytes(b'wave', return_language=True)

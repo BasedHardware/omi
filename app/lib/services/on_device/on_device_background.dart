@@ -1,14 +1,9 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/models/local_recording.dart';
-import 'package:omi/providers/local_recordings_provider.dart' show countBatchRecordingFrames;
 import 'package:omi/services/on_device/on_device_runner.dart';
 import 'package:omi/services/on_device/on_device_transcription_controller.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
@@ -47,34 +42,7 @@ Future<void> runOnDeviceBackground({required Future<void> Function() initialize}
     // This worker is Android-only; Apple's summary capability has no channel here.
     await controller.ensureLoaded();
     await controller.model.refresh();
-    final recordings = <LocalRecording>[];
-    final dir = await getApplicationDocumentsDirectory();
-    final ownersFile = File('${dir.path}/omibatch_owners.json');
-    if (await ownersFile.exists()) {
-      final owners = jsonDecode(await ownersFile.readAsString());
-      if (owners is Map) {
-        await for (final entity in dir.list()) {
-          if (entity is! File) continue;
-          final name = entity.path.split('/').last;
-          if (!name.startsWith('audio_omibatchoverflow_') || !name.endsWith('.bin') || owners[name] != uid) continue;
-          final size = await entity.length();
-          final initial = LocalRecording.fromFile(
-              fileName: name, filePath: entity.path, sizeBytes: size, state: LocalRecordingState.pending);
-          if (initial == null) continue;
-          final frames = await countBatchRecordingFrames(entity.path);
-          final fps = initial.codec.getFramesPerSecond();
-          if (fps <= 0) continue;
-          final recording = LocalRecording.fromFile(
-              fileName: name,
-              filePath: entity.path,
-              sizeBytes: size,
-              seconds: frames ~/ fps,
-              state: LocalRecordingState.pending);
-          if (recording != null) recordings.add(recording);
-        }
-      }
-    }
-    runner = OnDeviceRunner(sync: sync, controller: controller, publish: (_) {}, recordings: () => recordings);
+    runner = OnDeviceRunner(sync: sync, controller: controller, publish: (_) {});
     channel.setMethodCallHandler((call) async {
       if (call.method == 'backgroundExpired') await runner?.cancel();
     });

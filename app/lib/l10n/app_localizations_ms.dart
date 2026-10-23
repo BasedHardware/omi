@@ -14518,4 +14518,9 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kawalan';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Juga: $items';
+  }
 }

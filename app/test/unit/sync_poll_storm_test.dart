@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/services/wals/native_recording_intake.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -525,82 +525,50 @@ void main() {
           expect(files.single.existsSync(), isTrue);
           return UploadFilesResult.queued('replacement');
         });
-    final provider = LocalRecordingsProvider(uploadGate: gate);
-    provider.jobStatusFetcherOverride = (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound);
-    addTearDown(provider.dispose);
-    await provider.refresh();
-    await provider.reconcileForTesting();
+    final sync = LocalWalSyncImpl(_Listener(),
+        uploadGate: gate,
+        now: () => now,
+        freeDiskBytes: () async => 4 * 1024 * 1024 * 1024,
+        jobStatusFetcher: (_) async => const SyncJobFetch(SyncJobFetchOutcome.notFound));
+    await sync.loadForOnDeviceWorker();
+    await NativeRecordingIntake(sync).scan();
+    await sync.reconcileUploadedWals();
     expect(uploads, 0);
     now = now.add(const Duration(minutes: 5));
-    await provider.reconcileForTesting();
+    await sync.reconcileUploadedWals();
+    await sync.syncAll();
     expect(File('${dir.path}/$name').existsSync(), isTrue);
     expect(uploads, 1);
-    expect(jsonDecode(SharedPreferencesUtil().getString('localRecordingJobs'))[name], 'replacement');
+    expect((await sync.getAllWals()).single.jobId, 'replacement');
+    expect(SharedPreferencesUtil().getString('localRecordingJobs'), isEmpty);
   });
 
-  testWidgets('Transcribe Later timer and WAL wakes share the singleton 18/min budget', (tester) async {
-    final requests = <DateTime>[];
-    var phoneRequests = 0;
-    var walRequests = 0;
-    late LocalRecordingsProvider provider;
-    late LocalWalSyncImpl sync;
-    await tester.runAsync(() async {
-      final jobs = <String, String>{};
-      for (var i = 0; i < 7; i++) {
-        final name = 'audio_omibatchphone_opus_fs320_16000_1_fs320_${1720000001 + i}.bin';
-        await File('${dir.path}/$name').writeAsBytes([4, 0, 0, 0, 1, 2, 3, 4]);
-        jobs[name] = 'phone-$i';
-      }
-      SharedPreferencesUtil().uid = 'owner';
-      await SharedPreferencesUtil().saveString('batchAudioDir', dir.path);
-      await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode(jobs));
-      // Construct on the widget zone below so its production 15s timer is virtual.
-    });
-    final timerZone = Zone.current;
-    provider = LocalRecordingsProvider(periodic: (duration, callback) {
-      expect(duration, const Duration(seconds: 15));
-      // Directory IO finishes outside the widget zone; keep the actual Timer
-      // in the virtual clock's zone without manually driving reconciliation.
-      return timerZone.run(() => Timer.periodic(duration, callback));
-    });
-    provider.jobStatusFetcherOverride = (id) async {
-      phoneRequests++;
-      requests.add(now);
-      return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
-    };
-    sync = LocalWalSyncImpl(_Listener(),
+  test('migrated native jobs and device jobs share one reconciliation pass and budget', () async {
+    const name = 'audio_omibatchphone_opus_16000_1_fs320_1720000001.bin';
+    await File('${dir.path}/$name').writeAsBytes([1, 0, 0, 0, 5]);
+    SharedPreferencesUtil().uid = 'owner';
+    await SharedPreferencesUtil().saveString('batchAudioDir', dir.path);
+    await SharedPreferencesUtil().saveString('localRecordingJobs', jsonEncode({name: 'phone-job'}));
+    var requests = 0;
+    final sync = LocalWalSyncImpl(_Listener(),
         now: () => now,
+        freeDiskBytes: () => Future.value(4 * 1024 * 1024 * 1024),
         jobPoller: SyncJobPoller.instance,
-        persistWals: (_) async {},
         jobStatusFetcher: (id) async {
-          walRequests++;
-          requests.add(now);
+          requests++;
           return SyncJobFetch(SyncJobFetchOutcome.ok, SyncJobStatusResponse(jobId: id, status: 'processing'));
         });
+    await sync.loadForOnDeviceWorker();
     sync.testWals = List.generate(50, pending);
-    await tester.runAsync(() async {
-      await provider.refresh();
-      await provider.reconcileForTesting();
-      await sync.reconcileUploadedWals();
-    });
-    expect(phoneRequests, 7);
-    expect(walRequests, 11);
-    for (var tick = 0; tick < 8; tick++) {
-      now = now.add(const Duration(seconds: 15));
-      await tester.pump(const Duration(seconds: 15));
-      // Let the timer's asynchronous directory scan finish, flushing both IO
-      // and widget-zone microtasks. Never call reconcile to drive this owner.
-      for (var attempt = 0; attempt < 100 && provider.isReconcilingForTesting; attempt++) {
-        await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 1)));
-        await tester.pump();
-      }
-      expect(provider.isReconcilingForTesting, isFalse);
-      await tester.runAsync(() => sync.reconcileUploadedWals());
-      expect(requests.where((time) => time.isAfter(now.subtract(const Duration(minutes: 1)))).length,
-          lessThanOrEqualTo(18));
-    }
-    expect(phoneRequests, greaterThan(7), reason: 'the production timer resumes polling after the window');
-    provider.dispose();
+    await NativeRecordingIntake(sync).scan();
+    await Future.wait([sync.reconcileUploadedWals(), sync.reconcileUploadedWals()]);
+    expect(requests, 18);
+    await sync.reconcileUploadedWals();
+    expect(requests, 18);
+    now = now.add(const Duration(minutes: 1));
+    await sync.reconcileUploadedWals();
+    expect(requests, 36);
+    expect((await sync.getAllWals()).where((w) => w.filePath == name).single.jobId, 'phone-job');
   });
 
   test('server hint bounds a single job independently of the request budget', () async {

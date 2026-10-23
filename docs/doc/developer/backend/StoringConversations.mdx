@@ -4,6 +4,22 @@ icon: "database"
 description: 'This document outlines how Omi stores conversation data and extracts memories from conversations.'
 ---
 
+
+## Recording metadata and generated output
+
+A stored recording and its generated notes are separate results. A recording can
+remain available in history while generated summaries, memories, or action items
+are absent. Preserve the original transcript and audio when handling that state.
+
+Treat optional content, call, and calendar metadata as unknown when absent. A
+recording's location describes its owner; it does not establish where remote
+participants were. Speaker names require identity evidence or a manual correction:
+a contact name or meeting roster alone does not identify a voice.
+
+Capture groups can present simultaneous recordings as one event while retaining
+each original recording. Matching wall-clock windows alone is not proof of shared
+speech, and unmatched speech must remain available.
+
 ## Overview
 
 Omi uses a **dual-collection architecture** for storing user data:

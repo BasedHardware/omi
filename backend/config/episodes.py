@@ -41,6 +41,8 @@ from __future__ import annotations
 
 import os
 
+from config.refactor_switches import default_on as rollout_default_on
+
 from config.jev_decisions import percentage, uid_bucket
 
 EPISODES_ENABLED_ENV = 'EPISODES_ENABLED'
@@ -57,7 +59,7 @@ _ON = frozenset({'true', 'on', '1', 'yes'})
 def episodes_enabled() -> bool:
     """Unset or blank is on; only an explicit on-value keeps it on, anything else is off."""
     raw = os.getenv(EPISODES_ENABLED_ENV, '').strip().lower()
-    return not raw or raw in _ON
+    return rollout_default_on(EPISODES_ENABLED_ENV, not raw or raw in _ON)
 
 
 def episodes_enabled_for(uid: str) -> bool:

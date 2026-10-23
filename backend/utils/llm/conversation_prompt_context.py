@@ -337,6 +337,9 @@ def build_conversation_prompt_prefix(
         shaped_context = json.dumps(evidence, ensure_ascii=False) + f'\nFULL TRANSCRIPT\n{transcript.strip()}'
 
     source_ids = frozenset(segment_id for segment_id in (transcript_segment_ids or ()) if segment_id)
+    rendered_ids = getattr(speaker_map, 'source_segment_ids', None)
+    if rendered_ids is not None:
+        source_ids = source_ids & rendered_ids
     # Rich meeting notes name people through their roster rules instead.
     title_people, owner_names = _title_people(speaker_map) if roster is None else ((), ())
     return ConversationPromptPrefix(

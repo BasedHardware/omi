@@ -18,6 +18,8 @@ Pure module: stdlib only, flags read at the call boundary, never at import.
 from __future__ import annotations
 
 import os
+
+from config.refactor_switches import default_on as rollout_default_on
 from enum import Enum
 
 SMART_MERGE_MODE_ENV = 'CONVERSATION_SMART_MERGE_MODE'
@@ -58,7 +60,7 @@ def smart_merge_audit_enabled() -> bool:
     typo in the kill switch therefore turns the audit off, never the merge.
     """
     raw = os.getenv(SMART_MERGE_AUDIT_ENV, '').strip().lower()
-    return not raw or raw in _ON
+    return rollout_default_on(SMART_MERGE_AUDIT_ENV, not raw or raw in _ON)
 
 
 def smart_merge_flatten_enabled() -> bool:
@@ -71,7 +73,7 @@ def smart_merge_flatten_enabled() -> bool:
     after the flag is turned off: completing queued work is not new permission.
     """
     raw = os.getenv(SMART_MERGE_FLATTEN_ENV, '').strip().lower()
-    return not raw or raw in _ON
+    return rollout_default_on(SMART_MERGE_FLATTEN_ENV, not raw or raw in _ON)
 
 
 def smart_merge_flatten_chain_repair_enabled() -> bool:
@@ -84,7 +86,7 @@ def smart_merge_flatten_chain_repair_enabled() -> bool:
     one-hop check, which rejects the whole absorb.
     """
     raw = os.getenv(SMART_MERGE_FLATTEN_CHAIN_REPAIR_ENV, '').strip().lower()
-    return not raw or raw in _ON
+    return rollout_default_on(SMART_MERGE_FLATTEN_CHAIN_REPAIR_ENV, not raw or raw in _ON)
 
 
 # Sources the benchmark measured. Pendant pairs were 113 of 138; desktop recall

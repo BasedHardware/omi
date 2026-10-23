@@ -11832,5 +11832,6 @@
     "deviceCatchingUpProgress": "{done} sa {total} min",
     "deviceRecently": "Kamakailan",
     "deviceDisconnectedFor": "Nadiskonekta nang {duration}",
-    "deviceControls": "Mga Kontrol"
+    "deviceControls": "Mga Kontrol",
+    "homeBackgroundLine": "Gayundin: {items}"
 }

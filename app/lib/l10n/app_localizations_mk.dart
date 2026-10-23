@@ -14547,4 +14547,9 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get deviceControls => 'Контроли';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Исто така: $items';
+  }
 }

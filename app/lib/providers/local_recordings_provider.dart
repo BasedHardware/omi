@@ -1,570 +1,185 @@
-import 'package:omi/services/on_device/on_device_transcription_controller.dart';
-import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-
+import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
-
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/models/local_recording.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
-import 'package:omi/services/bridges/ble_bridge.dart';
-import 'package:omi/services/connectivity_service.dart';
-import 'package:omi/services/capture/native_batch_geolocation.dart';
-import 'package:omi/services/capture/watch_recording_receipt.dart';
-import 'package:omi/services/telemetry/client_telemetry.dart';
+import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
-import 'package:omi/services/wals/sync_job_poller.dart';
 import 'package:omi/utils/audio_player_utils.dart';
-import 'package:omi/utils/batch_recording.dart';
 import 'package:omi/utils/conversation_sync_utils.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/waveform_utils.dart';
 
-/// Owns the batch/offline-mode recordings captured natively to the phone.
-///
-/// Design (fieldy-style): the recordings directory is the queue and the `.bin`
-/// files are the single source of truth — there is no WAL/offline-sync entry.
-/// The list is derived by scanning the dir; uploading a recording turns it into
-/// a conversation. Only the truly-stateless leaf helpers are reused:
-/// [uploadLocalFilesV2] (the `/v2/sync-local-files` call), [fetchSyncJobStatus]
-/// (reconcile), and [AudioPlayerUtils] (opus playback, fed a transient [Wal]).
-///
-/// Robustness beyond fieldy: an in-flight upload's `jobId` is persisted in a
-/// tiny sidecar (SharedPreferences) so an app-kill mid-processing reconciles on
-/// next launch, and the local file is deleted only once the job reports
-/// `completed` (never fire-and-forget).
-/// Result of a user-triggered [LocalRecordingsProvider.upload], so the UI can
-/// react (fair-use message, generic error, or navigate away) instead of guessing.
 enum LocalUploadOutcome { started, fairUseLimited, backendBusy, failed, busy }
 
+/// Home's view of explicit Transcribe Later custody. No queue, scanner or uploader.
 class LocalRecordingsProvider extends ChangeNotifier {
+  LocalRecordingsProvider(
+      {LocalWalSyncImpl? ledger,
+      bool initialize = true,
+      Future<void> Function(SyncLocalFilesResponse)? surfaceConversations})
+      : _ledgerOverride = ledger,
+        _surfaceOverride = surfaceConversations {
+    _audio.addListener(_onAudioChanged);
+    if (initialize) {
+      _subscribed = true;
+      _ledger.heldRevision.addListener(_onLedgerChanged);
+      _ledger.conversationCompletions.addListener(_onConversationsCompleted);
+      refresh();
+    }
+  }
+  final LocalWalSyncImpl? _ledgerOverride;
+  LocalWalSyncImpl get _ledger => _ledgerOverride ?? ServiceManager.instance().wal.getSyncs().phone as LocalWalSyncImpl;
   final AudioPlayerUtils _audio = AudioPlayerUtils.instance;
-
-  // Sidecar: fileName -> server jobId for recordings uploaded but not yet
-  // confirmed transcribed. Persisted as JSON under [_jobsPrefKey].
-  static const String _jobsPrefKey = 'localRecordingJobs';
-  Map<String, String> _jobs = {};
-
-  static const String _ownersFileName = 'omibatch_owners.json';
-  Set<String> _ownedNames = {};
-
-  @visibleForTesting
-  Future<SyncJobFetch> Function(String jobId)? jobStatusFetcherOverride;
-
-  final SyncJobPoller _jobPoller;
-  final SyncUploadGate? _uploadGate;
-  Future<SyncJobFetch> _jobStatusFetcher(String jobId) =>
-      _jobPoller.fetch(jobId, jobStatusFetcherOverride ?? fetchSyncJobStatus);
-  Future<void>? _reconcileInFlight;
-
-  // Exact per-file duration (seconds), computed once by walking the frame
-  // prefixes. Finalized .bin files are immutable, so this is cached by fileName.
-  final Map<String, int> _secondsByFile = {};
-
-  List<LocalRecording> _recordings = [];
-  List<LocalRecording> get recordings => _recordings;
-
+  bool _subscribed = false;
+  bool _disposed = false;
+  int _generation = 0;
   bool _isLoading = false;
   bool get isLoading => _isLoading;
-
-  // Single-flight upload guard + the file currently uploading (for its state).
-  bool _isUploading = false;
-  String? _uploadingName;
-  String? _failedName; // last upload that errored (file intact, retriable)
-
-  // Consecutive auto-upload failures per fileName. In-memory only (never
-  // persisted): the backoff resets on the next app launch, so a file that hit
-  // the [autoPhoneUploadMaxFailures] cap is retried once the app restarts.
-  final Map<String, int> _autoFailures = {};
-  // Re-entrancy guard for an auto-upload pass (connectivity can flip rapidly).
-  bool _isAutoUploading = false;
-  StreamSubscription<bool>? _connectivitySub;
-
-  final Timer Function(Duration, void Function(Timer)) _periodic;
-  Timer? _reconcileTimer;
-  bool _disposed = false;
-
+  List<LocalRecording> _recordings = [];
+  List<LocalRecording> get recordings => _recordings;
+  final Map<String, Wal> _rows = {};
+  final Future<void> Function(SyncLocalFilesResponse)? _surfaceOverride;
+  SyncLocalFilesResponse? _lastCompletion;
   ConversationProvider? _conversationProvider;
-
-  LocalRecordingsProvider(
-      {SyncJobPoller? jobPoller, SyncUploadGate? uploadGate, Timer Function(Duration, void Function(Timer))? periodic})
-      : _jobPoller = jobPoller ?? SyncJobPoller.instance,
-        _uploadGate = uploadGate,
-        _periodic = periodic ?? Timer.periodic {
-    _audio.addListener(_onAudioChanged);
-    // Native batch writer → Dart on file finalize (rotation/gap/stop) so a
-    // rotated recording surfaces without waiting for a BLE disconnect.
-    BleBridge.instance.addBatchRecordingFinalizedListener(_onRecordingFinalized);
-    _jobs = _loadJobs();
-    // Trigger (a): auto-upload offline-fallback recordings once the initial scan
-    // is in (_afterFirstPublishedScan — a refresh started meanwhile may supersede
-    // this one). Trigger (b): whenever connectivity is (re)gained.
-    refresh();
-    _connectivitySub = ConnectivityService().onConnectionChange.listen((connected) {
-      if (connected) _maybeAutoUpload();
-    });
-  }
-
-  Map<String, String> _ownedJobs() => Map.fromEntries(_jobs.entries.where((entry) => _ownedNames.contains(entry.key)));
-
-  /// Wired from main.dart so a finished transcription can surface its
-  /// conversation into the list the user is looking at.
   void setConversationProvider(ConversationProvider provider) {
+    if (identical(_conversationProvider, provider)) return;
     _conversationProvider = provider;
+    _onConversationsCompleted();
   }
 
-  void _onRecordingFinalized(String fileName) {
-    refresh().then((_) {
-      PlatformManager.instance.analytics.transcribeLaterRecordingCaptured(durationSeconds: _secondsByFile[fileName]);
+  void _onConversationsCompleted() {
+    if (_disposed || (_conversationProvider == null && _surfaceOverride == null)) return;
+    final result = _ledger.conversationCompletions.value;
+    if (result == null || identical(result, _lastCompletion)) return;
+    _lastCompletion = result;
+    unawaited(_surface(result));
+  }
+
+  Future<void> _surface(SyncLocalFilesResponse result) async {
+    if (result.newConversationIds.isEmpty && result.updatedConversationIds.isEmpty) return;
+    final session = _ledger.sessionGeneration;
+    final provider = _conversationProvider;
+    try {
+      final surface = _surfaceOverride;
+      if (surface != null) {
+        await surface(result);
+        return;
+      }
+      if (provider == null) return;
+      final pointers = await ConversationSyncUtils.processConversationIds(
+          newConversationIds: result.newConversationIds, updatedConversationIds: result.updatedConversationIds);
+      if (_disposed || session != _ledger.sessionGeneration || !identical(provider, _conversationProvider)) return;
+      for (final pointer in pointers) {
+        provider.upsertConversation(pointer.conversation);
+      }
+    } catch (e) {
+      Logger.error('LocalRecordings: surfacing confirmed conversations failed: $e');
+    }
+  }
+
+  void _onLedgerChanged() {
+    _readLedger();
+  }
+
+  Future<void>? _refreshInFlight;
+  Future<void> refresh() {
+    final active = _refreshInFlight;
+    if (active != null) return active;
+    final pass = _refresh();
+    _refreshInFlight = pass;
+    return pass.whenComplete(() {
+      if (identical(_refreshInFlight, pass)) _refreshInFlight = null;
     });
   }
 
-  // ───────────────────────── scanning ─────────────────────────
-
-  Future<Directory?> _dir() async {
-    final configured = SharedPreferencesUtil().getString('batchAudioDir');
-    if (configured.isNotEmpty) return Directory(configured);
-    return getApplicationDocumentsDirectory();
-  }
-
-  LocalRecordingState _stateFor(String name) {
-    if (name == _uploadingName) return LocalRecordingState.uploading;
-    if (_jobs.containsKey(name)) return LocalRecordingState.processing;
-    if (name == _failedName) return LocalRecordingState.failed;
-    return LocalRecordingState.pending;
-  }
-
-  int _scanGeneration = 0;
-
-  /// Rescan the recordings directory and rebuild [recordings]. Cheap and
-  /// idempotent — call it on app foreground, after a BLE disconnect, etc.
-  ///
-  /// The listing is async, so overlapping scans can finish out of order; only
-  /// the newest scan publishes its results or rewrites the owners file.
-  Future<void> refresh() async {
-    final generation = ++_scanGeneration;
+  Future<void> _refresh() async {
+    if (!_subscribed && _ledgerOverride == null) return;
     _isLoading = true;
-    notifyListeners();
     try {
-      final dir = await _dir();
-      if (dir == null || !await dir.exists()) {
-        if (generation == _scanGeneration) _recordings = [];
-        return;
-      }
-      final uid = SharedPreferencesUtil().uid;
-      final ownersFile = File('${dir.path}/$_ownersFileName');
-      final owners = await _readOwners(ownersFile);
-      if (owners == null) {
-        if (generation == _scanGeneration) {
-          _recordings = [];
-          _ownedNames = {};
-        }
-        return;
-      }
-      var ownersChanged = false;
-      final list = <LocalRecording>[];
-      final seen = <String>{};
-      final onDisk = <String>{};
-      // This directory also holds every offline-sync WAL file, so it can have
-      // thousands of entries; list it without blocking the UI isolate (refresh
-      // runs on every app resume).
-      final files = await dir.list().where((entity) => entity is File).cast<File>().toList();
-      for (final entity in files) {
-        final name = entity.path.split('/').last;
-        // Only batch recordings (audio_omibatch* — includes the omibatchlimitless
-        // marker) — never offline-sync WAL flushes, which share this directory and
-        // the same audio_*.bin naming.
-        if (!name.startsWith('audio_$batchRecordingDevice') || !name.endsWith('.bin')) continue;
-        onDisk.add(name);
-        if (name.startsWith('audio_omibatchwatch')) {
-          final owner = await watchRecordingOwner(dir, name);
-          if (owner == null) continue;
-          if (owners[name] != owner) {
-            owners[name] = owner;
-            ownersChanged = true;
-          }
-        } else if (uid.isNotEmpty && !owners.containsKey(name)) {
-          owners[name] = uid;
-          ownersChanged = true;
-        }
-        if (owners[name] != uid) continue;
-        if (OnDeviceTranscriptionController.instance.completedRecordingNames.contains(name)) continue;
-        final size = await entity.length();
-        seen.add(name);
-        final rec = LocalRecording.fromFile(
-          fileName: name,
-          filePath: entity.path,
-          sizeBytes: size,
-          seconds: await _durationSeconds(name, entity.path, size),
-          geolocation: await readNativeBatchGeolocation(entity.path),
-          jobId: _jobs[name],
-          state: _stateFor(name),
-        );
-        if (rec != null) list.add(rec);
-      }
-      bool current() => generation == _scanGeneration;
-      if (!current()) return;
-      final ownerCount = owners.length;
-      owners.removeWhere((name, _) => !onDisk.contains(name));
-      if (ownersChanged || owners.length != ownerCount) await _writeOwners(ownersFile, owners, stillCurrent: current);
-      // A newer scan may have started during the owners write.
-      if (!current()) return;
-      list.sort((a, b) => b.timerStart.compareTo(a.timerStart));
-      _recordings = list;
-      _ownedNames = seen;
-      _secondsByFile.removeWhere((k, _) => !seen.contains(k));
+      await _ledger.intakeNativeRecordings();
     } catch (e) {
-      Logger.error('LocalRecordings: scan failed: $e');
+      Logger.error('LocalRecordings: refresh deferred: $e');
     } finally {
-      if (generation == _scanGeneration) _isLoading = false;
-      // Resume polling if recordings are still awaiting transcription (e.g. the
-      // timer was dropped while backgrounded and we just resumed).
-      if (_ownedJobs().isNotEmpty) _startReconcileTimer();
-      if (!_disposed && generation == _scanGeneration) {
-        notifyListeners();
-        if (!_firstScanPublished) {
-          _firstScanPublished = true;
-          _afterFirstPublishedScan();
-        }
-      }
+      await _readLedger();
+      _isLoading = false;
+      if (!_disposed) notifyListeners();
     }
   }
 
-  bool _firstScanPublished = false;
-
-  /// Runs once, after the first scan that was not superseded, so it sees the
-  /// recordings that scan published.
-  void _afterFirstPublishedScan() {
-    _maybeAutoUpload();
-    if (_ownedJobs().isNotEmpty) {
-      _startReconcileTimer();
-      _reconcile();
+  Future<void> _readLedger() async {
+    final generation = ++_generation;
+    final wals = await _ledger.getAllWals();
+    final rows = <String, Wal>{};
+    final recordings = <LocalRecording>[];
+    for (final wal in wals) {
+      if (wal.ownerUid == null || wal.filePath == null) continue;
+      rows[wal.filePath!] = wal;
+      if (!wal.holdForUser || wal.status == WalStatus.synced) continue;
+      final path = await Wal.getFilePath(wal.filePath);
+      if (path == null) continue;
+      var bytes = 0;
+      try {
+        bytes = await File(path).length();
+      } catch (_) {}
+      rows[wal.filePath!] = wal;
+      recordings.add(LocalRecording.fromWal(wal, filePath: path, sizeBytes: bytes));
     }
-  }
-
-  /// Exact recording duration (seconds), computed once per file by counting the
-  /// length-prefixed frames (`[4-byte LE len][frame]`) and multiplying by the
-  /// per-frame duration — the byte-size estimate is unreliable for VBR opus.
-  /// Cached because finalized files never change; falls back to the size estimate
-  /// if the file can't be read.
-  Future<int> _durationSeconds(String name, String path, int sizeBytes) async {
-    final cached = _secondsByFile[name];
-    if (cached != null) return cached;
-    final info = BatchRecordingInfo.fromFileName(name);
-    if (info == null) return 1;
-    int seconds;
-    try {
-      seconds = info.secondsFromFrameCount(await countBatchRecordingFrames(path));
-    } catch (e) {
-      // Transient read failure (e.g. file mid-write): return the rough estimate but
-      // don't cache it, so the next refresh retries the exact frame count.
-      Logger.error('LocalRecordings: duration scan failed for $name: $e');
-      return info.estimateSeconds(sizeBytes);
-    }
-    _secondsByFile[name] = seconds;
-    return seconds;
+    if (_disposed || generation != _generation) return;
+    recordings.sort((a, b) => b.timerStart.compareTo(a.timerStart));
+    _rows
+      ..clear()
+      ..addAll(rows);
+    _recordings = recordings;
+    notifyListeners();
   }
 
   LocalRecording? getById(String id) {
-    for (final r in _recordings) {
-      if (r.id == id) return r;
+    for (final rec in _recordings) {
+      if (rec.id == id) return rec;
     }
     return null;
   }
 
-  // ───────────────────── upload / transcribe ─────────────────────
+  Wal? _walFor(LocalRecording r) => _rows[r.fileName];
 
-  /// Upload a single recording → backend transcribes it into a conversation.
-  /// 200 fast-path: delete the file + surface the conversation immediately.
-  /// 202 queued: persist the jobId and let the reconciler finish it.
-  ///
-  /// User-initiated: surfaces the `failed` chip on any error and fires the
-  /// `Transcribe Later Recording Processed` analytic. Auto uploads go through the
-  /// same core via [_uploadFile] but stay silent (see [_recordUploadOutcome]).
-  Future<LocalUploadOutcome> upload(LocalRecording rec) => _uploadFile(rec, auto: false);
-
-  Future<LocalUploadOutcome> _uploadFile(LocalRecording rec, {required bool auto}) async {
-    if (rec.fileName.startsWith('audio_omibatchoverflow_')) {
-      await OnDeviceTranscriptionController.instance.transcribeNow();
-      return LocalUploadOutcome.busy;
-    }
-    if (_isUploading || rec.isBusy) return LocalUploadOutcome.busy;
-    _isUploading = true;
-    _uploadingName = rec.fileName;
-    // Only the user's own retry clears the visible chip; an auto pass must not
-    // wipe a failed state the user is looking at for some other recording.
-    if (!auto) _failedName = null;
-    await refresh();
-
-    var outcome = LocalUploadOutcome.started;
+  Future<LocalUploadOutcome> upload(LocalRecording rec) async {
+    final wal = _rows[rec.fileName];
+    if (wal == null || wal.isSyncing || wal.status == WalStatus.uploaded) return LocalUploadOutcome.busy;
+    final session = _ledger.sessionGeneration;
     try {
-      final file = File(rec.filePath);
-      if (!file.existsSync()) {
-        Logger.error('LocalRecordings: file missing on upload: ${rec.fileName}');
-        outcome = LocalUploadOutcome.failed;
-      } else {
-        final result = await uploadNativeBatchRecording(rec, file: file, uploadGate: _uploadGate);
-
-        if (result.completed != null) {
-          await _deleteFileOnly(rec.fileName);
-          await _surface(result.completed!.newConversationIds, result.completed!.updatedConversationIds);
-        } else if (result.jobId != null) {
-          _jobs[rec.fileName] = result.jobId!;
-          _jobPoller.defer(result.jobId!, result.pollAfterMs);
-          await _saveJobs();
-          _startReconcileTimer();
-        }
+      final result = await _ledger.syncWal(wal: wal);
+      if (_disposed || session != _ledger.sessionGeneration) return LocalUploadOutcome.busy;
+      final accepted = wal.status == WalStatus.uploaded || wal.status == WalStatus.synced;
+      if (accepted) {
+        unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.userRetry));
       }
+      if (result != null) await _surface(result);
+      return accepted ? LocalUploadOutcome.started : LocalUploadOutcome.failed;
     } on SyncRateLimitedException catch (e) {
-      outcome = switch (e.kind) {
+      return switch (e.kind) {
         SyncRateLimitKind.fairUse => LocalUploadOutcome.fairUseLimited,
         SyncRateLimitKind.backendCapacity => LocalUploadOutcome.backendBusy,
         SyncRateLimitKind.edgeThrottle => LocalUploadOutcome.busy,
       };
     } on SyncOfflineQueueQuarantinedException {
-      // Bounded-loss offline queue fence — stay silent and leave the file pending.
-      outcome = LocalUploadOutcome.backendBusy;
+      return LocalUploadOutcome.backendBusy;
     } catch (e) {
-      Logger.error('LocalRecordings: upload failed for ${rec.fileName}: $e');
-      outcome = LocalUploadOutcome.failed;
+      Logger.error('LocalRecordings: manual sync failed: $e');
+      return LocalUploadOutcome.failed;
     } finally {
-      _isUploading = false;
-      _uploadingName = null;
-    }
-    // Record outcome (failed chip / backoff / analytics) before the final refresh
-    // so `_stateFor` reflects any `_failedName` change in the same rebuild.
-    _recordUploadOutcome(rec.fileName, outcome, auto: auto);
-    await refresh();
-    return outcome;
-  }
-
-  void _recordUploadOutcome(String fileName, LocalUploadOutcome outcome, {required bool auto}) {
-    if (outcome == LocalUploadOutcome.started) {
-      // Accepted (200 completed or 202 queued): clear any failure bookkeeping.
-      _autoFailures.remove(fileName);
-      if (!auto) PlatformManager.instance.analytics.transcribeLaterRecordingProcessed();
-      return;
-    }
-    // Rate-limited / backend-busy: transient push-back, not a per-file fault.
-    if (outcome != LocalUploadOutcome.failed) return;
-
-    if (!auto) {
-      _failedName = fileName;
-      return;
-    }
-    // Auto: silent retry until the per-file cap, then surface a chip so the user
-    // eventually sees something actionable. `_autoFailures` is in-memory only —
-    // documented on the field: the backoff resets on the next app launch.
-    final failures = (_autoFailures[fileName] ?? 0) + 1;
-    _autoFailures[fileName] = failures;
-    if (failures >= autoPhoneUploadMaxFailures) _failedName = fileName;
-  }
-
-  // ─────────────────────── auto-upload (offline fallback) ───────────────────────
-
-  /// Silently upload the automatic offline-fallback phone recordings
-  /// (`audio_omibatchphoneauto_*`) once connectivity allows. Explicit Transcribe
-  /// Later recordings are never touched here — that mode's promise is manual
-  /// upload. Files are processed one at a time through [_uploadFile] so the
-  /// single-flight guard and jobs sidecar keep working.
-  Future<void> _maybeAutoUpload() async {
-    if (_disposed || _isAutoUploading) return;
-    _isAutoUploading = true;
-    try {
-      // Files attempted this pass — so a file that fails (below its cap) or is
-      // rate-limited isn't re-selected in a tight loop within the same pass.
-      final handled = <String>{};
-      while (!_disposed) {
-        if (!canAutoUploadPhoneRecordings(
-          useCustomStt: SharedPreferencesUtil().useCustomStt,
-          autoSyncOfflineRecordings: SharedPreferencesUtil().autoSyncOfflineRecordings,
-          isUploading: _isUploading,
-        )) {
-          return;
-        }
-        final busy = <String>{if (_uploadingName != null) _uploadingName!, ..._jobs.keys, ...handled};
-        final next = selectNextAutoPhoneUpload(
-          _recordings.map((r) => r.fileName).toList(),
-          busyNames: busy,
-          failureCounts: _autoFailures,
-        );
-        if (next == null) break;
-        handled.add(next);
-        final rec = getById(next);
-        if (rec == null) continue; // deleted between scan and now
-        final outcome = await _uploadFile(rec, auto: true);
-        // Backend pushed back (fair-use / busy): stop this pass, retry on the
-        // next trigger rather than hammering.
-        if (SyncRateLimiter.instance.isLimited ||
-            outcome == LocalUploadOutcome.fairUseLimited ||
-            outcome == LocalUploadOutcome.backendBusy) {
-          break;
-        }
-      }
-    } finally {
-      _isAutoUploading = false;
+      await _readLedger();
     }
   }
 
-  // ───────────────────────── reconcile ─────────────────────────
-
-  void _startReconcileTimer() {
-    _reconcileTimer ??= _periodic(const Duration(seconds: 15), (_) => _reconcile());
-  }
-
-  void _stopReconcileTimer() {
-    _reconcileTimer?.cancel();
-    _reconcileTimer = null;
-  }
-
-  /// Poll every pending job once. `completed` → delete file + surface the
-  /// conversation. `failed`/`notFound` → drop the job; the file stays on disk
-  /// so it reverts to a pending, retriable recording.
-  @visibleForTesting
-  Future<void> reconcileForTesting() => _reconcile();
-
-  @visibleForTesting
-  bool get isReconcilingForTesting => _reconcileInFlight != null;
-
-  Future<void> _reconcile() {
-    final active = _reconcileInFlight;
-    if (active != null) return active;
-    if (!_jobPoller.beginPass()) return Future.value();
-    final pass = _reconcileJobs();
-    _reconcileInFlight = pass;
-    return pass.whenComplete(() {
-      if (identical(_reconcileInFlight, pass)) _reconcileInFlight = null;
-      _jobPoller.endPass();
-    });
-  }
-
-  Future<void> _reconcileJobs() async {
-    final owned = _ownedJobs();
-    if (owned.isEmpty) {
-      _stopReconcileTimer();
-      return;
-    }
-    final uid = SharedPreferencesUtil().uid;
-    final newIds = <String>[];
-    final updIds = <String>[];
-    bool changed = false;
-    bool retryAutoUpload = false;
-
-    final ordered = _jobPoller.ordered(owned.values);
-    final entries = owned.entries.toList()
-      ..sort((a, b) => ordered.indexOf(a.value).compareTo(ordered.indexOf(b.value)));
-    for (final entry in entries) {
-      if (SyncRateLimiter.instance.isLimited) break;
-      final name = entry.key;
-      final jobId = entry.value;
-      SyncJobFetch fetch;
-      try {
-        fetch = await _jobStatusFetcher(jobId);
-      } catch (_) {
-        continue; // transient — retry next tick
-      }
-      if (SharedPreferencesUtil().uid != uid) return;
-      switch (fetch.outcome) {
-        case SyncJobFetchOutcome.throttled:
-          break;
-        case SyncJobFetchOutcome.transient:
-          break;
-        case SyncJobFetchOutcome.notFound:
-          retryAutoUpload = true;
-          _jobs.remove(name);
-          changed = true;
-          break;
-        case SyncJobFetchOutcome.ok:
-          final s = fetch.status!;
-          if (!s.isTerminal) break;
-          if (s.result != null) {
-            newIds.addAll(s.result!.newConversationIds);
-            updIds.addAll(s.result!.updatedConversationIds);
-          }
-          if (s.status == 'completed') {
-            try {
-              ClientTelemetry.instance.observeUploadDurableCompleted(jobId: jobId, confirmedAt: DateTime.now());
-            } catch (_) {
-              // Completion telemetry must not change file retention.
-            }
-            await _deleteFileOnly(name);
-          }
-          // completed or failed: stop tracking. On failure the file is kept
-          // (only `completed` deletes it) so the recording becomes pending again.
-          _jobs.remove(name);
-          changed = true;
-          break;
-      }
-    }
-
-    if (changed) await _saveJobs();
-    if (SharedPreferencesUtil().uid != uid) return;
-    if (newIds.isNotEmpty || updIds.isNotEmpty) await _surface(newIds, updIds);
-    await refresh();
-    if (_ownedJobs().isEmpty) _stopReconcileTimer();
-    if (retryAutoUpload) await _maybeAutoUpload();
-  }
-
-  Future<void> _surface(List<String> newIds, List<String> updatedIds) async {
-    if (_conversationProvider == null) return;
-    if (newIds.isEmpty && updatedIds.isEmpty) return;
-    try {
-      final pointers = await ConversationSyncUtils.processConversationIds(
-        newConversationIds: newIds,
-        updatedConversationIds: updatedIds,
-      );
-      for (final p in pointers) {
-        _conversationProvider!.upsertConversation(p.conversation);
-      }
-    } catch (e) {
-      Logger.error('LocalRecordings: surfacing conversations failed: $e');
-    }
-  }
-
-  // ───────────────────────── delete ─────────────────────────
-
-  /// Delete a recording the user no longer wants. Stops playback first.
   Future<void> delete(LocalRecording rec) async {
-    if (isPlaying(rec)) {
-      await togglePlayback(rec);
-    }
-    await _deleteFileOnly(rec.fileName);
-    if (_jobs.remove(rec.fileName) != null) await _saveJobs();
-    await refresh();
+    final wal = _rows[rec.fileName];
+    if (wal == null) return;
+    if (isPlaying(rec)) await togglePlayback(rec);
+    await _ledger.deleteWal(wal);
+    await _readLedger();
   }
-
-  Future<void> _deleteFileOnly(String fileName) async {
-    try {
-      final dir = await _dir();
-      if (dir == null) return;
-      final file = File('${dir.path}/$fileName');
-      if (file.existsSync()) await file.delete();
-      final sidecar = File(nativeBatchGeolocationSidecarPath(file.path));
-      if (sidecar.existsSync()) await sidecar.delete();
-    } catch (e) {
-      Logger.error('LocalRecordings: delete failed for $fileName: $e');
-    }
-  }
-
-  // ───────────────────── playback / waveform ─────────────────────
-
-  /// A throwaway [Wal] used only to drive [AudioPlayerUtils] (opus decode +
-  /// playback). Never stored anywhere. `filePath` is the relative name, which
-  /// `Wal.getFilePath` resolves against the app documents dir (== batchAudioDir).
-  Wal _walFor(LocalRecording r) => Wal(
-        timerStart: r.timerStart,
-        codec: r.codec,
-        seconds: r.seconds,
-        sampleRate: 16000,
-        channel: 1,
-        status: WalStatus.miss,
-        storage: WalStorage.disk,
-        filePath: r.fileName,
-        device: batchRecordingDevice,
-      );
 
   String? get currentPlayingId => _audio.currentPlayingId;
   bool get isProcessingAudio => _audio.isProcessingAudio;
@@ -572,9 +187,20 @@ class LocalRecordingsProvider extends ChangeNotifier {
   Duration get totalDuration => _audio.totalDuration;
   double get playbackProgress => _audio.playbackProgress;
 
-  bool isPlaying(LocalRecording r) => _audio.isPlaying(_walFor(r).id);
-  bool canPlay(LocalRecording r) => _audio.canPlayOrShare(_walFor(r));
-  Future<void> togglePlayback(LocalRecording r) => _audio.togglePlayback(_walFor(r));
+  bool isPlaying(LocalRecording r) {
+    final wal = _walFor(r);
+    return wal != null && _audio.isPlaying(wal.id);
+  }
+
+  bool canPlay(LocalRecording r) {
+    final wal = _walFor(r);
+    return wal != null && _audio.canPlayOrShare(wal);
+  }
+
+  Future<void> togglePlayback(LocalRecording r) async {
+    final wal = _walFor(r);
+    if (wal != null) await _audio.togglePlayback(wal);
+  }
 
   bool _isPreparingShare = false;
   bool get isPreparingShare => _isPreparingShare;
@@ -582,6 +208,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
   Future<void> share(LocalRecording r) async {
     if (_isPreparingShare) return;
     final wal = _walFor(r);
+    if (wal == null) return;
     _isPreparingShare = true;
     notifyListeners();
     try {
@@ -606,6 +233,7 @@ class LocalRecordingsProvider extends ChangeNotifier {
 
   Future<List<double>?> getWaveform(LocalRecording r) async {
     final wal = _walFor(r);
+    if (wal == null) return null;
     String? wavPath = _audio.getCachedAudioPath(wal.id);
     if (wavPath == null && _audio.canPlayOrShare(wal)) {
       wavPath = await _audio.ensureAudioFileExists(wal);
@@ -617,65 +245,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
     return WaveformUtils.generateWaveform(params['id'] as String, params['path'] as String?);
   }
 
-  // ───────────────────────── sidecar ─────────────────────────
-
-  /// [stillCurrent] is checked right before the rename so a superseded scan
-  /// never replaces the owners file a newer scan wrote.
-  Future<void> _writeOwners(File file, Map<String, String> owners, {bool Function()? stillCurrent}) async {
-    final temp = File('${file.path}.${DateTime.now().microsecondsSinceEpoch}.tmp');
-    final handle = await temp.open(mode: FileMode.write);
-    try {
-      await handle.writeString(jsonEncode(owners));
-      await handle.flush();
-    } finally {
-      await handle.close();
-    }
-    if (stillCurrent != null && !stillCurrent()) {
-      await temp.delete();
-      return;
-    }
-    await temp.rename(file.path);
-  }
-
-  Future<Map<String, String>?> _readOwners(File file) async {
-    try {
-      if (!await file.exists()) return {};
-      final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! Map<String, dynamic>) return null;
-      final owners = <String, String>{};
-      for (final entry in decoded.entries) {
-        final value = entry.value;
-        if (value is! String) return null;
-        owners[entry.key] = value;
-      }
-      return owners;
-    } catch (_) {
-      return null;
-    }
-  }
-
   void clearUserData() {
+    _generation++;
+    _rows.clear();
     _recordings = [];
-    _jobs = {};
-    _failedName = null;
-    _autoFailures.clear();
-    _stopReconcileTimer();
+    _lastCompletion = null;
     if (!_disposed) notifyListeners();
-  }
-
-  Map<String, String> _loadJobs() {
-    try {
-      final raw = SharedPreferencesUtil().getString(_jobsPrefKey);
-      if (raw.isEmpty) return {};
-      final decoded = jsonDecode(raw) as Map<String, dynamic>;
-      return decoded.map((k, v) => MapEntry(k, v.toString()));
-    } catch (_) {
-      return {};
-    }
-  }
-
-  Future<void> _saveJobs() async {
-    await SharedPreferencesUtil().saveString(_jobsPrefKey, jsonEncode(_jobs));
   }
 
   void _onAudioChanged() {
@@ -685,70 +260,12 @@ class LocalRecordingsProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    _stopReconcileTimer();
-    _connectivitySub?.cancel();
-    BleBridge.instance.removeBatchRecordingFinalizedListener(_onRecordingFinalized);
+    _generation++;
+    if (_subscribed) {
+      _ledger.heldRevision.removeListener(_onLedgerChanged);
+      _ledger.conversationCompletions.removeListener(_onConversationsCompleted);
+    }
     _audio.removeListener(_onAudioChanged);
     super.dispose();
-  }
-}
-
-@visibleForTesting
-Future<UploadFilesResult> uploadNativeBatchRecording(
-  LocalRecording recording, {
-  required File file,
-  SyncUploadGate? uploadGate,
-}) {
-  return (uploadGate ?? SyncUploadGate.instance).upload(
-    [file],
-    geolocation: recording.geolocation,
-    telemetrySource: 'phone',
-  );
-}
-
-/// Counts complete length-prefixed frames (`[4-byte LE length][payload]`) in a
-/// batch `.bin` file. Reads in fixed 64 KB chunks so a long recording is never
-/// loaded whole into memory, and only counts a frame once its full payload is
-/// present — a truncated tail frame (e.g. from a crash-recovered file) is not
-/// counted, keeping the duration exact.
-Future<int> countBatchRecordingFrames(String path) async {
-  final raf = await File(path).open();
-  try {
-    const chunkSize = 64 * 1024;
-    final buf = Uint8List(chunkSize);
-    final header = Uint8List(4);
-    var headerHave = 0; // bytes of the current 4-byte header collected (0..4)
-    var remaining = 0; // payload bytes still to consume for the in-flight frame
-    var inPayload = false;
-    var frames = 0;
-    while (true) {
-      final read = await raf.readInto(buf, 0, chunkSize);
-      if (read <= 0) break;
-      var i = 0;
-      while (i < read) {
-        if (inPayload) {
-          final avail = read - i;
-          final skip = remaining < avail ? remaining : avail;
-          i += skip;
-          remaining -= skip;
-          if (remaining == 0) {
-            frames++; // full payload consumed — frame is complete
-            inPayload = false;
-          }
-        } else {
-          header[headerHave++] = buf[i++];
-          if (headerHave == 4) {
-            headerHave = 0;
-            final len = header[0] | (header[1] << 8) | (header[2] << 16) | (header[3] << 24);
-            if (len <= 0) return frames; // invalid/zero length — stop
-            remaining = len;
-            inPayload = true;
-          }
-        }
-      }
-    }
-    return frames; // any in-flight (truncated) frame is intentionally not counted
-  } finally {
-    await raf.close();
   }
 }

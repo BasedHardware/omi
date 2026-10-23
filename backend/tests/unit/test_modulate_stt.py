@@ -146,19 +146,18 @@ class TestLanguageRouting(unittest.TestCase):
 @pytest.mark.parametrize('models', [['dg-nova-3'], ['dg-nova-3', 'modulate-velma-2']])
 @pytest.mark.parametrize('language', ['en', 'fr'])
 @pytest.mark.parametrize('multi_language', [False, True])
-def test_configured_cloud_deepgram_serves_available_streaming_languages(models, language, multi_language):
-    # Hosted Deepgram was restored for live streaming, not PTT or prerecorded
-    # audio. Preserve both its current enabled behavior and the refusal tests
-    # above when the policy explicitly disables a deployment.
+def test_retired_deepgram_never_serves_streaming_languages(models, language, multi_language):
+    # Deepgram retired 2026-08-27: even a chain that still lists dg-nova-3 with
+    # a resolvable client never selects it; Velma takes the session.
     with (
         patch('utils.stt.streaming.stt_service_models', models),
         patch('utils.stt.streaming.is_dg_self_hosted', False),
         patch('utils.stt.streaming._deepgram_is_available', return_value=True),
     ):
         assert get_stt_service_for_language(language, multi_lang_enabled=multi_language) == (
-            STTService.deepgram,
+            STTService.modulate,
             'multi' if multi_language else language,
-            'nova-3',
+            'velma-2',
         )
 
 
@@ -607,7 +606,9 @@ class TestModulatePrerecorded(unittest.TestCase):
         self.assertEqual(exc_info.exception.provider, 'modulate')
         self.assertEqual(mock_client_cls.return_value.post.call_count, 1)
 
-    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key'})
+    # Pins the legacy 3-attempt ladder under the fail-fast kill switch; the default
+    # (2 POSTs) is asserted in test_prerecorded_vendor_fail_fast.py.
+    @patch.dict('os.environ', {'MODULATE_API_KEY': 'test-key', 'STT_PRERECORDED_VENDOR_FAIL_FAST': 'false'})
     @patch('utils.stt.pre_recorded.httpx.Client')
     def test_plain_429_stays_a_retryable_upstream_error(self, mock_client_cls):
         from utils.stt.outcomes import TranscriptionFailure

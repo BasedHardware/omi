@@ -38,7 +38,9 @@ class ListenSessionPolicy(PolicyPart):
     window_allocation_valid: bool = True
     window_allocation_parse_valid: bool = True
     window_allocated: bool = False
-    service_models: tuple[str, ...] = ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet')
+    # Mirrors stt_provider_policy DEFAULT_MODELS_BY_SURFACE[STREAMING]; Deepgram
+    # retired 2026-08-27.
+    service_models: tuple[str, ...] = ('modulate-velma-2', 'soniox', 'parakeet')
     failover_recovery_enabled: bool = False
     fallback_liveness_grace_seconds: float = 0.3
     paid_spillover_budget_enabled: bool = False
@@ -336,7 +338,9 @@ def resolve_listen_policy(
     hintable = _hintable_percent(env)
 
     def enabled(key, default='false'):
-        return env.get(key, default).lower() == 'true'
+        from config.policy.parts import boolean
+
+        return boolean(env, key, default, strip=False, uid=uid)
 
     try:
         shed = min(1000, max(1, int(env.get('STT_SHED_CONNECT_FAILURES', '3'))))

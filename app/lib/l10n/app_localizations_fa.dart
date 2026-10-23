@@ -14477,4 +14477,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceControls => 'کنترل‌ها';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'همچنین: $items';
+  }
 }

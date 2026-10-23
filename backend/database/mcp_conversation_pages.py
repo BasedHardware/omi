@@ -21,13 +21,12 @@ from config.firestore_read_levers import lever_enabled
 
 from ._client import get_firestore_client
 from .conversations import (
-    MCP_CONVERSATION_CARD_FIELD_PATHS,
     document_data_with_revision,
     prepare_conversation_for_read,
     conversations_collection,
     is_visible_conversation,
 )
-from .firestore_index_registry import MCP_CONVERSATION_CARD_QUERY_SPECS
+from .mcp_read_queries import MCP_CONVERSATION_CARD_QUERY_SPECS, MCP_CONVERSATION_CARD_FIELD_PATHS
 from .helpers import prepare_for_read
 
 # Upper bound on raw documents a single page may scan while skipping

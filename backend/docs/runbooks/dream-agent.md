@@ -114,8 +114,19 @@ metadata is informational and cannot exclude Store users.
 
 An hourly sweep drains a durable `dream_due` queue ordered by due time, which
 combines backlog and staleness. Product writes enqueue immediately. Independent
-discovery scans 20 pages of 499 owners (9,980/hour), initializing missing rows
-transactionally without overwriting dirty work or waiting for model sessions.
+discovery scans 20 pages of 499 owners (9,980/hour), committing each page in
+100-owner transactions so a fully eligible page stays inside the 3 s RPC
+deadlines, without overwriting dirty work or waiting for model sessions. Each
+chunk reads every owner's queue row (both the no-clobber skip and the stale-row
+delete need it) but reads `dream_users` state only for eligible owners not
+already queued — no state read at all when none qualify, so a steady-state sweep
+that mostly re-finds queued owners costs about two reads per scanned owner
+instead of three. A
+discovery failure (for example a Firestore `DeadlineExceeded`) or its 120 s
+wall budget only degrades that sweep to the already-due queue — one payload-free
+warning plus a `record_fallback` — and never fails the sweep; the cursor
+advances only with a page's final chunk, so failed or budget-stopped pages
+re-scan from their start (chunk commits are idempotent under that replay).
 Future hunts remain queued (24 hours, six for heavy owners); daily-capped owners
 are deferred rather than blocking the queue head. Each drain admits up to 5,000
 owners with concurrency derived from reserved TPM and expected tokens (334 at
@@ -173,6 +184,69 @@ alone cannot create evidence. Auth and transport failures are inconclusive and
 do not create a failed-probe admission veto. Fresh shared evidence, readable
 headroom and shared concurrency slots remain required. Legacy 2.5 discovery
 keeps its direct dedicated probe.
+
+Quiet-hour admission targets stale 3.8 evidence even while its day-long routing
+state remains ACTIVE. Generic discovery does not claim against evidence fresh
+within 900 seconds. A targeted waiter records bounded priority in the same Redis
+transaction, so generic discovery cannot renew a non-teaching lease ahead of it.
+The existing 600-second lease is never stolen or cleared on failure. Priority
+expires 630 seconds after the last targeted check if the waiter goes away.
+The drain rechecks 22 times at 30-second intervals (660 seconds): a full remaining
+lease, the 30-second probe deadline, and a final read. The global kill switch is
+checked again after each sleep. These waits share the 1680-second drain deadline;
+they do not extend it or an owner's pass deadline.
+
+Reservation scope is `vertex-reservations:v1:<project>:<address-digest>`.
+`OMI_VERTEX_RESERVATION_PROJECT` overrides `GOOGLE_CLOUD_PROJECT` for the key;
+the digest covers every declared model, order and resolved location (including
+`OMI_VERTEX_PT_TARGET_LOCATION`). Gateway and backend must use the same Redis
+host/port, project and digest. Gateway inference still uses its own compute
+project, with the Dream route pinned to 3.8 in `us`. A completed dedicated
+response with `usageMetadata.trafficType=PROVISIONED_THROUGHPUT` updates
+`evidence[gemini-3.8-flash].success_at` using Redis TIME. Missing/contradictory PT
+metadata, unfinished responses and plain HTTP 200 do not update it. No admission
+override or local success substitutes for that strict shared read.
+
+Rebuild and release every reservation writer (backend, desktop-backend and
+llm-gateway) from this source before assessing fleet fairness. Older reducers
+discard the new targeted-priority field when rewriting the shared document;
+the existing per-model lease still prevents duplicate probes during rollout.
+
+After deploy, in a quiet-hour sweep expect the following payload-free messages
+(timestamps and scope vary):
+
+```text
+vertex_reservation_probe_claim model=gemini-3.8-flash scope=<key> decision=claimed lease_until=<epoch> success_at=<old-epoch> source=admission
+vertex_reservation_probe_start model=gemini-3.8-flash scope=<key> location=us
+vertex_reservation_evidence model=gemini-3.8-flash scope=<same-key> storage=redis outcome=dedicated_success success_at=<new-epoch>
+dream_capacity_probe source=gateway model=gemini-3.8-flash status=200
+dream_capacity_probe outcome=inconclusive model=gemini-3.8-flash
+vertex_reservation_probe_complete model=gemini-3.8-flash scope=<key> outcome=inconclusive
+```
+
+With `DREAM_GATEWAY_PROBE_ENABLED=false` none of the probe lines appear (admission
+does not claim), and the only signal is `dream_capacity_decision reason=no_states`;
+check that switch before suspecting a missing writer.
+
+A pass that starts late in a sweep receives only the drain's remaining budget
+(minus `FINISH_MARGIN_SECONDS`), so it ends through its own deadline rather than
+being cancelled; below `MIN_PASS_SECONDS` the owner stays due for the next sweep.
+
+The evidence line is on the gateway; the caller intentionally remains
+`inconclusive` because it does not infer PT from HTTP success. The next check
+must emit `dream_capacity_decision` with `decision=admit`,
+`reason=fresh_reservation_saturation_clear`, `source=evidence`. An outstanding
+lease first emits `decision=leased`, then one `decision=claimed` after expiry;
+other replicas must not claim again in that 600-second window. A scope/override
+change before execution emits `vertex_reservation_probe_skip`; unexpected probe
+errors emit only their exception class. A shared-store failure emits
+`vertex_reservation_store_unavailable` and cannot claim a probe.
+
+The configured production backend/gateway scopes agree in source. An eight-hour
+absence of the old probe log alone cannot identify the production lease holder,
+prove a scope mismatch, or distinguish a skipped/cancelled task from missing
+shared publication. Confirm the claim/start/publication sequence and matching
+scopes after deploy before calling this incident resolved.
 
 The stable contract, instructions, tool schemas and seed prefix are repeated
 unchanged across turns for Vertex implicit caching on provisioned throughput.

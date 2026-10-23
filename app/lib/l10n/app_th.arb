@@ -4406,5 +4406,6 @@
     "deviceCatchingUpProgress": "{done} จาก {total} นาที",
     "deviceRecently": "ล่าสุด",
     "deviceDisconnectedFor": "ตัดการเชื่อมต่อ {duration}",
-    "deviceControls": "การควบคุม"
+    "deviceControls": "การควบคุม",
+    "homeBackgroundLine": "นอกจากนี้: {items}"
 }
