@@ -17,6 +17,7 @@ from utils.observability.transcription import record_live_stt_audio_seconds
 from utils.observability.routing_cohort import current_routing_cohort
 from utils.stt_cap_dispatch import CapSocket, session_admission, suppress_socket_audio, set_cap_capture
 from utils.stt import streaming as st
+from utils.stt.edge_shadow import attach_tap as attach_edge_tap
 from utils.dream_vocabulary import keyterms
 from utils.stt.live_failure import PendingLiveFailover, settle_terminal_socket
 from utils.stt.live_outcome import LiveLegOutcome, record_managed_leg_handoff
@@ -46,6 +47,7 @@ from utils.stt.recovery_state import current_recovery
 from utils.stt.stream_close import ACCOUNT_REJECTION_REASONS
 from utils.stt.no_text_rescue import NoTextRescue
 from utils.stt.replay_capture_accounting import note_observed_spans
+from utils.stt.local_send_diagnostics import record_local_send_failure
 from utils.stt.socket import STTSocket, record_live_stt_socket_closed, record_live_stt_socket_open
 from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import VAD_GATE_MODE, VADStreamingGate, is_gate_enabled
@@ -232,6 +234,7 @@ class LiveChainSession:
                 record_fallback(
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
+            attach_edge_tap(gate, self.receiver)
             passthrough = service == st.STTService.modulate
             if epoch is not None:
                 epoch.set_validation_callback(
@@ -342,8 +345,8 @@ class LiveChainSession:
                         sample_rate,
                         language,
                         profile=host.language_profile,
-                        keywords=keywords,
                         idle_budget=getattr(self.receiver, 'soniox_idle_budget', None),
+                        uid=uid,
                     )
                 elif service == st.STTService.modulate:
                     raw = await connect_modulate(callback, sample_rate, language)
@@ -842,14 +845,15 @@ class LiveLegSocket(STTSocket):
         circuit = target_circuit(target)
         if reason in ACCOUNT_REJECTION_REASONS:
             circuit.record_account_failure(
-                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800'))
+                float(listen_value('account_circuit_cooldown_seconds', 'STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')),
+                error_class=reason,
             )
             health.quarantine_target(target.id, circuit.account_cooldown_seconds_remaining)
             health.quarantine(self.service.value, 'account', circuit.account_cooldown_seconds_remaining)
         elif getattr(self.raw, 'idle_reopen_failed', False) is True:
             circuit.record_failure()
         else:
-            circuit.record_serve_failure()
+            circuit.record_serve_failure(error_class=reason)
             health.quarantine(
                 self.service.value, 'selection', circuit.serve_error_bench_seconds, endpoint=self.routing_endpoint
             )
@@ -1089,20 +1093,24 @@ class LiveLegSocket(STTSocket):
             else:
                 sent_spans = tuple(output.send_spans) if output is not None else ()
         record_before_finalize = live_capture_window_translator_sends_enabled()
+        send_phase = 'usage_accounting'
         try:
             if audio:
                 if not self.window and not self._no_text_rescue.can_admit(len(audio) / (self.sample_rate * 2)):
                     self._expire_rescue()
                     return False
                 try:
+                    send_phase = 'capture_mapping'
                     token = capture_spans.set(sent_spans) if self._soniox_wire_ledger else None
                     try:
                         set_cap_capture(self.raw, audio, sent_spans)
+                        send_phase = 'raw_send'
                         sent = self.raw.send(audio)
                     finally:
                         if token is not None:
                             capture_spans.reset(token)
-                except Exception:
+                except Exception as error:
+                    record_local_send_failure(self.service, send_phase, self.raw, error)
                     # A raised send is transport evidence unless the socket
                     # already owns a more specific bounded cause.
                     self._latch_failure(reason='connection_lost')
@@ -1110,6 +1118,7 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     return False
                 if sent is not True:
+                    record_local_send_failure(self.service, 'raw_refused', self.raw)
                     # False is a send symptom only while the raw socket still
                     # reports alive. A dead socket with unknown diagnostics is
                     # a connection loss, and typed causes win in normalization.
@@ -1121,18 +1130,22 @@ class LiveLegSocket(STTSocket):
                     self._finish_transport()
                     self._dead = True
                     return False
+                send_phase = 'usage_accounting'
                 if self._routing_cohort is not None and getattr(self.raw, 'idle_close_enabled', False) is not True:
                     self._routing_cohort.paid_audio(self.service.value, len(audio) / (self.sample_rate * 2))
                 if not self.window:
                     self._no_text_rescue.audio(self.service.value, len(audio) / (self.sample_rate * 2))
             if record_before_finalize and self._send_tracker is not None and not self._soniox_wire_ledger:
+                send_phase = 'capture_mapping'
                 note_observed_spans(self._send_tracker, sent_spans, 'managed_chain')
             if output is not None and output.should_finalize:
+                send_phase = 'finalize'
                 if self.window and isinstance(self.raw, WindowedParakeetSocket):
                     self.raw.finalize(vad_pause=True)
                 else:
                     self.raw.finalize()
-        except Exception:
+        except Exception as error:
+            record_local_send_failure(self.service, send_phase, self.raw, error)
             self._local_death_reason = 'send_failed'
             self._dead = True
             self._finish_transport()

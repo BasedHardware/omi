@@ -1,0 +1,1540 @@
+{
+  "entries": [
+    {
+      "path": "database/firestore_document_probe.py",
+      "function": "_record",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "database/firestore_read_metrics.py",
+      "function": "record_document_read",
+      "label": "outcome",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "database/fsr_cache_telemetry.py",
+      "function": "record_fallback",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "database/memory_source_index.py",
+      "function": "retraction_historical_ids",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "database/memory_source_index.py",
+      "function": "store",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "database/messaging.py",
+      "function": "_queue_event",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "database/s5_candidates_cache.py",
+      "function": "_cache_unavailable",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "database/staged_promote_cache.py",
+      "function": "_unavailable",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "llm_gateway/gateway/metrics.py",
+      "function": "observe_accounting_event",
+      "label": "provider",
+      "shape": "call:_bounded",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "llm_gateway/gateway/metrics.py",
+      "function": "observe_auth_rejection",
+      "label": "reason",
+      "shape": "call:_bounded",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "llm_gateway/gateway/metrics.py",
+      "function": "observe_route_result",
+      "label": "provider",
+      "shape": "subscript",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/auth.py",
+      "function": "_log_auth_event",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/auth.py",
+      "function": "_log_auth_event",
+      "label": "provider",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/desktop_task_gate.py",
+      "function": "screen_task_gate",
+      "label": "outcome",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/parity_telemetry.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/parity_telemetry.py",
+      "function": "record_parity_capture_event",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/receiver.py",
+      "function": "ListenReceiver._fallback_unplaced",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/receiver.py",
+      "function": "ListenReceiver._record_elapsed_validation",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/receiver.py",
+      "function": "ListenReceiver._record_elapsed_validation",
+      "label": "provider",
+      "shape": "call:audio_timeline_provider_label",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/receiver.py",
+      "function": "ListenReceiver._record_selected_epoch",
+      "label": "provider",
+      "shape": "call:audio_timeline_provider_label",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/speakers.py",
+      "function": "SpeakerMatcher._record_exit",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/stt_callbacks.py",
+      "function": "build_stt_callbacks",
+      "label": "provider",
+      "shape": "call:audio_timeline_provider_label",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/stt_callbacks.py",
+      "function": "build_stt_callbacks.record_mapped",
+      "label": "provider",
+      "shape": "call:audio_timeline_provider_label",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/stt_callbacks.py",
+      "function": "build_stt_callbacks.record_reject",
+      "label": "provider",
+      "shape": "call:audio_timeline_provider_label",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/stt_callbacks.py",
+      "function": "build_stt_callbacks.record_reject",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/listen/transcripts.py",
+      "function": "TranscriptProcessor._update_live_conversation",
+      "label": "reason",
+      "shape": "name",
+      "count": 3,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "routers/sync.py",
+      "function": "sync_local_files_v2",
+      "label": "reason",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/account_cutover/telemetry.py",
+      "function": "record_cutover_transition",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/async_tasks.py",
+      "function": "supervise_tasks",
+      "label": "reason",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/action_item_extraction.py",
+      "function": "filter_extracted_items",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/action_item_identity.py",
+      "function": "_emit",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/action_item_refresh.py",
+      "function": "_emit",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/final_pass_pyannote.py",
+      "function": "run_final_pass",
+      "label": "outcome",
+      "shape": "binop",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/final_pass_pyannote.py",
+      "function": "run_final_pass",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/final_pass_sync.py",
+      "function": "_run_sync_final_pass",
+      "label": "outcome",
+      "shape": "bad_literal",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/meeting_evidence_admission.py",
+      "function": "await_meeting_evidence",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/speaker_grouping_shadow.py",
+      "function": "count",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/speaker_resolution.py",
+      "function": "_resolve",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/speaker_resolution.py",
+      "function": "_resolve",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/speaker_resolution.py",
+      "function": "_resolve.place_segment",
+      "label": "reason",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/speaker_resolution.py",
+      "function": "_without_resolution",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/speaker_resolution.py",
+      "function": "_without_resolution",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/teaching_placement.py",
+      "function": "recover_teaching_clip",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/transcription_shadow.py",
+      "function": "_record_comparison_metrics",
+      "label": "outcome",
+      "shape": "name",
+      "count": 4,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/conversations/transcription_shadow.py",
+      "function": "_run_shadow",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/episodes/metrics.py",
+      "function": "record_moment_update",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/external_list_reads.py",
+      "function": "_Entry.event",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "callers pass string literals (stored/version_bypass/...); closed in practice, scanner is intraprocedural."
+    },
+    {
+      "path": "utils/held_content_cohort.py",
+      "function": "RuntimeCohort._failure",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "main held-content observability via sync 14 (2026-10-20); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/llm/gateway_observability.py",
+      "function": "record_direct_exception_surface",
+      "label": "reason",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/llm/gateway_observability.py",
+      "function": "record_gateway_request_result",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/llm/gateway_observability.py",
+      "function": "record_gateway_request_result",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/llm/gateway_resilience.py",
+      "function": "observe_gateway_first_byte",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/llm/meeting_notes_presentation.py",
+      "function": "_record_contract",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/llm/meeting_notes_presentation.py",
+      "function": "_record_contract",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/llm/notes_agent.py",
+      "function": "record_decision",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/mcp_server/oauth.py",
+      "function": "mcp_token.record_outcome",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/metrics.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 12,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/metrics.py",
+      "function": "<module>",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/metrics.py",
+      "function": "<module>",
+      "label": "reason",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/metrics.py",
+      "function": "record_action_items_list_cache",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/metrics.py",
+      "function": "record_relevance_scorer_outcome",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/metrics_smart_merge.py",
+      "function": "record_conversation_smart_merge_audit",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/metrics_smart_merge.py",
+      "function": "record_conversation_smart_merge_refresh",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/metrics_smart_merge.py",
+      "function": "record_smart_merge_flatten",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/metrics_smart_merge.py",
+      "function": "record_smart_merge_flatten",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/billing_ledger.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/billing_ledger.py",
+      "function": "record_outcome",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/demand_cohort.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 3,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/demand_cohort.py",
+      "function": "<module>",
+      "label": "provider",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/demand_cohort.py",
+      "function": "<module>",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/external_lists.py",
+      "function": "ExternalListMetricsMiddleware.__call__",
+      "label": "outcome",
+      "shape": "call:_outcome",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/fallback.py",
+      "function": "initialize_cache_write_fail_open_children",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/fallback.py",
+      "function": "initialize_live_stt_exhausted_children",
+      "label": "reason",
+      "shape": "name",
+      "count": 4,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/fallback.py",
+      "function": "record_fallback",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/fallback.py",
+      "function": "record_fallback",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/finalization.py",
+      "function": "<module>",
+      "label": "reason",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/finalization.py",
+      "function": "record_finalization_failure",
+      "label": "reason",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/fleet.py",
+      "function": "reject",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/held_content.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 5,
+      "why": "main held-content observability via sync 14 (2026-10-20); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/observability/held_content.py",
+      "function": "<module>",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "main held-content observability via sync 14 (2026-10-20); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/observability/held_content.py",
+      "function": "record_pacing",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "main episodes/memory-source/held-content observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/observability/journeys.py",
+      "function": "record_capture_finalization_reconciliation",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/journeys.py",
+      "function": "record_client_journey_terminal._record",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/owner_recognition.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/owner_recognition.py",
+      "function": "emit_finalized_owner_recognition",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/owner_recognition.py",
+      "function": "record_owner_identity_repair",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/owner_recognition.py",
+      "function": "record_owner_reconnect",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/owner_recognition.py",
+      "function": "record_owner_reconnect",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/routing_cohort.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/routing_cohort.py",
+      "function": "<module>",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/routing_cohort.py",
+      "function": "RoutingCohort.finish",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/routing_cohort.py",
+      "function": "RoutingCohort.finish",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/routing_cohort.py",
+      "function": "RoutingCohort.terminal",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/speaker_embedding_budget.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/speaker_embedding_budget.py",
+      "function": "<module>",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/speaker_identification.py",
+      "function": "record_speaker_review",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/speaker_learning_jobs.py",
+      "function": "record_speaker_learning_job_events",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/stt_cap_dispatch.py",
+      "function": "record_reconciliation",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/subscription_events.py",
+      "function": "_record",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/subscription_events.py",
+      "function": "_zero_initialize_label_children",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "LiveSTTAttempt.__init__",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "LiveSTTAttempt.finish",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "LiveSTTAttempt.finish",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "TranscriptionAttempt.__init__",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "TranscriptionAttempt.finish",
+      "label": "outcome",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "TranscriptionAttempt.finish",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "initialize_live_session_transcript_outcome_children",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "record_listen_audio_outcome",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "record_live_stt_failure",
+      "label": "outcome",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "record_sync_intake_outcome",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/observability/transcription.py",
+      "function": "record_sync_transcription_outcome",
+      "label": "outcome",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/other/daily_summary_metrics.py",
+      "function": "<module>",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/other/fsr_leader_lease.py",
+      "function": "_count",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/other/list_budget.py",
+      "function": "ListReadBudget.observe",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/product_metrics.py",
+      "function": "record_product_event",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_audio.py",
+      "function": "legacy_speaker_clip_pcm.record",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_audio.py",
+      "function": "legacy_speaker_clip_pcm.record",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_identification.py",
+      "function": "extract_speaker_samples",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_tag_prompts/clips.py",
+      "function": "conversation_clip_pcm",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_tag_prompts/service.py",
+      "function": "_apply_owner_answer",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_tag_prompts/service.py",
+      "function": "apply_answer",
+      "label": "outcome",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_tag_prompts/service.py",
+      "function": "get_prompts",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_tag_prompts/service.py",
+      "function": "store_owner_voice_sample",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/speaker_tag_prompts/service.py",
+      "function": "verified_clip_pcm",
+      "label": "reason",
+      "shape": "call:get",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/staging_fence.py",
+      "function": "_assert",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "lane 2: reason comes from its own closed fence-check names; switch to a StagingFence enum + reason_label() to drop this entry."
+    },
+    {
+      "path": "utils/stt/batch_pressure.py",
+      "function": "BatchPressure._refresh",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/batch_pressure.py",
+      "function": "BatchPressure.allows",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/connect_metrics.py",
+      "function": "initialize_stt_provider_connect_children",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/connect_metrics.py",
+      "function": "initialize_stt_provider_connect_children",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/connect_metrics.py",
+      "function": "record_stt_provider_connect",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/edge_shadow.py",
+      "function": "EdgeShadowMirror._finish",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/legacy_replay.py",
+      "function": "reconnect_live_stt_socket",
+      "label": "reason",
+      "shape": "name",
+      "count": 4,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_chain.py",
+      "function": "_connect_backoff_event",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_chain.py",
+      "function": "connect_configured_chain._same_target_retry",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 3,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/live_cost_health.py",
+      "function": "CostHealthMixin._init_cost_metrics",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_cost_health.py",
+      "function": "CostHealthMixin._init_cost_metrics",
+      "label": "reason",
+      "shape": "name",
+      "count": 3,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_cost_health.py",
+      "function": "CostHealthMixin.record_session",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_failure.py",
+      "function": "terminate_live_stt_backoff",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_health.py",
+      "function": "FleetHealth.record",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_health.py",
+      "function": "FleetHealth.record",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_metrics.py",
+      "function": "<module>",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_outcome.py",
+      "function": "LiveLegOutcome.claim",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_outcome.py",
+      "function": "LiveLegOutcome.settle",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_outcome.py",
+      "function": "LiveLegOutcome.settle",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_recovery.py",
+      "function": "allow_same_target_retry",
+      "label": "provider",
+      "shape": "name",
+      "count": 2,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/live_recovery.py",
+      "function": "release_session_local_exclusions",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "main #22734/#22647 via sync 10 (2026-10-20); provider label from the live provider registry, owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/live_router.py",
+      "function": "propose",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_router.py",
+      "function": "select",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/live_session.py",
+      "function": "LiveLegSocket.window_replay_settle_through",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "main #22734/#22647 via sync 10 (2026-10-20); provider label from the live provider registry, owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/no_text_rescue.py",
+      "function": "NoTextRescue.audio",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/paid_admission.py",
+      "function": "admit",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/paid_admission.py",
+      "function": "admit",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/parakeet_window.py",
+      "function": "WindowedParakeetSocket._post_and_parse",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/parakeet_window.py",
+      "function": "WindowedParakeetSocket._record_session_outcome",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/provider_resilience.py",
+      "function": "ProviderCircuitBreaker._note_trip",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "main #23074 breaker trip causes (M3 final main merge); provider label from the breaker config, owner lane 14"
+    },
+    {
+      "path": "utils/stt/provider_resilience.py",
+      "function": "ProviderCircuitBreaker._publish_state",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/provider_resilience.py",
+      "function": "initialize_stt_circuit_trip_children",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "main #23074 breaker trip causes (M3 final main merge); provider label from the breaker config, owner lane 14"
+    },
+    {
+      "path": "utils/stt/provider_stream_end.py",
+      "function": "<module>",
+      "label": "provider",
+      "shape": "name",
+      "count": 3,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/provider_stream_end.py",
+      "function": "ProviderStreamEnd.note_text",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/provider_stream_end.py",
+      "function": "ProviderStreamEnd.record",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "main STT/notes observability via sync 15 (2026-10-21); owner lane 14 to bound"
+    },
+    {
+      "path": "utils/stt/resilient_stream.py",
+      "function": "ResilientAudio.admit",
+      "label": "provider",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/resilient_stream.py",
+      "function": "ResilientAudio.admit",
+      "label": "reason",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/resilient_stream.py",
+      "function": "ResilientAudio.record_replay",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/resilient_stream.py",
+      "function": "reconnect_live_stt_socket",
+      "label": "reason",
+      "shape": "name",
+      "count": 6,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/soniox.py",
+      "function": "SafeSonioxSocket.send",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/soniox_capture_axis.py",
+      "function": "validation_detail",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/soniox_capture_axis.py",
+      "function": "validation_detail",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/soniox_wire_ledger.py",
+      "function": "OrderedSonioxProviderClock._record_settled",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/soniox_wire_ledger.py",
+      "function": "SonioxProviderClock._record_settled",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/soniox_wire_metrics.py",
+      "function": "finalize_gate_metrics",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/soniox_wire_metrics.py",
+      "function": "ordered_finalize_metrics",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/soniox_wire_metrics.py",
+      "function": "wire_metrics",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/speaker_recovery.py",
+      "function": "recovery_voice_blocked",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/stream_close.py",
+      "function": "initialize_stt_stream_close_children",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/stream_close.py",
+      "function": "initialize_stt_stream_close_children",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/stream_close.py",
+      "function": "publish_stt_provider_retired",
+      "label": "provider",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/streaming.py",
+      "function": "SafeModulateSocket.send",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt/vad_gate.py",
+      "function": "GatedSTTSocket._counted",
+      "label": "provider",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/stt_cap_cohort.py",
+      "function": "RuntimeCohort._failure",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "main #22810 via sync 12 (2026-10-20); reason passed as a name, owner lane 14 to bound"
+    },
+    {
+      "path": "utils/sync/bridge.py",
+      "function": "_record_bridge_retraction",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/sync/bridge.py",
+      "function": "_record_bridge_retraction",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/sync/legacy_dark.py",
+      "function": "record_dark_ack",
+      "label": "reason",
+      "shape": "call:_label",
+      "count": 1,
+      "why": "lane 10: value is folded through its own enum helper (_label -> LegacyAdmissionReason/...) so it is closed; scanner cannot see it. Lane 10 can switch to reason_label() to drop this entry."
+    },
+    {
+      "path": "utils/sync/legacy_dark.py",
+      "function": "record_legacy_admission",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "lane 10: value is folded through its own enum helper (_label -> LegacyAdmissionReason/...) so it is closed; scanner cannot see it. Lane 10 can switch to reason_label() to drop this entry."
+    },
+    {
+      "path": "utils/sync/recording_lineage.py",
+      "function": "_emit",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/sync/safety_wal_coverage.py",
+      "function": "apply_safety_wal_coverage",
+      "label": "reason",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/sync/speaker_identity.py",
+      "function": "identify_speakers_for_segments",
+      "label": "outcome",
+      "shape": "name",
+      "count": 2,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/sync/wal_audio_coverage_metrics.py",
+      "function": "record_coverage_outcome",
+      "label": "outcome",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/task_intelligence/workstream_association.py",
+      "function": "associate_workflow_evidence.finish",
+      "label": "outcome",
+      "shape": "attribute",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/task_intelligence/workstream_association.py",
+      "function": "associate_workflow_evidence.finish",
+      "label": "reason",
+      "shape": "name",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/translation_core/metrics.py",
+      "function": "PrometheusTranslationMetrics.success",
+      "label": "provider",
+      "shape": "name",
+      "count": 4,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/workers/consumer.py",
+      "function": "_count",
+      "label": "outcome",
+      "shape": "attribute",
+      "count": 1,
+      "why": "typed enum fields (Result.outcome / Result.reason are StrEnum members), closed by type; the scanner cannot see types. Remove when the check learns attribute typing."
+    },
+    {
+      "path": "utils/workers/consumer.py",
+      "function": "_count",
+      "label": "reason",
+      "shape": "attribute",
+      "count": 1,
+      "why": "typed enum fields (Result.outcome / Result.reason are StrEnum members), closed by type; the scanner cannot see types. Remove when the check learns attribute typing."
+    }
+  ]
+}

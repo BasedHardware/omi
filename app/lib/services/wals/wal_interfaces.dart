@@ -88,6 +88,11 @@ abstract class LocalWalSync implements IWalSync {
   /// of local copies removed.
   Future<int> applySyncedCopyRetention();
 
+  /// Deletes every local recording (index entry and file) owned by [uid],
+  /// whether active, retired or foreign. Called when that account is deleted
+  /// from this phone. Returns the number of records removed.
+  Future<int> purgeAccountWals(String uid);
+
   /// Ingest a pre-processed audio frame from an AudioSource.
   /// The frame contains headerless payload and a source-specific sync key.
   WalFrame onFrameCaptured(WalFrame frame, {String? captureRoot});
@@ -96,8 +101,10 @@ abstract class LocalWalSync implements IWalSync {
   /// Matches frames by sync key (source-agnostic).
   void markFrameSynced(FrameSyncKey key);
 
-  /// Notify WAL that the audio codec has changed (resets frame state).
-  Future onAudioCodecChanged(BleAudioCodec codec);
+  /// Seal the old source before switching codec and optional device metadata.
+  /// Supply deviceInfo when ingress can continue during the flush, so those
+  /// arrivals belong to the new source before asynchronous I/O yields.
+  Future onAudioCodecChanged(BleAudioCodec codec, {({String id, String model})? deviceInfo});
 
   /// Set device metadata for WAL file naming.
   void setDeviceInfo(String? deviceId, String? deviceModel);

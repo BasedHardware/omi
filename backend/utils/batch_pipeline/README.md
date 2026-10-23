@@ -19,6 +19,7 @@ operator settings, RPCs and index readiness are in
 | Enrichment | `enrichment.py` | Privacy-aware adapter to the existing coalesced sync reprocess outbox. |
 | Quarantine recovery | `quarantine_recovery.py` | Default-off owner-gated per-unit legacy sync STT, single dispatch and encrypted result reconciliation; original batch claim retained. |
 | Cleanup | `retention.py` | Durable erasure outboxes and bounded object/metadata cleanup. |
+| Real-upload shadow | `shadow_intake.py`, `shadow_worker.py`, `shadow_recovery.py`, `shadow_metrics.py` | Idle-only isolated GPU handoff, capped recovery and hashed outcomes; [contract](../../docs/batch-pipeline-shadow.md). |
 | Backend supervisor | `serving.py`, `metrics.py` | Recovery, ordered projection, retention and queue-age export independent of upload admission. |
 
 Firestore transaction/query adapters live in `database/batch_pipeline_*.py`.

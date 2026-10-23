@@ -11,8 +11,9 @@ from typing import Any, Callable, Protocol, TypeVar
 
 from google.cloud import firestore
 
+from config.firestore_read_levers import lever_enabled
 from database._client import get_data_plane_firestore_client
-from database.batch_pipeline_privacy import assert_batch_write_allowed
+from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
 from database.batch_pipeline_recovery import quarantine_fenced
 from utils.sync.stage import collection_name
 
@@ -30,6 +31,7 @@ class Transaction(Protocol):
     def put(self, table: str, key: str, value: dict) -> None: ...
     def patch(self, table: str, key: str, fields: dict) -> None: ...
     def first_pending(self, owner_key: str) -> dict | None: ...
+    def first_ready_pending(self, owner_key: str) -> dict | None: ...
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None: ...
     def service_frontier(self, priority: int) -> float: ...
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int: ...
@@ -42,6 +44,9 @@ class Store(Protocol):
     def oldest_retry(self, priority: int) -> float | None: ...
     def control_candidate(self, priority: int, pool: str, now: float) -> str | None: ...
     def quarantine_fenced(self, segment_id: str, now: float) -> bool: ...
+    def longest_ready_pending(self, owner_key: str) -> dict | None: ...
+    def fresh_pending(self, owner_key: str, limit: int) -> list[dict]: ...
+    def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]: ...
 
 
 class FirestoreTransaction:
@@ -87,6 +92,9 @@ class FirestoreTransaction:
     def first_pending(self, owner_key: str) -> dict | None:
         return first_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
 
+    def first_ready_pending(self, owner_key: str) -> dict | None:
+        return first_ready_pending(self.client, self.namespace, owner_key, transaction=self.transaction)
+
     def ready_predecessor(self, owner_key: str, priority: int, segment_id: str) -> dict | None:
         return ready_predecessor(
             self.client, self.namespace, owner_key, priority, segment_id, transaction=self.transaction
@@ -96,12 +104,19 @@ class FirestoreTransaction:
         return service_frontier(self.client, self.namespace, priority, transaction=self.transaction)
 
     def check_privacy(self, uid: str, conversation_ids=(), expected_generation: int | None = None) -> int:
+        options = {}
+        if lever_enabled('batch_privacy_memoize', uid):
+            # FirestoreStore.run creates this view anew on every callback retry.
+            if not hasattr(self, '_privacy_memo'):
+                self._privacy_memo = BatchPrivacyMemo(self.client, self.transaction)
+            options['memo'] = self._privacy_memo
         return assert_batch_write_allowed(
             self.client,
             self.transaction,
             uid,
             conversation_ids=conversation_ids,
             expected_generation=expected_generation,
+            **options,
         )
 
     def flush(self):
@@ -116,9 +131,7 @@ class FirestoreTransaction:
             if identity in guarded:
                 continue
             guarded.add(identity)
-            generation = assert_batch_write_allowed(
-                self.client,
-                self.transaction,
+            generation = self.check_privacy(
                 job['owner_id'],
                 conversation_ids=(job['conversation_id'],) if job.get('conversation_id') else (),
                 expected_generation=job.get('privacy_generation'),
@@ -183,6 +196,17 @@ class FirestoreStore:
 
     def quarantine_fenced(self, segment_id: str, now: float) -> bool:
         return quarantine_fenced(self.client, self.namespace, segment_id, now)
+
+    def longest_ready_pending(self, owner_key: str) -> dict | None:
+        # A hint read outside any transaction; the bypass transaction re-verifies it.
+        return longest_ready_pending(self.client, self.namespace, owner_key)
+
+    def fresh_pending(self, owner_key: str, limit: int) -> list[dict]:
+        # A hint read outside any transaction; the fresh-first transaction re-verifies it.
+        return fresh_pending(self.client, self.namespace, owner_key, limit)
+
+    def held_merge_owners(self, limit: int, *, after: str | None = None) -> list[tuple[str, str | None]]:
+        return held_merge_owners(self.client, self.namespace, limit, after=after)
 
     def projection_pending(self, limit: int = 100) -> list[str]:
         return projection_pending(self.client, self.namespace, limit)
@@ -256,6 +280,77 @@ def first_pending(client: Any, namespace: str, owner_key: str, *, transaction: A
         .stream(transaction=transaction)
     )
     return docs[0].to_dict() if docs else None
+
+
+def first_ready_pending(client: Any, namespace: str, owner_key: str, *, transaction: Any = None) -> dict | None:
+    """The owner's earliest-captured pending row that already has a result (bounded head wait)."""
+    docs = list(
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('state', '==', 'result_ready')
+        .order_by('capture_at')
+        .order_by('segment_id')
+        .limit(1)
+        .stream(transaction=transaction)
+    )
+    return docs[0].to_dict() if docs else None
+
+
+def longest_ready_pending(client: Any, namespace: str, owner_key: str) -> dict | None:
+    """The owner's pending result that has waited longest; rows without ``ready_at`` never match.
+
+    Non-transactional discovery hint: it takes no transactional query lock.
+    """
+    docs = list(
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('state', '==', 'result_ready')
+        .order_by('ready_at')
+        .limit(1)
+        .stream()
+    )
+    return docs[0].to_dict() if docs else None
+
+
+def held_merge_owners(
+    client: Any, namespace: str, limit: int, *, after: str | None = None
+) -> list[tuple[str, str | None]]:
+    """Owners whose catch-up commits are held for projection depth: (owner key, owner id or None).
+
+    Ordered by owner key after ``after`` so callers can rotate through every
+    marker. The marker stores no user ID; the owner's earliest pending job
+    supplies it. None means nothing is pending, so the marker is stale.
+    """
+    collection = client.collection(f'{namespace}_merge_holds')
+    query = collection.where('held', '==', True).order_by('__name__')
+    if after is not None:
+        query = query.start_after({'__name__': collection.document(after)})
+    marks = query.limit(max(1, min(limit, 100))).stream()
+    owners = []
+    for mark in marks:
+        job = first_pending(client, namespace, mark.id)
+        owners.append((mark.id, job.get('owner_id') if job else None))
+    return owners
+
+
+def fresh_pending(client: Any, namespace: str, owner_key: str, limit: int) -> list[dict]:
+    """The owner's earliest-captured pending fresh rows, ready or not (fresh-first merge).
+
+    Non-transactional discovery hint: it takes no transactional query lock.
+    """
+    docs = (
+        client.collection(f'{namespace}_jobs')
+        .where('owner_key', '==', owner_key)
+        .where('merge_pending', '==', True)
+        .where('fresh_capture', '==', True)
+        .order_by('capture_at')
+        .order_by('segment_id')
+        .limit(max(1, min(limit, 32)))
+        .stream()
+    )
+    return [doc.to_dict() for doc in docs]
 
 
 def ready_predecessor(

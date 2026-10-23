@@ -598,5 +598,179 @@
       "group_by": ["alertname"], "group_wait": "5m", "group_interval": "1h", "repeat_interval": "24h"
     },
     "record": null
+  },
+  {
+    "uid": "omi-firestore-commit-resource-exhausted",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Firestore Cost",
+    "title": "Firestore - Commit RESOURCE_EXHAUSTED sustained",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "timeSeriesList",
+        "relativeTimeRange": {
+          "from": 900,
+          "to": 0
+        },
+        "datasourceUid": "beuxmaq8oxhq8e",
+        "model": {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "beuxmaq8oxhq8e"
+          },
+          "instant": false,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "queryType": "timeSeriesList",
+          "range": true,
+          "refId": "A",
+          "timeSeriesList": {
+            "alignmentPeriod": "60s",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "filters": [
+              "metric.type",
+              "=",
+              "firestore.googleapis.com/api/request_count",
+              "AND",
+              "metric.label.api_method",
+              "=",
+              "Commit",
+              "AND",
+              "metric.label.response_code",
+              "=",
+              "RESOURCE_EXHAUSTED"
+            ],
+            "groupBys": [],
+            "perSeriesAligner": "ALIGN_DELTA",
+            "projectName": "based-hardware",
+            "view": "FULL"
+          }
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce",
+          "settings": {
+            "mode": "dropNN"
+          }
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$B > 10",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-10-19T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "KeepLast",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "evidence": "omi-knowledge-base:projects/two-lane-transcription/evidence/2026-10-21-firestore-hotspots-key-visualizer.md",
+      "dashboard_url": "https://monitor.omi.me/d/3e7c5f57-a1be-4175-81e6-1f0c7c28b9dd",
+      "summary": "Firestore Commit calls are returning RESOURCE_EXHAUSTED at more than 10 per minute for 5 consecutive minutes",
+      "threshold": "firestore.googleapis.com/api/request_count{api_method=Commit,response_code=RESOURCE_EXHAUSTED}, 60s ALIGN_DELTA summed, last point > 10, for 5m",
+      "user_impact": "Contended or throttled commits expire in-flight transactions (batch retention, cap persist); work retries or is lost until the hotspot clears.",
+      "scope": "Cloud Monitoring firestore.googleapis.com/api/request_count for the based-hardware default database, Commit only. Hotspot evidence: KB projects/two-lane-transcription/evidence/2026-10-21-firestore-hotspots-key-visualizer.md.",
+      "verification": "Backtest 2026-10-14..10-21 (Cloud Monitoring, 60s ALIGN_DELTA): RESOURCE_EXHAUSTED on Commit was nonzero in 958 minutes (60.7k total; nonzero-minute p50 9, p90 147, max 2,351). Sustained episodes: > 0 for 2m = 217 in 7d (too noisy to page on); > 10/min for 5m = 18 (latest 10-20 16:16Z, 18:02Z, 18:32Z); > 50/min for 5m = 8; > 10/min for 10m = 5.",
+      "evaluated_bad": "> 100/min for 5m on 2026-10-20 16:18Z",
+      "evaluated_good": "0/min (most minutes; 958 of ~10,080 minutes were nonzero)",
+      "safe_next_action": "Open the Firestore Key Visualizer for the hot key range and match it to the batch retention / cap-persist writers before changing write rates.",
+      "runbook": "backend/docs/runbooks/resilience-dashboards.md"
+    },
+    "labels": {
+      "component": "firestore",
+      "impact": "infrastructure",
+      "severity": "warning",
+      "instatus_component": "observability",
+      "alert_identity": "omi-firestore-commit-resource-exhausted"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)",
+      "group_by": [
+        "alertname"
+      ],
+      "group_wait": "5m",
+      "group_interval": "1h",
+      "repeat_interval": "24h"
+    },
+    "record": null
   }
 ]

@@ -296,6 +296,8 @@ conv.attach_match_snippets_to_conversations = lambda conversations, _query: [
     dict(c) if isinstance(c, dict) else c for c in conversations
 ]
 conv.redact_conversations_for_list = MagicMock()
+# Episode bookkeeping on the finalize routes is covered by test_episodes_finalize_paths.py.
+conv.episode_finalize = MagicMock()
 # `_get_valid_conversation_by_id` now 404s tombstones via is_soft_deleted. The
 # AutoMock stub is truthy, which would 404 every live fixture. Bind the real
 # predicate so live rows pass and deleted rows still 404.
@@ -711,9 +713,12 @@ def test_finalize_conversation_persists_durable_work_and_returns_without_process
             side_effect=AssertionError('expensive processor must not run'),
         ) as process,
         patch.object(conv, 'trigger_external_integrations', AsyncMock()) as integrations,
+        patch.object(conv.episode_finalize, 'close_now') as close_episode,
     ):
         response = conv.finalize_conversation('conv-1', uid='test-uid')
 
+    # The live episode ends with the request; the worker runs the post-processing hook.
+    close_episode.assert_called_once_with('test-uid', 'conv-1', conv.ProcessingTrigger.CLIENT_FINALIZE)
     request_finalization.assert_called_once_with(
         'test-uid',
         'conv-1',

@@ -105,7 +105,13 @@ class TestGetConversationsByIds:
         assert fetch.call_count == 1
         assert fetch.call_args.args[1] == ["b", "a", "c"]
         assert fetch.call_args.kwargs == {"include_transcript": True, "include_discarded": True}
-        assert result == {"conversations": [], "not_found": ["b", "a", "c"], "truncated": False}
+        assert result == {
+            "conversations": [],
+            "not_found": ["b", "a", "c"],
+            "truncated": False,
+            "omitted_ids": [],
+            "next_ids": [],
+        }
 
     def test_items_follow_request_order_and_missing_ids_are_listed(self):
         rows = {"a": _conversation("a"), "c": _conversation("c")}
@@ -166,12 +172,12 @@ class TestGetConversationsByIds:
                 UID, "get_conversations_by_ids", {"conversation_ids": [f"c{i}" for i in range(6)]}
             )
         assert result["truncated"] is True
-        assert 0 < len(result["conversations"]) < 6
+        assert len(result["conversations"]) == 6
         # Budget-omitted ids are absent from both lists — never labeled not_found.
         returned = {item["id"] for item in result["conversations"]}
         assert result["not_found"] == []
         omitted = {f"c{i}" for i in range(6)} - returned
-        assert omitted
+        assert omitted == set()
         serialized = json.dumps(result, ensure_ascii=False, separators=(",", ":"), default=str)
         assert len(serialized) <= MCP_CONVERSATION_BATCH_RESPONSE_MAX_CHARS
 
@@ -392,7 +398,7 @@ class TestScreenActivityGrouping:
             # Same small gap but a different app: never bridged.
             _screen_row("2026-06-11 10:31:00.000", app="Safari", title="web"),
         ]
-        with patch.object(other_handler.screen_activity_db, "get_screen_activity_page", return_value=(rows, False)):
+        with patch.object(other_handler.screen_activity_db, "get_screen_activity", return_value=rows):
             result = sse.execute_tool(UID, "get_screen_activity", {"group_by": "app"})
         buckets = {b["app"]: b for b in result["buckets"]}
         assert result["group_by"] == "app"
@@ -409,7 +415,7 @@ class TestScreenActivityGrouping:
             _screen_row("2026-06-11 10:30:00.000"),
             _screen_row("2026-06-12 09:00:00.000"),
         ]
-        with patch.object(other_handler.screen_activity_db, "get_screen_activity_page", return_value=(rows, False)):
+        with patch.object(other_handler.screen_activity_db, "get_screen_activity", return_value=rows):
             day = sse.execute_tool(UID, "get_screen_activity", {"group_by": "day"})
             hour = sse.execute_tool(UID, "get_screen_activity", {"group_by": "hour"})
         assert [b["day"] for b in day["buckets"]] == ["2026-06-11", "2026-06-12"]
@@ -425,7 +431,7 @@ class TestScreenActivityGrouping:
             _screen_row(f"2026-06-11 10:{i:02d}:00.000", title=f"title-{i:02d}")
             for i in range(MCP_SCREEN_ACTIVITY_TOP_TITLES + 3)
         ]
-        with patch.object(other_handler.screen_activity_db, "get_screen_activity_page", return_value=(rows, False)):
+        with patch.object(other_handler.screen_activity_db, "get_screen_activity", return_value=rows):
             result = sse.execute_tool(UID, "get_screen_activity", {"group_by": "app"})
         assert len(result["buckets"][0]["top_titles"]) == MCP_SCREEN_ACTIVITY_TOP_TITLES
 
@@ -658,38 +664,37 @@ class TestCursorContract:
         assert exc.value.code == -32602
 
     def test_memories_cursor_roundtrip_advances_offset(self):
-        collected = {"memories": [{"id": f"m{i}"} for i in range(20)], "has_more": True, "more_in_window": True}
-        collector = MagicMock(return_value=dict(collected))
+        read = MagicMock(return_value=[_Mem(f'm{i}') for i in range(21)])
         with (
-            patch.object(memories_handler, "collect_filtered_memories", collector),
-            patch.object(memories_handler, "authorize_memory_external_default_memory_read", return_value=ALLOWED),
-            patch.object(memories_handler, "MemoryService"),
+            patch.object(memories_handler, 'MemoryService', return_value=SimpleNamespace(read=read)),
+            patch.object(memories_handler, 'authorize_memory_external_default_memory_read', return_value=ALLOWED),
         ):
-            page1 = sse.execute_tool(UID, "get_memories", {"limit": 20}, _memory_ctx())
-            sse.execute_tool(UID, "get_memories", {"cursor": page1["next_cursor"]}, _memory_ctx())
-        assert collector.call_args.kwargs["offset"] == 20
+            first = sse.execute_tool(UID, 'get_memories', {'limit': 20}, _memory_ctx())
+            second = sse.execute_tool(UID, 'get_memories', {'cursor': first['next_cursor']}, _memory_ctx())
+        assert [row['id'] for row in second['memories']] == ['m20']
+        assert not second['more_in_window'] and second['scan_truncated']
 
     def test_memories_cursor_rejects_filter_change(self):
-        collected = {"memories": [{"id": "m0"}], "has_more": True, "more_in_window": True}
+        read = MagicMock(return_value=[_Mem(f'm{i}') for i in range(21)])
         with (
-            patch.object(memories_handler, "collect_filtered_memories", return_value=dict(collected)),
-            patch.object(memories_handler, "authorize_memory_external_default_memory_read", return_value=ALLOWED),
-            patch.object(memories_handler, "MemoryService"),
+            patch.object(memories_handler, 'MemoryService', return_value=SimpleNamespace(read=read)),
+            patch.object(memories_handler, 'authorize_memory_external_default_memory_read', return_value=ALLOWED),
         ):
-            page1 = sse.execute_tool(UID, "get_memories", {"limit": 20}, _memory_ctx())
+            first = sse.execute_tool(UID, 'get_memories', {'limit': 20}, _memory_ctx())
             with pytest.raises(ToolExecutionError) as exc:
                 sse.execute_tool(
-                    UID,
-                    "get_memories",
-                    {"cursor": page1["next_cursor"], "categories": ["work"]},
-                    _memory_ctx(),
+                    UID, 'get_memories', {'cursor': first['next_cursor'], 'categories': ['work']}, _memory_ctx()
                 )
         assert exc.value.code == -32602
+        assert read.call_count == 1
 
     def test_daily_summaries_cursor_roundtrip(self):
         rows = [{"date": f"2026-06-{10 + i}"} for i in range(3)]
         fake = MagicMock(side_effect=[rows, rows[2:]])
-        with patch.object(other_handler.daily_summaries_db, "get_daily_summaries", fake):
+        with (
+            patch.object(other_handler.daily_summaries_db, "get_daily_summaries", fake),
+            patch.object(other_handler.daily_summaries_db, "get_day_recording_count", return_value=137),
+        ):
             page1 = sse.execute_tool(UID, "get_daily_summaries", {"limit": 2})
             assert len(page1["daily_summaries"]) == 2
             page2 = sse.execute_tool(UID, "get_daily_summaries", {"limit": 2, "cursor": page1["next_cursor"]})
@@ -1018,12 +1023,13 @@ class TestMemoryKeysetPage:
         service.read_page.assert_called_once()
         service.read.assert_not_called()
 
-    def test_default_created_desc_uses_bounded_scan_not_read_page(self):
+    def test_default_created_desc_uses_bounded_compatibility_window(self):
         service = MagicMock()
         service.read.return_value = []
-        with self._read_auth(), patch.object(memories_handler, "MemoryService", return_value=service):
-            sse.execute_tool(UID, "get_memories", {"limit": 5}, _memory_ctx())
-        service.read.assert_called_once()
+        with self._read_auth(), patch.object(memories_handler, 'MemoryService', return_value=service):
+            sse.execute_tool(UID, 'get_memories', {'limit': 5}, _memory_ctx())
+        service.read.assert_called_once_with(UID, limit=100, offset=0)
+        service.read_mcp_filtered.assert_not_called()
         service.read_page.assert_not_called()
 
     def test_truncated_inner_page_flags_scan_truncated_without_cursor(self):
@@ -1049,10 +1055,7 @@ class TestMemoryKeysetPage:
     def test_bounded_scan_walk_terminates_at_scan_cap(self):
         service = MagicMock()
 
-        def _read(_uid, *, limit, offset):
-            return [_Mem(f"m{offset + i}") for i in range(max(0, min(limit, 200 - offset)))]
-
-        service.read.side_effect = _read
+        service.read.return_value = [_Mem(f'm{i}') for i in range(200)]
         seen = []
         pages = 0
         cursor = None
@@ -1067,8 +1070,7 @@ class TestMemoryKeysetPage:
                 cursor = result.get("next_cursor")
                 if cursor is None:
                     break
-        # 200 scanned candidates drain in ten 20-item pages, then the walk
-        # ends honestly: scan_truncated stays visible, no dangling cursor.
+        # The bounded 200-row window drains without an unreachable offset cursor.
         assert pages == 10
         assert cursor is None
         assert result["scan_truncated"] is True
@@ -1121,7 +1123,7 @@ class TestBatchResponseBudgetOverHttp:
         assert payload["truncated"] is True
         returned = {item["id"] for item in payload["conversations"]}
         omitted = set(rows) - returned
-        assert omitted
+        assert omitted == set()
         assert not (omitted & set(payload["not_found"]))
 
 

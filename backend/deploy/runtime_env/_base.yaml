@@ -22,6 +22,7 @@ environment_shared:
       - conversation.finalize.persisted
       - memory.canonical.mutate
       env:
+        STALE_IN_PROGRESS_RECOVERY_ENABLED: {value: 'true', category: rollout}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
         STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
@@ -30,7 +31,7 @@ environment_shared:
         REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
         FIRESTORE_READ_LEVERS:
-          value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+          value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
           category: rollout
         FSR_QUEUE_AGE_PUBLISHER:
           value: '1'
@@ -94,10 +95,10 @@ environment_shared:
           value: 'false'
           category: rollout
         AUDIO_ARCHIVE_LIVE_ENABLED:
-          value: 'false'
+          value: 'true'
           category: rollout
         AUDIO_ARCHIVE_READ_ENABLED:
-          value: 'false'
+          value: 'true'
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_ENABLED:
           value: 'false'
@@ -116,6 +117,8 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          category: rollout
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           category: rollout
         BUCKET_AUDIO_DERIVED:
@@ -123,10 +126,6 @@ environment_shared:
           category: rollout
         AUDIO_MERGE_WORKER_URL:
           value: ''
-          category: rollout
-        AUDIO_TIMELINE_SPANS:
-          category: rollout
-        LIVE_SPEAKER_SPAN_RESOLUTION:
           category: rollout
         LIVE_CAPTURE_WINDOW_RETENTION:
           value: 'false'
@@ -145,9 +144,6 @@ environment_shared:
           category: rollout
         SONIOX_WIRE_LEDGER:
           category: rollout
-        CAPTURE_EVIDENCE_V1_DARK_WRITE:
-          value: 'true'
-          category: rollout
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
           value: 'true'
           category: rollout
@@ -157,25 +153,10 @@ environment_shared:
         SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
           value: 'true'
           category: ops_kill
-        SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-          value: 'true'
-          category: rollout
-        LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
-          value: 'true'
-          category: rollout
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
-        TRANSLATION_DEMAND_SHADOW_ENABLED:
-          value: 'false'
-          category: rollout
         TRANSLATION_DEMAND_GATE_ENABLED:
-          value: 'true'
-          category: rollout
-        TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-          value: 'true'
-          category: rollout
-        TRANSLATION_ONDEMAND_GEMINI_ENABLED:
           value: 'true'
           category: rollout
         TRANSLATION_ONOPEN_ENABLED:
@@ -186,12 +167,6 @@ environment_shared:
           category: rollout
         TRANSLATION_NEGATIVE_CACHE_TTL:
           value: '21600'
-          category: rollout
-        TRANSLATION_ONDEMAND_COHORT_PERCENT:
-          value: '100'
-          category: rollout
-        TRANSLATION_ONDEMAND_UID_ALLOWLIST:
-          value: ''
           category: rollout
         TRANSLATION_ONDEMAND_MAX_SEGMENTS:
           value: '50'
@@ -309,16 +284,8 @@ environment_shared:
         STT_NO_TEXT_SECONDS:
           value: '30'
           category: rollout
-        SONIOX_MONTHLY_CEILING_USD:
-          category: rollout
-        SONIOX_ESTIMATED_USD_PER_HOUR:
-          value: '0.07537'
-          category: rollout
         STT_MULTI_LANGUAGE_HINTS:
           value: 'true'
-          category: rollout
-        SONIOX_CONTEXT_TERMS:
-          value: 'false'
           category: rollout
         STT_LEARNED_LANGUAGE_PROFILE:
           value: 'true'
@@ -391,6 +358,7 @@ environment_shared:
           category: service_discovery
         HOSTED_SPEAKER_EMBEDDING_API_URL:
           category: service_discovery
+        LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
         LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
           value: '900'
           category: reliability
@@ -550,6 +518,7 @@ environment_shared:
       - memory.canonical.mutate
       values_file: backend/charts/pusher/{env}_omi_pusher_values.yaml
       env:
+        LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
         STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
         STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
         STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
@@ -564,7 +533,7 @@ environment_shared:
         REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
         SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
         FIRESTORE_READ_LEVERS:
-          value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+          value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
           category: rollout
         FSR_QUEUE_AGE_PUBLISHER:
           value: '0'
@@ -597,10 +566,10 @@ environment_shared:
           value: '30'
           category: rollout
         AUDIO_ARCHIVE_LIVE_ENABLED:
-          value: 'false'
+          value: 'true'
           category: rollout
         AUDIO_ARCHIVE_READ_ENABLED:
-          value: 'false'
+          value: 'true'
           category: rollout
         AUDIO_ARCHIVE_STOP_PCM_ENABLED:
           value: 'false'
@@ -619,6 +588,8 @@ environment_shared:
           category: rollout
         AUDIO_ARCHIVE_PERCENT:
           category: rollout
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          category: rollout
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           category: rollout
         BUCKET_AUDIO_DERIVED:
@@ -626,10 +597,6 @@ environment_shared:
           category: rollout
         AUDIO_MERGE_WORKER_URL:
           value: ''
-          category: rollout
-        AUDIO_TIMELINE_SPANS:
-          category: rollout
-        LIVE_SPEAKER_SPAN_RESOLUTION:
           category: rollout
         LIVE_CAPTURE_WINDOW_RETENTION:
           value: 'false'
@@ -648,18 +615,12 @@ environment_shared:
           category: rollout
         SONIOX_WIRE_LEDGER:
           category: rollout
-        CAPTURE_EVIDENCE_V1_DARK_WRITE:
-          value: 'true'
-          category: rollout
         ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
           value: 'true'
           category: rollout
         CONVERSATION_SMART_MERGE_FLATTEN_ENABLED:
           value: 'true'
           category: ops_kill
-        LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED:
-          value: 'true'
-          category: rollout
         CAPTURE_GROUP_CONTAINMENT_MODE:
           value: shadow
           category: rollout
@@ -827,7 +788,7 @@ environment_shared:
       FIRESTORE_READ_LEDGER:
         value: '1'
       FIRESTORE_READ_LEVERS:
-        value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+        value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
         category: rollout
       FSR_QUEUE_AGE_PUBLISHER:
         value: '0'
@@ -889,6 +850,7 @@ environment_shared:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -948,6 +910,8 @@ environment_shared:
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+          BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -982,10 +946,10 @@ environment_shared:
           BUCKET_TEMPORAL_SYNC_LOCAL:
             category: storage_retention
           AUDIO_ARCHIVE_LIVE_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_READ_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_ENABLED:
             value: 'false'
@@ -1004,6 +968,8 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            category: rollout
           BUCKET_AUDIO_DERIVED:
             value: ''
             category: rollout
@@ -1016,7 +982,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -1053,11 +1019,6 @@ environment_shared:
           OMI_VERTEX_RESERVATION_PROJECT:
             value: '{compute_project}'
             category: runtime_identity
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
@@ -1079,9 +1040,6 @@ environment_shared:
           SONIOX_WIRE_LEDGER:
             value: 'false'
             category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -1094,25 +1052,10 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
             value: 'true'
             category: rollout
-          SYNC_LINEAGE_S1_REQUIRED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_DEMAND_SHADOW_ENABLED:
-            value: 'false'
-            category: rollout
           TRANSLATION_DEMAND_GATE_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_DEMAND_LEASE_V1_ENABLED:
-            value: 'true'
-            category: rollout
-          TRANSLATION_ONDEMAND_GEMINI_ENABLED:
             value: 'true'
             category: rollout
           TRANSLATION_ONOPEN_ENABLED:
@@ -1123,9 +1066,6 @@ environment_shared:
             category: rollout
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
-            category: rollout
-          TRANSLATION_ONDEMAND_COHORT_PERCENT:
-            value: '100'
             category: rollout
           TRANSLATION_ONDEMAND_MAX_SEGMENTS:
             value: '50'
@@ -1217,6 +1157,7 @@ environment_shared:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
+          LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -1342,6 +1283,8 @@ environment_shared:
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+          BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1375,10 +1318,10 @@ environment_shared:
             value: '9090'
             category: telemetry
           AUDIO_ARCHIVE_LIVE_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_READ_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_ENABLED:
             value: 'false'
@@ -1396,6 +1339,8 @@ environment_shared:
             value: 'false'
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
+            category: rollout
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
             category: rollout
           BUCKET_AUDIO_DERIVED:
             value: ''
@@ -1415,7 +1360,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -1455,11 +1400,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
@@ -1481,9 +1421,6 @@ environment_shared:
           SONIOX_WIRE_LEDGER:
             value: 'false'
             category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -1496,13 +1433,7 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-            value: 'true'
-            category: rollout
-          SYNC_LINEAGE_S1_REQUIRED:
             value: 'true'
             category: rollout
           SYNC_SAFETY_WAL_DEDUPE_ENABLED:
@@ -1573,6 +1504,7 @@ environment_shared:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
+          LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -1712,6 +1644,8 @@ environment_shared:
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
           VAD_CACHE_TTL_SECONDS: {value: '86400', category: rollout}
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+          BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -1747,10 +1681,10 @@ environment_shared:
             value: '9090'
             category: telemetry
           AUDIO_ARCHIVE_LIVE_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_READ_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_ENABLED:
             value: 'false'
@@ -1769,6 +1703,8 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            category: rollout
           BUCKET_AUDIO_DERIVED:
             value: ''
             category: rollout
@@ -1781,7 +1717,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -1821,11 +1757,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
@@ -1847,9 +1778,6 @@ environment_shared:
           SONIOX_WIRE_LEDGER:
             value: 'false'
             category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -1862,13 +1790,7 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-            value: 'true'
-            category: rollout
-          SYNC_LINEAGE_S1_REQUIRED:
             value: 'true'
             category: rollout
           SYNC_SAFETY_WAL_DEDUPE_ENABLED:
@@ -1939,6 +1861,7 @@ environment_shared:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
+          LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -2073,6 +1996,8 @@ environment_shared:
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
           SYNC_POLL_BACKOFF_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_SHADOW_PERCENT: {value: '0', category: rollout}
+          BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR: {value: '200', category: ops_kill}
           BATCH_PIPELINE_ENABLED:
             value: 'false'
             category: rollout
@@ -2093,7 +2018,7 @@ environment_shared:
             value: ''
             category: service_auth
           BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT:
-            value: ''
+            value: 'batch-pipeline-worker@{compute_project}.iam.gserviceaccount.com'
             category: service_auth
           BUCKET_BATCH_PIPELINE:
             category: service_discovery
@@ -2107,10 +2032,10 @@ environment_shared:
             value: '9090'
             category: telemetry
           AUDIO_ARCHIVE_LIVE_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_READ_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           AUDIO_ARCHIVE_STOP_PCM_ENABLED:
             value: 'false'
@@ -2129,6 +2054,8 @@ environment_shared:
             category: rollout
           AUDIO_ARCHIVE_PERCENT:
             category: rollout
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            category: rollout
           BUCKET_AUDIO_DERIVED:
             value: ''
             category: rollout
@@ -2141,7 +2068,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2181,11 +2108,6 @@ environment_shared:
           TRANSLATION_NEGATIVE_CACHE_TTL:
             value: '21600'
             category: rollout
-          AUDIO_TIMELINE_SPANS:
-            value: 'false'
-            category: rollout
-          LIVE_SPEAKER_SPAN_RESOLUTION:
-            category: rollout
           LIVE_CAPTURE_WINDOW_RETENTION:
             value: 'false'
             category: rollout
@@ -2207,9 +2129,6 @@ environment_shared:
           SONIOX_WIRE_LEDGER:
             value: 'false'
             category: rollout
-          CAPTURE_EVIDENCE_V1_DARK_WRITE:
-            value: 'true'
-            category: rollout
           ACTION_ITEM_REFRESH_PRESERVE_ENABLED:
             value: 'true'
             category: rollout
@@ -2222,13 +2141,7 @@ environment_shared:
           SYNC_FINALIZE_TARGET_RECOVERY_ENABLED:
             value: 'true'
             category: ops_kill
-          SYNC_ASSIGNMENT_RECOVERY_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_LINEAGE_LIVE_DEDUPE_ENABLED:
-            value: 'true'
-            category: rollout
-          SYNC_LINEAGE_S1_REQUIRED:
             value: 'true'
             category: rollout
           SYNC_SAFETY_WAL_DEDUPE_ENABLED:
@@ -2277,6 +2190,7 @@ environment_shared:
             category: service_discovery
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
+          LISTEN_QUIET_FINALIZATION_ENABLED: {value: 'true', category: ops_kill}
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -2376,7 +2290,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2454,7 +2368,7 @@ environment_shared:
             version: latest
         env:
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2537,7 +2451,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2622,7 +2536,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'
@@ -2693,7 +2607,7 @@ environment_shared:
           FIRESTORE_READ_LEDGER:
             value: '1'
           FIRESTORE_READ_LEVERS:
-            value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":5,"subscription_cache":100,"usage_month_cache":5}'
+            value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
             category: rollout
           FSR_QUEUE_AGE_PUBLISHER:
             value: '0'

@@ -1,19 +1,92 @@
 /** Read-time repair only. Expectations live in contracts/note_citation_contract.json. */
+
+const FENCE =
+  /^[ \t]{0,3}(`{3,}(?!`)|~{3,}(?!~))[^\n]*\n[\s\S]*?(?:^[ \t]{0,3}\1[`~]*[ \t]*(?:\n|$)|(?![\s\S]))/my;
+
+/**
+ * Replace fenced blocks and inline code spans through `protect`, left to right.
+ * Same matches as the former single regex
+ * `^fence...|(`+)(?!`)[\s\S]*?(?<!`)\2(?!`)` (gm), but a code span's closing run
+ * is looked up in an index of backtick runs instead of by lazy backtracking,
+ * which was quadratic on a long unclosed backtick run (CodeQL js/polynomial-redos).
+ */
+function protectCode(input, protect) {
+  // Maximal backtick runs by length, ascending start offsets: a span closes at
+  // the first later run of exactly its opening length.
+  const runs = new Map();
+  for (const match of input.matchAll(/`+/g)) {
+    const starts = runs.get(match[0].length) ?? [];
+    starts.push(match.index);
+    runs.set(match[0].length, starts);
+  }
+  const cursors = new Map();
+  let out = "";
+  let last = 0;
+  let runEnd = -1;
+  let p = 0;
+  // A fence needs a newline after its opening line; without one the fence
+  // pattern can only fail, after backtracking across the whole line.
+  let nextNewline = input.indexOf("\n");
+  while (p < input.length) {
+    if (nextNewline !== -1 && nextNewline < p)
+      nextNewline = input.indexOf("\n", p);
+    if ((p === 0 || input[p - 1] === "\n") && nextNewline !== -1) {
+      FENCE.lastIndex = p;
+      const fence = FENCE.exec(input);
+      if (fence && fence[0]) {
+        out += input.slice(last, p) + protect(fence[0]);
+        p = last = p + fence[0].length;
+        continue;
+      }
+    }
+    if (input[p] === "`") {
+      if (p >= runEnd) {
+        runEnd = p;
+        while (input[runEnd] === "`") runEnd++;
+      }
+      // An opening inside a longer run starts mid-run, as the regex retried there.
+      const length = runEnd - p;
+      const starts = runs.get(length) ?? [];
+      let index = cursors.get(length) ?? 0;
+      while (index < starts.length && starts[index] < runEnd) index++;
+      cursors.set(length, index);
+      if (index < starts.length) {
+        const end = starts[index] + length;
+        out += input.slice(last, p) + protect(input.slice(p, end));
+        p = last = end;
+        continue;
+      }
+    }
+    p++;
+  }
+  return out + input.slice(last);
+}
+
+// Protected-unit keys: a prefix the input does not contain, the unit's index in
+// base 254 over U+E002..U+E0FF, then U+E001. Private-use characters match no
+// repair pattern, and the keys stay short however many units a note holds.
+const KEY_BASE = 254;
+function keyDigits(index) {
+  let digits = "";
+  do {
+    digits = String.fromCharCode(0xe002 + (index % KEY_BASE)) + digits;
+    index = Math.floor(index / KEY_BASE);
+  } while (index > 0);
+  return digits;
+}
+
 function repairPass(input, knownIDs) {
   const valid = new Set(knownIDs);
   const protectedUnits = new Map();
   let prefix = "\uE000";
   while (input.includes(prefix)) prefix += "\uE000";
   const protect = (value) => {
-    const key = `${prefix}${"\uE002".repeat(protectedUnits.size)}\uE001`;
+    const key = `${prefix}${keyDigits(protectedUnits.size)}\uE001`;
     protectedUnits.set(key, value);
     return key;
   };
   const marker = "\0";
-  let text = input.replace(
-    /^[ \t]{0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^[ \t]{0,3}\1[`~]*[ \t]*(?:\n|$)|(?![\s\S]))|(`+)(?!`)[\s\S]*?(?<!`)\2(?!`)/gm,
-    protect
-  );
+  let text = protectCode(input, protect);
   const recovered = [];
   const remove = (ids = []) => {
     recovered.push(...ids);
@@ -78,7 +151,7 @@ function repairPass(input, knownIDs) {
     }
     if (
       !tokens.length ||
-      /^(?:spk|speaker)[ _]\d+:?$/i.test(content) ||
+      /^(?:spk|speaker)[ _]\p{Nd}+:?$/iu.test(content) ||
       /^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+)$/.test(content)
     )
       return remove();
@@ -93,11 +166,17 @@ function repairPass(input, knownIDs) {
   )) {
     const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     text = text.replace(
-      new RegExp(`(?<![\\w-])${escaped}(?![\\w-])`, "gu"),
+      new RegExp(`(?<![\\p{L}\\p{N}_-])${escaped}(?![\\p{L}\\p{N}_-])`, "gu"),
       marker
     );
   }
-  text = text.replace(/\b(?:spk|speaker)[ _]\d+\b:?[ \t]*/gi, marker);
+  // Word boundaries and digits are Unicode, as in Python generation and Swift
+  // (ICU): an ID or speaker label glued to CJK text is part of a word, not a
+  // citation, and `Speaker_١٢` is a speaker label.
+  text = text.replace(
+    /(?<![\p{L}\p{N}_])(?:spk|speaker)[ _]\p{Nd}+(?![\p{L}\p{N}_]):?[ \t]*/giu,
+    marker
+  );
   for (;;) {
     const cleaned = text.replace(/\([^()\n]*\)/g, (value) => {
       if (!/[\0\x01]/.test(value)) return value;
@@ -117,8 +196,13 @@ function repairPass(input, knownIDs) {
       .trim();
   }
   if (text.includes("\x01")) text = text.replaceAll("\x01", "").trim();
-  for (const [key, value] of [...protectedUnits].reverse())
-    text = text.replaceAll(key, value);
+  // One pass, restoring nested units (a link label that held a code span) recursively.
+  const keyPattern = new RegExp(`${prefix}[\\uE002-\\uE0FF]+\\uE001`, "g");
+  const restore = (value) =>
+    value.replace(keyPattern, (key) =>
+      protectedUnits.has(key) ? restore(protectedUnits.get(key)) : key
+    );
+  text = restore(text);
   return { text, sourceIDs: [...new Set(recovered)] };
 }
 

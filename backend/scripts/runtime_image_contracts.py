@@ -18,6 +18,9 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
+import posixpath
+import re
 import shlex
 import shutil
 import subprocess
@@ -54,6 +57,17 @@ class ImageContract:
     dependency_probe_smoke: bool
     dependency_probe_exclusions: frozenset[str]
     pull_request_smoke: bool
+    # Build stage for multi-target Dockerfiles; None means the last stage.
+    target: str | None = None
+    # Built and smoked as a check only; no deployment workflow ships it yet.
+    build_only: bool = False
+
+
+@dataclass(frozen=True)
+class DockerStage:
+    name: str | None
+    parent: str
+    instructions: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -67,7 +81,7 @@ class ContractError(ValueError):
 
 
 def _repository_relative(path: Path) -> str:
-    return path.relative_to(REPOSITORY_ROOT).as_posix()
+    return path.relative_to(REPOSITORY_ROOT).as_posix() if path.is_relative_to(REPOSITORY_ROOT) else path.as_posix()
 
 
 def load_contracts(
@@ -147,8 +161,24 @@ def load_contracts(
         if entry["name"] in names:
             raise ContractError(f"duplicate runtime-image name: {entry['name']}")
         names.add(entry["name"])
+        target = entry.get("target")
+        if target is not None and (not isinstance(target, str) or not target):
+            raise ContractError(f"{entry['name']}: target must be a non-empty build stage name")
+        build_only = entry.get("build_only", False)
+        if not isinstance(build_only, bool):
+            raise ContractError(f"{entry['name']}: build_only must be boolean")
         deployment_workflows_raw = entry.get("deployment_workflows")
-        if (
+        if build_only:
+            if deployment_workflows_raw != []:
+                raise ContractError(
+                    f"{entry['name']}: a build_only image declares deployment_workflows as [] until a deploy ships it"
+                )
+            if not entry["pull_request_smoke"] or not entry["dependency_probe_smoke"]:
+                raise ContractError(
+                    f"{entry['name']}: a build_only image exists to be built and probed; "
+                    "pull_request_smoke and dependency_probe_smoke must be true"
+                )
+        elif (
             not isinstance(deployment_workflows_raw, list)
             or not deployment_workflows_raw
             or any(not isinstance(workflow, str) or not workflow for workflow in deployment_workflows_raw)
@@ -169,6 +199,8 @@ def load_contracts(
             raise ContractError(f"{entry['name']}: source root does not exist: {entry['source_root']}")
         if not entrypoint_source_root.is_dir():
             raise ContractError(f"{entry['name']}: entrypoint source root does not exist")
+        if target is not None and target not in {stage.name for stage in docker_named_stages(dockerfile)}:
+            raise ContractError(f"{entry['name']}: target stage {target!r} is not defined in {entry['dockerfile']}")
         contracts.append(
             ImageContract(
                 name=entry["name"],
@@ -187,6 +219,8 @@ def load_contracts(
                 dependency_probe_smoke=entry["dependency_probe_smoke"],
                 dependency_probe_exclusions=frozenset(dependency_probe_exclusions_raw),
                 pull_request_smoke=entry["pull_request_smoke"],
+                target=target,
+                build_only=build_only,
             )
         )
     return contracts
@@ -225,11 +259,47 @@ def docker_stages(dockerfile: Path) -> list[list[str]]:
     return stages
 
 
-def final_stage_copy_instructions(dockerfile: Path) -> list[CopyInstruction]:
-    stages = docker_stages(dockerfile)
+def docker_named_stages(dockerfile: Path) -> list[DockerStage]:
+    """Return each stage with its ``AS`` name and the image or stage it builds ``FROM``."""
+    headers: list[tuple[str | None, str]] = []
+    for line in _logical_docker_lines(dockerfile):
+        if line.upper().startswith("FROM "):
+            tokens = [token for token in line.split()[1:] if not token.startswith("--")]
+            name = tokens[2] if len(tokens) == 3 and tokens[1].upper() == "AS" else None
+            headers.append((name, tokens[0] if tokens else ""))
+    return [
+        DockerStage(name=name, parent=parent, instructions=tuple(instructions))
+        for (name, parent), instructions in zip(headers, docker_stages(dockerfile), strict=True)
+    ]
 
+
+def docker_target_instructions(dockerfile: Path, target: str | None = None) -> list[str]:
+    """Return the filesystem-relevant instructions of ``target`` (default: last stage).
+
+    A stage built ``FROM`` an earlier stage of the same Dockerfile inherits that
+    stage's layers, so the result concatenates the chain from the root stage to
+    ``target`` in build order. ``COPY --from`` is a copy, not inheritance.
+    """
+    stages = docker_named_stages(dockerfile)
+    by_name = {stage.name: stage for stage in stages if stage.name}
+    if target is None:
+        stage = stages[-1]
+    elif target in by_name:
+        stage = by_name[target]
+    else:
+        raise ContractError(f"{_repository_relative(dockerfile)} has no build stage {target!r}")
+    chain = [stage]
+    while chain[-1].parent in by_name:
+        parent = by_name[chain[-1].parent]
+        if parent in chain:
+            raise ContractError(f"{_repository_relative(dockerfile)} has a cyclic stage chain at {parent.name!r}")
+        chain.append(parent)
+    return [line for ancestor in reversed(chain) for line in ancestor.instructions]
+
+
+def final_stage_copy_instructions(dockerfile: Path, target: str | None = None) -> list[CopyInstruction]:
     copies: list[CopyInstruction] = []
-    for line in stages[-1]:
+    for line in docker_target_instructions(dockerfile, target):
         if not line.upper().startswith("COPY "):
             continue
         tokens = shlex.split(line[5:])
@@ -251,7 +321,7 @@ def _copy_destination(line: str) -> str | None:
 
 def final_stage_layer_errors(contract: ImageContract) -> list[str]:
     """Reject bytes hidden by later layers and installs shadowed by a late venv copy."""
-    instructions = docker_stages(contract.dockerfile)[-1]
+    instructions = docker_target_instructions(contract.dockerfile, contract.target)
     errors: list[str] = []
 
     copied_destinations: dict[str, int] = {}
@@ -319,7 +389,7 @@ def _copy_source(source: Path, destination: Path) -> None:
 
 
 def stage_runtime_sources(contract: ImageContract, runtime_root: Path) -> None:
-    for instruction in final_stage_copy_instructions(contract.dockerfile):
+    for instruction in final_stage_copy_instructions(contract.dockerfile, contract.target):
         destination = _runtime_destination(instruction.destination, contract.workdir)
         for source_pattern in instruction.sources:
             if "$" in source_pattern:
@@ -517,11 +587,19 @@ def workflow_contract_errors(contracts: Iterable[ImageContract]) -> list[str]:
     for contract in contracts:
         dockerfile = _repository_relative(contract.dockerfile)
         for workflow in contract.deployment_workflows:
-            workflow_text = _workflow_contract_text(workflow)
+            # Comments do not run: a marker left above a deleted step must not pass.
+            workflow_text = "\n".join(
+                line for line in _workflow_contract_text(workflow).splitlines() if not line.lstrip().startswith("#")
+            )
             workflow_name = _repository_relative(workflow)
             if not any(
                 marker in workflow_text
-                for marker in ("runtime_image_contracts.py smoke", 'runtime_image_contracts.py" smoke')
+                # role_images.py verify runs this smoke per role target (backend/scripts/role_images.py).
+                for marker in (
+                    "runtime_image_contracts.py smoke",
+                    'runtime_image_contracts.py" smoke',
+                    "role_images.py verify",
+                )
             ):
                 errors.append(f"{contract.name}: {workflow_name} does not smoke its registered runtime image")
             if dockerfile not in workflow_text:
@@ -616,11 +694,23 @@ def _dependency_probe_code(modules: tuple[str, ...]) -> str:
     )
 
 
-def contracts_for_dockerfile(contracts: Iterable[ImageContract], dockerfile: Path) -> list[ImageContract]:
+def contracts_for_dockerfile(
+    contracts: Iterable[ImageContract], dockerfile: Path, target: str | None = None
+) -> list[ImageContract]:
     resolved = dockerfile.resolve()
     matches = [contract for contract in contracts if contract.dockerfile.resolve() == resolved]
     if not matches:
         raise ContractError(f"Dockerfile is not registered as a runtime image: {_repository_relative(resolved)}")
+    targets = {contract.target for contract in matches}
+    if target is not None or len(targets) > 1:
+        # One built image is one target; probing it against a sibling target's
+        # entrypoints would test the wrong dependency surface.
+        matches = [contract for contract in matches if contract.target == target]
+        if not matches:
+            raise ContractError(
+                f"{_repository_relative(resolved)} registers targets {sorted(t or '<last>' for t in targets)}; "
+                f"pass --target to smoke one of them (got {target!r})"
+            )
     return matches
 
 
@@ -676,10 +766,24 @@ def smoke_image(image: str, contracts: Iterable[ImageContract]) -> int:
     return 0
 
 
+def _release_sha() -> str:
+    sha = os.environ.get("GITHUB_SHA", "")
+    if not sha:
+        result = subprocess.run(
+            ["git", "-C", str(REPOSITORY_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True, check=False
+        )
+        sha = result.stdout.strip() if result.returncode == 0 else ""
+    return sha or "unknown"
+
+
 def build_and_smoke_image(image: str, contract: ImageContract) -> int:
     dockerfile = _repository_relative(contract.dockerfile)
     build_context = _repository_relative(contract.build_context)
-    build_command = ["docker", "build", "--file", dockerfile, "--tag", image, build_context]
+    target = ["--target", contract.target] if contract.target else []
+    if contract.target:
+        # Role targets end with the release stamp; stamp the SHA actually built.
+        target += ["--build-arg", f"OMI_RELEASE_SHA={_release_sha()}"]
+    build_command = ["docker", "build", "--file", dockerfile, *target, "--tag", image, build_context]
     print(f"Building {contract.name} runtime image: {' '.join(build_command)}", flush=True)
     build = subprocess.run(build_command, check=False)
     if build.returncode:
@@ -691,6 +795,249 @@ def pull_request_smoke_matrix(contracts: Iterable[ImageContract]) -> str:
     return json.dumps({"service": [contract.name for contract in contracts if contract.pull_request_smoke]})
 
 
+ROLE_PLATFORMS = {"cloud-run", "cloud-run-job", "gke"}
+RELEASE_STAMP_LINES = (
+    "ARG OMI_RELEASE_SHA=unknown",
+    "ENV OMI_RELEASE_SHA=${OMI_RELEASE_SHA}",
+    "LABEL org.opencontainers.image.revision=${OMI_RELEASE_SHA}",
+)
+
+
+def _build_instructions(dockerfile: Path, target: str | None) -> list[str]:
+    """Instructions of ``target``'s chain plus every stage it copies from."""
+    stage_names = {stage.name for stage in docker_named_stages(dockerfile) if stage.name}
+    pending: list[str | None] = [target]
+    seen: set[str | None] = set()
+    lines: list[str] = []
+    while pending:
+        stage = pending.pop()
+        if stage in seen:
+            continue
+        seen.add(stage)
+        chain = docker_target_instructions(dockerfile, stage)
+        lines.extend(chain)
+        for line in chain:
+            if line.upper().startswith("COPY "):
+                for token in shlex.split(line[5:]):
+                    if token.startswith("--from=") and token[len("--from=") :] in stage_names:
+                        pending.append(token[len("--from=") :])
+    return lines
+
+
+LOCK_INSTALLERS = ("uv pip sync", "pip install", "pip3 install")
+
+
+def _installs_lock(contract: ImageContract, lock: str) -> bool:
+    """True when the image's build copies ``lock`` and a RUN installs from that copy.
+
+    A lock equal to the image Dockerfile means inline pins: some RUN must install.
+    """
+    lines = _build_instructions(contract.dockerfile, contract.target)
+    runs = [line for line in lines if line.upper().startswith("RUN ") and any(i in line for i in LOCK_INSTALLERS)]
+    if (REPOSITORY_ROOT / lock).resolve() == contract.dockerfile.resolve():
+        return bool(runs)
+    name = PurePosixPath(lock).name
+    for line in lines:
+        if not line.upper().startswith("COPY "):
+            continue
+        tokens = [token for token in shlex.split(line[5:]) if not token.startswith("--")]
+        if len(tokens) < 2 or lock not in tokens[:-1]:
+            continue
+        destination = tokens[-1]
+        if destination.endswith("/") or destination in {".", "./"}:
+            destination = posixpath.join(destination, name)
+        destination = posixpath.normpath(destination)
+        relative = not destination.startswith("/")
+        if any(destination in run or (relative and name in run) for run in runs):
+            return True
+    return False
+
+
+def _github_texts() -> dict[str, str]:
+    """Every workflow and composite action, keyed by repository-relative path."""
+    github = REPOSITORY_ROOT / ".github"
+    paths = sorted(github.glob("workflows/*.y*ml")) + sorted(github.glob("actions/**/action.y*ml"))
+    return {_repository_relative(path): path.read_text(encoding="utf-8") for path in paths}
+
+
+def _mentions_dockerfile(text: str, relative: str) -> bool:
+    # Bounded so backend/Dockerfile does not match backend/Dockerfile.desktop_backend.
+    return re.search(rf"{re.escape(relative)}(?![\w.-])", text) is not None
+
+
+def _names_deploy_target(text: str, name: str) -> bool:
+    """True when ``text`` names ``name`` as a deploy target, not as a path segment or prose.
+
+    Accepted forms: a ``service:``/``SERVICE=``-style key whose value is the name, a
+    deploy flag (``--service``, ``--gke-service``, ...), a YAML list item, a Cloud Run
+    job ``jobId`` assignment or ``/jobs/<name>`` resource, or a ``deploy-<name>.sh``
+    script. A bare quoted token or path tail (an image tag, a log filter, a test
+    assertion) is not a deploy.
+    """
+    token = re.escape(name)
+    end = r"(?![\w.-])"
+    patterns = (
+        rf"(?im)^[ \t-]*[\w.-]*service[\w.-]*[ \t]*[:=][ \t]*[\"']?{token}[\"']?[ \t]*(?:#.*)?$",
+        rf"--(?:service|gke-service|cloud-run-service|migrate-legacy-public-binding)(?:=|[ \t]+)[\"']?{token}{end}",
+        rf"(?m)^[ \t]*-[ \t]+[\"']?{token}[\"']?[ \t]*$",
+        rf"(?<![\w.-])jobId[\"']?\]?\s*(?<![=!<>])=\s*[\"']{token}[\"']",
+        rf"/jobs/{token}[\"']",
+        rf"deploy-{token}\.sh",
+    )
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def dockerfile_shipped_by_github(dockerfile: Path) -> list[str]:
+    """Workflows or composite actions that reference ``dockerfile`` (so it may be shipped)."""
+    relative = _repository_relative(dockerfile)
+    return [path for path, text in _github_texts().items() if _mentions_dockerfile(text, relative)]
+
+
+def _deploy_text(path: str) -> str:
+    text = (REPOSITORY_ROOT / path).read_text(encoding="utf-8")
+    return _workflow_contract_text(REPOSITORY_ROOT / path) if path.startswith(".github/workflows/") else text
+
+
+def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = REGISTRY_PATH) -> list[str]:
+    """Check the role -> image -> service map that one train SHA builds from.
+
+    Every service the registry declares (the ``services`` map and every chart in
+    ``logging_chart_images``) maps to exactly one role image — a Python role
+    image of its role or a native image (``native_images``) of that role; every
+    registered image is a role image of exactly one role or carries an
+    ``outside_role_split`` reason on its own entry (kept per entry so the map
+    never repeats image names that other inventories count).
+    """
+    payload = json.loads(registry_path.read_text(encoding="utf-8"))
+    roles = payload.get("roles")
+    services = payload.get("services")
+    if not isinstance(roles, dict) or not roles:
+        return ["runtime-image registry must declare a non-empty roles map"]
+    if not isinstance(services, dict) or not services:
+        return ["runtime-image registry must declare a non-empty services map"]
+    outside = {
+        entry["name"]: entry["outside_role_split"]
+        for entry in payload.get("images", [])
+        if isinstance(entry, dict) and "outside_role_split" in entry
+    }
+    native_role: dict[str, str | None] = {
+        name: spec.get("role") for name, spec in (payload.get("native_images") or {}).items() if isinstance(spec, dict)
+    }
+
+    by_name = {contract.name: contract for contract in contracts}
+    errors: list[str] = []
+    image_role: dict[str, str] = {}
+    for role, spec in roles.items():
+        images = spec.get("images") if isinstance(spec, dict) else None
+        if not isinstance(images, dict) or not images:
+            errors.append(f"role {role}: images must map each role image to its dependency lock")
+            continue
+        for image, lock in images.items():
+            if image in image_role:
+                errors.append(f"role image {image} belongs to both {image_role[image]} and {role}")
+                continue
+            image_role[image] = role
+            contract = by_name.get(image)
+            if contract is None:
+                errors.append(f"role {role}: image {image} is not a registered runtime image")
+                continue
+            if not isinstance(lock, str) or not (REPOSITORY_ROOT / lock).is_file():
+                errors.append(f"role {role}: image {image} declares a missing dependency lock {lock!r}")
+                continue
+            if not _installs_lock(contract, lock):
+                errors.append(f"role {role}: image {image} does not install its declared lock {lock}")
+            if contract.target is not None:
+                chain = docker_target_instructions(contract.dockerfile, contract.target)
+                stamp = chain[-len(RELEASE_STAMP_LINES) :]
+                early = [line for line in chain[: -len(RELEASE_STAMP_LINES)] if "OMI_RELEASE_SHA" in line]
+                if tuple(stamp) != RELEASE_STAMP_LINES or early:
+                    errors.append(
+                        f"role {role}: target {contract.target} must end with the release stamp "
+                        "(ARG/ENV OMI_RELEASE_SHA, LABEL org.opencontainers.image.revision) and reference "
+                        "OMI_RELEASE_SHA nowhere earlier, or every later layer rebuilds per SHA"
+                    )
+                if not contract.dependency_probe_smoke:
+                    errors.append(f"role {role}: image {image} must run the dependency probe")
+
+    for name in by_name:
+        if name in image_role and name in outside:
+            errors.append(f"image {name} is both a role image and outside the role split")
+        elif name not in image_role and name not in outside:
+            errors.append(f"image {name} is neither a role image nor carries an outside_role_split reason")
+    for name, reason in outside.items():
+        if not isinstance(reason, str) or not reason:
+            errors.append(f"outside_role_split {name}: reason must be a non-empty string")
+
+    served: set[str] = set()
+    for service, spec in services.items():
+        if not isinstance(spec, dict):
+            errors.append(f"service {service}: must be an object")
+            continue
+        role, image, current = spec.get("role"), spec.get("image"), spec.get("current_image")
+        if spec.get("platform") not in ROLE_PLATFORMS:
+            errors.append(f"service {service}: platform must be one of {sorted(ROLE_PLATFORMS)}")
+        if role not in roles:
+            errors.append(f"service {service}: role {role!r} is not declared")
+        elif image_role.get(image) != role and native_role.get(image) != role:
+            errors.append(f"service {service}: image {image!r} is not a role image of {role}")
+        else:
+            served.add(image)
+        if current not in by_name and current not in native_role:
+            errors.append(f"service {service}: current_image {current!r} is not a registered runtime image")
+        deploys = spec.get("current_deploy")
+        if not isinstance(deploys, list) or not deploys:
+            errors.append(f"service {service}: current_deploy must list the files that ship it today")
+            continue
+        texts: list[str] = []
+        for deploy in deploys:
+            if not isinstance(deploy, str) or not (REPOSITORY_ROOT / deploy).is_file():
+                errors.append(f"service {service}: current_deploy {deploy!r} does not exist")
+                continue
+            text = _deploy_text(deploy)
+            texts.append(text)
+            if not _names_deploy_target(text, spec.get("deployed_as", service)):
+                errors.append(f"service {service}: current_deploy {deploy} never names the service as a deploy target")
+        # A deploy that runs an image another pipeline built (a tag reuse, an admitted image)
+        # says so with a reason; otherwise the deploy set must build the current image's Dockerfile.
+        elsewhere = spec.get("image_built_elsewhere")
+        if elsewhere is not None and (not isinstance(elsewhere, str) or not elsewhere.strip()):
+            errors.append(f"service {service}: image_built_elsewhere must be a non-empty reason")
+        elif current in native_role and elsewhere is None:
+            errors.append(
+                f"service {service}: a native current_image needs an image_built_elsewhere reason "
+                "(a workflow never builds a native image itself)"
+            )
+        elif current in by_name and elsewhere is None:
+            dockerfile = _repository_relative(by_name[current].dockerfile)
+            if texts and not any(_mentions_dockerfile(text, dockerfile) for text in texts):
+                errors.append(f"service {service}: no current_deploy builds {current}'s {dockerfile}")
+
+    for contract in by_name.values():
+        if not contract.build_only:
+            continue
+        users = sorted(name for name, spec in services.items() if spec.get("current_image") == contract.name)
+        if users:
+            errors.append(f"build_only image {contract.name} is the current image of {users}")
+        shippers = dockerfile_shipped_by_github(contract.dockerfile)
+        if shippers:
+            errors.append(
+                f"build_only image {contract.name}: {_repository_relative(contract.dockerfile)} "
+                f"is referenced by {shippers}; clear build_only and register the deploy"
+            )
+
+    for chart, image in payload.get("logging_chart_images", {}).items():
+        spec = services.get(chart)
+        if not isinstance(spec, dict):
+            errors.append(f"chart {chart} has no role-image service entry")
+        elif spec.get("current_image") != image:
+            errors.append(f"service {chart}: current_image {spec.get('current_image')!r} != chart image {image!r}")
+    for image in sorted(set(image_role) - served):
+        errors.append(f"role image {image} serves no declared service")
+    for image in sorted(set(native_role) - served):
+        errors.append(f"native image {image} serves no declared service")
+    return errors
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--registry", type=Path, default=REGISTRY_PATH)
@@ -698,9 +1045,11 @@ def parse_args() -> argparse.Namespace:
     subparsers.add_parser("check", help="check registered source-closure and deployment-workflow contracts")
     subparsers.add_parser("check-source", help="check each entrypoint's first-party Docker source closure")
     subparsers.add_parser("check-workflows", help="check registered deployment workflows smoke their image")
+    subparsers.add_parser("check-roles", help="check the role -> image -> service map and role-image build stamps")
     smoke = subparsers.add_parser("smoke", help="import an already-built image's registered entrypoint")
     smoke.add_argument("--dockerfile", type=Path, required=True)
     smoke.add_argument("--image", required=True)
+    smoke.add_argument("--target", help="build stage of a multi-target Dockerfile the image was built from")
     build_smoke = subparsers.add_parser("build-smoke", help="build one registered image then import its entrypoint")
     build_smoke.add_argument("--service", required=True)
     build_smoke.add_argument("--image", required=True)
@@ -719,13 +1068,15 @@ def main() -> int:
         else:
             dockerfile = None
             contracts = load_contracts(args.registry)
-        if args.command in {"check", "check-source", "check-workflows"}:
+        if args.command in {"check", "check-source", "check-workflows", "check-roles"}:
             errors = []
             if args.command in {"check", "check-source"}:
                 errors.extend(check_source_closures(contracts))
                 errors.extend(import_smoke_environment_errors(contracts))
             if args.command in {"check", "check-workflows"}:
                 errors.extend(workflow_contract_errors(contracts))
+            if args.command in {"check", "check-roles"}:
+                errors.extend(role_map_errors(contracts, args.registry))
             if errors:
                 print("FAIL: runtime-image contract is incomplete:", file=sys.stderr)
                 for error in errors:
@@ -739,7 +1090,7 @@ def main() -> int:
             print(pull_request_smoke_matrix(contracts))
             return 0
         assert dockerfile is not None  # reached only for the smoke command
-        return smoke_image(args.image, contracts_for_dockerfile(contracts, dockerfile))
+        return smoke_image(args.image, contracts_for_dockerfile(contracts, dockerfile, args.target))
     except ContractError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return 2

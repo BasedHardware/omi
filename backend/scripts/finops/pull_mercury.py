@@ -3,6 +3,9 @@
 
 Never persist a raw response or print an HTTP body, token, counterparty or cursor.
 API: https://docs.mercury.com/reference/listtransactions
+
+FINOPS_MERCURY_BACKFILL_DAYS=N (91..400) widens one run to N posted days for the
+one-time annual-history backfill; see backfill_start and the finops README.
 """
 
 from __future__ import annotations
@@ -17,12 +20,14 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+import auth_http
 from mercury_costs import MercuryError, aggregate_page, aggregate_rows, days, load_map
 
 FILENAME = 'mercury_vendor_spend_daily.json'
+BACKFILL_LIMIT_DAYS = 400  # matches the loader's aggregate-window cap; 13 months fits
 
 
-class NoRedirect(urllib.request.HTTPRedirectHandler):
+class NoRedirect(auth_http.NoRedirect):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         raise MercuryError('Mercury redirect refused')
 
@@ -90,11 +95,29 @@ def fetch_aggregates(start: str, end: str, token: str, config: dict) -> list[dic
     return aggregate_rows(totals, start, end)
 
 
+def backfill_start(end: str) -> str | None:
+    """One-time annual-history backfill: FINOPS_MERCURY_BACKFILL_DAYS=N widens a
+    single job run to N posted days ending at `--end` (13 months needs ~400).
+    The env route exists because the Cloud Run job invokes this pull with fixed
+    arguments; `--backfill-from` serves explicit local/one-off runs. Re-running
+    over the same window re-derives the same (date, vendor) aggregates — the
+    loader replaces, never appends — so the backfill is idempotent."""
+    raw = os.environ.get('FINOPS_MERCURY_BACKFILL_DAYS', '').strip()
+    if not raw:
+        return None
+    if not raw.isdigit():
+        raise MercuryError('FINOPS_MERCURY_BACKFILL_DAYS must be a whole number of days')
+    span = int(raw)
+    if not 90 < span <= BACKFILL_LIMIT_DAYS:
+        raise MercuryError('FINOPS_MERCURY_BACKFILL_DAYS must be 91..%d' % BACKFILL_LIMIT_DAYS)
+    return (dt.date.fromisoformat(end) - dt.timedelta(days=span - 1)).isoformat()
+
+
 def pull(raw: pathlib.Path, end: str, backfill_from: str | None = None) -> None:
     raw.mkdir(parents=True, exist_ok=True)
     path = raw / FILENAME
     path.unlink(missing_ok=True)  # a skipped/failed refresh cannot reuse a prior ready artifact
-    start = backfill_from or (dt.date.fromisoformat(end) - dt.timedelta(days=89)).isoformat()
+    start = backfill_from or backfill_start(end) or (dt.date.fromisoformat(end) - dt.timedelta(days=89)).isoformat()
     if len(days(start, end)) > 400:
         raise MercuryError('Mercury explicit backfill is limited to 400 UTC days')
     reason = None

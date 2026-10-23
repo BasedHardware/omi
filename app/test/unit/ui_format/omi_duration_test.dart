@@ -8,6 +8,14 @@ import 'package:omi/utils/other/time_utils.dart';
 /// One duration vocabulary: offsets never drop the hour, and list/detail lengths come from one
 /// formatter.
 void main() {
+  test('live length retains localized seconds past ten minutes and hours', () {
+    final en = lookupAppLocalizations(const Locale('en'));
+    final de = lookupAppLocalizations(const Locale('de'));
+    expect(OmiDuration.live(601, en), '10m 1s');
+    expect(OmiDuration.live(3661, en), '1h 1m 1s');
+    expect(OmiDuration.live(601, de), de.timeCompactMinsAndSecs(10, 1));
+    expect(OmiDuration.live(-1, en), '0s');
+  });
   group('offset', () {
     test('m:ss under an hour', () {
       expect(OmiDuration.offset(0), '0:00');

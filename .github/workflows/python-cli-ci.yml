@@ -1,6 +1,14 @@
 name: Python CLI
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: [main]
     paths:
@@ -16,6 +24,14 @@ on:
       - '.github/workflows/python-cli-ci.yml'
       - '.github/workflows/publish_omi_cli.yml'
 
+concurrency:
+  # PRs cancel their own older runs. Main pushes share one ref-keyed group
+  # with cancel-in-progress false: the running tests finish and only the
+  # newest pending main SHA runs next — a burst of CLI merges no longer
+  # queues a superseded suite for every intermediate SHA.
+  group: python-cli-ci-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
   issues: read
@@ -24,14 +40,22 @@ defaults:
   run:
     working-directory: sdks/python-cli
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   ci-tier:
     name: Resolve CI Tier
     runs-on: ubuntu-latest
     outputs:
-      full_ci: ${{ steps.resolve.outputs.full_ci }}
+      full_ci: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.resolve.outputs.full_ci) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - id: resolve
         uses: ./.github/actions/ci-tier
       - name: Explain deferred Windows coverage
@@ -56,6 +80,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - uses: actions/setup-python@v6
         with:
@@ -78,6 +104,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - uses: actions/setup-python@v6
         with:
@@ -104,6 +132,8 @@ jobs:
         python-version: ['3.10', '3.11', '3.12']
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
 
       - uses: actions/setup-python@v6
         with:

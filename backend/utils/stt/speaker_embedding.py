@@ -9,6 +9,9 @@ import numpy as np
 import httpx
 from scipy.spatial.distance import cdist
 
+from config.refactor_modes import shadow_or_serve
+from utils.speakers import embedding_cache
+
 from utils.executors import storage_executor, run_blocking
 from utils.http_client import get_stt_client
 from utils.log_sanitizer import sanitize_provider_error
@@ -103,7 +106,11 @@ def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     """
     api_url = _get_api_url()
 
-    with open(audio_path, 'rb') as f:
+    audio_data = _read_file(audio_path)
+    cache_key, cached = _cached(audio_data, api_url)
+    if cached is not None:
+        return cached
+    with io.BytesIO(audio_data) as f:
         files = {'file': (os.path.basename(audio_path), f, 'audio/wav')}
         response = httpx.post(f"{api_url}/v2/embedding", files=files, timeout=300.0)
         response.raise_for_status()
@@ -120,6 +127,8 @@ def extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
     if embedding.ndim == 1:
         embedding = embedding.reshape(1, -1)
 
+    if cache_key is not None:
+        embedding_cache.put(cache_key, embedding)
     return embedding
 
 
@@ -147,6 +156,9 @@ def extract_embedding_from_bytes(
 
     api_url = _get_api_url()
 
+    cache_key, cached = _cached(audio_data, api_url)
+    if cached is not None:
+        return cached
     files = {'file': (filename, audio_data, 'audio/wav')}
     post = client.post if client is not None else httpx.post
     response = post(f"{api_url}/v2/embedding", files=files, timeout=timeout)
@@ -164,7 +176,16 @@ def extract_embedding_from_bytes(
     if embedding.ndim == 1:
         embedding = embedding.reshape(1, -1)
 
+    if cache_key is not None:
+        embedding_cache.put(cache_key, embedding)
     return embedding
+
+
+def _cached(audio_data: bytes, api_url: str):
+    if not shadow_or_serve('SPEAKER_EVIDENCE_MODE'):
+        return None, None
+    cache_key = embedding_cache.key(audio_data, f'{api_url}:{embedding_cache.MODEL_ID}')
+    return cache_key, embedding_cache.get(cache_key)
 
 
 def _read_file(path: str) -> bytes:
@@ -179,6 +200,9 @@ async def async_extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
 
     file_data = await run_blocking(storage_executor, _read_file, audio_path)
 
+    cache_key, cached = _cached(file_data, api_url)
+    if cached is not None:
+        return cached
     files = {'file': (os.path.basename(audio_path), file_data, 'audio/wav')}
     try:
         response = await client.post(f"{api_url}/v2/embedding", files=files)
@@ -195,6 +219,8 @@ async def async_extract_embedding(audio_path: str) -> np.ndarray[Any, Any]:
 
     if embedding.ndim == 1:
         embedding = embedding.reshape(1, -1)
+    if cache_key is not None:
+        embedding_cache.put(cache_key, embedding)
     return embedding
 
 
@@ -207,6 +233,9 @@ async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = 
     api_url = _get_api_url()
     client = get_stt_client()
 
+    cache_key, cached = _cached(audio_data, api_url)
+    if cached is not None:
+        return cached
     files = {'file': (filename, audio_data, 'audio/wav')}
     try:
         response = await client.post(f"{api_url}/v2/embedding", files=files)
@@ -223,6 +252,8 @@ async def async_extract_embedding_from_bytes(audio_data: bytes, filename: str = 
 
     if embedding.ndim == 1:
         embedding = embedding.reshape(1, -1)
+    if cache_key is not None:
+        embedding_cache.put(cache_key, embedding)
     return embedding
 
 

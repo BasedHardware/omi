@@ -44,7 +44,6 @@ def _ondemand_config():
     return resolve_ondemand_config(
         {
             'TRANSLATION_DEMAND_GATE_ENABLED': 'true',
-            'TRANSLATION_ONDEMAND_GEMINI_ENABLED': 'true',
             'TRANSLATION_ONDEMAND_UID_DAILY_CHARS': '1000000',
             'TRANSLATION_ONDEMAND_GLOBAL_DAILY_CHARS': '100000000',
         }

@@ -13,14 +13,16 @@ def encode_sync_assignment_plan(uid: str, client: Any, transaction: Any, payload
 
     if current and current.get('has_transcript_corrections'):
         from utils.agent_capabilities.transcripts import load_entries, preserves_correction_anchors
-        from utils.sync.assignment_errors import SyncAssignmentConflict
+        from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentConflictReason
 
         captured = conversations.decode_transcript_segments_verified(
             uid, current.get('transcript_segments') or [], bool(current.get('transcript_segments_compressed'))
         )
         corrections = load_entries(uid, payload['id'], firestore_client=client, transaction=transaction)
         if not preserves_correction_anchors(captured, payload.get('transcript_segments') or [], corrections):
-            raise SyncAssignmentConflict('sync append changed corrected speech', subtype='other')
+            raise SyncAssignmentConflict(
+                'sync append changed corrected speech', subtype=SyncAssignmentConflictReason.CORRECTED_SPEECH_CHANGED
+            )
     encoded = conversations._prepare_conversation_for_write(  # type: ignore[reportPrivateUsage]
         payload,
         uid,

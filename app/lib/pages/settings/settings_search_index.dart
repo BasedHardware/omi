@@ -16,9 +16,13 @@ enum SettingsDestination {
   helpGroup,
   notifications,
   planAndUsage,
+
+  /// The trial paywall, from the Upgrade row shown to free readers who can still start a trial.
+  upgrade,
   offlineSync,
   device,
   integrations,
+  taskIntegrations,
   permissions,
   memories,
   goals,
@@ -125,6 +129,7 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Plan, referrals (on the sheet)
   SettingsSearchEntry('planAndUsage', (l) => l.planAndUsage, SettingsDestination.planAndUsage, _drawer),
+  SettingsSearchEntry('upgrade', (l) => l.upgrade, SettingsDestination.upgrade, _drawer),
   SettingsSearchEntry('referralProgram', (l) => l.referralProgram, SettingsDestination.referral, _drawer),
 
   // Device group
@@ -200,6 +205,8 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
 
   // Integrations (opens the Integrations page directly)
   SettingsSearchEntry('integrations', (l) => l.integrations, SettingsDestination.integrations, _drawer),
+  SettingsSearchEntry('taskIntegrations', (l) => l.taskIntegrations, SettingsDestination.taskIntegrations,
+      'lib/pages/settings/integrations_page.dart'),
 
   // Data & Privacy group
   SettingsSearchEntry('dataProtection', (l) => l.dataProtection, SettingsDestination.dataPrivacy, _groups),

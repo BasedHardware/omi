@@ -11,6 +11,7 @@ import 'package:omi/utils/platform/platform_service.dart';
 
 class PostHogAnalyticsAdapter
     implements
+        AnalyticsResolvedFlagAdapter,
         AnalyticsAdapter,
         AnalyticsDeliveryAdapter,
         AnalyticsIdentityAdapter,
@@ -191,6 +192,17 @@ class PostHogAnalyticsAdapter
     if (verified != null) return verified.flags[key] == true;
     final result = await Posthog().getFeatureFlagResult(key);
     return result?.enabled == true && result?.variant == null;
+  }
+
+  @override
+  Future<bool?> resolvedFeatureEnabled(String key) async {
+    final verified = _fresh;
+    if (verified != null) {
+      final value = verified.flags[key];
+      return value is bool ? value : null;
+    }
+    final result = await Posthog().getFeatureFlagResult(key);
+    return result?.enabled;
   }
 
   @override

@@ -33,6 +33,9 @@ class Ref:
             raise AlreadyExists('synthetic existing tombstone')
         self.rows[self.path] = data
 
+    def delete(self):
+        self.rows.pop(self.path, None)
+
 
 @pytest.mark.parametrize('retry', [False, True])
 def test_tombstone_precedes_batch_cleanup_and_failure_is_retryable(monkeypatch, retry):
@@ -107,12 +110,12 @@ def test_owner_orphan_sweep_stays_inside_owner_namespace_and_checks_versions(mon
 
 def test_completion_ttl_manifest_is_stage_bounded_and_has_no_privacy_authorities():
     resources = ttl_resources('demo-synthetic', 'synthetic-db')
-    assert len(resources) == len(set(resources)) == 10
+    assert len(resources) == len(set(resources)) == 14
     assert all(resource.endswith('/fields/expires_at') for resource in resources)
     assert {resource.split('/collectionGroups/')[1].split('/')[0] for resource in resources} == {
         f'batch_pipeline_{stage}_{table}'
         for stage in ('prod', 'dev')
-        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes')
+        for table in ('jobs', 'results', 'artifacts', 'projections', 'intakes', 'shadow_jobs', 'shadow_spend')
     }
     with pytest.raises(ValueError):
         ttl_resources('foreign/path')
@@ -131,3 +134,13 @@ def test_account_purge_erases_cohort_membership_and_retries_failures(monkeypatch
     data_plane.collection.return_value.document.return_value.delete.side_effect = RuntimeError('retry')
     with pytest.raises(RuntimeError, match='retry'):
         purge_user_subtree('synthetic', client, recursive)
+
+
+def test_from_segments_ttl_policy_is_separately_reviewable_and_defaults_do_not_expand_batch_scope():
+    from pathlib import Path
+
+    policy = Path(__file__).resolve().parents[2] / 'deploy' / 'from-segments-retention.json'
+    assert ttl_resources('demo-synthetic', policy_path=policy) == [
+        'projects/demo-synthetic/databases/(default)/collectionGroups/from_segments_chunks/fields/expires_at'
+    ]
+    assert len(ttl_resources('demo-synthetic')) == 14

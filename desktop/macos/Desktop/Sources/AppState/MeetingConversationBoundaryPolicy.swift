@@ -23,6 +23,12 @@ enum MeetingConversationBoundaryPolicy {
     let finalizationReason: TranscriptionFinalizationReason
   }
 
+  /// Rebuilding a detector during a mode change must not demote an existing meeting
+  /// while positive evidence is provisional. A negative first probe can still end it.
+  static func initialObservation(captureActive: Bool, meetingConfirmed: Bool) -> Bool? {
+    captureActive && !meetingConfirmed ? nil : meetingConfirmed
+  }
+
   /// Meeting observation is independent from capture gating. A detected edge
   /// rotates the logical conversation even when the microphone remains live in
   /// Always mode; stable detector samples never rotate twice. `callChanged` is the detector
@@ -60,10 +66,12 @@ enum MeetingConversationBoundaryPolicy {
     meetingStateReady: Bool,
     shouldCapture: Bool,
     segmentCount: Int,
+    conversationRole: Role,
     hasSpeakerSegments: Bool
   ) -> Bool {
     mode == .onlyMeetings
       && meetingStateReady
+      && conversationRole == .meeting
       && !shouldCapture
       && (segmentCount > 0 || hasSpeakerSegments)
   }

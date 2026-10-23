@@ -42,6 +42,8 @@ yarn.lock
 build/
 dist/
 .build/
+# scripts/worktree_env_doctor.py --fix moves a stale SwiftPM .build aside to this name.
+.build.stale-*/
 .swiftpm/
 
 # VS Code

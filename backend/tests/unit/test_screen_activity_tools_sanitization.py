@@ -98,7 +98,10 @@ def _fail_summary_query(sa, monkeypatch):
 def test_invalid_date_returns_fixed_hint_without_parser_text(sa, start_date, end_date):
     result = sa.get_screen_activity_tool.invoke({"start_date": start_date, "end_date": end_date}, config=_CONFIG)
 
-    assert result == "Error: Invalid date format. Use YYYY-MM-DDTHH:MM:SS+HH:MM."
+    # The fixed hint names the field and the expected format; no parser exception text leaks.
+    field = "start_date" if start_date == "not-a-date" else "end_date"
+    assert result.startswith(f"Error: {field} ") and "is not a time. Use an ISO 8601 time" in result
+    assert "Invalid isoformat" not in result and "month must be" not in result
 
 
 def test_summary_query_failure_returns_fixed_error_without_exception_text(sa, monkeypatch):
@@ -118,3 +121,58 @@ def test_summary_query_failure_is_still_logged_with_traceback(sa, monkeypatch, c
     error_records = [record for record in caplog.records if record.levelno >= logging.ERROR]
     assert len(error_records) == 1
     assert error_records[0].exc_info[0] is RuntimeError
+
+
+# ---------------------------------------------------------------- harness tool rules 1 and 2
+
+
+def _summary_window(sa, monkeypatch, arguments, config):
+    summary = MagicMock(return_value={"apps": {}, "total_screenshots": 0})
+    monkeypatch.setattr(sa.screen_activity_db, "get_screen_activity_summary", summary)
+    sa.get_screen_activity_tool.invoke(arguments, config=config)
+    kwargs = summary.call_args.kwargs
+    return kwargs["start_date"], kwargs["end_date"]
+
+
+def test_screen_summary_without_dates_defaults_to_the_last_day(sa, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    before = datetime.now(timezone.utc)
+    start, end = _summary_window(sa, monkeypatch, {}, _CONFIG)
+    assert end - start == timedelta(days=1)
+    assert before <= end <= datetime.now(timezone.utc)
+
+
+def test_screen_summary_defaults_to_the_attached_chat_timeframe(sa, monkeypatch):
+    from datetime import datetime, timezone
+
+    config = {
+        "configurable": {
+            "user_id": "u1",
+            "chat_scope": {"start_date": "2026-09-01T08:00:00-07:00", "end_date": "2026-09-01T17:00:00-07:00"},
+        }
+    }
+    start, end = _summary_window(sa, monkeypatch, {}, config)
+    assert (start, end) == (
+        datetime(2026, 9, 1, 15, tzinfo=timezone.utc),
+        datetime(2026, 9, 2, 0, tzinfo=timezone.utc),
+    )
+    # One explicit bound keeps the other from the window.
+    start, end = _summary_window(sa, monkeypatch, {"start_date": "2026-09-01T20:00:00Z"}, config)
+    assert (start, end) == (datetime(2026, 9, 1, 20, tzinfo=timezone.utc), datetime(2026, 9, 2, tzinfo=timezone.utc))
+
+
+def test_screen_summary_converts_offsets_and_reads_naive_times_in_the_user_zone(sa, monkeypatch):
+    from datetime import datetime, timezone
+
+    config = {"configurable": {"user_id": "u1", "user_timezone": "America/Los_Angeles"}}
+    start, end = _summary_window(
+        sa, monkeypatch, {"start_date": "2026-09-01T09:00:00", "end_date": "2026-09-01T17:00:00-07:00"}, config
+    )
+    assert start == datetime(2026, 9, 1, 16, tzinfo=timezone.utc)
+    assert end == datetime(2026, 9, 2, 0, tzinfo=timezone.utc)
+
+
+def test_screen_search_rejects_an_unreadable_date_instead_of_searching_unfiltered(sa):
+    result = sa.search_screen_activity_tool.invoke({"query": "budget", "start_date": "last tuesday"}, config=_CONFIG)
+    assert result.startswith("Error: start_date 'last tuesday' is not a time.")

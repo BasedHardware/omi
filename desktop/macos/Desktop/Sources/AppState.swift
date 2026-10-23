@@ -521,7 +521,7 @@ class AppState: ObservableObject {
     UpdateInstallActivity.setMeetingCaptureActive(isLiveCapturing && currentConversationRole == .meeting)
   }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
-  var meetingBoundaryInProgress = false
+  var (meetingBoundaryInProgress, meetingBoundaryEvidence) = (false, MeetingBoundaryEvidence())
   var pendingMeetingState: Bool?
   /// True while `finishConversation` is rotating the logical conversation.
   /// Serializes ALL rotation callers — `handleMeetingObservation`'s boundary
@@ -705,7 +705,7 @@ class AppState: ObservableObject {
   /// switch posts only .runtimeOwnerDidChange, so without this the previous
   /// account's folders, filters, counts, and people kept rendering.
   func resetOwnerScopedContent() {
-    ownerScopeGeneration &+= 1
+    (ownerScopeGeneration, meetingBoundaryEvidence) = (ownerScopeGeneration &+ 1, MeetingBoundaryEvidence())
     folders = []
     selectedFolderId = nil
     selectedDateFilter = nil

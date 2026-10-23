@@ -19,7 +19,9 @@ metadata:
   name: {{ .Release.Name }}
 spec:
   # L4 scale-from-zero, image pull and joint model startup exceeded 600s in dev.
-  progressDeadlineSeconds: 1800
+  # Recreate also waits for old pods to drain (terminationGracePeriodSeconds 1500)
+  # before new ones start, so the deadline covers drain plus startup.
+  progressDeadlineSeconds: 2400
   {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
@@ -76,6 +78,9 @@ spec:
             - {name: BATCH_PIPELINE_WORKER_ENABLED, value: "true"}
             - {name: BATCH_PIPELINE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_PERCENT, value: "0"}
+            - {name: BATCH_PIPELINE_SHADOW_PERCENT, value: {{ .Values.worker.shadowPercent | quote }}}
+            - {name: BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR, value: {{ .Values.worker.shadowPaidRecoveryPerHour | quote }}}
+            - {name: BATCH_PIPELINE_SHADOW_RECOVERY_API_URL, value: {{ .Values.worker.shadowRecoveryApiUrl | quote }}}
             - {name: BATCH_PIPELINE_UID_ALLOWLIST, value: ""}
             - {name: BATCH_PIPELINE_SHARED_LIVE_ENABLED, value: "false"}
             - {name: BATCH_PIPELINE_POOL_KIND, value: dedicated_batch}

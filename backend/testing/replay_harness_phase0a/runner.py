@@ -93,7 +93,6 @@ class Harness:
         try:
             for _ in range(count):
                 probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 probe.bind(("127.0.0.1", 0))
                 probes.append(probe)
                 ports.append(int(probe.getsockname()[1]))

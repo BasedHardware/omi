@@ -156,7 +156,7 @@ actor RewindDatabase {
   }
 
   /// Handle corruption/I/O failures from cleanup and other maintenance operations.
-  /// Those paths can otherwise run repeatedly and emit the same Sentry error forever.
+  /// Those paths can otherwise run repeatedly and emit the same error forever.
   private func recoverFromMaintenanceError(_ error: Error, operation: String) async {
     guard dbQueue != nil else { return }
     guard isRecoverableDatabaseError(error) else { return }
@@ -2466,7 +2466,7 @@ actor RewindDatabase {
     SiriMemoryExpirySchema.registerMigration(on: &migrator)
     LocalEmbeddingStore.registerMigration(on: &migrator)
     ProactivityRetirementMigration.registerMigration(on: &migrator)
-    return migrator
+    return addingSpeakerLabelSourceMigration(migrator)
   }
 
   /// Kept as one callable migration boundary so a populated legacy table can be exercised in a

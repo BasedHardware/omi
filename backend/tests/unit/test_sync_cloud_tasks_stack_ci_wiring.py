@@ -55,6 +55,9 @@ def test_sync_cloud_tasks_stack_gauntlet_has_a_deterministic_hermetic_ci_job() -
     assert 'websocketPort' in run_script
     run_py = (_REPO_ROOT / 'backend' / 'testing' / 'sync_cloud_tasks_stack' / 'run.py').read_text(encoding='utf-8')
     assert 'def _free_ports(count: int) -> list[int]:' in run_py
+    # SO_REUSEADDR on a probe waives the exclusive bind that makes the
+    # reservation meaningful; a probe must hold the port alone.
+    assert 'SO_REUSEADDR' not in run_py
     assert 'ports = _free_ports(3)' in run_py
     assert 'self.redis_port = ports[0]' in run_py
     assert 'self.admission_port = ports[1]' in run_py
@@ -115,7 +118,6 @@ def test_sync_cloud_tasks_stack_free_ports_are_strictly_distinct_and_bindable() 
         try:
             for _ in range(count):
                 probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
                 probe.bind(('127.0.0.1', 0))
                 probes.append(probe)
                 ports.append(int(probe.getsockname()[1]))

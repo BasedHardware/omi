@@ -2,14 +2,17 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_timezone/flutter_timezone.dart';
+import 'package:http/http.dart' as http;
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/messages_wire.g.dart' as wire;
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/services/chat_video_sampler.dart';
 import 'package:omi/services/device_tools/device_tool_dispatcher.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/string_utils.dart';
+import 'package:path/path.dart' as p;
 
 /// Hard-scope payload for POST /v2/messages `context` (#4515).
 class ChatPageContext {
@@ -240,6 +243,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(
   ChatPageContext? context,
   String? chatSessionId,
   ApiStreamingSeams? seams,
+  Future<void>? cancelSignal,
 }) async* {
   var url = '${Env.apiBaseUrl}v2/messages?app_id=$appId';
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
@@ -271,6 +275,7 @@ Stream<ServerMessageChunk> sendMessageStreamServer(
     headers: const {'X-Omi-Chat-Failure-Protocol': '1'},
     body: jsonEncode(body),
     seams: seams,
+    cancelSignal: cancelSignal,
   )) {
     if (_isIgnorableStreamFrame(line)) continue;
     if (line.startsWith('error:402:')) {
@@ -333,11 +338,92 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
   }
 }
 
-Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
-  var url = '${Env.apiBaseUrl}v2/files?app_id=$appId';
+String _filesUrl(String path, String? appId) {
   if (appId == null || appId.isEmpty || appId == 'null' || appId == 'no_selected') {
-    url = '${Env.apiBaseUrl}v2/files';
+    return '${Env.apiBaseUrl}$path';
   }
+  return '${Env.apiBaseUrl}$path?app_id=$appId';
+}
+
+/// Uploads chat attachments; one result per file, in the order given.
+///
+/// Videos are sampled on device (frames + audio → `/v2/files/video`) so the clip itself is
+/// not uploaded; when the platform can't sample one, the clip goes to `/v2/files` and the
+/// server samples it.
+Future<List<MessageFile>?> uploadFilesServer(List<File> files, {String? appId}) async {
+  if (!files.any((f) => isChatVideo(f.path))) return _uploadFilesBatch(files, appId: appId);
+  final results = List<MessageFile?>.filled(files.length, null);
+  final others = [
+    for (var i = 0; i < files.length; i++)
+      if (!isChatVideo(files[i].path)) i
+  ];
+  // The quick batch first: if it fails, no video has been stored yet.
+  if (others.isNotEmpty) {
+    final uploaded = await _uploadFilesBatch([for (final i in others) files[i]], appId: appId);
+    if (uploaded == null || uploaded.length != others.length) {
+      throw Exception('Failed to upload file');
+    }
+    for (var k = 0; k < others.length; k++) {
+      results[others[k]] = uploaded[k];
+    }
+  }
+  for (var i = 0; i < files.length; i++) {
+    if (results[i] == null) results[i] = await uploadVideoServer(files[i], appId: appId);
+  }
+  return results.cast<MessageFile>();
+}
+
+Future<MessageFile> uploadVideoServer(File video, {String? appId}) async {
+  final sampled = await ChatVideoSampler.sample(video);
+  if (sampled == null) {
+    final whole = await _uploadFilesBatch([video], appId: appId);
+    if (whole == null || whole.isEmpty) throw Exception('Failed to upload video');
+    return whole.first;
+  }
+  try {
+    final response = await makeMultipartApiCall(
+      url: _filesUrl('v2/files/video', appId),
+      files: sampled.frames,
+      fileFieldName: 'frames',
+      fields: {
+        'frame_times': jsonEncode(sampled.times),
+        'duration_seconds': sampled.duration.toString(),
+        'name': p.basename(video.path),
+      },
+      namedFiles: {if (sampled.audio != null) 'audio': sampled.audio!},
+    );
+    if (response.statusCode != 200) {
+      Logger.debug('Failed to upload video frames. Status code: ${response.statusCode}');
+      throw Exception('Failed to upload video. Status code: ${response.statusCode}');
+    }
+    final stored = (jsonDecode(response.body) as List<dynamic>)
+        .map((file) => MessageFile.fromGenerated(wire.GeneratedFileChat.fromJson(file as Map<String, dynamic>)))
+        .first;
+    stored.localPreviewPath = await _keepPosterFrame(sampled.frames, stored.id);
+    return stored;
+  } finally {
+    await sampled.dispose();
+  }
+}
+
+/// Copies the clip's first sampled frame out of the sampler's temp directory, which
+/// [SampledChatVideo.dispose] deletes, so the sent bubble can show it as the preview.
+Future<String?> _keepPosterFrame(List<File> frames, String fileId) async {
+  if (frames.isEmpty) return null;
+  try {
+    final directory = Directory(p.join(Directory.systemTemp.path, 'omi-chat-video-posters'));
+    await directory.create(recursive: true);
+    final safeId = fileId.replaceAll(RegExp(r'[^A-Za-z0-9_-]'), '_');
+    final poster = await frames.first.copy(p.join(directory.path, '$safeId.jpg'));
+    return poster.path;
+  } catch (e) {
+    Logger.debug('Could not keep the video poster frame: $e');
+    return null;
+  }
+}
+
+Future<List<MessageFile>?> _uploadFilesBatch(List<File> files, {String? appId}) async {
+  final url = _filesUrl('v2/files', appId);
 
   try {
     var response = await makeMultipartApiCall(url: url, files: files);
@@ -371,6 +457,26 @@ Future reportMessageServer(String messageId) async {
   wire.GeneratedMessageReportResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
 }
 
+/// A voice-message transcription failure with the server's HTTP status, so the caller can
+/// log what failed and tell a server fault from a bad clip. The body is not read: the status
+/// carries the distinction, and response bodies decode only through generated models.
+class VoiceTranscriptionException implements Exception {
+  final int? statusCode;
+  final String? outcome;
+  final bool? retryable;
+  final String? cause;
+
+  const VoiceTranscriptionException({this.statusCode, this.outcome, this.retryable, this.cause});
+
+  /// A 5xx or 429: the fault is ours, the recording is fine and a later retry may work.
+  /// No response (offline) is not reported as our fault.
+  bool get isServerSide => statusCode != null && (statusCode! >= 500 || statusCode == 429);
+
+  @override
+  String toString() => 'VoiceTranscriptionException(status: $statusCode, outcome: $outcome, retryable: $retryable'
+      '${cause == null ? '' : ', cause: $cause'})';
+}
+
 /// Transcribe audio files sequentially (one request per file) to stay under
 /// Cloud Run's 32 MB request-body limit.  Transcripts are concatenated
 /// client-side with a space separator — same behaviour as the backend's
@@ -379,34 +485,30 @@ Future<String> transcribeVoiceMessage(List<File> audioFiles, {String? language})
   final transcripts = <String>[];
 
   for (final file in audioFiles) {
+    final http.Response response;
     try {
-      var response = await makeMultipartApiCallUnpooled(
+      response = await makeMultipartApiCallUnpooled(
         url: '${Env.apiBaseUrl}v2/voice-message/transcribe',
         files: [file],
         fields: language != null ? {'language': language} : {},
       );
-
-      if (response.statusCode == 200) {
-        final data = wire.GeneratedVoiceMessageTranscriptionResponse.fromJson(
-          jsonDecode(response.body) as Map<String, dynamic>,
-        );
-        final transcript = data.transcript;
-        if (transcript.isNotEmpty) {
-          transcripts.add(transcript);
-        }
-      } else {
-        Logger.debug('Failed to transcribe voice message chunk: ${response.statusCode} ${response.body}');
-        throw Exception('Failed to transcribe voice message');
-      }
     } catch (e) {
-      Logger.debug('Error transcribing voice message chunk: $e');
-      throw Exception('Error transcribing voice message: $e');
+      throw VoiceTranscriptionException(cause: e.runtimeType.toString());
+    }
+    if (response.statusCode != 200) throw VoiceTranscriptionException(statusCode: response.statusCode);
+
+    final data = wire.GeneratedVoiceMessageTranscriptionResponse.fromJson(
+      jsonDecode(response.body) as Map<String, dynamic>,
+    );
+    final transcript = data.transcript;
+    if (transcript.isNotEmpty) {
+      transcripts.add(transcript);
     }
   }
 
   final transcript = transcripts.join(' ').trim();
   if (transcript.isEmpty) {
-    throw Exception('Voice message transcription returned empty transcript');
+    throw const VoiceTranscriptionException(statusCode: 200, outcome: 'empty_transcript', retryable: false);
   }
   return transcript;
 }

@@ -1,0 +1,115 @@
+# One-shot staging L4 Job for the quality-corpus paired runs (lane 5).
+# Render with envsubst; lane 2 (or the captain) applies it in the staging namespace:
+#   IMAGE=us-central1-docker.pkg.dev/based-hardware-dev/staging/batch-pipeline-worker@sha256:...  \
+#   NAMESPACE=staging NODEPOOL=<staging L4 pool> HF_SECRET=<staging secret holding HUGGINGFACE_TOKEN> \
+#   RUN=short-speech|flight|baseline \
+#   envsubst '${IMAGE} ${NAMESPACE} ${NODEPOOL} ${HF_SECRET} ${RUN}' < paired-run-job.yaml | kubectl --context <ctx> apply -f -
+# (name the variables: the script below uses its own $vars)
+# Scripts come from a ConfigMap built from the lane branch (the batch image copies only
+# config/ database/ diarizer/ utils/):
+#   kubectl create configmap quality-corpus-scripts -n $NAMESPACE \
+#     --from-file=backend/testing/quality_corpus/ --from-file=backend/scripts/parity/
+# Public audio only, fetched inside the pod and verified against manifest.lock.json.
+# No GCP service account roles, no Firestore, no customer data, no ENCRYPTION_SECRET.
+# Receipts are printed and left in /receipts; copy them with kubectl cp before the TTL.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: quality-corpus-${RUN}
+  namespace: ${NAMESPACE}
+  labels: {app.kubernetes.io/name: quality-corpus, omi.ai/lane: lr-05}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 14400
+  ttlSecondsAfterFinished: 7200
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: quality-corpus}
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      nodeSelector:
+        cloud.google.com/gke-nodepool: ${NODEPOOL}
+        cloud.google.com/gke-accelerator: nvidia-l4
+      tolerations:
+        - {key: omi.ai/batch-pipeline, operator: Equal, value: "true", effect: NoSchedule}
+        - {key: nvidia.com/gpu, operator: Equal, value: present, effect: NoSchedule}
+      containers:
+        - name: run
+          image: ${IMAGE}
+          workingDir: /app
+          command: [bash, -ceu]
+          args:
+            - |
+              mkdir -p /app/testing/quality_corpus /app/scripts/parity /receipts
+              touch /app/scripts/__init__.py
+              cp /scripts/*.py /scripts/*.json /app/testing/quality_corpus/ 2>/dev/null || true
+              for f in __init__ report_schema rows scorers fleet_sample parity_gate soak_check; do
+                cp /scripts/$f.py /app/scripts/parity/ 2>/dev/null || true
+              done
+              gate=0  # the paired gate's exit status; the Job exits with it after the copy window
+              export PYTHONPATH=/app QUALITY_CORPUS_CACHE=/corpus BATCH_PIPELINE_MODEL_BATCH_SIZE=8
+              python testing/quality_corpus/corpus.py fetch --cache /corpus
+              python testing/quality_corpus/corpus.py build --cache /corpus --out /corpus/built
+              case "${RUN}" in
+                short-speech)
+                  set -- ; for m in EN2002a ES2004a IS1009a TS3003a; do
+                    python - "$m" <<'PY'
+              import json, sys
+              from pathlib import Path
+              meeting = sys.argv[1]
+              ref = json.loads(Path(f'/corpus/built/refs/ami-{meeting}.json').read_text())
+              lines = [f"SPEAKER ami-{meeting} 1 {w['start']:.3f} {w['end'] - w['start']:.3f} <NA> <NA> {w['speaker']} <NA> <NA>"
+                       for w in ref['words'] if w['end'] > w['start']]
+              Path(f'/corpus/built/ami-{meeting}.rttm').write_text('\n'.join(lines) + '\n')
+              PY
+                    set -- "$@" --pair /corpus/built/units/ami-$m.wav:/corpus/built/ami-$m.rttm
+                  done
+                  for u in /corpus/built/refs/vox-*.json; do
+                    id=$(basename "$u" .json)
+                    python -c 'import json,sys; r=json.load(open(sys.argv[1])); print("\n".join("SPEAKER x 1 %.3f %.3f <NA> <NA> %s <NA> <NA>" % (t["start"], t["end"]-t["start"], t["speaker"]) for t in r["turns"]))' "$u" > /corpus/built/$id.rttm
+                    set -- "$@" --pair /corpus/built/units/$id.wav:/corpus/built/$id.rttm
+                  done
+                  python testing/quality_corpus/paired_short_speech.py "$@" --output /receipts/short-speech.json || gate=$?
+                  ;;
+                flight)
+                  python testing/quality_corpus/paired_flight_batching.py run \
+                    --audio /corpus/built/units/ami-ES2004a.wav /corpus/built/units/ami-IS1009a.wav \
+                            /corpus/built/units/ami-TS3003a.wav /corpus/built/units/ami-EN2002a.wav \
+                    --output /receipts/flight-paired.json || gate=$?
+                  ;;
+                baseline)
+                  python testing/quality_corpus/corpus.py baseline --units /corpus/built --out /receipts/baseline-batch
+                  python testing/quality_corpus/corpus.py score --units /corpus/built --batch /receipts/baseline-batch \
+                    --output /receipts/corpus-baseline.json
+                  ;;
+                *)
+                  echo "unknown RUN=${RUN}" >&2
+                  exit 64
+                  ;;
+              esac
+              cat /receipts/*.json 2>/dev/null | head -c 200000
+              echo "gate_exit=$gate"
+              sleep 3600  # window for kubectl cp; the Job deadline still bounds the node-hour
+              exit "$gate"  # 1 fail, 2 insufficient evidence: the Job must not read as Succeeded
+          env:
+            - name: HUGGINGFACE_TOKEN
+              valueFrom:
+                secretKeyRef: {name: "${HF_SECRET}", key: HUGGINGFACE_TOKEN}
+          resources:
+            requests: {cpu: "6", memory: 24Gi, nvidia.com/gpu: 1}
+            limits: {memory: 28Gi, nvidia.com/gpu: 1}
+          volumeMounts:
+            - {name: scripts, mountPath: /scripts}
+            - {name: corpus, mountPath: /corpus}
+            - {name: receipts, mountPath: /receipts}
+            - {name: model-cache, mountPath: /cache}
+      volumes:
+        - name: scripts
+          configMap: {name: quality-corpus-scripts}
+        - name: corpus
+          emptyDir: {sizeLimit: 40Gi}
+        - name: receipts
+          emptyDir: {sizeLimit: 1Gi}
+        - name: model-cache
+          emptyDir: {sizeLimit: 30Gi}

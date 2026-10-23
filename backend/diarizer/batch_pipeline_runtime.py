@@ -21,16 +21,21 @@ from config.batch_pipeline import worker_pipeline_depth
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env, shadow_parity_collectors
 from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.capacity import PoolCapacity
 from utils.batch_pipeline.metrics import QueueMetrics
+from utils.batch_pipeline.language_metrics import ROUTES as LANGUAGE_ROUTES
 from utils.batch_pipeline.correctness_metrics import TRANSITIONS, DURATION, LABELS
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
+from database.batch_pipeline_shadow import ShadowStore
+from utils.batch_pipeline.shadow_worker import ShadowRunner
+from utils.batch_pipeline.shadow_metrics import COLLECTORS as SHADOW_COLLECTORS
 from utils.executors import shutdown_executors
 from utils.other.local_storage import create_storage_client
 from utils.rollout_cohorts import configure_rollout_runtime
@@ -92,11 +97,16 @@ class SynchronizedWorker:
 
 
 def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -> ThreadingHTTPServer:
+    registry.register(LANGUAGE_ROUTES)
+    for collector in SHADOW_COLLECTORS:
+        registry.register(collector)
     if cap_dispatch_enabled():
         registry.register(AUDIO_SECONDS)
     registry.register(TRANSITIONS)
     registry.register(DURATION)
     registry.register(LABELS)
+    for collector in shadow_parity_collectors():  # A2 shadow only; empty (no jobstore import) otherwise
+        registry.register(collector)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -179,6 +189,12 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         # Startup models off the event loop. Readiness remains closed until the
         # entire BF16 ASR / FP32 segmentation chain and graph policy are ready.
         worker = await asyncio.to_thread(load_worker, artifacts)
+        from utils.batch_pipeline.compute_client import shadow_from_env
+
+        # Lazy client creation keeps a dark rollout independent of API config.
+        def shadow_recover(segment):
+            return shadow_from_env().shadow_recover(segment)
+
         metrics = QueueMetrics(
             registry,
             worker_release=os.environ.get('BATCH_PIPELINE_WORKER_RELEASE', 'unscoped'),
@@ -197,6 +213,7 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
             # GPU batch hands over after the TTL. Fails open on store errors.
             leader=LeaderLease(store, PUMP_RECOVERY, ttl_seconds=30),
             inline_metrics=False,  # supervise() samples on its own task.
+            shadow=ShadowRunner(ShadowStore(store), shadow_recover),
         )
         await supervise(pump, state, stop_event)
     finally:
@@ -214,7 +231,7 @@ def main() -> None:
     store = FirestoreStore(namespace)
     if not os.getenv('FIRESTORE_EMULATOR_HOST') and not os.getenv('OMI_FIRESTORE_DATA_PLANE_PROJECT'):
         raise RuntimeError('explicit customer data-plane project required')
-    store = FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client())
+    store = shadow_from_env(FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client()))
     # The worker evaluates live-reuse admission (sync_live_dedupe_active_for)
     # on admitted work items; bind the cached cohort resolver before pumping.
     configure_rollout_runtime()
