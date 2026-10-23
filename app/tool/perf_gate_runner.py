@@ -40,7 +40,7 @@ def main():
     status = 0
     for run in range(1, repeats + 1):
         print(f'PERF GATE run {run}/{repeats}', flush=True)
-        command = ['nice', '-n', '10', 'flutter', 'test', '--no-pub', '--concurrency=1', '--dart-define=OMI_APP_PROFILE=local_dev', 'test/perf/production_shell_gate_test.dart', *args.flutter_args]
+        command = ['nice', '-n', '10', 'flutter', 'test', '--no-pub', '--concurrency=1', '--dart-define=OMI_APP_PROFILE=local_dev', '--dart-define=PERF_GATE_INNER_REPEATS=1', 'test/perf/production_shell_gate_test.dart', *args.flutter_args]
         log_path = artifacts / f'run-{run}.log'
         log = log_path.open('w')
         print(f'Flutter output: {log_path}', flush=True)

@@ -15,7 +15,9 @@ is used. Pinned SDK: Flutter 3.44.5. Missing generated inputs are a setup error,
 never a green result. The measured command duration excludes one-time setup.
 
 `app/test/perf/production_shell_gate_test.dart` runs the same eight scenarios in
-ordinary `test.sh`. Existing Mobile App Checks and Mobile Release Eligibility
+ordinary `test.sh`, with three independently seeded trials in one isolate to
+amortize compilation. The local command uses three fresh processes instead.
+Existing Mobile App Checks and Mobile Release Eligibility
 therefore block admission of a regressed scenario; no workflow is added.
 Shell fidelity and tool-contract checks also register in the existing local/CI
 checks manifest. Existing release admission requires the canonical successful
