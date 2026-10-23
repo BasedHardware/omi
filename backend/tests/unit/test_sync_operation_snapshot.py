@@ -35,7 +35,7 @@ def world(monkeypatch):
     monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
     monkeypatch.setattr(conversations, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(conversations, 'db', store)
-    donor = {'id': 'donor', 'deleted': True, 'sync_merged_into': 'survivor'}
+    donor = {'id': 'donor', 'deleted': True, 'sync_merged_into': 'survivor', 'has_photos': False}
     segments = [
         {'id': 's', 'text': 'Synthetic speech.', 'speaker': 'SPEAKER_00', 'is_user': True, 'start': 0, 'end': 1}
     ]
@@ -64,6 +64,7 @@ def test_redirect_hydration_uses_four_reads_instead_of_five_with_identical_conte
         row = deepcopy(store.rows[('users', 'u', 'conversations', 'survivor')])
         row['transcript_segments'] = json.loads(zlib.decompress(row['transcript_segments']))
         row.pop('transcript_segments_compressed')
+        row['data_protection_level'] = level
         store.rows[('users', 'u', 'conversations', 'survivor')] = conversations._prepare_conversation_for_write(
             row, 'u', level
         )
