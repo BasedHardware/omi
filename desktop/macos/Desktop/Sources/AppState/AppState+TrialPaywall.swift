@@ -5,9 +5,87 @@ import SwiftUI
 
 @MainActor
 extension AppState {
+  /// Reasons that belong to the free-plan / trial paywall family this file
+  /// guards. Deliberately narrow (an allowlist, not everything): `"realtime"`
+  /// (`RealtimeHubController+SessionDelegate`) reports a real-time
+  /// transcription PROVIDER quota exhaustion (Deepgram/Soniox), a distinct
+  /// axis from the AI chat provider. It must keep surfacing even when Local
+  /// chat is active, since voice always stays on Omi's Deepgram proxy
+  /// regardless of the active chat provider, so it is intentionally excluded
+  /// here. A future reason not in this set fails closed (still shown) rather
+  /// than silently swallowed.
+  private static let freePlanPaywallReasons: Set<String> = [
+    "trial_expired", "transcription", "ptt", "chat", "screen_capture",
+  ]
+
+  /// Reason-aware Local-provider exemption, shared by the central
+  /// `triggerUsageLimitPopup` choke point and every leaf gate that needs the
+  /// same answer for the same reason. Free-tier quota exists to meter Omi's
+  /// cloud model usage; a reason names WHICH feature is asking, so each one
+  /// gets exactly the exemption its own model/network path earns:
+  ///
+  /// - `"chat"`: the completion itself always runs against the user's own
+  ///   server under Local (`AIProvider.currentProviderMode` never routes
+  ///   text to Omi regardless of the cloud-assist setting), so the
+  ///   free-tier question quota does not apply: `isLocalProviderActive`
+  ///   alone is enough.
+  /// - `"ptt"`: exempted for a different reason than `"chat"`, and only in
+  ///   one specific case. A PTT turn does NOT run its completion against the
+  ///   user's own server: online, it runs end to end (audio in, transcript,
+  ///   and the reply) inside Omi's cloud realtime hub regardless of the
+  ///   active chat provider (see `PTTRoutePolicy.decide`), so an online PTT
+  ///   turn under Local must stay on this gate exactly like every other
+  ///   provider — this mirrors `PushToTalkButtonTrigger.isPushToTalkUsageLimitBlocked`,
+  ///   the leaf gate this backstops, and must never disagree with it (a
+  ///   turn it blocks but this suppresses the popup for is a silent no-op
+  ///   click). Only offline, where PTT falls back to on-device dictation
+  ///   with no AI response to meter, is Local exempt.
+  /// - `"screen_capture"`: matches `isScreenCaptureExemptFromPaywall`'s
+  ///   Local-specific clause exactly, so this backstop can never disagree
+  ///   with the leaf gate it backstops (see `isScreenCaptureExemptFromPaywall`'s
+  ///   doc comment for why cloud-assist re-introduces metering here).
+  /// - `"transcription"`: voice always runs through Omi's Deepgram proxy
+  ///   regardless of the active chat provider, so Local earns no exemption
+  ///   here either.
+  /// - anything else (including `"trial_expired"`, `"realtime"`): no Local
+  ///   exemption. `"trial_expired"` no longer has a Local-specific poster:
+  ///   both `SystemCaptureControls` gates now post their own narrower reason,
+  ///   so a caller that still posts it is asking about genuine Omi-account
+  ///   trial state, which Local does not change.
+  nonisolated static func isUsageLimitExemptLocally(reason: String) -> Bool {
+    switch reason {
+    case "chat":
+      return AIProvider.isLocalProviderActive
+    case "ptt":
+      // `NetworkReachability` is `@MainActor`; every caller of this
+      // `nonisolated` function (the `triggerUsageLimitPopup` choke point,
+      // and tests) already runs on the main actor.
+      guard AIProvider.isLocalProviderActive else { return false }
+      return MainActor.assumeIsolated { !NetworkReachability.shared.isOnline }
+    case "screen_capture":
+      return AIProvider.isLocalProviderFailingClosed
+    default:
+      return false
+    }
+  }
+
   func triggerUsageLimitPopup(reason: String) {
     // Debug escape hatch for self-test runs that don't want the overage modal in the way.
     if ProcessInfo.processInfo.environment["OMI_SKIP_USAGE_POPUP"] == "1" { return }
+    // Single choke point for every `.showUsageLimitPopup` poster (direct calls
+    // and the notification both land here; see DesktopHomeView's listener).
+    // Every known leaf already checks its own exemption before posting, but a
+    // future caller that forgets to, or a stale cached flag that slips one
+    // through, still lands here, so re-check once, centrally, rather than
+    // trusting every call site forever. BYOK is already covered per-leaf via
+    // `isPaywalled`/`isPaywalledEffective`; the Local-provider check is the
+    // one this file exists to add.
+    if Self.freePlanPaywallReasons.contains(reason),
+      APIKeyService.isByokActive || AppState.isUsageLimitExemptLocally(reason: reason)
+    {
+      log("AppState: usage-limit popup (reason=\(reason)) suppressed: BYOK or Local-provider exemption for this reason")
+      return
+    }
     // A modal the user did not ask for, arriving over what they were doing: the same "something
     // just opened" cue the what's-new card gets.
     OmiUISound.play(.reveal)
@@ -47,6 +125,33 @@ extension AppState {
   ) -> Bool {
     guard let lastAdmissionStopAt else { return true }
     return now.timeIntervalSince(lastAdmissionStopAt) >= debounce
+  }
+
+  /// True when transcription specifically is exempt from the paywall: the
+  /// general BYOK exemption above. Voice always runs through Omi's Deepgram
+  /// proxy regardless of the active chat provider, so the Local provider
+  /// earns no exemption here, unlike `isScreenCaptureExemptFromPaywall`.
+  nonisolated static var isTranscriptionExemptFromPaywall: Bool {
+    !isPaywalledEffective
+  }
+
+  /// True when screen capture / screenshot interpretation is exempt from the
+  /// paywall: either the general BYOK exemption above, or because the Local
+  /// provider is active AND the user has not opted cloud-assisted features
+  /// on. Unlike `isTranscriptionExemptFromPaywall`, this has a real Local
+  /// exemption: screen capture's own cloud dependency was Omi's Gemini proxy
+  /// for interpreting the image, and the local provider already routes that
+  /// through its own model instead (the screenshot is attached directly to
+  /// the request). Screen capture itself (the macOS frame grab) never
+  /// leaves the device under any
+  /// provider, but the proactive assistants and live notes that consume it
+  /// (task/memory/insight/suggestion extraction) go back to Omi's Gemini
+  /// proxy the moment the user opts cloud-assist on, so this is metered again
+  /// exactly like a cloud user once `AIProvider.localCloudAssistEnabled` is
+  /// true.
+  nonisolated static var isScreenCaptureExemptFromPaywall: Bool {
+    if !isPaywalledEffective { return true }
+    return AIProvider.isLocalProviderFailingClosed
   }
 
   /// Decision for the resume-on-paywall-clear hook in `fetchTrialMetadata()`.

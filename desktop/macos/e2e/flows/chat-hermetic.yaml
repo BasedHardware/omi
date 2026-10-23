@@ -104,6 +104,12 @@ covers:
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+BackendRouting.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift
   - desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift
+  # This flow runs the default piMono stub only and never switches to the
+  # Local provider, but every piMono run still executes AIProvider.swift:
+  # AgentRuntimeProcess.swift reads AIProvider.currentProviderMode at spawn.
+  # (AgentRuntimeRouting.swift is listed above.) A flow that actually drives
+  # the Local provider branch would be a stronger claim; none exists yet.
+  - desktop/macos/Desktop/Sources/Providers/AIProvider.swift
 preconditions:
   - automation_bridge_ready
 

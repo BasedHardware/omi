@@ -5502,7 +5502,8 @@
     ],
     "adapters": {
       "pi-mono": {
-        "advertised": true
+        "advertised": true,
+        "condition": "realtimeVoiceOnly"
       }
     },
     "surfaces": [
