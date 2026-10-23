@@ -4407,5 +4407,6 @@
     "deviceRecently": "Nylig",
     "deviceDisconnectedFor": "Frakoblet i {duration}",
     "deviceControls": "Kontroller",
-    "homeBackgroundLine": "Også: {items}"
+    "homeBackgroundLine": "Også: {items}",
+    "recapInTheBackground": "I bakgrunnen"
 }

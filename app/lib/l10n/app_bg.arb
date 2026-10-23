@@ -4407,5 +4407,6 @@
     "deviceRecently": "Наскоро",
     "deviceDisconnectedFor": "Без връзка за {duration}",
     "deviceControls": "Управление",
-    "homeBackgroundLine": "Също: {items}"
+    "homeBackgroundLine": "Също: {items}",
+    "recapInTheBackground": "На заден план"
 }

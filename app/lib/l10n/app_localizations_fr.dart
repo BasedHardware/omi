@@ -14601,4 +14601,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Aussi : $items';
   }
+
+  @override
+  String get recapInTheBackground => 'En arrière-plan';
 }

@@ -4407,5 +4407,6 @@
     "deviceRecently": "Recent",
     "deviceDisconnectedFor": "Deconectat timp de {duration}",
     "deviceControls": "Comenzi",
-    "homeBackgroundLine": "De asemenea: {items}"
+    "homeBackgroundLine": "De asemenea: {items}",
+    "recapInTheBackground": "În fundal"
 }

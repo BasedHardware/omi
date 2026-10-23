@@ -14483,4 +14483,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Tiež: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'V pozadí';
 }

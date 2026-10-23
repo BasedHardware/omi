@@ -4407,5 +4407,6 @@
     "deviceRecently": "Baru-baru ini",
     "deviceDisconnectedFor": "Terputus selama {duration}",
     "deviceControls": "Kawalan",
-    "homeBackgroundLine": "Juga: {items}"
+    "homeBackgroundLine": "Juga: {items}",
+    "recapInTheBackground": "Di latar belakang"
 }

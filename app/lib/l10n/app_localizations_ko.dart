@@ -14289,4 +14289,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return '그 외: $items';
   }
+
+  @override
+  String get recapInTheBackground => '배경에서';
 }

@@ -14536,4 +14536,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Также: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'На фоне';
 }

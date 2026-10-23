@@ -14482,4 +14482,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'همچنین: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'در پس‌زمینه';
 }

@@ -14385,4 +14385,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'גם: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'ברקע';
 }

@@ -24,7 +24,6 @@ import 'package:omi/models/sync_state.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/page.dart' show ConversationDetailPage;
 import 'package:omi/pages/conversations/conversations_page.dart';
-import 'package:omi/pages/conversations/widgets/background_day_line.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -431,28 +430,14 @@ void main() {
     VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 500);
   });
 
-  testWidgets('background conversations fold into one line under their day and open on tap', (tester) async {
+  testWidgets('background conversations leave Home for the daily recap, with no line or toggle', (tester) async {
     // Today holds conv-0 (12:30), conv-1 (09:30), conv-2 (06:30) and conv-3 (03:30).
     await _pumpHome(tester, background: {1, 2});
-    expect(find.byType(BackgroundDayLine), findsOneWidget);
-    final line = tester.widget<Text>(find.descendant(of: find.byType(BackgroundDayLine), matching: find.byType(Text)));
-    // Two short transcript lines each, under a minute, so no length.
-    expect(line.data, 'Also: Conversation 1 · Conversation 2');
     expect(find.byKey(const ValueKey('conv-1')), findsNothing);
+    expect(find.byKey(const ValueKey('conv-2')), findsNothing);
     expect(find.byKey(const ValueKey('conv-0')), findsOneWidget);
-    // The line sits under today's header, below the live episode row.
-    expect(tester.getTopLeft(find.byType(BackgroundDayLine)).dy,
-        greaterThan(tester.getTopLeft(find.byType(LiveEpisodeRow)).dy));
-    expect(tester.getTopLeft(find.byType(BackgroundDayLine)).dy,
-        lessThan(tester.getTopLeft(find.byKey(const ValueKey('conv-0'))).dy));
-
-    await tester.tap(find.byType(BackgroundDayLine));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('conv-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('conv-2')), findsOneWidget);
-    await tester.tap(find.byType(BackgroundDayLine));
-    await tester.pump();
-    expect(find.byKey(const ValueKey('conv-1')), findsNothing);
+    expect(find.byKey(const ValueKey('conv-3')), findsOneWidget);
+    expect(find.textContaining('Also:'), findsNothing);
     await _drainAndUnmount(tester);
   });
 

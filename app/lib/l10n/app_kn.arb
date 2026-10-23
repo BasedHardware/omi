@@ -11833,5 +11833,6 @@
     "deviceRecently": "ಇತ್ತೀಚೆಗೆ",
     "deviceDisconnectedFor": "{duration} ಸಂಪರ್ಕ ಕಡಿತ",
     "deviceControls": "ನಿಯಂತ್ರಣಗಳು",
-    "homeBackgroundLine": "ಜೊತೆಗೆ: {items}"
+    "homeBackgroundLine": "ಜೊತೆಗೆ: {items}",
+    "recapInTheBackground": "ಹಿನ್ನೆಲೆಯಲ್ಲಿ"
 }

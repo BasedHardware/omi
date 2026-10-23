@@ -4407,5 +4407,6 @@
     "deviceRecently": "Nesen",
     "deviceDisconnectedFor": "Atvienots {duration}",
     "deviceControls": "Vadīklas",
-    "homeBackgroundLine": "Arī: {items}"
+    "homeBackgroundLine": "Arī: {items}",
+    "recapInTheBackground": "Fonā"
 }

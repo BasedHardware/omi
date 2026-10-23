@@ -14471,4 +14471,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'साथ ही: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'पृष्ठभूमि में';
 }

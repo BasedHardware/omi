@@ -14539,4 +14539,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Също: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'На заден план';
 }

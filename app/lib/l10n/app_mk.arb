@@ -11833,5 +11833,6 @@
     "deviceRecently": "Неодамна",
     "deviceDisconnectedFor": "Исклучено {duration}",
     "deviceControls": "Контроли",
-    "homeBackgroundLine": "Исто така: {items}"
+    "homeBackgroundLine": "Исто така: {items}",
+    "recapInTheBackground": "Во позадина"
 }

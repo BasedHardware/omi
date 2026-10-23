@@ -4407,5 +4407,6 @@
     "deviceRecently": "Nedávno",
     "deviceDisconnectedFor": "Odpojené na {duration}",
     "deviceControls": "Ovládanie",
-    "homeBackgroundLine": "Tiež: {items}"
+    "homeBackgroundLine": "Tiež: {items}",
+    "recapInTheBackground": "V pozadí"
 }

@@ -14530,4 +14530,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Także: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'W tle';
 }

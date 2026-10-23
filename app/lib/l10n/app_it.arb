@@ -4407,5 +4407,6 @@
     "deviceRecently": "Di recente",
     "deviceDisconnectedFor": "Disconnesso per {duration}",
     "deviceControls": "Controlli",
-    "homeBackgroundLine": "Inoltre: {items}"
+    "homeBackgroundLine": "Inoltre: {items}",
+    "recapInTheBackground": "In sottofondo"
 }

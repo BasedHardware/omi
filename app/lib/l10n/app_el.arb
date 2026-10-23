@@ -4407,5 +4407,6 @@
     "deviceRecently": "Πρόσφατα",
     "deviceDisconnectedFor": "Αποσυνδεδεμένο για {duration}",
     "deviceControls": "Χειριστήρια",
-    "homeBackgroundLine": "Επίσης: {items}"
+    "homeBackgroundLine": "Επίσης: {items}",
+    "recapInTheBackground": "Στο παρασκήνιο"
 }

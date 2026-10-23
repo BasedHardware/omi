@@ -11833,5 +11833,6 @@
     "deviceRecently": "לאחרונה",
     "deviceDisconnectedFor": "מנותק למשך {duration}",
     "deviceControls": "פקדים",
-    "homeBackgroundLine": "גם: {items}"
+    "homeBackgroundLine": "גם: {items}",
+    "recapInTheBackground": "ברקע"
 }

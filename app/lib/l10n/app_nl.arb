@@ -4407,5 +4407,6 @@
     "deviceRecently": "Recent",
     "deviceDisconnectedFor": "{duration} niet verbonden",
     "deviceControls": "Bediening",
-    "homeBackgroundLine": "Ook: {items}"
+    "homeBackgroundLine": "Ook: {items}",
+    "recapInTheBackground": "Op de achtergrond"
 }

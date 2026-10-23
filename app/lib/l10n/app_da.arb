@@ -4449,5 +4449,6 @@
     "deviceRecently": "For nylig",
     "deviceDisconnectedFor": "Afbrudt i {duration}",
     "deviceControls": "Betjening",
-    "homeBackgroundLine": "Også: {items}"
+    "homeBackgroundLine": "Også: {items}",
+    "recapInTheBackground": "I baggrunden"
 }

@@ -4407,5 +4407,6 @@
     "deviceRecently": "مؤخرًا",
     "deviceDisconnectedFor": "انقطع الاتصال لمدة {duration}",
     "deviceControls": "عناصر التحكم",
-    "homeBackgroundLine": "أيضًا: {items}"
+    "homeBackgroundLine": "أيضًا: {items}",
+    "recapInTheBackground": "في الخلفية"
 }

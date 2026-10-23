@@ -14516,4 +14516,7 @@ class AppLocalizationsBs extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Također: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'U pozadini';
 }

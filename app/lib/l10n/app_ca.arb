@@ -4407,5 +4407,6 @@
     "deviceRecently": "Recentment",
     "deviceDisconnectedFor": "Desconnectat durant {duration}",
     "deviceControls": "Controls",
-    "homeBackgroundLine": "També: {items}"
+    "homeBackgroundLine": "També: {items}",
+    "recapInTheBackground": "En segon pla"
 }

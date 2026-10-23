@@ -14561,4 +14561,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'També: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'En segon pla';
 }

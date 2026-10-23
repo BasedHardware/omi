@@ -4407,5 +4407,6 @@
     "deviceRecently": "Äskettäin",
     "deviceDisconnectedFor": "Yhteys katkesi {duration} ajaksi",
     "deviceControls": "Säätimet",
-    "homeBackgroundLine": "Lisäksi: {items}"
+    "homeBackgroundLine": "Lisäksi: {items}",
+    "recapInTheBackground": "Taustalla"
 }

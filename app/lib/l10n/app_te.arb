@@ -11833,5 +11833,6 @@
     "deviceRecently": "ఇటీవల",
     "deviceDisconnectedFor": "{duration} డిస్‌కనెక్ట్",
     "deviceControls": "నియంత్రణలు",
-    "homeBackgroundLine": "అలాగే: {items}"
+    "homeBackgroundLine": "అలాగే: {items}",
+    "recapInTheBackground": "నేపథ్యంలో"
 }

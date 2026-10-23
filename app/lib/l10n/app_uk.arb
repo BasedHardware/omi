@@ -4407,5 +4407,6 @@
     "deviceRecently": "Нещодавно",
     "deviceDisconnectedFor": "Відключено на {duration}",
     "deviceControls": "Керування",
-    "homeBackgroundLine": "Також: {items}"
+    "homeBackgroundLine": "Також: {items}",
+    "recapInTheBackground": "У фоні"
 }

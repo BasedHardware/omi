@@ -11833,5 +11833,6 @@
     "deviceRecently": "Нядаўна",
     "deviceDisconnectedFor": "Адключаны на {duration}",
     "deviceControls": "Кіраванне",
-    "homeBackgroundLine": "Таксама: {items}"
+    "homeBackgroundLine": "Таксама: {items}",
+    "recapInTheBackground": "У фоне"
 }

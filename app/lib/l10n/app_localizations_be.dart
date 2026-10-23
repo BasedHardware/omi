@@ -14523,4 +14523,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Таксама: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'У фоне';
 }

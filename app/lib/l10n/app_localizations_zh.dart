@@ -14263,4 +14263,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return '另外：$items';
   }
+
+  @override
+  String get recapInTheBackground => '背景中';
 }

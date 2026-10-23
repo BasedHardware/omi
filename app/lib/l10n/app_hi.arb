@@ -4407,5 +4407,6 @@
     "deviceRecently": "हाल ही में",
     "deviceDisconnectedFor": "{duration} तक डिस्कनेक्ट रहा",
     "deviceControls": "नियंत्रण",
-    "homeBackgroundLine": "साथ ही: {items}"
+    "homeBackgroundLine": "साथ ही: {items}",
+    "recapInTheBackground": "पृष्ठभूमि में"
 }

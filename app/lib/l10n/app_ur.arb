@@ -11833,5 +11833,6 @@
     "deviceRecently": "حال ہی میں",
     "deviceDisconnectedFor": "{duration} تک منقطع",
     "deviceControls": "کنٹرولز",
-    "homeBackgroundLine": "نیز: {items}"
+    "homeBackgroundLine": "نیز: {items}",
+    "recapInTheBackground": "پس منظر میں"
 }

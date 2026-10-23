@@ -11833,5 +11833,6 @@
     "deviceRecently": "Kamakailan",
     "deviceDisconnectedFor": "Nadiskonekta nang {duration}",
     "deviceControls": "Mga Kontrol",
-    "homeBackgroundLine": "Gayundin: {items}"
+    "homeBackgroundLine": "Gayundin: {items}",
+    "recapInTheBackground": "Sa background"
 }

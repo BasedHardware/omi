@@ -14498,4 +14498,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'तसेच: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'पार्श्वभूमीवर';
 }

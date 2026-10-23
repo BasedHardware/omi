@@ -14526,4 +14526,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Ook: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Op de achtergrond';
 }

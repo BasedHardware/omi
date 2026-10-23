@@ -4407,5 +4407,6 @@
     "deviceRecently": "Neseniai",
     "deviceDisconnectedFor": "Atsijungta {duration}",
     "deviceControls": "Valdikliai",
-    "homeBackgroundLine": "Taip pat: {items}"
+    "homeBackgroundLine": "Taip pat: {items}",
+    "recapInTheBackground": "Fone"
 }

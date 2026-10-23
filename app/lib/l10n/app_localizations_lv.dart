@@ -14519,4 +14519,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Arī: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Fonā';
 }

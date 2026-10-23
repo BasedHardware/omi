@@ -17677,5 +17677,9 @@
                 "type": "String"
             }
         }
+    },
+    "recapInTheBackground": "In the background",
+    "@recapInTheBackground": {
+        "description": "Daily recap section listing the day's background conversations, which Home no longer shows"
     }
 }

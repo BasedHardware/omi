@@ -14415,4 +14415,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'นอกจากนี้: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'ในเบื้องหลัง';
 }

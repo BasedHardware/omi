@@ -4407,5 +4407,6 @@
     "deviceRecently": "ล่าสุด",
     "deviceDisconnectedFor": "ตัดการเชื่อมต่อ {duration}",
     "deviceControls": "การควบคุม",
-    "homeBackgroundLine": "นอกจากนี้: {items}"
+    "homeBackgroundLine": "นอกจากนี้: {items}",
+    "recapInTheBackground": "ในเบื้องหลัง"
 }

@@ -14500,4 +14500,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'نیز: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'پس منظر میں';
 }

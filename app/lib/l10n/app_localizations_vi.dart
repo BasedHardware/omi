@@ -14488,4 +14488,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Ngoài ra: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Trong nền';
 }

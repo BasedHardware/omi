@@ -14501,4 +14501,7 @@ class AppLocalizationsId extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Juga: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Di latar belakang';
 }

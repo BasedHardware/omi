@@ -14534,4 +14534,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'ಜೊತೆಗೆ: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'ಹಿನ್ನೆಲೆಯಲ್ಲಿ';
 }

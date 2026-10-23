@@ -11833,5 +11833,6 @@
     "deviceRecently": "Nedavno",
     "deviceDisconnectedFor": "Bez veze {duration}",
     "deviceControls": "Kontrole",
-    "homeBackgroundLine": "Također: {items}"
+    "homeBackgroundLine": "Također: {items}",
+    "recapInTheBackground": "U pozadini"
 }

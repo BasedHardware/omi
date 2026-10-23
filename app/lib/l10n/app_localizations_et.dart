@@ -14480,4 +14480,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Lisaks: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Taustal';
 }

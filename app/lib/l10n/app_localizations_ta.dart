@@ -14585,4 +14585,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'மேலும்: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'பின்னணியில்';
 }

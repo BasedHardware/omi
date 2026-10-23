@@ -14500,4 +14500,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Ayrıca: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Arka planda';
 }

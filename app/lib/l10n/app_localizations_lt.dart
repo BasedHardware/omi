@@ -14511,4 +14511,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Taip pat: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Fone';
 }

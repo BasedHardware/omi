@@ -14581,4 +14581,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Επίσης: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Στο παρασκήνιο';
 }

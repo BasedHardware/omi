@@ -14477,4 +14477,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Også: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'I baggrunden';
 }

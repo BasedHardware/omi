@@ -4442,5 +4442,6 @@
     "deviceRecently": "Ostatnio",
     "deviceDisconnectedFor": "Rozłączono na {duration}",
     "deviceControls": "Sterowanie",
-    "homeBackgroundLine": "Także: {items}"
+    "homeBackgroundLine": "Także: {items}",
+    "recapInTheBackground": "W tle"
 }

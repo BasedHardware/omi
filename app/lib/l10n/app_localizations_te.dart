@@ -14546,4 +14546,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'అలాగే: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'నేపథ్యంలో';
 }

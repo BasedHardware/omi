@@ -11833,5 +11833,6 @@
     "deviceRecently": "अलीकडे",
     "deviceDisconnectedFor": "{duration} डिस्कनेक्ट",
     "deviceControls": "नियंत्रणे",
-    "homeBackgroundLine": "तसेच: {items}"
+    "homeBackgroundLine": "तसेच: {items}",
+    "recapInTheBackground": "पार्श्वभूमीवर"
 }

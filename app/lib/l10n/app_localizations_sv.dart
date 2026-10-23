@@ -14495,4 +14495,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Även: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'I bakgrunden';
 }

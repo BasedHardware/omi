@@ -11833,5 +11833,6 @@
     "deviceRecently": "اخیراً",
     "deviceDisconnectedFor": "قطع اتصال به مدت {duration}",
     "deviceControls": "کنترل‌ها",
-    "homeBackgroundLine": "همچنین: {items}"
+    "homeBackgroundLine": "همچنین: {items}",
+    "recapInTheBackground": "در پس‌زمینه"
 }

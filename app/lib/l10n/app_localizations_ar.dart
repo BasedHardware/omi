@@ -14407,4 +14407,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'أيضًا: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'في الخلفية';
 }

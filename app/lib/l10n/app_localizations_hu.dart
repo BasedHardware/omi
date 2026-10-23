@@ -14545,4 +14545,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Továbbá: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'A háttérben';
 }

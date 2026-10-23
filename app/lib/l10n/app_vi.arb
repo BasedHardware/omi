@@ -4407,5 +4407,6 @@
     "deviceRecently": "Gần đây",
     "deviceDisconnectedFor": "Mất kết nối {duration}",
     "deviceControls": "Điều khiển",
-    "homeBackgroundLine": "Ngoài ra: {items}"
+    "homeBackgroundLine": "Ngoài ra: {items}",
+    "recapInTheBackground": "Trong nền"
 }

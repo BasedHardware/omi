@@ -14487,4 +14487,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Také: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Na pozadí';
 }

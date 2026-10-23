@@ -11833,5 +11833,6 @@
     "deviceRecently": "Nedavno",
     "deviceDisconnectedFor": "Prekinjeno {duration}",
     "deviceControls": "Kontrolniki",
-    "homeBackgroundLine": "Tudi: {items}"
+    "homeBackgroundLine": "Tudi: {items}",
+    "recapInTheBackground": "V ozadju"
 }

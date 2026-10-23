@@ -4407,5 +4407,6 @@
     "deviceRecently": "最近",
     "deviceDisconnectedFor": "{duration} 切断",
     "deviceControls": "コントロール",
-    "homeBackgroundLine": "その他: {items}"
+    "homeBackgroundLine": "その他: {items}",
+    "recapInTheBackground": "バックグラウンド"
 }

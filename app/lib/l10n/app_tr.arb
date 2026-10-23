@@ -4442,5 +4442,6 @@
     "deviceRecently": "Son zamanlarda",
     "deviceDisconnectedFor": "{duration} bağlantı kesildi",
     "deviceControls": "Kontroller",
-    "homeBackgroundLine": "Ayrıca: {items}"
+    "homeBackgroundLine": "Ayrıca: {items}",
+    "recapInTheBackground": "Arka planda"
 }

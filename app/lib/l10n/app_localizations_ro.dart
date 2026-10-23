@@ -14549,4 +14549,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'De asemenea: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'În fundal';
 }

@@ -14515,4 +14515,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Também: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Em segundo plano';
 }

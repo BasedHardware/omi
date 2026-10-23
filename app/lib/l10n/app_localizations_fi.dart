@@ -14492,4 +14492,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Lisäksi: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Taustalla';
 }

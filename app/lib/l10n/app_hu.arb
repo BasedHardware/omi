@@ -4503,5 +4503,6 @@
     "deviceRecently": "Nemrég",
     "deviceDisconnectedFor": "{duration} szétkapcsolva",
     "deviceControls": "Vezérlők",
-    "homeBackgroundLine": "Továbbá: {items}"
+    "homeBackgroundLine": "Továbbá: {items}",
+    "recapInTheBackground": "A háttérben"
 }

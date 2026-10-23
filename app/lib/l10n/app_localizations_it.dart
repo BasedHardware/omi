@@ -14563,4 +14563,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Inoltre: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'In sottofondo';
 }

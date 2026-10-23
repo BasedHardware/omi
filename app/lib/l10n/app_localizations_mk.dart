@@ -14552,4 +14552,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Исто така: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Во позадина';
 }

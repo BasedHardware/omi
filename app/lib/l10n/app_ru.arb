@@ -4442,5 +4442,6 @@
     "deviceRecently": "Недавно",
     "deviceDisconnectedFor": "Отключено на {duration}",
     "deviceControls": "Управление",
-    "homeBackgroundLine": "Также: {items}"
+    "homeBackgroundLine": "Также: {items}",
+    "recapInTheBackground": "На фоне"
 }

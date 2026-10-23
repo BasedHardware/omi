@@ -4407,5 +4407,6 @@
     "deviceRecently": "최근",
     "deviceDisconnectedFor": "{duration} 동안 연결 끊김",
     "deviceControls": "제어",
-    "homeBackgroundLine": "그 외: {items}"
+    "homeBackgroundLine": "그 외: {items}",
+    "recapInTheBackground": "배경에서"
 }

@@ -14494,4 +14494,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Такође: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'У позадини';
 }

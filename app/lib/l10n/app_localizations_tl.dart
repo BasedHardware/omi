@@ -14601,4 +14601,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Gayundin: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'Sa background';
 }

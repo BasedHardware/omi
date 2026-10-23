@@ -14483,4 +14483,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'এছাড়াও: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'পটভূমিতে';
 }

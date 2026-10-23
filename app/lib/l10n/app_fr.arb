@@ -4442,5 +4442,6 @@
     "deviceRecently": "Récemment",
     "deviceDisconnectedFor": "Déconnecté pendant {duration}",
     "deviceControls": "Commandes",
-    "homeBackgroundLine": "Aussi : {items}"
+    "homeBackgroundLine": "Aussi : {items}",
+    "recapInTheBackground": "En arrière-plan"
 }

@@ -14516,4 +14516,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'Tudi: $items';
   }
+
+  @override
+  String get recapInTheBackground => 'V ozadju';
 }

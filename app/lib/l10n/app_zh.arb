@@ -4407,5 +4407,6 @@
     "deviceRecently": "最近",
     "deviceDisconnectedFor": "断开连接 {duration}",
     "deviceControls": "控制",
-    "homeBackgroundLine": "另外：{items}"
+    "homeBackgroundLine": "另外：{items}",
+    "recapInTheBackground": "背景中"
 }

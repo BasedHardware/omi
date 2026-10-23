@@ -4407,5 +4407,6 @@
     "deviceRecently": "Kürzlich",
     "deviceDisconnectedFor": "{duration} getrennt",
     "deviceControls": "Steuerung",
-    "homeBackgroundLine": "Außerdem: {items}"
+    "homeBackgroundLine": "Außerdem: {items}",
+    "recapInTheBackground": "Im Hintergrund"
 }
