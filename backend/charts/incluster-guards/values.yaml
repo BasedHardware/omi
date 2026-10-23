@@ -1,0 +1,11 @@
+enabled: true
+# Ship enforced; this kill switch suppresses HPA spec writes, not evidence/state.
+dryRun: false
+namespace: prod-omi-backend
+hpaName: prod-omi-parakeet
+prometheusUrl: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090
+image: python:3.13.12-slim-bookworm@sha256:a58daefb915e1e03ad48f3ca4df8832065412c5c35cacb9d39f4229184de12b6
+# Reserved approval gate. v1 fails rendering if enabled; no GCP identity is installed.
+batch:
+  monitoringRelease: prod-omi-kube-prometheus-stack
+  cloudRunRollbackEnabled: false
