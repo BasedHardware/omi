@@ -59,6 +59,9 @@ def main() -> None:
     def abort_once(request, **kwargs):
         attempts.append(request)
         if len(attempts) == 1:
+            # A real server abort releases its transaction locks. An injected
+            # transport exception must release them too before the SDK retries.
+            client._firestore_api.rollback(request={'database': request.database, 'transaction': request.transaction})
             raise Aborted('injected first-attempt RPC abort')
         return real_rpc(request, **kwargs)
 

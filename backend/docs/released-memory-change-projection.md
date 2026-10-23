@@ -86,7 +86,7 @@ transaction retry, source result cardinality, sync/async deletes and bulk
 exclusion. It refuses to run without `FIRESTORE_EMULATOR_HOST`:
 
 ```sh
-PYTHONPATH=backend npx --no-install firebase emulators:exec --only firestore \
+PYTHONPATH=backend firebase emulators:exec --only firestore \
   --project demo-fs-p2 \
   'backend/.venv/bin/python backend/scripts/released_memory_projection_emulator_test.py'
 ```
