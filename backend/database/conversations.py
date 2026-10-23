@@ -49,6 +49,7 @@ from utils.manual_speaker_assignments import (
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
+from database.sync_conversation_snapshot import resolve_snapshot
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
@@ -1409,12 +1410,7 @@ def get_conversation(
 
 
 def get_conversation_raw_snapshot(
-    uid: str,
-    conversation_id: str,
-    *,
-    firestore_client: Any = None,
-    field_paths: Optional[List[str]] = None,
-    include_revision: bool = False,
+    uid: str, conversation_id: str, *, firestore_client: Any = None, field_paths: Optional[List[str]] = None
 ) -> Optional[Dict[str, Any]]:
     """Return the stored conversation document with no read-path decoding.
 
@@ -1429,56 +1425,13 @@ def get_conversation_raw_snapshot(
     snapshot = ref.get() if field_paths is None else ref.get(field_paths=field_paths)
     if not getattr(snapshot, 'exists', False):
         return None
-    return document_data_with_revision(snapshot) if include_revision else snapshot.to_dict()
+    return snapshot.to_dict()
 
 
 def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_hops: int = 16) -> Optional[str]:
-    """Resolve a server-authored sync bridge for an owner read.
-
-    User deletion is terminal, including deletion of the survivor. Do not
-    follow arbitrary deleted rows or expose another account's conversation.
-    """
-    resolved = _resolve_sync_conversation_snapshot(uid, conversation_id, max_hops=max_hops)
-    return resolved[0] if resolved is not None else None
-
-
-def _resolve_sync_conversation_snapshot(
-    uid: str, conversation_id: str, *, max_hops: int = 16, include_revision: bool = False
-) -> Optional[Tuple[str, dict]]:
-    # The returned row belongs solely to this call. It is never retained across
-    # a mutation, transaction, callback or authority boundary.
-    seen: set[str] = set()
-    current_id = conversation_id
-    for _ in range(max_hops):
-        if current_id in seen or not current_id or '/' in current_id or len(current_id.encode()) > 256:
-            return None
-        seen.add(current_id)
-        if (
-            get_firestore_client()
-            .collection('users')
-            .document(uid)
-            .collection('deleted_conversations')
-            .document(current_id)
-            .get()
-            .exists
-        ):
-            return None
-        row = (
-            get_conversation_raw_snapshot(uid, current_id, include_revision=True)
-            if include_revision
-            else get_conversation_raw_snapshot(uid, current_id)
-        )
-        if not row:
-            return None
-        if row.get('owner_uid', uid) != uid or row.get('id', current_id) != current_id:
-            return None
-        if not row.get('deleted'):
-            return current_id, row
-        successor = row.get('sync_merged_into')
-        if not isinstance(successor, str) or not successor:
-            return None
-        current_id = successor
-    return None
+    """Resolve an owner bridge; user deletion remains terminal at every hop."""
+    resolved = resolve_snapshot(uid, conversation_id, firestore_client=get_firestore_client(), max_hops=max_hops)
+    return resolved.conversation_id if resolved is not None else None
 
 
 @prepare_for_read(decrypt_func=prepare_conversation_for_read)
@@ -1486,25 +1439,19 @@ def _resolve_sync_conversation_snapshot(
 def _get_sync_redirected_conversation_snapshot(
     uid: str, conversation_id: str, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED
 ) -> Optional[dict]:
-    resolved = _resolve_sync_conversation_snapshot(uid, conversation_id, include_revision=True)
+    resolved = resolve_snapshot(uid, conversation_id, firestore_client=get_firestore_client())
     if resolved is None:
         return None
     record_document_read(read_site, FirestoreReadOutcome.HIT)
     sync_operation_snapshot.avoided('redirect_hydration')
-    return resolved[1]
+    return resolved.to_dict()
 
 
 @read_origin('job:sync_operation_snapshot')
 def get_sync_redirected_conversation(
     uid: str, conversation_id: str, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED
 ) -> Optional[dict]:
-    """Resolve and hydrate one owner read from its final raw snapshot/version.
-
-    Every hop retains its fresh deletion-marker and owner/path checks. Photos
-    and decoding use the ordinary get_conversation decorators, without a
-    second survivor document lookup. Mutation callers still reread/CAS in
-    their own transaction. The disabled path is the previous two-step read.
-    """
+    """Hydrate one checked snapshot; mutations still reread/CAS independently."""
     if not sync_operation_snapshot.enabled():
         canonical = resolve_sync_conversation_redirect(uid, conversation_id)
         return get_conversation(uid, canonical, read_site=read_site) if canonical else None
