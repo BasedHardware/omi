@@ -265,6 +265,7 @@ def test_summary_delivery_refuses_oversized_conversation_and_sync_failure_is_non
 
 
 def test_enrichment_outbox_and_consumer_retire_oversized_conversation_obligation(monkeypatch):
+    import sys
     import types
     from database.outbox import Claim, OutboxKind, Outcome
     from utils.enrichment import consumer as consumer_mod
