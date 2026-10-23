@@ -11,6 +11,11 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/models/sync_state.dart';
+import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/schema/pending_work.dart';
+import 'package:omi/services/pending_work/pending_work_store.dart';
+import 'package:omi/services/wals/sync_rate_limiter.dart' show RateLimitReason;
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/device/device_live_sections.dart';
@@ -64,6 +69,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   List<TranscriptSegment> get segments => const [];
   @override
+  DateTime? get liveCaptureStartedAt => null;
+  @override
   void addMetricsListener() {}
   @override
   void removeMetricsListener() {}
@@ -79,6 +86,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
 class _Sync extends ChangeNotifier implements SyncProvider {
   bool active = false;
   @override
+  SyncState get syncState => active ? const SyncState(status: SyncStatus.syncing) : const SyncState();
+  @override
   bool get isSyncing => active;
   @override
   List<Wal> get allWals {
@@ -90,6 +99,11 @@ class _Sync extends ChangeNotifier implements SyncProvider {
   final wals = <Wal>[];
   @override
   int get missingWalsInSeconds => 0;
+  // The device card's status line reads the rate-limit state; this fake is never limited.
+  @override
+  bool get isRateLimited => false;
+  @override
+  RateLimitReason? get rateLimitReason => null;
   void tick() => notifyListeners();
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -153,6 +167,16 @@ Future<void> _screenshot(WidgetTester tester, String name) async {
 }
 
 void main() {
+  final store = PendingWorkStore(
+    loadPending: () async => const ApiSuccess(PendingWorkSnapshot.disabled),
+    loadAttention: () async => const ApiSuccess(AttentionItemsPage.disabled),
+  );
+  final previousStore = PendingWorkStore.instance;
+  setUpAll(() => PendingWorkStore.instance = store);
+  tearDownAll(() {
+    PendingWorkStore.instance = previousStore;
+    store.dispose();
+  });
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
@@ -304,10 +328,14 @@ void main() {
     sync.tick();
     await tester.pump();
     expect(find.byKey(const Key('device_right_now_catching_up')), findsOneWidget);
-    expect(tester.widget<DeviceRightNowGroup>(find.byType(DeviceRightNowGroup)).catchingUp,
-        (doneSeconds: 0, totalSeconds: 600));
+    expect(tester.widget<DeviceRightNowGroup>(find.byType(DeviceRightNowGroup)).catchingUp?.status, isNotEmpty);
     expect(tester.widget<DeviceStatsRow>(find.byType(DeviceStatsRow)).onDeviceSeconds, 600);
     sync.active = false;
+    sync.tick();
+    await tester.pump();
+    expect(find.byKey(const Key('device_right_now_catching_up')), findsOneWidget,
+        reason: 'A waiting backlog remains reachable after a transfer stops.');
+    sync.wals.clear();
     sync.tick();
     await tester.pump();
     expect(find.byKey(const Key('device_right_now_catching_up')), findsNothing);

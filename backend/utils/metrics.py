@@ -762,6 +762,11 @@ MEETING_NOTES_EVIDENCE_WAIT_TOTAL = Counter(
     ['outcome'],
 )
 
+CONVERSATION_ORPHANED_UNFINALIZED = Counter(
+    'omi_conversation_orphaned_unfinalized',
+    'Quiet content-bearing conversations observed without a finalization job and with no live recording lease',
+)
+
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',
     'Durable listen finalization jobs replayed by the reconciler',
@@ -939,6 +944,12 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
     ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
 )
 
+OMI_SYNC_EMPTY_SUCCESS_GUARD_TOTAL = Counter(
+    'omi_sync_empty_success_guard_total',
+    'Zero-word sync segment dispositions at the silence decision, by provider and reason',
+    ['provider', 'reason'],
+)
+
 OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(
     'omi_sync_bridge_retraction_total',
     (
@@ -1061,6 +1072,20 @@ OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
     'omi_stt_provider_circuit_open',
     'Whether the process-local STT provider breaker is currently refusing traffic (1) or not (0)',
     ['provider', 'kind'],
+)
+
+# Trips of the same breaker (closed/half-open -> open), counted once per
+# transition by the bounded cause that opened it: the serve-death reason
+# (connection_lost, send_failed, ...) or the connect-failure reason that
+# reached the threshold. error_class uses the shared live-reason vocabulary;
+# 'untyped' covers trips whose caller could not name a cause. Re-arming an
+# already-open breaker does not count. The gauge above shows state; this
+# counter answers WHY it tripped (P34 2026-10-21: Parakeet selection breakers
+# tripped on 2-10 of 40 listen pods per 10m with the cause unlogged).
+OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL = Counter(
+    'omi_stt_provider_circuit_trip_total',
+    'STT provider breaker transitions into open by bounded cause (serve-death or connect-failure reason)',
+    ['provider', 'kind', 'error_class'],
 )
 
 # Per-provider live-STT connection attempts on every connect path (legacy order

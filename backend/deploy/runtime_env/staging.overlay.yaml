@@ -1,0 +1,202 @@
+# Staging = the composed prod environment plus this allowlisted diff (contract (i)).
+#
+# compose_runtime_env.py --env staging composes: _base.yaml (with staging projects substituted)
+# + prod.overlay.yaml + the `overlay` patch below, then applies the staging transforms
+# (service names, identity, secrets, network). It is rendered on demand by
+# backend/deploy/staging/deploy.sh and never written into deploy/runtime_env.yaml.
+#
+# Every difference from prod must fall in STAGING_DIFF_ALLOWLIST
+# (backend/scripts/cross_service_checks/staging.py, invariant `staging-mirrors-prod`), and the
+# composed env must pass utils/staging_fence.py (no prod project, bucket, URL, Redis, index).
+environment: staging
+base_environment: prod
+compute_project: based-hardware-dev
+data_plane_project: based-hardware-dev
+# Cloud Run services deploy as <prod name><service_suffix>.
+service_suffix: -staging
+service_account: staging-runtime@based-hardware-dev.iam.gserviceaccount.com
+# Deterministic Cloud Run URL for a staging service: https://<name>-staging-<project number>.<region>.run.app
+run_url_template: 'https://{service}-staging-1031333818730.us-central1.run.app'
+
+cloud_run:
+  network_flags:
+    --network: omi-dev-vpc-1
+    --subnet: omi-us-central1-dev-vpc-1-subnet-1
+    --vpc-egress: private-ranges-only
+  # Staging scale: prod-shaped code paths, not prod-sized fleets (replica counts are allowlisted).
+  scale_flags:
+    --min-instances: '0'
+    --max-instances: '4'
+  # backend-integration runs the batch serving loop (BATCH_PIPELINE_SERVING_ENABLED, like prod, which
+  # keeps 3 warm). At 0 it idles without inbound traffic and nothing reconciles or projects.
+  scale_flags_by_service:
+    backend-integration:
+      --min-instances: '1'
+  # Inputs the prod deploy action supplies through env_var entries.
+  env_inputs:
+    ACCOUNT_DELETION_HANDLER_URL: '{run_url:backend-sync}/v1/users/account-deletion-wipes/run'
+    LISTEN_FINALIZATION_TASKS_HANDLER_URL: '{run_url:backend-sync}/v1/conversation-finalization-jobs/run'
+    LISTEN_FINALIZATION_TASKS_INVOKER_SA: staging-tasks-invoker@based-hardware-dev.iam.gserviceaccount.com
+    SYNC_TASKS_HANDLER_URL: '{run_url:backend-sync}/v2/sync-jobs/run'
+    SYNC_TASKS_INVOKER_SA: staging-tasks-invoker@based-hardware-dev.iam.gserviceaccount.com
+    SYNC_BACKFILL_TASKS_HANDLER_URL: '{run_url:backend-sync-backfill}/v2/sync-jobs/run'
+    SYNC_BACKFILL_TASKS_OIDC_AUDIENCE: '{run_url:backend-sync-backfill}/v2/sync-jobs/run'
+    BUCKET_FRAME_REQUESTS: based-hardware-dev-staging-batch
+    BUCKET_FRAME_REQUESTS_TEMPORARY: based-hardware-dev-staging-batch
+    OMI_LLM_GATEWAY_URL: 'http://127.0.0.1:9'
+    GOOGLE_CLIENT_ID: ''
+    MCP_OAUTH_CLAUDE_CLIENT_ID: ''
+    MCP_OAUTH_CLAUDE_CLIENT_NAME: ''
+    MCP_OAUTH_CLAUDE_REDIRECT_URIS: ''
+    SYNC_LEDGER_FENCE_MODE: legacy
+  # Per-service env_inputs (override env_inputs for that service). Prod's deploy action gives
+  # backend-sync-backfill its own sync-jobs URL; without it the backfill service mints and accepts
+  # backend-sync's audience and rejects its own Cloud Tasks with 403 (wrong audience).
+  env_inputs_by_service:
+    backend-sync-backfill:
+      SYNC_TASKS_HANDLER_URL: '{run_url:backend-sync-backfill}/v2/sync-jobs/run'
+  # Set on every staging Cloud Run service (added or overriding prod).
+  env_all:
+    OMI_DEPLOYMENT: staging
+    OMI_ENV_STAGE: prod
+    GOOGLE_CLOUD_PROJECT: based-hardware-dev
+    OMI_CUSTOMER_DATA_PROJECT: based-hardware-dev
+    FIRESTORE_DATABASE_ID: staging
+    FIREBASE_AUTH_PROJECT_ID: based-hardware-dev
+    SYNC_TASKS_PROJECT: based-hardware-dev
+    SYNC_PHASE_METRICS_PROJECT: based-hardware-dev
+    OMI_VERTEX_RESERVATION_PROJECT: based-hardware-dev
+    REDIS_DB_HOST: '{input:STAGING_REDIS_HOST}'
+    REDIS_DB_PORT: '6379'
+    BUCKET_TEMPORAL_SYNC_LOCAL: based-hardware-dev-staging-sync
+    # utils/other/storage.py defaults this to the PROD private-cloud-sync bucket when unset (P13b,
+    # 2026-10-21 bridge 403); the fence now requires it in staging.
+    BUCKET_PRIVATE_CLOUD_SYNC: based-hardware-dev-staging-sync
+    # Code defaults point at production (api.omi.me, mail.omi.me); the fence requires these in staging.
+    # Staging has no RESEND_API_KEY, so email is no-send; the senders only keep the default out.
+    MCP_AUTHORIZATION_SERVER_URL: '{run_url:backend}'
+    LIFECYCLE_EMAIL_FROM_ADDRESS: staging-no-send@based-hardware-dev.invalid
+    SHARE_EMAIL_FROM_ADDRESS: staging-no-send@based-hardware-dev.invalid
+    BUCKET_BATCH_PIPELINE: based-hardware-dev-staging-batch
+    BUCKET_SCREEN_FRAMES: based-hardware-dev-staging-batch
+    BATCH_PIPELINE_API_URL: '{run_url:backend-sync}'
+    BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE: '{run_url:backend-integration}'
+    BATCH_PIPELINE_WORKER_AUDIENCE: '{run_url:backend-sync}'
+    BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT: staging-worker@based-hardware-dev.iam.gserviceaccount.com
+    # Enrichment queue route (plan C3 'staging at M2', lead ruling 2026-10-20 07:36Z; prod still sync_handler):
+    # new sr- obligations bind to /v2/enrichment/run on staging-enrichment instead of staging-sync-jobs-fresh.
+    # backend-sync serves the route (no OMI_ROLE, so every role mounts), and its URL is both the task target and
+    # the verified audience (self-referential, as for backfill's sync-jobs audience). Rollback: sync_handler;
+    # rows keep the binding they were created with.
+    ENRICHMENT_ROUTE: enrichment_queue
+    ENRICHMENT_TASKS_QUEUE: staging-enrichment
+    ENRICHMENT_TASKS_HANDLER_URL: '{run_url:backend-sync}/v2/enrichment/run'
+    ENRICHMENT_TASKS_OIDC_AUDIENCE: '{run_url:backend-sync}/v2/enrichment/run'
+    FIREBASE_SIGNER_SERVICE_ACCOUNT: staging-runtime@based-hardware-dev.iam.gserviceaccount.com
+    # Vendor spend caps (staging uses dev's test keys).
+    SONIOX_MONTHLY_CEILING_USD: '50'
+    # Messaging channels stay off in staging: their webhooks and bot tokens are prod-only.
+    OMI_TELEGRAM_ENABLED: 'off'
+    OMI_IMESSAGE_ENABLED: 'off'
+    # Prod live-service residue the code reads with os.environ[...] (not in runtime_env.yaml;
+    # value read from prod backend on ro-prod 2026-10-19).
+    SUBSCRIPTION_LAUNCH_DATE: '2025-08-21'
+    # A2 Postgres job-store shadow (lead ruling 2026-10-19 14:41Z/18:05Z; lane 12). Firestore stays
+    # primary; mirror failures are counted, never raised. IAM DB auth as the service's own SA (no
+    # password). Instance staging-jobs, private IP on omi-dev-vpc-1. Kill: JOBSTORE_SHADOW_WRITES=off.
+    BATCH_JOBSTORE_MODE: shadow
+    JOBSTORE_SHADOW_WRITES: 'on'
+    JOBSTORE_PG_HOST: 172.20.207.3
+    JOBSTORE_PG_DATABASE: jobstore_staging
+    JOBSTORE_PG_USER: staging-runtime@based-hardware-dev.iam
+  # Queue names: every *_QUEUE value is mapped prod name -> staging name; unmapped prod queues fail compose.
+  queue_map:
+    sync-jobs: staging-sync-jobs
+    sync-jobs-fresh: staging-sync-jobs-fresh
+    sync-backfill: staging-sync-backfill
+    sync-backfill-fresh: staging-sync-backfill-fresh
+    batch-quarantine-recovery: staging-batch-quarantine-recovery
+    enrichment: staging-enrichment
+    provider-stt: staging-provider-stt
+    conversation-finalization: staging-conversation-finalization
+    audio-merge: staging-audio-merge
+    account-deletion: staging-account-deletion
+  # Secret bindings: prod env name -> staging Secret Manager secret (created by bootstrap_iam.sh).
+  # Any prod secret binding not listed here is dropped in staging and reported by the
+  # staging-mirrors-prod check as an allowlisted `secret_dropped` difference.
+  secret_map:
+    ENCRYPTION_SECRET: staging-encryption-secret
+    ADMIN_KEY: staging-admin-key
+    METRICS_SECRET: staging-metrics-secret
+    LIFECYCLE_EMAIL_SIGNING_SECRET: staging-lifecycle-email-signing-secret
+    MEMORY_V3_CURSOR_SECRET: staging-memory-v3-cursor-secret
+    SCREEN_FRAME_SIGNING_SECRET: staging-screen-frame-signing-secret
+    DREAM_AGENT_FEEDBACK_SALT: staging-dream-agent-feedback-salt
+    OMI_LLM_GATEWAY_SERVICE_TOKEN: staging-omi-llm-gateway-service-token
+    TELEGRAM_WEBHOOK_SECRET: staging-telegram-webhook-secret
+    LINQ_WEBHOOK_SECRET: staging-linq-webhook-secret
+    REDIS_DB_PASSWORD: staging-redis-password
+    OPENAI_API_KEY: staging-openai-api-key
+    ANTHROPIC_API_KEY: staging-anthropic-api-key
+    GEMINI_API_KEY: staging-gemini-api-key
+    OPENROUTER_API_KEY: staging-openrouter-api-key
+    GROQ_API_KEY: staging-groq-api-key
+    SONIOX_API_KEY: staging-soniox-api-key
+    HUGGINGFACE_TOKEN: staging-huggingface-token
+    FIREBASE_API_KEY: staging-firebase-api-key
+    STT_SERVICE_MODELS: staging-stt-service-models
+    MODULATE_API_KEY: staging-modulate-api-key
+  # Secrets that prod mounts from outside the manifest (live-service residue) but staging needs.
+  secret_add:
+    - ENCRYPTION_SECRET
+    - ADMIN_KEY
+    - METRICS_SECRET
+    - REDIS_DB_PASSWORD
+    - OPENAI_API_KEY
+    - ANTHROPIC_API_KEY
+    - GEMINI_API_KEY
+    - OPENROUTER_API_KEY
+    - GROQ_API_KEY
+    - SONIOX_API_KEY
+    - HUGGINGFACE_TOKEN
+    - FIREBASE_API_KEY
+    - STT_SERVICE_MODELS
+    - MODULATE_API_KEY
+
+# A plain patch over the composed prod config, for staging-only values that are not covered above.
+# Prod live-service residue (set per service outside runtime_env.yaml; values read from prod on
+# ro-prod 2026-10-20). Without SYNC_DISPATCH_MODE the sync services run inline, and the backfill
+# lane fails closed with sync_backfill_dispatch_unavailable (503) whenever an owner is not on batch.
+#
+# Hosted speech endpoints: prod points them at prod Parakeet (parakeet.omi.me) and the prod diarizer
+# ILB. Dev's own Parakeet and diarizer are scaled to zero, so staging blackholes all three (the same
+# closed port as OMI_LLM_GATEWAY_URL): hosted calls fail fast and the STT chain falls back to its
+# vendors. The staging fence rejects any omi.me host or prod network address (M1 review L02-1).
+overlay:
+  cloud_run:
+    services:
+      backend:
+        env:
+          ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+          HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+      backend-sync:
+        env:
+          SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+          ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+          HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+      backend-sync-backfill:
+        env:
+          SYNC_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+          ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+          HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_DIARIZATION_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+      backend-integration:
+        env:
+          ACCOUNT_DELETION_DISPATCH_MODE: {category: rollout, value: cloud_tasks}
+          HOSTED_PARAKEET_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}
+          HOSTED_SPEAKER_EMBEDDING_API_URL: {category: service_discovery, value: 'http://127.0.0.1:9'}

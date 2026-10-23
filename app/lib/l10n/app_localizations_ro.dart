@@ -13452,9 +13452,6 @@ class AppLocalizationsRo extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Continuă cu planul gratuit';
-
-  @override
   String get paywallTrialCancelNote => 'Anulează oricând. Fără taxe, fără penalități.';
 
   @override
@@ -14547,4 +14544,59 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceControls => 'Comenzi';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'De asemenea: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Apasă butonul de pe Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'O apăsare scurtă. Apoi întreabă orice.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Pune întrebarea';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Spune cu voce tare. Omi ascultă.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Gata? Apasă din nou butonul pentru a trimite.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Ai primit $days de zile gratuit';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days de zile de Omi Pro din partea noastră. Te anunțăm înainte de orice plată. Anulezi oricând.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Vreau perioada de probă de $days de zile';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Începe perioada gratuită de $days zile';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Pornește Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Apasă butonul o dată și ține-l aproape de telefon.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Gata. Omi va continua să-ți înregistreze conversațiile în fundal.';
+
+  @override
+  String get noThanks => 'Nu, mulțumesc';
+
+  @override
+  String get recapInTheBackground => 'În fundal';
 }

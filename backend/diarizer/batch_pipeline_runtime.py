@@ -21,6 +21,7 @@ from config.batch_pipeline import worker_pipeline_depth
 from config.batch_pipeline_providers import provider_config
 from database._client import get_data_plane_firestore_client
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env, shadow_parity_collectors
 from diarizer.batch_pipeline import is_fatal_cuda_error
 from diarizer.batch_pipeline_startup import ChainMemoryProbe, load_worker, synchronize_gpu
 from utils.batch_pipeline.artifact_policy import create_artifact_store
@@ -104,6 +105,8 @@ def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -
     registry.register(TRANSITIONS)
     registry.register(DURATION)
     registry.register(LABELS)
+    for collector in shadow_parity_collectors():  # A2 shadow only; empty (no jobstore import) otherwise
+        registry.register(collector)
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
@@ -228,7 +231,7 @@ def main() -> None:
     store = FirestoreStore(namespace)
     if not os.getenv('FIRESTORE_EMULATOR_HOST') and not os.getenv('OMI_FIRESTORE_DATA_PLANE_PROJECT'):
         raise RuntimeError('explicit customer data-plane project required')
-    store = FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client())
+    store = shadow_from_env(FirestoreStore(namespace, firestore_client=get_data_plane_firestore_client()))
     # The worker evaluates live-reuse admission (sync_live_dedupe_active_for)
     # on admitted work items; bind the cached cohort resolver before pumping.
     configure_rollout_runtime()

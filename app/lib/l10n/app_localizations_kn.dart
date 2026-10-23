@@ -13436,9 +13436,6 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'ಉಚಿತ ಯೋಜನೆಯೊಂದಿಗೆ ಮುಂದುವರಿಯಿರಿ';
-
-  @override
   String get paywallTrialCancelNote => 'ಯಾವುದೇ ಸಮಯದಲ್ಲಿ ರದ್ದುಗೊಳಿಸಿ. ಯಾವುದೇ ಶುಲ್ಕಗಳಿಲ್ಲ, ಯಾವುದೇ ದಂಡಗಳಿಲ್ಲ.';
 
   @override
@@ -14532,4 +14529,60 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceControls => 'ನಿಯಂತ್ರಣಗಳು';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'ಜೊತೆಗೆ: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'உங்கள் Omi பொத்தானை அழுத்துங்கள்';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'ಒಂದು ಸಣ್ಣ ಒತ್ತು. ನಂತರ ಏನು ಬೇಕಾದರೂ ಕೇಳಿ.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'ನಿಮ್ಮ ಪ್ರಶ್ನೆ ಕೇಳಿ';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'ಜೋರಾಗಿ ಹೇಳಿ. Omi ಕೇಳುತ್ತಿದೆ.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'ಮುಗಿಯಿತೇ? ಕಳುಹಿಸಲು ಮತ್ತೆ ಬಟನ್ ಒತ್ತಿ.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'ನಿಮಗೆ $days ದಿನ ಉಚಿತ ಸಿಕ್ಕಿದೆ';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days ದಿನ Omi Pro ನಮ್ಮಿಂದ ಉಚಿತ. ಶುಲ್ಕಕ್ಕೆ ಮೊದಲು ನೆನಪಿಸುತ್ತೇವೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದು ಮಾಡಿ.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days ದಿನದ ಪ್ರಯೋಗ ಪಡೆಯಿರಿ';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '$days ದಿನಗಳ ಉಚಿತ ಪ್ರಯೋಗ ಪ್ರಾರಂಭಿಸಿ';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'ನಿಮ್ಮ Omi ಆನ್ ಮಾಡಿ';
+
+  @override
+  String get pairingPowerOnSubtitle => 'ಒಮ್ಮೆ ಬಟನ್ ಒತ್ತಿ ಫೋನ್ ಹತ್ತಿರ ಇರಿಸಿ.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'ಅಷ್ಟೇ. Omi ಹಿನ್ನೆಲೆಯಲ್ಲಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಲೇ ಇರುತ್ತದೆ.';
+
+  @override
+  String get noThanks => 'ಬೇಡ, ಧನ್ಯವಾದ';
+
+  @override
+  String get recapInTheBackground => 'ಹಿನ್ನೆಲೆಯಲ್ಲಿ';
 }

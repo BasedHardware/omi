@@ -61,13 +61,15 @@ def commit_publication(
 
 
 class Publication:
-    def __init__(self, uid: str) -> None:
+    def __init__(self, uid: str, *, identity: str | None = None) -> None:
         self._uid = uid
-        self._identity = uuid4().hex
+        self._identity = identity or uuid4().hex
         self._attempted = False
         self.lock = RLock()
         self.fields: dict = {}
         self.put_started = False
+        # Upload-only futures retain ambiguous results; they never own a commit.
+        self.upload_attempts: list[Any] = []
 
     @property
     def uid(self) -> str:

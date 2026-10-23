@@ -11,12 +11,28 @@ on:
         default: ''
   push:
     branches: main
+    # Superset of the detect-changes has_frontend/has_web_app/has_admin/
+    # has_personas filters that gate this workflow's jobs, so a main push
+    # that cannot wake any of them skips the workflow entirely.
+    paths:
+      - 'web/frontend/**'
+      - 'web/app/**'
+      - 'web/admin/**'
+      - 'web/personas-open-source/**'
+      - 'web/packages/note-shared/**'
+      - 'firestore.indexes.json'
+      - '.github/actions/detect-changes/**'
+      - '.github/workflows/web-checks.yml'
   pull_request:
     branches: main
 
 concurrency:
   group: web-checks-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
-  cancel-in-progress: true
+  # A newer PR push supersedes that PR's older run. A newer main push must not
+  # cancel the running one: with cancel-in-progress false GitHub replaces only
+  # the pending run in the group, so the running SHA finishes and the newest
+  # pending SHA runs next — main always gets a complete run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout

@@ -4,7 +4,7 @@ import logging
 import time
 from typing import Any
 
-from google.api_core.exceptions import AlreadyExists, NotFound, PreconditionFailed
+from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 from database._client import get_data_plane_firestore_client as get_firestore_client
 from database._client import is_retryable_firestore_transaction_error, run_transactional
@@ -33,9 +33,9 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
         # The publication lock covers one attempt. Retry backoff runs after this
         # returns, so a sleep cannot stall another session's source.
         with source.lock:
-            # Hold both account authorities through upload AND manifest commit.
-            # A destructive writer either precedes this read (we refuse) or waits /
-            # conflicts with it. Nested GCS gates reuse this exact transaction scope.
+            # The live upload checks both account authorities independently;
+            # these reads still fence its receipt commit against destructive work.
+            # Synchronous recovery callers upload inside this same scope.
             with external_write_fence(uid, firestore_client=client, transaction=tx):
                 existing = ref.get(transaction=tx)
                 prior = existing.to_dict() if existing.exists else None
@@ -53,8 +53,7 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                     return
                 attempted = True
                 source.put_started = True
-                source.fields = {}  # A later failed put must not inherit a deleted generation.
-                fields = cap_hold.upload_held_audio(uid, path, identity, metadata, immutable=True)
+                fields = source.fields or cap_hold.upload_held_audio(uid, path, identity, metadata, immutable=True)
                 source.fields = dict(fields)
                 body = cap_hold.hold_manifest(fields, seconds, time.time(), int(metadata['timestamp']))
                 tx.create(ref, {**body, 'live_custody_version': 4, 'usage_applied': True})
@@ -132,24 +131,9 @@ def _publish(uid: str, path: str, source: Publication, metadata: dict, seconds: 
                     type(error).__name__,
                 )
                 return None
-            # Exceptional path only: an upload may have succeeded before an aborted
-            # commit or a deletion marker won. Never delete a committed source on a
-            # lost reply, nor a replacement generation. Retain failures for retry.
-            if source.put_started and not ref.get().exists:
-                fields = source.fields
-                blob = cap_hold.get_private_cloud_sync_bucket().blob(
-                    fields.get('audio_path') or f'chunks/{uid}/cap-held/{identity}.opus.enc'
-                )
-                try:
-                    generation = fields.get('audio_generation')
-                    if not generation:
-                        blob.reload(timeout=10, retry=None)  # Ambiguous reply; exceptional Class B only.
-                        generation = blob.generation
-                    if not generation:
-                        raise RuntimeError('held source generation unavailable for cleanup')
-                    blob.delete(if_generation_match=generation)
-                except (NotFound, PreconditionFailed):
-                    pass
+            # A missing receipt cannot fence an earlier commit that is still in
+            # flight. Keep the identity and generation even on a permanent error;
+            # unreferenced storage is preferable to a receipt naming deleted audio.
         return UNRECOVERED
 
     commit_publication(client, commit, recover=recover)

@@ -13502,9 +13502,6 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Magpatuloy sa libreng plano';
-
-  @override
   String get paywallTrialCancelNote => 'Magkansela anumang oras. Walang bayad, walang multa.';
 
   @override
@@ -14599,4 +14596,60 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get deviceControls => 'Mga Kontrol';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Gayundin: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Pindutin ang button sa iyong Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Isang maikling pindot. Pagkatapos, magtanong ng kahit ano.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Itanong ang iyong tanong';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Sabihin nang malakas. Nakikinig si Omi.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Tapos na? Pindutin muli ang button para ipadala.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Na-upgrade ka sa $days araw na libre';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days araw ng Omi Pro, libre mula sa amin. Paalalahanan ka namin bago masingil. Kanselahin anumang oras.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Kunin ang $days-araw na trial';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Simulan ang $days-araw na libreng trial';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'I-on ang iyong Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Pindutin nang isang beses ang button at ilapit sa iyong phone.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'Ayan na. Patuloy na irerekord ni Omi ang iyong mga usapan sa background.';
+
+  @override
+  String get noThanks => 'Hindi, salamat';
+
+  @override
+  String get recapInTheBackground => 'Sa background';
 }

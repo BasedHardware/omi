@@ -1261,13 +1261,9 @@ EXTERNAL_ALERT_METRICS = {
     "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
 }
 
-# These backend counters are owned by legacy-retirement PR #22422 and are not
-# in this alert-only base yet. Remove the pending allowance once that producer
-# lands; until then it permits the alert to arrive before the M3 rollout.
-PENDING_BACKEND_ALERT_METRICS = {
-    "omi_reason_total": "legacy-retirement PR #22422",
-    "omi_reason_unknown_total": "legacy-retirement PR #22422",
-}
+# Backend counters whose alert may arrive before the producer lands. Both reason
+# counters are now declared by utils/observability/reasons.py (#22422), so none pend.
+PENDING_BACKEND_ALERT_METRICS = {}
 
 _METRIC_DECLARATION = re.compile(r"(?:Counter|Gauge|Histogram)\(\s*['\"]([a-zA-Z0-9_:]+)['\"]")
 _PROMQL_KEYWORDS = frozenset(
@@ -1864,6 +1860,29 @@ def test_live_stt_capacity_full_and_provider_terminal_alerts_are_per_target_and_
         assert 'outcome="success"' in term["A"]["expr"], export_name
         assert "omi_live_stt_terminal_failures_total" in term["B"]["expr"], export_name
         assert term["C"]["expression"] == "$A >= 30 && $B > 0.75", export_name
+
+
+def test_local_delivery_and_sync_budget_siblings_cover_reasons_the_capacity_rules_lost():
+    # 2026-10-22: P34 (#23074) moved Soniox/Modulate local delivery deaths off
+    # capacity_full, and Modulate's 429 "Insufficient credits" paged nothing
+    # until #23234 typed it provider_budget_exhausted on sync jobs.
+    for export_name, rules in _all_rule_exports().items():
+        local = rules["omi-stt-local-delivery-exhausted"]
+        assert local["labels"]["severity"] == "warning", export_name
+        assert local["for"] == "30m", export_name
+        nodes = {node["refId"]: node["model"] for node in local["data"]}
+        assert (
+            'reason=~"send_queue_full|replay_send_stalled|delivery_expired",outcome="exhausted"' in nodes["B"]["expr"]
+        ), export_name
+        assert nodes["C"]["expression"] == "$A >= 100 && $B > 0.02", export_name
+        budget = rules["omi-sync-provider-budget-exhausted"]
+        assert budget["labels"]["severity"] == "critical", export_name
+        assert budget["for"] == "5m", export_name
+        assert budget["data"][0]["datasourceUid"] == "gmp-cloud-run", export_name
+        nodes = {node["refId"]: node["model"] for node in budget["data"]}
+        assert 'outcome="provider_budget_exhausted"' in nodes["A"]["expr"], export_name
+        assert "backend-sync|backend-sync-backfill" in nodes["A"]["expr"], export_name
+        assert nodes["C"]["expression"] == "$A >= 3", export_name
 
 
 def test_chat_journey_rules_require_a_failure_floor_before_firing():

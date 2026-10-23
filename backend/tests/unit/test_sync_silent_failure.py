@@ -10,6 +10,7 @@ silent returns or thread crashes, and the endpoint always returned 200.
 """
 
 import os
+import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -17,7 +18,11 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from models import conversation_continuity  # noqa: F401 - retain pure policy across the legacy models package stub
 from models.transcript_segment import SpeakerIdentityStatus
+from utils.capture import coverage  # noqa: F401 - retain lazy ledger authority before database stubs
+from utils.stt import transcript_admission  # noqa: F401 - retain pure admission contract before enum/package stubs
+from utils.speakers import context  # noqa: F401 - retain speaker metric owner before package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms before legacy database stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy sanitizer stubs
 
@@ -402,9 +407,15 @@ class TestAppSideSyncBehavior:
 
     def test_app_keeps_wals_retryable_on_failed_reconcile(self):
         """App keeps uploaded WALs retryable when sync v2 reconciliation fails."""
-        source = self._read_app_file('services/wals/local_wal_sync.dart')
-        if source is None:
+        library = self._read_app_file('services/wals/local_wal_sync.dart')
+        if library is None:
             pytest.skip("App source not available")
+        # The reconcile logic lives in `part` files of this library (e.g. wal_job_reconciliation.dart).
+        parts = [
+            self._read_app_file(f'services/wals/{name}') or ''
+            for name in re.findall(r"^part '([^']+)';", library, flags=re.MULTILINE)
+        ]
+        source = '\n'.join([library, *parts])
 
         assert 'reconcileUploadedWals' in source, "Must reconcile uploaded sync v2 jobs"
         assert 'case SyncJobFetchOutcome.notFound' in source, "Expired jobs must be recoverable"
@@ -806,7 +817,7 @@ class TestProcessSegmentReal:
         # Install stubs
         for mod_name in _STUB_MODULES:
             sys.modules[mod_name] = ModuleType(mod_name)
-        sys.modules['models'].__path__ = []
+        sys.modules['models'].__path__ = [os.path.join(os.path.dirname(__file__), '..', '..', 'models')]
         # Keep receipt policy + allocator real: assignment.py imports them at
         # module scope, and the stubbed models.transcript_segment is not a package
         # that can load the policy's real TranscriptSegment binding.

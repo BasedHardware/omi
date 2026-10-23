@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/firebase/admin';
-import { verifyAdmin } from '@/lib/auth';
-import type Stripe from 'stripe';
-import { getStripe } from '@/lib/stripe';
-export const dynamic = 'force-dynamic';
+import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/firebase/admin";
+import { requireScope } from "@/lib/auth";
+import type Stripe from "stripe";
+import { getStripeRead } from "@/lib/stripe";
+export const dynamic = "force-dynamic";
 
 interface PayoutWithAppInfo {
   payout: Stripe.Payout;
@@ -13,45 +13,52 @@ interface PayoutWithAppInfo {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
-  const stripe = getStripe();
+  const stripe = getStripeRead();
   const db = getDb();
 
   try {
     const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const startingAfter = searchParams.get('starting_after');
+    const limit = parseInt(searchParams.get("limit") || "50");
+    const startingAfter = searchParams.get("starting_after");
 
     // 1. Get all paid apps
-    const appsSnapshot = await db.collection('plugins_data')
-      .where('is_paid', '==', true)
+    const appsSnapshot = await db
+      .collection("plugins_data")
+      .where("is_paid", "==", true)
       .get();
 
-    const apps = appsSnapshot.docs.map(doc => {
+    const apps = appsSnapshot.docs.map((doc) => {
       const data = doc.data();
       return {
         id: doc.id,
-        name: data.name || 'Unknown App',
-        uid: data.uid || '',
-        ...data
+        name: data.name || "Unknown App",
+        uid: data.uid || "",
+        ...data,
       };
     });
 
     // 2. Get all users with Stripe accounts
-    const usersWithStripe: { [userId: string]: { stripeAccountId: string, name: string, email: string } } = {};
-    const userIds = Array.from(new Set(apps.map(app => app.uid)));
+    const usersWithStripe: {
+      [userId: string]: {
+        stripeAccountId: string;
+        name: string;
+        email: string;
+      };
+    } = {};
+    const userIds = Array.from(new Set(apps.map((app) => app.uid)));
 
     for (const userId of userIds) {
-      const userDoc = await db.collection('users').doc(userId).get();
+      const userDoc = await db.collection("users").doc(userId).get();
       if (userDoc.exists) {
         const userData = userDoc.data();
         if (userData?.stripe_account_id) {
           usersWithStripe[userId] = {
             stripeAccountId: userData.stripe_account_id,
-            name: userData.name || userData.displayName || 'Unknown',
-            email: userData.email || 'No email'
+            name: userData.name || userData.displayName || "Unknown",
+            email: userData.email || "No email",
           };
         }
       }
@@ -80,7 +87,7 @@ export async function GET(request: NextRequest) {
         });
 
         // Add app info to each payout
-        const payoutsWithAppInfo = payouts.data.map(payout => ({
+        const payoutsWithAppInfo = payouts.data.map((payout) => ({
           payout,
           appName: app.name,
           userName: userStripeData.name,
@@ -98,12 +105,12 @@ export async function GET(request: NextRequest) {
     allPayoutsWithAppInfo.sort((a, b) => b.payout.created - a.payout.created);
 
     // 5. Apply pagination if needed
-    const paginatedPayouts = startingAfter 
+    const paginatedPayouts = startingAfter
       ? allPayoutsWithAppInfo.slice(0, limit)
       : allPayoutsWithAppInfo.slice(0, limit);
 
     // Transform payouts to remove owner field and add uid field
-    const transformedPayouts = paginatedPayouts.map(payoutData => {
+    const transformedPayouts = paginatedPayouts.map((payoutData) => {
       const { payout, appName, userName, userId } = payoutData;
       return {
         payout,
@@ -113,20 +120,23 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    const response = NextResponse.json({
+    const response = authResult.json({
       payouts: transformedPayouts,
       hasMore: allPayoutsWithAppInfo.length > limit,
       totalCount: allPayoutsWithAppInfo.length,
     });
 
     // Set caching headers for better performance
-    response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
+    response.headers.set(
+      "Cache-Control",
+      "public, s-maxage=300, stale-while-revalidate=600"
+    );
 
     return response;
   } catch (error) {
-    console.error('Error fetching all payouts:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch payouts' },
+    console.error("Error fetching all payouts:", error);
+    return authResult.json(
+      { error: "Failed to fetch payouts" },
       { status: 500 }
     );
   }

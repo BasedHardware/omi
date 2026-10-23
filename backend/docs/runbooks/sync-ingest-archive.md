@@ -1,21 +1,26 @@
 # As-captured audio and backend-sync cost trial
 
-Owner: David approves cohorts; Claude deploys and ramps. All new writes and
-routing trials default off. Canonical capture stays in `BUCKET_PRIVATE_CLOUD_SYNC`
-(the existing US multi-region bucket), indefinitely except user-requested conversation/account deletion.
+Owner: David approves cohorts; Claude deploys and ramps. Canonical capture stays
+in `BUCKET_PRIVATE_CLOUD_SYNC` (the existing US multi-region bucket), indefinitely
+except user-requested conversation/account deletion.
 Training use is **not authorized** by storage consent. No age deletion or
 historical rewrite is part of this change.
 
 ## Phases and compatibility
 
-The common deterministic cohort uses `AUDIO_ARCHIVE_PERCENT` (0) and
-`AUDIO_ARCHIVE_UID_ALLOWLIST` (empty). Each phase also needs its own enable:
+Per David's 2026-10-22 as-captured ruling (P71), `AUDIO_ARCHIVE_LIVE_ENABLED`
+and `AUDIO_ARCHIVE_READ_ENABLED` default **on** as fleet kill switches: the
+original Opus capture is dual-written next to the decoded PCM everywhere, and
+readers prefer it, without a percent cohort. Setting either to `false` is the
+rollback. The remaining phases stay default-off staged rollouts behind their
+enable plus the common deterministic cohort (`AUDIO_ARCHIVE_PERCENT` (0),
+`AUDIO_ARCHIVE_UID_ALLOWLIST` (empty)):
 
 | Enable | Behavior |
 | --- | --- |
-| `AUDIO_ARCHIVE_LIVE_ENABLED` | Dual-write original Opus WAL packets or lossless PCM FLAC alongside today's PCM. Packs are bounded at 16 MiB, partitioned by owner/conversation/UTC hour/channel; tails flush on disconnect. |
-| `AUDIO_ARCHIVE_READ_ENABLED` | Prefer checksum-verified raw coverage for span-bearing legacy chunks in merge, playback, and final-pass consumers of the shared decoder. Missing/incomplete raw keeps PCM. |
-| `AUDIO_ARCHIVE_STOP_PCM_ENABLED` | Requires READ; skip a PCM batch only after committed raw verifies complete coverage and the live capture-PCM SHA matches (or raw decode matches every byte). Missing raw, checksum, rate, span, or decode mismatch retains today's write. |
+| `AUDIO_ARCHIVE_LIVE_ENABLED` (default on) | Dual-write original Opus WAL packets or lossless PCM FLAC alongside today's PCM. Packs are bounded at 16 MiB, partitioned by owner/conversation/UTC hour/channel; tails flush on disconnect. |
+| `AUDIO_ARCHIVE_READ_ENABLED` (default on) | Prefer checksum-verified raw coverage for span-bearing legacy chunks in merge, playback, and final-pass consumers of the shared decoder. Missing/incomplete raw keeps PCM. |
+| `AUDIO_ARCHIVE_STOP_PCM_ENABLED` + `AUDIO_ARCHIVE_STOP_PCM_PERCENT` (default off/0) | Requires READ; ramps against its own percent (not `AUDIO_ARCHIVE_PERCENT`, which COALESCE pins at 100). Skip a PCM batch only after committed raw verifies complete coverage and the live capture-PCM SHA matches (or raw decode matches every byte). Missing raw, checksum, rate, span, or decode mismatch retains today's write. |
 | `AUDIO_ARCHIVE_SYNC_ENABLED` | v1/v2 SD/offline uploads archive original file bytes before decode/acceptance; lossy backend Opus chunks become derived renditions. Existing mobile-batch archival remains mandatory. |
 | `AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED` | Route merged/playback caches, sync renditions and new intake staging to `BUCKET_AUDIO_DERIVED`. Canonical raw stays multi-region. |
 | `AUDIO_ARCHIVE_COALESCE_ENABLED` | Share concurrent identical file rebuild results, including failures; released admission permits retry. Existing fingerprint-named Cloud Tasks and distributed conversation leases still cover cross-instance rebuilds. |

@@ -43,6 +43,12 @@ from utils.stt.soniox_capture_axis import (
     enabled as capture_axis_diagnostics_enabled,
 )
 from utils.stt.soniox_idle import IdleSonioxSocket, SonioxIdleBudget
+from utils.stt.live_reason import (
+    LOCAL_DELIVERY_DEATH_REASONS,
+    LOCAL_DELIVERY_EXPIRED,
+    LOCAL_DELIVERY_REPLAY_SEND_STALLED,
+    LOCAL_DELIVERY_SEND_QUEUE_FULL,
+)
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
 from utils.observability.demand_cohort import create_connected_meter, create_wire_meter, telemetry_call
@@ -253,6 +259,9 @@ class SafeSonioxSocket(STTSocket):
         else:
             self._send_queue = asyncio.Queue(maxsize=2000)
         self._writer_pace: RecoveryWriterPace | None = None
+        # Death diagnostics only (local delivery deaths): when the last wire
+        # write completed. Queue age comes from the queue itself.
+        self._last_write_at: float | None = None
         # A response can end in the middle of a word. Downstream joins distinct
         # segments with spaces, so retain the last word until its boundary is known.
         self._pending_segment: Optional[Dict[str, Any]] = None
@@ -317,6 +326,36 @@ class SafeSonioxSocket(STTSocket):
                 operation if operation in {'send', 'recv'} else 'unknown',
                 *fields,
             )
+        if typed_reason in LOCAL_DELIVERY_DEATH_REASONS:
+            self._log_local_delivery_death(typed_reason)
+
+    def _log_local_delivery_death(self, subtype: str) -> None:
+        """One bounded WARNING per local delivery death: the subtype and numbers only.
+
+        These deaths carry no transport error, so until now they never logged
+        and the three local causes were indistinguishable in prod (P32).
+        """
+        now = time.monotonic()
+        queue = self._send_queue
+        try:
+            queue_packets = queue.qsize() + getattr(queue, 'inflight', 0)
+        except Exception:
+            queue_packets = -1
+        age = getattr(queue, 'oldest_queued_age', None)
+        try:
+            queue_age = age(now) if callable(age) else -1.0
+        except Exception:
+            queue_age = -1.0
+        last_write_at = self._last_write_at
+        logger.warning(
+            'Soniox local delivery death subtype=%s queue_packets=%d queue_age_seconds=%.3f '
+            'since_last_send_seconds=%.3f session_age_seconds=%.3f',
+            subtype,
+            queue_packets,
+            queue_age,
+            now - last_write_at if last_write_at is not None else -1.0,
+            now - self._opened_at,
+        )
 
     def send(self, data: bytes) -> bool:
         with self._lock:
@@ -348,7 +387,7 @@ class SafeSonioxSocket(STTSocket):
             self._send_queue.put_nowait(aligned)
             self._diagnostic(lambda diagnostic: setattr(diagnostic, 'queued', diagnostic.queued + len(aligned) // 2))
         except asyncio.QueueFull:
-            self._mark_dead('send queue full', typed_reason='capacity_full')
+            self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
             return False
         return True
 
@@ -367,7 +406,7 @@ class SafeSonioxSocket(STTSocket):
                 timeout=timeout if timeout is not None else self.replay_limits.queue_wait_seconds,
             )
         except TimeoutError:
-            self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
+            self._mark_dead('replay send queue stalled', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
         return not (self._dead or self._closed or self._finishing)
 
     def finalize(self) -> None:
@@ -377,7 +416,7 @@ class SafeSonioxSocket(STTSocket):
             try:
                 self._send_queue.put_nowait(json.dumps({'type': 'finalize'}))
             except asyncio.QueueFull:
-                self._mark_dead('send queue full', typed_reason='capacity_full')
+                self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
 
         try:
             current_loop = asyncio.get_running_loop()
@@ -405,7 +444,7 @@ class SafeSonioxSocket(STTSocket):
                 try:
                     self._send_queue.put_nowait(b'')
                 except asyncio.QueueFull:
-                    self._mark_dead('send queue full', typed_reason='capacity_full')
+                    self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
 
         try:
             current_loop = asyncio.get_running_loop()
@@ -534,6 +573,7 @@ class SafeSonioxSocket(STTSocket):
         try:
             await self._ws.send(data)
             written = True
+            self._last_write_at = time.monotonic()
             telemetry_call(self, '_demand_wire', 'written', data)
             if isinstance(data, bytes):
                 self.stream_end.note_audio_sent()
@@ -615,7 +655,7 @@ class SafeSonioxSocket(STTSocket):
                 if isinstance(data, bytes):
                     self._audio_sent = True
         except AudioDeliveryExpired:
-            self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
+            self._mark_dead('live audio delivery expired', typed_reason=LOCAL_DELIVERY_EXPIRED)
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(
                 f'ws send closed: {e}',
@@ -817,6 +857,7 @@ async def process_audio_soniox(
     *,
     profile: LiveLanguageProfile | None = None,
     idle_budget: SonioxIdleBudget | None = None,
+    uid: str | None = None,
 ) -> STTSocket:
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -867,13 +908,21 @@ async def process_audio_soniox(
             rejected,
         )
 
+    from utils.stt.vocabulary import apply_context
+
+    await apply_context(config, uid)
     url = SONIOX_WS_URL
 
     async def connect(callback: Any) -> SafeSonioxSocket:
         return await _open_soniox(config, url, callback, preseconds)
 
     sock = await connect(stream_transcript)
+    # The receiver-owned budget already resolved the uid-hash cohort against the
+    # global knobs; a bare call (no budget) keeps the global read. The global
+    # kill switch is re-read per leg so SONIOX_IDLE_CLOSE_SECONDS=0 stays hot.
     seconds = idle_close_seconds()
+    if seconds and idle_budget is not None:
+        seconds = idle_budget.close_seconds
     if seconds:
         return IdleSonioxSocket(sock, connect, stream_transcript, sample_rate, seconds, idle_budget=idle_budget)
     return sock

@@ -134,7 +134,6 @@ surfaces:
   - utils/sync/minimal_redrive.py::feature:sync_redrive_title
   - utils/episodes/incremental.py::feature:episode_incremental
   - utils/llm/conversation_processing.py::feature:conv_structure
-  - utils/llm/episode_writer.py::feature:conv_structure
   - utils/llm/conversation_processing.py::feature:conv_app_result
   - utils/llm/conversation_processing.py::feature:conv_app_select
   - utils/llm/conversation_processing.py::feature:daily_summary
@@ -149,6 +148,7 @@ surfaces:
   - utils/llm/trends.py::feature:trends
   - utils/llm/wake_word_adjudication.py::feature:wake_word_adjudication
   - utils/llm/working_observations.py::feature:memory_l1
+  - utils/memory/canonical_consolidation.py::feature:memory_l2
   - utils/retrieval/graph.py::feature:chat_graph
   - utils/screen_frames/judge.py::feature:<dynamic>
   - utils/translation_core/providers.py::feature:translation

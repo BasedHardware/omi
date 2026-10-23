@@ -16,7 +16,11 @@ on:
 
 concurrency:
   group: backend-checks-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
-  cancel-in-progress: true
+  # A newer PR push supersedes that PR's older run. A newer main push must not
+  # cancel the running one: with cancel-in-progress false GitHub replaces only
+  # the pending run in the group, so the running SHA finishes and the newest
+  # pending SHA runs next — main always gets a complete run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches

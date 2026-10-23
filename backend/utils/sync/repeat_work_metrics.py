@@ -25,6 +25,7 @@ CALLS = Counter('omi_repeat_work_llm_calls_total', 'Observed LangChain calls in 
 FINALS = Counter(
     'omi_repeat_work_finalizations_total', 'Durable conversation revisions; join logs for distinct survivors'
 )
+PLAYBACK_WRITES = Counter('omi_playback_writes_total', 'Playback write decisions', ['outcome'])
 PLAYBACK_BUILDS = Counter('omi_playback_artifacts_total', 'Playback artifact work', ['representation', 'outcome'])
 PLAYBACK_BUILD_SECONDS = Histogram(
     'omi_playback_build_seconds',

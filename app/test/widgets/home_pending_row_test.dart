@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nested/nested.dart';
@@ -13,11 +12,9 @@ import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/models/sync_state.dart';
-import 'package:omi/pages/conversations/conversations_page.dart' show dateFilterIncludesToday;
 import 'package:omi/pages/conversations/on_the_way_page.dart';
 import 'package:omi/pages/conversations/sync_pending_work.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart' show NoConversationsHero;
-import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -157,17 +154,6 @@ Widget _app(SyncProvider sync, Widget child, {List<SingleChildWidget> extras = c
       ),
     );
 
-Future<void> _pumpRow(WidgetTester tester, SyncProvider sync, {List<SingleChildWidget> extras = const []}) async {
-  await tester.pumpWidget(
-    _app(
-      sync,
-      const Scaffold(body: SingleChildScrollView(child: HomePendingRow(multiFileSync: true))),
-      extras: extras,
-    ),
-  );
-  await tester.pump();
-}
-
 Future<void> _pumpPage(WidgetTester tester, SyncProvider sync, {List<SingleChildWidget> extras = const []}) async {
   // The fixtures start a few minutes into 1970: pin Today there so their day opens by default.
   OnTheWayPage.resetFolds();
@@ -202,128 +188,6 @@ void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
-  });
-
-  group('HomePendingRow', () {
-    testWidgets('shows a finished recording while the server still processes it', (tester) async {
-      await _pumpRow(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]));
-
-      expect(find.byKey(_row), findsOneWidget);
-      expect(find.text('Conversations on the way'), findsOneWidget);
-      expect(find.text('Transcribing…'), findsOneWidget);
-    });
-
-    testWidgets('hides once every recording is a conversation', (tester) async {
-      await _pumpRow(tester, _FakeSync(wals: [_wal('done', 15, WalStatus.synced)]));
-      expect(find.byKey(_row), findsNothing);
-    });
-
-    testWidgets('a long backlog reads as catching up, never as an amount', (tester) async {
-      await _pumpRow(tester, _FakeSync(wals: [_wal('a', 25, WalStatus.miss), _wal('bb', 10, WalStatus.miss)]));
-
-      expect(find.text('Catching up on earlier audio'), findsOneWidget);
-      expect(find.text('Waiting to sync'), findsOneWidget);
-      expect(find.textContaining('35m'), findsNothing);
-    });
-
-    testWidgets('names the live step of a sync', (tester) async {
-      await _pumpRow(tester, _FakeSync(wals: [_wal('ready', 5, WalStatus.miss)], syncing: true));
-      expect(find.text('Downloading from your device'), findsOneWidget);
-    });
-
-    testWidgets('keeps the transcribing copy through the post-sync conversation fetch', (tester) async {
-      await _pumpRow(
-        tester,
-        _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)], fetchingWithUploadPhase: true),
-      );
-      expect(find.text('Transcribing…'), findsOneWidget);
-    });
-
-    testWidgets('reads the conversation fetch after a sync as transcribing', (tester) async {
-      await _pumpRow(tester, _FakeSync(wals: [_wal('done', 4, WalStatus.synced)], fetching: true));
-      expect(find.text('Transcribing…'), findsOneWidget);
-    });
-
-    testWidgets('a device download in progress reads as itself through an upload cooldown', (tester) async {
-      final sync = _FakeSync(wals: [_wal('ready', 5, WalStatus.miss)], syncing: true)
-        ..rateLimited = true
-        ..reason = RateLimitReason.backendBusy;
-      await _pumpRow(tester, sync);
-      expect(find.text('Downloading from your device'), findsOneWidget);
-    });
-
-    testWidgets('reads a backend-busy cooldown as itself, not pending work', (tester) async {
-      final sync = _FakeSync(wals: [_wal('ready', 5, WalStatus.miss)])
-        ..rateLimited = true
-        ..reason = RateLimitReason.backendBusy;
-      await _pumpRow(tester, sync);
-      expect(find.text('Omi servers are busy — your recordings will sync once capacity returns'), findsOneWidget);
-    });
-
-    testWidgets('hides when only retry-exhausted or refused recordings remain', (tester) async {
-      final exhausted = _wal('failed', 5, WalStatus.miss)..retryCount = 99;
-      await _pumpRow(tester, _FakeSync(wals: [exhausted, _wal('old', 5, WalStatus.outsideRecoveryWindow)]));
-      expect(find.byKey(_row), findsNothing);
-    });
-
-    testWidgets('hides when only local-only (on-device STT) recordings remain', (tester) async {
-      final local = _wal('local', 5, WalStatus.miss)..onDeviceOnly = true;
-      await _pumpRow(tester, _FakeSync(wals: [local]));
-      expect(find.byKey(_row), findsNothing);
-    });
-
-    testWidgets('stays activatable for screen readers', (tester) async {
-      final handle = tester.ensureSemantics();
-      await _pumpRow(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]));
-      final node = tester.getSemantics(find.byKey(_row));
-      expect(node.label, 'Conversations on the way, Transcribing…');
-      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
-      handle.dispose();
-    });
-
-    test('belongs to Today only: a date filter that excludes today hides it', () {
-      final now = DateTime(2026, 10, 15, 18);
-      expect(dateFilterIncludesToday(null, null, now), isTrue);
-      expect(dateFilterIncludesToday(DateTime(2026, 10, 15), null, now), isTrue);
-      expect(dateFilterIncludesToday(DateTime(2026, 10, 1), DateTime(2026, 10, 15), now), isTrue);
-      expect(dateFilterIncludesToday(DateTime(2026, 10, 1), DateTime(2026, 10, 14), now), isFalse);
-      expect(dateFilterIncludesToday(DateTime(2026, 10, 14), null, now), isFalse);
-    });
-
-    testWidgets('tapping opens On the Way', (tester) async {
-      await _pumpRow(tester, _FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)]));
-      await tester.tap(find.byKey(_row));
-      await tester.pumpAndSettle();
-      expect(find.text('On the Way'), findsOneWidget);
-      expect(find.text('1 recording · 4m on the way'), findsOneWidget);
-    });
-
-    // Home mounts the row inside a CustomScrollView's slivers, where a plain
-    // box widget (SizedBox.shrink included) asserts against the viewport.
-    testWidgets('mounts inside a sliver list, hidden and visible', (tester) async {
-      Widget host(SyncProvider sync) => _app(
-            sync,
-            const Scaffold(
-              body: CustomScrollView(
-                slivers: [
-                  SliverToBoxAdapter(child: HomePendingRow(showTodayHeader: true)),
-                ],
-              ),
-            ),
-          );
-
-      await tester.pumpWidget(host(_FakeSync(wals: [_wal('done', 15, WalStatus.synced)])));
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-      expect(find.byKey(_row), findsNothing);
-      expect(find.text('Today'), findsNothing);
-
-      await tester.pumpWidget(host(_FakeSync(wals: [_wal('processing', 4, WalStatus.uploaded)])));
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-      expect(find.byKey(_row), findsOneWidget);
-      expect(find.text('Today'), findsOneWidget);
-    });
   });
 
   group('OnTheWayPage', () {
@@ -402,6 +266,14 @@ void main() {
 
       expect(find.text('On your device'), findsNothing);
       expect(find.text('Transcribing…'), findsOneWidget);
+    });
+
+    testWidgets('a fully synced twin hides its lagging device source completely', (tester) async {
+      final phone = _wal('twin', 4, WalStatus.synced);
+      final deviceTwin = _wal('twin', 4, WalStatus.miss)..storage = WalStorage.sdcard;
+      await _pumpPage(tester, _FakeSync(wals: [phone, deviceTwin]));
+
+      expect(find.text('All recordings are synced'), findsOneWidget);
     });
 
     testWidgets('counts fragments of one recording as one row', (tester) async {
@@ -643,7 +515,7 @@ void main() {
 
   // Home's order holds from the first frame: Daily Recaps, then Today (the pending row first in it),
   // then the rest. Before the list loads, the row opens Today exactly where the list's Today lands.
-  group('Home order', () {
+  group('Home without a catch-up row', () {
     final now = DateTime.now();
     DateTime at(int daysAgo, int hour) => DateTime(now.year, now.month, now.day - daysAgo, hour);
     ServerConversation convo(String id, DateTime when) => ServerConversation(
@@ -718,74 +590,47 @@ void main() {
     final today = find.text('Today');
     final yesterday = find.text('Yesterday');
 
-    testWidgets('while the list loads: recaps, then Today, then the pending row', (tester) async {
-      final provider = await pumpHome(tester, pending(), loading: true);
-      expect(today, findsOneWidget);
-      expectTopToBottom(tester, [recapsRow, today, find.byKey(_row)]);
-      await unmount(tester, provider);
-    });
+    final cases = <String, SyncProvider>{
+      'idle': _FakeSync(),
+      'small backlog': _FakeSync(wals: [_wal('small', 4, WalStatus.miss)]),
+      'large backlog': _FakeSync(wals: [_wal('large', 180, WalStatus.miss)]),
+      'downloading': _FakeSync(wals: [_wal('download', 180, WalStatus.miss)], syncing: true),
+      'uploaded': pending(),
+      'fetching conversations': _FakeSync(fetching: true),
+      'fetching after upload': _FakeSync(fetchingWithUploadPhase: true),
+      'terminal failure': _FakeSync(wals: [_wal('failed', 10, WalStatus.miss)..retryCount = 99]),
+      'local only': _FakeSync(wals: [_wal('local', 10, WalStatus.miss)..onDeviceOnly = true]),
+    };
+    for (final entry in cases.entries) {
+      for (final loading in [false, true]) {
+        testWidgets('${entry.key}, loading=$loading: no pending row or artificial Today header', (tester) async {
+          final provider =
+              await pumpHome(tester, entry.value, loading: loading, items: loading ? [] : [convo('y1', at(1, 18))]);
+          expect(find.byKey(_row), findsNothing);
+          expect(find.text('Catching up on earlier audio'), findsNothing);
+          expect(find.text('Conversations on the way'), findsNothing);
+          if (!loading) {
+            expect(today, findsNothing);
+            expectTopToBottom(tester, [recapsRow, yesterday, find.text('Conversation y1')]);
+          }
+          await unmount(tester, provider);
+        });
+      }
+    }
 
-    testWidgets('today\'s conversations arrive under the pending row and nothing above it moves', (tester) async {
-      final provider = await pumpHome(tester, pending(), loading: true);
-      final todayAt = tester.getRect(today);
-      final rowAt = tester.getRect(find.byKey(_row));
-
-      provider
-        ..conversations = [convo('t1', at(0, 0)), convo('y1', at(1, 18))]
-        ..isLoadingConversations = false
-        ..groupConversationsByDate();
-      await tester.pump();
-
-      expect(today, findsOneWidget);
-      expect(tester.getRect(today), todayAt);
-      expect(tester.getRect(find.byKey(_row)), rowAt);
-      expectTopToBottom(tester, [
-        recapsRow,
-        today,
-        find.byKey(_row),
-        find.text('Conversation t1'),
-        yesterday,
-        find.text('Conversation y1'),
-      ]);
-      await unmount(tester, provider);
-    });
-
-    testWidgets('with nothing today yet, the pending row opens Today above Yesterday', (tester) async {
-      final provider = await pumpHome(tester, pending(), items: [convo('y1', at(1, 18))]);
-      expect(today, findsOneWidget);
-      expectTopToBottom(tester, [recapsRow, today, find.byKey(_row), yesterday, find.text('Conversation y1')]);
-      await unmount(tester, provider);
-    });
-
-    testWidgets('with nothing pending, the list starts at its own first day', (tester) async {
-      final provider = await pumpHome(
-        tester,
-        _FakeSync(wals: [_wal('done', 15, WalStatus.synced)]),
-        items: [convo('y1', at(1, 18))],
-      );
+    testWidgets('today starts with its conversation, below the recaps', (tester) async {
+      final provider = await pumpHome(tester, pending(), items: [convo('t1', at(0, 0)), convo('y1', at(1, 18))]);
       expect(find.byKey(_row), findsNothing);
-      expect(today, findsNothing);
-      expectTopToBottom(tester, [recapsRow, yesterday, find.text('Conversation y1')]);
+      expect(today, findsOneWidget);
+      expectTopToBottom(tester, [recapsRow, today, find.text('Conversation t1'), yesterday]);
       await unmount(tester, provider);
     });
 
-    testWidgets('a new account keeps its hero, below Today\'s pending row', (tester) async {
+    testWidgets('a new account keeps its hero without a pending row', (tester) async {
       final provider = await pumpHome(tester, pending());
-      expect(find.byType(NoConversationsHero), findsOneWidget);
-      expectTopToBottom(tester, [recapsRow, today, find.byKey(_row), find.byType(NoConversationsHero)]);
-      await unmount(tester, provider);
-    });
-
-    testWidgets('a date range without today shows no pending row', (tester) async {
-      final provider = await pumpHome(
-        tester,
-        pending(),
-        items: [convo('o1', at(3, 10))],
-        start: DateTime(now.year, now.month, now.day - 4),
-        end: at(2, 0),
-      );
       expect(find.byKey(_row), findsNothing);
       expect(today, findsNothing);
+      expect(find.byType(NoConversationsHero), findsOneWidget);
       await unmount(tester, provider);
     });
   });

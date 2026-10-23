@@ -573,6 +573,10 @@ def test_every_declared_service_maps_to_exactly_one_role_image(contracts_module)
             roles_by_image.setdefault(image, []).append(role)
     assert all(len(roles) == 1 for roles in roles_by_image.values()), roles_by_image
 
+    # native_images join the map with the role their own entry declares.
+    for name, spec in registry.get('native_images', {}).items():
+        roles_by_image.setdefault(name, []).append(spec['role'])
+
     declared = set(registry['services']) | set(registry['logging_chart_images'])
     assert declared == set(registry['services'])
     for service in declared:
@@ -696,6 +700,19 @@ def test_role_pusher_target_copies_the_pusher_source_surface(contracts_module):
                 '.github/workflows/gcp_backend_listen_helm.yml'
             ),
             'gcp_backend_listen_helm.yml never names the service as a deploy target',
+        ),
+        # Native service entries: the registry's native_images join the role -> image -> service map.
+        (
+            lambda p: p['services'].pop('listen-edge'),
+            'native image listen-edge serves no declared service',
+        ),
+        (
+            lambda p: p['services']['listen-edge'].update({'role': 'gateway'}),
+            'is not a role image of gateway',
+        ),
+        (
+            lambda p: p['services']['listen-edge'].pop('image_built_elsewhere'),
+            'a native current_image needs an image_built_elsewhere reason',
         ),
     ],
 )
@@ -882,3 +899,31 @@ def test_build_only_entries_are_validated(contracts_module, tmp_path, override, 
 
     with pytest.raises(contracts_module.ContractError, match=re.escape(expected)):
         contracts_module.load_contracts(_registry_variant(tmp_path, mutate))
+
+
+@pytest.mark.parametrize(
+    'name,excluded_modules',
+    [
+        ('parakeet', {'utils.logging_config', 'utils.speakers.policy'}),
+        ('diarizer', {'omi_logging', 'utils.logging_config', 'utils.stt.diarization_turns'}),
+        ('nllb-translation', {'omi_logging'}),
+    ],
+)
+def test_copied_gpu_shims_do_not_probe_checkout_only_imports(contracts_module, name, excluded_modules):
+    contract = _contract(contracts_module, name)
+    assert excluded_modules <= contract.dependency_probe_exclusions
+    dependencies = contracts_module.third_party_dependency_modules(contract)
+    assert not any(
+        module == shim or module.startswith(shim + '.') for module in dependencies for shim in excluded_modules
+    )
+
+
+def test_gpu_batch_retry_cap_does_not_reach_cloud_tasks(contracts_module):
+    contract = _contract(contracts_module, 'batch-pipeline-worker')
+    closure = contracts_module.first_party_import_closure(contract, contract.entrypoints)
+    assert 'utils.capture.retry_cap' in closure
+    assert 'utils.sync.retry_hygiene' not in closure
+    assert 'utils.cloud_tasks' not in closure
+    assert not any(
+        module.startswith('google.cloud.tasks') for module in contracts_module.third_party_dependency_modules(contract)
+    )

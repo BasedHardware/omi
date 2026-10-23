@@ -267,6 +267,15 @@ A busy surface lease requeues the inbox head and does not wake that same head.
 The lease holder wakes the oldest pending row on release. The thirty-second
 pending drain covers a leaked lease. That avoids a claim/wake spin.
 
+A newer plain message replaces a running reply that nobody has seen yet. Enqueue
+stamps a content-free `supersedes` flag on each row (false for commands, button
+callbacks, link proofs and album parts). While a turn streams, a side task checks
+every `SUPERSEDE_POLL_SECONDS` for a newer flagged pending row, using the same
+`status`/`created_at` index as the drain. The turn stops at its next frame only if
+the sink has delivered nothing and no tool wrote anything. It sends no apology,
+completes its row and releases the lease, so the newer message is answered next
+with the replaced one still in the session history. Otherwise the queue stays FIFO.
+
 For the October 11 burst, logs establish the callback's canonical cleanup at
 09:17:36 / 09:22:34 UTC and two provider failures at 09:24:39 / 09:25:06. Task creation
 resumed at 09:31:21 and 09:31:27 on another already-existing instance of the same

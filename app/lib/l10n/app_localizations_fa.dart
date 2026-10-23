@@ -13392,9 +13392,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'ادامه با طرح رایگان';
-
-  @override
   String get paywallTrialCancelNote => 'هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.';
 
   @override
@@ -14480,4 +14477,59 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceControls => 'کنترل‌ها';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'همچنین: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'دکمه Omi را فشار دهید';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'یک فشار کوتاه. سپس هر چیزی بپرسید.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'سؤال خود را بپرسید';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'بلند بگویید. Omi گوش می‌دهد.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'تمام شد؟ برای ارسال دوباره دکمه را فشار دهید.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'به $days روز رایگان ارتقا یافتید';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days روز Omi Pro مهمان ما. قبل از هر پرداختی یادآوری می‌کنیم. هر زمان لغو کنید.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'دریافت آزمایشی $days روزه';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'آزمایش رایگان $days روزه را شروع کنید';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Omi را روشن کنید';
+
+  @override
+  String get pairingPowerOnSubtitle => 'یک بار دکمه را فشار دهید و نزدیک گوشی نگه دارید.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'همین. Omi به ضبط مکالمات شما در پس‌زمینه ادامه می‌دهد.';
+
+  @override
+  String get noThanks => 'نه، ممنون';
+
+  @override
+  String get recapInTheBackground => 'در پس‌زمینه';
 }

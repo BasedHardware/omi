@@ -149,6 +149,10 @@ def _read_events(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def postgres_requested() -> bool:
+    return os.getenv('OMI_STACK_POSTGRES', '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
 class Stack:
     def __init__(
         self,
@@ -319,6 +323,17 @@ class Stack:
         # can exceed 20s). Give the strong check the generous budget.
         _wait_until(healthy, label=f'Sync {role} health endpoint', timeout=60.0)
 
+    def _start_postgres(self) -> None:
+        """Opt-in (``OMI_STACK_POSTGRES=1``): a private-socket Postgres 16 with the job-store schema, for roles
+        that select the Postgres job store. Its DSN reaches children as ``JOBSTORE_POSTGRES_DSN``. Nothing in
+        the default stack reads it, so the stack is unchanged unless asked."""
+        from testing.store_fixtures import BackendUnavailable, postgres_dsn
+
+        try:
+            self.env['JOBSTORE_POSTGRES_DSN'] = postgres_dsn()
+        except BackendUnavailable as exc:
+            raise StackFailure(f'OMI_STACK_POSTGRES=1 but Postgres is unavailable: {exc}') from exc
+
     def start(self) -> None:
         redis_binary = shutil.which('redis-server')
         if not redis_binary:
@@ -341,6 +356,8 @@ class Stack:
         )
         _wait_for_port(self.redis_port, label='isolated Redis')
         redis.Redis(host='127.0.0.1', port=self.redis_port).ping()
+        if postgres_requested():
+            self._start_postgres()
         self._start(
             'worker',
             [
@@ -390,6 +407,10 @@ class Stack:
     def close(self) -> None:
         for name in list(self.children):
             self.stop(name)
+        if postgres_requested():
+            from testing.store_fixtures import stop_local_postgres
+
+            stop_local_postgres()
         for port, label in (
             (self.redis_port, 'isolated Redis'),
             (self.worker_port, 'Sync worker'),

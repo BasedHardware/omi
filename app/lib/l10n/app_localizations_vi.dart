@@ -13395,9 +13395,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Tiếp tục với gói miễn phí';
-
-  @override
   String get paywallTrialCancelNote => 'Hủy bất cứ lúc nào. Không phí, không phạt.';
 
   @override
@@ -14486,4 +14483,60 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get deviceControls => 'Điều khiển';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Ngoài ra: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Nhấn nút trên Omi của bạn';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Một lần nhấn ngắn. Sau đó hỏi bất cứ điều gì.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Đặt câu hỏi của bạn';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Nói to lên. Omi đang lắng nghe.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Xong chưa? Nhấn nút lần nữa để gửi.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Bạn được nâng lên $days ngày miễn phí';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days ngày Omi Pro miễn phí. Chúng tôi sẽ nhắc trước khi tính phí. Hủy bất cứ lúc nào.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Nhận dùng thử $days ngày';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Bắt đầu dùng thử miễn phí $days ngày';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Bật Omi của bạn';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Nhấn nút một lần và giữ gần điện thoại.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'Xong rồi. Omi sẽ tiếp tục ghi lại các cuộc trò chuyện của bạn ở chế độ nền.';
+
+  @override
+  String get noThanks => 'Không, cảm ơn';
+
+  @override
+  String get recapInTheBackground => 'Trong nền';
 }

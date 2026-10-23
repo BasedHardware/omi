@@ -15,6 +15,8 @@ import time
 
 from prometheus_client import Counter, Gauge, Histogram
 
+from utils.observability.reasons import ReasonFamily, StagingRetryOutcome, TransitionTailOutcome, reason_label
+
 logger = logging.getLogger(__name__)
 
 CAPTURE_KINDS = ('lost', 'byte_mismatch', 'frame_mismatch', 'ack_without_authority')
@@ -22,7 +24,30 @@ CHOICE_OUTCOMES = ('ok', 'stale_period_409', 'no_capability', 'intent_only')
 RECOVERY_RESULTS = ('attempt', 'completed')
 ERASURE_OUTCOMES = ('failure', 'post_delete_publication')
 PUBLICATION_RETRY_OUTCOMES = ('retried_ok', 'exhausted', 'staged_unverified', 'source_orphaned')
+PUBLICATION_RETRY_CAUSES = ('throttle', 'timeout', 'connection', 'other')
+STAGING_RETRY_OUTCOMES = (
+    StagingRetryOutcome.RETRIED_OK,
+    StagingRetryOutcome.DEFERRED,
+    StagingRetryOutcome.EXHAUSTED,
+    StagingRetryOutcome.PERMANENT,
+    StagingRetryOutcome.RETAINED,
+)
+STAGING_RETRY = Counter(
+    'omi_held_content_staging_retry',
+    'Held upload outcomes: deferred has a durable journal; retained still owns volatile PCM after both stores failed',
+    ['outcome'],
+)
+DEFERRED_SECONDS = Counter('omi_held_content_deferred_seconds', 'Held seconds handed to encrypted staging journals')
+PCM_CUSTODY_SECONDS = Gauge('omi_held_content_pcm_custody_seconds', 'Process-local pending held PCM seconds')
+for _outcome in STAGING_RETRY_OUTCOMES:
+    STAGING_RETRY.labels(outcome=reason_label(ReasonFamily.HELD_CONTENT, _outcome, StagingRetryOutcome))
 CHOICE_METHODS = ('get', 'put')
+TRANSITION_TAIL_OUTCOMES = (TransitionTailOutcome.COALESCED, TransitionTailOutcome.SEALED)
+TRANSITION_TAIL = Counter(
+    'omi_held_content_transition_tail',
+    'Deferred tiny PCM tails joined by compatible capture or sealed without a neighbour',
+    ['outcome'],
+)
 
 CAPTURE = Counter(
     'omi_held_content_capture',
@@ -84,12 +109,15 @@ FLEET_SNAPSHOT_TIMESTAMP = Gauge(
 ERASURE = Counter('omi_held_content_erasure', 'Held erasure failures and post-delete publication', ['outcome'])
 PUBLICATION_RETRY = Counter(
     'omi_held_content_publication_retry',
-    'Live cap publication attempts that retried a transient Firestore transaction. '
-    'retried_ok committed on a later fresh transaction; exhausted spent the bounded budget; '
+    'Live cap publication attempts that retried a transient failure, as a Firestore '
+    'transaction restart or an immutable GCS upload retry. '
+    'retried_ok completed a later upload or fresh transaction; '
+    'exhausted spent the bounded budget; '
     'staged_unverified means the staging write landed and a later read failed; '
     'source_orphaned means the flush failed closed after uploading a fragment no row names. '
-    'Labels are a closed set and never identify a person',
-    ['outcome'],
+    'cause separates Firestore throttling (throttle) from transport timeouts (timeout) '
+    'and dropped connections (connection). Labels are a closed set and never identify a person',
+    ['outcome', 'cause'],
 )
 COHORT_SOURCE = Gauge('omi_held_content_cohort_source', 'Active held-content cohort source', ['source'])
 COHORT_PERCENT = Gauge('omi_held_content_cohort_percent', 'Active held-content cohort percent; 0 denies by percent')
@@ -99,6 +127,8 @@ COHORT_REFRESH_FAILURES = Counter(
     ['reason'],
 )
 
+for _outcome in TRANSITION_TAIL_OUTCOMES:
+    TRANSITION_TAIL.labels(outcome=reason_label(ReasonFamily.HELD_CONTENT, _outcome, TransitionTailOutcome))
 for _kind in CAPTURE_KINDS:
     CAPTURE.labels(kind=_kind)
 for _outcome in CHOICE_OUTCOMES:
@@ -113,7 +143,8 @@ for _outcome in PACING_OUTCOMES:
 for _outcome in ERASURE_OUTCOMES:
     ERASURE.labels(outcome=_outcome)
 for _outcome in PUBLICATION_RETRY_OUTCOMES:
-    PUBLICATION_RETRY.labels(outcome=_outcome)
+    for _cause in PUBLICATION_RETRY_CAUSES:
+        PUBLICATION_RETRY.labels(outcome=_outcome, cause=_cause)
 for _source in ('doc', 'env', 'none'):
     COHORT_SOURCE.labels(source=_source)
 for _reason in ('read', 'schedule'):
@@ -125,6 +156,11 @@ def _inc(counter, **labels) -> None:
         counter.labels(**labels).inc() if labels else counter.inc()
     except Exception:
         logger.warning('event=held_content_metric outcome=dropped')
+
+
+def record_transition_tail(outcome: str) -> None:
+    if outcome in TRANSITION_TAIL_OUTCOMES:
+        _inc(TRANSITION_TAIL, outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, TransitionTailOutcome))
 
 
 def record_capture(kind: str) -> None:
@@ -173,9 +209,21 @@ def record_erasure(outcome: str) -> None:
         _inc(ERASURE, outcome=outcome)
 
 
-def record_publication_retry(outcome: str) -> None:
-    if outcome in PUBLICATION_RETRY_OUTCOMES:
-        _inc(PUBLICATION_RETRY, outcome=outcome)
+def record_publication_retry(outcome: str, cause: str = 'other') -> None:
+    if outcome in PUBLICATION_RETRY_OUTCOMES and cause in PUBLICATION_RETRY_CAUSES:
+        _inc(PUBLICATION_RETRY, outcome=outcome, cause=cause)
+
+
+def record_staging_retry(outcome: str) -> None:
+    if outcome in STAGING_RETRY_OUTCOMES:
+        _inc(STAGING_RETRY, outcome=reason_label(ReasonFamily.HELD_CONTENT, outcome, StagingRetryOutcome))
+
+
+def record_deferred_seconds(seconds: float) -> None:
+    try:
+        DEFERRED_SECONDS.inc(seconds)
+    except Exception:
+        logger.warning('event=held_content_metric outcome=dropped')
 
 
 def _gauge_number(value, *, whole: bool) -> float:

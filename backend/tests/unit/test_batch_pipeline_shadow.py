@@ -22,6 +22,11 @@ from utils.batch_pipeline.recovery_disposition import MultilingualEmpty
 
 @pytest.fixture
 def repository(monkeypatch):
+    # Production answers None (Deepgram retired 2026-08-27); the second-provider
+    # machinery these shadows exercise stays covered under a named provider.
+    from utils.batch_pipeline import quarantine_recovery as _qr
+
+    monkeypatch.setattr(_qr, 'SECOND_PROVIDER', 'deepgram')
     monkeypatch.setenv('BATCH_PIPELINE_SHADOW_PERCENT', '100')
     monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
     monkeypatch.setenv('BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED', 'false')
@@ -294,6 +299,7 @@ def test_shadow_artifact_cleanup_removes_raw_owner_receipt(repository, monkeypat
 
     reference = Mock()
     artifact = SimpleNamespace(
+        id='synthetic-artifact',  # integration's retention records touched ids for the A2 mirror refresh
         reference=reference,
         to_dict=lambda: {
             'owner_id': 'synthetic-owner',

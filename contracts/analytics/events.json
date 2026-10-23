@@ -4387,8 +4387,34 @@
         "capture-recovery"
       ],
       "correlation": null
+    },
+    {
+      "id": "nativeCustodyObserved",
+      "wire_name": "Native Custody Observed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "outcome": {
+          "type": "enum",
+          "wire_name": "outcome",
+          "values": [
+            "watch_deleted",
+            "watch_deferred",
+            "watch_uploaded",
+            "legacy_owners_deferred",
+            "legacy_jobs_quarantined",
+            "directory_mismatch"
+          ]
+        }
+      },
+      "consumers": [
+        "native-custody-health"
+      ],
+      "correlation": null
     }
-],
+  ],
 "transport_dispositions": {
     "source": "docs/finops/telemetry-transport-contract.md section 4",
     "note": "Legacy required events stay in the events array. Recording Requested is documented here with request_origin semantics. It is not inserted into events[] in this change because the registry generator would also rewrite app/lib/utils/analytics/registry/events.g.dart, which is outside the admin and analytics write boundary. Parent regenerates that Dart file if the event is later promoted into events[].",

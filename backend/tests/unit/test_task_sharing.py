@@ -471,6 +471,26 @@ class TestCompletionNotification:
 
             mock_notify.assert_not_called()
 
+    def test_no_duplicate_notification_when_already_completed(self):
+        """Repeating completed=True on an already-completed shared task must not notify again."""
+        with patch("routers.action_items.action_items_db") as mock_db, patch(
+            "routers.action_items.send_notification"
+        ) as mock_notify:
+            mock_db.get_action_item.side_effect = [
+                {
+                    "id": "t1",
+                    "description": "Shared task",
+                    "completed": True,
+                    "shared_from": {"sender_uid": "uid_alice"},
+                },
+                {"id": "t1", "description": "Shared task", "completed": True},
+            ]
+            mock_db.mark_action_item_completed.return_value = True
+
+            toggle_action_item_completion("t1", completed=True, uid="uid_bob")
+
+            mock_notify.assert_not_called()
+
 
 class TestGetUserDisplayName:
     """Boundary tests for the get_user_display_name logic.

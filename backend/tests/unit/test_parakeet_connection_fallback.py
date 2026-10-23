@@ -89,7 +89,7 @@ async def test_unhealthy_parakeet_connection_records_failure_before_fallback():
             connect_modulate=AsyncMock(return_value=object()),
         )
 
-    circuit.record_failure.assert_called_once_with()
+    circuit.record_failure.assert_called_once_with(error_class='timeout')
     circuit.record_rejection.assert_not_called()
 
 

@@ -447,3 +447,94 @@ async def test_log_executor_health_swallows_exceptions(caplog):
             except asyncio.CancelledError:
                 pass
     assert call_count == 2, f"Expected 2 calls before cancel, got {call_count}"
+
+
+def test_task_gauges_include_queued_cancelled_and_failed_work():
+    from utils.executors import EXECUTOR_ACTIVE, EXECUTOR_QUEUED
+
+    pool = MonitoredThreadPoolExecutor('test-task-gauges', max_workers=1, max_queue_size=1)
+    started, release = threading.Event(), threading.Event()
+
+    def record_moment():
+        started.set()
+        release.wait(5)
+        raise ValueError('fixture failure')
+
+    active = EXECUTOR_ACTIVE.labels(executor=pool.name, task='record_moment')
+    queued = EXECUTOR_QUEUED.labels(executor=pool.name, task='record_moment')
+    try:
+        first = pool.submit(record_moment)
+        assert started.wait(2)
+        second = pool.submit(record_moment)
+        assert active._value.get() == 1
+        assert queued._value.get() == 1
+        assert second.cancel()
+        assert queued._value.get() == 0
+        release.set()
+        with pytest.raises(ValueError):
+            first.result(2)
+        assert active._value.get() == 0
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_backpressure_waits_for_capacity_and_preserves_work():
+    pool = MonitoredThreadPoolExecutor('test-backpressure', max_workers=1, max_queue_size=0, wait_on_saturation=True)
+    release, started = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    try:
+        first = pool.submit(hold)
+        assert started.wait(2)
+        waiting = asyncio.create_task(run_blocking(pool, lambda: 42))
+        await asyncio.sleep(0.06)
+        assert not waiting.done()
+        assert pool._work_queue.qsize() == 0
+        release.set()
+        assert await asyncio.wait_for(waiting, 2) == 42
+        first.result(2)
+    finally:
+        release.set()
+        pool.shutdown()
+
+
+def test_lifecycle_pool_isolation_and_shadow_rollback(monkeypatch):
+    from utils.executors import lifecycle_executor, postprocess_executor
+
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'off')
+    assert lifecycle_executor('test-account', episode=True) is postprocess_executor
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'shadow')
+    assert lifecycle_executor('test-account', episode=True) is postprocess_executor
+    monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
+    episode = lifecycle_executor('test-account', episode=True)
+    postprocess = lifecycle_executor('test-account')
+    assert episode is not postprocess
+    assert (episode._max_workers, episode.max_queue_size) == (2, 8)
+    assert (postprocess._max_workers, postprocess.max_queue_size) == (24, 96)
+
+
+def test_cancelled_queue_payloads_do_not_escape_the_bound():
+    pool = MonitoredThreadPoolExecutor('test-cancel-bound', max_workers=1, max_queue_size=1)
+    release, started = threading.Event(), threading.Event()
+
+    def hold():
+        started.set()
+        release.wait(5)
+
+    try:
+        running = pool.submit(hold)
+        assert started.wait(2)
+        for _ in range(100):
+            queued = pool.submit(lambda: None)
+            assert queued.cancel()
+            assert pool._work_queue.qsize() == 0
+        release.set()
+        running.result(2)
+    finally:
+        release.set()
+        pool.shutdown()

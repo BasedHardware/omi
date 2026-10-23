@@ -80,6 +80,19 @@
       "scope": "explicit-bridge"
     },
     {
+      "expression": "sum by (namespace) (increase(omi_sync_transcription_job_total{project_id=\"based-hardware\",cluster=\"__run__\",job=\"omi-cloud-run-application-metrics\",namespace=~\"backend-sync|backend-sync-backfill\",outcome=\"provider_budget_exhausted\"}[15m]))",
+      "file": "alerts/backend-sync.json",
+      "issues": [],
+      "metrics": [
+        "omi_sync_transcription_job_total"
+      ],
+      "owner_title": "Sync STT - provider out of credits/budget (top up)",
+      "owner_uid": "omi-sync-provider-budget-exhausted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "count({job=\"cloud-run-application-metrics\", __name__=~\"stackdriver_.*_omi_.*\"}) or vector(0)",
       "file": "alerts/cloud-run-ingestion.json",
       "issues": [
@@ -950,6 +963,33 @@
       "owner_uid": "omi-stt-no-full-stage-target",
       "panel": null,
       "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m]))",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - local delivery deaths exhausting live sessions",
+      "owner_uid": "omi-stt-local-delivery-exhausted",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
+      "expression": "sum(increase(omi_fallback_total{job=\"backend-listen-metrics\",component=\"stt_live_session\",reason=~\"send_queue_full|replay_send_stalled|delivery_expired\",outcome=\"exhausted\"}[15m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[15m])), 1)",
+      "file": "alerts/live-stt.json",
+      "issues": [],
+      "metrics": [
+        "omi_fallback_total",
+        "omi_listen_accepted_total"
+      ],
+      "owner_title": "Live STT - local delivery deaths exhausting live sessions",
+      "owner_uid": "omi-stt-local-delivery-exhausted",
+      "panel": null,
+      "pointer": "/data/1/model/expr",
       "scope": "normalized-omi-consumer-source-review"
     },
     {
@@ -3076,7 +3116,7 @@
   ],
   "counts": {
     "explicit_bridge": 23,
-    "query_consumers": 202
+    "query_consumers": 205
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

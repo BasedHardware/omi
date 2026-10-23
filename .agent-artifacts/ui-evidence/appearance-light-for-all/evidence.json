@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-home-light-after-migrated-system.png",
+      "platform": "mobile-ios",
+      "description": "Simulator in dark appearance, prefs seeded with the Oct 4 migrated state (appearanceMode=system, appearanceDefaultMigration=system): Home opens in the light theme",
+      "captured_by": "agent",
+      "source": "screencapture"
+    },
+    {
+      "file": "002-mobile-ios-home-dark-explicit-dark-kept.png",
+      "platform": "mobile-ios",
+      "description": "Same simulator with an explicit Dark choice (appearanceMode=dark, appearanceDefaultMigration=light): Home still renders dark after the upgrade",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

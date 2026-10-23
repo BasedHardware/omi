@@ -358,3 +358,41 @@ def test_flag_off_preserves_legacy_contract_without_firestore(poll, monkeypatch)
     sync_jobs.create_sync_job('owner', 1, 1, 'original', content_id='content')
     assert client.get('/v2/sync-local-files/original').json()['status'] == 'queued'
     lookup.assert_not_called()
+
+
+HELD = {'total_segments': 1, 'failed_segments': 0, 'errors': [], 'outcome': 'success', 'held_audio': True}
+
+
+def test_expired_cap_hold_handle_reaches_a_terminal_poll(poll):
+    """M1 review L10-2: the dark fence ACKs a valid hold with its ledger job id and
+    writes no Redis job; after the TTL the poll must answer it, not 404 forever."""
+    client, database = poll
+    database.collection('users').document('owner').collection('sync_content_ledger').document('content').create(
+        {'dispatch_protocol': 'stt_cap_hold_v1', 'status': 'held', 'job_id': 'original', 'result': HELD}
+    )
+    before = deepcopy(database.rows)
+    response = client.get('/v2/sync-local-files/original')
+    assert response.status_code == 200
+    body = response.json()
+    assert body['status'] == 'completed' and body['result']['held_audio'] is True
+    assert database.rows == before
+
+
+@pytest.mark.parametrize(
+    'row',
+    [
+        {'status': 'held', 'job_id': 'original', 'result': HELD},
+        {
+            'dispatch_protocol': 'stt_cap_hold_v1',
+            'status': 'held',
+            'job_id': 'original',
+            'result': {**HELD, 'errors': ['x']},
+        },
+        {'dispatch_protocol': 'stt_cap_hold_v1', 'status': 'processing', 'job_id': 'original', 'result': HELD},
+    ],
+    ids=['no-hold-protocol', 'invalid-hold', 'not-held'],
+)
+def test_only_a_valid_cap_hold_is_acknowledged(poll, row):
+    client, database = poll
+    database.collection('users').document('owner').collection('sync_content_ledger').document('content').create(row)
+    assert client.get('/v2/sync-local-files/original').status_code == 404

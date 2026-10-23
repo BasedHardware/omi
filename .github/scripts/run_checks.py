@@ -520,6 +520,12 @@ def parse_args() -> argparse.Namespace:
         help="Run only selected checks that consume PR metadata and report all their failures.",
     )
     parser.add_argument(
+        "--keep-going",
+        action="store_true",
+        help="Run every selected check before exiting and report all failures (nightly full runs); "
+        "fail-fast remains the default for PR and local lanes.",
+    )
+    parser.add_argument(
         "--check-id",
         action="append",
         default=[],
@@ -655,7 +661,7 @@ def main() -> int:
             head=args.head,
             pr_body_file=body_path,
             skip_changelog=args.skip_changelog,
-            keep_going=args.metadata_only,
+            keep_going=args.keep_going or args.metadata_only,
         )
 
 

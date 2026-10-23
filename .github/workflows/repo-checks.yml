@@ -26,8 +26,11 @@ concurrency:
   # cancel an in-flight code run it shares no work with, and cancelled jobs render
   # as red "fail" checks on the PR — flaky red with no code cause. Key the group by
   # lane so newer-cancels-older still holds within each lane, but never across them.
+  # Within a lane, only PR runs cancel in progress: a newer main push replaces the
+  # pending code run instead of cancelling the running one, so the newest main SHA
+  # still gets a complete deterministic-check run.
   group: repo-checks-${{ github.event.pull_request.number || github.ref }}-${{ github.event_name == 'pull_request' && contains(fromJSON('["edited", "labeled", "unlabeled"]'), github.event.action) && 'metadata' || 'code' }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches
@@ -191,7 +194,7 @@ jobs:
             --from-commit-body-file /tmp/main-push-commit-message.txt \
             --output "$PR_BODY_FILE"
           python3 .github/scripts/run_checks.py --lane ci \
-            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks' || '' }} \
+            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going' || '' }} \
             --base "${{ needs.changes.outputs.diff_base }}" \
             --pr-body-file "$PR_BODY_FILE"
 
@@ -275,7 +278,9 @@ jobs:
           fi
 
       - name: Check Python formatting
-        if: needs.changes.outputs.has_python == 'true'
+        # Nightly 39610825548: the dart step failed first and this step never
+        # ran, masking four unformatted files run 1 could not report.
+        if: ${{ !cancelled() && needs.changes.outputs.has_python == 'true' }}
         run: |
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
@@ -283,7 +288,9 @@ jobs:
           fi
 
       - name: Check ARB formatting
-        if: needs.changes.outputs.has_arb == 'true'
+        # Same masking hole as the Python step (Luna P2, PR 23064 round 1): a
+        # dart-format failure must not hide ARB findings from the same nightly.
+        if: ${{ !cancelled() && needs.changes.outputs.has_arb == 'true' }}
         run: |
           FILES=$(grep '\.arb$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           failed=0

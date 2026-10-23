@@ -1148,3 +1148,60 @@ def test_idempotent_hit_without_new_context_writes_nothing(monkeypatch):
     developer._apply_late_from_segments_context('uid1', existing, _late_request(folder_id='folder-1'))
 
     assert writes == []
+
+
+def test_http_continuation_assembles_one_recording_and_retry_never_creates_another(monkeypatch, segment_api_client):
+    """Exercise actual routing, request validation, assembly and existing admission ownership."""
+    from routers import developer_segments as intake
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+
+    store = StrictFirestore()
+    monkeypatch.setenv(intake.CONTINUATION_FLAG_KEY, 'serve')
+    monkeypatch.setattr(intake.firestore, 'transactional', lambda fn: fn)
+    monkeypatch.setattr(intake, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(intake.encryption, 'encrypt', lambda value, owner: value)
+    monkeypatch.setattr(intake.encryption, 'decrypt', lambda value, owner: value)
+    monkeypatch.setattr(intake, 'purge_chunks', lambda *args: None)
+    persisted = {}
+    processed = []
+
+    def get(_owner, conversation_id, **kwargs):
+        return persisted.get(conversation_id)
+
+    def persist(_owner, row):
+        persisted[row['id']] = row
+
+    def process(_owner, _language, conversation, **kwargs):
+        processed.append(conversation)
+        conversation.status = ConversationStatus.completed
+        return conversation
+
+    monkeypatch.setattr(conversations_db, 'get_conversation', get)
+    monkeypatch.setattr(developer.lifecycle_service, 'create_processing_conversation', MagicMock(return_value=True))
+    monkeypatch.setattr(developer.lifecycle_service, 'persist_processed_conversation', persist)
+    monkeypatch.setattr(developer, 'process_conversation', process)
+    replies = []
+    bodies = []
+    for index, count in enumerate([500, 500, 1]):
+        body = _request(
+            client_session_id='synthetic-continuation',
+            chunk_index=index,
+            chunk_count=3,
+            finished_at=NOW + timedelta(hours=1),
+            transcript_segments=[
+                {**_segment(), 'speaker_id': position % 2, 'start': float(position), 'end': float(position) + 0.5}
+                for position in range(index * 500, index * 500 + count)
+            ],
+        ).model_dump(mode='json')
+        bodies.append(body)
+        reply = segment_api_client.post('/v1/conversations/from-segments', json=body)
+        assert reply.status_code == 200
+        replies.append(reply.json())
+    assert len({reply['id'] for reply in replies}) == 1
+    assert [reply['status'] for reply in replies] == ['processing', 'processing', 'completed']
+    assert len(processed) == 1
+    assert len(processed[0].transcript_segments) == 1001
+    retry = segment_api_client.post('/v1/conversations/from-segments', json=bodies[-1])
+    assert retry.status_code == 200
+    assert retry.json()['id'] == replies[-1]['id']
+    assert len(processed) == 1

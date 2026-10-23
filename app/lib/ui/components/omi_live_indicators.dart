@@ -163,3 +163,70 @@ class _OmiLiveDotState extends State<OmiLiveDot> with SingleTickerProviderStateM
     return FadeTransition(opacity: Tween<double>(begin: 1, end: 0.35).animate(_pulse), child: dot);
   }
 }
+
+/// A small live dot with one thin ring breathing out of it, every 2.4 s. The quiet live mark for
+/// rows that sit among ordinary ones (Home's live episode): the primary text colour, no green
+/// (David 2026-10-23). Grey and still when not [live], and still under Reduce Motion.
+class OmiBreathingDot extends StatefulWidget {
+  const OmiBreathingDot({super.key, this.live = true, this.size = 6});
+
+  final bool live;
+  final double size;
+
+  @override
+  State<OmiBreathingDot> createState() => _OmiBreathingDotState();
+}
+
+class _OmiBreathingDotState extends State<OmiBreathingDot> with SingleTickerProviderStateMixin {
+  late final AnimationController _breath =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 2400));
+
+  @override
+  void dispose() {
+    _breath.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduceMotion = OmiMotion.of(context).standard == Duration.zero;
+    final animate = widget.live && !reduceMotion && TickerMode.valuesOf(context).enabled;
+    if (animate) {
+      if (!_breath.isAnimating) _breath.repeat();
+    } else if (_breath.isAnimating) {
+      _breath.stop();
+    }
+    final color = widget.live ? OmiColors.textPrimary : OmiColors.textTertiary;
+    final dot = Container(
+        width: widget.size, height: widget.size, decoration: BoxDecoration(color: color, shape: BoxShape.circle));
+    final extent = widget.size * 3;
+    return SizedBox.square(
+      dimension: extent,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (animate)
+            ExcludeSemantics(
+              child: RepaintBoundary(
+                child: AnimatedBuilder(
+                  animation: _breath,
+                  builder: (context, _) {
+                    final t = Curves.easeOut.transform(_breath.value);
+                    return Opacity(
+                      opacity: (1 - t) * 0.6,
+                      child: Container(
+                        width: widget.size * (1 + 1.6 * t),
+                        height: widget.size * (1 + 1.6 * t),
+                        decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: color, width: 1)),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+          dot,
+        ],
+      ),
+    );
+  }
+}

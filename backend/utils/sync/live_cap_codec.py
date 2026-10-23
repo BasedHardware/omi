@@ -10,14 +10,14 @@ from utils.observability.held_content import record_capture
 MAX_OBJECT_BYTES = 128 * 1024
 
 
-def _ffmpeg(args: list[str], *, pcm: bytes | None = None) -> bytes:
+def _ffmpeg(args: list[str], *, pcm: bytes | None = None, timeout: float = 20) -> bytes:
     try:
         result = subprocess.run(
             ['ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error', '-y', *args],
             input=pcm,
             capture_output=True,
             check=True,
-            timeout=20,
+            timeout=timeout,
         )
     except (subprocess.SubprocessError, OSError) as error:
         raise RuntimeError('held audio codec failed') from error

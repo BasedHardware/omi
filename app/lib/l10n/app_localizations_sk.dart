@@ -13393,9 +13393,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Pokračovať s bezplatným plánom';
-
-  @override
   String get paywallTrialCancelNote => 'Zrušiť kedykoľvek. Žiadne poplatky, žiadne pokuty.';
 
   @override
@@ -14481,4 +14478,59 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get deviceControls => 'Ovládanie';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Tiež: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Stlačte tlačidlo na Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Jedno krátke stlačenie. Potom sa spýtajte na čokoľvek.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Položte otázku';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Povedzte to nahlas. Omi počúva.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Hotovo? Stlačte tlačidlo znova na odoslanie.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Získali ste $days dní zadarmo';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dní Omi Pro na nás. Pripomenieme sa pred účtovaním. Zrušte kedykoľvek.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Chcem skúšobné obdobie $days dní';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Začnite skúšobné obdobie $days dní zadarmo';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Zapnite Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Raz stlačte tlačidlo a držte ho pri telefóne.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'To je všetko. Omi bude ďalej nahrávať vaše rozhovory na pozadí.';
+
+  @override
+  String get noThanks => 'Nie, ďakujem';
+
+  @override
+  String get recapInTheBackground => 'V pozadí';
 }

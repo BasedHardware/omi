@@ -24,7 +24,14 @@ permissions:
   issues: read
 
 concurrency:
-  group: mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  # PRs cancel their own older runs. Main pushes key on the exact SHA with
+  # cancel-in-progress false, matching desktop-swift-ci: mobile release
+  # admission (verify_mobile_release_admission.py) requires a first-attempt
+  # push-event Mobile Release Eligibility success on the exact release SHA,
+  # and a pending push run replaced by a newer event leaves a cancelled check
+  # that no rerun can re-mint (attempt 2 does not count). The daily cron and
+  # manual dispatches keep per-run groups so they can never evict a push run.
+  group: mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.sha) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -361,6 +368,11 @@ jobs:
     needs: changes
     if: github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')
     timeout-minutes: 25
+    env:
+      # Read by app/android/app/build.gradle (ndkVersion) and the NDK install
+      # step below; test_mobile_ci_infra_guards.py keeps it equal to
+      # build.gradle's fallback pin.
+      NDK_VERSION: "28.2.13676358"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -447,6 +459,22 @@ jobs:
             notifications
             wrapper
 
+      - name: Restore pinned Android NDK
+        # Same corrupt-download flake as the emulator job hit (runs 39506049904,
+        # 39626150998): AGP auto-installs a missing NDK inside Gradle configure
+        # with no retry, and one truncated dl.google.com response fails the job
+        # before any app code runs. Restore-only: this job is the Mobile App
+        # Checks wall, so the one-time cache save stays on the emulator job,
+        # which runs in every event this job does; install_android_ndk.py
+        # covers a miss with one retry.
+        uses: actions/cache/restore@v6
+        with:
+          path: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}
+          key: ${{ runner.os }}-android-ndk-${{ env.NDK_VERSION }}
+
+      - name: Install pinned Android NDK
+        run: python3 .github/scripts/install_android_ndk.py --ndk-version "$NDK_VERSION"
+
       - name: Build Flutter Android dev debug APK
         working-directory: app
         env:
@@ -494,6 +522,11 @@ jobs:
     needs: changes
     if: github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')
     timeout-minutes: 25
+    env:
+      # Read by app/android/app/build.gradle (ndkVersion) and the NDK install
+      # step below; test_mobile_ci_infra_guards.py keeps it equal to
+      # build.gradle's fallback pin.
+      NDK_VERSION: "28.2.13676358"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -568,6 +601,20 @@ jobs:
             notifications
             wrapper
 
+      - name: Restore pinned Android NDK
+        # Gradle configure resolves ndkVersion for :app:testDevDebugUnitTest
+        # too, so without this the job auto-downloads the NDK the same way the
+        # emulator job did before runs 39506049904/39626150998. Restore-only:
+        # the emulator job seeds the cache key; install_android_ndk.py covers
+        # a miss with one retry.
+        uses: actions/cache/restore@v6
+        with:
+          path: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}
+          key: ${{ runner.os }}-android-ndk-${{ env.NDK_VERSION }}
+
+      - name: Install pinned Android NDK
+        run: python3 .github/scripts/install_android_ndk.py --ndk-version "$NDK_VERSION"
+
       - name: Run Android JVM unit tests
         working-directory: app/android
         env:
@@ -585,6 +632,11 @@ jobs:
     needs: changes
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')
     timeout-minutes: 35
+    env:
+      # Read by app/android/app/build.gradle (ndkVersion) and the NDK install
+      # step below; test_mobile_ci_infra_guards.py keeps it equal to
+      # build.gradle's fallback pin.
+      NDK_VERSION: "28.2.13676358"
     steps:
       - uses: actions/checkout@v7
         with:
@@ -610,6 +662,24 @@ jobs:
       - name: Install acceptance build tools
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;36.0.0" "platforms;android-36"
+
+      - name: Cache pinned Android NDK
+        # AGP auto-installs a missing NDK inside Gradle configure with no
+        # retry, so one truncated dl.google.com response fails the job before
+        # any app code runs ("Error on ZipFile unknown archive": runs
+        # 39506049904, 39469917718, 39626150998 — dead 5 s into a download
+        # that takes ~22 s when healthy). Cache the extracted NDK so most runs
+        # make no dl.google.com request at all. Sole writer: the restore-only
+        # compile-smoke and unit-test jobs keep post-job saves off their wall,
+        # and this job runs in every event they do.
+        uses: actions/cache@v6
+        with:
+          path: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}
+          key: ${{ runner.os }}-android-ndk-${{ env.NDK_VERSION }}
+
+      - name: Install pinned Android NDK
+        # Cache-miss path: explicit install, corrupt-archive purge, one retry.
+        run: python3 .github/scripts/install_android_ndk.py --ndk-version "$NDK_VERSION"
       - name: Prepare secret-free local app inputs
         working-directory: app
         run: |
@@ -673,8 +743,13 @@ jobs:
     if: needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_ios_compile == 'true'
     # Local cold Xcode time was 334s on an M-series Mac. Hosted macos-26 still
     # pays Flutter SDK, pub get, build_runner, and CocoaPods on top of that.
-    # Expect ~20-30 min warm / ~35 min cold; 40 is the wedge-guard.
-    timeout-minutes: 40
+    # Cold p50 is ~33 min, but a slow cold runner measured 39:25 for the real
+    # steps alone (16:12 manifest checks + 16:27 Xcode build, run 39634604539
+    # attempt 1); the post-job Post Setup Flutter cache save (59 s on the
+    # sibling success run 119312386446) then hit the 40-min ceiling and the
+    # job reported cancelled after every real step passed. 50 keeps the
+    # wedge-guard above that cold path; budget counts p50 (19), not the cap.
+    timeout-minutes: 50
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -720,7 +795,7 @@ jobs:
       - name: Run macOS-scoped iOS manifest checks
         run: |
           python3 .github/scripts/run_checks.py --lane ci --platform macos \
-            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks' || '' }} \
+            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going' || '' }} \
             --exclusive-platform --base "${{ needs.changes.outputs.diff_base }}" \
             --skip-pr-body-checks
 

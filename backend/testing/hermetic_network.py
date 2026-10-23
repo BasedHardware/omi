@@ -33,6 +33,35 @@ def is_local_address(host: object) -> bool:
     return address.is_loopback
 
 
+METADATA_ENDPOINT = ('169.254.169.254', 80)
+METADATA_NAME_ENDPOINT = ('metadata.google.internal', 80)  # google-auth connects by hostname
+METADATA_NAMES = frozenset({'metadata.google.internal', '169.254.169.254'})
+POSTGRES_PORT = 5432
+
+
+def _cloudsql_iam_host() -> str | None:
+    """PG host of the staging conformance job, or None unless ``OMI_TEST_POSTGRES_IAM=host,db,user`` is set.
+
+    This env var is the explicit knob (like ``OMI_HERMETIC_ALLOW_FAKE_REDIS``): an unset or malformed value
+    adds no allowance. The IAM connector needs exactly two things, the GCE metadata server for its token and
+    the private-IP Cloud SQL instance.
+    """
+    parts = [part.strip() for part in os.getenv('OMI_TEST_POSTGRES_IAM', '').split(',')]
+    return parts[0] if len(parts) == 3 and all(parts) else None
+
+
+def _allowed_endpoint(address: object) -> bool:
+    host = _cloudsql_iam_host()
+    if host is None or not isinstance(address, tuple) or len(address) < 2:
+        return False
+    return (address[0], address[1]) in {METADATA_ENDPOINT, METADATA_NAME_ENDPOINT, (host, POSTGRES_PORT)}
+
+
+def _allowed_dns(name: object) -> bool:
+    host = _cloudsql_iam_host()
+    return host is not None and isinstance(name, str) and name in (METADATA_NAMES | {host})
+
+
 def _host_from_address(address: object) -> object:
     if isinstance(address, tuple) and address:
         return address[0]
@@ -54,32 +83,40 @@ def block_outbound_network() -> Iterator[None]:
     original_gethostbyname_ex = socket.gethostbyname_ex
 
     def guarded_connect(sock: socket.socket, address: object):
-        if not _is_unix_socket(sock) and not is_local_address(_host_from_address(address)):
+        if (
+            not _is_unix_socket(sock)
+            and not is_local_address(_host_from_address(address))
+            and not _allowed_endpoint(address)
+        ):
             raise BlockedNetworkError(f'Blocked outbound network connection to {address!r}')
         return original_connect(sock, address)
 
     def guarded_connect_ex(sock: socket.socket, address: object):
-        if not _is_unix_socket(sock) and not is_local_address(_host_from_address(address)):
+        if (
+            not _is_unix_socket(sock)
+            and not is_local_address(_host_from_address(address))
+            and not _allowed_endpoint(address)
+        ):
             raise BlockedNetworkError(f'Blocked outbound network connection to {address!r}')
         return original_connect_ex(sock, address)
 
     def guarded_create_connection(address: object, *args, **kwargs):
-        if not is_local_address(_host_from_address(address)):
+        if not is_local_address(_host_from_address(address)) and not _allowed_endpoint(address):
             raise BlockedNetworkError(f'Blocked outbound network connection to {address!r}')
         return original_create_connection(address, *args, **kwargs)
 
     def guarded_getaddrinfo(host: object, *args, **kwargs):
-        if not is_local_address(host):
+        if not is_local_address(host) and not _allowed_dns(host):
             raise BlockedNetworkError(f'Blocked DNS resolution for {host!r}')
         return original_getaddrinfo(host, *args, **kwargs)
 
     def guarded_gethostbyname(host: object):
-        if not is_local_address(host):
+        if not is_local_address(host) and not _allowed_dns(host):
             raise BlockedNetworkError(f'Blocked DNS resolution for {host!r}')
         return original_gethostbyname(host)
 
     def guarded_gethostbyname_ex(host: object):
-        if not is_local_address(host):
+        if not is_local_address(host) and not _allowed_dns(host):
             raise BlockedNetworkError(f'Blocked DNS resolution for {host!r}')
         return original_gethostbyname_ex(host)
 

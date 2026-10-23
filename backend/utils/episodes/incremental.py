@@ -26,6 +26,11 @@ from config.episodes import (
     JEV_TIMEOUT_SECONDS,
     MOMENT_TEXT_MAX_CHARS,
 )
+from config.refactor_modes import serving_for, shadow_or_serve
+from utils.episodes.moment_render import render_segments
+from utils.llm.notes_packet import get_evidence
+from utils.llm.notes_refactor_metrics import shadow
+from utils.llm.output_language import resolve_output_language
 from utils.episodes.state import IncrementalUpdate, parse_update
 from utils.llm.clients import get_llm
 from utils.llm.jev_client import ask_jev
@@ -33,12 +38,13 @@ from utils.llm.usage_tracker import track_usage
 
 logger = logging.getLogger(__name__)
 
-PROMPT_PREFIX = """You keep the running notes for one live episode of a person's day, as heard by their Omi.
+_MOMENT_OPENING = """You keep the running notes for one live episode of a person's day, as heard by their Omi.
 You receive the episode state so far (JSON) and the newest moment of speech. Return the updated state.
 
 Rules:
-- Write in the language the people speak. Be concrete: names, places, numbers, decisions.
-- "bullets": the whole episode so far, at most 8 short lines, newest information folded in, oldest
+"""
+_MOMENT_LEGACY_LANGUAGE = '- Write in the language the people speak. Be concrete: names, places, numbers, decisions.\n'
+_MOMENT_RULES = """- "bullets": the whole episode so far, at most 8 short lines, newest information folded in, oldest
   trivia dropped. Do not repeat a bullet in other words.
 - "title": a short topic for the whole episode (at most 6 words), not for this moment only.
 - "moment_heading": at most 4 words naming what this newest moment was about.
@@ -55,6 +61,18 @@ Rules:
 Reply with one JSON object only:
 {"title": "", "moment_heading": "", "bullets": [], "people": [], "open_questions": [], "items": [], "drop_ids": []}
 """
+
+PROMPT_PREFIX = _MOMENT_OPENING + _MOMENT_LEGACY_LANGUAGE + _MOMENT_RULES
+
+
+def _moment_prompt(output_language: str) -> str:
+    return (
+        _MOMENT_OPENING + f'- Write all fields, including title and moment_heading, in {output_language}. '
+        'Be concrete: names, places, numbers, decisions.\n'
+        '- Use names only from confident speaker evidence; hedge likely matches as "likely X"; '
+        'unknown voices are "a speaker". Never assign personal stories to a name without evidence.\n' + _MOMENT_RULES
+    )
+
 
 BOUNDARY_QUESTION = 'same_occasion'
 BOUNDARY_QUESTIONS: dict[str, dict[str, Any]] = {
@@ -89,8 +107,27 @@ def speaker_label(segment: Mapping[str, Any]) -> str:
     return f'Speaker {speaker_id}' if speaker_id is not None else 'Speaker'
 
 
-def render_moment(segments: Sequence[Mapping[str, Any]]) -> MomentText:
+def render_moment(
+    segments: Sequence[Mapping[str, Any]],
+    *,
+    uid: str | None = None,
+    conversation_id: str | None = None,
+) -> MomentText:
     """Speaker-labelled lines, consecutive lines from one voice joined, head and tail kept."""
+    legacy = _legacy_moment(segments)
+    if shadow_or_serve('NOTES_PACKET_V2_MODE'):
+        serving = serving_for('NOTES_PACKET_V2_MODE', uid)
+        # Shadow compares renderers without the evidence read; only the serving cohort pays for it.
+        evidence = get_evidence(uid, conversation_id) if serving else None
+        text, words = render_segments(segments, evidence=evidence)
+        shadow('moment_render', 'agree' if text == legacy[0] else 'disagree', rendered_chars=len(text), words=words)
+        if serving:
+            return MomentText(_bounded_moment(text), words)
+    return MomentText(_bounded_moment(legacy[0]), legacy[1])
+
+
+def _legacy_moment(segments: Sequence[Mapping[str, Any]]) -> tuple[str, int]:
+    # refactor: superseded by moment_render.render_segments when NOTES_PACKET_V2_MODE=serve
     lines: list[list[str]] = []
     words = 0
     for segment in segments:
@@ -103,16 +140,21 @@ def render_moment(segments: Sequence[Mapping[str, Any]]) -> MomentText:
             lines[-1][1] += ' ' + text
         else:
             lines.append([label, text])
-    rendered = '\n'.join(f'{label}: {text}' for label, text in lines)
+    return '\n'.join(f'{label}: {text}' for label, text in lines), words
+
+
+def _bounded_moment(rendered: str) -> str:
     if len(rendered) > MOMENT_TEXT_MAX_CHARS:
         marker = '\n[…]\n'
         keep = MOMENT_TEXT_MAX_CHARS - len(marker)
         head = keep // 3
         rendered = rendered[:head] + marker + rendered[-(keep - head) :]
-    return MomentText(rendered, words)
+    return rendered
 
 
-def build_messages(state_json: str, moment: str, *, now: datetime, tz_name: str) -> list[tuple[str, str]]:
+def build_messages(
+    state_json: str, moment: str, *, now: datetime, tz_name: str, output_language: str | None = None
+) -> list[tuple[str, str]]:
     """Fixed prefix first; the clock, state and new speech last."""
     try:
         local = now.astimezone(ZoneInfo(tz_name))
@@ -123,7 +165,10 @@ def build_messages(state_json: str, moment: str, *, now: datetime, tz_name: str)
         f'Episode state so far:\n{state_json}\n\n'
         f'Newest moment:\n{moment}'
     )
-    return [('system', PROMPT_PREFIX), ('user', volatile)]
+    prefix = PROMPT_PREFIX
+    if output_language:
+        prefix = _moment_prompt(output_language)
+    return [('system', prefix), ('user', volatile)]
 
 
 @dataclass
@@ -148,7 +193,7 @@ def _usage(reply: Any) -> tuple[int, int]:
     return 0, 0
 
 
-def _invoke(uid: str, messages: list[tuple[str, str]]) -> Any:
+def invoke_model(uid: str, messages: list[tuple[str, str]]) -> Any:
     with track_usage(uid, INCREMENTAL_FEATURE):
         llm = get_llm('episode_incremental', uid=uid, request_timeout=INCREMENTAL_TIMEOUT_SECONDS, max_retries=0)
         return llm.invoke(messages)
@@ -163,12 +208,17 @@ def run_incremental_update(
     now: datetime,
     tz_name: str,
     invoke=None,
+    output_language: str | None = None,
+    conversation_language: str | None = None,
 ) -> ModelResult:
     """One cheap call. Raises ``ModelCallFailed`` (llm_error | parse_error); never partial state."""
-    messages = build_messages(state_json, moment, now=now, tz_name=tz_name)
+    language = None
+    if serving_for('NOTES_PACKET_V2_MODE', uid):
+        language = output_language or resolve_output_language(uid, conversation_language)
+    messages = build_messages(state_json, moment, now=now, tz_name=tz_name, output_language=language)
     started = time.monotonic()
     try:
-        reply = (invoke or _invoke)(uid, messages)
+        reply = (invoke or invoke_model)(uid, messages)
     except Exception as error:
         logger.warning('event=episode_moment outcome=llm_error exception_type=%s', type(error).__name__)
         raise ModelCallFailed('llm_error', time.monotonic() - started) from error

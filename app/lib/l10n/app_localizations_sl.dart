@@ -13426,9 +13426,6 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Nadaljujte z brezplačnim načrtom';
-
-  @override
   String get paywallTrialCancelNote => 'Prekličite kadar koli. Brez stroškov, brez kazni.';
 
   @override
@@ -14514,4 +14511,59 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get deviceControls => 'Kontrolniki';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Tudi: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Pritisni gumb na Omiju';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'En kratek pritisk. Nato vprašaj karkoli.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Zastavi vprašanje';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Povej na glas. Omi posluša.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Končano? Pritisni gumb še enkrat za pošiljanje.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Dobil si $days dni brezplačno';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dni Omi Pro na naš račun. Opomnimo te pred plačilom. Prekliči kadarkoli.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Vzemi $days-dnevni preizkus';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Začni $days-dnevni brezplačni preizkus';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Vklopi Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Enkrat pritisni gumb in ga imej blizu telefona.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'To je to. Omi bo še naprej snemal tvoje pogovore v ozadju.';
+
+  @override
+  String get noThanks => 'Ne, hvala';
+
+  @override
+  String get recapInTheBackground => 'V ozadju';
 }

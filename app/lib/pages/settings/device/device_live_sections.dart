@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
+import 'package:omi/pages/episodes/live_episode_clock.dart';
+import 'package:omi/pages/settings/device/device_catching_up_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -101,18 +103,31 @@ class DeviceRightNowGroup extends StatelessWidget {
     super.key,
     this.liveTitle,
     this.liveLength,
+    this.liveLengthNow,
     this.onOpenLive,
     this.catchingUp,
+    this.onOpenCatchingUp,
   });
 
   final String? liveTitle;
   final String? liveLength;
+
+  /// The running length read fresh each second; only the live row re-renders, not the page.
+  final String Function(DateTime now)? liveLengthNow;
   final VoidCallback? onOpenLive;
 
-  /// Minutes moved off the device so far, out of everything waiting to sync.
-  final ({int doneSeconds, int totalSeconds})? catchingUp;
+  final DeviceCatchUpSummary? catchingUp;
+  final VoidCallback? onOpenCatchingUp;
 
   bool get hasContent => liveTitle != null || catchingUp != null;
+
+  Widget _liveRow(String subtitle) => OmiSettingsRow(
+        key: const Key('device_right_now_live'),
+        leading: const OmiLiveDot(size: 8),
+        title: liveTitle!,
+        subtitle: subtitle,
+        onTap: onOpenLive,
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -122,44 +137,17 @@ class DeviceRightNowGroup extends StatelessWidget {
       header: l10n.deviceRightNow,
       children: [
         if (liveTitle != null)
-          OmiSettingsRow(
-            key: const Key('device_right_now_live'),
-            leading: const OmiLiveDot(size: 8),
-            title: liveTitle!,
-            subtitle: l10n.deviceLiveEpisode(liveLength ?? ''),
-            onTap: onOpenLive,
-          ),
+          liveLengthNow == null
+              ? _liveRow(l10n.deviceLiveEpisode(liveLength ?? ''))
+              : LiveEpisodeClock(
+                  clock: DateTime.now,
+                  builder: (context, now) => _liveRow(l10n.deviceLiveEpisode(liveLengthNow!(now))),
+                ),
         if (catchingUp != null)
-          Padding(
+          DeviceCatchingUpCard(
             key: const Key('device_right_now_catching_up'),
-            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(child: Text(l10n.deviceCatchingUp, style: OmiType.callout)),
-                    Text(
-                      l10n.deviceCatchingUpProgress(
-                        (catchingUp.doneSeconds / 60).floor(),
-                        (catchingUp.totalSeconds / 60).ceil(),
-                      ),
-                      style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: OmiSpacing.xs),
-                ClipRRect(
-                  borderRadius: OmiRadius.pillAll,
-                  child: LinearProgressIndicator(
-                    value: catchingUp.totalSeconds <= 0 ? 0 : catchingUp.doneSeconds / catchingUp.totalSeconds,
-                    minHeight: 6,
-                    backgroundColor: OmiColors.surface2,
-                    color: OmiColors.accent,
-                  ),
-                ),
-              ],
-            ),
+            summary: catchingUp,
+            onOpen: onOpenCatchingUp,
           ),
       ],
     );

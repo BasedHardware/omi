@@ -85,7 +85,7 @@ String _keyDigits(int index) {
           content.replaceAllMapped(RegExp(r'[^\s,;]+'), (match) => valid.contains(match[0]) ? '' : match[0]!));
     }
     if (tokens.isEmpty ||
-        RegExp(r'^(?:spk|speaker)[ _]\p{Nd}+:?$', caseSensitive: false, unicode: true).hasMatch(content) ||
+        _titleSpeaker.hasMatch(content) ||
         RegExp(r'^(?:[A-Za-z0-9][A-Za-z0-9._:-]{0,95}|\^\d+)$').hasMatch(content)) {
       return remove();
     }
@@ -97,15 +97,16 @@ String _keyDigits(int index) {
       (match) => unit(match[0]!));
   final sorted = valid.toList()..sort((a, b) => b.length.compareTo(a.length));
   for (final id in sorted) {
+    // Home rows normally contain none of their transcript's hundreds/thousands
+    // of IDs. Do not compile Unicode boundary patterns for absent literals:
+    // regexp parsing/canonicalization alone can consume the scene watchdog.
+    if (!text.contains(id)) continue;
     text =
         text.replaceAll(RegExp('(?<![\\p{L}\\p{N}_-])${RegExp.escape(id)}(?![\\p{L}\\p{N}_-])', unicode: true), marker);
   }
   // Word boundaries and digits are Unicode, as in Python generation and Swift (ICU): an ID or
   // speaker label glued to CJK text is part of a word, not a citation, and `Speaker_١٢` is a label.
-  text = text.replaceAll(
-      RegExp(r'(?<![\p{L}\p{N}_])(?:spk|speaker)[ _]\p{Nd}+(?![\p{L}\p{N}_]):?[ \t]*',
-          caseSensitive: false, unicode: true),
-      marker);
+  text = text.replaceAll(_bareSpeaker, marker);
   while (true) {
     final cleaned = text.replaceAllMapped(RegExp(r'\([^()\n]*\)'), (match) {
       final value = match[0]!;
@@ -157,6 +158,8 @@ final _titleCitationToken = RegExp(
     r'^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|s[0-9]{4,}|\^[0-9]+)$',
     caseSensitive: false);
 final _titleSpeaker = RegExp(r'^(?:spk|speaker)[ _]\p{Nd}+:?$', caseSensitive: false, unicode: true);
+final _bareSpeaker = RegExp(r'(?<![\p{L}\p{N}_])(?:spk|speaker)[ _]\p{Nd}+(?![\p{L}\p{N}_]):?[ \t]*',
+    caseSensitive: false, unicode: true);
 const _titleOpen = '[［【';
 const _titleClose = ']］】';
 const _slotBase = 0xF00; // slot digits U+E100..U+EFFF

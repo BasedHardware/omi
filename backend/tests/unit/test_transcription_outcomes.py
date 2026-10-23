@@ -1,6 +1,7 @@
 from unittest.mock import MagicMock, patch
 
 import httpx
+import pytest
 
 from config.prerecorded_stt import PrerecordedSTTConfigurationError
 from utils.observability.transcription import (
@@ -26,9 +27,44 @@ def test_outcome_vocabulary_is_closed_and_complete():
         'empty_unexpected',
         'timeout',
         'upstream_error',
+        'provider_budget_exhausted',
         'config_error',
         'invalid_input',
     }
+
+
+def test_provider_budget_failure_is_terminal_and_names_the_provider():
+    failure = TranscriptionFailure(TranscriptionOutcome.PROVIDER_BUDGET_EXHAUSTED, provider='modulate')
+    assert failure.provider == 'modulate'
+    assert failure.retryable is False
+    assert failure.status_code == 502
+    assert failure.error_code == 'stt_provider_budget_exhausted'
+    # The internal outcome keeps the precision for metrics; the public payload
+    # stays inside the released app-client vocabulary (error code carries it).
+    assert failure.as_detail()['outcome'] == 'upstream_error'
+    assert failure.as_detail()['error'] == 'stt_provider_budget_exhausted'
+    assert 'credits' not in str(failure.as_detail())
+
+
+def test_wire_outcome_vocabulary_is_frozen_and_maps_internal_only_values():
+    from config.prerecorded_stt import TranscriptionOutcome as InternalOutcome
+    from models.transcription_wire import TranscriptionOutcome as WireOutcome
+
+    assert {outcome.value for outcome in WireOutcome} == {
+        'success',
+        'expected_silence',
+        'empty_unexpected',
+        'timeout',
+        'upstream_error',
+        'config_error',
+        'invalid_input',
+    }
+    assert WireOutcome.from_internal(InternalOutcome.PROVIDER_BUDGET_EXHAUSTED) is WireOutcome.UPSTREAM_ERROR
+    assert WireOutcome.from_internal(InternalOutcome.SUCCESS) is WireOutcome.SUCCESS
+    with pytest.raises(ValueError):
+        # A future internal value without a wire mapping must fail loudly, not
+        # silently pass the frozen contract.
+        WireOutcome('provider_budget_exhausted')
 
 
 def test_wrapped_configuration_error_preserves_provider_without_env_leak():

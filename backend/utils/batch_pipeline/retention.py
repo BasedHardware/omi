@@ -18,6 +18,7 @@ from google.cloud import firestore
 from config.policy import RecoveryPolicy
 from database import batch_pipeline_privacy_queries as queries
 from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_write_allowed, privacy_owner_key
+from database.batch_pipeline_shadow_hook import mirror_refresh
 
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
 
@@ -136,6 +137,15 @@ def register_batch_artifact(
             and bool(terminal.get('token'))
             and uri.endswith(f"/{terminal['token']}.enc")
         )
+        # C8: the provider stage persists its one paid result under the intent minted by the
+        # provider_pending -> provider_running CAS (utils/batch_pipeline/provider_stt.py).
+        intent = job.get('provider_intent') or {}
+        provider_write = (
+            job.get('state') == 'provider_running'
+            and intent.get('privacy_generation') == expected_generation
+            and bool(intent.get('token'))
+            and uri.endswith(f"/{intent['token']}.enc")
+        )
         redrive = job.get('speech_redrive') or {}
         redrive_write = (
             policy.speech_empty_multilingual
@@ -151,6 +161,7 @@ def register_batch_artifact(
             kind != 'audio'
             and job.get('state') != 'leased'
             and not recovery_write
+            and not provider_write
             and not disposition_write
             and not redrive_write
             and not terminal_write
@@ -182,6 +193,7 @@ def register_batch_artifact(
             )
 
     register(client.transaction())
+    mirror_refresh(namespace, [('artifacts', artifact_id)])  # A2 shadow: no-op unless shadow mode
     return artifact_id
 
 
@@ -189,9 +201,11 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
     """Arm cleanup only after C has durably checkpointed successful projection."""
     client, namespace = store.client, store.namespace
     completed_at = datetime.fromtimestamp(now, timezone.utc)
+    touched: list[tuple[str, str]] = []  # the last (committed) attempt's writes, for the A2 shadow refresh
 
     @firestore.transactional
     def expire(transaction):
+        touched.clear()
         job_ref = client.collection(f'{namespace}_jobs').document(segment_id)
         result_ref = client.collection(f'{namespace}_results').document(segment_id)
         job = job_ref.get(transaction=transaction).to_dict() or {}
@@ -211,8 +225,11 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
         expires = completed_at + RECEIPT_RETENTION
         transaction.update(job_ref, {'expires_at': expires})
         transaction.update(result_ref, {'expires_at': expires})
+        touched.extend([('jobs', segment_id), ('results', segment_id)])
         if intake_ref is not None and intake is not None and intake.exists:
             transaction.update(intake_ref, {'expires_at': expires})
+            touched.append(('intakes', str(intake_id)))
+        touched.extend(('artifacts', artifact.id) for artifact in artifacts)
         for artifact in artifacts:
             metadata = artifact.to_dict() or {}
             # The native audio artifact is a small reference manifest. Keep its
@@ -227,7 +244,10 @@ def expire_completed_segment(store: Any, uid: str, segment_id: str, now: float) 
             transaction.update(artifact.reference, {'cleanup_after': completed_at + retention})
         return True
 
-    return run_retention_transaction(client, expire)
+    expired = run_retention_transaction(client, expire)
+    if touched:
+        mirror_refresh(namespace, list(touched))  # A2 shadow: no-op unless shadow mode; never raises
+    return expired
 
 
 def run_retention_transaction(client: Any, operation: Callable[[Any], Any]) -> Any:
@@ -261,25 +281,31 @@ def cleanup_completed_artifacts(
 ) -> int:
     """Erase objects first; only then permit TTL to remove their last reference."""
     cleaned = 0
-    for artifact in queries.due_artifacts(store.client, store.namespace, now, limit):
-        data = artifact.to_dict() or {}
-        delete_uri(data['owner_id'], data['uri'])
-        # Deletion races must never recreate a purged metadata document.
-        try:
-            if data.get('erasure_requested') or data.get('shadow'):
-                artifact.reference.delete()
-                cleaned += 1
-                continue
-            artifact.reference.update(
-                {
-                    'uri': firestore.DELETE_FIELD,
-                    'cleanup_after': firestore.DELETE_FIELD,
-                    'expires_at': now + RECEIPT_RETENTION,
-                }
-            )
-        except NotFound:
-            pass
-        cleaned += 1
+    touched: list[tuple[str, str]] = []
+    try:
+        for artifact in queries.due_artifacts(store.client, store.namespace, now, limit):
+            data = artifact.to_dict() or {}
+            delete_uri(data['owner_id'], data['uri'])
+            touched.append(('artifacts', artifact.id))
+            # Deletion races must never recreate a purged metadata document.
+            try:
+                if data.get('erasure_requested') or data.get('shadow'):
+                    artifact.reference.delete()
+                    cleaned += 1
+                    continue
+                artifact.reference.update(
+                    {
+                        'uri': firestore.DELETE_FIELD,
+                        'cleanup_after': firestore.DELETE_FIELD,
+                        'expires_at': now + RECEIPT_RETENTION,
+                    }
+                )
+            except NotFound:
+                pass
+            cleaned += 1
+    finally:
+        if touched:  # A2 shadow: re-copy (or delete) what this pass touched; no-op unless shadow mode
+            mirror_refresh(store.namespace, touched)
     return cleaned
 
 

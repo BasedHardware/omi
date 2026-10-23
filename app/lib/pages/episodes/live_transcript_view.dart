@@ -70,6 +70,15 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
 
   TranscriptScrollState _scrollStateFor(String sessionId) => _transcriptScrollStateStore.forSession(sessionId);
 
+  // Memoized timeline derivations (see _buildChronologicalTimeline): the membership snapshot,
+  // the speaker resolver, the episode decorations and the photo groups.
+  int _timelineKey = -1;
+  List<TranscriptSegment>? _timelineSegments;
+  SpeakerNames? _timelineNames;
+  LiveTranscriptDecorations? _timelineDecorations;
+  List<ConversationPhoto>? _timelinePhotos;
+  List<List<ConversationPhoto>>? _timelinePhotoGroups;
+
   @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
@@ -119,7 +128,7 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
                         )
                       : getTranscriptWidget(
                           false,
-                          provider.segments,
+                          List<TranscriptSegment>.of(provider.segments),
                           provider.photos,
                           deviceProvider.connectedDevice,
                           bottomMargin: 0,
@@ -146,26 +155,51 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
     TranscriptScrollState scrollState,
     String? conversationId,
   ) {
-    final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-    final segments = provider.segments;
     final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
-    final names = SpeakerNames.forSegments(segments, people: people, l10n: context.l10n);
-    final decorations = LiveTranscriptDecorations.of(widget.episode, conversationId, segments);
+    // The copy, the speaker resolver and the episode decorations walk every line, and a capture
+    // notifies several times a minute while live; recompute only when the transcript, the
+    // people list or the episode itself changed (the version covers photos too).
+    final key = Object.hash(
+      provider.segmentsPhotosVersion,
+      provider.segments.length,
+      identityHashCode(provider.segments),
+      identityHashCode(provider.photos),
+      identityHashCode(people),
+      identityHashCode(widget.episode),
+      conversationId,
+    );
+    if (_timelineKey != key) {
+      _timelineKey = key;
+      // A lazy row can be requested after a server deletion mutates the capture
+      // list, while its old delegate still has the previous itemCount. Keep one
+      // membership snapshot for that delegate, its names and decorations.
+      _timelineSegments = List<TranscriptSegment>.of(provider.segments);
+      _timelineNames = SpeakerNames.forSegments(_timelineSegments!, people: people, l10n: context.l10n);
+      _timelineDecorations = LiveTranscriptDecorations.of(widget.episode, conversationId, _timelineSegments!);
+      _timelinePhotos = List<ConversationPhoto>.from(provider.photos)
+        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
 
-    // Group consecutive photos taken within 30 seconds of each other
-    final List<List<ConversationPhoto>> photoGroups = [];
-    if (photos.isNotEmpty) {
-      List<ConversationPhoto> currentGroup = [photos.first];
-      for (int i = 1; i < photos.length; i++) {
-        if (photos[i].createdAt.difference(photos[i - 1].createdAt).inSeconds <= 30) {
-          currentGroup.add(photos[i]);
-        } else {
-          photoGroups.add(currentGroup);
-          currentGroup = [photos[i]];
+      // Group consecutive photos taken within 30 seconds of each other
+      final List<List<ConversationPhoto>> photoGroups = [];
+      if (_timelinePhotos!.isNotEmpty) {
+        List<ConversationPhoto> currentGroup = [_timelinePhotos!.first];
+        for (int i = 1; i < _timelinePhotos!.length; i++) {
+          if (_timelinePhotos![i].createdAt.difference(_timelinePhotos![i - 1].createdAt).inSeconds <= 30) {
+            currentGroup.add(_timelinePhotos![i]);
+          } else {
+            photoGroups.add(currentGroup);
+            currentGroup = [_timelinePhotos![i]];
+          }
         }
+        photoGroups.add(currentGroup);
       }
-      photoGroups.add(currentGroup);
+      _timelinePhotoGroups = photoGroups;
     }
+    final segments = _timelineSegments!;
+    final names = _timelineNames!;
+    final decorations = _timelineDecorations!;
+    final photos = _timelinePhotos!;
+    final photoGroups = _timelinePhotoGroups!;
 
     final leadingItems = [
       for (var index = 0; index < photoGroups.length; index++)

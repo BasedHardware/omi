@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Regenerate the users wire DTO for additive daily-summary statistics and coverage fields; no mobile view, flow, or presentation behavior change."
+}

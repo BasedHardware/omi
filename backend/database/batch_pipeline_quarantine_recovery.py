@@ -319,7 +319,12 @@ def cancel_fenced_recovery(store, segment_id):
             return True
         return False
 
-    return cancel(store.client.transaction())
+    cancelled = cancel(store.client.transaction())
+    if cancelled:
+        from database.batch_pipeline_shadow_hook import mirror_refresh
+
+        mirror_refresh(store.namespace, [('jobs', segment_id)])  # A2 shadow: no-op unless shadow mode
+    return cancelled
 
 
 class SilenceDispositionStore(RecoveryStore):

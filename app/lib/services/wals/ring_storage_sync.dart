@@ -1,12 +1,11 @@
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -404,15 +403,22 @@ class RingStorageSyncImpl implements RingStorageSync {
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
     _resetSyncState();
     _isSyncing = true;
+    // A recording page can hold a Wal from before setDevice() rebuilt the list,
+    // so mark the listed instance the sync UI reads.
+    final walToSync = _wals.where((w) => w.storage == wal.storage && w.id == wal.id).firstOrNull ?? wal;
+    walToSync.isSyncing = true;
+    walToSync.syncStartedAt = DateTime.now();
+    walToSync.syncMethod = SyncMethod.ble;
+    listener.onWalUpdated();
     try {
       progress?.onWalSyncedProgress(0.0);
-      final complete = await _syncRing(wal, progress: progress);
+      final complete = await _syncRing(walToSync, progress: progress);
       if (!complete) {
         // Like an incomplete syncAll: unadvanced records stay on the device and
         // the wal stays miss, but the caller must not report a finished transfer.
         throw Exception('Device transfer incomplete; recording kept on device');
       }
-      wal.status = WalStatus.synced;
+      walToSync.status = WalStatus.synced;
       progress?.onWalSyncedProgress(1.0, speedKBps: _currentSpeedKBps);
     } catch (e) {
       Logger.debug('RingStorageSync.syncWal: error: $e');
@@ -422,6 +428,12 @@ class RingStorageSyncImpl implements RingStorageSync {
       for (final w in _wals) {
         w.deviceDownloadFraction = null;
       }
+      walToSync.isSyncing = false;
+      walToSync.syncStartedAt = null;
+      walToSync.syncEtaSeconds = null;
+      walToSync.syncSpeedKBps = null;
+      walToSync.deviceDownloadFraction = null;
+      walToSync.syncMethod = SyncMethod.ble;
       listener.onWalUpdated();
     }
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
@@ -593,37 +605,17 @@ class RingStorageSyncImpl implements RingStorageSync {
             if (finalFlush && recordFrameCounts.isEmpty) break;
             continue;
           }
-          var bytes = 0;
-          for (final f in chunk) {
-            bytes += 4 + f.length;
-          }
           final localSync = _localSync;
-          if (localSync == null) {
-            throw StateError('LocalWalSync unavailable; refusing release');
-          }
-          var admittedBytes = 0;
+          if (localSync == null) throw StateError('LocalWalSync unavailable; refusing release');
           try {
-            final admitted = await localSync.ensureStorageAdmission(
-              bytes: bytes,
-              admittedGeneration: admittedGeneration,
-            );
-            if (!admitted) {
-              throw StateError('storage admission refused (cap/disk reserve)');
-            }
-            admittedBytes = bytes;
-            final file = await _flushToDisk(wal, chunk, chunkTimerStart, clockRun: chunkClockRun);
-            final localWal = await _registerWithLocalSync(
-              wal,
-              file,
-              chunkTimerStart,
-              chunk.length,
-              admittedGeneration,
-              clockRun: chunkClockRun,
-            );
-            admittedBytes = 0;
-            if (!await localSync.hasDurableWal(localWal, admittedGeneration: admittedGeneration)) {
-              throw StateError('WAL not durable after registration');
-            }
+            final localWal = await localSync.persistDeviceChunk(
+                source: wal,
+                frames: chunk,
+                timerStart: chunkTimerStart,
+                admittedGeneration: admittedGeneration,
+                clockRun: chunkClockRun,
+                nextCollisionSequence: () => _storageFileSeq++);
+            final file = File((await Wal.getFilePath(localWal.filePath))!);
             final fileBytes = await file.length();
             for (final s in chunkSeqs) {
               if (s == provenSeq) provenSeq = s + 1;
@@ -659,7 +651,6 @@ class RingStorageSyncImpl implements RingStorageSync {
               }
             }
           } catch (e) {
-            if (admittedBytes > 0) localSync.releaseStorageAdmission(admittedBytes);
             rethrow;
           }
         } catch (e) {
@@ -787,7 +778,11 @@ class RingStorageSyncImpl implements RingStorageSync {
           final consumedBytes = recordsConsumed * RingProtocol.recordSize;
           final pct = (consumedBytes / wal.storageTotalBytes).clamp(0.0, 1.0);
           wal.deviceDownloadFraction = pct;
+          wal.syncSpeedKBps = _currentSpeedKBps;
+          final remainingBytes = wal.storageTotalBytes - consumedBytes;
+          wal.syncEtaSeconds = _currentSpeedKBps > 0 ? (remainingBytes / 1024 / _currentSpeedKBps).round() : null;
           progress?.onWalSyncedProgress(pct, speedKBps: _currentSpeedKBps, phase: SyncPhase.downloadingFromDevice);
+          listener.onWalUpdated();
         }
       }
 
@@ -996,72 +991,4 @@ class RingStorageSyncImpl implements RingStorageSync {
   static int? ringIdOf(DeviceConnection connection) => connection.lastRingInfo?.ringId;
 
   int _storageFileSeq = 0;
-
-  /// Write opus frames to disk in WAL format: [frame_length_u32_le][frame_data]...
-  /// Identical to StorageSyncImpl._flushToDisk for downstream compatibility.
-  Future<File> _flushToDisk(Wal wal, List<List<int>> frames, int timerStart, {String? clockRun}) async {
-    final directory = await getApplicationDocumentsDirectory();
-    var fileName = wal.getFileNameByTimeStarts(timerStart, clockRun: clockRun);
-    if (await File('${directory.path}/$fileName').exists()) {
-      final dot = fileName.lastIndexOf('.');
-      final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
-      final ext = dot > 0 ? fileName.substring(dot) : '';
-      do {
-        fileName = '${stem}_u${_storageFileSeq++}$ext';
-      } while (await File('${directory.path}/$fileName').exists());
-    }
-    final filePath = '${directory.path}/$fileName';
-
-    final List<int> data = [];
-    for (final frame in frames) {
-      final byteFrame = ByteData(frame.length);
-      for (int j = 0; j < frame.length; j++) {
-        byteFrame.setUint8(j, frame[j]);
-      }
-      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-      data.addAll(byteFrame.buffer.asUint8List());
-    }
-
-    final file = File(filePath);
-    await file.writeAsBytes(data, flush: true);
-    Logger.debug('RingStorageSync: wrote ${data.length}B (${frames.length} frames) to $filePath');
-    return file;
-  }
-
-  Future<Wal> _registerWithLocalSync(
-    Wal wal,
-    File file,
-    int timerStart,
-    int frameCount,
-    int admittedGeneration, {
-    String? clockRun,
-  }) async {
-    final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
-    }
-    final fps = wal.codec.getFramesPerSecond();
-    final seconds = fps > 0 ? frameCount ~/ fps : 0;
-
-    final localWal = Wal(
-      codec: wal.codec,
-      channel: wal.channel,
-      sampleRate: wal.sampleRate,
-      timerStart: timerStart,
-      filePath: file.path.split('/').last,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      device: wal.device,
-      deviceModel: wal.deviceModel,
-      seconds: seconds,
-      totalFrames: frameCount,
-      syncedFrameOffset: 0,
-      originalStorage: WalStorage.sdcard,
-      clockRun: clockRun,
-    );
-
-    await localSync.addExternalWal(localWal, admittedGeneration: admittedGeneration);
-    Logger.debug('RingStorageSync: registered chunk (ts=$timerStart, ${seconds}s, $frameCount frames)');
-    return localWal;
-  }
 }

@@ -15,8 +15,9 @@ import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
-import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'live_episode_visibility.dart';
+import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -24,18 +25,16 @@ import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
-import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
+import 'package:omi/pages/conversations/background_conversations.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
-import 'package:omi/pages/conversations/sync_pending_work.dart';
-import 'package:omi/pages/conversations/widgets/home_pending_row.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
@@ -51,7 +50,7 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, pendingSync, conversation, recording, groupSpacer }
+enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, conversation, recording, groupSpacer }
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -222,24 +221,8 @@ List<_ConversationListRow> _buildConversationListRows({
   return rows;
 }
 
-/// Whether the date filter, if any, covers today: the pending row belongs to Today only.
-@visibleForTesting
-bool dateFilterIncludesToday(DateTime? start, DateTime? end, DateTime now) {
-  if (start == null) return true;
-  final today = DateTime(now.year, now.month, now.day);
-  end ??= start;
-  return !today.isBefore(DateTime(start.year, start.month, start.day)) &&
-      !today.isAfter(DateTime(end.year, end.month, end.day));
-}
-
-/// [rows] with Home's pending row placed right under today's header. With no today in the list, the
-/// row opens Today itself, carrying its own header, and the day below becomes an ordinary group.
-/// Only for a visible row: it reshapes the top of the list.
-List<_ConversationListRow> _withPendingSyncRow(List<_ConversationListRow> rows, DateTime now) =>
-    _withTodayRow(rows, now, _ConversationListRowKind.pendingSync);
-
-/// [rows] with [kind] placed right under today's header (the live episode first, then the pending
-/// row). With no today in the list, the row opens Today itself, carrying its own header.
+/// [rows] with the live episode right under today's header. With no today in the list,
+/// the episode opens Today itself, carrying its own header.
 List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTime now, _ConversationListRowKind kind) {
   if (rows.isEmpty) return rows;
   final today = DateTime(now.year, now.month, now.day);
@@ -273,18 +256,15 @@ List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTi
   ];
 }
 
-/// Conversations offline sync is still adding audio to, with how much: the server's pending sync
-/// jobs that name their target conversation.
-Map<String, int> _fillingSeconds(List<PendingWorkItem> pending) {
-  final filling = <String, int>{};
-  for (final item in pending) {
-    if (item.kind != 'sync_job' || item.state == 'summarizing' || item.conversationIds.length != 1) continue;
-    final seconds = item.durationSeconds ?? 0;
-    if (seconds <= 0) continue;
-    filling.update(item.conversationIds.single, (v) => v + seconds, ifAbsent: () => seconds);
-  }
-  return filling;
-}
+/// [byDate] without the conversations Home leaves to the daily recap (background notes,
+/// David 2026-10-23). Days left empty drop out when the rows are built.
+Map<DateTime, List<ServerConversation>> _withoutBackground(Map<DateTime, List<ServerConversation>> byDate) => {
+      for (final entry in byDate.entries)
+        entry.key: [
+          for (final c in entry.value)
+            if (!leftToDailyRecap(c)) c
+        ],
+    };
 
 bool _isLockedRow(List<_ConversationListRow> rows, int index) =>
     index >= 0 &&
@@ -528,12 +508,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
   }
 
-  /// [continuesToday]: the pending row above already drew Today's header, so the first group is
-  /// Today's conversations still loading and draws no second header.
-  Widget _buildLoadingShimmer({required bool continuesToday}) {
+  Widget _buildLoadingShimmer() {
     return SliverList(
       delegate: SliverChildBuilderDelegate(
-        (context, index) => _buildConversationShimmer(showHeader: index > 0 || !continuesToday),
+        (context, index) => _buildConversationShimmer(showHeader: true),
         childCount: 3, // Show 3 shimmer conversation groups
       ),
     );
@@ -558,21 +536,21 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Widget build(BuildContext context) {
     Logger.debug('building conversations page');
     super.build(context);
-    // Placing the pending row reads the clock and reshapes the top of the list: redo it whenever the
-    // row appears or goes away, not only when the conversation list changes.
-    final syncPendingVisible = context.select<SyncProvider, bool>(SyncPendingWork.shouldShow);
     // Episodes on: a streaming capture is the live episode's row in Today, not a card above the recaps.
     final episodes = context.watch<EpisodeProvider?>();
     final episodesOn = episodes?.enabled == true;
     final streaming = context.select<CaptureProvider, bool>((c) => EpisodePresentation.streamingSource(c) != null);
     final episodeLive = episodesOn && streaming;
-    final hiddenByLive = episodeLive ? episodes!.liveConversationIds : const <String>{};
-    final filling = episodesOn ? _fillingSeconds(_pendingWork.pending) : const <String, int>{};
+    final filling = episodesOn ? fillingSeconds(_pendingWork.pending) : const <String, int>{};
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
+        final hiddenByLive = episodeLive
+            ? hiddenLiveConversations(episodes!.liveConversationIds, snapshot.conversations,
+                serving: ClientRefactorFlags.serving)
+            : const <String>{};
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
@@ -591,16 +569,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
         final bool hasProcessingConversations = snapshot.processingConversations.isNotEmpty;
-        // Conversations still processing and server-side work join the one pending row instead of
-        // drawing their own cards: slow work never reads as a problem on Home.
-        // Rows offline sync is filling in stand for their own server work; the pending row keeps the rest.
-        final represented = {
-          for (final id in filling.keys)
-            if (!hiddenByLive.contains(id) && convoProvider.conversations.any((c) => c.id == id)) id,
-        };
-        final pendingVisible = syncPendingVisible ||
-            hasProcessingConversations ||
-            HomePendingRow.unrepresented(_pendingWork.pending, represented).isNotEmpty;
         final apiPhase = snapshot.apiViewPhase;
         final bool showTypedStatus = apiPhase == ApiViewPhase.error ||
             apiPhase == ApiViewPhase.locked ||
@@ -626,25 +594,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       if (!hiddenByLive.contains(c.id)) c
                   ],
               };
+        // Episodes beta, default view: background conversations live in the day's recap, not on Home.
+        final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
         final builtRows = _buildConversationListRows(
           dates: mergedDates,
-          conversationsByDate: conversationsByDate,
+          conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
         );
-        final listRows =
+        final conversationRows =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
-
-        // Recordings that are not conversations yet sit in Today, where they will land.
-        // Speaker-scoped results are a search: the global pending row was never filtered by speaker.
-        // A conversation just captured stays visible under a folder or starred filter too: the
-        // capture must never seem to vanish while it processes.
-        final showPending = pendingVisible &&
-            (showRecordings || hasProcessingConversations) &&
-            convoProvider.selectedSpeakerId == null &&
-            dateFilterIncludesToday(convoProvider.selectedStartDate, convoProvider.selectedEndDate, DateTime.now());
-        final conversationRows = showPending ? _withPendingSyncRow(listRows, DateTime.now()) : listRows;
-        // No list yet (loading, empty, a status): the row opens Today itself, where the list's Today lands.
-        final pendingOpensToday = showPending && builtRows.isEmpty;
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -683,9 +641,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                     ? HomeDailyRecaps(key: _recapsKey)
                     : HomeDailyRecaps(key: _recapsKey, load: widget.loadRecaps!),
               ),
-              // Today is always below the recaps. With no list to sit in, the pending row brings its own
-              // Today header, spaced like the list's first day so nothing moves when the list arrives.
-              // Recordings waiting on this phone sit with that row; nothing while the on-device flag is off.
+              // Phone-local recordings stay with their conversations. Device catch-up lives on Device.
               const SliverToBoxAdapter(child: OnDeviceQueueBanner()),
               const SliverToBoxAdapter(child: HeldAudioHomeSection()),
               // With no list yet, the live episode opens Today itself.
@@ -699,17 +655,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         DateListItem(date: DateUtils.dateOnly(DateTime.now()), isFirst: true),
                         const LiveEpisodeRow(),
                       ],
-                    ),
-                  ),
-                ),
-              if (pendingOpensToday)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: HomePendingRow(
-                      showTodayHeader: !(episodeLive && builtRows.isEmpty),
-                      pendingWork: widget.pendingWork,
-                      representedConversationIds: represented,
                     ),
                   ),
                 ),
@@ -768,7 +713,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   !hasRecordings &&
                   !hasProcessingConversations &&
                   isShowingConversationSkeleton)
-                _buildLoadingShimmer(continuesToday: pendingOpensToday)
+                _buildLoadingShimmer()
               else
                 SliverList(
                   delegate: SliverChildBuilderDelegate(childCount: conversationRows.length + 1, (context, index) {
@@ -807,13 +752,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                             if (row.isFirst) DateListItem(date: row.date, isFirst: true),
                             const LiveEpisodeRow(),
                           ],
-                        );
-                      case _ConversationListRowKind.pendingSync:
-                        return HomePendingRow(
-                          key: const ValueKey('pending_sync'),
-                          showTodayHeader: row.isFirst,
-                          pendingWork: widget.pendingWork,
-                          representedConversationIds: represented,
                         );
                       case _ConversationListRowKind.conversation:
                         // Consecutive locked rows share one frosted card and one upgrade action;
