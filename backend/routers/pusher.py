@@ -60,6 +60,8 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL,
     PUSHER_ACTIVE_WS_CONNECTIONS,
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
+    PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL,
+    PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL,
 )
 from utils.readiness import ReadinessGate
 from utils.observability.fallback import record_fallback
@@ -234,6 +236,14 @@ async def _websocket_util_trigger(
     # retries never lends its digest to a later replay: that range stays
     # unverifiable (a counted conflict) instead of trusted.
     v2_flushed_runs: Deque[Tuple[float, float, str]] = deque(maxlen=V2_FLUSHED_RUN_LEDGER_SIZE)
+    # Conversations that may skip the per-flush replay-reconcile listing: one
+    # span upload already committed this session and no replay signal has been
+    # seen since (duplicate frame, trimmed overlap, conflict, or a create-only
+    # collision). A replay signal re-enables reconciliation for the rest of
+    # the session. The exemption is only a cost skip: the create-only write
+    # plus identical-content no-op keeps a missed signal correct.
+    v2_reconcile_exempt: set[str] = set()
+    v2_replay_seen: set[str] = set()
     record_close_requests: set[str] = set()
     record_owners: dict[str, str] = {}
     record_upload_failed = False
@@ -344,6 +354,13 @@ async def _websocket_util_trigger(
                 if batch.get('span'):
                     upload_chunk['span'] = {**batch['span'], 'start': timestamp}
                 chunks_to_upload: List[Dict[str, Any]] = [upload_chunk]
+                # Skip the replay-reconcile listing once this session has
+                # committed a span upload for the conversation with no replay
+                # signal since; the first upload of a session (or any upload
+                # after a replay signal or a failed attempt) reconciles.
+                reconcile_prefix = conv_id in v2_replay_seen or conv_id not in v2_reconcile_exempt
+                if not reconcile_prefix:
+                    PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL.inc()
                 await run_blocking(
                     storage_executor,
                     cast(Any, upload_audio_chunks_batch),
@@ -352,11 +369,14 @@ async def _websocket_util_trigger(
                     conv_id,
                     cast(str, cached_protection_level),
                     sample_rate=sample_rate,
+                    reconcile_prefix=reconcile_prefix,
                 )
                 OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
                     reason='with_spans' if batch.get('span') is not None else 'without_spans'
                 ).inc()
                 if batch.get('span') is not None and batch.get('end') is not None:
+                    if conv_id not in v2_replay_seen and len(v2_reconcile_exempt) < 1024:
+                        v2_reconcile_exempt.add(conv_id)
                     # The digest ledger records only runs whose object exists.
                     # Batches are contiguous by construction (discontinuities
                     # close them in `_add_to_batch`), so one entry covers the
@@ -425,6 +445,12 @@ async def _websocket_util_trigger(
                 elif retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
                     batch['retries'] = retries + 1
                     batch['data'] = bytearray(chunk_data)
+                    # A failed attempt (including a create-only collision,
+                    # which is replay evidence) re-enables the reconcile
+                    # listing for this conversation for the rest of the
+                    # session; the upload loop also forces reconciliation on
+                    # its own retry attempt.
+                    v2_replay_seen.add(conv_id)
                     # Retry in the ordered ready lane on a later process tick,
                     # keeping the batch's queue time: an in-turn immediate
                     # retry burns the whole budget on one fast permanent error
@@ -652,6 +678,15 @@ async def _websocket_util_trigger(
         def _queue_private_cloud_chunk() -> None:
             nonlocal record_upload_failed
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
+                return
+            if not any(private_cloud_sync_buffer):
+                # An all-zero run carries no audio information: every reader
+                # zero-fills gaps between objects with these same bytes, so
+                # skipping the run is audio-identical to storing it, without
+                # one sub-1 KB object per silence boundary.
+                PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL.inc()
+                audio_budget.release(len(private_cloud_sync_buffer))
+                _reset_private_cloud_buffer()
                 return
             if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
                 fail_recording(private_cloud_queue[0]['conversation_id'])
@@ -923,6 +958,12 @@ async def _websocket_util_trigger(
                                 _queue_private_cloud_chunk()
                                 _reset_private_cloud_buffer()
                             elif delta < -AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
+                                # Any overlap of already-accepted audio is
+                                # replay evidence for this conversation: the
+                                # upload path must keep reconciling against
+                                # committed objects this session.
+                                if current_conversation_id:
+                                    v2_replay_seen.add(current_conversation_id)
                                 if run_end <= audio_timeline_last_end + AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
                                     # Exact replay of an already accepted
                                     # range: never re-store or re-emit it.

@@ -217,6 +217,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
         "AUDIO_ARCHIVE_PERCENT": "0",
         "AUDIO_ARCHIVE_STOP_PCM_PERCENT": "0",
+        "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT": "0",
         "AUDIO_ARCHIVE_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "BUCKET_AUDIO_DERIVED": "",
         "AUDIO_MERGE_WORKER_URL": "",

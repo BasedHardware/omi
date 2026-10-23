@@ -233,6 +233,126 @@ async def test_conversation_switch_flushes_and_rebinds(env):
     assert env[0][1]['timestamp'] == 500.0 and env[1][1]['timestamp'] == 500.5
 
 
+async def test_all_zero_run_is_skipped_and_real_runs_are_not(env):
+    """GCS-4: an all-zero run never lands as a standalone sub-1 KB object.
+
+    Readers zero-fill gaps between objects with the same bytes, so skipping
+    the run is audio-identical to storing it; a run carrying any real sample
+    is still stored in full.
+    """
+    from utils.metrics import PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL
+
+    before = PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get()
+    silent = bytes(RATE * 2 // 100)  # 20 ms of zeros, one keepalive frame
+    real = b'\x08\x00' * (RATE // 2)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(600.0, silent),
+            # 20 s gap: the silent run closes on its own and must not upload.
+            _audio(620.0, real),
+        ]
+    )
+
+    await _run(ws)
+
+    assert [chunk['timestamp'] for _cid, chunk in env] == [620.0]
+    assert env[0][1]['data'] == real
+    assert PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get() == before + 1
+
+
+async def test_zero_bytes_inside_a_contiguous_run_are_kept(env):
+    """No frame is dropped: zeros contiguous with real audio upload verbatim."""
+    head = b'\x09\x00' * (RATE // 4)
+    zeros = bytes(RATE)  # 0.5 s of zeros mid-run (16000 samples * 2 bytes)
+    tail = b'\x0a\x00' * (RATE // 4)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(700.0, head),
+            _audio(700.25, zeros),
+            _audio(700.75, tail),
+        ]
+    )
+
+    await _run(ws)
+
+    assert len(env) == 1
+    assert env[0][1]['data'] == head + zeros + tail
+
+
+async def test_reconcile_listing_skips_after_clean_upload(env, monkeypatch):
+    """GCS-3b: the per-flush replay-reconcile listing skips once the session
+    has committed a clean span upload for the conversation.
+
+    Two runs, one discontinuity, socket close: the shutdown drain uploads the
+    discontinuity-closed run first (first upload this session: reconciles),
+    then the tail — strictly sequential awaits, so the tail's decision sees
+    the first upload's clean ledger without racing the process loop.
+    """
+    from utils.metrics import PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL
+
+    seen = []
+    patched = pusher.upload_audio_chunks_batch
+    before_skip = PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get()
+
+    def capture(chunks, uid, cid, level=None, **kwargs):
+        seen.append((cid, kwargs.get('reconcile_prefix')))
+        return patched(chunks, uid, cid, level, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', capture)
+
+    pcm = b'\x0b\x00' * (RATE // 2)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(800.0, pcm),
+            _audio(810.0, pcm),  # 10 s gap closes run A; B flushes at shutdown
+        ]
+    )
+
+    await _run(ws)
+
+    assert seen == [('c1', True), ('c1', False)], 'first upload reconciles, the clean-ledger tail skips'
+    assert PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get() == before_skip + 1
+
+
+async def test_reconcile_listing_stays_on_after_replay_evidence(env, monkeypatch):
+    """Any replay evidence keeps the reconcile listing on for the session.
+
+    The overlapping frame is ignored at receive time (exact replay of an
+    accepted range) but latches the conversation: every upload afterwards
+    reconciles, including ones whose own bytes never overlapped anything.
+    """
+    from utils.metrics import PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL
+
+    seen = []
+    patched = pusher.upload_audio_chunks_batch
+    before_skip = PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get()
+
+    def capture(chunks, uid, cid, level=None, **kwargs):
+        seen.append((cid, kwargs.get('reconcile_prefix')))
+        return patched(chunks, uid, cid, level, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', capture)
+
+    pcm = b'\x0c\x00' * (RATE // 2)
+    replayed_prefix = b'\x0c\x00' * (RATE // 4)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(900.0, pcm),
+            _audio(900.0, replayed_prefix),  # exact replay: ignored, latches replay evidence
+            _audio(910.0, pcm),  # new run after the gap; both flush in the shutdown drain
+        ]
+    )
+
+    await _run(ws)
+
+    assert seen and all(flag is True for _cid, flag in seen), 'a latched replay keeps every upload reconciling'
+    assert PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get() == before_skip
+
+
 def test_ack_frame_is_stable():
     frame = audio_timeline_ack_frame()
     assert struct.unpack('<I', frame[:4])[0] == 202

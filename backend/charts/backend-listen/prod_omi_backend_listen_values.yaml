@@ -203,6 +203,8 @@ env:
     value: "100"
   - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
     value: "0"
+  - name: AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT
+    value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: ""
   - name: BUCKET_AUDIO_DERIVED

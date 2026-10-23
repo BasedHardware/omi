@@ -110,6 +110,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_PERCENT", "value": "0"},
         {"name": "AUDIO_ARCHIVE_STOP_PCM_PERCENT", "value": "0"},
+        {"name": "AUDIO_ARCHIVE_REGIONAL_CACHE_PERCENT", "value": "0"},
         {"name": "AUDIO_ARCHIVE_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "BUCKET_AUDIO_DERIVED", "value": ""},
         {"name": "AUDIO_MERGE_WORKER_URL", "value": ""},
