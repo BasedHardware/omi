@@ -6,6 +6,13 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Sync redirect hydration reuses the survivor's raw snapshot and update-time
+within one owner read. Bridge traversal reuses metadata only before any
+external effect; transfer, retraction, audio copying and receipt writes retain
+the final refresh. `SYNC_OPERATION_SNAPSHOT_ENABLED=false` restores the prior
+reads. The [operation snapshot contract](sync-operation-snapshots.md) documents
+the constant read origin, counted savings and the separate P4/index designs.
+
 At a new recording reservation during a partial batch ramp, the owner-load
 predicate in `config/policy/ramp.py` keeps heavy owners on the legacy route.
 `BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS=off` disables this admission narrowing.

@@ -1,0 +1,197 @@
+"""Count actual lookups and exercise the ordinary codecs with synthetic speech."""
+
+from copy import deepcopy
+from datetime import datetime, timezone
+import json
+import zlib
+
+import pytest
+
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreDocument
+
+
+@pytest.fixture(scope='module', autouse=True)
+def dependencies():
+    from database import conversations
+    from routers import conversations as routes
+    from utils.sync import bridge
+
+
+@pytest.fixture
+def world(monkeypatch):
+    from database import conversations
+    from database.firestore_read_origin import current_read_origin
+
+    store, reads = StrictFirestore(), []
+    original = StrictFirestoreDocument.get
+    revision = datetime(2026, 10, 23, tzinfo=timezone.utc)
+
+    def get(reference, *args, **kwargs):
+        reads.append((reference.path, current_read_origin()))
+        snapshot = original(reference, *args, **kwargs)
+        snapshot.update_time = revision
+        return snapshot
+
+    monkeypatch.setattr(StrictFirestoreDocument, 'get', get)
+    monkeypatch.setattr(conversations, 'get_firestore_client', lambda: store)
+    monkeypatch.setattr(conversations, 'db', store)
+    donor = {'id': 'donor', 'deleted': True, 'sync_merged_into': 'survivor'}
+    segments = [
+        {'id': 's', 'text': 'Synthetic speech.', 'speaker': 'SPEAKER_00', 'is_user': True, 'start': 0, 'end': 1}
+    ]
+    survivor = {
+        'id': 'survivor',
+        'owner_uid': 'u',
+        'data_protection_level': 'standard',
+        'transcript_segments': zlib.compress(json.dumps(segments).encode()),
+        'transcript_segments_compressed': True,
+        'has_photos': False,
+        'sync_content_revision': 7,
+        'created_at': revision,
+        'started_at': revision,
+        'finished_at': revision,
+        'structured': {'title': 'Synthetic', 'overview': 'Synthetic summary', 'emoji': '📝', 'category': 'other'},
+    }
+    store.rows[('users', 'u', 'conversations', 'donor')] = donor
+    store.rows[('users', 'u', 'conversations', 'survivor')] = survivor
+    return conversations, store, reads, revision
+
+
+def test_redirect_hydration_uses_four_reads_instead_of_five_with_identical_content(world, monkeypatch):
+    conversations, store, reads, revision = world
+    before = deepcopy(store.rows)
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', 'false')
+    legacy = conversations.get_sync_redirected_conversation('u', 'donor')
+    assert len(reads) == 5
+    old_paths = [path for path, _ in reads]
+    reads.clear()
+    monkeypatch.delenv('SYNC_OPERATION_SNAPSHOT_ENABLED')
+    current = conversations.get_sync_redirected_conversation('u', 'donor')
+    assert len(reads) == 4
+    assert [path for path, _ in reads] == old_paths[:-1]
+    assert {origin for _, origin in reads} == {'job:sync_operation_snapshot'}
+    assert current == legacy
+    assert current['updated_at'] == revision
+    assert current['sync_content_revision'] == 7
+    assert current['transcript_segments'][0]['text'] == 'Synthetic speech.'
+    assert current['transcript_segments'][0]['speaker'] == 'SPEAKER_00'
+    assert store.rows == before  # Stored compressed bytes never change.
+    current['transcript_segments'][0]['text'] = 'Changed only in the caller.'
+    assert conversations.get_sync_redirected_conversation('u', 'donor') == legacy
+
+
+@pytest.mark.parametrize('mode', ['true', 'false'])
+@pytest.mark.parametrize('defect', ['donor_marker', 'survivor_marker', 'deleted', 'owner', 'path', 'cycle', 'missing'])
+def test_all_redirect_rejections_are_identical(world, monkeypatch, mode, defect):
+    conversations, store, _, _ = world
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', mode)
+    survivor = store.rows[('users', 'u', 'conversations', 'survivor')]
+    if defect.endswith('_marker'):
+        key = 'donor' if defect == 'donor_marker' else 'survivor'
+        store.rows[('users', 'u', 'deleted_conversations', key)] = {'deleted': True}
+    elif defect == 'deleted':
+        survivor['deleted'] = True
+    elif defect == 'owner':
+        survivor['owner_uid'] = 'another-owner'
+    elif defect == 'path':
+        survivor['id'] = 'another-id'
+    elif defect == 'cycle':
+        survivor.update(deleted=True, sync_merged_into='donor')
+    else:
+        del store.rows[('users', 'u', 'conversations', 'survivor')]
+    assert conversations.get_sync_redirected_conversation('u', 'donor') is None
+
+
+def test_new_operation_refreshes_after_delete_redirect_or_source_mutation(world):
+    conversations, store, reads, _ = world
+    assert conversations.get_sync_redirected_conversation('u', 'donor')['sync_content_revision'] == 7
+    survivor = store.rows[('users', 'u', 'conversations', 'survivor')]
+    survivor['sync_content_revision'] = 8
+    assert conversations.get_sync_redirected_conversation('u', 'donor')['sync_content_revision'] == 8
+    survivor.update(deleted=True, sync_merged_into='new')
+    store.rows[('users', 'u', 'conversations', 'new')] = {
+        'id': 'new',
+        'has_photos': False,
+        'data_protection_level': 'standard',
+    }
+    assert conversations.get_sync_redirected_conversation('u', 'donor')['id'] == 'new'
+    store.rows[('users', 'u', 'deleted_conversations', 'new')] = {}
+    assert conversations.get_sync_redirected_conversation('u', 'donor') is None
+    assert len(reads) > 4
+
+
+def test_real_detail_route_has_identical_response_and_refreshes_deletion(world, monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers import conversations as routes
+
+    _, store, reads, _ = world
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[routes.auth.get_current_user_uid] = lambda: 'u'
+    responses = []
+    with TestClient(app) as client:
+        for mode in ('false', 'true'):
+            monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', mode)
+            reads.clear()
+            response = client.get('/v1/conversations/donor')
+            assert response.status_code == 200, response.text
+            responses.append(response.json())
+        assert responses[0] == responses[1]
+        assert responses[1]['id'] == 'survivor'
+        assert responses[1]['transcript_segments'][0]['text'] == 'Synthetic speech.'
+        store.rows[('users', 'u', 'deleted_conversations', 'survivor')] = {}
+        assert client.get('/v1/conversations/donor').status_code == 404
+
+
+@pytest.mark.parametrize('mode,expected', [('true', 1), ('false', 2)])
+def test_bridge_without_effects_reads_survivor_once(world, monkeypatch, mode, expected):
+    from utils.sync import bridge
+
+    conversations, _, reads, _ = world
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', mode)
+    monkeypatch.setattr(
+        bridge, 'read_metadata', lambda database, uid, cid, **kw: database.get_conversation_raw_snapshot(uid, cid)
+    )
+    assert bridge.finish_sync_bridges('u', 'survivor') == 'survivor'
+    assert len(reads) == expected
+    assert {path[-1] for path, _ in reads} == {'survivor'}
+
+
+@pytest.mark.parametrize('effect', ['transfer', 'retract', 'copy', 'receipt', 'failed_transfer'])
+def test_bridge_refreshes_after_every_effect_including_refused_transfer(monkeypatch, effect):
+    from utils.sync import bridge
+
+    reads = []
+    changed = False
+    survivor = {'id': 'survivor', 'sync_merged_from': ['donor'], 'private_cloud_sync_enabled': effect == 'copy'}
+    donor = {'id': 'donor', 'deleted': True, 'sync_merged_into': 'survivor', 'sync_content_revision': 1}
+
+    def read(_database, _uid, cid, **kwargs):
+        reads.append(cid)
+        if cid == 'donor':
+            return deepcopy(donor)
+        return {'id': cid, 'deleted': True} if changed else deepcopy(survivor)
+
+    def mutate(*args, **kwargs):
+        nonlocal changed
+        changed = True
+        return True
+
+    def fail_transfer(*args, **kwargs):
+        mutate()
+        raise RuntimeError('synthetic partial effect')
+
+    monkeypatch.setattr(bridge, 'sync_finalize_target_recovery_enabled', lambda: True)
+    monkeypatch.setattr(bridge, 'read_metadata', read)
+    monkeypatch.setattr(
+        bridge,
+        'transfer_donor',
+        fail_transfer if effect == 'failed_transfer' else mutate if effect == 'transfer' else lambda *a: None,
+    )
+    monkeypatch.setattr(bridge, 'retract_sync_bridge_source', mutate if effect == 'retract' else lambda *a: None)
+    monkeypatch.setattr(bridge, 'copy_sync_bridge_audio', mutate if effect == 'copy' else lambda *a: None)
+    monkeypatch.setattr(bridge, 'mark_sync_bridge_cleaned', mutate if effect == 'receipt' else lambda *a: True)
+    with pytest.raises(bridge.SyncAssignmentSuperseded):
+        bridge.finish_sync_bridges('u', 'survivor')
+    assert reads == ['survivor', 'donor', 'survivor']
