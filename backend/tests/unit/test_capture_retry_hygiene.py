@@ -1,4 +1,4 @@
-"""Retry caps preserve legacy shadow behavior and the existing terminal fences."""
+"""Shared batch retry caps preserve shadow behavior and terminal fences."""
 
 import logging
 from unittest.mock import Mock
@@ -11,7 +11,7 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from tests.unit.test_batch_pipeline_quarantine_recovery import setup  # noqa: F401
 from utils.batch_pipeline.contracts import WorkResult
 from utils.batch_pipeline.scheduler import Scheduler, owner_key
-from utils.sync import retry_hygiene
+from utils.capture import retry_cap as retry_hygiene
 
 
 @pytest.fixture(autouse=True)
@@ -85,9 +85,9 @@ def test_lease_expiry_uses_pinned_maximum(monkeypatch):
 
 def test_retry_cap_metrics_are_bounded(monkeypatch):
     monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'shadow')
-    metric = retry_hygiene.DECISIONS.labels('sequencer_dispatch', 'would_quarantine')._value
+    metric = retry_hygiene.DECISIONS.labels('scheduler_lease_expiry', 'would_quarantine')._value
     before = metric.get()
-    retry_hygiene.observe('sequencer_dispatch', retry_hygiene.retry_cap(uuid4().hex, 2, 2))
+    retry_hygiene.observe('scheduler_lease_expiry', retry_hygiene.retry_cap(uuid4().hex, 2, 2))
     assert metric.get() == before + 1
 
 
