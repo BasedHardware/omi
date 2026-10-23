@@ -53,6 +53,7 @@ import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_continuity_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/capture/live_finalize_gate.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
 import 'package:omi/backend/schema/capture_committed_event.dart';
@@ -971,11 +972,7 @@ class CaptureController extends ChangeNotifier
   int _voiceCommandSubmissionGeneration = 0;
   bool _voiceCommandStartedDuringOnboarding = false;
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
-
-  /// When the person last ended the live conversation. A second double-tap within
-  /// [_finalizeDebounce] would only end a near-empty stretch, so it is ignored.
-  DateTime? _lastLiveFinalizeAt;
-  static const Duration _finalizeDebounce = Duration(seconds: 3);
+  final LiveFinalizeGate _finalizeGate = LiveFinalizeGate();
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
 
@@ -2067,12 +2064,10 @@ class CaptureController extends ChangeNotifier
         }
       } else {
         // End conversation and process (default)
-        final last = _lastLiveFinalizeAt;
-        if (last != null && DateTime.now().difference(last) < _finalizeDebounce) return;
+        if (!_finalizeGate.allowsDoubleTap) return;
         Logger.debug("Double tap: processing conversation");
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
-        // The tap gives no other feedback on the phone; the processing row follows.
-        HapticFeedback.lightImpact();
+        HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
         forceProcessingCurrentConversation();
       }
       return;
@@ -3806,9 +3801,8 @@ class CaptureController extends ChangeNotifier
     // Add the placeholder before reset so a concurrent rebuild cannot drop it.
     final placeholderOwner = ++_processingPlaceholderOwner;
     externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
-    // The live episode closes now and the next one counts from this moment.
-    _lastLiveFinalizeAt = DateTime.now();
-    externalActions.onLiveFinalized();
+    _finalizeGate.markFinalized();
+    externalActions.onLiveFinalized(); // The live episode closes; the next counts from now.
 
     await phoneSync.finalizeCurrentSession();
     if (lifetime.isClosed ||
