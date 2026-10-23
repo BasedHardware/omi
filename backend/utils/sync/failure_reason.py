@@ -108,7 +108,7 @@ def persistence_failure_fingerprint(error: BaseException, phase: str, lane: str 
     so a conflict that can never resolve stops retrying paid work forever.
     """
     if phase != 'persistence':
-        if phase == 'finalize' and is_document_size_limit_error(error):
+        if phase == 'finalize' and is_document_size_limit_error(error) is True:
             return 'persistence:document_size_limit'
         return None
     structural = None

@@ -265,10 +265,15 @@ def test_summary_delivery_refuses_oversized_conversation_and_sync_failure_is_non
 
 
 def test_enrichment_outbox_and_consumer_retire_oversized_conversation_obligation(monkeypatch):
+    import types
     from database.outbox import Claim, OutboxKind, Outcome
     from utils.enrichment import consumer as consumer_mod
     from utils.enrichment import outbox as outbox_mod
     from utils.observability.reasons import ConsumerReason
+
+    fake_callback = types.ModuleType('utils.enrichment.callback')
+    fake_callback.SyncConversationPersistenceFenced = type('SyncConversationPersistenceFenced', (RuntimeError,), {})
+    monkeypatch.setitem(sys.modules, 'utils.enrichment.callback', fake_callback)
 
     size_err = InvalidArgument(
         "Document 'projects/p/databases/(default)/documents/users/uid-1/conversations/conv-1' cannot be "
