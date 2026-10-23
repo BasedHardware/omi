@@ -21,6 +21,20 @@ VERSION_RE = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
 BUILD_RE = re.compile(r"^[1-9][0-9]*$")
 
 
+# A version in any of these states is in Apple's hands or approved and waiting.
+# Withdrawing it to submit a newer build sends the app to the back of the review
+# queue (2026-10-23: three overnight withdrawals kept 1.0.572-1.0.574 out of the
+# store), so a newer build waits until the in-flight version is released.
+IOS_REVIEW_HOLD_STATES = (
+    "WAITING_FOR_REVIEW",
+    "IN_REVIEW",
+    "WAITING_FOR_EXPORT_COMPLIANCE",
+    "PENDING_APPLE_RELEASE",
+    "PROCESSING_FOR_APP_STORE",
+    "PENDING_DEVELOPER_RELEASE",
+)
+
+
 class PromotionError(ValueError):
     pass
 
@@ -167,11 +181,33 @@ def select_ios_build(payload: object, version: str, build_number: str) -> IOSBui
     return matches[0]
 
 
+def check_no_ios_version_in_review(version: str) -> None:
+    """Refuse to submit while another version is in review or approved and unreleased.
+
+    Submitting the same version again is fine (nothing is withdrawn); anything else
+    would need the in-flight version withdrawn first, which this pipeline never does.
+    """
+    held = []
+    for state in IOS_REVIEW_HOLD_STATES:
+        for resource in _resources(
+            cli_json("apps", "app-store-versions", APP_ID, "--platform", "IOS", "--state", state)
+        ):
+            other = _resource_attrs(resource).get("versionString")
+            if other != version:
+                held.append(f"{other} {state}")
+    if held:
+        raise PromotionError(
+            f"iOS {', '.join(held)} is already with Apple; never withdraw it to submit {version}. "
+            "Wait until it is released, then promote the newer build"
+        )
+
+
 def prepare_ios(version: str, build_number: str) -> IOSBuild:
     for name in ("APP_STORE_CONNECT_ISSUER_ID", "APP_STORE_CONNECT_KEY_IDENTIFIER", "APP_STORE_CONNECT_PRIVATE_KEY"):
         if not os.environ.get(name):
             raise PromotionError(f"missing Codemagic iOS integration credential: {name}")
     check_live_ios_version(version)
+    check_no_ios_version_in_review(version)
     builds = cli_json(
         "builds",
         "list",
