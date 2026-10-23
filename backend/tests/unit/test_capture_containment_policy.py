@@ -20,6 +20,7 @@ import pytest
 import yaml
 
 from database import capture_groups as groups_db
+from database import capture_speech as speech_db
 from database import conversations as conversations_db
 from models.conversation import Conversation
 from tests.unit.fixtures import containment_long_pair as long_pair
@@ -107,6 +108,8 @@ def seam(monkeypatch):
     store = StrictFirestore()
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(groups_db, 'get_firestore_client', lambda: store)
+    # Keep the new coverage observer in default shadow against the same store.
+    monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
 
     def query(uid, *, status, finished_after, limit):
         rows = [
@@ -607,6 +610,8 @@ def _run_capture_flow(module, rows, last_id, monkeypatch, caplog):
     store = StrictFirestore()
     monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(groups_db, 'get_firestore_client', lambda: store)
+    # Keep the new coverage observer in default shadow against the same store.
+    monkeypatch.setattr(speech_db, 'get_firestore_client', lambda: store)
 
     def query(uid, *, status, finished_after, limit):
         found = [

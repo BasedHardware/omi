@@ -40,6 +40,7 @@ from routers.listen.receiver import ListenReceiver
 from routers.listen.transcripts import ConversationCache, TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator, UNPLACED_SEGMENT_OFFSET
+from utils.stt.transcript_admission import AdmissionState
 from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
 RATE = 16000
@@ -395,6 +396,7 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     )
     processor = object.__new__(TranscriptProcessor)
     processor.host = host
+    processor.media_admission = AdmissionState()
     processor.cache = ConversationCache(loader)
     processor.segment_buffer = deque(maxlen=host.limits.max_segment_buffer_size)
     processor.photo_buffer = deque()

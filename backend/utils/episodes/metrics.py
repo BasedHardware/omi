@@ -35,7 +35,17 @@ def _reuse_or_create(factory, name: str, documentation: str, labelnames: list[st
 
 
 MOMENT_OUTCOMES = frozenset(
-    {'applied', 'skipped_short', 'skipped_applied', 'rate_limited', 'llm_error', 'parse_error', 'conflict', 'error'}
+    {
+        'applied',
+        'skipped_short',
+        'skipped_applied',
+        'skipped_closed',
+        'rate_limited',
+        'llm_error',
+        'parse_error',
+        'conflict',
+        'error',
+    }
 )
 MOMENT_TRIGGERS = frozenset({'pause', 'rollover', 'interval', 'session_end', 'finalize'})
 # Gated work that never ran: ended moments by trigger, plus conversation attaches.

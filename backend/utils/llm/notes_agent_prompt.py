@@ -94,9 +94,10 @@ FORMAT
   `action_items`.
 - title: at most 70 characters and specific. Lead with the counterpart's name when known; never use the owner's
   own name. overview: one or two plain sentences.
-- salience: "highlight" when the owner would want this as its own entry (time with people, a meeting or call,
-  plans, decisions, ideas, tasks); "background" when it is worth keeping but not a highlight (media playing,
-  ambient chatter, a passing remark, a trivial errand).
+- salience: "highlight" for any conversation the owner engages in with another person, with real back-and-forth,
+  whatever the topic (including chores, errands and casual time at home), and for meetings, calls, plans, ideas
+  or tasks. "background" is only for audio the owner is not engaged in: media/TV, ambient chatter, other people
+  talking or an isolated passing remark. If owner engagement is uncertain, use "highlight".
 - When the transcript has `[segment-id k]` headers, cite the smallest sufficient exact ids in source_segment_ids
   (for `[s01234 0]` cite "s01234"). Never put ids in prose; never invent them.
 

@@ -312,6 +312,9 @@ def baseline_module(monkeypatch):
 
 @pytest.mark.parametrize('case', ['resolved', 'zero', 'spanless', 'partial', 'disabled', 'failed_embedding'])
 def test_literal_baseline_and_instrumented_outputs_and_cache_bytes_identical(env, monkeypatch, baseline_module, case):
+    # This historical telemetry baseline predates optional V1 energy metadata.
+    # Isolate its byte-parity contract from the separately tested shadow cache extension.
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'off')
     _span_flags(monkeypatch)
     audio = _install_audio(monkeypatch, [0, 0], offset=180.0)
     original = _capture_shifted_conversation([0, 0])

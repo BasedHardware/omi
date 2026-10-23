@@ -346,6 +346,7 @@ class LiveChainSession:
                         language,
                         profile=host.language_profile,
                         idle_budget=getattr(self.receiver, 'soniox_idle_budget', None),
+                        uid=uid,
                     )
                 elif service == st.STTService.modulate:
                     raw = await connect_modulate(callback, sample_rate, language)

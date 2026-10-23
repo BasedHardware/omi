@@ -127,7 +127,7 @@ BigQuery `based-hardware.omi_finops` (location US, same as the billing export, s
 | `unit_cost_reconciliation` | date × pool | `pool_usd` vs `allocated_usd` vs `delta_pct` |
 | `plan_revenue_daily` | date × plan | Stripe **snapshot**; carries `snapshot_date` because Stripe is not replayable per historical day |
 | `unit_cost_user_day` | date × `uid_hash` | hashed uids only (`sha256[:16]`) |
-| `mercury_vendor_spend_daily`, `mercury_saas_daily` | date × vendor / date | Mercury aggregates (`load_mercury`; dark while Mercury is off) |
+| `mercury_vendor_spend_daily`, `mercury_saas_daily`, `mercury_infra_non_gcp_daily` | date × vendor / date | Mercury aggregates (`load_mercury`; dark while Mercury is off) |
 | `stripe_fee_daily` | date | measured Stripe processing fees (dark while the fee scope is missing) |
 | `vendor_balance_snapshot` | ts × vendor | Soniox prepaid-balance snapshots (dark while the org key is off) |
 | `vendor_balance_spend_daily` | date × vendor | daily spend derived from consecutive snapshots (gap/reset flagged) |
@@ -135,7 +135,8 @@ BigQuery `based-hardware.omi_finops` (location US, same as the billing export, s
 
 All four are partitioned by `date` and clustered. Loads are **idempotent per date**: the run's
 dates are deleted and re-inserted inside one BigQuery transaction, so re-running a date replaces
-it rather than doubling it.
+it rather than doubling it. A column added to a loader's `SCHEMAS` is added to the live table
+automatically (nullable, before the load); any other schema change needs a migration.
 
 ## Validation
 
@@ -454,7 +455,7 @@ completeness gate below, not the cadence of any named vendor.
 | --- | --- |
 | `saas` | Non-GCP software subscriptions; drives the TV SaaS line |
 | `stt_vendor`, `llm_vendor` | Cash cross-check against provider invoices; never add to usage costs. Anthropic maps to `saas` since 2026-10-22: its Mercury cash is Claude team seats, not per-customer API spend |
-| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend, including outgoing Stripe fees; separate from SaaS |
+| `infra_non_gcp` | Non-GCP infrastructure/platform cash spend (Modal, AWS, Runpod, …), including outgoing Stripe fees; drives the TV "Infra (non-GCP)" line. The run-rate table's `amount_usd` excludes the `stripe_fees` vendor (that cash is measured on the `stripe_fee_daily` line; the two must never stack) but carries its own run rate in `stripe_fees_usd`, so the TV can count it on the infra line only on a day the measured fee line is unavailable — never on both lines, never on neither |
 | `gcp` | Excluded from TV addition; already covered by GCP billing |
 | `marketing`, `fulfillment`, `hardware_cogs`, `travel_meals`, `professional_services`, `facilities`, `other_opex` | Reconciliation categories only; never included in the SaaS line |
 | `excluded` | Payroll, internal/treasury transfers, card repayments, expense reimbursements, taxes, refunds/credits and explicitly excluded hardware categories; collapsed to vendor `excluded` |
@@ -488,7 +489,7 @@ monthly/annual bills for one canonical vendor need separate verified aliases.
 
 ### BigQuery and TV contract
 
-The existing `load_bigquery.py` path loads two new date-partitioned aggregate tables:
+The existing `load_bigquery.py` path loads three date-partitioned aggregate tables:
 
 - `based-hardware.omi_finops.mercury_vendor_spend_daily`: `date`, `vendor`, `category`,
   `amount_usd` (NUMERIC, positive outgoing spend), `transaction_count`, `run_id`, `computed_at`.
@@ -497,6 +498,17 @@ The existing `load_bigquery.py` path loads two new date-partitioned aggregate ta
   (the ÷12 portion from ambiguous one-off vendors), `unmapped_usd`, `unmapped_count`,
   `coverage_days`, `annual_history_complete`, `annual_history_reason`,
   `inputs_complete`, `run_id`, `computed_at`.
+- `based-hardware.omi_finops.mercury_infra_non_gcp_daily`: the SaaS run-rate
+  schema plus a `stripe_fees_usd` column, at `category='infra_non_gcp'` — the
+  same run-rate treatment as SaaS over non-GCP infrastructure cash (Modal, AWS,
+  Runpod, …), feeding the TV "Infra (non-GCP)" cost line. The `stripe_fees`
+  vendor is kept out of `amount_usd` (measured on `stripe_fee_daily` instead)
+  and reported separately in `stripe_fees_usd`, which the TV counts on the
+  infra line only on a day the measured fee line is unavailable. The table is
+  created whole from `SCHEMAS` on its first load (every produced field has a
+  column, pinned by test) and stays dark until then, so the wall shows an
+  unavailable line, never a guess. Reconciling an OLDER live table against the
+  current schema is #23354's job, not this loader's.
 
 Every successful refresh replaces **all 90 dates**, including zero-spend dates,
 through the existing per-table delete/insert transaction. The daily unmapped row
@@ -542,6 +554,18 @@ reason, not as an unavailable line: the wall shows the amortized value and
 appends the partial note.
 Preserve an explicit measured zero. The admin wall reads this table through
 `wall-finops.ts` (`saasMeasured` + `saasAnnualPartial`), which is in place.
+
+The infra run rate keeps the SaaS read gates but not the SaaS display rule:
+while `annual_history_complete=false` the run rate is a **floor**, not a
+measurement — the cadence treatment amortizes only charges the ledger holds,
+so an annual bill posted before the ledger starts (the 2026-01-08 Modal wire)
+contributes nothing, and a first-seen charge is an ambiguous one-off ÷12. The
+wall shows max(measured, dated `INFRA_MONTHLY_USD` fallback), still labelled
+partial with the producer's reason, so a fresh-but-short row never drops the
+known Modal bill from the all-in total; once the history is complete the
+measured value stands alone. `stripe_fees_usd` is counted on the infra line
+only on a day the measured fee line is unavailable, so those fees are never on
+both lines and never on neither.
 
 Bank posting dates and prepayments differ from provider usage days. Reconcile
 `mercury_vendor_spend_daily` by vendor/month against every non-GCP invoice and the
@@ -600,8 +624,8 @@ The same `pull_stripe.py` run writes the book first (`raw/stripe_plan_mrr.json`)
   `non_usd_paying_subs` lets the wall label the figure partial.
 * **Customers, not items.** `paying_subs` counts a customer once per plan,
   never per subscription item; `paying_customers` (new nullable
-  `plan_revenue_daily` column, added to a live table by the loader's one-shot
-  `ALTER TABLE … ADD COLUMN IF NOT EXISTS`) is the book-wide distinct customer
+  `plan_revenue_daily` column, added to a live table automatically by the
+  loader's schema reconcile) is the book-wide distinct customer
   count repeated on every plan row — the wall takes MAX per snapshot day, not
   the plan-row sum, and falls back to the sum (labelled item-based) on rows
   written before the column existed. Old artifacts load with NULL.

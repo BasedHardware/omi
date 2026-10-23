@@ -645,6 +645,12 @@ class SharedPreferencesUtil {
 
   bool get deviceOnboardingCompleted => getBool('deviceOnboardingCompleted');
 
+  /// Set when the `pocket` onboarding ends without a subscription: the trial paywall opens once
+  /// more on the first tap in Home, then this clears.
+  bool get homeTrialSheetPending => getBool('homeTrialSheetPending');
+
+  set homeTrialSheetPending(bool value) => saveBool('homeTrialSheetPending', value);
+
   set deviceOnboardingCompleted(bool value) => saveBool('deviceOnboardingCompleted', value);
 
   bool get omiButtonActionsEnabled => getBool('omiButtonActionsEnabled', defaultValue: true);

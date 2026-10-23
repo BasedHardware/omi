@@ -443,6 +443,9 @@ def _get_shaped_conversation_notes(
     if not prefix.has_usable_content and not frames:
         return Structured()
     mount = notes_mount()
+    from utils.llm.action_item_v2 import instructions_for
+
+    mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
     evidence = [
         {
             'role': 'user',

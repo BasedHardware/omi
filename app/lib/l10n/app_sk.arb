@@ -4407,5 +4407,19 @@
     "deviceRecently": "Nedávno",
     "deviceDisconnectedFor": "Odpojené na {duration}",
     "deviceControls": "Ovládanie",
-    "homeBackgroundLine": "Tiež: {items}"
+    "homeBackgroundLine": "Tiež: {items}",
+    "deviceOnboardingPressButtonTitle": "Stlačte tlačidlo na Omi",
+    "deviceOnboardingPressButtonSubtitle": "Jedno krátke stlačenie. Potom sa spýtajte na čokoľvek.",
+    "deviceOnboardingAskNowTitle": "Položte otázku",
+    "deviceOnboardingAskNowSubtitle": "Povedzte to nahlas. Omi počúva.",
+    "deviceOnboardingPressAgainHint": "Hotovo? Stlačte tlačidlo znova na odoslanie.",
+    "trialUpsellTitle": "Získali ste {days} dní zadarmo",
+    "trialUpsellBody": "{days} dní Omi Pro na nás. Pripomenieme sa pred účtovaním. Zrušte kedykoľvek.",
+    "trialUpsellClaim": "Chcem skúšobné obdobie {days} dní",
+    "settingsUpgradeTrialSubtitle": "Začnite skúšobné obdobie {days} dní zadarmo",
+    "pairingPowerOnTitle": "Zapnite Omi",
+    "pairingPowerOnSubtitle": "Raz stlačte tlačidlo a držte ho pri telefóne.",
+    "walkthroughBackgroundRecordingNote": "To je všetko. Omi bude ďalej nahrávať vaše rozhovory na pozadí.",
+    "noThanks": "Nie, ďakujem",
+    "recapInTheBackground": "V pozadí"
 }

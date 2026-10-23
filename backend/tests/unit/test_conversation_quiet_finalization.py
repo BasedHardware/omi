@@ -488,3 +488,78 @@ def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store
     monkeypatch.setenv('LIFECYCLE_V2_MODE', 'serve')
     assert checks.quiet_deadline(row, 120, uid='synthetic') == NOW - timedelta(minutes=3)
     assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) is None
+
+
+def _oversized_write_rejection():
+    from google.api_core.exceptions import InvalidArgument
+
+    return InvalidArgument(
+        "400 Document 'projects/p/databases/(default)/documents/users/synthetic/conversations/old' cannot be "
+        "written because its size (1,048,631 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
+    )
+
+
+def test_oversized_conversation_retires_the_quiet_check_instead_of_retrying_forever(store, monkeypatch):
+    """#23341: the 1 MiB refusal is permanent, so the check must stop re-waking and the worker must not 5xx."""
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+
+    def refuse(*args, **kwargs):
+        raise _oversized_write_rejection()
+
+    monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
+    job_id = checks.quiet_check_id('synthetic', 'old')
+    assert quiet.run(job_id, 1, firestore_client=store) == 'document_size_limit'
+    job = _job(store)
+    assert job['status'] == 'quiet_done'
+    assert job['last_failure_code'] == 'document_size_limit'
+    assert (
+        job['reconcile_after_at'] is firestore.DELETE_FIELD
+    )  # the fixture keeps the sentinel; Firestore drops the field
+    # The successor wake this run dispatched before admission is now inert.
+    assert quiet.run(job_id, job['dispatch_generation'], firestore_client=store) == 'stale'
+    # User data stays: the conversation row is neither touched nor terminalized here.
+    assert store.rows[ROW]['status'] == 'in_progress'
+    assert store.rows[ROW]['transcript_segments'] == [{'text': 'synthetic fixture'}]
+
+
+def test_other_invalid_argument_rejections_still_surface(store, monkeypatch):
+    from google.api_core.exceptions import InvalidArgument
+
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+
+    def refuse(*args, **kwargs):
+        raise InvalidArgument('400 synthetic unrelated rejection')
+
+    monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
+    with pytest.raises(InvalidArgument):
+        quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert _job(store)['status'] == checks.QUIET_CHECK_STATUS
+
+
+def test_worker_endpoint_acks_an_oversized_conversation_with_200(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+
+    def refuse(*args, **kwargs):
+        raise _oversized_write_rejection()
+
+    monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
+    actual = quiet.run
+    monkeypatch.setattr(quiet, 'run', lambda jid, gen: actual(jid, gen, firestore_client=store))
+    app = FastAPI()
+    app.include_router(worker.router)
+    app.dependency_overrides[worker.verify_listen_finalization_cloud_tasks_oidc] = lambda: 0
+    payload = {'job_id': checks.quiet_check_id('synthetic', 'old'), 'dispatch_generation': 1}
+    with TestClient(app) as client:
+        first = client.post('/v1/conversation-finalization-jobs/run', json=payload)
+        # Cloud Tasks redelivery of the same generation and the dispatched successor both ack.
+        second = client.post('/v1/conversation-finalization-jobs/run', json=payload)
+        successor = client.post(
+            '/v1/conversation-finalization-jobs/run',
+            json={'job_id': payload['job_id'], 'dispatch_generation': _job(store)['dispatch_generation']},
+        )
+    assert (first.status_code, first.json()['status']) == (200, 'document_size_limit')
+    assert (second.status_code, second.json()['status']) == (200, 'stale')
+    assert (successor.status_code, successor.json()['status']) == (200, 'stale')

@@ -16,6 +16,15 @@
  *         its own Mercury cash) so one provider never hides another
  *       + SaaS: a complete, fresh Mercury daily aggregate when available,
  *         otherwise a fixed monthly estimate
+ *       + Infra (non-GCP): Mercury-categorized Modal/AWS/Runpod-class cash as
+ *         a run rate with the SaaS cadence treatment (yearly and one-off
+ *         charges amortized ÷12); never GCP (billing export) or STT/fee cash
+ *         (their own lines), so no dollar is counted twice. While the producer
+ *         labels the run rate partial it is a FLOOR (it cannot see annual
+ *         bills posted before the ledger starts), so the day shows
+ *         max(measured, dated fallback), still labelled partial. Mercury
+ *         `stripe_fees` cash rejoins this line only on a day the measured fee
+ *         line is unavailable — never on both lines, never on neither.
  *       + Stripe processing fees, measured from balance transactions. When the
  *         finops key lacks the read scope the line is UNAVAILABLE, never a guess.
  * Each manual estimate carries the date it was read and goes stale past its own
@@ -27,6 +36,21 @@ import { shiftDay } from "./qualified-activity";
 
 export const SAAS_MONTHLY_USD = 4800; // "Omi Cost vs Revenue" artifact, Oct 2026 row
 export const SAAS_AS_OF = "2026-10-16";
+/** Non-GCP infra (Modal, AWS, Runpod, …) run-rate fallback, read 2026-10-23
+ * read-only from the Mercury ledger (`mercury_vendor_spend_daily`, category
+ * `infra_non_gcp`, 2026-07-04..2026-10-20) with the SaaS cadence treatment:
+ * monthly cloud bills (Cloudflare, Hetzner) run at ≈ $114/mo; the once-a-year
+ * Modal compute wire ($12,000 on 2026-01-08, the 13-month read-only check
+ * recorded in the finops README) predates the ledger and amortizes ÷12 to
+ * $1,000/mo through 2027-01-07. The `stripe_fees` vendor is excluded — its
+ * cash is the measured Stripe fee line. Replaced per day by the FinOps
+ * `mercury_infra_non_gcp_daily` run rate once that table has complete fresh
+ * rows whose annual history is complete; while the producer still labels a
+ * day partial (the ledger cannot see the Modal wire until the 400-day
+ * backfill runs) the day shows max(measured, this constant) — see
+ * `allInCost`. */
+export const INFRA_MONTHLY_USD = 1114;
+export const INFRA_AS_OF = "2026-10-23";
 /** Soniox console, October 2026 (read 2026-10-16): ≈ $174/day; the KB
  * transcription-cost note's ≈ $204/day agrees in order. The FinOps
  * `stt_vendor_low` model (~$10K/mo) overstated it and is no longer used.
@@ -39,6 +63,9 @@ export const STT_SOURCE = `Soniox console, Oct 2026, read ${STT_AS_OF}`;
  * so a console constant must not outlive two weeks. SaaS: a monthly constant. */
 export const STT_STALE_DAYS = 14;
 export const SAAS_STALE_DAYS = 35;
+/** The infra fallback is a monthly run-rate constant like SaaS, so the SaaS
+ * staleness threshold applies (35 days). */
+export const INFRA_STALE_DAYS = SAAS_STALE_DAYS;
 export const ESTIMATE_STALE_DAYS = SAAS_STALE_DAYS;
 export const FEES_UNAVAILABLE_REASON =
   "Stripe processing fees unavailable: the finops Stripe key needs read access to balance transactions (GET /v1/balance_transactions, 'Balance' category)";
@@ -98,6 +125,26 @@ export interface CostDay {
   saas: number;
   /** SaaS came from a complete, fresh Mercury FinOps aggregate. */
   saasMeasured: boolean;
+  /** Non-GCP infra dollars on the line: the measured run rate when complete,
+   * max(measured, dated constant) while the producer labels it partial, or
+   * the dated constant without a row — plus `infraFeesCash` (below). */
+  infra: number;
+  /** A complete, fresh Mercury FinOps infra row exists for the day. */
+  infraMeasured: boolean;
+  /** The producer's run rate for the day (fee cash excluded); null without a
+   * row. Kept even when the dated fallback floors it, so the line can say so. */
+  infraMeasuredUsd: number | null;
+  /** The producer's partial reason (`history_under_12_months` or
+   * `uncategorized_above_threshold`); null when complete or without a row. */
+  infraPartial: string | null;
+  /** The dated fallback replaced a partial measured run rate that was lower:
+   * a partial run rate is a floor (annual bills before the ledger start are
+   * invisible to it), never a reason to show less than the dated estimate. */
+  infraFloored: boolean;
+  /** Mercury `stripe_fees` cash run rate counted on the infra line because the
+   * measured Stripe fee line is unavailable for the day; 0 whenever the fee
+   * line owns that money (or there is no such cash). */
+  infraFeesCash: number;
   /** Measured Stripe processing fees; null = source unavailable, never a guess. */
   fees: number | null;
   oneTime: number;
@@ -147,7 +194,7 @@ export function oneTimeExcess(days: BillingDay[]) {
 }
 
 export interface EstimateStatus {
-  line: "STT" | "SaaS";
+  line: "STT" | "SaaS" | "Infra";
   monthlyUsd: number;
   asOf: string;
   ageDays: number;
@@ -172,6 +219,7 @@ export function estimateStatus(
     [
       ["STT", STT_MONTHLY_USD, STT_AS_OF, STT_STALE_DAYS],
       ["SaaS", SAAS_MONTHLY_USD, SAAS_AS_OF, SAAS_STALE_DAYS],
+      ["Infra", INFRA_MONTHLY_USD, INFRA_AS_OF, INFRA_STALE_DAYS],
     ] as const
   ).map(([line, monthlyUsd, asOf, staleDays]) => {
     const ageDays = age(asOf);
@@ -258,6 +306,17 @@ export interface VendorInputs {
   sttCash?: Record<string, Record<string, number>>;
   /** date → complete, fresh Mercury SaaS daily USD. */
   saasMeasured?: Record<string, number>;
+  /** date → complete, fresh Mercury non-GCP infra run-rate USD (never GCP,
+   * STT or Stripe-fee cash — those are their own lines; the producer keeps
+   * the stripe_fees vendor out of it so this never double-counts the fee line). */
+  infraMeasured?: Record<string, number>;
+  /** date → producer reason while the infra annual history is incomplete;
+   * such a run rate is floored at the dated constant (see `allInCost`). */
+  infraAnnualPartial?: Record<string, string>;
+  /** date → run rate of the Mercury `stripe_fees` cash excluded from
+   * `infraMeasured`; rejoins the infra line only on a day the measured fee
+   * line is unavailable. */
+  infraStripeFeesCash?: Record<string, number>;
   /** date → measured Stripe processing fee USD. */
   stripeFees?: Record<string, number>;
 }
@@ -373,6 +432,47 @@ export function modulateReconciliation(
   };
 }
 
+/** One day's non-GCP infra line. The producer's run rate replaces the dated
+ * constant outright only once it is a complete measurement. While the
+ * producer labels the day partial the run rate is a FLOOR: the cadence
+ * treatment amortizes only charges the ledger holds, so an annual bill posted
+ * before the ledger starts (the 2026-01-08 Modal wire, ≈$1,000/mo) contributes
+ * nothing, and a vendor's first-seen charge is an ambiguous one-off ÷12 — it
+ * cannot overcount the complete figure. The dated constant was read from the
+ * same ledger plus that known wire, so the day shows max(measured, constant),
+ * still labelled partial: never the ≈$114/mo visible slice in place of the
+ * $1,114/mo the evidence supports (Luna r2 P1), while a measured run rate
+ * that rises above the constant is used at once instead of hidden behind it.
+ * Both partial reasons floor — `uncategorized_above_threshold` can hide an
+ * unmatched annual infra wire just as a short ledger does. Once the producer
+ * calls the annual history complete (≥365 covered days, after the 400-day
+ * backfill) the measured value stands alone. Mercury `stripe_fees` cash —
+ * kept out of the run rate because the measured fee line owns that money —
+ * rejoins here only when that line has no value for the day, so the fees are
+ * never on both lines and never on neither (Luna r2 P2). */
+export function infraLineFor(
+  date: string,
+  { infraMeasured, infraAnnualPartial, infraStripeFeesCash }: VendorInputs,
+  /** The measured Stripe fee for the day as the stack books it; null = the
+   * fee line has no value for the day (source dark or day not loaded). */
+  fees: number | null
+) {
+  const estimate = INFRA_MONTHLY_USD / DAYS_PER_MONTH;
+  const measured = infraMeasured?.[date] ?? null;
+  const partial = measured == null ? null : infraAnnualPartial?.[date] ?? null;
+  const floored = partial != null && (measured as number) < estimate;
+  const base = measured == null || floored ? estimate : measured;
+  const feesCash = fees == null ? infraStripeFeesCash?.[date] ?? 0 : 0;
+  return {
+    usd: base + feesCash,
+    measured: measured != null,
+    measuredUsd: measured,
+    partial,
+    floored,
+    feesCash,
+  };
+}
+
 /** Measured date maps replace their dated estimates for those days; an
  * unavailable source stays visible in `missing` and never becomes a guess. */
 export function allInCost(
@@ -410,6 +510,7 @@ export function allInCost(
       const measuredSaas = vendor.saasMeasured?.[d.date];
       const saas = measuredSaas ?? saasEstimate;
       const fees = feesUnavailable ? null : vendor.stripeFees?.[d.date] ?? null;
+      const infra = infraLineFor(d.date, vendor, fees);
       const total =
         gcp +
         vertexLlm +
@@ -417,6 +518,7 @@ export function allInCost(
         anthropicCounted +
         stt.usd +
         saas +
+        infra.usd +
         (fees ?? 0);
       return {
         date: d.date,
@@ -436,6 +538,12 @@ export function allInCost(
         sttCash: stt.cash,
         saas,
         saasMeasured: measuredSaas != null,
+        infra: infra.usd,
+        infraMeasured: infra.measured,
+        infraMeasuredUsd: infra.measuredUsd,
+        infraPartial: infra.partial,
+        infraFloored: infra.floored,
+        infraFeesCash: infra.feesCash,
         fees,
         oneTime: excess,
         total,

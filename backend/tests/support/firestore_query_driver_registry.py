@@ -1057,6 +1057,26 @@ _add(
     )
 )
 _add(DriverEntry('database.daily_summaries.get_daily_summary_by_date', base={'uid': UID, 'date': '2026-01-01'}))
+_add(DriverEntry('database.daily_summaries.get_day_recording_count', base={'uid': UID, 'start': T0, 'end': T1}))
+_add(
+    DriverEntry(
+        'database.mcp_memory_queries.read_mcp_memory_candidates',
+        base={'uid': UID},
+        neutrals={'budget': _BUDGET, 'max_candidates': _LIMIT},
+        domains={
+            'origin': ['memory_items', 'memories'],
+            'filters': [
+                {},
+                {'updated_after': T0},
+                {'reviewed': True},
+                {'manually_added': True},
+                {'categories': ['manual']},
+                {'reviewed': False},
+                {'categories': ['interesting']},
+            ],
+        },
+    )
+)
 _add(DriverEntry('database.daily_summaries.get_desktop_daily_usage', base={'uid': UID, 'date': '2026-01-01'}))
 _add(DriverEntry('database.daily_summaries.get_summaries_count', base={'uid': UID}))
 

@@ -1,16 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  fetchInfraHistory,
+  fetchStripeFeeHistory,
+  FINOPS_INFRA_QUERY,
   FINOPS_MODULATE_MODELLED_QUERY,
   FINOPS_PLAN_COST_QUERY,
   FINOPS_STRIPE_FEE_QUERY,
   FINOPS_VENDOR_BALANCE_QUERY,
+  HEALTH_COST_DAYS,
   parseFinopsHistory,
+  parseInfra,
   parsePlanCost,
   parseVendorBalance,
 } from "../wall-finops";
 import {
   allInCost,
   estimateStatus,
+  INFRA_AS_OF,
+  INFRA_MONTHLY_USD,
+  infraLineFor,
   modulateReconciliation,
   oneTimeExcess,
   SAAS_MONTHLY_USD,
@@ -20,6 +28,13 @@ import {
   sttLineFor,
   STT_MONTHLY_USD,
 } from "../wall-cost";
+
+const query = vi.hoisted(() => vi.fn());
+// Partial: wall-cost.ts also imports `isLlmService` from this module.
+vi.mock("@/lib/services/gcp-billing", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getGcpBillingClient: () => ({ query }),
+}));
 
 const day = (i: number) => `2026-09-${String(i).padStart(2, "0")}`;
 /** Flat GCP with a Coldline-migration-like Cloud Storage spike on Sep 20. */
@@ -44,6 +59,13 @@ const days = Array.from({ length: 21 }, (_, k) => {
 });
 const saasDay = SAAS_MONTHLY_USD / (365.25 / 12);
 const sttDay = STT_MONTHLY_USD / (365.25 / 12);
+const infraDay = INFRA_MONTHLY_USD / (365.25 / 12);
+/** Age of the infra constant at a test time, from the committed as-of date. */
+const infraAge = (at: string) =>
+  Math.floor(
+    (Date.parse(`${at}T00:00:00Z`) - Date.parse(`${INFRA_AS_OF}T00:00:00Z`)) /
+      86_400_000
+  );
 
 describe("all-in cost", () => {
   it("removes only the excess of a one-time spike", () => {
@@ -69,7 +91,9 @@ describe("all-in cost", () => {
     });
     expect(STT_MONTHLY_USD).toBe(5_300);
     expect(d.stt).toBeCloseTo(sttDay);
-    expect(d.total).toBeCloseTo(1_700 + 100 + 250 + 20 + sttDay + saasDay);
+    expect(d.total).toBeCloseTo(
+      1_700 + 100 + 250 + 20 + sttDay + saasDay + infraDay
+    );
     expect(missing).toEqual([]);
   });
 
@@ -92,7 +116,7 @@ describe("all-in cost", () => {
     const withSpend = daily.find((x) => x.date === day(19))!;
     expect(withSpend.anthropic).toBe(20);
     expect(withSpend.total).toBeCloseTo(
-      1_700 + 100 + 250 + 20 + sttDay + saasDay
+      1_700 + 100 + 250 + 20 + sttDay + saasDay + infraDay
     );
     // A reported zero (key present, no spend) is not counted and not missing.
     const flat = days.map((d) => ({
@@ -101,7 +125,7 @@ describe("all-in cost", () => {
     }));
     const zero = allInCost(flat, { openai: true, anthropic: true });
     expect(zero.daily.find((x) => x.date === day(19))!.total).toBeCloseTo(
-      1_700 + 100 + 250 + sttDay + saasDay
+      1_700 + 100 + 250 + sttDay + saasDay + infraDay
     );
     expect(zero.missing).toEqual([]);
   });
@@ -139,22 +163,38 @@ describe("all-in cost", () => {
         staleDays: 35,
         stale: false,
       },
+      {
+        line: "Infra",
+        monthlyUsd: INFRA_MONTHLY_USD,
+        asOf: INFRA_AS_OF,
+        ageDays: infraAge("2026-10-20"),
+        staleDays: 35,
+        stale: false,
+      },
     ]);
-    // STT goes stale after 14 days (David 2026-10-22) while SaaS holds to 35.
+    // STT goes stale after 14 days (David 2026-10-22) while SaaS and the infra
+    // run-rate constant hold to their monthly 35-day threshold.
     expect(
       estimateStatus(new Date("2026-10-31T00:00Z"), { SaaS: true })
     ).toEqual([
       expect.objectContaining({ line: "STT", ageDays: 15, stale: true }),
       expect.objectContaining({ line: "SaaS", ageDays: 15, stale: false }),
+      expect.objectContaining({
+        line: "Infra",
+        ageDays: infraAge("2026-10-31"),
+        stale: false,
+      }),
     ]);
+    // 2026-12-01 is past every line's threshold from each committed as-of.
     expect(
-      estimateStatus(new Date("2026-11-21T00:00Z")).every((e) => e.stale)
+      estimateStatus(new Date("2026-12-01T00:00Z")).every((e) => e.stale)
     ).toBe(true);
     expect(
-      estimateStatus(new Date("2026-11-21T00:00Z"), { SaaS: true })
+      estimateStatus(new Date("2026-12-01T00:00Z"), { SaaS: true, Infra: true })
     ).toEqual([
       expect.objectContaining({ line: "STT", stale: true }),
       expect.objectContaining({ line: "SaaS", stale: false }),
+      expect.objectContaining({ line: "Infra", stale: false }),
     ]);
   });
 
@@ -290,6 +330,168 @@ describe("all-in cost", () => {
     });
     expect(daily.find((d) => d.date === day(17))!.saas).toBeCloseTo(saasDay);
   });
+
+  it("counts the non-GCP infra run rate in the all-in total, with a dated fallback", () => {
+    const { daily } = allInCost(
+      days,
+      {},
+      {
+        infraMeasured: { [day(19)]: 41.25, [day(18)]: 0 },
+      }
+    );
+    const d19 = daily.find((d) => d.date === day(19))!;
+    expect(d19).toMatchObject({ infra: 41.25, infraMeasured: true });
+    expect(d19.total).toBeCloseTo(
+      1_700 + 100 + 250 + 20 + sttDay + saasDay + 41.25
+    );
+    // A measured zero is a measurement, not a missing line.
+    expect(daily.find((d) => d.date === day(18))).toMatchObject({
+      infra: 0,
+      infraMeasured: true,
+    });
+    // A day without a measured row keeps the dated constant — never silent $0.
+    const d17 = daily.find((d) => d.date === day(17))!;
+    expect(d17.infraMeasured).toBe(false);
+    expect(d17.infra).toBeCloseTo(infraDay);
+  });
+
+  it("keeps infra out of the STT line: each line counts its own dollars once", () => {
+    // STT cash (Modulate) and a measured infra row on the same day both land
+    // in the total exactly once; the STT fields never absorb infra dollars.
+    const { daily } = allInCost(
+      days,
+      {},
+      {
+        sttCash: { [day(19)]: { modulate: 20 } },
+        infraMeasured: { [day(19)]: 41.25 },
+      }
+    );
+    const d = daily.find((x) => x.date === day(19))!;
+    expect(d.stt).toBeCloseTo(sttDay + 20);
+    expect(d.infra).toBe(41.25);
+    expect(d.total).toBeCloseTo(
+      1_700 + 100 + 250 + 20 + sttDay + 20 + saasDay + 41.25
+    );
+  });
+
+  it("floors a partial infra run rate at the dated fallback, still labelled partial (Luna r2 P1)", () => {
+    // The ledger starts 2026-07-04; the $12,000 Modal wire of 2026-01-08
+    // (≈$1,000/mo) predates it, so until the 400-day backfill a partial row
+    // sees only the ≈$114/mo Cloudflare + Hetzner slice (≈$3.75/day). That is
+    // a floor, never a replacement for the $1,114/mo constant carrying the
+    // known wire: the day shows max(measured, constant) and stays partial.
+    const { daily } = allInCost(
+      days,
+      {},
+      {
+        infraMeasured: { [day(19)]: 3.75, [day(18)]: 50, [day(17)]: 3.75 },
+        infraAnnualPartial: {
+          [day(19)]: "history_under_12_months",
+          [day(18)]: "history_under_12_months",
+        },
+      }
+    );
+    const d19 = daily.find((d) => d.date === day(19))!;
+    expect(d19).toMatchObject({
+      infraMeasured: true,
+      infraMeasuredUsd: 3.75,
+      infraPartial: "history_under_12_months",
+      infraFloored: true,
+      infraFeesCash: 0,
+    });
+    expect(d19.infra).toBeCloseTo(infraDay);
+    expect(d19.total).toBeCloseTo(
+      1_700 + 100 + 250 + 20 + sttDay + saasDay + infraDay
+    );
+    // A partial run rate that rises above the constant is used at once —
+    // not hidden behind the constant — and is still labelled partial.
+    expect(daily.find((d) => d.date === day(18))).toMatchObject({
+      infra: 50,
+      infraMeasuredUsd: 50,
+      infraPartial: "history_under_12_months",
+      infraFloored: false,
+    });
+    // A complete row below the constant is the measurement: no floor.
+    expect(daily.find((d) => d.date === day(17))).toMatchObject({
+      infra: 3.75,
+      infraPartial: null,
+      infraFloored: false,
+    });
+  });
+
+  it("floors on either partial reason, a partial zero included", () => {
+    // `uncategorized_above_threshold` can hide an unmatched annual infra wire
+    // just as a short ledger does, so it floors the same way.
+    expect(
+      infraLineFor(
+        day(19),
+        {
+          infraMeasured: { [day(19)]: 0 },
+          infraAnnualPartial: { [day(19)]: "uncategorized_above_threshold" },
+        },
+        null
+      )
+    ).toMatchObject({
+      usd: infraDay,
+      measured: true,
+      measuredUsd: 0,
+      partial: "uncategorized_above_threshold",
+      floored: true,
+      feesCash: 0,
+    });
+    // No row at all: the dated constant, unmeasured, not floored.
+    expect(infraLineFor(day(19), {}, null)).toMatchObject({
+      usd: infraDay,
+      measured: false,
+      measuredUsd: null,
+      partial: null,
+      floored: false,
+      feesCash: 0,
+    });
+  });
+
+  it("counts Mercury stripe_fees cash on the infra line only while the measured fee line is dark (Luna r2 P2)", () => {
+    const vendor = {
+      infraMeasured: { [day(19)]: 41.25, [day(18)]: 41.25 },
+      infraStripeFeesCash: { [day(19)]: 4, [day(18)]: 4 },
+      stripeFees: { [day(19)]: 12.5 }, // day 18 has no measured fee row
+    };
+    const { daily } = allInCost(days, {}, vendor);
+    // Day 19: the measured fee line owns the money; infra stays without it.
+    const d19 = daily.find((d) => d.date === day(19))!;
+    expect(d19).toMatchObject({ infra: 41.25, infraFeesCash: 0, fees: 12.5 });
+    expect(d19.total).toBeCloseTo(
+      1_700 + 100 + 250 + 20 + sttDay + saasDay + 41.25 + 12.5
+    );
+    // Day 18: no measured fee for the day — the cash rejoins infra, labelled,
+    // so it is on exactly one line.
+    const d18 = daily.find((d) => d.date === day(18))!;
+    expect(d18).toMatchObject({ infra: 45.25, infraFeesCash: 4, fees: null });
+    expect(d18.total).toBeCloseTo(
+      1_700 + 100 + 250 + 20 + sttDay + saasDay + 45.25
+    );
+    // Fee source dark entirely: every day's cash rejoins infra, and the fee
+    // line is still reported missing — never dropped from both.
+    const dark = allInCost(days, {}, vendor, "fees unavailable");
+    expect(dark.daily.find((d) => d.date === day(19))).toMatchObject({
+      infra: 45.25,
+      infraFeesCash: 4,
+      fees: null,
+    });
+    expect(dark.missing).toContain("Stripe processing fees");
+    // The floor and the fee cash compose: constant base + fee cash.
+    const floored = infraLineFor(
+      day(19),
+      {
+        ...vendor,
+        infraMeasured: { [day(19)]: 3.75 },
+        infraAnnualPartial: { [day(19)]: "history_under_12_months" },
+      },
+      null
+    );
+    expect(floored.usd).toBeCloseTo(infraDay + 4);
+    expect(floored).toMatchObject({ floored: true, feesCash: 4 });
+  });
 });
 
 describe("FinOps plan cost reader", () => {
@@ -401,6 +603,110 @@ describe("FinOps plan cost reader", () => {
     // label the measured line partial until the ledger covers 12 months.
     expect(FINOPS_PLAN_COST_QUERY).toContain("annual_history_complete");
     expect(FINOPS_PLAN_COST_QUERY).toContain("annual_history_reason");
+  });
+});
+
+describe("FinOps infra run-rate reader", () => {
+  it("reads complete fresh rows, partial annual history and the excluded fee cash", () => {
+    const h = parseInfra(
+      JSON.stringify({
+        infra: [
+          {
+            day: "2026-10-13",
+            usd: 32.87,
+            stripe_fees_usd: "4.1",
+            annual_complete: true,
+          },
+          {
+            day: "2026-10-12",
+            usd: 0,
+            stripe_fees_usd: 0,
+            annual_complete: false,
+            annual_reason: "history_under_12_months",
+          },
+          {
+            day: "2026-10-11",
+            usd: 5,
+            annual_complete: false,
+            annual_reason: "uncategorized_above_threshold",
+          },
+          { day: "2026-10-10", usd: 6, annual_complete: false },
+        ],
+      })
+    );
+    // Explicit zeroes are measurements; a missing reason falls back to the
+    // short-history wording, matching the SaaS reader's contract.
+    expect(h.infraMeasured).toEqual({
+      "2026-10-13": 32.87,
+      "2026-10-12": 0,
+      "2026-10-11": 5,
+      "2026-10-10": 6,
+    });
+    expect(h.infraAnnualPartial).toEqual({
+      "2026-10-12": "history_under_12_months",
+      "2026-10-11": "uncategorized_above_threshold",
+      "2026-10-10": "history_under_12_months",
+    });
+    // NUMERIC arrives as a string; an absent value is no excluded cash.
+    expect(h.infraStripeFeesCash).toEqual({
+      "2026-10-13": 4.1,
+      "2026-10-12": 0,
+      "2026-10-11": 0,
+      "2026-10-10": 0,
+    });
+  });
+
+  it("queries the infra table separately from the plan-cost read", () => {
+    expect(FINOPS_INFRA_QUERY).toContain("mercury_infra_non_gcp_daily");
+    expect(FINOPS_INFRA_QUERY).toContain("inputs_complete = TRUE");
+    expect(FINOPS_INFRA_QUERY).toContain(
+      "computed_at >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 3 DAY)"
+    );
+    // The excluded fee cash rides along so the stack can count it on a
+    // fee-dark day; a NULL is no cash, not a failed read.
+    expect(FINOPS_INFRA_QUERY).toContain(
+      "IFNULL(stripe_fees_usd, 0) AS stripe_fees_usd"
+    );
+    // A dark infra table must never fail the plan/STT/SaaS read (the fee-table
+    // rule): it stays out of the plan-cost query.
+    expect(FINOPS_PLAN_COST_QUERY).not.toContain("mercury_infra_non_gcp_daily");
+  });
+
+  it("defaults both history reads past the oldest health frame (Luna r2 P2)", async () => {
+    // The wall renders HEALTH_COST_DAYS frames ending at the D−2 cutoff, so
+    // its oldest day is today−61. Both reads must reach that day unprompted:
+    // with the fee source dark, an infra day outside the read silently drops
+    // its Mercury stripe_fees cash from the rendered series.
+    const today = "2026-10-15";
+    const oldest = "2026-08-15"; // today − 61
+    query.mockResolvedValueOnce([
+      [
+        {
+          history: JSON.stringify({
+            infra: [
+              {
+                day: oldest,
+                usd: 1,
+                stripe_fees_usd: 4,
+                annual_complete: true,
+              },
+            ],
+          }),
+        },
+      ],
+    ]);
+    const infra = await fetchInfraHistory(today);
+    const infraCall = query.mock.calls[0][0] as { params: { days: number } };
+    expect(infraCall.params.days).toBeGreaterThanOrEqual(HEALTH_COST_DAYS + 1);
+    expect(infra.infraStripeFeesCash[oldest]).toBe(4);
+
+    query.mockResolvedValueOnce([
+      [{ day: oldest, fee_usd: 5, foreign_transaction_count: 0 }],
+    ]);
+    const fees = await fetchStripeFeeHistory(today);
+    const feeCall = query.mock.calls[1][0] as { params: { days: number } };
+    expect(feeCall.params.days).toBeGreaterThanOrEqual(HEALTH_COST_DAYS + 1);
+    expect(fees.fees[oldest]).toBe(5);
   });
 });
 

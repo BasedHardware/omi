@@ -11833,5 +11833,19 @@
     "deviceRecently": "Nedavno",
     "deviceDisconnectedFor": "Bez veze {duration}",
     "deviceControls": "Kontrole",
-    "homeBackgroundLine": "Također: {items}"
+    "homeBackgroundLine": "Također: {items}",
+    "deviceOnboardingPressButtonTitle": "Pritisnite dugme na Omiju",
+    "deviceOnboardingPressButtonSubtitle": "Jedan kratak pritisak. Zatim pitajte bilo šta.",
+    "deviceOnboardingAskNowTitle": "Postavite pitanje",
+    "deviceOnboardingAskNowSubtitle": "Recite naglas. Omi sluša.",
+    "deviceOnboardingPressAgainHint": "Gotovi? Pritisnite dugme ponovo da pošaljete.",
+    "trialUpsellTitle": "Dobili ste {days} dana besplatno",
+    "trialUpsellBody": "{days} dana Omi Pro na naš račun. Podsjetićemo vas prije naplate. Otkažite bilo kada.",
+    "trialUpsellClaim": "Preuzmi probu od {days} dana",
+    "settingsUpgradeTrialSubtitle": "Započnite besplatnu probu od {days} dana",
+    "pairingPowerOnTitle": "Uključite svoj Omi",
+    "pairingPowerOnSubtitle": "Pritisnite dugme jednom i držite ga blizu telefona.",
+    "walkthroughBackgroundRecordingNote": "To je to. Omi će nastaviti snimati vaše razgovore u pozadini.",
+    "noThanks": "Ne, hvala",
+    "recapInTheBackground": "U pozadini"
 }
