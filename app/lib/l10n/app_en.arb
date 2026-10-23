@@ -5204,6 +5204,10 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "You already have a subscription. Manage your current subscription instead of starting a new one.",
+    "@checkoutExistingSubscription": {
+        "description": "Checkout is blocked because an existing subscription must be managed, not purchased a second time. Not the pending-cancellation upgrade error."
+    },
     "resubscribeFirstToChangePlans": "Resubscribe first to change plans.",
     "@resubscribeFirstToChangePlans": {
         "description": "Why another price is refused while cancellation is pending"

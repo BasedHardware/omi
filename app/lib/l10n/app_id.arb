@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Periksa koneksi Anda lalu coba lagi.",
     "useFreePlan": "Gunakan Paket Gratis",
     "continueText": "Lanjutkan",
+    "checkoutExistingSubscription": "Anda sudah memiliki langganan. Kelola langganan saat ini alih-alih memulai yang baru.",
     "resubscribeFirstToChangePlans": "Berlangganan lagi dulu untuk mengubah paket.",
     "resubscribe": "Berlangganan lagi",
     "couldNotOpenPaymentSettings": "Tidak dapat membuka pengaturan pembayaran. Silakan coba lagi.",

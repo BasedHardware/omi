@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Controleer je verbinding en probeer het opnieuw.",
     "useFreePlan": "Gratis abonnement gebruiken",
     "continueText": "Doorgaan",
+    "checkoutExistingSubscription": "Je hebt al een abonnement. Beheer je huidige abonnement in plaats van een nieuw te starten.",
     "resubscribeFirstToChangePlans": "Abonneer je eerst opnieuw om van abonnement te wisselen.",
     "resubscribe": "Opnieuw abonneren",
     "couldNotOpenPaymentSettings": "Kon betalingsinstellingen niet openen. Probeer het opnieuw.",

@@ -4457,6 +4457,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get continueText => 'Συνέχεια';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Έχετε ήδη συνδρομή. Διαχειριστείτε την τρέχουσα συνδρομή σας αντί να ξεκινήσετε μια νέα.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Επανεγγραφείτε πρώτα για να αλλάξετε πρόγραμμα.';
 
   @override

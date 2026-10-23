@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "شما از قبل اشتراک دارید. به‌جای شروع اشتراک جدید، اشتراک فعلی خود را مدیریت کنید.",
     "resubscribeFirstToChangePlans": "برای تغییر طرح، ابتدا دوباره مشترک شوید.",
     "resubscribe": "مجددا مشترک شوید",
     "@resubscribe": {

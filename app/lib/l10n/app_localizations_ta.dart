@@ -4458,6 +4458,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get continueText => 'தொடரவும்';
 
   @override
+  String get checkoutExistingSubscription =>
+      'உங்களிடம் ஏற்கனவே சந்தா உள்ளது. புதியதைத் தொடங்குவதற்குப் பதிலாக தற்போதைய சந்தாவை நிர்வகிக்கவும்.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.';
 
   @override

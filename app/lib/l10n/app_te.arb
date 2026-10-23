@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "మీకు ఇప్పటికే సభ్యత్వం ఉంది. కొత్తది ప్రారంభించే బదులు ప్రస్తుత సభ్యత్వాన్ని నిర్వహించండి.",
     "resubscribeFirstToChangePlans": "ప్లాన్ మార్చడానికి ముందు మళ్లీ సబ్‌స్క్రైబ్ చేయండి.",
     "resubscribe": "మళ్లీ సబ్‌స్క్రిప్ట్ చేయండి",
     "@resubscribe": {

@@ -1361,6 +1361,7 @@
     "checkConnectionTryAgain": "请检查网络连接后重试。",
     "useFreePlan": "使用免费计划",
     "continueText": "继续",
+    "checkoutExistingSubscription": "您已有订阅。请管理现有订阅，而不要开始新的订阅。",
     "resubscribeFirstToChangePlans": "请先重新订阅再更改套餐。",
     "resubscribe": "重新订阅",
     "couldNotOpenPaymentSettings": "无法打开支付设置。请重试。",

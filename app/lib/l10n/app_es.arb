@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Comprueba tu conexión e inténtalo de nuevo.",
     "useFreePlan": "Usar plan gratuito",
     "continueText": "Continuar",
+    "checkoutExistingSubscription": "Ya tienes una suscripción. Gestiona tu suscripción actual en lugar de iniciar una nueva.",
     "resubscribeFirstToChangePlans": "Vuelve a suscribirte primero para cambiar de plan.",
     "resubscribe": "Volver a suscribirse",
     "couldNotOpenPaymentSettings": "No se pudieron abrir los ajustes de pago. Por favor, inténtalo de nuevo.",

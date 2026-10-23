@@ -54,7 +54,12 @@ abstract final class PaywallCheckout {
       if (!context.mounted) return PaywallCheckoutOutcome.cancelled;
       if (session != null && session['error'] == true) {
         // Checkout's 409 is an existing subscription, not a pending cancellation.
-        report(session['detail'] as String? ?? l10n.couldNotProcessSubscription, error: true);
+        report(
+          session['status_code'] == 409
+              ? l10n.checkoutExistingSubscription
+              : session['detail'] as String? ?? l10n.couldNotProcessSubscription,
+          error: true,
+        );
         return PaywallCheckoutOutcome.failed;
       }
       if (session == null) {

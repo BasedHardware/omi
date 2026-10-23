@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "כבר יש לך מנוי. אפשר לנהל את המנוי הקיים במקום להתחיל מנוי חדש.",
     "resubscribeFirstToChangePlans": "הירשמו מחדש קודם כדי לשנות תוכנית.",
     "resubscribe": "הירשם מחדש",
     "@resubscribe": {

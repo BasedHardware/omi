@@ -4434,6 +4434,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get continueText => 'Прыступіць';
 
   @override
+  String get checkoutExistingSubscription => 'У вас ужо ёсць падпіска. Замест новай падпіскі кіруйце бягучай.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Спачатку падпішыцеся зноў, каб змяніць план.';
 
   @override

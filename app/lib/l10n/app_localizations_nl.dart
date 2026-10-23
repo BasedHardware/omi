@@ -4433,6 +4433,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get continueText => 'Doorgaan';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Je hebt al een abonnement. Beheer je huidige abonnement in plaats van een nieuw te starten.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Abonneer je eerst opnieuw om van abonnement te wisselen.';
 
   @override

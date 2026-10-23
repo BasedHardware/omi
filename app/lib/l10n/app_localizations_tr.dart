@@ -4431,6 +4431,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get continueText => 'Devam Et';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Zaten bir aboneliğiniz var. Yeni bir abonelik başlatmak yerine mevcut aboneliğinizi yönetin.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Plan değiştirmek için önce yeniden abone olun.';
 
   @override

@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Bağlantını kontrol edip tekrar dene.",
     "useFreePlan": "Ücretsiz Planı Kullan",
     "continueText": "Devam Et",
+    "checkoutExistingSubscription": "Zaten bir aboneliğiniz var. Yeni bir abonelik başlatmak yerine mevcut aboneliğinizi yönetin.",
     "resubscribeFirstToChangePlans": "Plan değiştirmek için önce yeniden abone olun.",
     "resubscribe": "Yeniden Abone Ol",
     "couldNotOpenPaymentSettings": "Ödeme ayarları açılamadı. Lütfen tekrar deneyin.",

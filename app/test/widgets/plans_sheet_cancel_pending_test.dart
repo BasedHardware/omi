@@ -118,6 +118,7 @@ Future<_Usage> _pump(
   Object? sessionError,
   bool clearCancelOnFetch = false,
   bool omitPeriodEnd = false,
+  Locale locale = const Locale('en'),
 }) async {
   tester.view.physicalSize = const Size(430, 2400);
   tester.view.devicePixelRatio = 1;
@@ -162,10 +163,11 @@ Future<_Usage> _pump(
         ChangeNotifierProvider<UsageProvider>.value(value: usage),
         ChangeNotifierProvider<UserProvider>(create: (_) => UserProvider()),
       ],
-      child: const MaterialApp(
+      child: MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
-        supportedLocales: [Locale('en')],
-        home: Scaffold(body: _Harness()),
+        supportedLocales: AppLocalizations.supportedLocales,
+        locale: locale,
+        home: const Scaffold(body: _Harness()),
       ),
     ),
   );
@@ -254,15 +256,19 @@ void main() {
     expect(find.text(l10n.anErrorOccurredTryAgain), findsWidgets);
   });
 
-  testWidgets('a 409 from checkout shows the existing-subscription reason, not resubscribe', (tester) async {
-    const existing =
-        'You already have a subscription. Manage your existing subscription instead of starting a new checkout.';
-    await _pump(tester, sessionResult: {'error': true, 'status_code': 409, 'detail': existing});
-    final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
+  for (final locale in const [Locale('en'), Locale('de'), Locale('ar')]) {
+    testWidgets('checkout 409 shows the localized existing-subscription reason in ${locale.languageCode}',
+        (tester) async {
+      const existing =
+          'You already have a subscription. Manage your existing subscription instead of starting a new checkout.';
+      await _pump(tester, sessionResult: {'error': true, 'status_code': 409, 'detail': existing}, locale: locale);
+      final l10n = AppLocalizations.of(tester.element(find.byType(PlansSheet)));
 
-    await _tap(tester, find.byKey(const ValueKey('plans_sheet_resubscribe_button')));
+      await _tap(tester, find.byKey(const ValueKey('plans_sheet_resubscribe_button')));
 
-    expect(find.text(existing), findsWidgets);
-    expect(find.text(l10n.resubscribeFirstToChangePlans), findsNothing);
-  });
+      expect(find.text(l10n.checkoutExistingSubscription), findsWidgets);
+      expect(find.text(existing), findsNothing);
+      expect(find.text(l10n.resubscribeFirstToChangePlans), findsNothing);
+    });
+  }
 }

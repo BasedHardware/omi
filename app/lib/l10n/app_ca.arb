@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Comprova la connexió i torna-ho a provar.",
     "useFreePlan": "Utilitzar pla gratuït",
     "continueText": "Continuar",
+    "checkoutExistingSubscription": "Ja tens una subscripció. Gestiona la subscripció actual en lloc de començar-ne una de nova.",
     "resubscribeFirstToChangePlans": "Torneu a subscriure-us primer per canviar de pla.",
     "resubscribe": "Tornar a subscriure",
     "couldNotOpenPaymentSettings": "No s'han pogut obrir els ajustos de pagament. Si us plau, torna-ho a provar.",

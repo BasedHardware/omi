@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Ellenőrizd a kapcsolatot, és próbáld újra.",
     "useFreePlan": "Ingyenes csomag használata",
     "continueText": "Folytatás",
+    "checkoutExistingSubscription": "Már van előfizetésed. Új indítása helyett kezeld a meglévő előfizetésedet.",
     "resubscribeFirstToChangePlans": "Csomagváltáshoz először fizess elő újra.",
     "resubscribe": "Újra feliratkozás",
     "couldNotOpenPaymentSettings": "Nem sikerült megnyitni a fizetési beállításokat. Kérjük, próbálja újra.",

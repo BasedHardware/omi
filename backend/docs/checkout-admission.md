@@ -50,6 +50,14 @@ for entitlement healing.
 - [x] Clients tell the two 409s apart: checkout's 409 (existing subscription) shows
   that reason on Flutter, macOS, web and Windows; only the upgrade route's 409 means
   a pending cancellation ("Resubscribe first").
+- [x] Flutter selects the localized existing-subscription message by checkout
+  status 409, never by the server's English detail. All current ARBs and generated
+  delegates are updated through `app/scripts/l10n.py`; both purchase surfaces
+  have English, German and Arabic regression coverage.
+- [ ] Exercise checkout/refusal, same-plan reactivation and manage-existing
+  recovery end-to-end with an approved Stripe sandbox and installed client.
+- [ ] Final reviewed commit passes required checks; remain draft until this and
+  the preceding runtime gate are complete.
 - [ ] Review and merge the separate protection PR after checks pass.
 - [ ] Separately authorize deployment and verify the serving backend revision.
 - [ ] Verify the affected customer's Stripe/entitlement state before closing #21869.

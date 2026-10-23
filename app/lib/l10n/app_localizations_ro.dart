@@ -4444,6 +4444,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get continueText => 'Continuă';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Ai deja un abonament. Gestionează abonamentul actual în loc să începi unul nou.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Reabonează-te mai întâi ca să schimbi planul.';
 
   @override

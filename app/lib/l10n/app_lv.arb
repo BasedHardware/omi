@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Pārbaudiet savienojumu un mēģiniet vēlreiz.",
     "useFreePlan": "Izmantot bezmaksas plānu",
     "continueText": "Turpināt",
+    "checkoutExistingSubscription": "Jums jau ir abonements. Pārvaldiet pašreizējo abonementu, nevis sāciet jaunu.",
     "resubscribeFirstToChangePlans": "Lai mainītu plānu, vispirms abonējiet vēlreiz.",
     "resubscribe": "Atkārtoti abonēt",
     "couldNotOpenPaymentSettings": "Nevarēja atvērt maksājumu iestatījumus. Lūdzu, mēģiniet vēlreiz.",

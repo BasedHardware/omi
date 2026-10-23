@@ -560,7 +560,11 @@ class _PlansSheetState extends State<PlansSheet> {
         if (!mounted) return;
         if (sessionData != null && sessionData['error'] == true) {
           // Checkout's 409 is an existing subscription, not a pending cancellation.
-          _surfacePurchaseError(sessionData['detail'] as String? ?? l10n.couldNotProcessSubscription);
+          _surfacePurchaseError(
+            sessionData['status_code'] == 409
+                ? l10n.checkoutExistingSubscription
+                : sessionData['detail'] as String? ?? l10n.couldNotProcessSubscription,
+          );
         } else if (sessionData != null) {
           // Check if this was a reactivation
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {

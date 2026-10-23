@@ -4433,6 +4433,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get continueText => 'Продолжить';
 
   @override
+  String get checkoutExistingSubscription =>
+      'У вас уже есть подписка. Управляйте текущей подпиской вместо оформления новой.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Сначала оформите подписку снова, чтобы сменить план.';
 
   @override

@@ -4389,6 +4389,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get continueText => 'متابعة';
 
   @override
+  String get checkoutExistingSubscription => 'لديك اشتراك بالفعل. يمكنك إدارة اشتراكك الحالي بدلاً من بدء اشتراك جديد.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'أعد الاشتراك أولاً لتغيير الخطط.';
 
   @override

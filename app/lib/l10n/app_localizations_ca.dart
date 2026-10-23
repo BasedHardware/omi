@@ -4447,6 +4447,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get continueText => 'Continuar';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Ja tens una subscripció. Gestiona la subscripció actual en lloc de començar-ne una de nova.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Torneu a subscriure-us primer per canviar de pla.';
 
   @override

@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "آپ کے پاس پہلے سے سبسکرپشن ہے۔ نئی شروع کرنے کے بجائے اپنی موجودہ سبسکرپشن کا نظم کریں۔",
     "resubscribeFirstToChangePlans": "پلان بدلنے کے لیے پہلے دوبارہ رکنیت حاصل کریں۔",
     "resubscribe": "دوبارہ رکنیت حاصل کریں",
     "@resubscribe": {

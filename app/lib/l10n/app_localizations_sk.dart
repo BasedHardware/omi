@@ -4419,6 +4419,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get continueText => 'Pokračovať';
 
   @override
+  String get checkoutExistingSubscription => 'Predplatné už máte. Namiesto nového predplatného spravujte to súčasné.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Ak chcete zmeniť plán, najprv sa znova prihláste.';
 
   @override

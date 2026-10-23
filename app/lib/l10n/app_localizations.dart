@@ -8433,6 +8433,12 @@ abstract class AppLocalizations {
   /// **'Continue'**
   String get continueText;
 
+  /// Checkout is blocked because an existing subscription must be managed, not purchased a second time. Not the pending-cancellation upgrade error.
+  ///
+  /// In en, this message translates to:
+  /// **'You already have a subscription. Manage your current subscription instead of starting a new one.'**
+  String get checkoutExistingSubscription;
+
   /// Why another price is refused while cancellation is pending
   ///
   /// In en, this message translates to:

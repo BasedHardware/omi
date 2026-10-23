@@ -4425,6 +4425,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get continueText => 'Jatka';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Sinulla on jo tilaus. Hallitse nykyistä tilaustasi uuden aloittamisen sijaan.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Tilaa ensin uudelleen, jotta voit vaihtaa pakettia.';
 
   @override
