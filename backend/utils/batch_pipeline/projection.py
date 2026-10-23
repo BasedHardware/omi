@@ -56,6 +56,18 @@ OWNER_DRAIN_STEP_ROWS = 128
 CANDIDATE_WAIT_SECONDS = 10.0
 # Held units read per partial-completion scan.
 HELD_PARTIAL_PAGE = 32
+BATCH_PROJECTION_BLOCK_REASONS = frozenset(
+    {
+        'intake_binding_mismatch',
+        'invalid_recording_clock',
+        'invalid_recording_identity',
+        'invalid_recording_interval',
+        'invalid_upload_filenames',
+        'lineage_identity_missing',
+        'lineage_ambiguous',
+        'other',
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -132,6 +144,18 @@ def fence_reason_field(error: BaseException) -> str:
     return ''
 
 
+def projection_block_reason(error: BaseException) -> str:
+    """Return only the closed, log-safe projection block reason token."""
+    try:
+        attributes = error.__dict__
+        reason = attributes.get('block_reason') if isinstance(attributes, dict) else None
+    except Exception:
+        reason = None
+    if type(reason) is str and reason in BATCH_PROJECTION_BLOCK_REASONS:
+        return reason
+    return 'other'
+
+
 @contextmanager
 def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iterator[None]:
     """Static phase tokens only; never log bindings, payloads or exception text."""
@@ -144,12 +168,13 @@ def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iter
         yield
     except Exception as error:
         logger.info(
-            'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s%s%s',
+            'event=batch_projection_phase phase=%s outcome=error elapsed_ms=%d exception_type=%s%s%s block_reason=%s',
             phase,
             int((time.monotonic() - started) * 1000),
             error_type(error),
             fence_reason_field(error),
             error_site_field(error),
+            projection_block_reason(error),
         )
         raise
     else:
