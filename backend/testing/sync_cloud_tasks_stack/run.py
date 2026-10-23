@@ -22,6 +22,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
