@@ -64,7 +64,7 @@ def pool_centroids(vectors):
         seconds += duration
     if not valid:
         return None
-    centroid = sum(vector * duration for vector, duration in valid) / seconds
+    centroid = np.asarray(sum(vector * duration for vector, duration in valid) / seconds)
     norm = float(np.linalg.norm(centroid))
     if norm <= 0 or not math.isfinite(norm) or not np.isfinite(centroid).all():
         return None

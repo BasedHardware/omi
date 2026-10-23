@@ -68,6 +68,11 @@ def _get_inference(version: int, device_name: str | None = None) -> Any:
     return inference
 
 
+def get_embedding_inference(version: int, device_name: str | None = None) -> Any:
+    """Public factory for bounded local callers sharing the service model cache."""
+    return _get_inference(version, device_name)
+
+
 def initialize_embeddings(*, batch_only: bool = False) -> None:
     """Startup-only warmup; failures propagate and prevent readiness."""
     if not batch_only:

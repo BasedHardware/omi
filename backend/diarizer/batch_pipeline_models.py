@@ -80,11 +80,11 @@ class LocalCentroidEmbedding:
         _validate_centroid_clip(samples)
         if torch is None:
             raise RuntimeError('local embedding requires torch')
-        from diarizer.embedding import _get_inference
+        from diarizer.embedding import get_embedding_inference
 
         with self._lock, torch.inference_mode():
             if self._inference is None:
-                self._inference = _get_inference(2, self.device)
+                self._inference = get_embedding_inference(2, self.device)
             return self._inference({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
 
 
