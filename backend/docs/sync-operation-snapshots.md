@@ -28,6 +28,13 @@ redundant lookup avoided. It is an algorithmic count, not billed fleet savings.
 The focused fake tests count actual document gets and compare decoded content,
 compressed stored bytes, access outcomes and post-effect refreshes.
 
+Redirect hop reads now have caller
+`sync_conversation_snapshot:resolve_snapshot` instead of the old
+`conversations:resolve_sync_conversation_redirect` / raw-snapshot split.
+Their label movement is not a saving. Keep that caller in the reads loop's
+post-deploy baseline and use the fixed origin plus avoided-read count to avoid
+grading a vanished old caller as eliminated work.
+
 The report's P5 22M/day is a planning ceiling across raw snapshots, redirects,
 assignment and Typesense. This bounded change saves one read per successful
 redirect hydration and one per bridge traversal that performs no effects.
