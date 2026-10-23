@@ -10,13 +10,15 @@ v1 remains completely unchanged.
 
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
 
-from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
 from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
 from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
 from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
+from utils.stt import transcript_admission  # noqa: F401 - retain shared admission policy across legacy package stubs
+from utils.stt import batch_language  # noqa: F401 - retain detector/metric owner across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
 from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
 
@@ -1317,7 +1319,13 @@ def _install_sync_observability_stubs(saved_modules):
     (including held_content) is stubbed too. Real file-backed children already in
     sys.modules, such as the retained telemetry imports, stay.
     """
-    from testing.import_isolation import install_package_submodule_stubs
+    from pathlib import Path
+    from testing.import_isolation import install_package_submodule_stubs, load_module_fresh
+
+    # Its parent package is mocked. Retain the real, dependency-free predicate.
+    silent_name = 'utils.conversations.silent_redrive'
+    saved_modules[silent_name] = sys.modules.get(silent_name)
+    load_module_fresh(silent_name, str(Path(__file__).resolve().parents[2] / 'utils/conversations/silent_redrive.py'))
 
     obs_pkg = types.ModuleType('utils.observability')
     obs_pkg.__path__ = []  # type: ignore[attr-defined]
@@ -4012,10 +4020,14 @@ class TestConversationFinalizerExecutor:
 
     def test_process_conversation_uses_postprocess_bulkhead(self):
         source = self._read_finalizer_source()
-        assert 'postprocess_executor' in source
         assert re.search(
-            r'run_blocking\(\s+postprocess_executor,\s+process_with_episode_budget,\s+process_conversation', source
+            r'run_blocking\(\s+lifecycle_executor\(uid\),\s+process_with_episode_budget,\s+process_conversation', source
         )
+        # The selector preserves the original bulkhead outside the serve cohort.
+        from utils.executors import lifecycle_executor, postprocess_executor
+
+        with patch('utils.executors.serving_for', return_value=False):
+            assert lifecycle_executor('synthetic-owner') is postprocess_executor
 
 
 # 14. Bulkhead executor infrastructure tests

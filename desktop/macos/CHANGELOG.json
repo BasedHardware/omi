@@ -2,6 +2,70 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.525",
+      "date": "2026-10-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.524",
+      "date": "2026-10-22",
+      "changes": [
+        "Improved recognition of your voice, speaker labels after transcript updates, and long local recording uploads",
+        "Fixed open messaging chats being mistaken for meeting participants"
+      ]
+    },
+    {
+      "version": "0.12.523",
+      "date": "2026-10-22",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.522",
+      "date": "2026-10-22",
+      "changes": [
+        "Removed the Sentry crash/error reporter; Report an Issue now saves your note plus redacted diagnostics locally on this Mac instead of sending anything"
+      ]
+    },
+    {
+      "version": "0.12.521",
+      "date": "2026-10-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.520",
+      "date": "2026-10-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.519",
+      "date": "2026-10-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.518",
+      "date": "2026-10-21",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.517",
+      "date": "2026-10-21",
+      "changes": [
+        "Added opt-in, source-linked meeting briefs and editable follow-up drafts on Mac"
+      ]
+    },
+    {
       "version": "0.12.516",
       "date": "2026-10-20",
       "changes": [

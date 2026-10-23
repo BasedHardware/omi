@@ -13393,9 +13393,6 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Pokračovať s bezplatným plánom';
-
-  @override
   String get paywallTrialCancelNote => 'Zrušiť kedykoľvek. Žiadne poplatky, žiadne pokuty.';
 
   @override
@@ -14380,4 +14377,160 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi stále nahráva';
+
+  @override
+  String get episodeNow => 'Teraz';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Naživo · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count okamihov',
+      one: '1 okamih',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Okamihy';
+
+  @override
+  String get episodeSoFar => 'Zatiaľ';
+
+  @override
+  String get episodeUpdatedJustNow => 'Aktualizované práve teraz · úplné poznámky na konci';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Aktualizované pred $minutes min · úplné poznámky na konci';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Poznámky sa zobrazia po prvých minútach rozhovoru.';
+
+  @override
+  String get episodeOpenAll => 'Otvoriť všetko';
+
+  @override
+  String get episodeWrapUpNow => 'Uzavrieť teraz';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi to uzavrie, keď prejdete k niečomu inému';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Zachytená úloha: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Zachytená pripomienka: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Úloha uložená: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'pridáva sa $duration z vášho Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Teraz počúva';
+
+  @override
+  String get deviceHeardToday => 'Počuté dnes';
+
+  @override
+  String get deviceToSync => 'na synchronizáciu';
+
+  @override
+  String get deviceRightNow => 'Práve teraz';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Živá epizóda · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Dobieha';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done z $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Nedávno';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Odpojené na $duration';
+  }
+
+  @override
+  String get deviceControls => 'Ovládanie';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Tiež: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Stlačte tlačidlo na Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Jedno krátke stlačenie. Potom sa spýtajte na čokoľvek.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Položte otázku';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Povedzte to nahlas. Omi počúva.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Hotovo? Stlačte tlačidlo znova na odoslanie.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Získali ste $days dní zadarmo';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dní Omi Pro na nás. Pripomenieme sa pred účtovaním. Zrušte kedykoľvek.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Chcem skúšobné obdobie $days dní';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Začnite skúšobné obdobie $days dní zadarmo';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Zapnite Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Raz stlačte tlačidlo a držte ho pri telefóne.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'To je všetko. Omi bude ďalej nahrávať vaše rozhovory na pozadí.';
+
+  @override
+  String get noThanks => 'Nie, ďakujem';
+
+  @override
+  String get recapInTheBackground => 'V pozadí';
 }

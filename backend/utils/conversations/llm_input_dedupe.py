@@ -6,6 +6,8 @@ objects fail closed instead of silently stringifying two distinct inputs alike.
 
 from __future__ import annotations
 
+from config.refactor_modes import serving_for
+
 import dataclasses
 import hashlib
 import json
@@ -78,6 +80,16 @@ def implementation_digest(feature: str) -> str:
         'llm/working_observations.py',
         'llm/conversation_processing.py',
         'llm/conversation_notes_prompts.py',
+        'llm/notes_packet.py',
+        'llm/action_item_v2.py',
+        'llm/notes_output.py',
+        'llm/notes_lengths.py',
+        'llm/notes_effort.py',
+        'llm/notes_output_contract.py',
+        'llm/output_language.py',
+        'llm/speaker_evidence_prompt.py',
+        'llm/notes_short_clip.py',
+        'llm/notes_language_inputs.py',
         'llm/conversation_title_people.py',
         'llm/meeting_notes_rich_prompts.py',
         'llm/meeting_notes_presentation.py',
@@ -129,6 +141,14 @@ def _stored(uid: str, conversation: Any, *, db_client: Any = None) -> dict[str, 
     return row
 
 
+def _notes_packet_identity(uid: str) -> dict[str, Any]:
+    from config.refactor_modes import serving_for
+    from utils.llm.notes_packet import PACKET_VERSION
+
+    serving = serving_for('NOTES_PACKET_V2_MODE', uid)
+    return {'mode': 'serve' if serving else 'legacy', 'version': PACKET_VERSION if serving else 1}
+
+
 def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, str] | None, **kwargs):
     if not dedupe_enabled() or hashes is None:
         return generate(prefix, uid=uid, **kwargs)
@@ -138,6 +158,8 @@ def notes(uid: str, conversation: Any, prefix: Any, generate, hashes: dict[str, 
             'prefix': prefix,
             **({'content_revision': getattr(conversation, 'sync_content_revision', None)} if revision_reuse() else {}),
             'arguments': kwargs,
+            'notes_packet': _notes_packet_identity(uid),
+            'action_items_v2': serving_for('ACTION_ITEMS_V2_MODE', uid),
             'tier_escalation': os.getenv('NOTES_TIER_ESCALATION_ENABLED', ''),
             'shaped_notes_mode': os.getenv('OMI_SHAPED_AGENT_MODE', 'off'),
             'notes_agent': os.getenv('CONVERSATION_NOTES_AGENT_ENABLED', 'true').strip().lower(),

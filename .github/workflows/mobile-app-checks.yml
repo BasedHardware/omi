@@ -1,6 +1,14 @@
 name: Mobile App Checks
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: main
   # Stacked PRs (V6 on V5, #14358) must run this workflow. `branches: main`
@@ -16,7 +24,14 @@ permissions:
   issues: read
 
 concurrency:
-  group: mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
+  # PRs cancel their own older runs. Main pushes key on the exact SHA with
+  # cancel-in-progress false, matching desktop-swift-ci: mobile release
+  # admission (verify_mobile_release_admission.py) requires a first-attempt
+  # push-event Mobile Release Eligibility success on the exact release SHA,
+  # and a pending push run replaced by a newer event leaves a cancelled check
+  # that no rerun can re-mint (attempt 2 does not count). The daily cron and
+  # manual dispatches keep per-run groups so they can never evict a push run.
+  group: mobile-app-checks-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || (github.event_name == 'push' && github.sha) || format('run-{0}', github.run_id) }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -37,26 +52,32 @@ jobs:
     timeout-minutes: 20
     outputs:
       diff_base: ${{ steps.changes.outputs.diff_base }}
-      full_ci: ${{ steps.tier.outputs.full_ci }}
-      has_app_codegen: ${{ steps.changes.outputs.has_app_codegen }}
-      has_app_compile_smoke: ${{ steps.changes.outputs.has_app_compile_smoke }}
-      has_app_android_pr: ${{ steps.changes.outputs.has_app_android_pr }}
-      has_app_ios_compile: ${{ steps.changes.outputs.has_app_ios_compile }}
-      has_app_journeys: ${{ steps.changes.outputs.has_app_journeys }}
-      has_app_journeys_pr: ${{ steps.changes.outputs.has_app_journeys_pr }}
-      has_app_dart: ${{ steps.changes.outputs.has_app_dart }}
-      has_app_l10n: ${{ steps.changes.outputs.has_app_l10n }}
-      has_flutter_generated: ${{ steps.changes.outputs.has_flutter_generated }}
+      full_ci: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.tier.outputs.full_ci) }}
+      has_app_codegen: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_app_codegen) }}
+      has_app_compile_smoke: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_app_compile_smoke) }}
+      has_app_android_pr: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_app_android_pr) }}
+      has_app_ios_compile: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_app_ios_compile) }}
+      has_app_journeys: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_app_journeys) }}
+      has_app_journeys_pr: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_app_journeys_pr) }}
+      has_app_dart: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_app_dart) }}
+      has_app_l10n: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_app_l10n) }}
+      has_flutter_generated: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_flutter_generated) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # Full history is required: detect-changes diffs against the merge
           # base. blob:none keeps the commit graph but skips file contents,
           # which is what made the unfiltered clone of this ~1.25GB repo take
           # 7-13 minutes.
           fetch-depth: 0
           filter: blob:none
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Resolve current CI tier
         id: tier
@@ -76,7 +97,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 1
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -141,6 +168,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -269,7 +303,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 1
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -328,11 +368,22 @@ jobs:
     needs: changes
     if: github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')
     timeout-minutes: 25
+    env:
+      # Read by app/android/app/build.gradle (ndkVersion) and the NDK install
+      # step below; test_mobile_ci_infra_guards.py keeps it equal to
+      # build.gradle's fallback pin.
+      NDK_VERSION: "28.2.13676358"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 1
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Free runner disk space
         # ubuntu-latest ships with ~14GB free; the Gradle build runs out of
@@ -408,6 +459,22 @@ jobs:
             notifications
             wrapper
 
+      - name: Restore pinned Android NDK
+        # Same corrupt-download flake as the emulator job hit (runs 39506049904,
+        # 39626150998): AGP auto-installs a missing NDK inside Gradle configure
+        # with no retry, and one truncated dl.google.com response fails the job
+        # before any app code runs. Restore-only: this job is the Mobile App
+        # Checks wall, so the one-time cache save stays on the emulator job,
+        # which runs in every event this job does; install_android_ndk.py
+        # covers a miss with one retry.
+        uses: actions/cache/restore@v6
+        with:
+          path: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}
+          key: ${{ runner.os }}-android-ndk-${{ env.NDK_VERSION }}
+
+      - name: Install pinned Android NDK
+        run: python3 .github/scripts/install_android_ndk.py --ndk-version "$NDK_VERSION"
+
       - name: Build Flutter Android dev debug APK
         working-directory: app
         env:
@@ -455,11 +522,22 @@ jobs:
     needs: changes
     if: github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')
     timeout-minutes: 25
+    env:
+      # Read by app/android/app/build.gradle (ndkVersion) and the NDK install
+      # step below; test_mobile_ci_infra_guards.py keeps it equal to
+      # build.gradle's fallback pin.
+      NDK_VERSION: "28.2.13676358"
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 1
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -523,6 +601,20 @@ jobs:
             notifications
             wrapper
 
+      - name: Restore pinned Android NDK
+        # Gradle configure resolves ndkVersion for :app:testDevDebugUnitTest
+        # too, so without this the job auto-downloads the NDK the same way the
+        # emulator job did before runs 39506049904/39626150998. Restore-only:
+        # the emulator job seeds the cache key; install_android_ndk.py covers
+        # a miss with one retry.
+        uses: actions/cache/restore@v6
+        with:
+          path: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}
+          key: ${{ runner.os }}-android-ndk-${{ env.NDK_VERSION }}
+
+      - name: Install pinned Android NDK
+        run: python3 .github/scripts/install_android_ndk.py --ndk-version "$NDK_VERSION"
+
       - name: Run Android JVM unit tests
         working-directory: app/android
         env:
@@ -540,8 +632,20 @@ jobs:
     needs: changes
     if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_compile_smoke == 'true') || (needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_android_pr == 'true')
     timeout-minutes: 35
+    env:
+      # Read by app/android/app/build.gradle (ndkVersion) and the NDK install
+      # step below; test_mobile_ci_infra_guards.py keeps it equal to
+      # build.gradle's fallback pin.
+      NDK_VERSION: "28.2.13676358"
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
+
       - uses: actions/setup-java@v5
         with:
           distribution: temurin
@@ -558,6 +662,24 @@ jobs:
       - name: Install acceptance build tools
         run: |
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "build-tools;36.0.0" "platforms;android-36"
+
+      - name: Cache pinned Android NDK
+        # AGP auto-installs a missing NDK inside Gradle configure with no
+        # retry, so one truncated dl.google.com response fails the job before
+        # any app code runs ("Error on ZipFile unknown archive": runs
+        # 39506049904, 39469917718, 39626150998 — dead 5 s into a download
+        # that takes ~22 s when healthy). Cache the extracted NDK so most runs
+        # make no dl.google.com request at all. Sole writer: the restore-only
+        # compile-smoke and unit-test jobs keep post-job saves off their wall,
+        # and this job runs in every event they do.
+        uses: actions/cache@v6
+        with:
+          path: /usr/local/lib/android/sdk/ndk/${{ env.NDK_VERSION }}
+          key: ${{ runner.os }}-android-ndk-${{ env.NDK_VERSION }}
+
+      - name: Install pinned Android NDK
+        # Cache-miss path: explicit install, corrupt-archive purge, one retry.
+        run: python3 .github/scripts/install_android_ndk.py --ndk-version "$NDK_VERSION"
       - name: Prepare secret-free local app inputs
         working-directory: app
         run: |
@@ -621,13 +743,24 @@ jobs:
     if: needs.changes.outputs.full_ci == 'true' && needs.changes.outputs.has_app_ios_compile == 'true'
     # Local cold Xcode time was 334s on an M-series Mac. Hosted macos-26 still
     # pays Flutter SDK, pub get, build_runner, and CocoaPods on top of that.
-    # Expect ~20-30 min warm / ~35 min cold; 40 is the wedge-guard.
-    timeout-minutes: 40
+    # Cold p50 is ~33 min, but a slow cold runner measured 39:25 for the real
+    # steps alone (16:12 manifest checks + 16:27 Xcode build, run 39634604539
+    # attempt 1); the post-job Post Setup Flutter cache save (59 s on the
+    # sibling success run 119312386446) then hit the 40-min ceiling and the
+    # job reported cancelled after every real step passed. 50 keeps the
+    # wedge-guard above that cold path; budget counts p50 (19), not the cap.
+    timeout-minutes: 50
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Select and assert pinned Xcode
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
@@ -646,9 +779,23 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-desktop-swift-tools-v3-xcode266-
 
+      # The macOS-scoped selection includes desktop-beta-admission-firestore-
+      # contention, whose run.sh needs backend/.venv or uv (the same fallback
+      # desktop-swift-ci.yml relies on). Nightly 39586610411 failed the iOS
+      # job at that check's setup with neither present.
+      - name: Install uv for manifest checks
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          # Exact version resolves locally; an unset version means "latest",
+          # which fetches the astral-sh/versions manifest and has hard-failed
+          # CI on that network call. Matches desktop-swift-ci.yml and
+          # backend/Dockerfile UV_VERSION.
+          version: "0.11.13"
+
       - name: Run macOS-scoped iOS manifest checks
         run: |
           python3 .github/scripts/run_checks.py --lane ci --platform macos \
+            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going' || '' }} \
             --exclusive-platform --base "${{ needs.changes.outputs.diff_base }}" \
             --skip-pr-body-checks
 
@@ -776,11 +923,18 @@ jobs:
     name: Dart Tests (Pacific/Kiritimati)
     runs-on: ubuntu-latest
     needs: changes
-    if: github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')
+    if: inputs.nightly_main_sha != '' || github.event_name == 'schedule' || (github.event_name == 'push' && needs.changes.outputs.has_app_dart == 'true')
     timeout-minutes: 60
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -941,7 +1095,7 @@ jobs:
   post-merge-failure-issues:
     name: Post-merge mobile failure issues
     needs: [changes, analyze-and-test, journeys-hermetic, android-compile-smoke, android-unit-tests, android-emulator-checks, dart-tests-kiritimati]
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    if: ${{ always() && inputs.nightly_main_sha == '' && (github.event_name == 'push' || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read

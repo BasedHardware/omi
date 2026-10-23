@@ -1,10 +1,47 @@
 # Batch intake and serving operations
 
-All switches default off. Declaring settings or deploying an empty chart does
+Global batch admission defaults off; quality and isolation kill switches can
+ship on. Declaring settings or deploying an empty chart does
 not select an upload; the lead explicitly enables the global admission flag and
 allowlist/percentage after qualification. Agent A does not deploy or apply indexes.
 
 ## Host settings and rollback
+
+### Partial-ramp owner isolation
+
+`BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS` ships on; only `off` disables
+it. At a new sync upload or recording reservation with `0 < percent < 100`,
+`config/policy/ramp.py` excludes an owner with more than 30 open items or
+more than 21,600 seconds of waiting audio. Explicit canaries follow the same
+rule. Open items are recent (six-hour) unfinished, non-quarantined batch units
+plus waiting `sync_backfill_pending` jobs and the sequencer's active legacy
+payload, deduplicated by job ID across the dispatch transition. Audio includes their known durations
+and the incoming upload's declared span. This catches both run 24's one 20-hour
+upload and run 25's 42 open units before they enter a typical-user ramp.
+Missing or invalid incoming WAL bounds are unknown audio, never zero. New
+desktop uploads without declared bounds therefore stay on legacy during a
+partial ramp. Existing batch receipt/record owners continue draining.
+
+The database reader selects metadata only, at most 512 rows per query source
+plus one active-owner metadata document. A
+saturated read, unknown waiting duration or read error keeps new work on legacy
+and emits `omi_batch_ramp_heavy_owner_excluded_total{reason}`; fixed reasons are
+`open_backlog`, `recording_hours`, `load_unavailable`. The counter counts decisions,
+not distinct owners. It has no account label. Existing batch content receipts
+and native recording owners keep their original dispatcher and continue draining;
+the exclusion must never start a legacy twin. Full rollout (`percent=100`) and
+percent-zero explicit qualification retain their existing semantics.
+
+Excluded owners continue receiving the legacy pipeline, with its existing
+sequencer, capacity and recovery gates. The lead runs their drain as a separate
+heavy-owner qualification window: report the excluded count/reasons, open count
+and audio volume; keep the existing hard cap of 60; wait for backlog to fall;
+then run the unchanged fleet gate with the retained accepted-work census and
+by-reason failure checks. No automatic widening or new redrive is granted here.
+Before a 100% step, attach that heavy-owner gate receipt separately from the
+typical-cohort receipt. Roll back new-admission isolation with `=off`; accepted
+work retains its saved policy. The workspace preflight vendors the pure source
+and verifies its bytes against the serving release before applying exclusion.
 
 On the selected always-CPU backend host, `BATCH_PIPELINE_SERVING_ENABLED=true` starts a supervised
 20-second reconciliation loop. It recovers leases/retries, drains ordered log
@@ -492,10 +529,46 @@ pins/persists its provider before dispatch. With the flag on, positive strict
 local VAD, affirmative GPU padded-empty evidence, and a validated empty
 **multilingual** response produce `no_recoverable_speech`. Oversized and long-speech units that
 skipped the GPU padded retry still run strict VAD and multilingual recovery, but
-an empty multilingual response stays `failed_held` rather than terminal-empty.
-Timeouts, malformed responses, uncertain calls, missing evidence, and provider
-failures stay held. There are no additional calls after exhaustion and no
-paid-intent resets.
+an empty multilingual response from Modulate alone stays `failed_held` rather
+than terminal-empty. Timeouts, malformed responses, uncertain calls, missing
+evidence, and provider failures stay held. There are no paid-intent resets.
+
+**Second multilingual provider (long-speech units) — retired 2026-08-27.**
+This step used to spend exactly one more call, to cloud Deepgram nova-3 with
+language detection (`second_transcribe`), inside the same `running` intent.
+Deepgram is retired (no contract since 2026-08-27), so
+`config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` is `None` and
+`second_provider_eligible` answers False for every unit: no second call is
+spent, and an empty multilingual Modulate response settles `failed_held`
+(Modulate-only recovery, the same behavior as
+`BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false`). The wiring, flag and
+metering stay so a future second batch provider can be introduced by naming it
+in the policy again. Historical behavior, kept for reference:
+
+- Deepgram returns words: the unit recovers with those words (ordinary
+  `success` result).
+- Deepgram also returns valid-empty: with the terminal-empty flag on, the unit
+  settles `no_recoverable_speech` with `recognition_evidence`
+  `{gpu_padded_retry: skipped_long_speech, multilingual_recovery: empty,
+  second_multilingual_recovery: empty}`. This is the honest outcome. No one may
+  listen to the audio, so the pipeline has to settle it on evidence: VAD saw
+  speech-like energy, and two independent multilingual ASR systems, with
+  different models and language coverage, both found no words in it. It is the
+  same quality of evidence as GPU padded-empty plus Modulate-empty. Another
+  `failed_held` would only say "unknown", and nothing would ever retry it.
+- Deepgram errors, times out, returns a malformed answer, or the allowance
+  refuses: the unit stays `failed_held` with Modulate's
+  `response_validation/empty_asr` failure, as before.
+
+A crash between the two calls leaves the intent `running`. The 900 s abandonment
+rule then settles it `failed_held` without another call. Each long-speech empty
+costs at most one extra Deepgram call of the unit's duration. Metering:
+`omi_batch_recovery_second_provider_total{provider=deepgram,outcome=words|empty|error|refused}`,
+the log `event=batch_recovery_second_provider provider=deepgram outcome=...`,
+and `omi_stt_cap_provider_audio_seconds{path=sync,outcome=accepted}` for both
+paid answers (`provider=modulate`, now also for valid-empty answers, and
+`provider=deepgram`). `BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false` (kill
+switch, unset is on) restores Modulate-only recovery.
 
 This is an empty-words **terminal degradation**, distinct from silence. The
 encrypted result retains validated positive VAD and closed recognition evidence.
@@ -791,6 +864,17 @@ fence are unchanged. The successor lookup is two equality filters ordered by
 Two matches fail closed.
 
 ### Sweep owner-chain continuation and pending-only assignment page
+
+`BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED` defaults to `true`.
+When a discovered successor lacks a predecessor projection receipt, the sweep
+requests the owner's existing drain, or runs one bounded owner-chain walk when
+the drain is off. The walk starts at the projection watermark, rebuilding the
+missing predecessor before retrying successors in the same pass. This also
+works when the assignment cursor has already passed the head. `false` restores
+the previous blocked-page behavior. Binding, privacy, predecessor, replay and
+multipart fences remain authoritative; a head blocked by one of those fences
+still requires that underlying condition to be resolved. Already committed
+work does not need another GPU run.
 
 `BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED` defaults to `true` (kill switch:
 `false` restores one attempt per page row). Rows from one owner's ordered chain

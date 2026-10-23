@@ -587,11 +587,19 @@ def workflow_contract_errors(contracts: Iterable[ImageContract]) -> list[str]:
     for contract in contracts:
         dockerfile = _repository_relative(contract.dockerfile)
         for workflow in contract.deployment_workflows:
-            workflow_text = _workflow_contract_text(workflow)
+            # Comments do not run: a marker left above a deleted step must not pass.
+            workflow_text = "\n".join(
+                line for line in _workflow_contract_text(workflow).splitlines() if not line.lstrip().startswith("#")
+            )
             workflow_name = _repository_relative(workflow)
             if not any(
                 marker in workflow_text
-                for marker in ("runtime_image_contracts.py smoke", 'runtime_image_contracts.py" smoke')
+                # role_images.py verify runs this smoke per role target (backend/scripts/role_images.py).
+                for marker in (
+                    "runtime_image_contracts.py smoke",
+                    'runtime_image_contracts.py" smoke',
+                    "role_images.py verify",
+                )
             ):
                 errors.append(f"{contract.name}: {workflow_name} does not smoke its registered runtime image")
             if dockerfile not in workflow_text:
@@ -894,10 +902,11 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
     """Check the role -> image -> service map that one train SHA builds from.
 
     Every service the registry declares (the ``services`` map and every chart in
-    ``logging_chart_images``) maps to exactly one role image; every registered
-    image is a role image of exactly one role or carries an ``outside_role_split``
-    reason on its own entry (kept per entry so the map never repeats image names
-    that other inventories count).
+    ``logging_chart_images``) maps to exactly one role image — a Python role
+    image of its role or a native image (``native_images``) of that role; every
+    registered image is a role image of exactly one role or carries an
+    ``outside_role_split`` reason on its own entry (kept per entry so the map
+    never repeats image names that other inventories count).
     """
     payload = json.loads(registry_path.read_text(encoding="utf-8"))
     roles = payload.get("roles")
@@ -910,6 +919,9 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
         entry["name"]: entry["outside_role_split"]
         for entry in payload.get("images", [])
         if isinstance(entry, dict) and "outside_role_split" in entry
+    }
+    native_role: dict[str, str | None] = {
+        name: spec.get("role") for name, spec in (payload.get("native_images") or {}).items() if isinstance(spec, dict)
     }
 
     by_name = {contract.name: contract for contract in contracts}
@@ -966,11 +978,11 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
             errors.append(f"service {service}: platform must be one of {sorted(ROLE_PLATFORMS)}")
         if role not in roles:
             errors.append(f"service {service}: role {role!r} is not declared")
-        elif image_role.get(image) != role:
+        elif image_role.get(image) != role and native_role.get(image) != role:
             errors.append(f"service {service}: image {image!r} is not a role image of {role}")
         else:
             served.add(image)
-        if current not in by_name:
+        if current not in by_name and current not in native_role:
             errors.append(f"service {service}: current_image {current!r} is not a registered runtime image")
         deploys = spec.get("current_deploy")
         if not isinstance(deploys, list) or not deploys:
@@ -990,6 +1002,11 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
         elsewhere = spec.get("image_built_elsewhere")
         if elsewhere is not None and (not isinstance(elsewhere, str) or not elsewhere.strip()):
             errors.append(f"service {service}: image_built_elsewhere must be a non-empty reason")
+        elif current in native_role and elsewhere is None:
+            errors.append(
+                f"service {service}: a native current_image needs an image_built_elsewhere reason "
+                "(a workflow never builds a native image itself)"
+            )
         elif current in by_name and elsewhere is None:
             dockerfile = _repository_relative(by_name[current].dockerfile)
             if texts and not any(_mentions_dockerfile(text, dockerfile) for text in texts):
@@ -1016,6 +1033,8 @@ def role_map_errors(contracts: Iterable[ImageContract], registry_path: Path = RE
             errors.append(f"service {chart}: current_image {spec.get('current_image')!r} != chart image {image!r}")
     for image in sorted(set(image_role) - served):
         errors.append(f"role image {image} serves no declared service")
+    for image in sorted(set(native_role) - served):
+        errors.append(f"native image {image} serves no declared service")
     return errors
 
 

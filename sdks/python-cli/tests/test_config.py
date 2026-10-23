@@ -921,6 +921,28 @@ def test_config_set_accepts_valid_urls_and_normalizes_trailing_slash(
         assert profile.local_api_url == expected_saved
 
 
+@pytest.mark.parametrize("source", ["flag", "env", "saved"])
+@pytest.mark.parametrize("bad_base", ["localhost:8000", "ftp://api.omi.me", "http://example.test:abc"])
+def test_a_malformed_api_base_is_refused_before_any_request(
+    config_path: Path, cli_runner, monkeypatch: pytest.MonkeyPatch, source: str, bad_base: str
+) -> None:
+    """A write must not report "outcome unknown" for a request that could never be sent."""
+    from omi_cli.auth.store import store_api_key
+    from tests.conftest import FAKE_API_BASE, FAKE_API_KEY
+
+    store_api_key("default", FAKE_API_KEY, api_base=bad_base if source == "saved" else FAKE_API_BASE)
+    if source == "env":
+        monkeypatch.setenv(cfg.ENV_API_BASE, bad_base)
+    flag = ["--api-base", bad_base] if source == "flag" else []
+
+    result = cli_runner.invoke(app, ["--json", *flag, "memory", "create", "hello"])
+
+    assert result.exit_code == 1, result.output
+    assert result.stdout == ""
+    assert "Invalid URL for 'api_base'" in result.stderr
+    assert "outcome unknown" not in result.stderr
+
+
 @pytest.mark.parametrize("empty_token", ["", "   "])
 def test_config_set_rejects_empty_or_whitespace_local_token(config_path: Path, cli_runner, empty_token: str) -> None:
     result = cli_runner.invoke(app, ["config", "set", "local_token", empty_token])

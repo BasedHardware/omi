@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Literal, Optional, Tuple, Type
+from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
@@ -221,6 +221,12 @@ class ExtractedEvent(BaseModel):
 
 
 class ExtractedSection(BaseModel):
+    # Near-miss keys a model writes for the body; the agent harness normalizes them before
+    # validation (utils.llm.shaped_agent.normalize_output). Not part of the JSON schema.
+    output_aliases: ClassVar[dict[str, tuple[str, ...]]] = {
+        'body_markdown': ('body', 'content', 'markdown', 'bullets', 'text'),
+    }
+
     heading: str = Field(description='A descriptive heading chosen for this conversation')
     body_markdown: str = Field(description='Free-form markdown containing the section details')
     source_segment_ids: List[str] = Field(
@@ -279,6 +285,21 @@ class ExtractedInsight(BaseModel):
 
     def to_insight(self) -> Insight:
         return Insight(text=self.text, kind=self.kind)
+
+
+Salience = Literal['highlight', 'background']
+SALIENCE_DESCRIPTION = (
+    "'highlight' for owner-engaged back-and-forth with another person, whatever the topic, including chores "
+    "and casual home conversations, or meetings, calls, plans, ideas and tasks. 'background' only when the owner "
+    "is not engaged: media/TV, ambient chatter, other people talking or an isolated passing remark. "
+    "Uncertain owner engagement stays 'highlight'."
+)
+
+
+def _salience(value: Any) -> Optional[str]:
+    """An out-of-vocabulary salience answer is dropped, never the whole note."""
+    normalized = value.strip().lower() if isinstance(value, str) else None
+    return normalized if normalized in Salience.__args__ else None
 
 
 class StructuredExtraction(BaseModel):
@@ -350,6 +371,7 @@ class RichStructuredExtraction(StructuredExtraction):
         default_factory=list,
         description='People and AI agents evidenced by the meeting roster or the transcript; never the account owner',
     )
+    salience: Optional[Salience] = Field(default=None, description=SALIENCE_DESCRIPTION)
     insights: List[ExtractedInsight] = Field(
         default_factory=list,
         description='Insights connecting supplied background context to this conversation; empty without background',
@@ -377,6 +399,8 @@ class RichStructuredExtraction(StructuredExtraction):
         if value is not None and value not in MeetingType.__args__:
             normalized = value.strip().lower() if isinstance(value, str) else None
             coerced['meeting_type'] = normalized if normalized in MeetingType.__args__ else None
+        if coerced.get('salience') is not None:
+            coerced['salience'] = _salience(coerced['salience'])
         return coerced
 
     def to_structured(self) -> Structured:
@@ -394,6 +418,8 @@ class RichStructuredExtraction(StructuredExtraction):
         # baseline document shape even with the flag on.
         if self.meeting_type is not None:
             structured.meeting_type = self.meeting_type
+        if self.salience is not None:
+            structured.salience = self.salience
         if self.participants:
             structured.participants = [participant.to_participant() for participant in self.participants]
         if self.insights:
@@ -444,14 +470,20 @@ class AgentNotesSubmission(StructuredExtraction):
     """
 
     participants: List[AgentNotesParticipant] = Field(default_factory=list)
+    salience: Optional[Salience] = Field(default=None, description=SALIENCE_DESCRIPTION)
 
     @model_validator(mode='before')
     @classmethod
     def keep_usable_participants(cls, data: Any) -> Any:
-        return _keep_usable_content(data, {'participants': AgentNotesParticipant})
+        data = _keep_usable_content(data, {'participants': AgentNotesParticipant})
+        if isinstance(data, dict) and data.get('salience') is not None:
+            data = {**data, 'salience': _salience(data['salience'])}
+        return data
 
     def to_structured(self) -> Structured:
         structured = super().to_structured()
         if self.participants:
             structured.participants = [participant.to_participant() for participant in self.participants]
+        if self.salience is not None:
+            structured.salience = self.salience
         return structured

@@ -236,6 +236,7 @@ def validate(
     final_deployment_receipt_override: dict[str, object] | None = None,
     canary_mutator: Callable[[dict[str, object]], None] | None = None,
     require_final: bool = False,
+    expected_repository: str | tuple[str, ...] = REPOSITORY,
 ) -> list[str]:
     expected_sha = prod_source_sha if expected_canary_source_sha is None else expected_canary_source_sha
     receipt_sha = verifier.canonical_sha256(deployment_receipt)
@@ -307,7 +308,7 @@ def validate(
         canary_run,
         run,
         expected_digest=DIGEST,
-        expected_repository=REPOSITORY,
+        expected_repository=expected_repository,
         expected_workflow_id=WORKFLOW_ID,
         expected_run_id=RUN_ID,
         expected_canary_workflow_id=CANARY_WORKFLOW_ID,
@@ -380,6 +381,71 @@ def test_accepts_an_exact_digest_from_the_successful_main_dev_run(
     run: dict[str, object],
 ) -> None:
     assert validate(verifier, evidence, deployment_receipt, run) == []
+
+
+ROLE_REPOSITORY = "gcr.io/based-hardware-dev/backend-pusher"
+
+
+def test_accepts_a_backend_pusher_qualification_only_when_that_registry_is_admitted(
+    verifier: SimpleNamespace,
+    run: dict[str, object],
+) -> None:
+    """Plan B B3: the dev qualification may name the backend-pusher role image."""
+    receipt = _deployment_receipt()
+    receipt["image"] = {"repository": ROLE_REPOSITORY, "digest": DIGEST}
+    evidence = _evidence(verifier, receipt)
+    evidence["image_repository"] = ROLE_REPOSITORY
+
+    assert validate(verifier, evidence, receipt, run, expected_repository=(REPOSITORY, ROLE_REPOSITORY)) == []
+    assert validate(verifier, evidence, receipt, run, expected_repository=ROLE_REPOSITORY) == []
+
+    fat_only = validate(verifier, evidence, receipt, run)
+    assert fat_only == ["qualification evidence repository is not an admitted development Pusher registry"]
+
+
+def test_receipt_must_name_the_repository_the_evidence_qualified(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    evidence["image_repository"] = ROLE_REPOSITORY
+
+    errors = validate(verifier, evidence, deployment_receipt, run, expected_repository=(REPOSITORY, ROLE_REPOSITORY))
+
+    assert "deployment receipt image does not match the exact qualified candidate" in errors
+    assert not any("admitted development Pusher registry" in error for error in errors)
+
+
+def test_backend_pusher_qualification_closure_fires_on_role_dockerfile_drift(
+    verifier: SimpleNamespace,
+    tmp_path: Path,
+) -> None:
+    """Plan B B3 review: a moved production main that changes backend/Dockerfile.roles
+    must invalidate a backend-pusher qualification, not only the fat closure."""
+    repo, dev_sha, prod_sha = _promotion_repo(tmp_path, closure_change=False)
+    (repo / "backend" / "Dockerfile.roles").write_text("FROM base AS pusher\n", encoding="utf-8")
+    _git(repo, "add", ".")
+    dev_sha = _commit_all(repo, "qualified with role dockerfile")
+    (repo / "backend" / "Dockerfile.roles").write_text("FROM base AS pusher\nRUN true\n", encoding="utf-8")
+    prod_sha = _commit_all(repo, "moved main mutates the role dockerfile")
+
+    receipt = _deployment_receipt(dev_sha)
+    receipt["image"] = {"repository": ROLE_REPOSITORY, "digest": DIGEST}
+    evidence = _evidence(verifier, receipt)
+    evidence["image_repository"] = ROLE_REPOSITORY
+
+    errors = validate(
+        verifier,
+        evidence,
+        receipt,
+        _run(dev_sha),
+        prod_source_sha=prod_sha,
+        expected_canary_source_sha=prod_sha,
+        checkout_repository=repo,
+        expected_repository=(REPOSITORY, ROLE_REPOSITORY),
+    )
+    assert any("Pusher image source or chart changed" in error for error in errors)
 
 
 def test_accepts_writer_emitted_live_segment_window(

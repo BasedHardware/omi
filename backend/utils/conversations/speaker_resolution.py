@@ -1,21 +1,13 @@
-"""Resolve a conversation's speakers from its stored audio before processing reads them.
-
-Processing (summary, memories, owner attribution, speaker prompts) and every
-client read ``speaker_id`` as "one voice". Capture cannot promise that: its
-numbering restarts per connection, provider, and uploaded chunk. This stage
-embeds each segment's audio, re-diarizes the whole conversation
-(``utils.stt.conversation_speakers``), and rewrites the in-memory transcript so
-the processing write persists one id per voice plus ``speaker_resolution``.
-
-Embeddings are cached beside the audio (encrypted), so a conversation that
-grows through dozens of sync updates embeds each segment once. Everything here
-fails open: without audio, the diarizer, or time budget, processing continues
-on capture's ids and ``speaker_resolution`` says whether those ids can be counted.
+"""Resolve stored conversation audio before processing reads speaker identity.
+Capture IDs restart across providers and uploads; the pure resolver unifies them.
+Encrypted embeddings bound repeat work; missing audio abstains and manual receipts govern projections.
 """
 
 from __future__ import annotations
 
 from config.transcription_final_pass import authoritative_for
+from config.refactor_modes import serving_for
+from utils.speakers import processing as speaker_evidence
 
 import bisect
 from collections.abc import Sequence
@@ -108,6 +100,7 @@ MAX_PLACEMENT_SPANS = 10000
 
 
 def resolver_reason(reason: str) -> None:
+    speaker_evidence.reason(reason)
     retry_resolver_reason(reason)
     owner_diagnostics.resolver_reason(reason)
 
@@ -139,9 +132,11 @@ def encode_cache(entries: CacheEntries, evidence_seconds: Optional[Mapping[str, 
             }
     except Exception:
         match_scores.record_failure(logger, reason='malformed_doc')
+    energies = speaker_evidence.energy_metadata()
     header = json.dumps(
         {
             'v': CACHE_FORMAT_VERSION,
+            **({'energies': energies} if energies else {}),
             **optional_header,
             'ids': ids,
             'durations': [round(entries[i][0], 3) for i in ids],
@@ -160,6 +155,7 @@ def decode_cache(data: Optional[bytes], evidence_seconds: Optional[Dict[str, flo
         header = json.loads(data[4 : 4 + length])
         if header.get('v') != CACHE_FORMAT_VERSION or not header.get('ids'):
             return {}
+        speaker_evidence.restore_energy(header.get('energies'))
         if evidence_seconds is not None:
             try:
                 evidence_seconds.update(header.get('evidence_seconds') or {})
@@ -449,6 +445,7 @@ def _embed_missing(
             if embedded >= limit or (max_attempts is not None and diagnostics.attempted >= max_attempts):
                 return embedded, 'max_embeddings'
             diagnostics.attempted += 1
+            speaker_evidence.capture_energy(segment_id, clip)
             try:
                 vector = extract_embedding_from_bytes(
                     pcm_to_wav(clip, SAMPLE_RATE), client=client, timeout=EMBED_TIMEOUT_SECONDS
@@ -559,19 +556,10 @@ def _verified_read_session(
     placements: Mapping[str, AudioPlacement],
     deadline: float,
 ) -> Optional[AudioChunkReadSession]:
-    """One bounded actual blob inventory, proven before any embedding decodes.
+    """Generation-pin, decode and verify the bounded blob inventory before embedding.
 
-    The session's lazy listing is forced once here — after placement, before
-    any embedding or cache upload — and frozen for the call. Every listed
-    object must carry a positive generation and correspond to a manifest
-    timestamp/span pair. All objects are then pre-fetched pinned to their
-    listed generation and decoded once into the session cache: the concrete
-    extent of each object comes from the decoded PCM (an authoritative span
-    must match the decoded duration; a spanless object's end is its decoded
-    end), every pair of distinct objects that overlaps beyond tolerance
-    refuses, and each pending trusted window must be covered. Any missing,
-    malformed, duplicate, raced, or over-budget evidence refuses the read
-    before a single embedding is computed or the cache is touched.
+    Declared spans must match decoded extents covering each pending window;
+    malformed, raced or over-budget input refuses before any cache write.
     """
     session = AudioChunkReadSession(uid, conversation.id, SAMPLE_RATE)
     session.deadline = min(session.deadline, deadline)
@@ -670,7 +658,18 @@ def _verified_read_session(
     for first in range(len(extents)):
         for second in range(first + 1, len(extents)):
             overlap = min(extents[first][1], extents[second][1]) - max(extents[first][0], extents[second][0])
-            if overlap > COVERAGE_TOLERANCE_SECONDS:
+            if overlap > COVERAGE_TOLERANCE_SECONDS and (
+                not serving_for('SPEAKER_EVIDENCE_MODE', uid)
+                or any(
+                    window[0] < min(extents[first][1], extents[second][1])
+                    and window[1] > max(extents[first][0], extents[second][0])
+                    for s in pending
+                    if s.id is not None
+                    if (placement := placements.get(s.id)) is not None
+                    if (window := placement.window) is not None
+                )
+            ):
+                # refactor: superseded by per-window evidence when SPEAKER_EVIDENCE_MODE=serve
                 resolver_reason('decoded_overlap')
                 return None
     for segment in pending:
@@ -703,6 +702,7 @@ def _without_resolution(
     diagnostics: Optional[Mapping[str, Any]] = None,
 ) -> None:
     segments = conversation.transcript_segments
+    speaker_evidence.reason(outcome)
     owner_diagnostics.resolver_counts(**(diagnostics or {}))
     # Independent sync batches can each accept an owner in isolation. Without
     # conversation audio there is no evidence that their capture IDs name the
@@ -841,9 +841,8 @@ def apply_speaker_resolution(
                 # No new identity evidence (missing prints/short audio) cannot
                 # revoke an existing decision, including a prior partial pass.
                 continue
-            # Conversation-wide evidence supersedes capture's automatic owner
-            # guesses too. Manual voices are absent from this map, and the
-            # persistence transaction re-applies the latest manual receipt.
+            # refactor: superseded by utils.speakers.evidence.project_labels when SPEAKER_EVIDENCE_MODE=serve
+            # Manual voices are absent; persistence reapplies the latest receipt.
             segment.is_user = False
             segment.person_id = None
             segment.speaker_identity_status = identity_statuses[new_id]
@@ -904,6 +903,7 @@ def resolve_speakers_for_processing(
         return False
     if trace is not None and trace.pass_name == 'first':
         record_retry('first', 'eligible', 'candidate')
+    evidence_token = speaker_evidence.begin(conversation)
     resolver_reason('disabled')
     try:
         if match_scores.enabled():
@@ -934,16 +934,14 @@ def resolve_speakers_for_processing(
                     'event=conversation_speaker_resolution outcome=manual_receipt_failed exception_type=%s',
                     type(error).__name__,
                 )
-        # Persisted authority survives flag rollback and mixed live/WAL appends.
-        # Without compatible centroids we cannot safely regroup any of this
-        # conversation across the authoritative batch boundary. Manual receipts
-        # above and below still apply; anonymous identity is an explicit abstention.
+        # Legacy batch authority survives rollback; serve requires verified centroids.
         batch_record = any(
             (segment.speaker_id_scope or '').startswith('final:batch:') for segment in conversation.transcript_segments
         )
-        if batch_record:
-            # Reuse owner-safe abstention for unrelated legacy scopes without
-            # reclustering batch voices. Manual receipts still win below.
+        # refactor: superseded by utils.speakers when SPEAKER_EVIDENCE_MODE=serve
+        if batch_record and not serving_for('SPEAKER_EVIDENCE_MODE', uid):
+            resolver_reason('batch_authoritative')
+            # Legacy owner-safe abstention; manual receipts still win below.
             trusted = _capture_trusted(conversation.transcript_segments)
             _without_resolution(conversation, 'batch_authoritative', force_unavailable=not trusted)
             resolution = conversation.speaker_resolution
@@ -955,8 +953,10 @@ def resolve_speakers_for_processing(
                         if segment.speaker_match_source != 'batch_abstention'
                     ]
                 )
-        final_record = batch_record or (
-            authoritative_for(uid)
+        # refactor: superseded by per-window evidence when SPEAKER_EVIDENCE_MODE=serve
+        final_record = (batch_record and not serving_for('SPEAKER_EVIDENCE_MODE', uid)) or (
+            not batch_record
+            and authoritative_for(uid)
             and all(
                 (segment.speaker_id_scope or '').startswith('final:') for segment in conversation.transcript_segments
             )
@@ -1010,6 +1010,7 @@ def resolve_speakers_for_processing(
                 )
         elif receipt_read:
             receipt_applied = True  # A successful read confirmed there is no manual receipt.
+        speaker_evidence.finish(evidence_token, uid, conversation, receipt if receipt_read else None)
     return receipt_applied
 
 
@@ -1343,7 +1344,8 @@ def _resolve(
         # It must never borrow the nearest voice or a bare legacy cache entry.
         # Manifest contradictions and known coverage holes still refuse globally.
         all_usable_invalid = bool(invalid_text) and not any(s.id not in invalid_text_ids for s in embeddable)
-        if (
+        # refactor: superseded by per-window abstention when SPEAKER_EVIDENCE_MODE=serve
+        if not serving_for('SPEAKER_EVIDENCE_MODE', uid) and (
             index.ambiguity
             or all_usable_invalid
             or any(p.reason in ('uncovered_audio', 'invalid_window') for p in placements.values())
@@ -1386,6 +1388,7 @@ def _resolve(
         if read_session is None:
             _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
             return
+    speaker_evidence.window_abstentions(placements, abstained)
     diagnostics = EmbeddingDiagnostics()
     new_embeddings, stop = _embed_missing(
         uid,
@@ -1506,6 +1509,7 @@ def _resolve(
             conversation.speaker_match_scores = match_scores.merge(retained, resolution.match_scores)
     except Exception:
         match_scores.record_failure(logger, reason='malformed_doc')
+    speaker_evidence.capture_resolution(resolution)
     apply_speaker_resolution(
         conversation,
         resolution.speaker_ids,

@@ -30,6 +30,8 @@ from utils.conversations.screen_text_digest import MESSAGING_APPS
 from utils.executors import db_executor, run_blocking
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_agent_prompt import READ_TOOL_NAMES, VIEW_SCREENSHOT
+from utils.llm.shaped_agent import model_json
+from utils.model_text import ContextWindow, ToolTimeError, parse_tool_time, to_datetime, utc_z
 
 logger = logging.getLogger(__name__)
 
@@ -42,15 +44,9 @@ MAX_TOP_WINDOWS = 15
 
 
 def _as_utc(value: Any) -> Optional[datetime]:
-    if isinstance(value, datetime):
-        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
-    if isinstance(value, str) and value.strip():
-        try:
-            parsed = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
-        except ValueError:
-            return None
-        return _as_utc(parsed)
-    return None
+    """A server-side stored instant in UTC (naive means UTC); unreadable values are ``None``."""
+    moment = to_datetime(value)
+    return moment.astimezone(timezone.utc) if moment is not None else None
 
 
 def _clip(value: Any, limit: int) -> str:
@@ -80,12 +76,15 @@ class NotesToolbox:
     seen_conversations: set[str] = field(default_factory=set)
     calls: Counter = field(default_factory=Counter)
     _search: Any = None
+    # The conversation window: every time-range tool defaults to it (harness tool rule 1).
+    window: ContextWindow = field(init=False)
 
     def __post_init__(self):
         if not self.uid:
             raise ValueError('notes toolbox requires an owner uid')
         self.started_at = _as_utc(self.started_at) or datetime.now(timezone.utc)
         self.finished_at = _as_utc(self.finished_at) or self.started_at
+        self.window = ContextWindow(self.started_at, self.finished_at, 'conversation')
         if self._search is None:
             self._search = OwnerSearch(self.uid)
         self._handlers: dict[str, Callable[..., Awaitable[Any]]] = {
@@ -111,6 +110,8 @@ class NotesToolbox:
             return ToolOutcome(json.dumps({'error': f'unknown tool {name}'}))
         try:
             result = await handler(**dict(arguments))
+        except ToolTimeError as error:
+            return ToolOutcome(json.dumps({'error': str(error)}, ensure_ascii=False))
         except TypeError:
             return ToolOutcome(json.dumps({'error': 'bad arguments; match the tool schema'}))
         except Exception as error:  # noqa: BLE001 - one failed lookup never fails the notes
@@ -118,19 +119,13 @@ class NotesToolbox:
             return ToolOutcome(json.dumps({'error': 'lookup unavailable; continue without it'}))
         if isinstance(result, ToolOutcome):
             return result
-        text = json.dumps(result, ensure_ascii=False, default=str)
+        text = model_json(result)
         if len(text) > MAX_RESULT_CHARACTERS:
             text = text[:MAX_RESULT_CHARACTERS] + '…(truncated)'
         return ToolOutcome(text)
 
     def _window(self, start: Any, end: Any) -> tuple[datetime, datetime]:
-        lo = _as_utc(start) or self.started_at
-        hi = _as_utc(end) or self.finished_at
-        if hi < lo:
-            lo, hi = hi, lo
-        if hi - lo > timedelta(hours=MAX_WINDOW_HOURS):
-            hi = lo + timedelta(hours=MAX_WINDOW_HOURS)
-        return lo, hi
+        return self.window.resolve(start, end, max_span=timedelta(hours=MAX_WINDOW_HOURS))
 
     async def get_screen_activity(self, start: Any = None, end: Any = None, query: str = '', limit: int = 25):
         lo, hi = self._window(start, end)
@@ -211,7 +206,9 @@ class NotesToolbox:
             if match is None or not match.get('id'):
                 return {'conversations': [], 'note': 'no known person with that exact name; try search_people'}
             person_ref = 'people/' + str(match['id'])
-        lo, hi = _as_utc(start), _as_utc(end) or self.started_at
+        # Earlier meetings: open start, ending where this conversation began unless told otherwise.
+        lo = parse_tool_time(start, field='start')
+        hi = parse_tool_time(end, field='end') or self.started_at
         hits = await self._owner_search(
             'conversations',
             query,
@@ -260,10 +257,6 @@ class NotesToolbox:
                 _clip(item.get('description'), 160) for item in open_items or [] if isinstance(item, Mapping)
             ],
         }
-
-
-def _utc_z(moment: datetime) -> str:
-    return moment.astimezone(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
 
 
 def calendar_row(meeting: Mapping[str, Any]) -> dict[str, Any]:
@@ -381,8 +374,8 @@ def build_packet(
     seen = {item['conversation_id'] for item in related if item['conversation_id']}
     packet = {
         'conversation': {
-            'started_at': _utc_z(start),
-            'finished_at': _utc_z(end),
+            'started_at': utc_z(start),
+            'finished_at': utc_z(end),
             'timezone': timezone_name or 'UTC',
             'transcript_words': transcript_words,
             'capture_sources': list(capture_sources) or None,

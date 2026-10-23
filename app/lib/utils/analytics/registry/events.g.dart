@@ -2969,3 +2969,23 @@ final class CaptureRecoveryObserved extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"kind": kind.wireName, "trigger": trigger.wireName};
 }
+
+enum NativeCustodyObservedOutcome {
+  watchDeleted("watch_deleted"),
+  watchDeferred("watch_deferred"),
+  watchUploaded("watch_uploaded"),
+  legacyOwnersDeferred("legacy_owners_deferred"),
+  legacyJobsQuarantined("legacy_jobs_quarantined"),
+  directoryMismatch("directory_mismatch");
+  const NativeCustodyObservedOutcome(this.wireName);
+  final String wireName;
+}
+
+final class NativeCustodyObserved extends RegisteredEvent {
+  const NativeCustodyObserved({required this.outcome});
+  final NativeCustodyObservedOutcome outcome;
+  @override
+  String get wireName => "Native Custody Observed";
+  @override
+  Map<String, Object> get properties => {"outcome": outcome.wireName};
+}

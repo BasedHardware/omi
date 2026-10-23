@@ -251,9 +251,11 @@ def test_prod_pusher_requires_successful_dev_attestation_and_never_rebuilds() ->
     assert "pusher-prod-canary-evidence" in MANUAL
     assert "gcloud container images add-tag --quiet" in MANUAL
     assert selection < promotion < helm
+    # Plan B B3: development may skip the build for an admitted backend-pusher
+    # digest; production still never builds.
     assert (
-        "if: env.SERVICE == 'llm-gateway' || github.event.inputs.environment != 'prod'"
-        in MANUAL[build - 100 : build + 300]
+        "if: env.SERVICE == 'llm-gateway' || (github.event.inputs.environment != 'prod' "
+        "&& github.event.inputs.pusher_role_image_digest == '')" in MANUAL[build - 100 : build + 300]
     )
     assert 'image.tag=${IMAGE_TAG}' not in MANUAL[helm - 300 : helm + 500]
 
@@ -432,8 +434,8 @@ def test_prod_qualifies_an_isolated_config_then_proves_the_shared_config_is_iden
 def test_prod_pusher_compares_full_dockerfile_source_closure_not_subset() -> None:
     """The prod freshness check must derive comparison paths from the Dockerfile's
     COPY instructions, not a hardcoded two-directory subset.  Otherwise a change
-    to a shared backend module (e.g. backend/utils/apps.py) would silently ship
-    a stale digest."""
+    to a shared backend module (e.g. backend/utils/apps.py) would silently ship a
+    stale digest."""
     assert "verify_pusher_source_closure.py" in MANUAL
     assert "PUSHER_SOURCE_PATHS" in MANUAL
     assert '"${PUSHER_SOURCE_PATHS[@]}"' in MANUAL
@@ -442,13 +444,24 @@ def test_prod_pusher_compares_full_dockerfile_source_closure_not_subset() -> Non
     assert "backend/pusher backend/charts/pusher" not in MANUAL
 
 
+def test_prod_pusher_selects_the_closure_by_qualified_repository() -> None:
+    """Plan B B3 review: a backend-pusher qualification must compare the role
+    image's closure (Dockerfile.roles pusher target), selected by the repository
+    the evidence names — not always the fat Dockerfile's closure."""
+    assert 'verify_pusher_source_closure.py --image-repository "$DEV_PUSHER_REPOSITORY"' in MANUAL
+    # A role-image bake must also be re-qualified when the role Dockerfile moves.
+    assert "'backend/Dockerfile.roles'" in AUTO
+
+
 def test_dev_auto_qualification_covers_every_pusher_dockerfile_source_input() -> None:
     """A source change that can alter the Pusher image must trigger a new dev bake."""
     closure = runpy.run_path(str(ROOT / "backend/scripts/verify_pusher_source_closure.py"))
     source_paths = closure["final_stage_copy_sources"](ROOT / "backend/pusher/Dockerfile")
 
     for source_path in source_paths:
-        assert f"'{source_path}**'" in AUTO, f"development qualification does not trigger for {source_path}"
+        # Directory sources need a recursive glob; a single copied file (omi_logging.py) its exact path.
+        pattern = f"'{source_path}**'" if source_path.endswith("/") else f"'{source_path}'"
+        assert pattern in AUTO, f"development qualification does not trigger for {source_path}"
     assert "'backend/charts/pusher/**'" in AUTO
     assert "'.github/workflows/gcp_backend_pusher.yml'" in AUTO
 

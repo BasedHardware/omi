@@ -1,5 +1,7 @@
 """Worker-only provider selection; no serving path is enabled by these settings."""
 
+from config.refactor_switches import default_off as rollout_default_off
+
 import os
 import math
 from dataclasses import dataclass
@@ -71,11 +73,17 @@ def provider_config() -> ProviderConfig:
         ),
         window_seconds=float(os.getenv('BATCH_PIPELINE_WINDOW_SECONDS', '30')),
         context_seconds=float(os.getenv('BATCH_PIPELINE_CONTEXT_SECONDS', '2')),
-        reuse_live=os.getenv('BATCH_PIPELINE_REUSE_LIVE_ENABLED', 'false').lower() == 'true',
+        reuse_live=rollout_default_off(
+            'BATCH_PIPELINE_REUSE_LIVE_ENABLED',
+            os.getenv('BATCH_PIPELINE_REUSE_LIVE_ENABLED', 'false').lower() == 'true',
+        ),
         # Off by default; set seconds (e.g. 8) to enable on a qualified pool.
         asr_left_context_seconds=float(os.getenv('BATCH_PIPELINE_ASR_LEFT_CONTEXT_SECONDS', '0')),
         asr_left_context_units=int(os.getenv('BATCH_PIPELINE_ASR_LEFT_CONTEXT_UNITS', '64')),
         # Dark until qualified: only an explicit 'true' enables packing.
-        flight_batching=os.getenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', 'false').strip().lower() == 'true',
+        flight_batching=rollout_default_off(
+            'BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED',
+            os.getenv('BATCH_PIPELINE_FLIGHT_BATCHING_ENABLED', 'false').strip().lower() == 'true',
+        ),
         flight_batch_seconds=float(os.getenv('BATCH_PIPELINE_FLIGHT_BATCH_SECONDS', '1800')),
     )

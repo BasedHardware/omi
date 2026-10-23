@@ -227,6 +227,9 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
         by_docker.setdefault(c.dockerfile, []).append(c)
     registry = json.loads((root / 'backend/runtime_images.json').read_text())
     bindings: dict[str, str] = registry['logging_chart_images']
+    # Non-Python images (the Rust listen-edge) log through their own runtime; the
+    # registry records how, and this Python launch guard does not apply to them.
+    native = {spec['dockerfile'] for spec in registry.get('native_images', {}).values()}
     by_name = {c.name: c for c in contracts}
     sources: dict[str, dict[str, int]] = {}
 
@@ -242,7 +245,7 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
                 raise ValueError(f'{dockerfile}: shared omi_logging.py missing or shadowed')
 
     for dockerfile in sorted(set(dockerfiles(root)) | set(by_docker)):
-        if dockerfile.relative_to(root).as_posix() in NON_PRODUCTION:
+        if dockerfile.relative_to(root).as_posix() in NON_PRODUCTION | native:
             continue
         registered = by_docker.get(dockerfile, [])
         if (
@@ -269,7 +272,7 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
                 inspect(dockerfile, context, workdir, target, f'docker:{label}:{target}', stage)
     # Helm overrides add application entrypoints independently of Docker CMD.
     for chart in (root / 'backend/charts').iterdir():
-        if chart.name in ('deepgram-self-hosted', 'monitoring') or not chart.is_dir():
+        if chart.name == 'monitoring' or not chart.is_dir():
             continue
         for path in sorted(set(chart.rglob('*.yaml')) | set(chart.rglob('*.yml'))):
             for position, target in enumerate(helm_targets(path.read_text())):

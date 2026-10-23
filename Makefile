@@ -38,7 +38,7 @@ CHAT_FIRST_E2E_ACTION ?= prepare
 CHAT_FIRST_E2E_CASE ?= enabled
 CHAT_FIRST_E2E_SECONDS ?= 86400
 
-.PHONY: setup setup-main setup-hooks setup-backend lane-backend lane-bootstrap preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs mobile-session mobile-verify dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-maintenance
+.PHONY: setup setup-main setup-hooks setup-backend lane-backend lane-bootstrap preflight backend-ratchet-preflight runtime-image-source-closure runtime-image-smoke dev-check dev-up dev-status dev-summary dev-reset dev-down dev-logs mobile-session mobile-verify dev dev-desktop dev-init dev-verify list-memory-scenarios seed-memory-scenario reset-memory-scenario desktop-run-local chat-first-e2e-fixture run-canonical-maintenance
 
 # Baseline setup is deliberately limited to prerequisites that the default
 # pre-push gate may require; app and desktop runtime environments stay opt-in.
@@ -64,6 +64,12 @@ lane-bootstrap:
 
 preflight:
 	$(PYTHON_RUNNER) .github/scripts/pr_preflight.py --lane local --base origin/main
+
+# Backend ratchet guard tests (test_*ratchet*.py plus the reason-label enums)
+# through backend/test.sh; included by scripts/pr-preflight --all for backend
+# changes so CI-only ratchets surface before the push, not after it.
+backend-ratchet-preflight:
+	$(BASH) scripts/backend-ratchet-preflight
 
 runtime-image-source-closure:
 	$(PYTHON_RUNNER) backend/scripts/runtime_image_contracts.py check

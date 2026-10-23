@@ -13432,9 +13432,6 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Ga verder met het gratis abonnement';
-
-  @override
   String get paywallTrialCancelNote => 'Annuleer op elk moment. Geen kosten, geen boetes.';
 
   @override
@@ -14423,4 +14420,160 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi neemt nog steeds op';
+
+  @override
+  String get episodeNow => 'Nu';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Live · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count momenten',
+      one: '1 moment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Momenten';
+
+  @override
+  String get episodeSoFar => 'Tot nu toe';
+
+  @override
+  String get episodeUpdatedJustNow => 'Zojuist bijgewerkt · volledige notities aan het eind';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes min geleden bijgewerkt · volledige notities aan het eind';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Notities verschijnen na de eerste minuten van het gesprek.';
+
+  @override
+  String get episodeOpenAll => 'Alles openen';
+
+  @override
+  String get episodeWrapUpNow => 'Nu afronden';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi rondt dit af als je verdergaat';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Taak opgemerkt: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Herinnering opgemerkt: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Taak opgeslagen: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return '$duration van je Omi wordt toegevoegd';
+  }
+
+  @override
+  String get episodeListeningNow => 'Luistert nu';
+
+  @override
+  String get deviceHeardToday => 'Vandaag gehoord';
+
+  @override
+  String get deviceToSync => 'te synchroniseren';
+
+  @override
+  String get deviceRightNow => 'Op dit moment';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Live-episode · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Inhalen';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done van $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Recent';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration niet verbonden';
+  }
+
+  @override
+  String get deviceControls => 'Bediening';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Ook: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Druk op de knop van je Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Eén korte druk. Vraag daarna wat je wilt.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Stel je vraag';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Zeg het hardop. Omi luistert.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Klaar? Druk nogmaals op de knop om te versturen.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Je krijgt $days dagen gratis';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dagen Omi Pro van ons. We herinneren je voor er iets wordt afgeschreven. Altijd opzegbaar.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Mijn proefperiode van $days dagen';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Start je gratis proefperiode van $days dagen';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Zet je Omi aan';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Druk één keer op de knop en houd hem bij je telefoon.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Dat is alles. Omi blijft je gesprekken op de achtergrond opnemen.';
+
+  @override
+  String get noThanks => 'Nee, bedankt';
+
+  @override
+  String get recapInTheBackground => 'Op de achtergrond';
 }

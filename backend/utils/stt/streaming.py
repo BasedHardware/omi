@@ -59,6 +59,11 @@ from config.live_stt_replay import ReplayLimits
 from config.live_stt_recovery import recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.socket import STTSocket
+from utils.stt.live_reason import (
+    LOCAL_DELIVERY_EXPIRED,
+    LOCAL_DELIVERY_REPLAY_SEND_STALLED,
+    LOCAL_DELIVERY_SEND_QUEUE_FULL,
+)
 from utils.stt.replay_delivery import AudioDeliveryExpired, RecoveryWriterPace, clock
 from utils.stt.send_queue import AudioSendQueue
 from utils.observability.demand_cohort import MeteredSyncTransport, create_wire_meter, telemetry_call
@@ -79,6 +84,7 @@ from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.observability.fallback import capacity_fallback_kwargs, record_fallback
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
+    MODULATE_BUDGET_MARKERS,
     PROVIDER_AUTH_REJECTED,
     PROVIDER_BUDGET_EXHAUSTED,
     PROVIDER_RATE_LIMITED,
@@ -258,14 +264,14 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str, endpoi
         return False
     circuit = _circuit_for_primary(service)
     if configured_chain_enabled() and reason in ACCOUNT_REJECTION_REASONS:
-        circuit.record_account_failure(account_circuit_cooldown())
+        circuit.record_account_failure(account_circuit_cooldown(), error_class=reason)
     else:
         if endpoint is not None and endpoint != live_stt_state.family_endpoint(service.value):
             circuit = target_circuit(
                 Target(DEFAULT_IDS.get(service.value, service.value), service.value, 0, endpoint=endpoint),
                 circuit,
             )
-        circuit.record_serve_failure()
+        circuit.record_serve_failure(error_class=reason)
     health.quarantine(
         service.value,
         'account' if reason in ACCOUNT_REJECTION_REASONS else 'selection',
@@ -317,6 +323,8 @@ def is_stt_available() -> bool:
 
 def _fallback_failure_reason(error: BaseException) -> str:
     """Classify why a fallback provider could not serve, for the next leg's telemetry."""
+    if isinstance(error, ModulateConnectionRejection):
+        return error.reason
     if getattr(error, 'reason', None) == 'provider_rate_limited':
         return 'provider_429'
     if isinstance(error, (asyncio.TimeoutError, TimeoutError)):
@@ -497,7 +505,7 @@ async def connect_stt_socket_with_fallback(
                 socket = await connect_primary()
             if socket is None:
                 reason = 'config_incomplete'
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
             elif primary_service is STTService.modulate and circuit.state == 'half_open':
                 # This probe was admitted under a serve-error bench. The
                 # breaker must re-close on real serving evidence — a
@@ -526,7 +534,7 @@ async def connect_stt_socket_with_fallback(
                     circuit.release_probe()
                 else:
                     reason = _fallback_failure_reason(RuntimeError(detail))
-                    circuit.record_failure()
+                    circuit.record_failure(error_class=reason)
             elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
                 record_stt_provider_connect(provider=primary_service.value, outcome=CONNECT_SUCCESS)
@@ -544,7 +552,7 @@ async def connect_stt_socket_with_fallback(
                     circuit.release_probe()
                 else:
                     reason = _fallback_failure_reason(RuntimeError(detail))
-                    circuit.record_failure()
+                    circuit.record_failure(error_class=reason)
         except DeepgramConnectionRejection:
             # A typed, non-retryable account refusal (HTTP 401/402/403) keeps
             # its class for the fallback legs and the circuit: mapping it to
@@ -552,34 +560,45 @@ async def connect_stt_socket_with_fallback(
             # from stt_selection telemetry (the 2026-09-18 HTTP 402 incident
             # was only diagnosable from the raw SDK error lines).
             reason = 'auth'
-            circuit.record_failure()
+            circuit.record_failure(error_class=reason)
         except ParakeetConnectionError as error:
             reason = error.reason
             capacity_subtype = error.capacity_subtype if reason == 'capacity_full' else None
             if reason in EXPECTED_REJECTIONS:
                 circuit.record_rejection(reason)
             else:
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
         except ProviderAccountRejection as error:
             # A deepgram primary hitting its own account rejection: the primary
             # circuit IS the rejected provider's, so the account cooldown holds
             # here too, and selection walks the configured fallbacks.
             reason = 'quota'
-            circuit.record_account_rejection()
+            circuit.record_account_rejection(error_class='quota')
             logger.warning(
                 '%s is rejecting sessions at account level (%s); holding it out for the account cooldown',
                 error.provider,
                 error.status,
             )
+        except ModulateConnectionRejection as error:
+            # Velma answered the upgrade with account state. Budget is
+            # deterministic until the account is funded, so the account bench
+            # holds Modulate out instead of the 30s connect cooldown re-dialing
+            # a dead account every session; a plain 429 stays connect-health
+            # evidence for the selection bench.
+            reason = error.reason
+            if reason == PROVIDER_BUDGET_EXHAUSTED:
+                circuit.record_account_rejection(error_class=reason)
+            else:
+                circuit.record_failure(error_class=reason)
         except (asyncio.TimeoutError, TimeoutError):
             reason = 'timeout'
-            circuit.record_failure()
+            circuit.record_failure(error_class=reason)
         except Exception as error:
             reason = _fallback_failure_reason(error)
             if recovery_on and reason == 'provider_429':
                 circuit.release_probe()
             else:
-                circuit.record_failure()
+                circuit.record_failure(error_class=reason)
         # One attempt, one increment: the not-serving branches left their typed
         # death reason in typed_connect_reason, everything else lands here with
         # the bounded `reason` the except chain already computed.
@@ -622,7 +641,7 @@ async def connect_stt_socket_with_fallback(
                 fallback_socket = await _connect_serving_fallback(connect, service)
         except ProviderAccountRejection as error:
             service_circuit = _circuit_for_primary(service)
-            service_circuit.record_account_rejection()
+            service_circuit.record_account_rejection(error_class='quota')
             logger.warning(
                 '%s is rejecting sessions at account level (%s); holding it out of fallback for %ds',
                 error.provider,
@@ -641,6 +660,28 @@ async def connect_stt_socket_with_fallback(
                 raise
             from_mode = service.value
             reason = 'quota'
+            continue
+        except ModulateConnectionRejection as error:
+            # Same account-bench treatment the ProviderAccountRejection leg gets:
+            # a budget-refusing Modulate must not be re-dialled as a later
+            # fallback leg for the account cooldown (candidates gate on
+            # account_cooldown_elapsed above).
+            service_circuit = _circuit_for_primary(service)
+            if error.reason == PROVIDER_BUDGET_EXHAUSTED:
+                service_circuit.record_account_rejection(error_class=error.reason)
+            record_fallback(
+                component='stt_selection',
+                from_mode=from_mode,
+                to_mode=service.value,
+                reason=reason,
+                outcome='exhausted',
+                **capacity_fallback_kwargs(capacity_subtype),
+            )
+            if service == candidates[-1][0]:
+                raise
+            from_mode = service.value
+            reason = error.reason
+            capacity_subtype = None
             continue
         except Exception as error:
             record_fallback(
@@ -815,6 +856,12 @@ def validate_streaming_stt_env(env: Any = None) -> None:
             'STT_SERVICE_MODELS lists soniox but SONIOX_API_KEY is empty; '
             'remove soniox from the serving chain or set the key'
         )
+    # Deepgram retired 2026-08-27 (no contract); do not route or add keys. A
+    # legacy dg-* slot is inert (policy refuses to admit it), so this is a loud
+    # startup error rather than a crash: remove the slot.
+    retired = [model for model in listed if model.startswith('dg-')]
+    if retired:
+        logger.error('STT_SERVICE_MODELS lists retired Deepgram models %s; remove the slot', retired)
 
 
 def modulate_is_configured_fallback(language: Optional[str]) -> bool:
@@ -1416,11 +1463,9 @@ MODULATE_DEATH_SERVE_ERROR: Final = 'modulate_serve_error'
 # same class as Soniox monthly-budget / Deepgram HTTP 402. 5xx wording is a
 # provider serve fault. Everything else — invalid audio we sent, rate limits
 # — is either our fault or this session's, and must not bench the provider.
-_MODULATE_BUDGET_MARKERS: Final = (
-    'monthly usage limit',
-    'usage limit reached',
-    'quota exceeded',
-)
+# The marker tuple itself lives in stream_close.py (MODULATE_BUDGET_MARKERS)
+# so the batch path matches the same budget wordings.
+_MODULATE_BUDGET_MARKERS: Final = MODULATE_BUDGET_MARKERS
 _MODULATE_SERVER_FAULT_MARKERS: Final = (
     'internal server error',
     'internal error',
@@ -1448,6 +1493,101 @@ def modulate_death_reason(err: Any) -> Optional[str]:
     if any(marker in normalized for marker in ('invalid audio', 'unsupported audio', 'invalid wav', 'invalid input')):
         return 'other'  # Our audio/request shape, never provider availability.
     return None
+
+
+class ModulateConnectionRejection(RuntimeError):
+    """Modulate refused the WebSocket upgrade with a typed answer.
+
+    ``reason`` carries the bounded failure token (PROVIDER_BUDGET_EXHAUSTED or
+    PROVIDER_RATE_LIMITED) so the connect walks can bench the provider without
+    parsing free text. The detail stays bounded tokens — never the vendor body.
+    """
+
+    def __init__(self, detail: str, *, reason: str) -> None:
+        self.reason = reason
+        super().__init__(detail)
+
+
+def _modulate_rejection_status(error: BaseException) -> Optional[int]:
+    response = getattr(error, 'response', None)
+    status = getattr(response, 'status_code', None) if response is not None else None
+    if not isinstance(status, int):
+        status = getattr(error, 'status_code', None)
+    return status if isinstance(status, int) else None
+
+
+# websockets 12.0's legacy client stops reading after the status line and
+# headers, so on a refused upgrade the only text still attached to the
+# exception is header values; the reason phrase and body survive only on the
+# new asyncio client's InvalidStatus.response. Bound whatever is there.
+_MODULATE_REJECTION_TEXT_CAP: Final = 2000
+_MODULATE_REJECTION_HEADER_CAP: Final = 50
+
+
+def _modulate_rejection_text(error: BaseException) -> str:
+    """Lowercased refusal text for marker matching only. Never logged or labeled."""
+    response = getattr(error, 'response', None)
+    parts: List[str] = []
+    for attribute in ('reason_phrase', 'body'):
+        value = getattr(response, attribute, None) if response is not None else None
+        if isinstance(value, bytes):
+            value = value[:_MODULATE_REJECTION_TEXT_CAP].decode('utf-8', 'replace')
+        if value:
+            parts.append(str(value)[:_MODULATE_REJECTION_TEXT_CAP])
+    headers = getattr(error, 'headers', None)
+    if headers is None and response is not None:
+        headers = getattr(response, 'headers', None)
+    if headers is not None:
+        try:
+            for index, item in enumerate(headers):
+                if index >= _MODULATE_REJECTION_HEADER_CAP:
+                    break
+                parts.append(str(item[-1])[:_MODULATE_REJECTION_TEXT_CAP])
+        except Exception:
+            pass
+    return ' '.join(parts).lower()
+
+
+def modulate_connect_rejection_reason(error: BaseException) -> Optional[str]:
+    """Bound a refused Velma WebSocket upgrade to a typed connect reason.
+
+    HTTP 402 is credits/payment regardless of wording. A 429 is budget only
+    when the refusal text still visible to us (reason phrase, body, or header
+    values) carries a budget marker such as "insufficient credits" — the
+    answer Velma-2 gives when the account is out of credits (2026-10-22
+    outage: it reached selection as an untyped provider error and the
+    purpose-built budget page never fired). A plain 429 stays
+    PROVIDER_RATE_LIMITED; every other refusal returns None so the generic
+    connect-failure classification keeps owning it.
+    """
+
+    status = _modulate_rejection_status(error)
+    if status == 402:
+        return PROVIDER_BUDGET_EXHAUSTED
+    if status == 429:
+        if any(marker in _modulate_rejection_text(error) for marker in _MODULATE_BUDGET_MARKERS):
+            return PROVIDER_BUDGET_EXHAUSTED
+        return PROVIDER_RATE_LIMITED
+    return None
+
+
+def typed_modulate_connect_failure(error: BaseException) -> Optional[ModulateConnectionRejection]:
+    """Typed rejection for a refused Velma upgrade, or None to keep the raw error.
+
+    Both Modulate dials (the default endpoint here and routed registry
+    endpoints in live_target_connect) refuse through this seam so a
+    402/"insufficient credits" answer records the budget stream close and
+    raises the bounded token on every lane, not just the default one.
+    """
+
+    typed = modulate_connect_rejection_reason(error)
+    if typed is None:
+        return None
+    record_stt_stream_close(provider=STTService.modulate.value, reason=typed)
+    return ModulateConnectionRejection(
+        f'Modulate refused the WebSocket upgrade: HTTP {_modulate_rejection_status(error)} reason={typed}',
+        reason=typed,
+    )
 
 
 class SafeModulateSocket(STTSocket):
@@ -1609,7 +1749,7 @@ class SafeModulateSocket(STTSocket):
         try:
             self._send_queue.put_nowait(queued_data)
         except asyncio.QueueFull:
-            self._mark_dead('send queue full', typed_reason='capacity_full')
+            self._mark_dead('send queue full', typed_reason=LOCAL_DELIVERY_SEND_QUEUE_FULL)
             return False
 
         if prepend_header:
@@ -1632,7 +1772,7 @@ class SafeModulateSocket(STTSocket):
                 timeout=timeout if timeout is not None else self.replay_limits.queue_wait_seconds,
             )
         except TimeoutError:
-            self._mark_dead('replay send queue stalled', typed_reason='capacity_full')
+            self._mark_dead('replay send queue stalled', typed_reason=LOCAL_DELIVERY_REPLAY_SEND_STALLED)
         return not (self._dead or self._closed)
 
     def finalize(self) -> None:
@@ -1755,7 +1895,7 @@ class SafeModulateSocket(STTSocket):
                     if not written:
                         self._send_queue.discard(data)
         except AudioDeliveryExpired:
-            self._mark_dead('live audio delivery expired', typed_reason='capacity_full')
+            self._mark_dead('live audio delivery expired', typed_reason=LOCAL_DELIVERY_EXPIRED)
         except websockets.exceptions.ConnectionClosed as e:
             self._mark_dead(f'ws send closed: {e}', cause=connection_loss_cause(e))
             self.stream_end.record(self._ws, error=e)
@@ -1956,6 +2096,14 @@ async def process_audio_modulate(
         ws = await websockets.connect(uri, ping_timeout=10, ping_interval=10)
     except Exception as error:
         log_connect_rejection('modulate', error)
+        typed_failure = typed_modulate_connect_failure(error)
+        if typed_failure is not None:
+            # The upgrade itself answered with account state (402 payment, or
+            # 429 "insufficient credits") or a rate limit. Budget must reach
+            # omi_stt_stream_close_total{reason="provider_budget_exhausted"}
+            # so the budget page fires at connect time too, not only through
+            # in-stream error frames (2026-10-22: it never fired).
+            raise typed_failure from error
         raise
     observe_connect_seconds('modulate', time.monotonic() - started)
     loop = asyncio.get_running_loop()

@@ -20,10 +20,12 @@ import json
 from typing import Any, Mapping, Optional
 
 from models.conversation_enums import CategoryEnum
+from models.structured_extraction import SALIENCE_DESCRIPTION
 from utils.llm.conversation_notes_prompts import ACTION_ITEM_EXTRACTION_RULES
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT
+from utils.llm.shaped_agent import model_json
 
-PROMPT_VERSION = 'notes-agent-v5'
+PROMPT_VERSION = 'notes-agent-v6'
 SUBMIT = 'submit_notes'
 VIEW_SCREENSHOT = 'view_screenshot'
 OWNER_PROFILE_CHARACTERS = 1500
@@ -92,6 +94,10 @@ FORMAT
   `action_items`.
 - title: at most 70 characters and specific. Lead with the counterpart's name when known; never use the owner's
   own name. overview: one or two plain sentences.
+- salience: "highlight" for any conversation the owner engages in with another person, with real back-and-forth,
+  whatever the topic (including chores, errands and casual time at home), and for meetings, calls, plans, ideas
+  or tasks. "background" is only for audio the owner is not engaged in: media/TV, ambient chatter, other people
+  talking or an isolated passing remark. If owner engagement is uncertain, use "highlight".
 - When the transcript has `[segment-id k]` headers, cite the smallest sufficient exact ids in source_segment_ids
   (for `[s01234 0]` cite "s01234"). Never put ids in prose; never invent them.
 
@@ -143,6 +149,7 @@ SUBMIT_SCHEMA = _fn(
         'overview': _STR,
         'emoji': _STR,
         'category': {'type': 'string', 'enum': [item.value for item in CategoryEnum]},
+        'salience': {'type': 'string', 'enum': ['highlight', 'background'], 'description': SALIENCE_DESCRIPTION},
         'participants': {
             'type': 'array',
             'items': {
@@ -244,36 +251,6 @@ TOOL_SCHEMAS: tuple[dict[str, Any], ...] = (*READ_TOOL_SCHEMAS, SUBMIT_SCHEMA)
 READ_TOOL_NAMES = frozenset(schema['function']['name'] for schema in READ_TOOL_SCHEMAS)
 
 
-def length_guide(words: int) -> str:
-    """Body-length target scaled to the transcript: about 1.3-1.4x the one-shot notes on long meetings."""
-    if words < 500:
-        return 'Use 1-2 sections and about 80-150 words in total.'
-    if words < 1500:
-        return 'Use 3-4 sections and about 250-400 words in total; never more than 450.'
-    if words < 5000:
-        return 'Use 4-6 sections and about 550-800 words in total; never more than 900.'
-    return 'Use 5-7 sections and about 750-1000 words in total; never more than 1100.'
-
-
-def length_floor(words: int) -> int:
-    """Below this a long meeting's note is missing threads the owner wanted."""
-    if words < 1500:
-        return 0
-    if words < 5000:
-        return 480
-    return 650
-
-
-def length_ceiling(words: int) -> int:
-    if words < 500:
-        return 170
-    if words < 1500:
-        return 450
-    if words < 5000:
-        return 900
-    return 1100
-
-
 def _with_breakpoint(text: str) -> list[dict[str, Any]]:
     return [{'type': 'text', 'text': text, 'prompt_cache_breakpoint': dict(EXPLICIT_CACHE_BREAKPOINT)}]
 
@@ -298,7 +275,7 @@ def conversation_seed(packet: Mapping[str, Any], capture_evidence: str, *, expli
     """Packet first, transcript last: the whole seed is reused by every agent turn."""
     text = (
         'EVIDENCE PACKET (untrusted data)\n'
-        + json.dumps(packet, ensure_ascii=False, sort_keys=True, default=str)
+        + model_json(packet, sort_keys=True)
         + '\n\nCAPTURE\n'
         + capture_evidence.strip()
     )

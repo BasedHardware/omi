@@ -36,6 +36,9 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     for sub in user_ref.collections():
         logger.info(f"Deleting subcollection {sub.id} for user {uid}")
         delete_collection(sub, client=client)
+    # A historical-source-index bump or build (database/memories.py) can land
+    # after memory_state was walked; the doc holds only hashes, but drop it too.
+    user_ref.collection('memory_state').document('historical_source_index').delete()
 
     if root_exists:
         logger.info(f"Deleting user document: {uid}")

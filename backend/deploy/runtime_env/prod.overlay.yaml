@@ -5,6 +5,10 @@ data_plane_project: based-hardware
 overlay:
   llm_gateway:
     env:
+      # Retirement is an operator decision; expiring evidence can revive old ACTIVE state.
+      OMI_VERTEX_RESERVATION_STATES:
+        value: '{"gemini-2.5-flash":"inactive"}'
+        category: ops_kill
       PROACTIVITY_REDIS_HOST:
         config_map:
           name: prod-omi-backend-config
@@ -49,6 +53,8 @@ overlay:
           value: based-hardware-batch-pipeline-staging
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -89,6 +95,9 @@ overlay:
           value: https://omi.me
         DREAM_AGENT_ENABLED:
           value: 'true'
+          category: rollout
+        DREAM_ON_DEMAND_ENABLED:
+          value: 'false'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -219,6 +228,8 @@ overlay:
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -275,6 +286,9 @@ overlay:
           category: rollout
         DREAM_AGENT_ENABLED:
           value: 'true'
+          category: rollout
+        DREAM_ON_DEMAND_ENABLED:
+          value: 'false'
           category: rollout
         DREAM_AGENT_UID_ALLOWLIST:
           value: vi7SA9ckQCe4ccobWNxlbdcNdC23
@@ -456,6 +470,8 @@ overlay:
             value: syncing-local
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -525,8 +541,20 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '25'
+            category: rollout
+          DREAM_AGENT_CONCURRENCY:
+            value: '8'
+            category: reliability
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '6'
+            value: '48'
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -675,7 +703,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
@@ -719,6 +747,7 @@ overlay:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -729,7 +758,7 @@ overlay:
             version: latest
         env:
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
-          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'true', category: rollout}
+          SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
           CAPTURE_SHARED_SPEECH_MODE:
             value: 'off'
@@ -753,6 +782,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
@@ -824,11 +855,23 @@ overlay:
           DREAM_AGENT_ENABLED:
             value: 'true'
             category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '25'
+            category: rollout
+          DREAM_AGENT_CONCURRENCY:
+            value: '8'
+            category: reliability
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
           REVIEW_SURFACE_MODE:
             value: 'on'
             category: rollout
           DREAM_AGENT_PASSES_PER_DAY:
-            value: '6'
+            value: '48'
             category: rollout
           DREAM_AGENT_HUNT_INTERVAL_HOURS:
             value: '2'
@@ -958,7 +1001,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
@@ -1064,6 +1107,7 @@ overlay:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -1087,6 +1131,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
@@ -1157,6 +1203,21 @@ overlay:
             category: rollout
           DREAM_AGENT_ENABLED:
             value: 'true'
+            category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '25'
+            category: rollout
+          DREAM_AGENT_CONCURRENCY:
+            value: '8'
+            category: reliability
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
+            category: rollout
+          DREAM_AGENT_PASSES_PER_DAY:
+            value: '48'
             category: rollout
           MENTOR_PIPELINE:
             value: cohort
@@ -1264,7 +1325,7 @@ overlay:
             value: 'false'
             category: rollout
           BATCH_PIPELINE_SPEECH_EMPTY_MULTILINGUAL_ENABLED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_UNIT_SECONDS:
             value: '3600'
@@ -1370,6 +1431,7 @@ overlay:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -1414,6 +1476,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1425,6 +1489,18 @@ overlay:
             category: rollout
           DREAM_AGENT_ENABLED:
             value: 'true'
+            category: rollout
+          DREAM_AGENT_ELIGIBILITY:
+            value: paid
+            category: rollout
+          DREAM_AGENT_PAID_PERCENT:
+            value: '25'
+            category: rollout
+          DREAM_AGENT_CONCURRENCY:
+            value: '8'
+            category: reliability
+          DREAM_ON_DEMAND_ENABLED:
+            value: 'false'
             category: rollout
           MENTOR_PIPELINE:
             value: cohort
@@ -1503,7 +1579,7 @@ overlay:
             value: 'true'
             category: rollout
           BATCH_PIPELINE_RECOVERY_ALL_ADMITTED:
-            value: 'false'
+            value: 'true'
             category: rollout
           BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED:
             value: 'true'

@@ -39,6 +39,18 @@ void main() {
     return wals.fold<int>(0, (count, wal) => count + wal.totalFrames) + world.wal.syncs.phone.testFrames.length;
   }
 
+  /// Waits until [target] pendant frames are durable. The WAL writes are real
+  /// file I/O that completes on the runner's clock, so this polls for the
+  /// condition under a bounded deadline instead of a fixed number of attempts.
+  /// The caller still asserts the exact count, so a genuine loss fails loudly.
+  Future<void> awaitPersistedFrames(int target) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 15));
+    while (await persistedFrames() < target && DateTime.now().isBefore(deadline)) {
+      await world.settle();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+  }
+
   /// Holds a capture-fencing (OS periodic) transfer pass open until released.
   Future<({RecordingTransferCoordinator coordinator, Future<void> wake, Completer<void> release})> holdFencedPass(
       {WakeTrigger trigger = WakeTrigger.periodic}) async {
@@ -223,12 +235,8 @@ void main() {
       for (var i = 0; i < 50; i++) {
         world.deviceConnection!.emitAudio(value: i);
       }
-      // Orphan writes are synchronous; settle any WAL flush the writes scheduled
-      // and observe completion rather than sleeping a fixed time.
-      for (var i = 0; i < 200 && await persistedFrames() < before + 50; i++) {
-        await world.settle();
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
+      // Orphan writes reach the WAL through real file I/O; wait for the frames to land.
+      await awaitPersistedFrames(before + 50);
       expect(await persistedFrames(), before + 50);
       pass.release.complete();
       await pass.wake;
@@ -304,10 +312,7 @@ void main() {
     }
 
     Future<void> expectNoPacketDropped() async {
-      for (var i = 0; i < 200 && await persistedFrames() < baseline + emitted; i++) {
-        await world.settle();
-        await Future<void>.delayed(const Duration(milliseconds: 5));
-      }
+      await awaitPersistedFrames(baseline + emitted);
       expect(await persistedFrames(), baseline + emitted, reason: 'every emitted pendant packet is durable');
     }
 
@@ -370,6 +375,9 @@ void main() {
     test('a hung pass that never finishes', () async {
       await startAccounting();
       final hang = Completer<void>();
+      // The hard limit is driven by the test, not the host clock: it fires only
+      // after the connect and the packet burst have run against the hung pass.
+      final limits = <void Function()>[];
       final coordinator = RecordingTransferCoordinator(
         reconcile: () async {},
         discover: () => hang.future,
@@ -378,12 +386,15 @@ void main() {
         autoUploadEnabled: () => true,
         fencedPassTimeLimit: const Duration(milliseconds: 50),
         scheduleCooldown: (_, __) {},
+        scheduleTimeout: (_, onExpired) => limits.add(onExpired),
       );
       final wake = coordinator.wake(WakeTrigger.periodic);
       await pumpEventQueue();
       await disconnect();
       await connect();
       emitPackets(100);
+      expect(limits, hasLength(1), reason: 'the pass is still hung before its limit');
+      limits.single();
       await wake; // ended by the hard time limit, not by the hung stage
       await expectCaptureBackWithin(const Duration(seconds: 3));
       emitPackets(50);

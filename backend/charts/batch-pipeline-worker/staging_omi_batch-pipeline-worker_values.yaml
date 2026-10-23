@@ -1,0 +1,40 @@
+# Staging batch worker (contract (i)): prod's worker settings on dev's GPUs, staging data plane.
+# Deployed by backend/deploy/staging/deploy.sh --with-worker into namespace `staging`; the
+# post-renderer (deploy/staging/worker_post_render.py) adds the staging identity and fence env.
+enabled: true
+image:
+  repository: us-central1-docker.pkg.dev/based-hardware-dev/staging/batch-pipeline-worker
+  # deploy.sh supplies the digest of the image built from the deployed SHA.
+  digest: ""
+serviceAccountName: staging-worker
+gcpServiceAccount: staging-worker@based-hardware-dev.iam.gserviceaccount.com
+bucket: based-hardware-dev-staging-batch
+dataPlaneProject: based-hardware-dev
+stage: prod
+namespace: batch_pipeline_prod
+# k8s Secret in namespace staging with ENCRYPTION_SECRET and HUGGINGFACE_TOKEN (bootstrap_iam.sh).
+secretName: staging-batch-worker
+# Prod runs 2 replicas, one L4 each. Staging uses dev's two idle parakeet-pool L4s
+# (us-central1-a and -b) until lane 3/S7a provide others; never engine-pool. replicaCount is the
+# replay-window size: deploy.sh applies --worker-replicas (default 0) because staging GPUs are on
+# demand (2026-10-20; parakeet-pool autoscaling min 0), so scale up before replay traffic.
+replicaCount: 2
+autoscaling:
+  enabled: false
+nodeSelector:
+  cloud.google.com/gke-nodepool: parakeet-pool
+  # null drops the chart default (parakeet-pool nodes carry service=parakeet).
+  service: null
+tolerations:
+  - key: nvidia.com/gpu
+    operator: Equal
+    value: present
+    effect: NoSchedule
+worker:
+  apiUrl: https://backend-sync-staging-1031333818730.us-central1.run.app
+  audience: https://backend-sync-staging-1031333818730.us-central1.run.app
+  emptyAsrRecoveryEnabled: true
+  emptyAsrDispositionEnabled: true
+  headPriorityEnabled: true
+  workerSilenceDispositionEnabled: true
+  correctnessMetricsEnabled: true

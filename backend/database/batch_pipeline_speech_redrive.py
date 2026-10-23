@@ -47,7 +47,9 @@ class SpeechRedriveStore:
             and not job.get('silence_disposition')
         )
 
-    def prepare(self, segment_id, owner_id, plan_digest, expected_recovery, now, *, gpu_padded_retry_empty=False):
+    def prepare(
+        self, segment_id, owner_id, plan_digest, expected_recovery, now, *, gpu_padded_retry_empty=False, silent=False
+    ):
         candidates, observations = {}, []
         token = uuid4().hex
 
@@ -75,6 +77,7 @@ class SpeechRedriveStore:
                     or marker.get('paid_epoch') != PAID_EPOCH
                     or marker.get('privacy_generation') != binding.privacy_generation
                     or marker.get('provider') != 'modulate'
+                    or marker.get('silent', False) is not silent
                 ):
                     raise ProjectionBlocked('different speech redrive intent')
                 return job
@@ -84,6 +87,7 @@ class SpeechRedriveStore:
                 raise ProjectionBlocked('padded retry was skipped')
             job['speech_redrive'] = {
                 'gpu_padded_retry_empty': gpu_padded_retry_empty,
+                'silent': silent,
                 'paid_epoch': PAID_EPOCH,
                 'token': token,
                 'plan_digest': plan_digest,

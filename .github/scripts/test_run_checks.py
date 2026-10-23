@@ -289,13 +289,38 @@ class ManifestContractTests(unittest.TestCase):
         # --skip-pr-body-checks). #11835: the body must be the squash commit
         # message PLUS the live merged PR body, because this repo squashes
         # with the commit list rather than the PR description.
-        self.assertNotIn("--skip-pr-body-checks", workflow)
+        # P18's read-only main health call has no proposed change or PR body.
+        # Only that explicit input may omit metadata; normal main pushes keep it.
+        # The nightly branch may append further nightly-only flags (for example
+        # --keep-going after nightly 39610825548 masked later failures).
+        normal_workflow = re.sub(
+            r"\$\{\{ inputs\.nightly_main_sha != '' && '[^']*--skip-pr-body-checks[^']*' \|\| '' \}\}",
+            "",
+            workflow,
+        )
+        self.assertNotIn("--skip-pr-body-checks", normal_workflow)
         self.assertRegex(workflow, r"git log -1 --format=%B HEAD")
         self.assertRegex(workflow, r"pr_metadata\.py")
         self.assertRegex(workflow, r"--from-commit-body-file")
         self.assertRegex(workflow, r"--pr-body-file")
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
+
+    def test_nightly_invocations_keep_going(self) -> None:
+        """Nightly must run every selected check; PR and local lanes keep fail-fast.
+
+        A workflow edit that drops --keep-going from any of the three nightly
+        run_checks.py calls returns the nightly to one-red-per-run reporting
+        (39586610411 → 39610825548), so the wiring itself is pinned here.
+        """
+        for name in ("repo-checks.yml", "mobile-app-checks.yml", "desktop-swift-ci.yml"):
+            workflow = (WORKFLOWS_DIR / name).read_text(encoding="utf-8")
+            with self.subTest(workflow=name):
+                self.assertIn(
+                    "inputs.nightly_main_sha != '' && "
+                    "'--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going'",
+                    workflow,
+                )
 
     def test_manifest_test_modules_execute_their_cases(self) -> None:
         """A registered test command must not be able to pass without running tests.
@@ -647,6 +672,53 @@ class RunnerBehaviorTests(unittest.TestCase):
             self.assertEqual(result, 0)
             normalize.assert_called_once_with(["bash", "check.sh"], python_executable=sys.executable)
             run.assert_called_once_with(["git-bash.exe", "check.sh"], cwd=root, check=False)
+
+    def test_execute_checks_stops_at_first_failure_unless_keep_going(self) -> None:
+        """Nightly 39610825548: fail-fast hid a second red behind the first in one job.
+
+        PR and local lanes keep the fast verdict; --keep-going (nightly) runs every
+        selected check and names each failure so one run reports the full set.
+        """
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            changed = root / "changed.txt"
+            changed.write_text("example.txt\n", encoding="utf-8")
+            body = root / "body.txt"
+            body.write_text("", encoding="utf-8")
+            checks = [
+                Check("first", ("bash", "first.sh"), ("all",), ("ci",), "fixture"),
+                Check("second", ("bash", "second.sh"), ("all",), ("ci",), "fixture"),
+                Check("third", ("bash", "third.sh"), ("all",), ("ci",), "fixture"),
+            ]
+            returncodes = {"first.sh": 1, "second.sh": 0, "third.sh": 1}
+
+            def fake_run(command, cwd, check):
+                return subprocess.CompletedProcess(command, returncodes[command[-1]])
+
+            for keep_going, expected_runs, expected_stderr in (
+                (False, ["first.sh"], "Manifest checks failed: first\n"),
+                (True, ["first.sh", "second.sh", "third.sh"], "Manifest checks failed: first, third\n"),
+            ):
+                with self.subTest(keep_going=keep_going):
+                    stderr = StringIO()
+                    with (
+                        patch("run_checks.command_for_host", side_effect=lambda command, python_executable: command),
+                        patch("run_checks.subprocess.run", side_effect=fake_run) as run,
+                        redirect_stdout(StringIO()),
+                        redirect_stderr(stderr),
+                    ):
+                        result = execute_checks(
+                            root,
+                            checks,
+                            changed_files_path=changed,
+                            base="base",
+                            head="HEAD",
+                            pr_body_file=body,
+                            keep_going=keep_going,
+                        )
+                    self.assertEqual(result, 1)
+                    self.assertEqual([call.args[0][-1] for call in run.call_args_list], expected_runs)
+                    self.assertEqual(stderr.getvalue(), expected_stderr)
 
     def test_windows_bash_resolution_uses_the_git_install(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

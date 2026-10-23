@@ -22,7 +22,7 @@ from utils.llm import notes_agent_serving as serving
 from utils.llm import shaped_agent
 from utils.llm.conversation_prompt_context import build_conversation_prompt_prefix
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
-from utils.llm.notes_agent_validation import check_notes, nested_bullet_count, repair_notes
+from utils.llm.notes_output_contract import check_notes, nested_bullet_count, repair_notes
 
 FIXTURE = Path(__file__).parent / 'fixtures' / 'notes_agent' / 'weekly_sync_replay.json'
 OWNER = 'synthetic-owner'
@@ -331,7 +331,7 @@ def test_wall_clock_forces_submit():
     assert isinstance(model.choices[1], dict) and result.stop == 'forced_submit'
 
 
-def test_first_bad_submission_is_returned_once_then_repaired():
+def test_bad_submission_is_returned_once_per_failure_class_then_repaired():
     bad = submission(
         sections=[
             {'heading': 'Discussion', 'body_markdown': 'A prose paragraph about pricing.'},
@@ -347,7 +347,9 @@ def test_first_bad_submission_is_returned_once_then_repaired():
 
     model = TwiceBad()
     result = run_agent(model, policy.NotesAgentBudget(max_turns=5, max_tool_calls=6), words=2000)
-    assert len(result.rejections) == 1 and 'Action items' in result.rejections[0]
+    # Format goes back first, alone; then the length (content) check gets its own send-back.
+    assert len(result.rejections) == 2 and 'Action items' in result.rejections[0]
+    assert 'at least' not in result.rejections[0] and 'at least 480' in result.rejections[1]
     assert [s['heading'] for s in result.submission['sections']] == ['Discussion']
     assert 'action_section_dropped' in result.repairs
 
@@ -679,3 +681,55 @@ def test_unnamed_speaker_is_sent_back_and_the_name_reaches_participants_and_note
 def test_no_send_back_without_leads_or_when_someone_is_named():
     model = ScriptedModel()
     assert not run_agent(model, policy.NotesAgentBudget(max_turns=2, max_tool_calls=6)).rejections
+
+
+@pytest.mark.parametrize('failure', ['deadline', 'malformed'])
+def test_v2_salvages_last_repairable_submission_without_another_writer(failure):
+    turns = []
+
+    async def complete(messages, tool_choice):
+        turns.append(messages)
+        if len(turns) == 1:
+            return agent.CompletionTurn(
+                tool_calls=[
+                    call(
+                        prompt.SUBMIT,
+                        submission(
+                            sections=[{'heading': 'Topic', 'body_markdown': 'A short synthetic detail with no bullet.'}]
+                        ),
+                    )
+                ]
+            )
+        if failure == 'deadline':
+            raise TimeoutError('synthetic deadline')
+        return agent.CompletionTurn(tool_calls=[{'id': 'bad', 'name': prompt.SUBMIT, 'arguments': 'not JSON'}])
+
+    budget = policy.NotesAgentBudget(
+        max_turns=2,
+        max_tool_calls=5,
+        min_tool_calls=0,
+        max_cost_usd=0.02,
+        deadline_seconds=60,
+        force_submit_after_seconds=50,
+    )
+    result = run_agent(complete, budget, contract_v2=True)
+    assert result.submission is not None
+    assert result.submission['sections'][0]['body_markdown'].startswith('- ')
+    assert 'salvaged_submission' in result.repairs
+    assert len(turns) == 2
+
+
+def test_v2_retains_one_shot_fallback_when_no_usable_submission_exists():
+    async def complete(messages, tool_choice):
+        return agent.CompletionTurn(tool_calls=[{'id': 'bad', 'name': prompt.SUBMIT, 'arguments': 'not JSON'}])
+
+    budget = policy.NotesAgentBudget(
+        max_turns=1,
+        max_tool_calls=1,
+        min_tool_calls=0,
+        max_cost_usd=0.02,
+        deadline_seconds=60,
+        force_submit_after_seconds=50,
+    )
+    result = run_agent(complete, budget, contract_v2=True)
+    assert result.submission is None and 'salvaged_submission' not in result.repairs

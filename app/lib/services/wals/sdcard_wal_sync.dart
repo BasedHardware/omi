@@ -1,13 +1,11 @@
+import 'package:omi/services/wals/local_wal_sync.dart';
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:version/version.dart';
-
-import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
@@ -40,6 +38,15 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
   /// Parses an 83-byte SD card packet: byte 3 is the frame length, frame data starts at byte 4.
   /// Returns null when the length byte is corrupted (frame would exceed the packet bounds).
+  /// Arms [duration] and cancels [previous]. A later packet or the initial 5s
+  /// arm must not leave the earlier timer running, or it fires into a transfer
+  /// that is still receiving data.
+  @visibleForTesting
+  static Timer replaceTimer(Timer? previous, Duration duration, void Function() onFire) {
+    previous?.cancel();
+    return Timer(duration, onFire);
+  }
+
   static List<int>? parseLegacyPacketFrame(List<int> value) {
     final amount = value[3];
     if (amount <= 0 || 4 + amount > value.length) {
@@ -276,57 +283,16 @@ class SDCardWalSyncImpl implements SDCardWalSync {
   String? _activeClockRun;
 
   Future<File> _flushToDisk(Wal wal, List<List<int>> chunk, int timerStart) async {
-    final directory = await getApplicationDocumentsDirectory();
-    var fileName = wal.getFileNameByTimeStarts(timerStart, clockRun: _activeClockRun);
-    if (await File('${directory.path}/$fileName').exists()) {
-      final dot = fileName.lastIndexOf('.');
-      final stem = dot > 0 ? fileName.substring(0, dot) : fileName;
-      final ext = dot > 0 ? fileName.substring(dot) : '';
-      do {
-        fileName = '${stem}_u${_storageFileSeq++}$ext';
-      } while (await File('${directory.path}/$fileName').exists());
-    }
-    String filePath = '${directory.path}/$fileName';
-    List<int> data = [];
-
-    // Debug: Log first frame info
-    if (chunk.isNotEmpty) {
-      final firstFrame = chunk[0];
-      final frameHex = firstFrame.take(8).map((b) => b.toRadixString(16).padLeft(2, '0')).join(' ');
-      Logger.debug(
-        "SDCardWalSync _flushToDisk: ${chunk.length} frames, first frame size=${firstFrame.length}, hex: $frameHex",
-      );
-    }
-
-    for (int i = 0; i < chunk.length; i++) {
-      var frame = chunk[i];
-
-      final byteFrame = ByteData(frame.length);
-      for (int i = 0; i < frame.length; i++) {
-        byteFrame.setUint8(i, frame[i]);
-      }
-      data.addAll(Uint32List.fromList([frame.length]).buffer.asUint8List());
-      data.addAll(byteFrame.buffer.asUint8List());
-    }
     final localSync = _localSync;
-    var admittedBytes = 0;
-    if (localSync != null) {
-      if (!await localSync.ensureStorageAdmission(bytes: data.length, admittedGeneration: _admittedGeneration)) {
-        throw StateError('storage admission refused (cap/disk reserve)');
-      }
-      admittedBytes = data.length;
-    }
-    final file = File(filePath);
-    try {
-      await file.writeAsBytes(data, flush: true);
-    } catch (e) {
-      if (admittedBytes > 0) localSync?.releaseStorageAdmission(admittedBytes);
-      rethrow;
-    }
-
-    Logger.debug("SDCardWalSync _flushToDisk: Wrote ${data.length} bytes to $filePath");
-
-    return file;
+    if (localSync == null) throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
+    final saved = await localSync.persistDeviceChunk(
+        source: wal,
+        frames: chunk,
+        timerStart: timerStart,
+        admittedGeneration: _admittedGeneration,
+        clockRun: _activeClockRun,
+        nextCollisionSequence: () => _storageFileSeq++);
+    return File((await Wal.getFilePath(saved.filePath))!);
   }
 
   Future<bool> _readStorageBytesToFile(
@@ -369,8 +335,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           timeoutTimer?.cancel();
           Logger.debug('First data received, timeout cancelled');
         }
-        timeoutTimer?.cancel();
-        timeoutTimer = Timer(const Duration(seconds: 15), () {
+        timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 15), () {
           if (!completer.isCompleted) {
             hasError = true;
             Logger.debug('SD card read stalled: no data for 15s');
@@ -441,7 +406,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
-    timeoutTimer = Timer(const Duration(seconds: 5), () {
+    timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 5), () {
       if (!firstDataReceived && !completer.isCompleted) {
         hasError = true;
         final error = TimeoutException('No data received from SD card within 5 seconds');
@@ -535,8 +500,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
           timeoutTimer?.cancel();
           Logger.debug('First data received, timeout cancelled');
         }
-        timeoutTimer?.cancel();
-        timeoutTimer = Timer(const Duration(seconds: 15), () {
+        timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 15), () {
           if (!completer.isCompleted) {
             hasError = true;
             Logger.debug('SD card read stalled: no data for 15s');
@@ -683,7 +647,7 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
     await _writeToStorage(deviceId, fileNum, 0, offset);
 
-    timeoutTimer = Timer(const Duration(seconds: 5), () {
+    timeoutTimer = replaceTimer(timeoutTimer, const Duration(seconds: 5), () {
       if (!firstDataReceived && !completer.isCompleted) {
         hasError = true;
         final error = TimeoutException('No data received from SD card within 5 seconds');
@@ -782,7 +746,6 @@ class SDCardWalSyncImpl implements SDCardWalSync {
 
         int bytesInChunk = offset - lastOffset;
         _updateSpeed(bytesInChunk);
-        await _registerSingleChunk(wal, file, timerStart, chunkFrames, admittedGeneration);
         chunksDownloaded++;
         lastOffset = offset;
 
@@ -829,49 +792,6 @@ class SDCardWalSyncImpl implements SDCardWalSync {
     }
 
     return SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
-  }
-
-  Future<void> _registerSingleChunk(Wal wal, File file, int timerStart, int chunkFrames, int admittedGeneration) async {
-    final localSync = _localSync;
-    if (localSync == null) {
-      throw StateError('LocalWalSync unavailable; chunk cannot be proven durable');
-    }
-    var bytes = 0;
-    try {
-      bytes = await file.length();
-    } catch (_) {}
-
-    int chunkSeconds = chunkFrames ~/ wal.codec.getFramesPerSecond();
-
-    Wal localWal = Wal(
-      codec: wal.codec,
-      channel: wal.channel,
-      sampleRate: wal.sampleRate,
-      timerStart: timerStart,
-      filePath: file.path.split('/').last,
-      storage: WalStorage.disk,
-      status: WalStatus.miss,
-      device: wal.device,
-      deviceModel: wal.deviceModel,
-      seconds: chunkSeconds,
-      totalFrames: chunkFrames,
-      syncedFrameOffset: 0,
-      originalStorage: WalStorage.sdcard,
-      clockRun: _activeClockRun,
-    );
-
-    try {
-      await localSync.addExternalWal(localWal, admittedGeneration: admittedGeneration);
-    } catch (e) {
-      localSync.releaseStorageAdmission(bytes);
-      rethrow;
-    }
-    if (!await localSync.hasDurableWal(localWal, admittedGeneration: admittedGeneration)) {
-      throw StateError('WAL not durable after registration');
-    }
-    Logger.debug(
-      "SDCard: Registered chunk (ts: $timerStart) with LocalWalSync - codec=${localWal.codec}, sampleRate=${localWal.sampleRate}, channel=${localWal.channel}",
-    );
   }
 
   @override

@@ -1597,13 +1597,12 @@ async def test_s1_no_claims_saves_rows_identically_to_feature_off(real_pipeline,
     assert state.outcomes[-1].value == 'success'
 
 
-def test_s1_oversize_claim_set_returns_false_before_serialization(monkeypatch):
-    """Oversize claim sets are rejected by bound before the bounded JSON
-    serializer is ever invoked."""
+def test_s1_oversize_claim_set_returns_false_before_schema_validation(monkeypatch):
+    """Oversize claim sets are rejected before constructing schema-validator input."""
     _coverage_env(monkeypatch)
 
-    dump_calls = []
-    monkeypatch.setattr(recording_lineage.json, 'dumps', lambda *a, **k: dump_calls.append(a) or '{}')
+    calls = []
+    monkeypatch.setattr(recording_lineage, 'validate_sync_file_claims', lambda *a, **k: calls.append(a) or {})
     oversize = {f'f{i}.bin': _claim() for i in range(21)}
     assert not recording_lineage.lineage_resolution_requested(
         'u',
@@ -1613,7 +1612,7 @@ def test_s1_oversize_claim_set_returns_false_before_serialization(monkeypatch):
         capture_evidence_claims=oversize,
         filenames=list(oversize),
     )
-    assert dump_calls == []
+    assert calls == []
     assert not recording_lineage.lineage_resolution_requested(
         'u',
         ORIGIN,
@@ -1622,7 +1621,7 @@ def test_s1_oversize_claim_set_returns_false_before_serialization(monkeypatch):
         capture_evidence_claims={BIN_NAME: _claim()},
         filenames=[f'f{i}.bin' for i in range(21)],
     )
-    assert dump_calls == []
+    assert calls == []
 
 
 @pytest.mark.asyncio

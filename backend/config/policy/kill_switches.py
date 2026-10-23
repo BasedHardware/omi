@@ -14,6 +14,7 @@ KILL_SWITCHES = {
     'BATCH_PIPELINE_OWNER_CHAIN_PROJECTION_ENABLED': True,
     'BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED': True,
     'BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED': True,
+    'BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_PENDING_PAGE_ENABLED': True,
     'BATCH_PIPELINE_OWNER_DRAIN_ENABLED': True,
     'BATCH_PIPELINE_PROJECTION_INDEX_DEFERRED_ENABLED': True,
@@ -35,5 +36,8 @@ def kill_switch(name: str, *, policy_id: str = 'control', flags=None) -> bool:
         enabled = value not in {'false', '0', 'off'}
     else:
         enabled = value != 'false' if name in DISABLE_ONLY_SWITCHES else value == 'true'
+    from config.refactor_switches import default_on
+
+    enabled = default_on(name, enabled, environ=env)
     logger.info('event=batch_policy_kill_switch policy_id=%s switch=%s enabled=%s count=1', policy_id, name, enabled)
     return enabled

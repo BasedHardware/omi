@@ -1248,7 +1248,9 @@ async def test_coordinator_lineage_exception_keeps_stamp_and_processes_siblings(
         'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', **vars(kwargs)
     )
     assert captured == {chunk['id']: 'STAMP' for chunk in chunks}
-    metrics.labels.assert_called_once_with(outcome='lookup_failed')
+    metrics.labels.assert_called_once_with(
+        outcome='lookup_failed', stage='none', claim_count_bucket='none', file_count_bucket='none'
+    )
     metrics.labels.return_value.inc.assert_called_once()
     assert sum('event=sync_lineage_resolve' in r.getMessage() for r in caplog.records) == 1
 

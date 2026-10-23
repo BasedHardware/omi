@@ -130,7 +130,7 @@ actor StagedTaskStorage {
         throw ActionItemStorageError.recordNotFound
       }
 
-      // Sentry has seen UNIQUE constraint failures here when the same backend
+      // Production has seen UNIQUE constraint failures here when the same backend
       // task already exists locally (for example, from an API refresh racing a
       // local sync retry). Treat that as an idempotent sync completion: keep the
       // canonical backend row and remove the duplicate local row instead of

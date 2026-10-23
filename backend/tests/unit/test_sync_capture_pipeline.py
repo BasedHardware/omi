@@ -2,8 +2,9 @@
 
 import logging
 from copy import deepcopy
-from google.api_core.exceptions import InvalidArgument, ServiceUnavailable
+from google.api_core.exceptions import InvalidArgument, ServiceUnavailable, TooManyRequests
 from pathlib import Path
+from types import SimpleNamespace
 import threading
 from unittest.mock import AsyncMock, MagicMock
 import uuid
@@ -13,6 +14,7 @@ import httpx
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cloud_tasks import _load_sync_jobs, _seed_fenced_job
 from tests.unit.test_sync_cross_job_assignment import intake, conversations, chunk
@@ -432,6 +434,7 @@ def test_job_finalized_event_shares_segment_correlation(pipeline, caplog, monkey
         'model',
         'lane',
         'outcome',
+        'failure_reason',
     }
 
 
@@ -559,6 +562,57 @@ def test_persistence_errors_keep_audio_and_do_not_blame_stt(pipeline, caplog, er
     module.prerecorded.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    ('error', 'code', 'reason'),
+    [
+        (FirestoreContentionExhausted('busy'), 'sync_firestore_contention', 'firestore_contention'),
+        (TooManyRequests('per-object rate'), 'sync_storage_rate_limited', 'storage_rate_limited'),
+        (ServiceUnavailable('down'), 'sync_persistence_failed', 'persistence_error'),
+    ],
+)
+def test_internal_persistence_failure_names_its_cause_inside_the_fresh_turn(
+    pipeline, caplog, monkeypatch, error, code, reason
+):
+    module, _store = pipeline
+    turns = []
+    lease = SimpleNamespace(
+        acquire=lambda uid, conversation_id, lane: turns.append(('acquire', lane)) or 'turn',
+        release=lambda turn: turns.append(('release', turn)),
+    )
+    monkeypatch.setattr(module, 'conversation_turn_lease', lease)
+    module.ingest_test_seam.ingest_sync_conversation = MagicMock(side_effect=error)
+    module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
+    errors = []
+    response = {'new_memories': set(), 'updated_memories': set()}
+    with caplog.at_level(logging.INFO):
+        assert module.process_segment('1000.wav', 'u', response, threading.Lock(), errors) is False
+    assert errors == [code]
+    assert turns == [('acquire', 'fresh'), ('release', 'turn')]
+    segment = next(r.message for r in caplog.records if 'event=sync_transcription_segment' in r.message)
+    assert 'outcome=internal_error' in segment and f'failure_reason={reason}' in segment
+    assert 'upstream_error' not in segment
+
+
+def test_redirected_assignment_also_holds_the_finalize_target_turn(pipeline, monkeypatch):
+    module, _store = pipeline
+    turns = []
+    lease = SimpleNamespace(
+        acquire=lambda uid, conversation_id, lane: turns.append(('acquire', conversation_id)) or conversation_id,
+        release=lambda turn: turns.append(('release', turn)),
+    )
+    monkeypatch.setattr(module, 'conversation_turn_lease', lease)
+    module.ingest_test_seam.ingest_sync_conversation = MagicMock(return_value=({'id': 'survivor'}, False, []))
+    monkeypatch.setattr(module, 'complete_sync_intake', MagicMock(side_effect=TooManyRequests('per-object rate')))
+    module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
+    errors = []
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert module.process_segment('1000.wav', 'u', response, threading.Lock(), errors) is False
+    acquired = [conversation_id for kind, conversation_id in turns if kind == 'acquire']
+    assert acquired[-1] == 'survivor' and len(acquired) == 2
+    assert sorted((turn for kind, turn in turns if kind == 'release'), key=str) == sorted(acquired, key=str)
+    assert errors == ['sync_storage_rate_limited']
+
+
 @pytest.mark.parametrize('legacy_failure', [False, True])
 def test_sync_budget_refusal_retains_legacy_and_logs_only_uid_hash(pipeline, monkeypatch, caplog, legacy_failure):
     import hashlib
@@ -631,7 +685,7 @@ def test_dark_empty_recovery_runs_through_real_legacy_assignment(pipeline, monke
 
 def test_cached_multilingual_response_does_not_increment_submitted_audio(pipeline, monkeypatch):
     module, _ = pipeline
-    module.stt_cap_dispatch_enabled = lambda uid, lane: True
+    module.cap_enabled = lambda uid, lane: True
     module.sync_allowed = lambda uid, *, lane='sync': True
     module.compute_sync_segment_id = lambda *args: 'stable-synthetic-segment'
     module.dispatch_empty_recovery_once = lambda uid, sid, dispatch: (

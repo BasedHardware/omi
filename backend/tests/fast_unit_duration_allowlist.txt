@@ -302,6 +302,7 @@ tests/unit/test_ws_l_surface_routing.py::TestMcpSseLegacySearchParity::test_lega
 tests/unit/test_sync_cloud_tasks.py::test_sync_post_enqueue_cleanup_does_not_unstage
 # File-isolation amortizes router/STT/VAD imports across different node IDs per run.
 tests/unit/test_sync_cloud_tasks.py
+tests/unit/test_legacy_dark_router.py
 tests/unit/test_fallback_observability.py
 tests/unit/test_task_recommendations.py::test_no_production_branch_consumes_debug_summary_or_reason_codes
 tests/unit/test_utils_import_boundary.py::test_utils_modules_do_not_import_routers
@@ -474,6 +475,8 @@ tests/unit/test_processing_backlog.py::test_authenticated_process_endpoint_requi
 # The required durability/attention assertions pass; the full lifecycle costs ~0.69s CPU.
 tests/unit/test_recovery_discard_pipeline.py::test_short_contentful_recovery_keeps_minimum_instead_of_creating_attention
 # 2026-10-17: parses deploy/runtime_env.yaml in the call phase (1.01s CPU under runner load, #22000). Assertions still run.
+# Product search through the HTTP surface on a short-term/archive fixture; measured 0.37-0.47s CPU on m5 (unchanged test, 2026-10-19).
+tests/unit/test_product_memory_router.py::test_product_search_endpoint_keeps_expired_unadjudicated_short_term_and_excludes_archive
 # First test to import utils.sync.files / utils.sync.pipeline in this file under file isolation (import graph, ~1s / ~7s CPU); hermetic.
 tests/unit/test_sync_input_limits.py::test_opus_disk_full_mid_file_raises_capacity_pressure_and_keeps_no_prefix
 tests/unit/test_sync_input_limits.py::test_batch_storage_pressure_removes_earlier_local_files_but_not_staged_objects
@@ -481,6 +484,23 @@ tests/unit/test_sync_input_limits.py::test_batch_storage_pressure_removes_earlie
 tests/unit/test_chat_openapi_operation_ids.py::test_v1_chat_operation_ids_remain_compatible_after_handler_renames
 # Real FFmpeg: 48 per-target seeks plus loading the frames (~0.6s CPU); exercises the all-intra fallback.
 tests/unit/test_chat_video.py::test_all_intra_long_clip_falls_back_to_per_target_seeks
+# Lane-1 flake rule (2nd local guard trip in 48h, 2026-10-21): 0.31s twice under a loaded pre-push, passes alone. Debt: bus lane01 flake-guard-s14; owner lane 1 (main test).
+tests/unit/test_focus_sessions_read_boundary.py::TestFocusSessionsRouterBoundary::test_get_focus_sessions_returns_200_and_filters_poisoned_docs
+# Lane-1 flake rule (2nd local guard trip in 48h, 2026-10-21): 0.39s/0.36s under a loaded pre-push, passes alone; scheduler HTTP app wiring in the call phase. Debt: bus lane01 flake-guard-s14; owner lane 8 (cap-hold).
+tests/unit/test_cap_hold_durability.py::test_scheduler_http_endpoint_awaits_work_and_requires_oidc
 # First test in its file (pays the module import) and evaluates 4000 cohort decisions across three policies;
 # measured 1.03-1.06s CPU on CI shard 2 (PR #22920, three runs), at the 1.0s guard.
 tests/unit/test_batch_live_preview.py::test_all_three_cohorts_share_batch_bucket_and_summary_survives_admission_rollback
+# First import of utils.other.raw_audio/pydub happens in the call phase after main sync 15 (1.2-1.4s CPU on m5; whole file 0.47s on integration before the merge). Owner lane 1 (flakes); remove once that import moves to module scope or the guard measures per-file imports.
+tests/unit/test_summary_delivery.py::test_empty_model_output_retains_debt_and_prior_good_output
+# Main #23085's heavy-pass Dream retry cases: 1.16-1.28s CPU on integration CI shard 2 in two runs (PR #23133,
+# 10-21), 0.25s locally and green on main's CI shards. Owner lane 1 (flakes); remove after M3 when main's shard timing applies.
+tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[False-bare_429]
+tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[False-no_dispatch]
+tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[True-bare_429]
+tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_not_fill_receipt_cap[True-no_dispatch]
+# Main #23176's short-probe worker-barrier case (zh 6s PCM16 decode): 1.05s then 1.00s CPU vs the
+# 1.00s fail limit on PR #23100's shard-6 runners (two attempts, 10-22), under the limit on main's
+# --all shards and locally. Same boundary shape as the Dream retry entries above; the decode is the
+# test's real work, so keep it in the unit lane via the allowlist rather than a global threshold bump.
+tests/unit/test_batch_audio_language.py::test_admitted_short_false_permission_cannot_bypass_worker_barrier[zh-clean_speech-6s-pcm16]

@@ -126,6 +126,8 @@ _SCAN_FILES: tuple[str, ...] = (
     'models/client_processing.py',
     'models/conversation.py',
     'routers/developer.py',
+    'routers/developer_segments.py',
+    'routers/developer_segments_models.py',
     'utils/memory/developer_memory_list.py',
     'utils/conversations/meeting_context.py',
     'utils/conversations/process_conversation.py',
@@ -205,9 +207,15 @@ _ALLOWED_SCOPES: FrozenSet[tuple[str, str]] = frozenset(
         ('models/conversation.py', '<module>'),
         ('models/conversation.py', 'Conversation'),
         ('routers/developer.py', '<module>'),
-        ('routers/developer.py', 'CreateConversationFromTranscriptRequest'),
+        ('routers/developer_segments_models.py', 'CreateConversationFromTranscriptRequest'),
         ('routers/developer.py', '_accepted_client_projection'),
-        ('routers/developer.py', '_create_conversation_from_segments'),
+        ('routers/developer.py', '_ingest_conversation_from_segments'),
+        # Encrypted continuation custody carries only the display projection;
+        # admission clears it when the underlying transcript is filtered.
+        ('routers/developer_segments.py', 'admit_segments'),
+        ('routers/developer_segments.py', 'common'),
+        ('routers/developer_segments.py', 'continuation'),
+        ('routers/developer_segments.py', 'stage_chunk'),
         ('utils/conversations/process_conversation.py', '<module>'),
         ('utils/conversations/process_conversation.py', 'process_conversation'),
         ('utils/conversations/process_conversation.py', '_attach_client_projection'),
@@ -269,13 +277,19 @@ PINNED_REFERENCES: FrozenSet[Reference] = frozenset(
         Reference('models/conversation.py', 'Conversation', 'client_processing'),
         Reference('models/conversation.py', 'Conversation', 'ClientProcessing'),
         Reference('routers/developer.py', '<module>', 'ClientProcessing'),
-        Reference('routers/developer.py', 'CreateConversationFromTranscriptRequest', 'client_processing'),
+        Reference(
+            'routers/developer_segments_models.py', 'CreateConversationFromTranscriptRequest', 'client_processing'
+        ),
         Reference('routers/developer.py', '_accepted_client_projection', 'ClientProcessing'),
         Reference('routers/developer.py', '_accepted_client_projection', 'client_processing'),
         Reference('routers/developer.py', '_parse_client_projection', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_projection_to_segments', 'ClientProcessing'),
         Reference('routers/developer.py', '_bind_late_client_projection', 'client_processing'),
-        Reference('routers/developer.py', '_create_conversation_from_segments', 'client_projection'),
+        Reference('routers/developer.py', '_ingest_conversation_from_segments', 'client_projection'),
+        Reference('routers/developer_segments.py', 'admit_segments', 'client_processing'),
+        Reference('routers/developer_segments.py', 'common', 'client_processing'),
+        Reference('routers/developer_segments.py', 'continuation', 'client_processing'),
+        Reference('routers/developer_segments.py', 'stage_chunk', 'client_processing'),
         Reference('routers/conversations.py', '<module>', 'ClientProcessing'),
         Reference('routers/conversations.py', 'ProcessConversationRequest', 'client_processing'),
         Reference('routers/conversations.py', '_accepted_client_projection', 'ClientProcessing'),
@@ -488,16 +502,10 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/webhooks.py', '_build_conversation_webhook_payload_sync', 'conversation_to_dict'),
         DumpSite('utils/memory/developer_memory_list.py', '_validated_memories', 'model_dump'),
         DumpSite('utils/goals_response.py', 'list_developer_goals', 'model_dump'),
-        DumpSite('routers/developer.py', '_create_conversation_from_segments', 'model_dump'),
-        # #22731: CalendarMeetingContext stored under external_data on a
-        # from-segments retry. A storage dump of meeting metadata, not a
-        # Conversation, so it cannot carry `client_processing`. Reviewed 2026-10-20.
-        DumpSite('routers/developer.py', '_apply_late_from_segments_context', 'model_dump'),
+        DumpSite('routers/developer.py', '_ingest_conversation_from_segments', 'model_dump'),
+        # Request serialization goes only to encrypted staging, never intelligence.
+        DumpSite('routers/developer_segments.py', 'stage_chunk', 'model_dump'),
         DumpSite('routers/developer.py', 'update_goal', 'model_dump'),
-        # From-segments retry (#22731): dumps the request's CalendarMeetingContext
-        # into external_data.calendar_meeting_context. Calendar fields only, not a
-        # Conversation, so it cannot carry `client_processing`.
-        DumpSite('routers/developer.py', '_apply_late_from_segments_context', 'model_dump'),
         # DailySummaryDayStatsPayload aggregates (counts/minutes watched), not
         # conversation content; transcripts reach the LLM via
         # conversations_to_string. Reviewed with the daily-summary work (#12636).
@@ -635,6 +643,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'plugins_results',
         'external_data',
         'app_id',
+        # Server-authored media/noise eligibility metadata, not a display projection.
+        'content_kind',
         'discarded',
         'imported',
         'visibility',
@@ -647,6 +657,13 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'data_protection_level',
         'folder_id',
         'call_id',
+        # V4 finalizer projects boundary-derived identity and owner/remote location scope.
+        # These are server metadata, not client-authored display projection siblings.
+        'is_call',
+        'call_platform',
+        'calendar_event_id',
+        'geolocation_scope',
+        'other_participants_location',
         'calendar_event',
         'client_device_id',
         'client_platform',
@@ -1550,12 +1567,19 @@ PINNED_INTENT_TXN_CALLEES: FrozenSet[str] = frozenset(
     {
         'conversation_ref.get',
         '_conversation_has_finalization_content',
-        '_has_active_recording_session_lease',
+        'recording_session_lease_expiry',
+        'account_deletion_ref.get',
         'existing_ref.get',
         'job_ref.get',
         'transaction.set',
         '_record_projection_delta',
         '_apply_snapshot_bound_projection',
+        # Silent-backfill admission fences (read-only: owner inflight state,
+        # user privacy/byok doc, recording-session revision snapshot). Their
+        # only writes stay in this txn's direct transaction.set sites.
+        'backfill_owner_available',
+        'user_ref.get',
+        '<dynamic>.get',
     }
 )
 

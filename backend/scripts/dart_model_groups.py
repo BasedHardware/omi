@@ -25,6 +25,17 @@ SCHEMA_GROUPS = {
         'output': DEFAULT_OUTPUT_DIR / 'budget_choice_wire.g.dart',
         'schemas': ('BudgetChoiceRequest', 'BudgetChoiceRecord', 'BudgetChoiceResponse', 'BudgetChoiceWriteResponse'),
     },
+    'episodes': {
+        'output': DEFAULT_OUTPUT_DIR / 'episodes_wire.g.dart',
+        'schemas': (
+            'EpisodeMoment',
+            'EpisodeProvisionalItem',
+            'Episode',
+            'EpisodeLiveResponse',
+            'EpisodeLookupResponse',
+            'EpisodeWrapUpRequest',
+        ),
+    },
     'messaging': {
         'output': DEFAULT_OUTPUT_DIR / 'messaging_wire.g.dart',
         'schemas': (

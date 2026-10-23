@@ -44,7 +44,7 @@ void main() {
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull, reason: 'slide ${i + 2} overflowed at ${size.width}');
       }
-      expect(find.text('Start for \$0.00'), findsOneWidget);
+      expect(find.text('Try for \$0.00'), findsOneWidget);
     });
   }
 

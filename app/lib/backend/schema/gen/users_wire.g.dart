@@ -638,19 +638,31 @@ class GeneratedDailySummaryDayStats {
   final int? actionItemsCount;
   final int? actionItemsCreated;
   final int? memoriesCreated;
+  final int? memoriesLearnedCount;
   final int? proactiveMoments;
+  final int? reportedDeviceWatchingMinutes;
+  final int? summarizedConversations;
   final int? totalConversations;
   final int? totalDurationMinutes;
+  final String? watchingCoverage;
   final int? watchingMinutes;
+  final String? watchingMinutesBasis;
+  final String watchingMinutesUnit;
 
   const GeneratedDailySummaryDayStats({
     this.actionItemsCount,
     this.actionItemsCreated,
     this.memoriesCreated,
+    this.memoriesLearnedCount,
     this.proactiveMoments,
+    this.reportedDeviceWatchingMinutes,
+    this.summarizedConversations,
     this.totalConversations,
     this.totalDurationMinutes,
+    this.watchingCoverage,
     this.watchingMinutes,
+    this.watchingMinutesBasis,
+    this.watchingMinutesUnit = "minutes",
   });
 
   factory GeneratedDailySummaryDayStats.fromJson(Map<String, dynamic> json) {
@@ -658,10 +670,16 @@ class GeneratedDailySummaryDayStats {
       actionItemsCount: _readFieldValue<int>(_readField(json, const ["action_items_count"]), "action_items_count", _readInt, requiredField: false, nullable: true),
       actionItemsCreated: _readFieldValue<int>(_readField(json, const ["action_items_created"]), "action_items_created", _readInt, requiredField: false, nullable: true),
       memoriesCreated: _readFieldValue<int>(_readField(json, const ["memories_created"]), "memories_created", _readInt, requiredField: false, nullable: true),
+      memoriesLearnedCount: _readFieldValue<int>(_readField(json, const ["memories_learned_count"]), "memories_learned_count", _readInt, requiredField: false, nullable: true),
       proactiveMoments: _readFieldValue<int>(_readField(json, const ["proactive_moments"]), "proactive_moments", _readInt, requiredField: false, nullable: true),
+      reportedDeviceWatchingMinutes: _readFieldValue<int>(_readField(json, const ["reported_device_watching_minutes"]), "reported_device_watching_minutes", _readInt, requiredField: false, nullable: true),
+      summarizedConversations: _readFieldValue<int>(_readField(json, const ["summarized_conversations"]), "summarized_conversations", _readInt, requiredField: false, nullable: true),
       totalConversations: _readFieldValue<int>(_readField(json, const ["total_conversations"]), "total_conversations", _readInt, requiredField: false, nullable: true),
       totalDurationMinutes: _readFieldValue<int>(_readField(json, const ["total_duration_minutes"]), "total_duration_minutes", _readInt, requiredField: false, nullable: true),
+      watchingCoverage: _readFieldValue<String>(_readField(json, const ["watching_coverage"]), "watching_coverage", _readString, requiredField: false, nullable: true),
       watchingMinutes: _readFieldValue<int>(_readField(json, const ["watching_minutes"]), "watching_minutes", _readInt, requiredField: false, nullable: true),
+      watchingMinutesBasis: _readFieldValue<String>(_readField(json, const ["watching_minutes_basis"]), "watching_minutes_basis", _readString, requiredField: false, nullable: true),
+      watchingMinutesUnit: _required(_readFieldValue<String>(_readField(json, const ["watching_minutes_unit"]), "watching_minutes_unit", _readString, requiredField: false, nullable: false, defaultValue: "minutes"), "watching_minutes_unit"),
     );
   }
 
@@ -670,10 +688,16 @@ class GeneratedDailySummaryDayStats {
       'action_items_count': actionItemsCount,
       'action_items_created': actionItemsCreated,
       'memories_created': memoriesCreated,
+      'memories_learned_count': memoriesLearnedCount,
       'proactive_moments': proactiveMoments,
+      'reported_device_watching_minutes': reportedDeviceWatchingMinutes,
+      'summarized_conversations': summarizedConversations,
       'total_conversations': totalConversations,
       'total_duration_minutes': totalDurationMinutes,
+      'watching_coverage': watchingCoverage,
       'watching_minutes': watchingMinutes,
+      'watching_minutes_basis': watchingMinutesBasis,
+      'watching_minutes_unit': watchingMinutesUnit,
     };
   }
 }

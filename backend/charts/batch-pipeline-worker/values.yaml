@@ -38,6 +38,9 @@ worker:
   batchSize: 8
   # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
   pipelineDepth: 2
+  shadowPercent: 0
+  shadowPaidRecoveryPerHour: 200
+  shadowRecoveryApiUrl: ""
   unitSeconds: 3600
   paddedSeconds: 272
   # Pack pyannote segmentation/embedding forwards across one flight's units.

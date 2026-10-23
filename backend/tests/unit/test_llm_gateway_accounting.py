@@ -677,6 +677,50 @@ def test_user_day_rollup_survives_an_unencodable_uid() -> None:
     assert USER_DAYS_COLLECTION not in client.collections
 
 
+def test_anonymous_attempts_keep_the_ledger_row_but_skip_the_single_hot_rollup(monkeypatch) -> None:
+    monkeypatch.delenv('LLM_GATEWAY_ANONYMOUS_ROLLUP_SKIP', raising=False)
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    for ordinal, uid in enumerate([None, '', '   '], start=1):
+        event = {
+            'attempt_id': f'invocation-1:{ordinal}',
+            'date': '2026-09-14',
+            'provider': 'openrouter',
+            'user_uid': uid,
+            'feature': 'jev_conversation_relevance',
+            'payer': 'omi',
+            'cost_status': 'estimated',
+            'estimated_cost_micro_usd': 10,
+        }
+        assert record_llm_gateway_attempt(event, firestore_client=client)
+
+    # The attempts collection still carries the canonical anonymous record.
+    assert len(client.collections[ATTEMPTS_COLLECTION]) == 3
+    assert USER_DAYS_COLLECTION not in client.collections
+
+    attributed = {
+        'attempt_id': 'invocation-2:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'feature': 'chat',
+    }
+    assert record_llm_gateway_attempt(attributed, firestore_client=client)
+    uid_hash = hashlib.sha256(b'user-123').hexdigest()[:16]
+    assert list(client.collections[USER_DAYS_COLLECTION]) == [f'2026-09-14_{uid_hash}']
+
+
+@pytest.mark.parametrize('value', ['off', 'false', '0', 'no', 'disabled', ' OFF '])
+def test_anonymous_rollup_kill_switch_restores_the_legacy_document(monkeypatch, value: str) -> None:
+    monkeypatch.setenv('LLM_GATEWAY_ANONYMOUS_ROLLUP_SKIP', value)
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {'attempt_id': 'invocation-1:1', 'date': '2026-09-14', 'provider': 'openai', 'user_uid': None}
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    rollup = client.collections[USER_DAYS_COLLECTION]['2026-09-14_anonymous']
+    assert rollup['attempts'] == 1
+    assert rollup['uid_hash'] == 'anonymous'
+
+
 def test_user_day_rollup_pins_every_feature_bucket_the_ledger_puller_uses() -> None:
     client = _FakeFirestoreClient(subscription_plan='pro')
     features = ['chat', 'persona_gen', 'translation', 'memory_embeddings', 'screen_summary', '']

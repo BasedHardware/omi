@@ -98,16 +98,14 @@ MODULATE_SUPPORTED_LANGUAGES: Final[frozenset[str]] = frozenset(
     }
 )
 
-# This is the single source of truth for provider enablement. Cloud Deepgram
-# serves the live surfaces; batch stays on Parakeet/Velma. Self-hosted Deepgram
-# is a distinct product, available only to a runtime with its explicit endpoint
-# configured. Future availability changes start here.
+# This is the single source of truth for provider enablement. Batch stays on
+# Parakeet/Velma. Future availability changes start here.
 PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
-    # PTT is streaming-only in transcribe_voice_message_stream, which dispatches
-    # Parakeet and Modulate and raises on anything else. Admitting Deepgram here
-    # would select a provider that surface cannot connect.
-    DEEPGRAM_CLOUD_PROVIDER: frozenset({STTServingSurface.STREAMING}),
-    DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset({STTServingSurface.STREAMING}),
+    # Deepgram retired 2026-08-27 (no contract); do not route or add keys.
+    # Deliberately absent from this map: provider_is_enabled answers False for
+    # both DEEPGRAM_PROVIDERS on every surface, so selection can never admit a
+    # `dg-*` model, and a deployment that still lists one is warned at startup
+    # (utils/stt/streaming.py validate_streaming_stt_env) and skipped here.
     MODULATE_PROVIDER: frozenset(
         {
             STTServingSurface.STREAMING,
@@ -127,6 +125,13 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
     SONIOX_PROVIDER: frozenset({STTServingSurface.STREAMING}),
 }
 
+# Held batch recovery used to spend one more multilingual call after Modulate
+# returned a validated empty response for long unknown-language speech
+# (utils/batch_pipeline/quarantine_recovery.py). Deepgram retired 2026-08-27
+# (no contract); there is no second provider with a batch client, so recovery
+# is Modulate-only and eligible units settle without the second call.
+HELD_RECOVERY_SECOND_PROVIDER: Final[str | None] = None
+
 # Defaults are also policy-owned so a deployment fallback cannot drift from the
 # providers approved above. A deployment's literal ordering is checked against
 # these values by validate-backend-runtime-env.py.
@@ -139,12 +144,10 @@ DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = 
     # error frame hands the stream to Soniox rather than ending it (#12459), which
     # is what the second slot is for. Soniox only ever serves as that failover
     # hop, so judge it by the failover metrics, not by session-start acceptance
-    # (#13662). Deepgram stays listed so a BYOK user still resolves a `dg-*`
-    # model; it is not the intended overflow for Velma failures. Parakeet stays
-    # last rather than being dropped: a client can ask for it by name
-    # (`?stt_service=parakeet`), and that preference is only honorable while
-    # the model is listed here.
-    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet'),
+    # (#13662). Parakeet stays last rather than being dropped: a client can ask
+    # for it by name (`?stt_service=parakeet`), and that preference is only
+    # honorable while the model is listed here.
+    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox', 'parakeet'),
     # Batch work is queued, so Parakeet's bounded GPU means waiting rather than the
     # user-visible failure it causes on the streaming surface. Prefer the self-hosted
     # provider here and keep Velma as the overflow.

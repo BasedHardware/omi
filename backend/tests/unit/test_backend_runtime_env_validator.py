@@ -101,14 +101,15 @@ def with_memory_env(payload: str) -> str:
         {"name": "REPEAT_WORK_REVISION_ENABLED", "value": "false"},
         {"name": "REPEAT_WORK_LLM_VERSION", "value": "2026-10-16-v1"},
         {"name": "SYNC_POLL_BACKOFF_ENABLED", "value": "false"},
-        {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "false"},
-        {"name": "AUDIO_ARCHIVE_READ_ENABLED", "value": "false"},
+        {"name": "AUDIO_ARCHIVE_LIVE_ENABLED", "value": "true"},
+        {"name": "AUDIO_ARCHIVE_READ_ENABLED", "value": "true"},
         {"name": "AUDIO_ARCHIVE_STOP_PCM_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_SYNC_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_COALESCE_ENABLED", "value": "true"},
         {"name": "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED", "value": "false"},
         {"name": "AUDIO_ARCHIVE_PERCENT", "value": "0"},
+        {"name": "AUDIO_ARCHIVE_STOP_PCM_PERCENT", "value": "0"},
         {"name": "AUDIO_ARCHIVE_UID_ALLOWLIST", "value": "vi7SA9ckQCe4ccobWNxlbdcNdC23"},
         {"name": "BUCKET_AUDIO_DERIVED", "value": ""},
         {"name": "AUDIO_MERGE_WORKER_URL", "value": ""},
@@ -309,6 +310,7 @@ def with_listen_finalization_orphan_env(payload: str) -> str:
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "LISTEN_QUIET_FINALIZATION_ENABLED", "value": "true"},\n'
         '        {"name": "LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS", "value": "900"},',
     )
 
@@ -540,6 +542,20 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         r'("backend-integration":\s*\{.*?"env":\s*\[)',
         r'\1{"name": "BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE", '
         r'"value": "https://backend-integration-dt5lrfkkoa-uc.a.run.app"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+    payload = re.sub(
+        r'("backend(?:-sync|-sync-backfill|-integration)?":\s*\{.*?"env":\s*\[)',
+        r'\1\n        {"name": "BATCH_PIPELINE_SHADOW_PERCENT", "value": "0"},'
+        r'\n        {"name": "BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR", "value": "200"},',
+        payload,
+        flags=re.DOTALL,
+    )
+    payload = re.sub(
+        r'("backend-integration":\s*\{.*?"name": "BATCH_PIPELINE_WORKER_SERVICE_ACCOUNT", "value": )""',
+        r'\1"batch-pipeline-worker@based-hardware-dev.iam.gserviceaccount.com"',
         payload,
         count=1,
         flags=re.DOTALL,
