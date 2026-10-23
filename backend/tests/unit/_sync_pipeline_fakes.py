@@ -5,6 +5,7 @@ imports that pulls real heavyweight clients (GCS/Firestore protos, SDK clients) 
 heavy loads real inside the stub window.
 """
 
+import importlib
 from types import ModuleType
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,6 +21,15 @@ def _build_pipeline_fakes() -> dict:
     ``database``/``models`` get package markers with dead paths so their real
     ``__init__``s never run (same trick as the transcription-prefs fakes).
     """
+    # These light leaves register process-global Prometheus collectors. Load
+    # them before the isolation window so teardown does not evict them and a
+    # later core fixture cannot register the same collectors a second time.
+    for name in (
+        'utils.speakers.context',
+        'utils.stt.batch_language',
+        'utils.batch_pipeline.language_metrics',
+    ):
+        importlib.import_module(name)
     fakes: dict = {}
 
     for parent in ('database', 'models'):

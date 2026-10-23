@@ -310,12 +310,12 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
     )
-    def test_vocabulary_passed_to_deepgram(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    def test_vocabulary_passed_to_deepgram(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """User vocabulary should be passed as keywords to deepgram_prerecorded."""
         from utils.sync.legacy_segment_core import process_segment
 
@@ -345,13 +345,13 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
     )
     def test_single_language_mode_passes_user_language(
-        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process
     ):
         """Single language mode with a language should pass the user language."""
         from utils.sync.legacy_segment_core import process_segment
@@ -375,12 +375,12 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
     )
-    def test_chinese_passes_user_language(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    def test_chinese_passes_user_language(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """Chinese language should be passed through in single-language mode."""
         from utils.sync.legacy_segment_core import process_segment
 
@@ -403,12 +403,12 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
     )
-    def test_no_prefs_uses_defaults(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    def test_no_prefs_uses_defaults(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """Without preferences, should use multi-language defaults."""
         from utils.sync.legacy_segment_core import process_segment
 
@@ -431,12 +431,12 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
     )
-    def test_vocabulary_capped_at_100(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    def test_vocabulary_capped_at_100(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """Vocabulary should be capped at 100 items."""
         from utils.sync.legacy_segment_core import process_segment
 
@@ -461,13 +461,13 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
     )
     def test_single_language_empty_language_falls_back(
-        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process
     ):
         """single_language_mode=True with empty language should fall back to multi."""
         from utils.sync.legacy_segment_core import process_segment
@@ -491,12 +491,12 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
     )
-    def test_multi_language_mode_default(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    def test_multi_language_mode_default(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """Non-single-language mode should use multi-language detection."""
         from utils.sync.legacy_segment_core import process_segment
 
@@ -518,12 +518,12 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
     )
-    def test_single_language_trusts_user_language(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest):
+    def test_single_language_trusts_user_language(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest):
         """Single-language mode should trust user's language, not Deepgram's detection."""
         from utils.sync.legacy_segment_core import process_segment
 
@@ -552,13 +552,13 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
     )
     def test_private_cloud_sync_flag_passed_to_new_conversation(
-        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest
+        self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest
     ):
         """New offline sync conversations must retain private-cloud audio metadata intent."""
         from utils.sync.legacy_segment_core import process_segment
@@ -1261,7 +1261,6 @@ class TestIdentifySpeakersForSegments:
         assert segments[1].person_id == 'p2'
 
 
-@patch('utils.sync.legacy_segment_core.run_blocking', MagicMock())
 class TestProcessSegmentSpeakerIdIntegration:
     """Verify process_segment wires speaker identification correctly."""
 
@@ -1276,7 +1275,7 @@ class TestProcessSegmentSpeakerIdIntegration:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
@@ -1284,7 +1283,7 @@ class TestProcessSegmentSpeakerIdIntegration:
     @patch('utils.sync.legacy_segment_core.identify_speakers_for_segments')
     @patch('utils.sync.legacy_segment_core._download_audio_bytes')
     def test_speaker_id_called_when_cache_provided(
-        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_download, mock_identify, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process
     ):
         from utils.sync.legacy_segment_core import process_segment
 
@@ -1314,7 +1313,7 @@ class TestProcessSegmentSpeakerIdIntegration:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
@@ -1322,7 +1321,7 @@ class TestProcessSegmentSpeakerIdIntegration:
     @patch('utils.sync.legacy_segment_core.identify_speakers_for_segments')
     @patch('utils.sync.legacy_segment_core._download_audio_bytes')
     def test_no_cache_skips_download_but_runs_identification(
-        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_download, mock_identify, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process
     ):
         from utils.sync.legacy_segment_core import process_segment
 
@@ -1379,7 +1378,6 @@ class TestDownloadAudioBytes:
         assert result is None
 
 
-@patch('utils.sync.legacy_segment_core.run_blocking', MagicMock())
 class TestSpeakerIdExceptionHandling:
     """Verify process_segment swallows speaker ID exceptions gracefully."""
 
@@ -1394,7 +1392,7 @@ class TestSpeakerIdExceptionHandling:
     @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
     @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
     @patch('utils.sync.legacy_segment_core.prerecorded')
-    @patch('utils.sync.legacy_segment_core.delete_syncing_temporal_file')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
     @patch(
         'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
         return_value='http://example.com/audio.wav',
@@ -1404,7 +1402,7 @@ class TestSpeakerIdExceptionHandling:
     )
     @patch('utils.sync.legacy_segment_core._download_audio_bytes', return_value=b'audio')
     def test_speaker_id_exception_does_not_break_processing(
-        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_intake
+        self, mock_download, mock_identify, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_intake
     ):
         from utils.sync.legacy_segment_core import process_segment
 

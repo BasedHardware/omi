@@ -2013,13 +2013,13 @@ async def test_fresh_admission_daily_ceiling_prevents_staging_or_dispatch():
         assert restriction_kwargs['retry_after'] > 0
         module._retrieve_file_paths_v2.assert_not_called()
         mock_sync_jobs.create_sync_job.assert_not_called()
-        module.claim_sync_content.assert_not_called()
-        module.enqueue_sync_job.assert_not_called()
+        assert not hasattr(module, 'claim_sync_content')
+        assert not hasattr(module, 'enqueue_sync_job')
         module.start_background_task.assert_not_called()
         module.has_transcription_credits.assert_not_called()
     finally:
         sys.modules.pop('routers.sync', None)
-        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.legacy_segment_core', None)
         sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
@@ -2054,7 +2054,7 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload, monke
         route = next(route for route in module.router.routes if route.path == '/v2/sync-jobs/run')
         response = await route.endpoint(request, task_retry_count=0)
         assert response.status_code == 200
-        assert response.body == b'{"status":"foreign_stage"}'
+        assert json.loads(response.body) == {'status': 'dropped', 'reason': 'legacy_retired'}
         module.get_sync_ledger_fence_mode.assert_not_called()
         module.get_sync_job.assert_not_called()
         module.try_acquire_job_run_lock.assert_not_called()
@@ -2063,7 +2063,7 @@ async def test_dev_sync_job_route_acks_before_shared_state_access(payload, monke
         assert redis_client.mock_calls == []  # No sync_backfill:uid_sequencer:* writes.
     finally:
         sys.modules.pop('routers.sync', None)
-        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.legacy_segment_core', None)
         sys.modules.pop('utils.sync.ledger_completion', None)
         for mod_name, orig in saved_modules.items():
             if orig is None:
@@ -2093,12 +2093,12 @@ async def test_oversized_backfill_upload_is_rejected_before_staging_or_custody_t
         assert error.value.status_code == 413
         module._retrieve_file_paths_v2.assert_not_called()
         jobs.create_sync_job.assert_not_called()
-        module.claim_sync_content.assert_not_called()
-        module.enqueue_sync_job.assert_not_called()
+        assert not hasattr(module, 'claim_sync_content')
+        assert not hasattr(module, 'enqueue_sync_job')
         assert all(upload.file.tell() == 0 for upload in uploads)
     finally:
         sys.modules.pop('routers.sync', None)
-        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.legacy_segment_core', None)
         for name, original in saved_modules.items():
             if original is None:
                 sys.modules.pop(name, None)
