@@ -39,7 +39,7 @@ Map<String, Object?> scenarioScore(String name, PerfInstrumentation sample, doub
   }
   return {
     'scenario': name,
-    'measurement': 'host_ui_pipeline_wall_clock',
+    'measurement': 'host_pipeline_work_counts_with_wall_clock_diagnostics',
     'frame_count': build.length,
     'idle_frames_excluded': sample.idleFrames,
     'build_ms': quantiles(build),
@@ -62,6 +62,8 @@ Map<String, Object?> scenarioScore(String name, PerfInstrumentation sample, doub
     'ui_phase_ms': sample.phaseMs,
     'ui_phase_counts': sample.phaseCounts,
     'sampled_frames': sample.sampledFrames,
+    'semantics_compiles_per_frame':
+        sample.sampledFrames == 0 ? null : (sample.phaseCounts['SEMANTICS'] ?? 0) / sample.sampledFrames,
     'work_counts': sample.workCounts,
     'ui_phase_shares': {
       for (final phase in sample.phaseMs.entries)
