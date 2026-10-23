@@ -30,7 +30,7 @@ from utils import executors
 from utils.observability.fallback import record_fallback
 from utils.rollout.runtime_percent import configure_runtime_percent
 from utils.stt_cap_cohort import runtime_cohort
-from database.fsr_read_cache import cohort_memberships
+from database.request_read_context import cohort_memberships
 from database.firestore_read_origin import read_origin
 
 TTL_SECONDS = 60
