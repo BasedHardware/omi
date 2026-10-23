@@ -53,12 +53,13 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   }
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionOutcome?> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
+    ValueChanged<String>? onQuestionTranscribed,
   }) {
     return messageProvider.sendVoiceMessageStreamToServer(
       data,
@@ -66,6 +67,7 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
       onNoSpeech: onNoSpeech,
       codec: codec,
       playResponseAudio: playResponseAudio,
+      onQuestionTranscribed: onQuestionTranscribed,
     );
   }
 

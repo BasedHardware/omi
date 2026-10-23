@@ -1,0 +1,1 @@
+{"change": "Fixed the Ask Omi step of the pendant walkthrough so voice answers and retry hints always appear even when another chat is open in the background"}

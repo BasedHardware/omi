@@ -4,10 +4,15 @@ import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 
 enum PowerCycleSubState { waitingForOff, deviceOff, waitingForReconnect, reconnected }
 
 class DeviceOnboardingProvider extends ChangeNotifier {
+  DeviceOnboardingProvider({
+    this.questionPendingTimeout = const Duration(seconds: 65),
+  });
+
   static const int transcriptionStep = 0;
   static const int askQuestionStep = 1;
   static const int voiceReplyStep = 2;
@@ -16,6 +21,8 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   static const int allSetStep = 5;
   static const int totalSteps = 6;
   static const int _wordThreshold = 5;
+
+  final Duration questionPendingTimeout;
 
   int currentStep = 0;
   bool isOnboardingActive = false;
@@ -28,10 +35,16 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   // Step 1: Single press - ask a question
   bool voiceSessionActive = false;
   bool questionSent = false;
+  String? userQuestion;
   String? aiResponse;
-  // True right after a question was dropped empty or came back with no speech
-  // detected, so the step can show a retry hint instead of processing forever.
+  // True right after a question failed (no speech, codec/device, quota, transport/timeout, etc.)
+  // so the step shows a localized retry/limit explanation instead of processing forever.
   bool questionFailed = false;
+  VoiceQuestionFailure? questionFailure;
+
+  int _questionAttemptId = 0;
+  int get activeQuestionAttemptId => _questionAttemptId;
+  Timer? _questionTimeoutTimer;
 
   // Step 2: Voice reply preference. Null until the step is visited so a user
   // who skips the tutorial before this point keeps their existing preference.
@@ -51,6 +64,12 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   Timer? _hintTimer;
   bool _disposed = false;
+  bool get isDisposed => _disposed;
+
+  bool get canStartQuestionAttempt {
+    if (_disposed || !isOnboardingActive || currentStep != askQuestionStep) return false;
+    return !voiceSessionActive && !questionSent && aiResponse == null;
+  }
 
   void startOnboarding() {
     currentStep = transcriptionStep;
@@ -60,13 +79,18 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   }
 
   void _resetOnboardingState() {
+    _questionAttemptId++;
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
     demoSegments = [];
     wordCount = 0;
     transcriptionComplete = false;
     voiceSessionActive = false;
     questionSent = false;
+    userQuestion = null;
     aiResponse = null;
     questionFailed = false;
+    questionFailure = null;
     selectedVoiceResponseMode = null;
     powerCycleState = PowerCycleSubState.waitingForOff;
     selectedDoubleTapAction = -1;
@@ -77,8 +101,21 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     _hintTimer = null;
   }
 
+  void _retireUnansweredQuestionAttempt() {
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
+    if (aiResponse == null && (voiceSessionActive || questionSent)) {
+      _questionAttemptId++;
+      voiceSessionActive = false;
+      questionSent = false;
+    }
+  }
+
   void advanceStep() {
     if (currentStep < totalSteps - 1) {
+      if (currentStep == askQuestionStep) {
+        _retireUnansweredQuestionAttempt();
+      }
       currentStep++;
       notifyListeners();
     }
@@ -86,12 +123,18 @@ class DeviceOnboardingProvider extends ChangeNotifier {
 
   void goToStep(int step) {
     if (step < transcriptionStep || step >= totalSteps || step == currentStep) return;
+    if (currentStep == askQuestionStep) {
+      _retireUnansweredQuestionAttempt();
+    }
     reviewingFromSummary = currentStep == allSetStep;
     currentStep = step;
     notifyListeners();
   }
 
   void returnToSummary() {
+    if (currentStep == askQuestionStep) {
+      _retireUnansweredQuestionAttempt();
+    }
     reviewingFromSummary = false;
     currentStep = allSetStep;
     notifyListeners();
@@ -111,6 +154,7 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   }
 
   void completeOnboarding() {
+    _retireUnansweredQuestionAttempt();
     isOnboardingActive = false;
     _hintTimer?.cancel();
     _hintTimer = null;
@@ -155,19 +199,91 @@ class DeviceOnboardingProvider extends ChangeNotifier {
     if (buttonState != 1) return;
 
     if (!voiceSessionActive) {
-      voiceSessionActive = true;
-      questionFailed = false;
-      notifyListeners();
+      onVoiceQuestionListeningStarted();
     } else {
-      // Second press — question is being sent
-      voiceSessionActive = false;
-      questionSent = true;
-      notifyListeners();
+      onVoiceQuestionSubmitted();
     }
   }
 
-  void onVoiceResponseReceived(String response) {
-    if (currentStep != askQuestionStep) return;
+  int? onVoiceQuestionListeningStarted() {
+    if (!canStartQuestionAttempt) return null;
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
+    _questionAttemptId++;
+    voiceSessionActive = true;
+    questionSent = false;
+    questionFailed = false;
+    questionFailure = null;
+    userQuestion = null;
+    notifyListeners();
+    return _questionAttemptId;
+  }
+
+  int? onVoiceQuestionSubmitted({int? attemptId}) {
+    if (_disposed || !isOnboardingActive || currentStep != askQuestionStep || !voiceSessionActive) {
+      return null;
+    }
+    if (attemptId != null && attemptId != _questionAttemptId) return null;
+    voiceSessionActive = false;
+    questionSent = true;
+    questionFailed = false;
+    questionFailure = null;
+    final submittedAttempt = _questionAttemptId;
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = Timer(questionPendingTimeout, () {
+      if (_disposed) return;
+      onVoiceQuestionFailed(
+        failure: VoiceQuestionFailure.timeout,
+        attemptId: submittedAttempt,
+      );
+    });
+    notifyListeners();
+    return submittedAttempt;
+  }
+
+  void cancelVoiceQuestionAttempt({int? attemptId}) {
+    if (_disposed || currentStep != askQuestionStep || aiResponse != null) return;
+    if (attemptId != null && attemptId != _questionAttemptId) return;
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
+    _questionAttemptId++;
+    voiceSessionActive = false;
+    questionSent = false;
+    notifyListeners();
+  }
+
+  void onVoiceQuestionTranscribed(String question, {int? attemptId}) {
+    if (_disposed || !isOnboardingActive || currentStep != askQuestionStep) return;
+    if (!questionSent || aiResponse != null) return;
+    if (attemptId != null && attemptId != _questionAttemptId) return;
+    final trimmed = question.trim();
+    if (trimmed.isEmpty || userQuestion == trimmed) return;
+    userQuestion = trimmed;
+    notifyListeners();
+  }
+
+  void onVoiceResponseReceived(String response, {String? question, int? attemptId}) {
+    if (_disposed || !isOnboardingActive || currentStep != askQuestionStep) return;
+    if (aiResponse != null) return;
+    if (attemptId != null && attemptId != _questionAttemptId) return;
+    final trimmed = response.trim();
+    if (trimmed.isEmpty) {
+      onVoiceQuestionFailed(
+        failure: VoiceQuestionFailure.failed,
+        question: question,
+        attemptId: attemptId,
+      );
+      return;
+    }
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
+    if (question != null && question.trim().isNotEmpty) {
+      userQuestion = question.trim();
+    }
+    voiceSessionActive = false;
+    questionSent = true;
+    questionFailed = false;
+    questionFailure = null;
     aiResponse = response;
     notifyListeners();
   }
@@ -175,20 +291,29 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   /// Capture's 15 s voice-command timeout sent the question without the second press this step
   /// counts, so move on to "Processing" exactly as the second press would (#20786).
   void onQuestionAutoSubmitted() {
-    if (!isOnboardingActive || currentStep != askQuestionStep || !voiceSessionActive) return;
-    voiceSessionActive = false;
-    questionSent = true;
-    notifyListeners();
+    onVoiceQuestionSubmitted();
   }
 
-  /// The question was dropped before sending (no audio captured) or the
-  /// server reported no speech detected. Reset back to the pre-press state
-  /// so the step can show a retry hint instead of processing forever.
-  void onVoiceQuestionFailed() {
-    if (currentStep != askQuestionStep || aiResponse != null) return;
+  /// The question failed (no speech, codec/device, quota, transport/timeout, etc.).
+  /// Reset back to the pre-press state with a failure reason so the step shows
+  /// a localized retry/limit explanation instead of processing forever.
+  void onVoiceQuestionFailed({
+    VoiceQuestionFailure failure = VoiceQuestionFailure.noSpeech,
+    String? question,
+    int? attemptId,
+  }) {
+    if (_disposed || !isOnboardingActive || currentStep != askQuestionStep || aiResponse != null) return;
+    if (attemptId != null && attemptId != _questionAttemptId) return;
+    _questionTimeoutTimer?.cancel();
+    _questionTimeoutTimer = null;
+    _questionAttemptId++;
+    if (question != null && question.trim().isNotEmpty) {
+      userQuestion = question.trim();
+    }
     voiceSessionActive = false;
     questionSent = false;
     questionFailed = true;
+    questionFailure = failure;
     notifyListeners();
   }
 
@@ -254,6 +379,8 @@ class DeviceOnboardingProvider extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _questionAttemptId++;
+    _questionTimeoutTimer?.cancel();
     _hintTimer?.cancel();
     super.dispose();
   }

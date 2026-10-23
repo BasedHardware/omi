@@ -68,16 +68,27 @@ class _NoSocketCaptureProvider extends CaptureProvider {
 
 class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
   int sendCount = 0;
+  VoiceQuestionOutcome? nextOutcome;
+  String? nextTranscribedQuestion;
+  bool callOnNoSpeech = false;
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionOutcome?> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required void Function() onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
+    ValueChanged<String>? onQuestionTranscribed,
     required BleAudioCodec codec,
     required bool playResponseAudio,
   }) async {
     sendCount++;
+    if (nextTranscribedQuestion != null) {
+      onQuestionTranscribed?.call(nextTranscribedQuestion!);
+    }
+    if (callOnNoSpeech) {
+      await onNoSpeech();
+    }
+    return nextOutcome;
   }
 }
 
@@ -455,6 +466,126 @@ void main() {
 
     provider.cancelTutorialOwnedVoiceSession();
     expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('ignored post-auto-submit press during grace window does not enter tutorial listening (#23385)', () async {
+    var now = DateTime.utc(2026, 9, 27, 12);
+    final actions = _RecordingCaptureExternalActions();
+    actions.nextOutcome = const VoiceQuestionOutcome.failed(VoiceQuestionFailure.timeout);
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep(); // Step 1: ask question
+    final provider = CaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+      now: () => now,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.endVoiceCommandSessionForTesting('test-id', autoSubmitted: true);
+    await Future<void>.delayed(Duration.zero);
+    expect(onboarding.questionFailed, isTrue);
+    expect(onboarding.voiceSessionActive, isFalse);
+
+    // Pressing again within the 2s auto-submit grace period is dropped by capture;
+    // tutorial UI must not enter Listening without an active capture session.
+    now = now.add(const Duration(milliseconds: 500));
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    expect(onboarding.voiceSessionActive, isFalse);
+
+    // After the grace period expires, a retry press starts both capture and tutorial listening.
+    now = now.add(const Duration(seconds: 3));
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isTrue);
+    expect(onboarding.voiceSessionActive, isTrue);
+
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('codec lookup failure resets tutorial question step to failed (#23385)', () async {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final provider = _NoSocketCaptureProvider(
+      audioCodecLoader: (_) async => throw StateError('codec lookup failed'),
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 1);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(onboarding.questionSent, isFalse);
+    expect(onboarding.questionFailed, isTrue);
+    expect(onboarding.questionFailure, VoiceQuestionFailure.failed);
+
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('overlapping press while tutorial question is pending does not start a second session (#23385)', () async {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final actions = _RecordingCaptureExternalActions();
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(onboarding.questionSent, isTrue);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+
+    // While the first question is still awaiting a reply, another press must be ignored.
+    provider.handleButtonEventForTesting('test-id', 1);
+    expect(provider.hasVoiceCommandSessionForTesting, isFalse);
+    expect(onboarding.voiceSessionActive, isFalse);
+    expect(onboarding.questionSent, isTrue);
+
+    provider.dispose();
+    onboarding.dispose();
+  });
+
+  test('tutorial question outcome delivers answer and question text directly to onboarding (#23385)', () async {
+    final onboarding = DeviceOnboardingProvider()..startOnboarding();
+    onboarding.advanceStep();
+    final actions = _RecordingCaptureExternalActions();
+    actions.nextTranscribedQuestion = 'What is the weather?';
+    actions.nextOutcome = const VoiceQuestionOutcome.answered(
+      answer: 'Sunny and 72°F.',
+      question: 'What is the weather?',
+    );
+    final provider = _NoSocketCaptureProvider(
+      externalActions: actions,
+      audioCodecLoader: (_) async => BleAudioCodec.opus,
+      speakerHaptic: (_, __) async => true,
+    );
+    provider.deviceOnboardingProvider = onboarding;
+    provider.updateRecordingDevice(_device(DeviceType.omi));
+
+    provider.handleButtonEventForTesting('test-id', 1);
+    provider.addVoiceCommandBytesForTesting(<int>[1, 2, 3]);
+    provider.handleButtonEventForTesting('test-id', 1);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(onboarding.userQuestion, 'What is the weather?');
+    expect(onboarding.aiResponse, 'Sunny and 72°F.');
+    expect(onboarding.questionFailed, isFalse);
+
     provider.dispose();
     onboarding.dispose();
   });

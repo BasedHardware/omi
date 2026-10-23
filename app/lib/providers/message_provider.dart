@@ -21,6 +21,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/services/app_review_service.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/chat_video_sampler.dart';
 import 'package:omi/services/voice_playback/chat_reply_read_aloud.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
@@ -662,23 +663,37 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     const TypedEvents().emit(PendantVoiceQuestionDropped(reason: reason));
   }
 
-  Future sendVoiceMessageStreamToServer(
+  VoiceQuestionFailure _voiceQuestionFailureFor(ChatStreamFailureClass failure) {
+    return switch (failure) {
+      ChatStreamFailureClass.offline => VoiceQuestionFailure.offline,
+      ChatStreamFailureClass.server => VoiceQuestionFailure.server,
+      ChatStreamFailureClass.timeout => VoiceQuestionFailure.timeout,
+      ChatStreamFailureClass.quota => VoiceQuestionFailure.quota,
+      ChatStreamFailureClass.notSignedIn => VoiceQuestionFailure.notSignedIn,
+      ChatStreamFailureClass.unknown => VoiceQuestionFailure.failed,
+    };
+  }
+
+  Future<VoiceQuestionOutcome> sendVoiceMessageStreamToServer(
     List<List<int>> audioBytes, {
     Function? onFirstChunkRecived,
     Future<void> Function()? onNoSpeech,
     BleAudioCodec? codec,
     bool playResponseAudio = false,
+    ValueChanged<String>? onQuestionTranscribed,
   }) async {
-    if (chatAtCap != null) return;
+    if (chatAtCap != null) {
+      return const VoiceQuestionOutcome.failed(VoiceQuestionFailure.quota);
+    }
     // Re-entry guard so a duplicated end-of-session signal from the device
     // button can't kick off two parallel voice replies.
     if (_voiceSendInFlight || sendingMessage || showTypingIndicator) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.sendInFlight);
-      return;
+      return const VoiceQuestionOutcome.failed(VoiceQuestionFailure.failed);
     }
     if (audioBytes.isEmpty) {
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
-      return;
+      return const VoiceQuestionOutcome.failed(VoiceQuestionFailure.noSpeech);
     }
     _voiceSendInFlight = true;
     _readAloud.newQuery();
@@ -716,7 +731,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       _voiceSendInFlight = false;
       _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.audioSaveFailed);
       chatAttempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
-      return;
+      return const VoiceQuestionOutcome.failed(VoiceQuestionFailure.failed);
     }
 
     String chatTargetId = currentAppId ?? 'omi';
@@ -740,6 +755,7 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
     // path (capture_provider). The chat-screen mic input does not pass
     // playResponseAudio=true.
     final String playbackMessageId = message.id;
+    String? transcribedQuestion;
     try {
       if (playResponseAudio) {
         await OmiVoicePlaybackService.instance.beginResponse(messageId: playbackMessageId);
@@ -802,12 +818,30 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             unawaited(_readAloud.readFinalReply(message.text, generation: readAloudGeneration));
           }
           notifyListeners();
-          return;
+          if (message.text.trim().isEmpty) {
+            return VoiceQuestionOutcome.failed(
+              VoiceQuestionFailure.failed,
+              question: transcribedQuestion,
+            );
+          }
+          return VoiceQuestionOutcome.answered(
+            answer: message.text,
+            question: transcribedQuestion,
+          );
         }
 
         if (chunk.type == MessageChunkType.message) {
-          voiceMessages.insert(aiIndex, chunk.message!);
-          aiIndex++;
+          final chunkMessage = chunk.message;
+          if (chunkMessage != null) {
+            voiceMessages.insert(aiIndex, chunkMessage);
+            aiIndex++;
+            if (chunkMessage.sender == MessageSender.human && transcribedQuestion == null) {
+              if (chunkMessage.text.trim().isNotEmpty) {
+                transcribedQuestion = chunkMessage.text;
+                onQuestionTranscribed?.call(transcribedQuestion);
+              }
+            }
+          }
           notifyListeners();
           continue;
         }
@@ -822,7 +856,10 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             if (onNoSpeech != null) await onNoSpeech();
             completeChat(ProductOutcome.empty);
             notifyListeners();
-            return;
+            return VoiceQuestionOutcome.failed(
+              VoiceQuestionFailure.noSpeech,
+              question: transcribedQuestion,
+            );
           }
           if (_tryParseQuotaError(chunk.text) || chunk.errorCode == 'quota_exceeded') {
             _chatQuotaExceeded = true;
@@ -837,7 +874,10 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
             setShowTypingIndicator(false);
             _logChatFailure(ChatStreamFailureClass.quota, stage: 'voice_stream');
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
-            return;
+            return VoiceQuestionOutcome.failed(
+              VoiceQuestionFailure.quota,
+              question: transcribedQuestion,
+            );
           }
           final failure = _chunkFailureClass(chunk);
           _logChatFailure(failure, stage: 'voice_stream');
@@ -847,7 +887,10 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
           }
           completeChat(ProductOutcome.failure, failure: _productFailureFor(failure));
           notifyListeners();
-          return;
+          return VoiceQuestionOutcome.failed(
+            _voiceQuestionFailureFor(failure),
+            question: transcribedQuestion,
+          );
         }
       }
     } catch (e) {
@@ -859,6 +902,10 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       }
       completeChat(ProductOutcome.failure, failure: _productFailureFor(failure.kind));
       notifyListeners();
+      return VoiceQuestionOutcome.failed(
+        _voiceQuestionFailureFor(failure.kind),
+        question: transcribedQuestion,
+      );
     } finally {
       _voiceSendInFlight = false;
       setShowTypingIndicator(false);
@@ -870,6 +917,10 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
       }
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
     }
+    return VoiceQuestionOutcome.failed(
+      VoiceQuestionFailure.failed,
+      question: transcribedQuestion,
+    );
   }
 
   Future sendMessageStreamToServer(String text, {ChatPageContext? context}) => _streamReply(text, context: context);

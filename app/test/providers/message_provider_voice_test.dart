@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 ServerMessage _voiceRow(String id, MessageSender sender, String text) =>
@@ -188,5 +189,92 @@ void main() {
     expect(provider.showTypingIndicator, isFalse);
     await stalled.close();
     provider.dispose();
+  });
+
+  test('pendant voice question returns answered outcome even when viewing a past or app chat (#23385)', () async {
+    final appProvider = AppProvider();
+    addTearDown(appProvider.dispose);
+    appProvider.setSelectedChatAppId('mentor');
+    final provider = MessageProvider(
+      voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
+      voiceReplyStreamer: (_, {language}) => _answeredVoiceQuestion(),
+    );
+    addTearDown(provider.dispose);
+    provider.updateAppProvider(appProvider);
+    final mentorTip = ServerMessage.empty(appId: 'mentor')..text = 'Mentor tip';
+    provider.messages = [mentorTip];
+
+    String? transcribed;
+    final outcome = await provider.sendVoiceMessageStreamToServer(
+      [
+        <int>[1]
+      ],
+      codec: BleAudioCodec.opus,
+      onQuestionTranscribed: (text) => transcribed = text,
+    );
+
+    expect(transcribed, 'What did I promise Sam?');
+    expect(outcome.isAnswered, isTrue);
+    expect(outcome.question, 'What did I promise Sam?');
+    expect(outcome.answer, 'Call him on Friday.');
+    expect(provider.messages, [mentorTip]);
+  });
+
+  test('voice question returns typed failure outcomes for quota, audio save, and incomplete stream (#23385)', () async {
+    final quotaProvider = MessageProvider(
+      voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
+      voiceReplyStreamer: (_, {language}) async* {
+        yield ServerMessageChunk(
+          'quota-id',
+          'Quota exceeded',
+          MessageChunkType.error,
+          errorCode: 'quota_exceeded',
+        );
+      },
+    );
+    addTearDown(quotaProvider.dispose);
+
+    final quotaOutcome = await quotaProvider.sendVoiceMessageStreamToServer(
+      [
+        <int>[1]
+      ],
+      codec: BleAudioCodec.opus,
+    );
+    expect(quotaOutcome.isAnswered, isFalse);
+    expect(quotaOutcome.failure, VoiceQuestionFailure.quota);
+
+    final saveFailProvider = MessageProvider(
+      voiceAudioFileSaver: (_, __, ___) async => throw const FileSystemException('disk full'),
+    );
+    addTearDown(saveFailProvider.dispose);
+    final saveOutcome = await saveFailProvider.sendVoiceMessageStreamToServer(
+      [
+        <int>[1]
+      ],
+      codec: BleAudioCodec.opus,
+    );
+    expect(saveOutcome.isAnswered, isFalse);
+    expect(saveOutcome.failure, VoiceQuestionFailure.failed);
+
+    final incompleteProvider = MessageProvider(
+      voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
+      voiceReplyStreamer: (_, {language}) async* {
+        yield ServerMessageChunk(
+          'question',
+          '',
+          MessageChunkType.message,
+          message: _voiceRow('question', MessageSender.human, 'Hello?'),
+        );
+      },
+    );
+    addTearDown(incompleteProvider.dispose);
+    final incompleteOutcome = await incompleteProvider.sendVoiceMessageStreamToServer(
+      [
+        <int>[1]
+      ],
+      codec: BleAudioCodec.opus,
+    );
+    expect(incompleteOutcome.isAnswered, isFalse);
+    expect(incompleteOutcome.failure, VoiceQuestionFailure.failed);
   });
 }

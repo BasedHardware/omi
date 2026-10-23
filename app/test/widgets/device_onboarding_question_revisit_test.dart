@@ -10,6 +10,7 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/steps/single_press_step.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/ui/ui.dart';
 
 /// Chat as the pendant question path fills it; no network.
@@ -56,7 +57,7 @@ Widget _step(DeviceOnboardingProvider provider, _Messages chat) {
 }
 
 /// Starts the tutorial and answers the question step the way the pendant path does: two presses,
-/// then the question and Omi's answer arrive in chat.
+/// then the question and Omi's answer arrive on the onboarding provider.
 Future<(DeviceOnboardingProvider, _Messages)> _answered(WidgetTester tester) async {
   final provider = DeviceOnboardingProvider()
     ..startOnboarding()
@@ -67,9 +68,10 @@ Future<(DeviceOnboardingProvider, _Messages)> _answered(WidgetTester tester) asy
     ..onButtonEvent(1)
     ..onButtonEvent(1);
   await tester.pump();
-  chat
-    ..add('q1', 'What is on my calendar today?', MessageSender.human)
-    ..add('a1', 'A design review at 2 pm.', MessageSender.ai);
+  provider.onVoiceResponseReceived(
+    'A design review at 2 pm.',
+    question: 'What is on my calendar today?',
+  );
   await tester.pump(const Duration(milliseconds: 300));
   expect(find.text('A design review at 2 pm.'), findsOneWidget);
   return (provider, chat);
@@ -94,6 +96,55 @@ void main() {
     expect(find.text('A design review at 2 pm.'), findsOneWidget);
     expect(find.textContaining('Processing'), findsNothing);
     expect(find.text('Continue'), findsOneWidget);
+  });
+
+  testWidgets('unrelated MessageProvider messages do not complete the tutorial question step (#23385)', (tester) async {
+    final provider = DeviceOnboardingProvider()
+      ..startOnboarding()
+      ..advanceStep();
+    final chat = _Messages();
+    await tester.pumpWidget(_step(provider, chat));
+
+    provider
+      ..onButtonEvent(1)
+      ..onButtonEvent(1);
+    await tester.pump();
+
+    chat
+      ..add('q-other', 'Unrelated chat message', MessageSender.human)
+      ..add('a-other', 'Unrelated AI reply', MessageSender.ai);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Unrelated AI reply'), findsNothing);
+    expect(find.text('Continue'), findsNothing);
+    expect(find.textContaining('Processing'), findsOneWidget);
+
+    provider.completeOnboarding();
+  });
+
+  testWidgets('tutorial question step renders failure-specific retry or quota copy (#23385)', (tester) async {
+    final provider = DeviceOnboardingProvider()
+      ..startOnboarding()
+      ..advanceStep();
+    final chat = _Messages();
+    await tester.pumpWidget(_step(provider, chat));
+
+    provider
+      ..onButtonEvent(1)
+      ..onButtonEvent(1)
+      ..onVoiceQuestionFailed(failure: VoiceQuestionFailure.quota);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(
+      find.text("You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions."),
+      findsOneWidget,
+    );
+
+    provider
+      ..onButtonEvent(1)
+      ..onButtonEvent(1)
+      ..onVoiceQuestionFailed(failure: VoiceQuestionFailure.offline);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Unable to connect. Check your connection and try again.'), findsOneWidget);
   });
 
   test('a step reopened from All Set returns to All Set when finished (#20787)', () {

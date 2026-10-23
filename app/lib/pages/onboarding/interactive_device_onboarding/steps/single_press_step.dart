@@ -7,11 +7,10 @@ import 'package:omi/ui/omi_tokens.dart';
 
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/schema/message.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
-import 'package:omi/providers/message_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 String _stripMarkdown(String text) {
@@ -36,56 +35,15 @@ class SinglePressStep extends StatefulWidget {
 class _SinglePressStepState extends State<SinglePressStep> with TickerProviderStateMixin {
   late AnimationController _animController;
   late AnimationController _bounceController;
-  late MessageProvider _messageProvider;
-  bool _showContinue = false;
   bool _wasListening = false;
   bool _showPressAgain = false;
   Timer? _pressAgainTimer;
-
-  late int _messageCountAtStart;
-  String? _userQuestion;
-  String? _aiResponse;
 
   @override
   void initState() {
     super.initState();
     _animController = AnimationController(vsync: this, duration: const Duration(seconds: 4))..repeat();
     _bounceController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))..repeat();
-    _messageProvider = context.read<MessageProvider>();
-    _messageCountAtStart = _messageProvider.messages.length;
-    _messageProvider.addListener(_onMessagesChanged);
-    // Reopened from All Set after a question was answered: show that answer and Continue rather than
-    // waiting on "Processing your question…" for a message that already arrived (#20787).
-    final onboardingProvider = context.read<DeviceOnboardingProvider>();
-    if (onboardingProvider.questionSent && onboardingProvider.aiResponse != null) {
-      _aiResponse = onboardingProvider.aiResponse;
-      _showContinue = true;
-    }
-  }
-
-  void _onMessagesChanged() {
-    if (!mounted || _aiResponse != null) return;
-
-    final onboardingProvider = context.read<DeviceOnboardingProvider>();
-    if (!onboardingProvider.questionSent) return;
-
-    if (_messageProvider.messages.length <= _messageCountAtStart) return;
-    final newMessages = _messageProvider.messages.sublist(_messageCountAtStart);
-
-    for (final msg in newMessages) {
-      if (msg.sender == MessageSender.human && _userQuestion == null) {
-        _userQuestion = msg.text;
-      }
-    }
-
-    for (final msg in newMessages) {
-      if (msg.sender == MessageSender.ai && msg.text.isNotEmpty && msg.id != '0000' && !msg.fromIntegration) {
-        _aiResponse = msg.text;
-        onboardingProvider.onVoiceResponseReceived(msg.text);
-        setState(() => _showContinue = true);
-        return;
-      }
-    }
   }
 
   @override
@@ -93,8 +51,20 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     _pressAgainTimer?.cancel();
     _animController.dispose();
     _bounceController.dispose();
-    _messageProvider.removeListener(_onMessagesChanged);
     super.dispose();
+  }
+
+  String _failureExplanation(BuildContext context, VoiceQuestionFailure? failure) {
+    final l10n = context.l10n;
+    return switch (failure) {
+      VoiceQuestionFailure.noSpeech || null => l10n.voiceQuestionNoSpeech,
+      VoiceQuestionFailure.quota => l10n.chatQuotaExceededReply,
+      VoiceQuestionFailure.offline => l10n.chatReplyOffline,
+      VoiceQuestionFailure.server => l10n.chatReplyServerError,
+      VoiceQuestionFailure.timeout => l10n.chatReplyTimeout,
+      VoiceQuestionFailure.notSignedIn => l10n.chatReplyNotSignedIn,
+      VoiceQuestionFailure.failed => l10n.chatReplyFailed,
+    };
   }
 
   @override
@@ -115,11 +85,13 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
           _showPressAgain = false;
         }
 
+        final aiResponse = provider.aiResponse;
+        final showContinue = aiResponse != null;
         final listening = provider.voiceSessionActive;
-        final waiting = !listening && !provider.questionSent && _aiResponse == null;
+        final waiting = !listening && !provider.questionSent && aiResponse == null;
         final String title;
         final String subtitle;
-        if (_aiResponse != null || provider.questionSent) {
+        if (aiResponse != null || provider.questionSent) {
           title = context.l10n.deviceOnboardingAskQuestionTitle;
           subtitle = '';
         } else if (listening) {
@@ -129,21 +101,24 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
           title = context.l10n.deviceOnboardingPressButtonTitle;
           subtitle = context.l10n.deviceOnboardingPressButtonSubtitle;
         }
-        assert(waiting || listening || provider.questionSent || _aiResponse != null);
+        assert(waiting || listening || provider.questionSent || aiResponse != null);
 
         return OnboardingStepScaffold(
           title: title,
           subtitle: subtitle,
           content: Column(children: [const Spacer(flex: 1), _buildContent(provider), const Spacer(flex: 2)]),
-          bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
+          bottomAction: showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
         );
       },
     );
   }
 
   Widget _buildContent(DeviceOnboardingProvider provider) {
+    final aiResponse = provider.aiResponse;
+    final userQuestion = provider.userQuestion;
+
     // Response received
-    if (_aiResponse != null) {
+    if (aiResponse != null) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
@@ -151,9 +126,9 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            if (_userQuestion != null && _userQuestion!.isNotEmpty) ...[
+            if (userQuestion != null && userQuestion.isNotEmpty) ...[
               Text(
-                _userQuestion!,
+                userQuestion,
                 style: TextStyle(color: OmiColors.textSecondary, fontSize: 14, height: 1.3),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -163,7 +138,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
               const SizedBox(height: 12),
             ],
             Text(
-              _stripMarkdown(_aiResponse!),
+              _stripMarkdown(aiResponse),
               style: TextStyle(color: OmiColors.textPrimary, fontSize: 16, height: 1.5),
               maxLines: 10,
               overflow: TextOverflow.ellipsis,
@@ -207,10 +182,10 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                 );
               },
             ),
-            if (_userQuestion != null && _userQuestion!.isNotEmpty) ...[
+            if (userQuestion != null && userQuestion.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                '"$_userQuestion"',
+                '"$userQuestion"',
                 style: TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontStyle: FontStyle.italic),
                 textAlign: TextAlign.center,
                 maxLines: 2,
@@ -222,7 +197,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
       );
     }
 
-    // Dropped empty or came back with no speech detected — invite a retry
+    // Dropped empty, came back with no speech detected, or failed — invite a retry
     // instead of leaving the user stuck on "Processing" forever.
     if (provider.questionFailed) {
       return Column(
@@ -230,7 +205,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
           _buildOmiWithBounce(),
           const SizedBox(height: 24),
           Text(
-            context.l10n.voiceQuestionNoSpeech,
+            _failureExplanation(context, provider.questionFailure),
             style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
             textAlign: TextAlign.center,
           ),
