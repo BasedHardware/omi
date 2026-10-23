@@ -35,7 +35,8 @@ merge; any spec/image/generation identity change still resets arming.
 Every five minutes, a bounded Job reads the exact HPA spec, deployment images,
 readiness, recent Pod FailedScheduling events, and direct in-cluster Prometheus.
 Only floor 5/8 without `parakeet_request_latency_p99` is armed. The state identity
-includes the entire HPA spec and HPA/deployment generations and images. Changes
+includes the entire HPA spec, HPA generation and deployment images. Ordinary
+autoscaling replica changes do not restart the clock. Configuration/image changes
 reset the 15-minute clock. Readiness shortfall uses HPA desiredReplicas, not the
 floor. ScalingActive must be true, as in the original P77 guard.
 

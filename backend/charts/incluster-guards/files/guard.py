@@ -179,13 +179,14 @@ def decide(hpa, deployment, events, values, state, now):
     reading = evaluate(values)
     if not workload_only(hpa['spec']):
         return 'NOOP', {}, reading
-    # Image and generation changes invalidate the full lookback, even at the same floor.
+    # HPA configuration/generation and image changes invalidate the lookback.
+    # Deployment generation also changes on ordinary HPA replica writes; using
+    # it here would keep a scaling or unschedulable workload in perpetual warmup.
     identity = hashlib.sha256(
         json.dumps(
             [
                 hpa['spec'],
                 hpa['metadata'].get('generation'),
-                deployment['metadata'].get('generation'),
                 [c['image'] for c in deployment['spec']['template']['spec']['containers']],
             ],
             sort_keys=True,

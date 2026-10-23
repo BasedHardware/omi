@@ -438,3 +438,15 @@ def test_non_workload_state_is_noop_even_when_deployment_reader_is_unavailable()
     client.kube = limited
     assert guard.run(client, False, 1000) == 0
     assert not any(path == 'hpa' for path, _ in client.patches)
+
+
+def test_autoscaling_does_not_restart_window_or_hide_ready_shortfall():
+    hpa, dep = objects()
+    _, state, _ = guard.decide(hpa, dep, [], values(), {}, 0)
+    dep['metadata']['generation'] += 1
+    dep['spec']['replicas'] = 8
+    hpa['status']['desiredReplicas'] = 8
+    verdict, state, _ = guard.decide(hpa, dep, [], values(), state, 300)
+    assert verdict == 'WARMUP' and state['since'] == 0
+    verdict, state, reading = guard.decide(hpa, dep, [], values(), state, 900)
+    assert verdict == 'TRIP' and 'ready_shortfall' in reading['trips']
