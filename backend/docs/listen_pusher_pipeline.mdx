@@ -13,6 +13,12 @@ the final refresh. `SYNC_OPERATION_SNAPSHOT_ENABLED=false` restores the prior
 reads. The [operation snapshot contract](sync-operation-snapshots.md) documents
 the constant read origin, counted savings and the separate P4/index designs.
 
+Python conversation/action commits also maintain compact list metadata rows and
+opaque per-owner versions in the same Firestore commit. This does not change
+transcript, lifecycle, privacy or hold policy. Conditional list reads require a
+completed writer-fleet rollout; see [list serving projections](list-serving-projection.md)
+for the kill switch, rollout epoch, migration coverage and read/write cost contract.
+
 At a new recording reservation during a partial batch ramp, the owner-load
 predicate in `config/policy/ramp.py` keeps heavy owners on the legacy route.
 `BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS=off` disables this admission narrowing.

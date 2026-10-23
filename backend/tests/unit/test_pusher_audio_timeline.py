@@ -86,6 +86,15 @@ class HeldOpenWebSocket(FakeWebSocket):
         return await super().receive_bytes()
 
 
+class BoundaryFrameWebSocket(FakeWebSocket):
+    """Deliver a final short frame just after the size-ready uploader tick."""
+
+    async def receive_bytes(self):
+        if len(self.frames) == 1:
+            await asyncio.sleep(0.03)
+        return await super().receive_bytes()
+
+
 def _audio(ts: float, pcm: bytes) -> bytes:
     return struct.pack('<I', 101) + struct.pack('<d', ts) + pcm
 
@@ -231,6 +240,29 @@ async def test_conversation_switch_flushes_and_rebinds(env):
     conversations = [cid for cid, _chunk in env]
     assert conversations == ['c1', 'c2']
     assert env[0][1]['timestamp'] == 500.0 and env[1][1]['timestamp'] == 500.5
+
+
+@pytest.mark.parametrize('audio_timeline', [None, AUDIO_TIMELINE_PROTOCOL])
+async def test_size_boundary_frame_persists_in_previous_batch(env, monkeypatch, audio_timeline):
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.02)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 1.0)
+    full = b'\x01\x00' * RATE
+    boundary = b'\x02\x00' * 160  # one 10 ms frame, below 1 KB
+    ws = BoundaryFrameWebSocket([_conversation('c1'), _audio(100.0, full), _audio(101.0, boundary)])
+
+    await _run(ws, audio_timeline=audio_timeline)
+
+    assert len(env) == 1
+    assert env[0][1]['data'] == full + boundary
+    if audio_timeline is not None:
+        assert env[0][1]['span']['samples'] == RATE + 160
+
+
+async def test_single_frame_recording_is_never_dropped(env):
+    frame = b'\x03\x00' * 160
+    await _run(FakeWebSocket([_conversation('tiny'), _audio(100.0, frame)]))
+    assert len(env) == 1
+    assert env[0][1]['data'] == frame
 
 
 def test_ack_frame_is_stable():
