@@ -234,7 +234,9 @@ async def test_partial_ramp_unknown_incoming_audio_keeps_real_upload_retryable(
         audio_end_seconds=end,
     )
     assert response.status_code == 409
-    assert json.loads(response.body)['code'] == 'sync_content_retry_later'
+    assert json.loads(response.body)['code'] == 'sync_content_in_progress'
+    assert json.loads(response.body)['job_id'] is None
+    assert int(response.headers['retry-after']) >= 60
     assert incoming == [None]
     module.create_sync_job.assert_not_called()
     assert not module.accept_batch_upload.call_args.kwargs['policy'].batch_enabled
@@ -272,7 +274,7 @@ async def test_upload_acceptance_requires_archive_before_receipt_or_dispatch(
         jobs.mark_job_completed.assert_not_called()
     else:
         assert response.status_code == 409
-        assert json.loads(response.body)['code'] == 'sync_content_retry_later'
+        assert json.loads(response.body)['code'] == 'sync_content_in_progress'
         module.create_sync_job.assert_not_called()
 
 

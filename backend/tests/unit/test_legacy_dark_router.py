@@ -52,7 +52,9 @@ async def test_router_never_creates_a_legacy_job_outside_on(monkeypatch, mode):
         module.create_sync_job = MagicMock()
         response = await _upload(module, BytesIO)
         assert response.status_code == 409
-        assert json.loads(response.body)['code'] == 'sync_content_retry_later'
+        assert json.loads(response.body)['code'] == 'sync_content_in_progress'
+        assert json.loads(response.body)['job_id'] is None
+        assert int(response.headers['retry-after']) >= 60
         module.create_sync_job.assert_not_called()
     finally:
         _restore(saved)
