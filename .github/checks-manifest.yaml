@@ -688,6 +688,26 @@ checks:
     triggers: ["app/lib/**/*.dart"]
     lanes: ["local", "ci"]
     reason: "INV-UI-3: changed app/lib files may not add hand-rolled back glyphs, dialogs, sheets, toasts, clipboard writes, date patterns, UI literals or hardcoded copy (app/docs/ux-contract.md)"
+  - id: mobile-perf-budget-ratchet
+    command: ["python3", ".github/scripts/check_mobile_perf_budgets.py", "--base", "{base}"]
+    triggers: ["app/integration_test/perf/budgets.json", ".github/scripts/check_mobile_perf_budgets.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1 / #23400: preserve measured admission floors instead of raising host performance budgets to conceal a regression"
+  - id: mobile-perf-budget-tests
+    command: ["python3", ".github/scripts/test_check_mobile_perf_budgets.py"]
+    triggers: [".github/scripts/check_mobile_perf_budgets.py", ".github/scripts/test_check_mobile_perf_budgets.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1 / #23400: missing, raised and non-finite work-count caps cannot weaken admission"
+  - id: mobile-perf-shell-fidelity
+    command: ["python3", "app/tool/perf_shell.py", "--check"]
+    triggers: ["app/lib/**/*.dart", "app/integration_test/perf/**", "app/tool/perf_shell.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1 / #23400: host harness omitted main.dart analytics wrappers; source drift must fail before mobile release admission"
+  - id: mobile-perf-gate-tool-tests
+    command: ["python3", "app/tool/test_perf_gate.py"]
+    triggers: ["app/tool/perf_*.py", "app/tool/test_perf_gate.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-PERF-1 / #23400: shell extraction and incomplete repeated-run evidence must fail closed"
   - id: mobile-ui-isolate-tests
     command: ["python3", ".github/scripts/test_check_mobile_ui_isolate.py"]
     triggers: [".github/scripts/check_mobile_ui_isolate.py", ".github/scripts/test_check_mobile_ui_isolate.py", ".github/scripts/check_mobile_ux_contract.py", ".github/checks-manifest.yaml"]

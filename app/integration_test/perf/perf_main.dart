@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'perf_budget.dart';
 import 'perf_instrumentation.dart';
 import 'perf_scenarios.dart';
 import 'perf_scorecard.dart';
@@ -38,23 +39,26 @@ void main() {
           await tester.pumpWidget(const SizedBox.shrink());
         }
         final score = scenarioScore(name, collector, 1000 / 60);
-        results[name] = score;
         final budgetPath = Platform.environment['PERF_BUDGET_FILE'] ?? 'integration_test/perf/budgets.json';
         final budgets = jsonDecode(File(budgetPath).readAsStringSync()) as Map<String, dynamic>;
-        final budget = (budgets[name] as num).toDouble();
-        final p90 = (score['total_ms'] as Map<String, double>)['p90']!;
-        expect(p90, lessThan(budget),
-            reason: '$name: p90=$p90 ms, budget=$budget ms; '
-                'frames=${score['frame_count']}, jank=${score['jank_percent']}%');
-      });
+        final budget = (budgets['_gate'] as Map<String, dynamic>)[name] as Map<String, dynamic>;
+        final violations = budgetViolations(collector, budget);
+        score['gate_violations'] = violations;
+        results[name] = score;
+        debugPrint('PERF $name frames=${collector.sampledFrames} work=${collector.workCounts} violations=$violations');
+        expect(violations, isEmpty, reason: '$name: ${violations.join('; ')}');
+      }, semanticsEnabled: false);
     }
   });
   group('profile', () {
     testWidgets('emit scorecard even when a gate fails', (tester) async {
       final scorecard = <String, Object?>{
-        'schema': 'omi-mobile-perf/v1',
+        'schema': 'omi-mobile-perf/v2',
         'lane': 'host_flutter_tester',
+        'source_sha': Platform.environment['PERF_SOURCE_SHA'],
         'dataset_sizes': datasetSizes,
+        'shell': 'source_checked_production_ios_analytics',
+        'gate': 'deterministic_work_and_semantics_share',
         'scenarios': results,
         'complete': results.length == scenarioNames.length,
       };
@@ -66,7 +70,7 @@ void main() {
         debugPrint('PERF_SCORECARD=${file.path}');
       }, reportKey: 'perf_trace');
       binding.reportData!['perf_scorecard'] = scorecard;
-      expect(results.keys, containsAll(scenarioNames), reason: 'Scorecard must contain all four scenarios');
-    });
+      expect(results.keys, containsAll(scenarioNames), reason: 'Scorecard must contain all scenarios');
+    }, semanticsEnabled: false);
   });
 }

@@ -48,6 +48,8 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import '../journeys/support/fixture_backend.dart';
 import '../journeys/support/hermetic_boot.dart';
+import 'perf_mutations.dart';
+import 'production_shell.dart';
 
 const scenarioNames = [
   'home_scroll',
@@ -357,21 +359,24 @@ class PerfWorld {
   final _liveElapsed = ValueNotifier<Duration>(Duration.zero);
 
   Future<void> boot(WidgetTester tester, {List<SingleChildWidget> extraProviders = const []}) async {
-    await JourneyHermeticBoot.pumpPage(tester, page: const Scaffold(), providers: [
-      ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
-      ChangeNotifierProvider<MemoriesProvider>.value(value: memories),
-      ChangeNotifierProvider<MessageProvider>.value(value: messages),
-      ChangeNotifierProvider(create: (_) => LocalRecordingsProvider()),
-      ChangeNotifierProvider(create: (_) => PhoneCallProvider.forTesting()),
-      ChangeNotifierProvider<DeviceProvider>.value(value: device),
-      ChangeNotifierProvider(create: (_) => SpeakerTagPromptsProvider(now: () => seedDate)),
-      ChangeNotifierProvider(create: (_) => CaptureProvider(now: () => seedDate)),
-      ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
-        create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(seedDate),
-        update: (_, app, conversations, previous) => previous!..setProviders(app, conversations),
-      ),
-      ...extraProviders,
-    ]);
+    await JourneyHermeticBoot.pumpPage(tester,
+        page: const Scaffold(),
+        appBuilder: (page) => injectPerfMutation(PerfProductionShell(page: page)),
+        providers: [
+          ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+          ChangeNotifierProvider<MemoriesProvider>.value(value: memories),
+          ChangeNotifierProvider<MessageProvider>.value(value: messages),
+          ChangeNotifierProvider(create: (_) => LocalRecordingsProvider()),
+          ChangeNotifierProvider(create: (_) => PhoneCallProvider.forTesting()),
+          ChangeNotifierProvider<DeviceProvider>.value(value: device),
+          ChangeNotifierProvider(create: (_) => SpeakerTagPromptsProvider(now: () => seedDate)),
+          ChangeNotifierProvider(create: (_) => CaptureProvider(now: () => seedDate)),
+          ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
+            create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(seedDate),
+            update: (_, app, conversations, previous) => previous!..setProviders(app, conversations),
+          ),
+          ...extraProviders,
+        ]);
   }
 
   Future<void> close() async {
