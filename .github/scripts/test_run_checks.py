@@ -823,6 +823,8 @@ esac
 
             env = os.environ.copy()
             env["PATH"] = f"{fake_bin}:/usr/bin:/bin"
+            # The stub supervisor ignores --cleanup-path and run.sh execs it, so keep mktemp in the sandbox.
+            env["TMPDIR"] = str(root)
             result = subprocess.run(["bash", str(runner)], text=True, capture_output=True, env=env, check=False)
 
             self.assertEqual(result.returncode, 0, result.stderr)
