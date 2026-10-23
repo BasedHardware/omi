@@ -14,6 +14,8 @@ import json
 import math
 import os
 from pathlib import Path
+import secrets
+import traceback
 import sys
 
 
@@ -159,6 +161,8 @@ def main():
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    os.umask(0o077)
+    os.environ['ENCRYPTION_SECRET'] = secrets.token_hex(32)
     args.output.mkdir(parents=True, exist_ok=True, mode=0o700)
     args.output.chmod(0o700)
     log = args.output / 'projection.log'
@@ -196,6 +200,8 @@ def main():
         print(json.dumps(score))
         return 0 if score['split_gate'] == 'PASS' else 1
     except Exception:
+        with log.open('a') as handle:
+            traceback.print_exc(file=handle)
         # Exception strings can contain private paths, names, or transcript text.
         print(json.dumps({'split_gate': 'BLOCKED', 'reason': 'split_projection_failed'}))
         return 2
