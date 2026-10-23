@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-configurable-gestures.png",
+      "platform": "mobile-ios",
+      "description": "Actual DeviceSettings widget shows gesture defaults; isolated host fixture with saved double-tap mute choice. Rendered in headless Flutter tests using iOS theme and bundled fonts, not on a phone or simulator.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-triple-tap-actions.png",
+      "platform": "mobile-ios",
+      "description": "Actual triple-tap action sheet; isolated host fixture. Rendered in headless Flutter tests using iOS theme and bundled fonts, not on a phone or simulator.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}
