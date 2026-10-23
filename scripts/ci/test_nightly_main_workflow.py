@@ -26,6 +26,9 @@ def jobs(text):
 PR_SCHEMA_WRITERS = {"gcp_firestore_indexes.yml"}
 
 INTENTIONAL_BUDGET_CHANGES = {
+    # Native audio artifacts use a signed Noble snapshot. Keep the runner on
+    # that release; standard Linux class, fanout and p50 budget are unchanged.
+    ("backend-unit-tests.yml", "backend-unit-shard", "runs-on"): "ubuntu-24.04",
     # iOS Compile Check: the 40-min ceiling sat below the measured cold path
     # (39:25 real steps + ~1 min post-job Post Setup Flutter cache save, run
     # 39634604539 attempt 1), cancelling a healthy cold job after every real
