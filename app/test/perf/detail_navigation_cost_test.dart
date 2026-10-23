@@ -144,6 +144,8 @@ void main() {
         print('DETAIL_ROUTE semantics=$semanticsEnabled first_frame_builds=$firstFrameBuilds '
             'before_post_frame_init_reads=$readsBeforePostFrameInit through_first_pump_reads=$firstFrameReads first_frame_app_fetches=$firstFrameFetches summary_builds=$firstFrameSummary->$secondFrameSummary '
             'transcript_builds=$firstFrameTranscript transition_16ms_frames=$transitionFrames opaque=${pushed.opaque}');
+        // Opening the page validated timestamps pairwise: 2,881,201 reads for 1,200 lines.
+        expect(firstFrameReads, lessThan(20 * 1200), reason: 'detail open must stay linear in transcript length');
         expect(find.byType(SummaryTab), findsOneWidget);
         expect(find.byType(TranscriptWidgets), findsNothing);
         expect(find.byType(TranscriptWidget), findsNothing);
