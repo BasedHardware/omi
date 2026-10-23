@@ -112,8 +112,14 @@ class ListVersionCheck:
     def headers(self) -> dict[str, str]:
         return {'ETag': self.etag or '', 'Cache-Control': 'private, no-cache', 'Vary': 'Authorization'}
 
-    def finish(self, response: Response | None, *, truncated: bool) -> None:
+    def finish(self, response: Response | None, *, truncated: bool, cacheable: bool = True) -> None:
         # Never attach a validator to a partial page or a page spanning a
         # concurrent mutation. Existing clients receive the original response.
-        if response is not None and self.active and not truncated and _version(self.uid, self.family) == self.before:
+        if (
+            response is not None
+            and self.active
+            and not truncated
+            and cacheable
+            and _version(self.uid, self.family) == self.before
+        ):
             response.headers.update(self.headers())

@@ -28,8 +28,10 @@ use `If-None-Match` without a new parameter or client release. After existing
 authentication/scope dependencies and input validation, a matching validator
 returns 304 with one version lookup and no list query. A changed full response
 uses the existing source reader and emits an ETag only if a second version
-lookup confirms that no mutation crossed the read. Truncated pages never get a
-validator. User, route, exact query/headers, server release, and rollout epoch
+lookup confirms that no mutation crossed the read. Truncated pages and pages
+with locked conversations never get a validator: lock recovery must still run
+when allowance rolls over without a source write. User, route, exact query,
+authentication, server release, and rollout epoch
 scope the validator. No response data is cached by this protocol.
 
 Ordinary action-item requests without validators retain their existing cache

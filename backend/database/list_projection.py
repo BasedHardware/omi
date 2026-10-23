@@ -129,6 +129,7 @@ def project_writes(writes: list[Any]) -> list[Any]:
 def _wrap_commit(original: Any) -> Any:
     if getattr(original, '_omi_list_projection', False):
         return original
+    wrapped: Any
 
     def prepare(batch: Any) -> tuple[list[Any], int]:
         source = batch._write_pbs
@@ -196,4 +197,4 @@ def install_list_projection_writer() -> None:
     ):
         setattr(cls, method, _wrap_commit(getattr(cls, method)))
     # Shared by sync and async DocumentReference.delete, which bypass batches.
-    BaseDocumentReference._prep_delete = _wrap_delete(BaseDocumentReference._prep_delete)
+    setattr(BaseDocumentReference, '_prep_delete', _wrap_delete(getattr(BaseDocumentReference, '_prep_delete')))

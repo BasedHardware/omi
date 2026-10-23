@@ -1017,7 +1017,11 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
-    version_check.finish(response, truncated=budget.truncated)
+    # Paid lock recovery depends on the current allowance (including rollover)
+    # and must run on every locked-page read, even without a source mutation.
+    version_check.finish(
+        response, truncated=budget.truncated, cacheable=not any(row.get('is_locked') for row in conversations)
+    )
     return conversations
 
 

@@ -15,6 +15,7 @@ from google.cloud.firestore_v1.types import CommitResponse, WriteResult, Write
 
 from database import list_projection as projection, action_item_versions
 from utils import list_version_check as checks
+from routers import conversations as conversation_routes
 
 
 @pytest.fixture
@@ -295,3 +296,62 @@ def test_per_request_proxy_trace_does_not_break_unchanged_poll(store):
     first = client.get('/v1/conversations', headers=headers)
     headers.update({'if-none-match': first.headers['etag'], 'x-cloud-trace-context': 'trace-two'})
     assert client.get('/v1/conversations', headers=headers).status_code == 304
+
+
+def test_real_conversation_route_preserves_locked_allowance_recovery(store, monkeypatch):
+    store.client.document('users/owner/conversations/locked').set({'is_locked': True, 'status': 'completed'})
+    rows = [{'id': 'locked', 'is_locked': True, 'status': 'completed'}]
+    calls = []
+
+    def source(*args, **kwargs):
+        store.reads += 100
+        calls.append('source')
+        return copy.deepcopy(rows)
+
+    def heal(uid, page):
+        calls.append('heal')
+
+    monkeypatch.setattr(conversation_routes.conversations_db, 'get_conversations_without_photos', source)
+    monkeypatch.setattr(conversation_routes, '_heal_locked_conversations_if_eligible', heal)
+    monkeypatch.setattr(conversation_routes, 'redact_conversations_for_list', lambda page: None)
+    monkeypatch.setattr(
+        conversation_routes,
+        'list_read_budget_for_request',
+        lambda *a, **k: SimpleNamespace(
+            truncated=False,
+            observe=lambda outcome: None,
+        ),
+    )
+    request = Request({'type': 'http', 'path': '/v1/conversations', 'headers': [], 'query_string': b''})
+    params = dict(
+        request=request,
+        uid='owner',
+        limit=100,
+        offset=0,
+        statuses='completed',
+        sources=None,
+        start_date=None,
+        end_date=None,
+        folder_id=None,
+        starred=None,
+    )
+    first = Response()
+    assert conversation_routes.get_conversations(response=first, **params) == rows
+    assert 'etag' not in first.headers  # monthly rollover must still reach heal
+    assert conversation_routes.get_conversations(response=Response(), **params) == rows
+    assert calls == ['source', 'heal', 'source', 'heal']
+    rows[0]['is_locked'] = False
+    fresh = Response()
+    assert conversation_routes.get_conversations(response=fresh, **params) == rows
+    assert 'etag' in fresh.headers
+    conditional = Request(
+        {
+            'type': 'http',
+            'path': '/v1/conversations',
+            'query_string': b'',
+            'headers': [(b'if-none-match', fresh.headers['etag'].encode())],
+        }
+    )
+    params['request'] = conditional
+    assert conversation_routes.get_conversations(response=Response(), **params).status_code == 304
+    assert calls == ['source', 'heal', 'source', 'heal', 'source', 'heal']
