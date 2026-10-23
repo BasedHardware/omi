@@ -14306,9 +14306,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pairingPowerOnSubtitle => '按一下按钮，并放在手机附近。';
 
   @override
-  String get pairingLookingForOmi => '正在寻找你的 Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => '就这样。Omi 会在后台继续记录你的对话。';
 
   @override

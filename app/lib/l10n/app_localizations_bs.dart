@@ -14559,9 +14559,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Pritisnite dugme jednom i držite ga blizu telefona.';
 
   @override
-  String get pairingLookingForOmi => 'Tražimo vaš Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'To je to. Omi će nastaviti snimati vaše razgovore u pozadini.';
 
   @override

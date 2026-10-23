@@ -14458,9 +14458,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'กดปุ่มหนึ่งครั้งและวางไว้ใกล้โทรศัพท์';
 
   @override
-  String get pairingLookingForOmi => 'กำลังค้นหา Omi ของคุณ…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'เรียบร้อย Omi จะบันทึกบทสนทนาของคุณต่อไปในพื้นหลัง';
 
   @override

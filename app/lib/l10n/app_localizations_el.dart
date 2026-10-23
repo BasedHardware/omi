@@ -14624,9 +14624,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Πάτησε μία φορά το κουμπί και κράτα το κοντά στο κινητό.';
 
   @override
-  String get pairingLookingForOmi => 'Αναζήτηση του Omi σου…';
-
-  @override
   String get walkthroughBackgroundRecordingNote =>
       'Αυτό ήταν. Το Omi θα συνεχίσει να ηχογραφεί τις συζητήσεις σου στο παρασκήνιο.';
 

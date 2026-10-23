@@ -14579,9 +14579,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Нажмите кнопку один раз и держите рядом с телефоном.';
 
   @override
-  String get pairingLookingForOmi => 'Ищем ваш Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Готово. Omi продолжит записывать ваши разговоры в фоне.';
 
   @override

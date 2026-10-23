@@ -14525,9 +14525,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'یک بار دکمه را فشار دهید و نزدیک گوشی نگه دارید.';
 
   @override
-  String get pairingLookingForOmi => 'در جستجوی Omi شما…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'همین. Omi به ضبط مکالمات شما در پس‌زمینه ادامه می‌دهد.';
 
   @override

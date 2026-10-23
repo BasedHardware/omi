@@ -14588,9 +14588,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Nyomd meg egyszer a gombot, és tartsd a telefon közelében.';
 
   @override
-  String get pairingLookingForOmi => 'Keressük az Omit…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Ennyi. Az Omi a háttérben tovább rögzíti a beszélgetéseidet.';
 
   @override

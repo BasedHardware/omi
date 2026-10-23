@@ -14558,9 +14558,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Pressiona o botão uma vez e mantém-no perto do telemóvel.';
 
   @override
-  String get pairingLookingForOmi => 'À procura do teu Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote =>
       'É isso. O Omi continua a gravar as tuas conversas em segundo plano.';
 

@@ -14520,9 +14520,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Tryk én gang på knappen og hold den tæt på din telefon.';
 
   @override
-  String get pairingLookingForOmi => 'Leder efter din Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote =>
       'Det var det. Omi bliver ved med at optage dine samtaler i baggrunden.';
 

@@ -14569,9 +14569,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Druk één keer op de knop en houd hem bij je telefoon.';
 
   @override
-  String get pairingLookingForOmi => 'Je Omi zoeken…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Dat is alles. Omi blijft je gesprekken op de achtergrond opnemen.';
 
   @override

@@ -14530,9 +14530,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Jednou stiskněte tlačítko a držte ho u telefonu.';
 
   @override
-  String get pairingLookingForOmi => 'Hledáme váš Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'To je vše. Omi bude dál nahrávat vaše rozhovory na pozadí.';
 
   @override

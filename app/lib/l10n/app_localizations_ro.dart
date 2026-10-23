@@ -14592,9 +14592,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Apasă butonul o dată și ține-l aproape de telefon.';
 
   @override
-  String get pairingLookingForOmi => 'Căutăm Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Gata. Omi va continua să-ți înregistreze conversațiile în fundal.';
 
   @override

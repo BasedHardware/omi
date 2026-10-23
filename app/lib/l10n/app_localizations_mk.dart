@@ -14595,9 +14595,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Притиснете го копчето еднаш и држете го блиску до телефонот.';
 
   @override
-  String get pairingLookingForOmi => 'Го бараме вашиот Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Тоа е сè. Omi ќе продолжи да ги снима вашите разговори во заднина.';
 
   @override

@@ -14561,9 +14561,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Натисніть кнопку один раз і тримайте поруч із телефоном.';
 
   @override
-  String get pairingLookingForOmi => 'Шукаємо ваш Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Готово. Omi продовжить записувати ваші розмови у фоні.';
 
   @override

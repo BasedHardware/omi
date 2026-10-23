@@ -14638,9 +14638,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Drücke einmal die Taste und halte ihn nah ans Handy.';
 
   @override
-  String get pairingLookingForOmi => 'Suche deinen Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Das war\'s. Omi nimmt deine Gespräche weiter im Hintergrund auf.';
 
   @override

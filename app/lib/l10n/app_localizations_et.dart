@@ -14523,9 +14523,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Vajuta korra nuppu ja hoia telefoni lähedal.';
 
   @override
-  String get pairingLookingForOmi => 'Otsin sinu Omit…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Ongi kõik. Omi salvestab su vestlusi taustal edasi.';
 
   @override

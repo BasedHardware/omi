@@ -14559,9 +14559,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Enkrat pritisni gumb in ga imej blizu telefona.';
 
   @override
-  String get pairingLookingForOmi => 'Iščem tvoj Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'To je to. Omi bo še naprej snemal tvoje pogovore v ozadju.';
 
   @override

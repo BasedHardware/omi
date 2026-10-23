@@ -14544,9 +14544,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Tekan tombol sekali dan dekatkan ke ponsel.';
 
   @override
-  String get pairingLookingForOmi => 'Mencari Omi kamu…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Selesai. Omi akan terus merekam percakapanmu di latar belakang.';
 
   @override

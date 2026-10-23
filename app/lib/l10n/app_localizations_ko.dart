@@ -14332,9 +14332,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get pairingPowerOnSubtitle => '버튼을 한 번 누르고 휴대폰 가까이에 두세요.';
 
   @override
-  String get pairingLookingForOmi => 'Omi를 찾는 중…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => '끝이에요. Omi가 백그라운드에서 대화를 계속 녹음해요.';
 
   @override

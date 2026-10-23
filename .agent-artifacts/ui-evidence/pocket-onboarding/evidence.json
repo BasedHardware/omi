@@ -11,7 +11,7 @@
     {
       "file": "002-mobile-ios-pocket-pairing.png",
       "platform": "mobile-ios",
-      "description": "Pocket arm: pairing starts by itself, Looking for your Omi, Back/Skip leave it",
+      "description": "Pocket arm: pairing uses the Connect page's device list (saved Omi shown Offline, nearby Omis tappable, Not now); simulator with injected nearby devices",
       "captured_by": "agent",
       "source": "screencapture"
     },

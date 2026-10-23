@@ -14577,9 +14577,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'ಒಮ್ಮೆ ಬಟನ್ ಒತ್ತಿ ಫೋನ್ ಹತ್ತಿರ ಇರಿಸಿ.';
 
   @override
-  String get pairingLookingForOmi => 'ನಿಮ್ಮ Omi ಹುಡುಕಲಾಗುತ್ತಿದೆ…';
-
-  @override
   String get walkthroughBackgroundRecordingNote =>
       'ಅಷ್ಟೇ. Omi ಹಿನ್ನೆಲೆಯಲ್ಲಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಲೇ ಇರುತ್ತದೆ.';
 

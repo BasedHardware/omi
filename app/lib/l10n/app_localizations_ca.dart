@@ -14604,9 +14604,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Prem el botó un cop i mantén-lo a prop del mòbil.';
 
   @override
-  String get pairingLookingForOmi => 'Cercant el teu Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote =>
       'Ja està. L\'Omi continuarà gravant les teves converses en segon pla.';
 

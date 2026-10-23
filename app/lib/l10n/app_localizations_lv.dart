@@ -14562,9 +14562,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Nospiediet pogu vienreiz un turiet tuvu tālrunim.';
 
   @override
-  String get pairingLookingForOmi => 'Meklējam jūsu Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Tas arī viss. Omi turpinās ierakstīt jūsu sarunas fonā.';
 
   @override

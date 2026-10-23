@@ -14644,9 +14644,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Pindutin nang isang beses ang button at ilapit sa iyong phone.';
 
   @override
-  String get pairingLookingForOmi => 'Hinahanap ang iyong Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote =>
       'Ayan na. Patuloy na irerekord ni Omi ang iyong mga usapan sa background.';
 

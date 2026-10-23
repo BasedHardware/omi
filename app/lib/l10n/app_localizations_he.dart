@@ -14428,9 +14428,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'לחץ פעם אחת על הכפתור והשאר אותו קרוב לטלפון.';
 
   @override
-  String get pairingLookingForOmi => 'מחפש את ה‑Omi שלך…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'זהו. Omi ימשיך להקליט את השיחות שלך ברקע.';
 
   @override

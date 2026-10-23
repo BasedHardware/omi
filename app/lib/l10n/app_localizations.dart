@@ -25701,12 +25701,6 @@ abstract class AppLocalizations {
   /// **'Press the button once and keep it near your phone.'**
   String get pairingPowerOnSubtitle;
 
-  /// Pocket onboarding arm: pairingLookingForOmi
-  ///
-  /// In en, this message translates to:
-  /// **'Looking for your Omi…'**
-  String get pairingLookingForOmi;
-
   /// Pocket onboarding arm: walkthroughBackgroundRecordingNote
   ///
   /// In en, this message translates to:

@@ -14531,9 +14531,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Nhấn nút một lần và giữ gần điện thoại.';
 
   @override
-  String get pairingLookingForOmi => 'Đang tìm Omi của bạn…';
-
-  @override
   String get walkthroughBackgroundRecordingNote =>
       'Xong rồi. Omi sẽ tiếp tục ghi lại các cuộc trò chuyện của bạn ở chế độ nền.';
 

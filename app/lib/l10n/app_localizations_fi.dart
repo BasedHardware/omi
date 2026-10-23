@@ -14535,9 +14535,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Paina painiketta kerran ja pidä se lähellä puhelinta.';
 
   @override
-  String get pairingLookingForOmi => 'Etsitään Omiasi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Siinä kaikki. Omi jatkaa keskustelujesi tallentamista taustalla.';
 
   @override

@@ -14554,9 +14554,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Paspauskite mygtuką vieną kartą ir laikykite prie telefono.';
 
   @override
-  String get pairingLookingForOmi => 'Ieškoma jūsų Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Tiek. Omi toliau įrašinės jūsų pokalbius fone.';
 
   @override

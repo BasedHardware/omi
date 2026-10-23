@@ -14589,9 +14589,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'బటన్‌ను ఒకసారి నొక్కి ఫోన్ దగ్గర ఉంచండి.';
 
   @override
-  String get pairingLookingForOmi => 'మీ Omi కోసం వెతుకుతున్నాం…';
-
-  @override
   String get walkthroughBackgroundRecordingNote =>
       'అంతే. Omi బ్యాక్‌గ్రౌండ్‌లో మీ సంభాషణలను రికార్డ్ చేస్తూనే ఉంటుంది.';
 

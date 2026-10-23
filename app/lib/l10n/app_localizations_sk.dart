@@ -14526,9 +14526,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Raz stlačte tlačidlo a držte ho pri telefóne.';
 
   @override
-  String get pairingLookingForOmi => 'Hľadáme váš Omi…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'To je všetko. Omi bude ďalej nahrávať vaše rozhovory na pozadí.';
 
   @override

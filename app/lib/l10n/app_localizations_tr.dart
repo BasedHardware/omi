@@ -14543,9 +14543,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'Düğmeye bir kez bas ve telefonunun yanında tut.';
 
   @override
-  String get pairingLookingForOmi => 'Omi aranıyor…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'Bu kadar. Omi konuşmalarını arka planda kaydetmeye devam edecek.';
 
   @override

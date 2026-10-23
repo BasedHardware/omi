@@ -14526,9 +14526,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get pairingPowerOnSubtitle => 'একবার বোতাম টিপুন এবং ফোনের কাছে রাখুন।';
 
   @override
-  String get pairingLookingForOmi => 'আপনার Omi খোঁজা হচ্ছে…';
-
-  @override
   String get walkthroughBackgroundRecordingNote => 'এটুকুই। Omi ব্যাকগ্রাউন্ডে আপনার কথোপকথন রেকর্ড করতে থাকবে।';
 
   @override

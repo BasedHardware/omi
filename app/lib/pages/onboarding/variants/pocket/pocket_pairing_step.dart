@@ -1,24 +1,18 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/gen/assets.gen.dart';
-import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
+import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/widgets/connection_guide_sheet.dart';
+import 'package:omi/widgets/device_widget.dart';
 import 'package:omi/widgets/scanning_ripple.dart';
 
-/// Pairing that starts by itself: no "do you have an Omi" question. The scan runs as the step
-/// opens; the first Omi found is connected through the same path as a tap on the pairing page
-/// ([OnboardingProvider.handleTap]), once per device, and the step moves on when it settles. A
-/// failed attempt offers Scan again. Back (or Skip) leaves it for readers without an Omi at hand.
+/// Pairing with no "do you have an Omi" question. The body is the Connect page's own: the same
+/// ripple and device animation over [FindDevicesPage], which owns the scan, the nearby device
+/// list, the tap-to-connect path and the "No Omi Found" help. Back or Not now leaves the step.
 class PocketPairingStep extends StatefulWidget {
   const PocketPairingStep({super.key, required this.onDone});
 
@@ -30,239 +24,94 @@ class PocketPairingStep extends StatefulWidget {
 }
 
 class _PocketPairingStepState extends State<PocketPairingStep> {
-  OnboardingProvider? _provider;
   bool _done = false;
-  bool _showHelp = false;
-  Timer? _helpTimer;
-
-  /// The device an attempt was started for; never retried on its own (Scan again clears it).
-  String? _attemptedId;
-  bool _failed = false;
-  bool _completingConnected = false;
-  bool _attemptInFlight = false;
 
   @override
   void initState() {
     super.initState();
-    _helpTimer = Timer(const Duration(seconds: 12), () {
-      if (mounted) setState(() => _showHelp = true);
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _provider = context.read<OnboardingProvider>();
-      unawaited(_scan());
+      // The pendant was already connected when the step opened: pairing is done.
+      final devices = context.read<DeviceProvider>();
+      if (devices.isConnected && devices.connectedDevice != null) _finish(true);
     });
   }
 
   @override
   void dispose() {
-    _helpTimer?.cancel();
-    if (!_done) _provider?.cancelActiveScan();
-    // Invalidates the pending handleTap success callback and post-frame connect.
     _done = true;
     super.dispose();
   }
 
-  /// Connects the first Omi the scan found, exactly once per device, through the pairing page's
-  /// own path. Runs after the frame so the provider is never mutated during build.
-  /// Live connection: [DeviceProvider] is the source of truth (handleTap and a native reconnect
-  /// both land there). [OnboardingProvider.isConnected] is not cleared on an ordinary disconnect,
-  /// so it is never trusted on its own.
-  static bool _isConnected(OnboardingProvider provider, DeviceProvider devices) =>
-      devices.isConnected && devices.connectedDevice != null;
-
-  void _maybeConnect(OnboardingProvider provider, DeviceProvider devices) {
-    if (_done) return;
-    // A connect this step started finishes only through handleTap's own callback, after its
-    // settle and persistence; isConnected flips earlier than that.
-    if (_attemptInFlight) return;
-    if (_isConnected(provider, devices)) {
-      // Connected on entry, with no attempt from this step (the pendant reconnected on its own):
-      // complete pairing once as connected so the walkthrough check still runs.
-      if (_completingConnected) return;
-      _completingConnected = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) return;
-        // Re-check right before completing: the pendant may have dropped since the build.
-        if (_isConnected(context.read<OnboardingProvider>(), context.read<DeviceProvider>()) && !_attemptInFlight) {
-          _finish(true);
-        } else {
-          _completingConnected = false;
-        }
-      });
-      return;
-    }
-    if (_failed || provider.isClicked) return;
-    BtDevice? candidate;
-    for (final device in provider.deviceList) {
-      if (device.type == DeviceType.omi) {
-        candidate = device;
-        break;
-      }
-    }
-    if (candidate == null || candidate.id == _attemptedId) return;
-    _attemptedId = candidate.id;
-    _attemptInFlight = true;
-    final device = candidate;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _done) return;
-      unawaited(provider.handleTap(device: device, isFromOnboarding: true, goNext: () => _finish(true)).then((_) {
-        _attemptInFlight = false;
-        if (!mounted || _done || _isConnected(provider, devices)) return;
-        // handleTap swallowed a failure: offer a fresh scan instead of searching forever.
-        setState(() {
-          _failed = true;
-          _showHelp = true;
-        });
-      }));
-    });
-  }
-
-  Future<void> _scanAgain() async {
-    OmiHaptics.selection();
-    _provider?.cancelActiveScan();
-    setState(() {
-      _failed = false;
-      _attemptedId = null;
-    });
-    await _scan();
-  }
-
-  Future<void> _scan() async {
-    void publishGuidance() {
-      if (mounted) unawaited(BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery));
-    }
-
-    await _provider?.scanDevices(onShowDialog: publishGuidance, onShowLocationDialog: publishGuidance);
-  }
-
   void _finish(bool connected) {
-    // A connect that settles after the reader left the step (Back, Skip, or the step was
-    // disposed) must not advance onboarding a second time or touch a dead context.
+    // A connect that settles after the reader left (Back, Not now) must not advance twice.
     if (_done || !mounted) return;
     _done = true;
     PlatformManager.instance.analytics
         .track('Onboarding Device Choice', properties: {'choice': connected ? 'connected' : 'skipped'});
-    if (!connected) _provider?.cancelActiveScan();
     widget.onDone(connected);
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final pixelRatio = MediaQuery.of(context).devicePixelRatio;
-    const imageSize = 150.0;
-    return Consumer2<OnboardingProvider, DeviceProvider>(
-      builder: (context, provider, devices, _) {
-        _maybeConnect(provider, devices);
-        final connected = _isConnected(provider, devices);
-        final connecting = provider.isClicked && !connected;
-        return Scaffold(
-          backgroundColor: OmiColors.surface0,
-          body: SafeArea(
-            child: Column(
-              children: [
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: OmiBackButton(
-                    // Mid-attempt (incl. the settle), leaving never claims a connection or opens the walkthrough.
-                    onPressed: () => _finish(_isConnected(provider, devices) && !_attemptInFlight),
-                  ),
-                ),
-                const SizedBox(height: OmiSpacing.lg),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-                  child: Column(
-                    children: [
-                      Text(
-                        connected ? l10n.connected : l10n.pairingPowerOnTitle,
-                        style: OmiType.title1,
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: OmiSpacing.xs),
-                      Text(
-                        connected
-                            ? (devices.connectedDevice?.name ?? provider.deviceName)
-                            : _failed
-                                ? l10n.connectionFailed
-                                : l10n.pairingPowerOnSubtitle,
-                        style: OmiType.body.copyWith(color: OmiColors.textSecondary),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-                const Spacer(),
-                Stack(
-                  alignment: Alignment.center,
+    return Scaffold(
+      backgroundColor: OmiColors.surface0,
+      appBar: AppBar(
+        leading: OmiBackButton(
+          onPressed: () {
+            final devices = context.read<DeviceProvider>();
+            final onboarding = context.read<OnboardingProvider>();
+            // Mid-connect, leaving never claims a connection or opens the walkthrough.
+            _finish(devices.isConnected && devices.connectedDevice != null && !onboarding.isClicked);
+          },
+        ),
+      ),
+      body: Consumer<OnboardingProvider>(
+        builder: (context, onboardingProvider, child) {
+          return ListView(
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+                child: Column(
                   children: [
-                    if (!connected)
-                      ScanningRippleWidget(
-                          isScanning: true,
-                          size: imageSize + 140,
-                          color: OmiColors.textPrimary.withValues(alpha: 0.25)),
-                    Image.asset(
-                      Assets.images.omiWithoutRope.path,
-                      height: imageSize,
-                      width: imageSize,
-                      cacheHeight: (imageSize * pixelRatio).round(),
-                      cacheWidth: (imageSize * pixelRatio).round(),
+                    Text(l10n.pairingPowerOnTitle, style: OmiType.title1, textAlign: TextAlign.center),
+                    const SizedBox(height: OmiSpacing.xs),
+                    Text(
+                      l10n.pairingPowerOnSubtitle,
+                      style: OmiType.body.copyWith(color: OmiColors.textSecondary),
+                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
-                const SizedBox(height: OmiSpacing.lg),
-                if (!connected && !_failed)
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const OmiSpinner(size: OmiSpinnerSize.small),
-                      const SizedBox(width: OmiSpacing.sm),
-                      Text(
-                        connecting ? l10n.deviceConnecting : l10n.pairingLookingForOmi,
-                        style: OmiType.callout.copyWith(color: OmiColors.textSecondary),
-                      ),
-                    ],
-                  ),
-                const Spacer(),
-                AnimatedOpacity(
-                  opacity: _showHelp && !connected ? 1 : 0,
-                  duration: const Duration(milliseconds: 300),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Also after the delayed help: a scan blocked by Bluetooth off or a denied
-                        // permission ends quietly, so the reader needs a retry once they fix it.
-                        if (_failed || _showHelp)
-                          OnboardingContinueButton(
-                            key: const Key('pocket_pairing_scan_again'),
-                            label: l10n.scanAgain,
-                            onPressed: _scanAgain,
-                          ),
-                        OmiButton.tertiary(
-                          key: const Key('pocket_pairing_how_to_pair'),
-                          label: l10n.howToPair,
-                          onPressed: () {
-                            PlatformManager.instance.analytics.connectionGuideOpened();
-                            ConnectionGuideSheet.show(context);
-                          },
-                        ),
-                        OmiButton.tertiary(
-                          key: const Key('pocket_pairing_skip'),
-                          label: l10n.skipForNow,
-                          onPressed: () => _finish(false),
-                        ),
-                      ],
+              ),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  if (!onboardingProvider.isConnected)
+                    ScanningRippleWidget(
+                      isScanning: !onboardingProvider.isConnected,
+                      size: (MediaQuery.sizeOf(context).height <= 700 ? 280.0 : 360.0) *
+                          (onboardingProvider.pairingFailureReason == null ? 1 : 0.5),
                     ),
+                  DeviceAnimationWidget(
+                    sizeMultiplier: onboardingProvider.pairingFailureReason == null ? 1 : 0.5,
+                    isConnected: onboardingProvider.isConnected,
+                    deviceName: onboardingProvider.deviceName,
+                    deviceType: onboardingProvider.deviceType,
+                    animatedBackground: onboardingProvider.isConnected,
                   ),
-                ),
-                const SizedBox(height: OmiSpacing.lg),
-              ],
-            ),
-          ),
-        );
-      },
+                ],
+              ),
+              FindDevicesPage(
+                isFromOnboarding: true,
+                goNext: () => _finish(true),
+                onSkip: () => _finish(false),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }

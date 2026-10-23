@@ -17742,10 +17742,6 @@
     "@pairingPowerOnSubtitle": {
         "description": "Pocket onboarding arm: pairingPowerOnSubtitle"
     },
-    "pairingLookingForOmi": "Looking for your Omi…",
-    "@pairingLookingForOmi": {
-        "description": "Pocket onboarding arm: pairingLookingForOmi"
-    },
     "walkthroughBackgroundRecordingNote": "That's it. Omi will keep recording your conversations in the background.",
     "@walkthroughBackgroundRecordingNote": {
         "description": "Pocket onboarding arm: walkthroughBackgroundRecordingNote"
