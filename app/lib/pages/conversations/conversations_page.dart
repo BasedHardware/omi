@@ -13,7 +13,6 @@ import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
-import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
@@ -664,7 +663,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
-              const SliverToBoxAdapter(child: ReviewEntryCard(fallback: SpeakerTagPromptCard())),
+              const SliverToBoxAdapter(child: ReviewEntryCard()),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null
                     ? HomeDailyRecaps(key: _recapsKey)
