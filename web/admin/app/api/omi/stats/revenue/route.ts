@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin } from '@/lib/auth';
-import { getOptionalStripe } from '@/lib/stripe';
-import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
+import { NextRequest, NextResponse } from "next/server";
+import { requireScope } from "@/lib/auth";
+import { getOptionalStripeRead } from "@/lib/stripe";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import {
   AllSubscriptionSourcesFailedError,
   MRR_STATUSES,
@@ -11,8 +11,8 @@ import {
   groupByProduct,
   monthlyAmount,
   OMI_PLAN_PRODUCTS,
-} from '@/lib/stripe-subscriptions';
-export const dynamic = 'force-dynamic';
+} from "@/lib/stripe-subscriptions";
+export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
 function cacheKey(): string {
@@ -23,7 +23,7 @@ function cacheKey(): string {
 export { cacheKey as revenueCacheKey };
 
 export async function computeRevenue() {
-  const stripe = getOptionalStripe();
+  const stripe = getOptionalStripeRead();
 
   if (!stripe) {
     return {
@@ -36,9 +36,15 @@ export async function computeRevenue() {
     };
   }
 
-  const { subscriptions, partial } = await fetchOmiSubscriptions(stripe, MRR_STATUSES);
+  const { subscriptions, partial } = await fetchOmiSubscriptions(
+    stripe,
+    MRR_STATUSES
+  );
 
-  const mrr = subscriptions.reduce((sum, subscription) => sum + monthlyAmount(subscription), 0);
+  const mrr = subscriptions.reduce(
+    (sum, subscription) => sum + monthlyAmount(subscription),
+    0
+  );
 
   // Trials are pipeline, not revenue: reported alongside MRR, never inside it. A failure here
   // must not cost the MRR figure that already succeeded — but it stays null rather than 0, so a
@@ -50,7 +56,7 @@ export async function computeRevenue() {
     trialingSubscriptions = trials.subscriptions.length;
     trialPartial = trials.partial;
   } catch (error) {
-    console.error('Error fetching trialing subscriptions:', error);
+    console.error("Error fetching trialing subscriptions:", error);
     trialPartial = true;
   }
 
@@ -66,27 +72,29 @@ export async function computeRevenue() {
 }
 
 export async function GET(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "finance:read");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
     const key = cacheKey();
 
-    const cached = await getPayload<Awaited<ReturnType<typeof computeRevenue>>>(key);
+    const cached = await getPayload<Awaited<ReturnType<typeof computeRevenue>>>(
+      key
+    );
     if (cached) {
-      return NextResponse.json(withFreshness(cached.data, cached.freshAt));
+      return authResult.json(withFreshness(cached.data, cached.freshAt));
     }
 
     const payload = await computeRevenue();
     await setPayload(key, payload);
-    return NextResponse.json(withFreshness(payload, Date.now()));
+    return authResult.json(withFreshness(payload, Date.now()));
   } catch (error) {
     if (error instanceof AllSubscriptionSourcesFailedError) {
-      return NextResponse.json({ error: error.message }, { status: 502 });
+      return authResult.json({ error: error.message }, { status: 502 });
     }
-    console.error('Error calculating revenue metrics:', error);
-    return NextResponse.json(
-      { error: 'Failed to calculate revenue metrics' },
+    console.error("Error calculating revenue metrics:", error);
+    return authResult.json(
+      { error: "Failed to calculate revenue metrics" },
       { status: 500 }
     );
   }

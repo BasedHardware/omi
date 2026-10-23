@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-mobile-idle-task-spins-behind-animation",
+  "violated_contract": "A mobile surface that can animate continuously (Home's live dot while a capture is live, an indeterminate processing bar) must not hand SchedulerBinding an idle-priority task: the default scheduling strategy declines it while any ticker runs, and the scheduler re-arms a zero-delay timer every event-loop turn until the animation stops, spinning the UI isolate (INV-PERF-1).",
+  "canonical_prevention": "Defer off-frame work with Timer.run, a Future or a post-frame callback, never SchedulerBinding.scheduleTask below Priority.animation from a surface that can animate. Guard by pumping the real animating surface, replacing the binding's schedulingStrategy with a counter that fails past a small bound, and checking the deferred work still lands.",
+  "canonical_prevention_artifact": ["app/test/perf/home_after_detail_perf_test.dart"],
+  "evidence_prs": [],
+  "scope_hints": ["app/lib/pages/conversations/widgets/conversation_list_item.dart"],
+  "status": "open"
+}

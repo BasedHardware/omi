@@ -212,34 +212,11 @@ flutter:
     - assets/models/silero_vad.onnx
     - assets/images/stars.png
     - assets/images/herologo.png
-    - assets/fonts/
     - assets/images/
     - assets/test/tts_progressive_probe.mp3
     - assets/integration_app_logos/
     - assets/competitor-logos/
     - shorebird.yaml
-  fonts:
-    - family: "SF Pro Display"
-      fonts:
-        - asset: assets/fonts/SFPRODISPLAYTHINITALIC.OTF
-          weight: 100
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYLIGHTITALIC.OTF
-          weight: 300
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYREGULAR.OTF
-        - asset: assets/fonts/SFPRODISPLAYHEAVYITALIC.OTF
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYMEDIUM.OTF
-          weight: 500
-        - asset: assets/fonts/SFPRODISPLAYSEMIBOLDITALIC.OTF
-          weight: 600
-          style: italic
-        - asset: assets/fonts/SFPRODISPLAYBOLD.OTF
-          weight: 700
-        - asset: assets/fonts/SFPRODISPLAYBLACKITALIC.OTF
-          weight: 900
-          style: italic
 
 flutter_gen:
   output: lib/gen/

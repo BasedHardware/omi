@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "id": "FC-wall-budget-equals-paced-work-duration",
+  "violated_contract": "A fixed wall budget that bounds work delivered at a fixed pace must exceed that work's duration at that pace. Sizing the work to the whole budget leaves only scheduler and write-confirm jitter as slack, so a healthy, keeping-up delivery is rejected as a local capacity failure.",
+  "canonical_prevention": "Size the paced work from the budget less an explicit margin (`bounded_snapshot` retains `(wall - margin) * rate` seconds, `LISTEN_REPLAY_PREFIX_MARGIN_SECONDS`), keep the budget itself unchanged so the margin is slack, and pin the knife edge with a virtual-clock simulation: an exact-wall prefix must fail on a tens-of-milliseconds final write confirm and the margined one must land inside the wall.",
+  "canonical_prevention_artifact": [
+    "backend/utils/stt/replay_delivery.py",
+    "backend/tests/unit/test_replay_prefix_wall_margin.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/replay_delivery.py",
+    "backend/utils/stt/resilient_stream.py",
+    "backend/config/live_stt_replay.py",
+    "backend/routers/listen/receiver.py",
+    "backend/routers/listen/demand_switch.py"
+  ],
+  "status": "open"
+}

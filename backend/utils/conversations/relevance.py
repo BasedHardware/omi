@@ -400,3 +400,14 @@ def sync_intake_decision(rule: str) -> dict[str, Any]:
         'trigger': 'sync_intake',
         'rules_version': RULES_VERSION,
     }
+
+
+def content_minimum(uid: str, conversation: Any, *, user_kept: bool = False) -> Any:
+    """V2 pre-model content policy; owners wire this before paid relevance/notes.
+
+    Lazy import keeps the existing deterministic relevance authority import-light.
+    The optional minimum is a compute decision, never a duration discard verdict.
+    """
+    from utils.conversations.relevance_media import minimum_for_processing
+
+    return minimum_for_processing(uid, conversation, user_kept=user_kept)

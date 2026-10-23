@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-control-live-edge.png",
+      "platform": "desktop-macos",
+      "description": "Standard control transcript at the live edge after EXP-002 retirement; real ChatMessagesView with synthetic messages in the hermetic NSHostingView harness",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

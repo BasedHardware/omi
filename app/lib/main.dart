@@ -70,6 +70,7 @@ import 'package:omi/services/siri_integration.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/providers/goals_provider.dart';
@@ -668,21 +669,24 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
         ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
         ChangeNotifierProvider(create: (context) => ReviewProvider()),
+        // Live episodes overlay; reads the server capability on first use (Home's live row).
+        ChangeNotifierProvider(create: (context) => EpisodeProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),
           update: (BuildContext context, value, MessageProvider? previous) =>
               (previous?..updateAppProvider(value)) ?? MessageProvider(),
         ),
-        ChangeNotifierProxyProvider4<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
-            CaptureProvider>(
+        ChangeNotifierProxyProvider5<ConversationProvider, MessageProvider, PeopleProvider, UsageProvider,
+            EpisodeProvider, CaptureProvider>(
           create: (context) => composeProductionCaptureProvider(localSegmentStore: LocalSegmentStore.appSupport()),
-          update: (BuildContext context, conversation, message, people, usage, CaptureProvider? previous) {
+          update: (BuildContext context, conversation, message, people, usage, episodes, CaptureProvider? previous) {
             final externalActions = ProviderCaptureExternalActions(
               conversationProvider: conversation,
               messageProvider: message,
               peopleProvider: people,
               usageProvider: usage,
+              episodeProvider: episodes,
             );
             return (previous?..updateExternalActions(externalActions)) ??
                 composeProductionCaptureProvider(

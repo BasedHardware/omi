@@ -24,10 +24,13 @@ enum ApiProblemKind {
 }
 
 class ApiProblem {
-  const ApiProblem(this.kind, {this.statusCode, this.retryAfter});
+  const ApiProblem(this.kind, {this.statusCode, this.retryAfter, this.detail});
   final ApiProblemKind kind;
   final int? statusCode;
   final Duration? retryAfter;
+
+  /// Bounded machine code such as budget_period_changed. Never a free-form message.
+  final String? detail;
   bool get retryable => switch (kind) {
         ApiProblemKind.transport ||
         ApiProblemKind.authTransient ||
@@ -117,6 +120,15 @@ ApiResult<T> _decodeSuccess<T>(String body, T Function(String) decode, {bool tru
   }
 }
 
+String? _boundedDetail(String body) {
+  try {
+    final decoded = jsonDecode(body);
+    final detail = decoded is Map ? decoded['detail'] : null;
+    if (detail is String && RegExp(r'^[a-z0-9_]{1,64}$').hasMatch(detail)) return detail;
+  } catch (_) {}
+  return null;
+}
+
 ApiResult<T> _classifyResponse<T>(http.Response response, T Function(String) decode, DateTime Function() now) {
   if (response.statusCode >= 200 && response.statusCode < 300) {
     return _decodeSuccess(response.body, decode, truncated: isOmiListTruncated(response));
@@ -127,6 +139,7 @@ ApiResult<T> _classifyResponse<T>(http.Response response, T Function(String) dec
       kind,
       statusCode: response.statusCode,
       retryAfter: kind == ApiProblemKind.rateLimited ? parseApiRetryAfter(response, now) : null,
+      detail: _boundedDetail(response.body),
     ),
   );
 }

@@ -51,13 +51,8 @@ _TRANSLATION_LISTEN_ONLY = frozenset(
     {
         # Visibility belongs to authenticated listen sockets and opt-in detail
         # reads; pusher hosts neither transport and must not admit this spend.
-        'TRANSLATION_DEMAND_SHADOW_ENABLED',
         'TRANSLATION_DEMAND_GATE_ENABLED',
-        'TRANSLATION_DEMAND_LEASE_V1_ENABLED',
-        'TRANSLATION_ONDEMAND_GEMINI_ENABLED',
         'TRANSLATION_ONOPEN_ENABLED',
-        'TRANSLATION_ONDEMAND_COHORT_PERCENT',
-        'TRANSLATION_ONDEMAND_UID_ALLOWLIST',
         'TRANSLATION_ONDEMAND_MAX_SEGMENTS',
         'TRANSLATION_ONDEMAND_MAX_CHARS',
         'TRANSLATION_ONDEMAND_DEADLINE_SECONDS',
@@ -84,6 +79,9 @@ _DEMAND_LISTEN_ONLY = frozenset(
         'STT_LIVE_DEMAND_MIN_DWELL_SECONDS',
     }
 )
+# Only listen WebSocket reconnects run the stale-page scanner. Pusher consumes
+# admitted jobs; this kill switch must not disable their finalization/retries.
+_RECONNECT_RECOVERY_LISTEN_ONLY = frozenset({'STALE_IN_PROGRESS_RECOVERY_ENABLED'})
 # main.py owns sync intake, recovery RPC and serving startup. pusher.main mounts
 # none of those surfaces and never starts the dedicated GPU process.
 _BATCH_PIPELINE_LISTEN_ONLY = frozenset(
@@ -133,9 +131,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "PARAKEET_WINDOW_POST_TIMEOUT_SECONDS",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
-            "SONIOX_ESTIMATED_USD_PER_HOUR",
-            "SONIOX_MONTHLY_CEILING_USD",
-            "SONIOX_CONTEXT_TERMS",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
@@ -152,10 +147,8 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
-            "SYNC_ASSIGNMENT_RECOVERY_ENABLED",
             "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
-            "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
             # Legacy mobile HTTP TTS rollback; pusher mounts no TTS router.
@@ -209,6 +202,9 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",
             "VAD_GATE_MODE",
+            # Plan D D2 shadow: only listen's live sessions mirror frames to listen-edge
+            # (utils/stt/edge_shadow.py); pusher receives no live audio.
+            "EDGE_SHADOW_URL",
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }
@@ -216,6 +212,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
+    | _RECONNECT_RECOVERY_LISTEN_ONLY
     | _BATCH_PIPELINE_LISTEN_ONLY,
     "prod": frozenset(
         {
@@ -243,9 +240,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "SERVICE_ACCOUNT_JSON",
             "SONIOX_CIRCUIT_COOLDOWN_SECONDS",
             "SONIOX_CIRCUIT_FAILURE_THRESHOLD",
-            "SONIOX_ESTIMATED_USD_PER_HOUR",
-            "SONIOX_MONTHLY_CEILING_USD",
-            "SONIOX_CONTEXT_TERMS",
             "STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS",
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_SHED_CONNECT_FAILURES",
@@ -266,7 +260,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_ROUTING_DISRUPTION_GATE",
             "STT_ROUTING_REDIS_TIMEOUT_SECONDS",
             # Sync HTTP intake is mounted by main.py; pusher mounts no sync router.
-            "SYNC_ASSIGNMENT_RECOVERY_ENABLED",
             "SYNC_FINALIZE_TARGET_RECOVERY_ENABLED",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
             "ACCOUNT_DELETION_DISPATCH_MODE",
@@ -321,6 +314,11 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "TWILIO_AUTH_TOKEN",
             "USE_VERTEX_AI",
             "VAD_GATE_MODE",
+            # Plan D D2 shadow: only listen's live sessions mirror frames to listen-edge
+            # (utils/stt/edge_shadow.py); pusher receives no live audio. The percent is
+            # the kill switch (0) and is declared in the prod values only.
+            "EDGE_SHADOW_PERCENT",
+            "EDGE_SHADOW_URL",
             "WAKE_WORD_ADJUDICATION_ENABLED",
             "X_OAUTH_CLIENT_SECRET",
         }
@@ -328,6 +326,7 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     | _TRANSLATION_LISTEN_ONLY
     | _REVIEW_SURFACE_LISTEN_ONLY
     | _DEMAND_LISTEN_ONLY
+    | _RECONNECT_RECOVERY_LISTEN_ONLY
     | (_BATCH_PIPELINE_LISTEN_ONLY - {'BATCH_PIPELINE_UID_ALLOWLIST'}),
 }
 
@@ -351,7 +350,6 @@ PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     # Pusher retains its cloud/BYOK credential; listen has no managed cloud key.
     "prod": frozenset(
         {
-            "DEEPGRAM_API_KEY",
             # Late identity retries are scheduled only by prod pusher audio drain.
             "OWNER_IDENTITY_RETRY_COALESCE_ENABLED",
             "REDIS_DB_HOST",

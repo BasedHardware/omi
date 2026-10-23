@@ -32,7 +32,10 @@ order ready work only under contention and never impose an idle-capacity timer.
 Future lazy enrichment does not block ready visible work. Ready work drains tiers
 0, 1, 2; 59-minute debt escapes starvation with one minute of processing headroom,
 not a demonstrated completion SLO. Priority
-waits create scheduled wakeups without consuming processing attempts. Already
+waits create scheduled wakeups without consuming processing attempts. A wait
+behind ready higher-tier work re-checks every `BLOCKED_WAIT_SECONDS` (30), one
+named Cloud Task per wait, clamped to its ceiling escape (at most 5 seconds past
+it, inside the one-minute headroom). Already
 running work is not preempted. Queue-age gauges use scrape-time Redis reads and
 return NaN when the dependency is unavailable. Redis loss uses eager recovery
 for finalization/effects and retains sync's ordinary settle deadline;
@@ -59,6 +62,9 @@ core and hosted MCP. Its owner comes from authenticated/injected execution conte
 never a tool argument. It promotes at most 20 indexed obligations from the last six
 hours, once per 30 seconds per owner. Its response reports progress with
 `ready=false`; no indexed debt is not proof that all historical work is complete.
+A surface's closed-to-open edge wakes at most `OPEN_PROMOTE_LIMIT` (20) of the
+newest indexed obligations from the last 48 hours; older debt keeps its tier and
+its ceiling.
 Redis indexes are not a historical discovery database. Existing durable recovery
 continues to own unindexed or pre-rollout debt; no Firestore discovery scan was
 added to surface or tool requests.

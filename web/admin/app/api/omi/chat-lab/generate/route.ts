@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyAdmin } from "@/lib/auth";
+import { requireScope } from "@/lib/auth";
 import { ADMIN_LLM_LANES, invokeAdminLlmGateway } from "@/lib/llm-gateway";
 
 export const dynamic = "force-dynamic";
@@ -13,7 +13,7 @@ interface Evaluation {
 }
 
 export async function POST(request: NextRequest) {
-  const authResult = await verifyAdmin(request);
+  const authResult = await requireScope(request, "content:write");
   if (authResult instanceof NextResponse) return authResult;
 
   try {
@@ -28,11 +28,11 @@ export async function POST(request: NextRequest) {
       !Array.isArray(evaluations) ||
       evaluations.length === 0
     ) {
-      return NextResponse.json(
+      return authResult.json(
         {
           error: "current_prompt and non-empty evaluations array are required",
         },
-        { status: 400 },
+        { status: 400 }
       );
     }
 
@@ -43,8 +43,12 @@ export async function POST(request: NextRequest) {
 Question: ${e.question}
 Response: ${e.response}
 AI Score: ${e.ai_score}/5
-${e.human_score != null ? `Human Score: ${e.human_score}/5` : "Human Score: not provided"}
-${e.human_comment ? `Human Comment: ${e.human_comment}` : ""}`,
+${
+  e.human_score != null
+    ? `Human Score: ${e.human_score}/5`
+    : "Human Score: not provided"
+}
+${e.human_comment ? `Human Comment: ${e.human_comment}` : ""}`
       )
       .join("\n\n");
 
@@ -86,14 +90,14 @@ Respond ONLY with valid JSON in this exact format:
         throw new Error("No JSON found in response");
       }
       const parsed = JSON.parse(jsonMatch[0]);
-      return NextResponse.json({
+      return authResult.json({
         prompt_text: parsed.prompt_text || "",
         floating_prefix: parsed.floating_prefix || "",
         notes: parsed.notes || "",
       });
     } catch {
       // Return raw text if JSON parsing fails
-      return NextResponse.json({
+      return authResult.json({
         prompt_text: resultText,
         floating_prefix: "",
         notes:
@@ -104,6 +108,6 @@ Respond ONLY with valid JSON in this exact format:
     console.error("[Chat Lab] Error generating prompt:", error);
     const message =
       error instanceof Error ? error.message : "Internal Server Error";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return authResult.json({ error: message }, { status: 500 });
   }
 }

@@ -12,6 +12,7 @@ from omi_cli.client import path_segment
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import NotFoundError, UsageError
 from omi_cli.output import shorten
+from omi_cli.validation import bounded_text
 
 if TYPE_CHECKING:
     from omi_cli.main import AppContext
@@ -122,12 +123,8 @@ def create_action_item(
     due_at: Optional[datetime] = typer.Option(None, "--due-at", formats=ISO_DATETIME_FORMATS, help="ISO datetime."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    if not description or not description.strip():
-        raise UsageError(
-            message="Invalid description",
-            detail="Description cannot be empty or whitespace.",
-        )
-    body: dict[str, object] = {"description": description.strip(), "completed": completed}
+    description = bounded_text(description, label="description")
+    body: dict[str, object] = {"description": description, "completed": completed}
     if due_at is not None:
         body["due_at"] = due_at.isoformat()
     with ctx.make_client() as client:
@@ -155,7 +152,7 @@ def update_action_item(
         )
     body: dict[str, object] = {}
     if description is not None:
-        body["description"] = description.strip()
+        body["description"] = bounded_text(description, label="description")
     if completed is not None:
         body["completed"] = completed
     if clear_due_at:

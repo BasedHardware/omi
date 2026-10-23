@@ -1,4 +1,4 @@
-"""Explicit phone Transcribe Later uploads retain the user's keep intent (#20459).
+"""Selected phone and Watch recovery uploads retain the user's keep intent.
 
 Exercise the production job coordinator and relevance handoff with external
 storage/STT replaced. Intake has already retained the short transcript; it must
@@ -27,6 +27,7 @@ def pipeline():
 
 EXPLICIT = '/tmp/audio_omibatchphone_opus_fs320_16000_1_fs320_1720000000.bin'
 AUTO = '/tmp/audio_omibatchphoneauto_opus_fs320_16000_1_fs320_1720000000.bin'
+WATCH = '/tmp/audio_omibatchwatch0123456789abcdef0123456789abcdefs0_pcm16_16000_1_fs160_1720000000.bin'
 
 
 def prepare_recording(pipeline, *, discarded=True):
@@ -88,10 +89,11 @@ def prepare_recording(pipeline, *, discarded=True):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('discarded', [True, False])
-async def test_process_now_keeps_short_phone_recording_before_enrichment(pipeline, discarded):
+@pytest.mark.parametrize('path,source', [(EXPLICIT, 'phone'), (WATCH, 'omi')])
+async def test_process_now_keeps_selected_recording_before_enrichment(pipeline, discarded, path, source):
     row = prepare_recording(pipeline, discarded=discarded)
 
-    await pipeline._run_full_pipeline_background_async('job', 'uid', [EXPLICIT], 'phone', False, '/tmp/job')
+    await pipeline._run_full_pipeline_background_async('job', 'uid', [path], source, False, '/tmp/job')
 
     pipeline.lifecycle_service.restore_discarded.assert_called_once_with('uid', 'recording')
     pipeline.process_conversation.assert_called_once()
@@ -101,7 +103,18 @@ async def test_process_now_keeps_short_phone_recording_before_enrichment(pipelin
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('paths', [[AUTO], [EXPLICIT, AUTO], [EXPLICIT, EXPLICIT], ['/tmp/audio_phonemic_pcm16_1.bin']])
+@pytest.mark.parametrize(
+    'paths',
+    [
+        [AUTO],
+        [EXPLICIT, AUTO],
+        [EXPLICIT, EXPLICIT],
+        ['/tmp/audio_phonemic_pcm16_1.bin'],
+        [WATCH, WATCH],
+        [WATCH, AUTO],
+        [WATCH.replace('0123456789abcdef0123456789abcdef', 'invalid')],
+    ],
+)
 async def test_automatic_or_mixed_uploads_keep_existing_discard_policy(pipeline, paths):
     row = prepare_recording(pipeline)
 

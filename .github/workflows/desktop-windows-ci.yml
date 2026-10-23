@@ -13,16 +13,28 @@ name: Desktop Windows CI
 # formatting warnings remain non-blocking (formatting is not enforced here).
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: [main]
     paths:
       - 'desktop/windows/**'
+      - 'web/packages/note-shared/**'
+      - 'contracts/note_citation_contract.json'
       - '.github/workflows/desktop-windows-ci.yml'
       - '.github/workflows/desktop_windows_release.yml'
   pull_request:
     branches: [main]
     paths:
       - 'desktop/windows/**'
+      - 'web/packages/note-shared/**'
+      - 'contracts/note_citation_contract.json'
       - '.github/workflows/desktop-windows-ci.yml'
       - '.github/workflows/desktop_windows_release.yml'
 
@@ -30,12 +42,20 @@ defaults:
   run:
     working-directory: desktop/windows
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
   checks:
     name: Typecheck · Lint · Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       # The app is pnpm-managed (pnpm-lock.yaml, lockfileVersion 9).
       - uses: pnpm/action-setup@v6
         with:
@@ -64,6 +84,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - uses: pnpm/action-setup@v6
         with:
           version: 10
@@ -116,6 +138,8 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
       - uses: pnpm/action-setup@v6
         with:
           version: 10

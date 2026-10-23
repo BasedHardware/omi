@@ -4354,6 +4354,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get continueText => '계속';
 
   @override
+  String get checkoutExistingSubscription => '이미 구독 중입니다. 새 구독을 시작하는 대신 현재 구독을 관리하세요.';
+
+  @override
   String get resubscribeFirstToChangePlans => '플랜을 변경하려면 먼저 다시 구독하세요.';
 
   @override
@@ -13214,9 +13217,6 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => '무료 플랜으로 계속하기';
-
-  @override
   String get paywallTrialCancelNote => '언제든지 취소 가능. 수수료나 위약금 없음.';
 
   @override
@@ -14186,4 +14186,175 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi에서 계속 녹음 중';
+
+  @override
+  String get episodeNow => '지금';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return '라이브 · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '순간 $count개',
+      one: '순간 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => '순간';
+
+  @override
+  String get episodeSoFar => '지금까지';
+
+  @override
+  String get episodeUpdatedJustNow => '방금 업데이트됨 · 끝나면 전체 노트';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes분 전에 업데이트됨 · 끝나면 전체 노트';
+  }
+
+  @override
+  String get episodeNotesSoon => '대화가 몇 분 지나면 노트가 나타납니다.';
+
+  @override
+  String get episodeOpenAll => '모두 열기';
+
+  @override
+  String get episodeWrapUpNow => '지금 마무리';
+
+  @override
+  String get episodeWrapsUpHint => '다른 일로 넘어가면 Omi가 마무리합니다';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return '할 일 감지: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return '알림 감지: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return '할 일 저장됨: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'Omi에서 $duration 추가 중';
+  }
+
+  @override
+  String get episodeListeningNow => '지금 듣는 중';
+
+  @override
+  String get deviceHeardToday => '오늘 들은 시간';
+
+  @override
+  String get deviceToSync => '동기화 대기';
+
+  @override
+  String get deviceRightNow => '현재';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return '라이브 에피소드 · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => '따라잡는 중';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total분';
+  }
+
+  @override
+  String get deviceRecently => '최근';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration 동안 연결 끊김';
+  }
+
+  @override
+  String get deviceControls => '제어';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return '그 외: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Omi 버튼을 누르세요';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => '짧게 한 번 누르세요. 그다음 무엇이든 물어보세요.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => '질문하세요';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => '소리 내어 말하세요. Omi가 듣고 있어요.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => '다 말했나요? 버튼을 다시 눌러 보내세요.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return '$days일 무료로 업그레이드되었어요';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return 'Omi Pro $days일 무료. 결제 전에 알려드려요. 언제든 취소할 수 있어요.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days일 무료 체험 받기';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '$days일 무료 체험 시작하기';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Omi 전원을 켜세요';
+
+  @override
+  String get pairingPowerOnSubtitle => '버튼을 한 번 누르고 휴대폰 가까이에 두세요.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => '끝이에요. Omi가 백그라운드에서 대화를 계속 녹음해요.';
+
+  @override
+  String get noThanks => '괜찮아요';
+
+  @override
+  String get recapInTheBackground => '배경에서';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% 할인받고 계속 쓰기';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return '계속 쓰시면 월 $price, 앞으로 $months개월 동안.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return '완료되었습니다. $percent% 할인이 $months개월 동안 적용됩니다.';
+  }
 }

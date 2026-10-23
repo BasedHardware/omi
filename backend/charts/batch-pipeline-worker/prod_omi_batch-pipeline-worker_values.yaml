@@ -30,6 +30,7 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
   apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
   audience: https://backend-sync-hhibjajaja-uc.a.run.app
   emptyAsrRecoveryEnabled: true

@@ -37,6 +37,48 @@ class CalendarMeetingContext(BaseModel):
         default=None, description="Participant provenance retained before calendar/screen context merging"
     )
 
+    def to_storage_dict(self) -> dict[str, Any]:
+        """The stored shape under ``external_data['calendar_meeting_context']``.
+
+        Hand-built rather than a model dump: the conversation trust-boundary
+        guard keys on dump call sites, and a storage write for meeting metadata
+        must not silently sweep up fields added to the model later.
+        """
+        return {
+            'calendar_event_id': self.calendar_event_id,
+            'title': self.title,
+            'participants': [
+                {'name': participant.name, 'email': participant.email} for participant in self.participants
+            ],
+            'platform': self.platform,
+            'meeting_link': self.meeting_link,
+            'start_time': self.start_time.isoformat(),
+            'duration_minutes': self.duration_minutes,
+            'notes': self.notes,
+            'calendar_source': self.calendar_source,
+            'participant_sources': self._participant_sources_storage_dict(),
+        }
+
+    def _participant_sources_storage_dict(self) -> Optional[dict[str, Any]]:
+        sources = self.participant_sources
+        if sources is None:
+            return None
+        return {
+            'expected_calendar': (
+                [{'name': participant.name, 'email': participant.email} for participant in sources.expected_calendar]
+                if sources.expected_calendar is not None
+                else None
+            ),
+            'observed_screen_listing': (
+                [
+                    {'name': participant.name, 'email': participant.email}
+                    for participant in sources.observed_screen_listing
+                ]
+                if sources.observed_screen_listing is not None
+                else None
+            ),
+        }
+
     def participants_by_source(self) -> MeetingParticipantSources:
         if self.participant_sources is not None:
             return self.participant_sources

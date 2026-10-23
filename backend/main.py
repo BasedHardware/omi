@@ -3,20 +3,24 @@ import json
 import logging
 import os
 
+from omi_logging import configure_logging
 from utils.env_loader import firebase_admin_options, load_backend_env
-from utils.logging_config import configure_split_stream_logging
 from utils.firebase_admin_runtime import (
     firebase_verify_only_credential,
     install_firebase_auth_mutation_guard,
     install_google_adc_guard,
 )
 from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
+from config.listen_quiet_finalization import enabled as quiet_finalization_enabled
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 install_google_adc_guard()
 
-# INFO/DEBUG to stdout, WARNING+ to stderr, so GKE does not store routine lines as ERROR.
-configure_split_stream_logging(level=logging.INFO)
+# Text keeps the INFO-to-stdout / WARNING+-to-stderr split (so GKE does not store
+# routine lines as ERROR) and the textPayload that log metrics match, until each
+# service's consumers are admitted for JSON (docs/runbooks/structured-logging-rollout.md);
+# OMI_LOG_FORMAT=json opts a service in.
+configure_logging(os.getenv('K_SERVICE') or 'backend', default_format='text')
 logger = logging.getLogger(__name__)
 
 import firebase_admin
@@ -26,116 +30,17 @@ from starlette.staticfiles import StaticFiles
 
 from database.google_credentials import prepare_google_credentials
 from utils.rollout_cohorts import configure_rollout_runtime
+from utils.stt_cap_cohort import refresh_stt_cap_cohort_forever
 
 prepare_google_credentials()
 install_firebase_auth_mutation_guard()
 
 from utils.observability.sync_upload import SyncUploadMetricsMiddleware
 from utils.observability.external_lists import ExternalListMetricsMiddleware
-from routers import messaging
-from routers import (
-    fleet_telemetry,
-    budget_choice,
-    candidate_integration_sweep,
-    chat_receipts,
-    dream_cohort,
-    dream_report,
-    dream_sweep,
-    review,
-    proactivity,
-    chat,
-    firmware,
-    static_map,
-    transcribe,
-    omni_relay,
-    auto_model,
-    notifications,
-    speech_profile,
-    speaker_tag_prompts,
-    speaker_labels,
-    people,
-    agents,
-    users,
-    support,
-    trends,
-    sync,
-    batch_pipeline,
-    apps,
-    payment,
-    storefront,
-    integration,
-    conversations,
-    conversation_mutations,
-    memories,
-    api_key_management,
-    mcp,
-    mcp_sse,
-    oauth,
-    auth,
-    action_items,
-    account_cutover,
-    candidates,
-    chat_first,
-    chat_first_e2e,
-    daily_summary_e2e,
-    task_integrations,
-    integrations,
-    x_connector,
-    other,
-    developer,
-    developer_key,
-    updates,
-    calendar_meetings,
-    google_calendar,
-    calendar_onboarding,
-    imports,
-    knowledge_graph,
-    wrapped,
-    folders,
-    search,
-    goals,
-    workstreams,
-    announcements,
-    phone_calls,
-    agent_tools,
-    tools,
-    metrics,
-    fair_use_admin,
-    feedback_admin,
-    staged_tasks,
-    focus_sessions,
-    advice,
-    chat_sessions,
-    chat_generation,
-    desktop_agent_vm,
-    desktop_chat,
-    desktop_core,
-    desktop_prompts,
-    desktop_proxy,
-    desktop_task_gate,
-    desktop_realtime,
-    desktop_screen_crisp,
-    frame_requests,
-    retired_app_client_contracts,
-    referrals,
-    desktop_tts_updates,
-    scores,
-    stt,
-    tts,
-    memory_admin,
-    memory_product,
-    task_recommendations,
-    conversation_finalization,
-    pending_work,
-    commitment_followup,
-    public_shared_conversation_chat,
-    screen_frames,
-    csat,
-    email_preferences,
-    mobile_feedback,
-    device_diagnostics,
-    client_telemetry,
-)
+
+# app_roles imports every router (the route table) in the original order.
+from app_roles import mount_routers, role_from_env
+from routers import messaging  # also used directly for the adapter runtime below
 from routers.listen.registry import proactive_message_dispatcher
 
 from utils.other.timeout import TimeoutMiddleware
@@ -155,7 +60,7 @@ from utils.executors import start_background_task
 from utils.batch_pipeline.serving import start_serving_from_env, stop_serving
 from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from utils.stt.streaming import validate_streaming_stt_env
-from utils.stt.soniox_runway import poll_forever
+from utils.stt.soniox_usage import start_if_configured as start_soniox_usage_if_configured
 from utils.stt.live_health import health as live_stt_health
 from utils.stt.parakeet_window import batch_pressure
 from utils.llm.managed_spend_ledger import shutdown_managed_spend_ledger
@@ -231,119 +136,11 @@ app.add_middleware(
     ],
 )
 
-app.include_router(budget_choice.router)
-app.include_router(messaging.router)
-app.include_router(proactivity.router)
-app.include_router(dream_cohort.router)
-app.include_router(dream_report.router)
-app.include_router(dream_sweep.router)
-app.include_router(candidate_integration_sweep.router)
-app.include_router(transcribe.router)
-app.include_router(static_map.router)
-app.include_router(omni_relay.router)
-app.include_router(auto_model.router)
-app.include_router(conversations.router)
-app.include_router(conversation_mutations.router)
-app.include_router(public_shared_conversation_chat.router)
-app.include_router(action_items.router)
-app.include_router(account_cutover.router)
-app.include_router(candidates.router)
-app.include_router(chat_first.router)
-if is_chat_first_e2e_harness_runtime():
-    # The fixture router has its own runtime check as defense in depth.  It is
-    # intentionally absent from dev/prod route tables, not merely disabled.
-    app.include_router(chat_first_e2e.router)
-    # Same stage boundary, same defense in depth: the desktop memory-review flow
-    # needs a daily summary carrying `memories_learned`, which only the nightly
-    # job produces in a deployable environment.
-    app.include_router(daily_summary_e2e.router)
-app.include_router(task_integrations.router)
-app.include_router(integrations.router)
-app.include_router(x_connector.router)
-app.include_router(memories.router)
-app.include_router(chat.router)
-app.include_router(chat_receipts.router)
-app.include_router(speech_profile.router)
-app.include_router(speaker_tag_prompts.router)
-app.include_router(speaker_labels.router)
-app.include_router(people.router)
-app.include_router(notifications.router)
-app.include_router(integration.router)
-app.include_router(agents.router)
-app.include_router(users.router)
-app.include_router(support.router)
-app.include_router(referrals.router)
-app.include_router(csat.router)
-app.include_router(feedback_admin.router)
-app.include_router(email_preferences.router)
-app.include_router(mobile_feedback.router)
-app.include_router(device_diagnostics.router)
-app.include_router(desktop_prompts.router)
-app.include_router(conversation_finalization.router)
-app.include_router(pending_work.router)
-app.include_router(commitment_followup.router)
-app.include_router(trends.router)
-
-app.include_router(other.router)
-
-app.include_router(firmware.router)
-app.include_router(updates.router)
-app.include_router(sync.router)
-app.include_router(batch_pipeline.router)
-
-app.include_router(apps.router)
-app.include_router(calendar_meetings.router)
-app.include_router(google_calendar.router)
-app.include_router(calendar_onboarding.router)
-app.include_router(oauth.router)
-app.include_router(auth.router)
-
-app.include_router(payment.router)
-app.include_router(storefront.router)
-app.include_router(api_key_management.mcp_router)
-app.include_router(mcp.router)
-app.include_router(mcp_sse.router)
-app.include_router(api_key_management.developer_router)
-app.include_router(developer.router)
-app.include_router(developer_key.router)
-app.include_router(imports.router)
-app.include_router(wrapped.router)
-app.include_router(folders.router)
-app.include_router(search.router)
-app.include_router(knowledge_graph.router)
-app.include_router(goals.router)
-app.include_router(workstreams.router)
-app.include_router(announcements.router)
-app.include_router(phone_calls.router)
-app.include_router(agent_tools.router)
-app.include_router(tools.router)
-app.include_router(metrics.router)
-app.include_router(client_telemetry.router)
-app.include_router(fleet_telemetry.router)
-app.include_router(fair_use_admin.router)
-app.include_router(staged_tasks.router)
-app.include_router(focus_sessions.router)
-app.include_router(advice.router)
-app.include_router(chat_sessions.router)
-app.include_router(chat_generation.router)
-app.include_router(scores.router)
-app.include_router(stt.router)
-app.include_router(tts.router)
-app.include_router(memory_admin.router)
-app.include_router(memory_product.router)
-app.include_router(task_recommendations.router)
-app.include_router(desktop_core.router)
-app.include_router(desktop_agent_vm.router)
-app.include_router(desktop_chat.router)
-app.include_router(desktop_proxy.router)
-app.include_router(desktop_task_gate.router)
-app.include_router(desktop_realtime.router)
-app.include_router(desktop_screen_crisp.router)
-app.include_router(frame_requests.router)
-app.include_router(retired_app_client_contracts.router)
-app.include_router(desktop_tts_updates.router)
-app.include_router(screen_frames.router)
-app.include_router(review.router)
+# B8: OMI_ROLE selects the routers this process serves (default `all` = every router, today's order).
+# The route table and roles live in app_roles.py; the router imports above stay static so the image
+# source-closure and import-time checks still see every router. An unknown OMI_ROLE fails startup.
+OMI_APP_ROLE = role_from_env()
+mount_routers(app, OMI_APP_ROLE, include_harness=is_chat_first_e2e_harness_runtime())
 
 methods_timeout = {
     "GET": os.environ.get('HTTP_GET_TIMEOUT'),
@@ -358,7 +155,7 @@ paths_timeout = {
     "/v2/cap-hold-recovery/sweep": 1710,  # Await bounded redrive under Scheduler's 1740s deadline.
     "/v2/batch-pipeline/recover-quarantine": 1500,  # Await paid STT and durable settlement within the task request.
     "/v2/sync-jobs/run": os.environ.get('HTTP_SYNC_JOBS_RUN_TIMEOUT', 1500),
-    "/v2/dream-agent/sweep": 150,  # Drain has its own 120s bound; Scheduler allows 180s.
+    "/v2/dream-agent/sweep": 150,  # Enabled Dream routes use the 1710s cap in TimeoutMiddleware.
     "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
     "/v2/dream-agent/canary": 90,
     "/v1/dream/runs": 90,
@@ -406,6 +203,11 @@ from utils.other.fsr_leader_lease import install_loop_lease_sigterm_handler
 
 install_loop_lease_sigterm_handler()
 
+# Live STT: deaths after SIGTERM are our rolling restart, not provider evidence.
+from utils.stt.pod_drain import install_drain_signal_marker
+
+install_drain_signal_marker()
+
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
@@ -413,11 +215,14 @@ async def startup_event():
 
     app.state.messaging_runtime = await start_adapters(messaging.register_adapter)
     start_metrics_sidecar_server()
+    start_background_task(refresh_stt_cap_cohort_forever(), name='stt_cap_cohort_refresh')
     start_background_task(live_stt_health.refresh_forever(), name='live_stt_fleet_health')
+    from utils.held_content_cohort import refresh_held_content_cohort_forever
+
+    start_background_task(refresh_held_content_cohort_forever(), name='held_content_cohort_refresh')
     batch_pressure.start_from_env()
     app.state.batch_pipeline_serving = start_serving_from_env()
-    if os.getenv('SONIOX_MONTHLY_CEILING_USD', '0') not in ('', '0'):
-        start_background_task(poll_forever(), name='soniox_runway')
+    start_soniox_usage_if_configured(start_background_task)
     validate_account_deletion_dispatch_configuration()
     validate_streaming_stt_env()
     start_background_task(log_executor_health(), name='executor_health')
@@ -558,12 +363,13 @@ def _drain_abandoned_byok_finalization_jobs():
         logger.error(f"Startup byok-abandonment reconciliation failed: {e}")
 
 
-def _listen_finalization_reconcile_interval_seconds() -> int:
+def _listen_finalization_reconcile_interval_seconds(*, quiet_checks: bool = True) -> int:
     """Periodic reconcile cadence; overridable for hermetic behavioral tests."""
+    default_seconds = 60 if quiet_checks and quiet_finalization_enabled() else 300
     try:
-        seconds = int(os.getenv('LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS', '300'))
+        seconds = int(os.getenv('LISTEN_FINALIZATION_RECONCILE_INTERVAL_SECONDS', str(default_seconds)))
     except ValueError:
-        seconds = 300
+        seconds = default_seconds
     return max(1, seconds)
 
 
@@ -642,7 +448,7 @@ async def _periodic_durable_queue_age_publish(interval_seconds: int | None = Non
     from utils.other.fsr_leader_lease import poll_delay, singleton_loops_enabled
 
     if interval_seconds is None:
-        interval_seconds = _listen_finalization_reconcile_interval_seconds()
+        interval_seconds = _listen_finalization_reconcile_interval_seconds(quiet_checks=False)
     while True:
         if singleton_loops_enabled():
             try:
@@ -662,6 +468,7 @@ async def _periodic_durable_queue_age_publish(interval_seconds: int | None = Non
 async def shutdown_event():
     # Keep the shutdown cleanup self-contained for isolated lifecycle callers.
     import logging
+
     from utils.executors import db_executor, run_blocking
 
     runtime = getattr(app.state, 'messaging_runtime', None)

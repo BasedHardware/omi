@@ -14,6 +14,7 @@ import 'package:omi/pages/conversation_detail/widgets/ask_agent_sheet.dart';
 import 'package:omi/pages/settings/connect_agent/connect_agent_page.dart';
 import 'package:omi/ui/ui.dart';
 
+import '../../../helpers/sfpro_font_fixtures.dart';
 import 'connect_agent_fixture.dart';
 
 /// Renders every Connect an Agent state on an iPhone-sized screen with the app's real fonts and
@@ -33,6 +34,7 @@ Future<void> _loadFonts() async {
     '.SF UI Display',
     '.SF Pro Text',
     '.SF Pro Display',
+    'SF Pro Display',
     'CupertinoSystemText',
     'CupertinoSystemDisplay',
     'FlutterTest',
@@ -40,7 +42,7 @@ Future<void> _loadFonts() async {
   ]) {
     final loader = FontLoader(family);
     for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
-      loader.addFont(rootBundle.load('assets/fonts/SFPRODISPLAY$font.OTF'));
+      loader.addFont(sfProFont('SFPRODISPLAY$font.OTF'));
     }
     await loader.load();
   }
@@ -141,6 +143,14 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('connect_agent_chatgpt')));
     await settle(tester);
     await shoot(tester, '3-chatgpt-connected');
+  });
+
+  testWidgets('3b partial ChatGPT grant: reconnect sheet offers Disconnect', (tester) async {
+    await pump(tester, FakeAgentBackend(chatGptConnected: true, chatGptScopes: ['memories.read']));
+    await tester.tap(find.text('Reconnect'));
+    await settle(tester);
+    expect(find.byKey(const ValueKey('connect_chatgpt_disconnect')), findsOneWidget);
+    await shoot(tester, '3b-chatgpt-reconnect-sheet-disconnect');
   });
 
   testWidgets('4 agent prompt before copy', (tester) async {

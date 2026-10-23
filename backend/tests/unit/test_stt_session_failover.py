@@ -80,6 +80,9 @@ def test_excluding_the_dead_provider_selects_the_next_one():
 
 def test_excluding_the_dead_provider_skips_soniox_without_a_key():
     """An empty key must not consume a failover hop."""
+    # Deepgram retired 2026-08-27: even with a dg slot listed and available,
+    # exclusion of Modulate plus an empty Soniox key exhausts the chain — and
+    # crucially the empty-key slot never consumes the selection.
     with patch.dict(
         'os.environ',
         {'STT_SERVICE_MODELS': 'modulate-velma-2,soniox,dg-nova-3,parakeet', 'SONIOX_API_KEY': ''},
@@ -88,7 +91,7 @@ def test_excluding_the_dead_provider_skips_soniox_without_a_key():
         'utils.stt.streaming._deepgram_is_available', return_value=True
     ):
         second, _, _ = get_stt_service_for_language('en', exclude=frozenset({MODULATE_PROVIDER}))
-        assert second == STTService.deepgram
+        assert second is None
 
 
 def test_excluding_every_provider_selects_nothing(monkeypatch):

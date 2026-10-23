@@ -598,7 +598,7 @@ def _drive_process_segment(
     monkeypatch.setattr(pipeline, 'get_timestamp_from_path', lambda _path: wal_ts)
     monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', lambda *args, **kwargs: None)
     monkeypatch.setattr(pipeline.conversations_db, 'get_manual_speaker_receipt', lambda *args: {})
-    monkeypatch.setattr(pipeline, 'capture_evidence_dark_write_enabled', lambda: False)
+
     if prove:
 
         def dark_write(incoming, _map, segments):

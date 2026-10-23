@@ -20,6 +20,7 @@ import 'package:omi/pages/home/home_deep_links.dart';
 import 'package:omi/pages/home/item_list_sheet.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/ui/ui.dart';
+import '../../helpers/sfpro_font_fixtures.dart';
 
 /// h.omi.me/items: an ordered list of conversations, tasks and memories that opens as one sheet
 /// over Home (contract M, Mobile).
@@ -278,11 +279,12 @@ void main() {
             'CupertinoSystemDisplay',
             '.SF UI Text',
             '.SF UI Display',
+            'SF Pro Display',
             'FlutterTest'
           ]) {
             final loader = FontLoader(family)
-              ..addFont(rootBundle.load('assets/fonts/SFPRODISPLAYMEDIUM.OTF'))
-              ..addFont(rootBundle.load('assets/fonts/SFPRODISPLAYREGULAR.OTF'));
+              ..addFont(sfProFont('SFPRODISPLAYMEDIUM.OTF'))
+              ..addFont(sfProFont('SFPRODISPLAYREGULAR.OTF'));
             await loader.load();
           }
         });

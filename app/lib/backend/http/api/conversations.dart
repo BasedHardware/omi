@@ -188,13 +188,25 @@ final class ReprocessFailed extends ReprocessResult {
 /// pool must never retry it (a timeout or 5xx retry starts a second, duplicate reprocess).
 const Duration reprocessRequestTimeout = Duration(seconds: 180);
 
+/// The reprocess query: `app_id` for a template, `source=omi` for Omi's own notes ([forceOmi]),
+/// nothing for the legacy "regenerate" (Omi notes plus the user's server preferred template).
+/// A backend that predates `source` ignores the unknown parameter.
+@visibleForTesting
+String reprocessQuery({String? appId, bool forceOmi = false}) {
+  if (appId != null) return '?app_id=${Uri.encodeQueryComponent(appId)}';
+  if (forceOmi) return '?source=omi';
+  return '';
+}
+
 Future<ReprocessResult> reProcessConversationServer(
   String conversationId, {
   String? appId,
   bool requireSpeakerReceipt = false,
+  bool forceOmi = false,
 }) async {
+  final route = '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess';
   final response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/reprocess${appId != null ? '?app_id=$appId' : ''}',
+    url: '$route${reprocessQuery(appId: appId, forceOmi: forceOmi)}',
     headers: {},
     method: 'POST',
     body: '',
@@ -1335,4 +1347,18 @@ Future<MergeConversationsResponse?> mergeConversations(List<String> conversation
     Logger.debug('mergeConversations error: ${response.statusCode} - ${response.body}');
     return null;
   }
+}
+
+/// Creates the "Get Started with Omi" conversation that opens the `pocket` onboarding's Home.
+/// Idempotent on the server; false on any failure (Home then simply starts empty).
+Future<bool> seedOnboardingConversation() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/onboarding/seed-conversation',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  Logger.debug('seedOnboardingConversation: ${response.statusCode}');
+  return response.statusCode == 200 || response.statusCode == 201;
 }

@@ -1,15 +1,61 @@
 fullnameOverride: "dev-omi-cloud-run-metrics-exporter"
 
+# Only families an in-cluster consumer can read from job=cloud-run-application-metrics
+# are imported (see the prod twin for the 2026-10-21 consumer audit and the
+# measured 188-family / ~54k-live-series collection this replaces). Dev runs the
+# same codebase, so dev would grow the same unconsumed per-instance families;
+# both files are held to one pinned list by
+# tests/unit/test_monitoring_telemetry_contract.py. The
+# custom.googleapis.com/omi_sync_phase_ prefix is gone here too: dev backend-sync
+# writes it the same way and nothing in-cluster reads it.
 stackdriver:
   projectIds:
     - "based-hardware-dev"
   metrics:
     prefixes:
-      - 'prometheus.googleapis.com/omi_'
-      - 'custom.googleapis.com/omi_sync_phase_'
+      - 'prometheus.googleapis.com/omi_capture_finalization_failures_total/'
+      - 'prometheus.googleapis.com/omi_capture_finalization_reconciliations_total/'
+      - 'prometheus.googleapis.com/omi_chat_search_tool_outcomes_total/'
+      - 'prometheus.googleapis.com/omi_client_app_startup_duration_seconds/'
+      - 'prometheus.googleapis.com/omi_client_events_total/'
+      - 'prometheus.googleapis.com/omi_client_journey_accepted_total/'
+      - 'prometheus.googleapis.com/omi_client_journey_duration_seconds/'
+      - 'prometheus.googleapis.com/omi_client_journey_issues_total/'
+      - 'prometheus.googleapis.com/omi_client_journey_terminal_total/'
+      - 'prometheus.googleapis.com/omi_client_telemetry_rejected_total/'
+      - 'prometheus.googleapis.com/omi_conversation_duration_seconds/'
+      - 'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/'
+      - 'prometheus.googleapis.com/omi_daily_summary_resumed_cohort_age_seconds/'
+      - 'prometheus.googleapis.com/omi_fallback_total/'
+      - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'
+      - 'prometheus.googleapis.com/omi_firestore_read_operations_total/'
+      - 'prometheus.googleapis.com/omi_journey_accepted_total/'
+      - 'prometheus.googleapis.com/omi_journey_latency_seconds/'
+      - 'prometheus.googleapis.com/omi_journey_terminal_total/'
+      - 'prometheus.googleapis.com/omi_listen_audio_decode_failures_total/'
+      - 'prometheus.googleapis.com/omi_listen_demand_failure_detail_total/'
+      - 'prometheus.googleapis.com/omi_live_session_transcript_outcome_total/'
+      - 'prometheus.googleapis.com/omi_owner_recognition_conversations_total/'
+      - 'prometheus.googleapis.com/omi_product_event_total/'
+      - 'prometheus.googleapis.com/omi_queue_oldest_ready_age_seconds/'
+      - 'prometheus.googleapis.com/omi_queue_oldest_ready_sample_unknown/'
+      - 'prometheus.googleapis.com/omi_stt_chain_exhausted_total/'
+      - 'prometheus.googleapis.com/omi_stt_provider_circuit_open/'
+      - 'prometheus.googleapis.com/omi_stt_provider_connect_total/'
+      - 'prometheus.googleapis.com/omi_stt_provider_retired/'
+      - 'prometheus.googleapis.com/omi_stt_stream_close_total/'
+      - 'prometheus.googleapis.com/omi_subscription_events_total/'
+      - 'prometheus.googleapis.com/omi_translation_cache_ops_total/'
+      - 'prometheus.googleapis.com/omi_translation_chars_total/'
+      - 'prometheus.googleapis.com/omi_translation_errors_total/'
+      - 'prometheus.googleapis.com/omi_translation_latency_seconds/'
+      - 'prometheus.googleapis.com/omi_translation_requests_total/'
+      - 'prometheus.googleapis.com/omi_translation_skip_total/'
+      - 'prometheus.googleapis.com/omi_vertex_managed_25_attempts_total/'
+      - 'prometheus.googleapis.com/omi_vertex_managed_25_on_demand_responses_total/'
+      - 'prometheus.googleapis.com/omi_vertex_non_dream_flash_after_cutover_attempts_total/'
     filters:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend","notifications-job")'
-      - 'custom.googleapis.com/omi_sync_phase_:resource.labels.job=one_of("backend-sync","backend-sync-backfill")'
     interval: '10m'
     offset: '1m'
 

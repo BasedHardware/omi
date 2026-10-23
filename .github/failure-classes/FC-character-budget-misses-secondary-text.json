@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-character-budget-misses-secondary-text",
+  "violated_contract": "A character budget on a returned transcript must charge every variable-length text field the projection emits. Clipping a sibling field without charging it or setting the truncation flag both exceeds the advertised bound and tells the caller a clipped response is complete.",
+  "canonical_prevention": "Charge the budget in field priority order (primary text first), truncate each later field to the remaining allowance, and set the shared truncation flag on any cut. Exercise the production reader with a corrected segment whose original_text outlives the text and assert the summed returned characters stay within max_chars and the flag is true.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_mcp_transcript_character_budget.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/mcp_server/helpers.py",
+    "backend/utils/mcp_server/handlers/conversations.py",
+    "backend/routers/mcp.py"
+  ],
+  "status": "open"
+}

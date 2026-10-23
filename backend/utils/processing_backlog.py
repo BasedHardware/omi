@@ -6,6 +6,7 @@ import time
 
 from config.rate_card import recording_units_per_hour, standard_chat_units, budget_units
 from config.plan_catalog import resolve_subscription_entitlements, allocation_limit
+from config.stt_cap_dispatch import recovery_cohort_admits
 from datetime import datetime, timezone
 from models.users import ProcessingBacklog
 from utils import funded_processing
@@ -69,7 +70,7 @@ def snapshot(uid: str, *, allowance=None, audio=None, summary=None) -> Processin
 
 
 def choose(uid: str, *, request_key: str, automatic: bool = False, intent_at: Any = None) -> dict | None:
-    if not funded_processing.enabled(uid):
+    if not recovery_cohort_admits(uid) or not funded_processing.enabled(uid):
         return None
     from database import processing_backlog as store
 

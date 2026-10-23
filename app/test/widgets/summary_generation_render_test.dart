@@ -26,6 +26,7 @@ import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/services/experiments/summary_generation_gate.dart';
 import 'package:omi/ui/ui.dart';
 
+import '../helpers/sfpro_font_fixtures.dart';
 import '../helpers/summary_fixtures.dart';
 
 /// Summary generation redesign, rendered with the real widgets in the dark palette.
@@ -129,7 +130,7 @@ void main() {
         conversation,
         fetches: fetches,
         catalog: [_pgApp],
-        reprocess: (id, {appId, requireSpeakerReceipt = false}) {
+        reprocess: (id, {appId, requireSpeakerReceipt = false, forceOmi = false}) {
           final result = _results[item.slug];
           return result == null ? gate.future : Future.value(result);
         },
@@ -247,13 +248,10 @@ void main() {
 
 Future<void> _loadEvidenceFonts() async {
   final fonts = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List<dynamic>;
-  final sfAssets = <String>{};
   for (final entry in fonts) {
     final loader = FontLoader(entry['family'] as String);
     for (final font in entry['fonts'] as List<dynamic>) {
-      final asset = font['asset'] as String;
-      if (asset.contains('SFPRODISPLAY')) sfAssets.add(asset);
-      loader.addFont(rootBundle.load(asset));
+      loader.addFont(rootBundle.load(font['asset'] as String));
     }
     await loader.load();
   }
@@ -266,8 +264,8 @@ Future<void> _loadEvidenceFonts() async {
     'FlutterTest',
   ]) {
     final loader = FontLoader(family);
-    for (final asset in sfAssets) {
-      loader.addFont(rootBundle.load(asset));
+    for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
+      loader.addFont(sfProFont('SFPRODISPLAY$font.OTF'));
     }
     await loader.load();
   }

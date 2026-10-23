@@ -8,8 +8,10 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -265,3 +267,56 @@ def test_update_conversation_request_null_title_means_unchanged():
     request = developer_module.UpdateConversationRequest.model_validate({'title': None, 'discarded': True})
     assert request.title is None
     assert request.discarded is True
+
+
+def _create_from_text(body):
+    captured = []
+
+    def process(_uid, _language, conversation):
+        captured.append(conversation)
+        return SimpleNamespace(id='c1', status=None, discarded=False, processing_deferred=False)
+
+    with patch.object(developer_module, 'process_conversation', process), patch.object(
+        developer_module, 'resolve_geolocation', lambda _geolocation: None
+    ):
+        response = _build().post('/v1/dev/user/conversations', json={'text': 'hello there', **body})
+    return response, captured
+
+
+@pytest.mark.parametrize(
+    'body, finished_at',
+    [
+        # started_at defaults to now (aware), so the naive finish has to be in the future.
+        ({'finished_at': '2099-01-01T00:10:00'}, datetime(2099, 1, 1, 0, 10, tzinfo=timezone.utc)),
+        (
+            {'started_at': '2026-01-01T00:00:00', 'finished_at': '2026-01-01T00:10:00Z'},
+            datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc),
+        ),
+        (
+            {'started_at': '2026-01-01T00:00:00Z', 'finished_at': '2026-01-01T00:10:00'},
+            datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_create_from_text_reads_a_timestamp_without_an_offset_as_utc(body, finished_at):
+    # A naive timestamp next to an aware one (or the aware started_at default) made the handler's
+    # finished_at < started_at check raise TypeError, an HTTP 500. Naive values are read as UTC.
+    response, captured = _create_from_text(body)
+
+    assert response.status_code == 200
+    assert captured[0].finished_at == finished_at
+
+
+def test_create_from_text_keeps_accepting_two_naive_timestamps_as_utc():
+    response, captured = _create_from_text({'started_at': '2026-01-01T00:00:00', 'finished_at': '2026-01-01T00:10:00'})
+
+    assert response.status_code == 200
+    assert captured[0].started_at == datetime(2026, 1, 1, tzinfo=timezone.utc)
+    assert captured[0].finished_at == datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc)
+
+
+def test_create_from_text_still_rejects_a_finish_before_the_start():
+    response, captured = _create_from_text({'started_at': '2026-01-01T00:10:00', 'finished_at': '2026-01-01T00:00:00Z'})
+
+    assert response.status_code == 422
+    assert captured == []

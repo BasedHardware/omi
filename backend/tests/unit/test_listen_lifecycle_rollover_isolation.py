@@ -116,6 +116,10 @@ async def test_failing_reconnect_client_id_cleanup_still_rolls_over():
 
     async def _call(fn, *args, **_kwargs):
         name = fn.__name__
+        if name == 'arm':
+            assert args[0] == 'uid-1' and isinstance(args[1], str)
+            assert _kwargs == {'requires_byok': False}
+            return None
         if name == 'open_live_recording_session':
             _uid, _sid, proposed = args
             return {

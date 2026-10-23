@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-phone-custody-home.png",
+      "platform": "mobile-ios",
+      "description": "Real conversations page with one manual phone recording and a synthetic conversation; twelve Watch copies, automatic phone fallback and Limitless custody WALs produce no Home rows.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-ios-phone-custody-processing.png",
+      "platform": "mobile-ios",
+      "description": "Real Home keeps the Transcribe Later row visible while its accepted job processes. Synthetic fixture, real fonts.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

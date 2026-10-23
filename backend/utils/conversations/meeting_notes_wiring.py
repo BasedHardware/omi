@@ -153,8 +153,14 @@ def rich_notes_inputs(
     *,
     include_background: bool,
     include_screen_text: bool,
-) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...]]:
-    """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, and frame images for notes."""
+) -> Tuple[Optional[MeetingRoster], Optional[str], bool, Tuple[NotesFrameImage, ...], int]:
+    """Roster, optional rendered BACKGROUND CONTEXT block, desktop flag, frame
+    images for notes, and the approved-frame count.
+
+    The count is the screen-volume signal the notes tier gate escalates on; the
+    images are capped far below it (``MAX_NOTES_FRAME_IMAGES``), so they alone
+    can never say how screen-heavy the meeting was.
+    """
     roster, people_docs, desktop_capture, evidence = _rich_meeting_roster(
         uid,
         conversation,
@@ -162,7 +168,7 @@ def rich_notes_inputs(
     )
     corrections = confirmed_corrections_context(conversation)
     if roster is None or not include_background:
-        return roster, corrections or None, desktop_capture, ()
+        return roster, corrections or None, desktop_capture, (), len(evidence)
     started_at = frame_evidence_started_at(conversation)
     block = _rich_meeting_context_block(
         uid,
@@ -180,7 +186,7 @@ def rich_notes_inputs(
         logger.warning('rich meeting frame images failed uid=%s: %s', uid, type(exc).__name__)
     if corrections:
         block = (block or '') + corrections
-    return roster, block, desktop_capture, images
+    return roster, block, desktop_capture, images, len(evidence)
 
 
 def confirmed_corrections_context(conversation):
@@ -193,3 +199,23 @@ def confirmed_corrections_context(conversation):
         '\nOwner-confirmed corrections (use these facts in the title and summary; do not rewrite the transcript):\n'
         + text
     )
+
+
+def notes_capture_sources(conversation: Any) -> list[str]:
+    """Capture surfaces that recorded this event (one entry per capture-group member)."""
+    group = getattr(conversation, 'capture_group', None)
+    members = getattr(group, 'members', None) or []
+    sources = [str(getattr(member, 'source', None) or 'unknown') for member in members]
+    if sources:
+        return sources
+    source = getattr(conversation, 'source', None)
+    return [str(getattr(source, 'value', source) or 'unknown')]
+
+
+def notes_agent_inputs(conversation: Any, desktop_capture: bool) -> Dict[str, Any]:
+    """Extra notes-call inputs the agentic writer budgets on: window end and capture evidence."""
+    return {
+        'finished_at': getattr(conversation, 'finished_at', None),
+        'desktop_meeting_capture': desktop_capture,
+        'capture_sources': notes_capture_sources(conversation),
+    }

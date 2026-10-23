@@ -135,6 +135,7 @@ def _worker(vad_spans, clocks, *, diarize=None):
 
     words = _Words(clocks)
     worker = PipelineWorker(
+        language_of=lambda item: 'en',
         decode=lambda item: np.full(int(item.duration_seconds * SAMPLE_RATE), 0.01, dtype=np.float32),
         vad=lambda s: list(vad_spans),
         words_providers={'parakeet': words},
