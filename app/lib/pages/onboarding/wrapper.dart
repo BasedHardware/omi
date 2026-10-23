@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:omi/services/onboarding_sync_runtime.dart';
 import 'onboarding_step_telemetry.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -272,6 +274,9 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     PaintingBinding.instance.imageCache.clear();
     if (!paywallShown) await _maybeShowOnboardingPaywall();
     if (!mounted) return true;
+    // Sign-in happened inside onboarding, after the app shell's launch-time fetch, so Home and
+    // Settings (Upgrade row, first-tap trial paywall) would otherwise have no subscription.
+    unawaited(context.read<UsageProvider>().fetchSubscription());
     routeToPage(context, const HomePageWrapper(), replace: true);
     return true;
   }
