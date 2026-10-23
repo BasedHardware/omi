@@ -130,64 +130,67 @@ void main() {
     testWidgets('stream updates leave chat shell and settled markdown alone, semantics=$semantics', (tester) async {
       addTearDown(tester.view.resetViewInsets);
       final handle = semantics ? tester.ensureSemantics() : null;
-      addTearDown(() => handle?.dispose());
-      final provider = _QuietMessages(_OlderSessions(const []));
-      addTearDown(provider.dispose);
-      final history = _History(List.generate(
-          80, (i) => _textMessage('m$i', DateTime.utc(2026, 10, 22), '**Settled $i** paragraph', MessageSender.ai)));
-      provider.messages = history;
+      try {
+        final provider = _QuietMessages(_OlderSessions(const []));
+        addTearDown(provider.dispose);
+        final history = _History(List.generate(
+            80, (i) => _textMessage('m$i', DateTime.utc(2026, 10, 22), '**Settled $i** paragraph', MessageSender.ai)));
+        provider.messages = history;
 
-      await tester.pumpWidget(_chat(provider));
-      await tester.pump(const Duration(seconds: 1));
-      await tester.pump(const Duration(seconds: 1));
-      final counts = <String, int>{};
-      history.visited = 0;
-      debugOnRebuildDirtyWidget = (element, builtOnce) {
-        final name = element.widget.runtimeType.toString();
-        counts[name] = (counts[name] ?? 0) + 1;
-      };
-      addTearDown(() => debugOnRebuildDirtyWidget = null);
-      for (var i = 0; i < 10; i++) {
-        provider.ping();
+        await tester.pumpWidget(_chat(provider));
+        await tester.pump(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        final counts = <String, int>{};
+        history.visited = 0;
+        debugOnRebuildDirtyWidget = (element, builtOnce) {
+          final name = element.widget.runtimeType.toString();
+          counts[name] = (counts[name] ?? 0) + 1;
+        };
+        addTearDown(() => debugOnRebuildDirtyWidget = null);
+        for (var i = 0; i < 10; i++) {
+          provider.ping();
+          await tester.pump();
+        }
+        debugPrint(
+            'CHAT_NOOP semantics=$semantics history_visits=${history.visited} header=${counts['ChatHeader'] ?? 0} scaffold=${counts['Scaffold'] ?? 0} ai=${counts['AIMessage'] ?? 0} markdown=${counts['MarkdownBody'] ?? 0} total=${counts.values.fold(0, (int a, b) => a + b)}');
+        final noOpHeader = counts['ChatHeader'] ?? 0;
+        final noOpVisits = history.visited;
+        counts.clear();
+        history.visited = 0;
+        for (var i = 0; i < 10; i++) {
+          provider.messages.last.text += ' chunk';
+          provider.ping();
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        debugPrint(
+            'CHAT_STREAM semantics=$semantics header=${counts['ChatHeader'] ?? 0} scaffold=${counts['Scaffold'] ?? 0} ai=${counts['AIMessage'] ?? 0} markdown=${counts['MarkdownBody'] ?? 0} history_visits=${history.visited} slots=${counts['_ChatMessageSlot'] ?? 0} total=${counts.values.fold(0, (int a, b) => a + b)}');
+        final streamCounts = Map<String, int>.of(counts);
+        final streamVisits = history.visited;
+        counts.clear();
+        history.visited = 0;
+        tester.view.viewInsets = const FakeViewPadding(bottom: 300);
         await tester.pump();
+        debugPrint(
+            'CHAT_KEYBOARD semantics=$semantics history_visits=${history.visited} header=${counts['ChatHeader'] ?? 0} ai=${counts['AIMessage'] ?? 0} markdown=${counts['MarkdownBody'] ?? 0} total=${counts.values.fold(0, (int a, b) => a + b)}');
+        final openVisits = history.visited;
+        history.visited = 0;
+        tester.view.resetViewInsets();
+        await tester.pump();
+        debugPrint('CHAT_KEYBOARD_CLOSE semantics=$semantics history_visits=${history.visited}');
+        expect(openVisits, 0, reason: 'keyboard opening must reuse transcript membership');
+        expect(history.visited, 0, reason: 'keyboard closing must reuse transcript membership');
+        expect(noOpHeader, 0);
+        expect(noOpVisits, 0, reason: 'no-op notifications must not walk chat history');
+        expect(streamVisits, 0);
+        expect(streamCounts['ChatHeader'] ?? 0, 0);
+        expect(streamCounts['Scaffold'] ?? 0, 0);
+        expect(streamCounts['MarkdownBody'] ?? 0, lessThanOrEqualTo(10));
+        tester.view.resetViewInsets();
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(seconds: 1));
+      } finally {
+        handle?.dispose();
       }
-      debugPrint(
-          'CHAT_NOOP semantics=$semantics history_visits=${history.visited} header=${counts['ChatHeader'] ?? 0} scaffold=${counts['Scaffold'] ?? 0} ai=${counts['AIMessage'] ?? 0} markdown=${counts['MarkdownBody'] ?? 0} total=${counts.values.fold(0, (int a, b) => a + b)}');
-      final noOpHeader = counts['ChatHeader'] ?? 0;
-      final noOpVisits = history.visited;
-      counts.clear();
-      history.visited = 0;
-      for (var i = 0; i < 10; i++) {
-        provider.messages.last.text += ' chunk';
-        provider.ping();
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-      debugPrint(
-          'CHAT_STREAM semantics=$semantics header=${counts['ChatHeader'] ?? 0} scaffold=${counts['Scaffold'] ?? 0} ai=${counts['AIMessage'] ?? 0} markdown=${counts['MarkdownBody'] ?? 0} history_visits=${history.visited} slots=${counts['_ChatMessageSlot'] ?? 0} total=${counts.values.fold(0, (int a, b) => a + b)}');
-      final streamCounts = Map<String, int>.of(counts);
-      final streamVisits = history.visited;
-      counts.clear();
-      history.visited = 0;
-      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
-      await tester.pump();
-      debugPrint(
-          'CHAT_KEYBOARD semantics=$semantics history_visits=${history.visited} header=${counts['ChatHeader'] ?? 0} ai=${counts['AIMessage'] ?? 0} markdown=${counts['MarkdownBody'] ?? 0} total=${counts.values.fold(0, (int a, b) => a + b)}');
-      final openVisits = history.visited;
-      history.visited = 0;
-      tester.view.resetViewInsets();
-      await tester.pump();
-      debugPrint('CHAT_KEYBOARD_CLOSE semantics=$semantics history_visits=${history.visited}');
-      expect(openVisits, 0, reason: 'keyboard opening must reuse transcript membership');
-      expect(history.visited, 0, reason: 'keyboard closing must reuse transcript membership');
-      expect(noOpHeader, 0);
-      expect(noOpVisits, 0, reason: 'no-op notifications must not walk chat history');
-      expect(streamVisits, 0);
-      expect(streamCounts['ChatHeader'] ?? 0, 0);
-      expect(streamCounts['Scaffold'] ?? 0, 0);
-      expect(streamCounts['MarkdownBody'] ?? 0, lessThanOrEqualTo(10));
-      tester.view.resetViewInsets();
-      await tester.pumpWidget(const SizedBox.shrink());
-      await tester.pump(const Duration(seconds: 1));
     });
   }
 
@@ -270,12 +273,16 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
     }
     debugPrint('CHAT_REAL_STREAM chunks=10 header_builds=$headers text_length=${provider.messages.last.text.length}');
-    provider.stopReply();
+    final streamHeaders = headers;
+    debugOnRebuildDirtyWidget = null;
+    unawaited(provider.stopReply());
+    await tester.pump();
+    await tester.pump();
     await turn;
-    await chunks.close();
+    unawaited(chunks.close());
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(seconds: 1));
-    expect(headers, 0);
+    expect(streamHeaders, 0);
   });
 
   for (final state in [VoiceRecorderState.recording, VoiceRecorderState.pendingRecovery]) {

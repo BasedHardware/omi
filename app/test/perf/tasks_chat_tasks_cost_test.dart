@@ -39,47 +39,50 @@ void main() {
     for (final overdue in [false, true]) {
       testWidgets('240 ${overdue ? 'overdue' : 'undated'} tasks stay lazy, semantics=$semantics', (tester) async {
         final handle = semantics ? tester.ensureSemantics() : null;
-        addTearDown(() => handle?.dispose());
-        final provider = _Tasks(List.generate(
-            240,
-            (i) => ActionItemWithMetadata(
-                id: '$i',
-                description: 'Task $i',
-                completed: false,
-                sortOrder: i + 1,
-                dueAt: overdue ? DateTime(2020) : null)));
-        addTearDown(provider.dispose);
-        await tester.pumpWidget(await buildTypedActionItemsScreen(provider));
-        await provider.ensureLoaded();
-        await tester.pumpAndSettle();
-        final mounted = find.byType(TaskCompletionMark).evaluate().length;
-        var rows = 0;
-        debugOnRebuildDirtyWidget = (element, builtOnce) {
-          if (element.widget is TaskCompletionMark) rows++;
-        };
-        addTearDown(() => debugOnRebuildDirtyWidget = null);
-        for (var i = 0; i < 5; i++) {
-          provider.ping();
-          await tester.pump();
+        try {
+          final provider = _Tasks(List.generate(
+              240,
+              (i) => ActionItemWithMetadata(
+                  id: '$i',
+                  description: 'Task $i',
+                  completed: false,
+                  sortOrder: i + 1,
+                  dueAt: overdue ? DateTime(2020) : null)));
+          addTearDown(provider.dispose);
+          await tester.pumpWidget(await buildTypedActionItemsScreen(provider));
+          await provider.ensureLoaded();
+          await tester.pumpAndSettle();
+          final mounted = find.byType(TaskCompletionMark).evaluate().length;
+          var rows = 0;
+          debugOnRebuildDirtyWidget = (element, builtOnce) {
+            if (element.widget is TaskCompletionMark) rows++;
+          };
+          addTearDown(() => debugOnRebuildDirtyWidget = null);
+          for (var i = 0; i < 5; i++) {
+            provider.ping();
+            await tester.pump();
+          }
+          final noOpRows = rows;
+          rows = 0;
+          await provider.updateActionItemState(provider.actionItems.first, true);
+          await tester.pumpAndSettle();
+          debugPrint('TASKS_COST overdue=$overdue semantics=$semantics mounted=$mounted noop5=$noOpRows toggle=$rows');
+          expect(mounted, lessThan(40));
+          expect(noOpRows, lessThan(200));
+          expect(rows, lessThan(80));
+          await tester.scrollUntilVisible(find.text('Task 239'), 600,
+              scrollable: find.byType(Scrollable).first, maxScrolls: 30);
+          expect(find.text('Task 239'), findsOneWidget);
+          await tester.pumpAndSettle();
+          final endMounted = find.byType(TaskCompletionMark).evaluate().length;
+          debugPrint(
+              'TASKS_SCROLL overdue=$overdue semantics=$semantics endpoint_mounted=$endMounted idle_callbacks=${tester.binding.transientCallbackCount}');
+          expect(endMounted, lessThan(40));
+          expect(tester.binding.transientCallbackCount, 0);
+          await tester.pumpWidget(const SizedBox.shrink());
+        } finally {
+          handle?.dispose();
         }
-        final noOpRows = rows;
-        rows = 0;
-        await provider.updateActionItemState(provider.actionItems.first, true);
-        await tester.pumpAndSettle();
-        debugPrint('TASKS_COST overdue=$overdue semantics=$semantics mounted=$mounted noop5=$noOpRows toggle=$rows');
-        expect(mounted, lessThan(40));
-        expect(noOpRows, lessThan(200));
-        expect(rows, lessThan(80));
-        await tester.scrollUntilVisible(find.text('Task 239'), 600,
-            scrollable: find.byType(Scrollable).first, maxScrolls: 30);
-        expect(find.text('Task 239'), findsOneWidget);
-        await tester.pumpAndSettle();
-        final endMounted = find.byType(TaskCompletionMark).evaluate().length;
-        debugPrint(
-            'TASKS_SCROLL overdue=$overdue semantics=$semantics endpoint_mounted=$endMounted idle_callbacks=${tester.binding.transientCallbackCount}');
-        expect(endMounted, lessThan(40));
-        expect(tester.binding.transientCallbackCount, 0);
-        await tester.pumpWidget(const SizedBox.shrink());
       });
     }
   }
@@ -107,30 +110,33 @@ void main() {
 
   testWidgets('one 240-task project only builds visible rows', (tester) async {
     final handle = tester.ensureSemantics();
-    addTearDown(handle.dispose);
-    var built = 0;
-    final items = List.generate(
-        240,
-        (i) => ActionItemWithMetadata(
-            id: '$i', description: 'Task $i', completed: false, sortOrder: i + 1, workstreamId: 'p'));
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: const [Locale('en')],
-      home: Scaffold(
-          body: Builder(
-              builder: (context) => CustomScrollView(
-                  slivers: projectTaskSections(
-                      context: context,
-                      items: items,
-                      projects: const {'p': EntityRef(entityId: 'p', type: EntityType.project, name: 'Project')},
-                      buildRow: (item, group) {
-                        built++;
-                        return SizedBox(height: 50, child: Text(item.description));
-                      })))),
-    ));
-    debugPrint('PROJECT_COST initial_row_builds=$built');
-    expect(built, lessThan(40));
-    await tester.scrollUntilVisible(find.text('Task 239'), 600, maxScrolls: 30);
-    expect(find.text('Task 239'), findsOneWidget);
+    try {
+      var built = 0;
+      final items = List.generate(
+          240,
+          (i) => ActionItemWithMetadata(
+              id: '$i', description: 'Task $i', completed: false, sortOrder: i + 1, workstreamId: 'p'));
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: const [Locale('en')],
+        home: Scaffold(
+            body: Builder(
+                builder: (context) => CustomScrollView(
+                    slivers: projectTaskSections(
+                        context: context,
+                        items: items,
+                        projects: const {'p': EntityRef(entityId: 'p', type: EntityType.project, name: 'Project')},
+                        buildRow: (item, group) {
+                          built++;
+                          return SizedBox(height: 50, child: Text(item.description));
+                        })))),
+      ));
+      debugPrint('PROJECT_COST initial_row_builds=$built');
+      expect(built, lessThan(40));
+      await tester.scrollUntilVisible(find.text('Task 239'), 600, maxScrolls: 30);
+      expect(find.text('Task 239'), findsOneWidget);
+    } finally {
+      handle.dispose();
+    }
   });
 }
