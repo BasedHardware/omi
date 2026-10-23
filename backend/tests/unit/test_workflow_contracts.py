@@ -368,7 +368,10 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     guardrails job, and publishes the verdict through a literal-named gate so
     the required check surface never changes. Each shard carries a wall-clock
     regression budget; duration drift fails the run instead of publishing
-    green.
+    green. The budget is 900s since 2026-10-22: the selection grew past
+    2,200 files and runner variance alone put seven all-green shards over
+    the former 720s line (722-790s) while 48 same-day green walls ran
+    373-700s — the gate must sit above that variance tail, not inside it.
     """
     repo = BACKEND_DIR.parent
     workflow = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
@@ -377,7 +380,7 @@ def test_backend_unit_suite_is_sharded_with_a_literal_gate_and_budget():
     assert "shard: [1, 2, 3, 4, 5, 6]" in workflow
     assert "--shard 6/${{ matrix.shard }}" in workflow
     assert "name: Backend unit shard ${{ matrix.shard }}/6" in workflow
-    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"' in workflow
+    assert 'BACKEND_UNIT_STEP_BUDGET_SECONDS: "900"' in workflow
     assert "backend unit shard wall: ${elapsed}s" in workflow
     # The gate keeps the exact check name and fails closed on any shard or
     # guardrail result that is not a plain success.
