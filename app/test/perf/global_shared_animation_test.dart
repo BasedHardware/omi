@@ -1,6 +1,5 @@
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -76,39 +75,42 @@ void main() {
   for (final semantics in [false, true]) {
     testWidgets('breathing dot only paints on animation frames semantics=$semantics', (tester) async {
       final handle = semantics ? tester.ensureSemantics() : null;
-      addTearDown(() => handle?.dispose());
-      final surroundings = _Surroundings();
-      await tester.pumpWidget(MaterialApp(
-        home: Center(
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            CustomPaint(painter: surroundings, size: const Size.square(40)),
-            const OmiBreathingDot(),
-          ]),
-        ),
-      ));
-      await tester.pump(const Duration(milliseconds: 100));
-      final builds = <String, int>{};
-      final previous = debugOnRebuildDirtyWidget;
-      debugOnRebuildDirtyWidget = (element, builtOnce) {
-        builds.update(element.widget.runtimeType.toString(), (n) => n + 1, ifAbsent: () => 1);
-        previous?.call(element, builtOnce);
-      };
-      addTearDown(() => debugOnRebuildDirtyWidget = previous);
-      surroundings.paints = 0;
-      for (var frame = 0; frame < 60; frame++) {
-        await tester.pump(const Duration(milliseconds: 16));
+      try {
+        final surroundings = _Surroundings();
+        await tester.pumpWidget(MaterialApp(
+          home: Center(
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              CustomPaint(painter: surroundings, size: const Size.square(40)),
+              const OmiBreathingDot(),
+            ]),
+          ),
+        ));
+        await tester.pump(const Duration(milliseconds: 100));
+        final builds = <String, int>{};
+        final previous = debugOnRebuildDirtyWidget;
+        debugOnRebuildDirtyWidget = (element, builtOnce) {
+          builds.update(element.widget.runtimeType.toString(), (n) => n + 1, ifAbsent: () => 1);
+          previous?.call(element, builtOnce);
+        };
+        addTearDown(() => debugOnRebuildDirtyWidget = previous);
+        surroundings.paints = 0;
+        for (var frame = 0; frame < 60; frame++) {
+          await tester.pump(const Duration(milliseconds: 16));
+        }
+        debugOnRebuildDirtyWidget = previous;
+        final opacitySites =
+            find.descendant(of: find.byType(OmiBreathingDot), matching: find.byType(Opacity)).evaluate().length;
+        debugPrint('GLOBAL breathingDot semantics=$semantics frames=60 rebuilds=$builds '
+            'opacitySites=$opacitySites surroundingPaints=${surroundings.paints} '
+            'transientCallbacks=${tester.binding.transientCallbackCount}');
+        expect(builds, isEmpty, reason: 'a decorative live mark must not build/layout widgets at frame rate');
+        expect(opacitySites, 0, reason: 'draw the single ring with alpha instead of compositing an opacity subtree');
+        expect(surroundings.paints, 0);
+        expect(tester.binding.transientCallbackCount, 1, reason: 'the live ring still animates');
+        await tester.pumpWidget(const SizedBox.shrink());
+      } finally {
+        handle?.dispose();
       }
-      debugOnRebuildDirtyWidget = previous;
-      final opacitySites =
-          find.descendant(of: find.byType(OmiBreathingDot), matching: find.byType(Opacity)).evaluate().length;
-      debugPrint('GLOBAL breathingDot semantics=$semantics frames=60 rebuilds=$builds '
-          'opacitySites=$opacitySites surroundingPaints=${surroundings.paints} '
-          'transientCallbacks=${tester.binding.transientCallbackCount}');
-      expect(builds, isEmpty, reason: 'a decorative live mark must not build/layout widgets at frame rate');
-      expect(opacitySites, 0, reason: 'draw the single ring with alpha instead of compositing an opacity subtree');
-      expect(surroundings.paints, 0);
-      expect(tester.binding.transientCallbackCount, 1, reason: 'the live ring still animates');
-      await tester.pumpWidget(const SizedBox.shrink());
     });
   }
 

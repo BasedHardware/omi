@@ -1265,7 +1265,9 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         previous.currentFile == nextCurrent &&
         previous.totalFiles == nextTotal &&
         previous.uploadedBytes == uploadedBytes &&
-        previous.totalBytesToUpload == totalBytesToUpload) return;
+        previous.totalBytesToUpload == totalBytesToUpload) {
+      return;
+    }
 
     final next = previous.toSyncing(
       progress: progress,
