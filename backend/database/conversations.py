@@ -4250,7 +4250,7 @@ def assign_sync_conversation(
             )
         conversation = result[0]
         observation = conversation.pop('_sync_lineage_created', None)
-        if observation is not None:
+        if lineage_eligible and observation is not None:
             log_sync_lineage_created(observation)
         if defer_index is not None:
             # Coalesce the lineage's retryable donor deletes once per flush.
