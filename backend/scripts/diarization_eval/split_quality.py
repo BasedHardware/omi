@@ -230,15 +230,28 @@ def qualify(manifest, *, project=project_units, scorer=None, provenance_verified
     }
 
 
+def private_output_dir(path):
+    """Keep private artifacts outside checkouts, including linked worktrees."""
+    path = Path(path).expanduser().resolve()
+    if any((parent / '.git').exists() for parent in (path, *path.parents)):
+        raise ValueError('private output must be outside a Git checkout')
+    path.mkdir(parents=True, exist_ok=True, mode=0o700)
+    path.chmod(0o700)
+    return path
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
+    try:
+        args.output = private_output_dir(args.output)
+    except (OSError, ValueError):
+        print(json.dumps({'split_gate': 'BLOCKED', 'reason': 'private_output_required'}))
+        return 2
     os.umask(0o077)
     os.environ['ENCRYPTION_SECRET'] = secrets.token_hex(32)
-    args.output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    args.output.chmod(0o700)
     log = args.output / 'projection.log'
     descriptor = os.open(log, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
     try:

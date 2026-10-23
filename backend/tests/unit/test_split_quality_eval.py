@@ -8,7 +8,7 @@ import wave
 
 import pytest
 
-from scripts.diarization_eval.split_quality import _digest, qualify, verify_provenance
+from scripts.diarization_eval.split_quality import _digest, main, private_output_dir, qualify, verify_provenance
 
 
 def units(boundary=None):
@@ -177,3 +177,47 @@ def test_stale_or_unrelated_same_duration_payloads_are_rejected(tmp_path, tamper
         Path(unit['receipt']).unlink()
     with pytest.raises((ValueError, FileNotFoundError)):
         verify_provenance(data)
+
+
+@pytest.mark.parametrize('linked', [False, True])
+def test_private_split_output_rejects_checkout_and_worktree_before_writing(tmp_path, linked):
+    checkout = tmp_path / 'checkout'
+    checkout.mkdir()
+    marker = checkout / '.git'
+    if linked:
+        marker.write_text('gitdir: synthetic-shared-git')
+    else:
+        marker.mkdir()
+    output = checkout / 'split-results'
+    with pytest.raises(ValueError, match='outside a Git checkout'):
+        private_output_dir(output)
+    assert not output.exists()
+
+
+def test_private_split_output_resolves_symlink_into_checkout(tmp_path):
+    checkout = tmp_path / 'checkout'
+    checkout.mkdir()
+    (checkout / '.git').mkdir()
+    alias = tmp_path / 'alias'
+    alias.symlink_to(checkout, target_is_directory=True)
+    with pytest.raises(ValueError, match='outside a Git checkout'):
+        private_output_dir(alias / 'split-results')
+    assert not (checkout / 'split-results').exists()
+
+
+def test_private_split_output_outside_checkout_has_owner_only_permissions(tmp_path):
+    output = private_output_dir(tmp_path / 'private-results')
+    assert output.stat().st_mode & 0o777 == 0o700
+
+
+def test_cli_rejects_checkout_before_manifest_or_log_write(tmp_path, monkeypatch, capsys):
+    checkout = tmp_path / 'checkout'
+    checkout.mkdir()
+    (checkout / '.git').mkdir()
+    output = checkout / 'split-results'
+    monkeypatch.setattr(
+        'sys.argv', ['split_quality', '--manifest', str(tmp_path / 'private-input.json'), '--output', str(output)]
+    )
+    assert main() == 2
+    assert json.loads(capsys.readouterr().out) == {'split_gate': 'BLOCKED', 'reason': 'private_output_required'}
+    assert not output.exists()
