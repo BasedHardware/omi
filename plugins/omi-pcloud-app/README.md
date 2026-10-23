@@ -133,6 +133,12 @@ runs it in both local and CI lanes. Backend transport/route tests live in
 `backend/tests/unit/test_plugin_transport*.py`.
 
 - [x] Local HTTP/browser smoke and focused backend verification recorded in PR (synthetic provider only).
+- [x] Fresh grants for repeated home and setup-step clicks, signed-query preservation,
+  failed-refresh refusal and account/page fences covered by client regressions.
+- [x] Mobile vendor completion probes omit Omi bearer credentials and never log
+  capability-bearing URLs; legacy apps with no endpoint keep optional setup.
+- [ ] Verify setup/retry on the installed mobile and desktop clients with the
+  operator-provisioned provider app; helper/unit/browser fixtures do not replace it.
 - [ ] GitHub checks pass on the final reviewed SHA.
 - [ ] Operator provisions pCloud developer app, minimal grants, callbacks and test account.
 - [ ] Runtime secret bindings reviewed and provisioned on all conversation-finalization hosts.

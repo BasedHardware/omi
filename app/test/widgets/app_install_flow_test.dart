@@ -19,9 +19,10 @@ class _FakeAppProvider extends AppProvider {
   _FakeAppProvider(this.detail);
 
   final App detail;
+  Future<App?> Function()? load;
 
   @override
-  Future<App?> getAppDetails(String id) async => detail;
+  Future<App?> getAppDetails(String id) async => load == null ? detail : await load!();
 }
 
 App _app({
@@ -107,11 +108,13 @@ void main() {
     Future<(bool, String)> Function(String)? enableApp,
     Future<Map<String, dynamic>?> Function(String)? appDetailsLoader,
     Future<bool> Function(String?)? setupChecker,
+    AppProvider? appProvider,
+    Future<bool> Function(Uri)? launchSetupUrl,
   }) async {
     await tester.pumpWidget(
       MultiProvider(
         providers: [
-          ChangeNotifierProvider<AppProvider>.value(value: _FakeAppProvider(app)),
+          ChangeNotifierProvider<AppProvider>.value(value: appProvider ?? _FakeAppProvider(app)),
           ChangeNotifierProvider<AddAppProvider>.value(value: AddAppProvider()),
           ChangeNotifierProvider<MessageProvider>.value(value: MessageProvider()),
         ],
@@ -124,6 +127,7 @@ void main() {
             enableApp: enableApp ?? (_) async => (false, ''),
             appDetailsLoader: appDetailsLoader ?? (_) async => null,
             setupChecker: setupChecker ?? (_) async => false,
+            launchSetupUrl: launchSetupUrl,
           ),
         ),
       ),
@@ -447,6 +451,66 @@ void main() {
       await tester.pump(const Duration(seconds: 2));
       await settle(tester);
       expect(opened, ['https://plugin.test/home?omi_token=fresh-3']);
+    });
+  });
+
+  group('fresh setup capabilities', () {
+    App setupApp(int grant) => _app(
+          external: true,
+          authSteps: [
+            AuthStep(name: 'Connect pCloud', url: 'https://plugin.test/setup?uid=u1&omi_token=signed.$grant')
+          ],
+        );
+
+    testWidgets('each setup-step click fetches a fresh grant with intact query', (tester) async {
+      var reads = 0;
+      final provider = _FakeAppProvider(setupApp(0))..load = () async => setupApp(++reads);
+      final opened = <Uri>[];
+      await pumpDetail(tester, setupApp(0), appProvider: provider, launchSetupUrl: (uri) async {
+        opened.add(uri);
+        return true;
+      });
+      await settle(tester);
+      await tester.ensureVisible(find.text('Connect pCloud'));
+      await tester.tap(find.text('Connect pCloud'));
+      await settle(tester);
+      await tester.tap(find.text('Connect pCloud'));
+      await settle(tester);
+      expect(opened.map((uri) => uri.queryParameters['omi_token']), ['signed.2', 'signed.3']);
+      expect(opened.every((uri) => uri.queryParametersAll['uid']!.length == 1), isTrue);
+    });
+
+    testWidgets('failed refresh never opens the cached setup grant', (tester) async {
+      final provider = _FakeAppProvider(setupApp(0));
+      var launches = 0;
+      await pumpDetail(tester, setupApp(0), appProvider: provider, launchSetupUrl: (_) async {
+        launches++;
+        return true;
+      });
+      await settle(tester);
+      provider.load = () async => null;
+      await tester.ensureVisible(find.text('Connect pCloud'));
+      await tester.tap(find.text('Connect pCloud'));
+      await settle(tester);
+      expect(launches, 0);
+    });
+
+    testWidgets('account replacement while refreshing cannot open the previous grant', (tester) async {
+      final provider = _FakeAppProvider(setupApp(0));
+      var launches = 0;
+      await pumpDetail(tester, setupApp(0), appProvider: provider, launchSetupUrl: (_) async {
+        launches++;
+        return true;
+      });
+      await settle(tester);
+      final pending = Completer<App?>();
+      provider.load = () => pending.future;
+      await tester.ensureVisible(find.text('Connect pCloud'));
+      await tester.tap(find.text('Connect pCloud'));
+      SharedPreferencesUtil().uid = 'another-account';
+      pending.complete(setupApp(1));
+      await settle(tester);
+      expect(launches, 0);
     });
   });
 }

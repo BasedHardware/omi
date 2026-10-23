@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Image from '@tschk/moonshine-next/image';
 import Link from '@tschk/moonshine-next/link';
 import { useRouter } from '@tschk/moonshine-next/navigation';
@@ -72,27 +72,35 @@ export function AppDetail({ appId }: AppDetailProps) {
   const [error, setError] = useState<string | null>(null);
   const [isReEnabling, setIsReEnabling] = useState(false);
   const [reEnableError, setReEnableError] = useState<string | null>(null);
+  const [launchError, setLaunchError] = useState<string | null>(null);
+  const launchOwner = useRef(0);
 
   // Check if user owns this app
   const isOwner = user && app?.uid === user.uid;
 
   useEffect(() => {
+    const owner = ++launchOwner.current;
     async function loadApp() {
       setIsLoading(true);
       setError(null);
       setReEnableError(null);
       try {
         const appData = await getApp(appId);
+        if (owner !== launchOwner.current) return;
         setApp(appData);
       } catch (err) {
+        if (owner !== launchOwner.current) return;
         console.error('Failed to load app:', err);
         setError('Failed to load app details');
       } finally {
-        setIsLoading(false);
+        if (owner === launchOwner.current) setIsLoading(false);
       }
     }
     loadApp();
-  }, [appId]);
+    return () => {
+      ++launchOwner.current;
+    };
+  }, [appId, user?.uid]);
 
   const handleToggle = async () => {
     if (!app) return;
@@ -142,20 +150,42 @@ export function AppDetail({ appId }: AppDetailProps) {
   // A transport-backed app's home URL carries a one-use, short-lived launch grant,
   // so it is fetched again for each open. The tab opens synchronously so the
   // browser does not block it, then navigates once the fresh URL arrives.
-  const handleOpenAppHome = async () => {
+  const handleOpenAppHome = async (stepIndex?: number) => {
+    const owner = launchOwner.current;
+    const uid = user?.uid;
+    if (!uid) return;
     const tab = window.open('', '_blank');
-    let url = app?.external_integration?.app_home_url;
+    if (!tab) {
+      setLaunchError('Allow pop-ups for Omi, then try again.');
+      return;
+    }
+    tab.opener = null;
+    setLaunchError(null);
     try {
       const fresh = await getApp(appId);
+      if (owner !== launchOwner.current) {
+        tab.close();
+        return;
+      }
       setApp(fresh);
-      url = fresh.external_integration?.app_home_url || url;
+      const integration = fresh.external_integration;
+      const step = integration?.auth_steps?.[stepIndex ?? 0];
+      const url =
+        stepIndex === undefined
+          ? integration?.app_home_url
+          : step?.url
+          ? urlWithUidParam(step.url, uid)
+          : null;
+      if (url) tab.location.href = url;
+      else {
+        tab.close();
+        setLaunchError("This app's link is unavailable. Try again.");
+      }
     } catch {
-      // Keep the current URL.
+      tab.close();
+      if (owner === launchOwner.current)
+        setLaunchError('Could not refresh this app. Try again.');
     }
-    if (!tab) return;
-    tab.opener = null;
-    if (url) tab.location.href = url;
-    else tab.close();
   };
 
   const handleShare = async () => {
@@ -345,7 +375,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                 {app.enabled && app.external_integration?.app_home_url && (
                   <button
                     type="button"
-                    onClick={handleOpenAppHome}
+                    onClick={() => handleOpenAppHome()}
                     className={cn(
                       'rounded-xl px-4 py-2.5 font-medium',
                       'border border-bg-quaternary',
@@ -358,6 +388,11 @@ export function AppDetail({ appId }: AppDetailProps) {
                   </button>
                 )}
               </div>
+              {launchError && (
+                <p role="alert" className="mt-2 text-sm text-text-secondary">
+                  {launchError}
+                </p>
+              )}
             </div>
           </div>
 
@@ -462,13 +497,12 @@ export function AppDetail({ appId }: AppDetailProps) {
                         <p className="mb-2 text-sm text-text-tertiary">Setup Steps:</p>
                         <div className="space-y-2">
                           {app.external_integration.auth_steps.map((step, index) => (
-                            <a
+                            <button
                               key={index}
-                              href={user ? urlWithUidParam(step.url, user.uid) : step.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              type="button"
+                              onClick={() => handleOpenAppHome(index)}
                               className={cn(
-                                'flex items-center gap-2 rounded-lg px-4 py-2',
+                                'flex w-full items-center gap-2 rounded-lg px-4 py-2 text-left',
                                 'bg-bg-tertiary text-text-secondary',
                                 'transition-colors hover:bg-bg-quaternary',
                               )}
@@ -478,7 +512,7 @@ export function AppDetail({ appId }: AppDetailProps) {
                               </span>
                               {step.name}
                               <ExternalLink className="ml-auto h-4 w-4" />
-                            </a>
+                            </button>
                           ))}
                         </div>
                       </div>

@@ -14,7 +14,7 @@ import {
 import { omiApi } from '../../lib/apiClient'
 import { getCacheUid } from '../../lib/persistentCache'
 import { toast } from '../../lib/toast'
-import { startSetupPolling, worksExternally } from '../../lib/appInstall'
+import { startSetupPolling, urlWithUidParam, worksExternally } from '../../lib/appInstall'
 import type { App, AppCatalogItem, AppReview } from '../../lib/omiApi.generated'
 import { AddReviewDialog } from './AddReviewDialog'
 
@@ -288,25 +288,30 @@ export function AppDetailSheet({
   // fallback needs a signed-in uid; when there is neither a home url nor a resolvable
   // step, do nothing (no dead link).
   // A transport-backed app's home url carries a one-use, short-lived launch grant,
-  // so the detail is fetched again immediately before each open; on failure the
-  // current fields are used as before.
-  const onOpenApp = (): void => {
+  // so every home/setup open refetches. Never reuse a grant after a failed read.
+  const onOpenApp = (stepIndex?: number): void => {
     void (async () => {
-      let fresh = integration
+      const uid = getCacheUid()
       try {
         const res = await omiApi.get<App>(`/v1/apps/${app.id}`)
-        if (mounted.current) setDetail(res.data)
-        fresh = res.data.external_integration ?? fresh
+        if (!mounted.current || getCacheUid() !== uid) return
+        setDetail(res.data)
+        const fresh = res.data.external_integration
+        const step = fresh?.auth_steps?.[stepIndex ?? 0]
+        const target =
+          stepIndex === undefined && fresh?.app_home_url
+            ? fresh.app_home_url
+            : uid && step?.url
+              ? urlWithUidParam(step.url, uid)
+              : null
+        if (!target) return
+        const ok = await window.omi.openExternalUrl(target)
+        if (!ok) toast("This app's link is unavailable.", { tone: 'warn' })
       } catch {
-        // Keep the current fields.
+        if (mounted.current && getCacheUid() === uid) {
+          toast('Could not refresh this app. Try again.', { tone: 'warn' })
+        }
       }
-      const steps = fresh?.auth_steps ?? authSteps
-      const homeUrl = fresh?.app_home_url
-      const target =
-        homeUrl || (currentUid && steps[0]?.url ? `${steps[0].url}?uid=${currentUid}` : null)
-      if (!target) return
-      const ok = await window.omi.openExternalUrl(target)
-      if (!ok) toast("This app's link is unavailable.", { tone: 'warn' })
     })()
   }
 
@@ -383,7 +388,7 @@ export function AppDetailSheet({
                     ) : enabled ? (
                       external ? (
                         <button
-                          onClick={onOpenApp}
+                          onClick={() => onOpenApp()}
                           className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-white/15"
                         >
                           <ArrowUpRight className="h-4 w-4" />
@@ -461,9 +466,7 @@ export function AppDetailSheet({
                       {authSteps.map((step, i) => (
                         <button
                           key={`${step.url}-${i}`}
-                          onClick={() =>
-                            void window.omi.openExternalUrl(`${step.url}?uid=${currentUid}`)
-                          }
+                          onClick={() => onOpenApp(i)}
                           className="flex w-full items-center gap-3 rounded-xl border border-white/10 bg-white/[0.02] px-4 py-3 text-left transition-colors hover:bg-white/[0.05]"
                         >
                           <span

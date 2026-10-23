@@ -49,6 +49,7 @@ class AppDetailPage extends StatefulWidget {
   final Future<Map<String, dynamic>?> Function(String) appDetailsLoader;
   final Future<bool> Function(String?) setupChecker;
   final void Function(BuildContext context, App app) openAppHome;
+  final Future<bool> Function(Uri)? launchSetupUrl;
 
   const AppDetailPage({
     super.key,
@@ -58,6 +59,7 @@ class AppDetailPage extends StatefulWidget {
     this.appDetailsLoader = getAppDetailsServer,
     this.setupChecker = isAppSetupCompleted,
     this.openAppHome = _routeToAppHome,
+    this.launchSetupUrl,
   });
 
   static void _routeToAppHome(BuildContext context, App app) => routeToPage(context, AppHomeWebPage(app: app));
@@ -99,13 +101,13 @@ class _AppDetailPageState extends State<AppDetailPage> {
       }
       return true;
     } catch (e) {
-      Logger.warning('Failed to launch URL with in-app browser: $e');
+      Logger.warning('Failed to launch app browser: ${e.runtimeType}');
       // Fall back to external browser
       try {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
         return true;
       } catch (e) {
-        Logger.warning('Failed to launch URL with external browser: $e');
+        Logger.warning('Failed to launch external app browser: ${e.runtimeType}');
         if (mounted) {
           OmiFeedback.error(context, context.l10n.couldNotOpenUrl);
         }
@@ -121,9 +123,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
     // TODO: move check to backend
     final generation = ++_setupCheckGeneration;
+    final uid = SharedPreferencesUtil().uid;
     final requestedUrl = app.externalIntegration!.setupCompletedUrl;
     widget.setupChecker(requestedUrl).then((value) {
       if (!mounted) return;
+      if (SharedPreferencesUtil().uid != uid) return;
       if (generation != _setupCheckGeneration) return;
       if (app.externalIntegration?.setupCompletedUrl != requestedUrl) return;
 
@@ -249,8 +253,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   /// Returns whether fresh details were applied.
   Future<bool> _refreshAppDetails() async {
+    final uid = SharedPreferencesUtil().uid;
+    final appId = app.id;
     setIsLoading(true);
-    var res = await context.read<AppProvider>().getAppDetails(app.id);
+    var res = await context.read<AppProvider>().getAppDetails(appId);
+    if (!mounted || SharedPreferencesUtil().uid != uid || app.id != appId) return false;
     if (mounted) {
       setState(() {
         if (res != null) {
@@ -272,13 +279,39 @@ class _AppDetailPageState extends State<AppDetailPage> {
 
   /// Opens the app's home page with a launch grant fetched for this open. A grant
   /// is one-use and short-lived, so a catalog copy or an earlier response is never
-  /// reused; if the fetch fails the current details are opened as before.
+  /// reused. A failed refresh must not fall back to a consumed grant.
   Future<void> _openAppHome() async {
-    final fresh = await context.read<AppProvider>().getAppDetails(app.id);
-    if (!mounted) return;
-    if (fresh != null) setState(() => app = fresh);
+    if (!await _refreshLaunchDetails() || !mounted) return;
     if (app.externalIntegration?.appHomeUrl?.isNotEmpty != true) return;
     widget.openAppHome(context, app);
+  }
+
+  Future<bool> _refreshLaunchDetails() async {
+    final uid = SharedPreferencesUtil().uid;
+    final appId = app.id;
+    final fresh = await context.read<AppProvider>().getAppDetails(appId);
+    if (!mounted || SharedPreferencesUtil().uid != uid || app.id != appId) return false;
+    if (fresh == null) {
+      OmiFeedback.error(context, context.l10n.unableToFetchApps);
+      return false;
+    }
+    setState(() => app = fresh);
+    return true;
+  }
+
+  Future<void> _openSetupStep(int index) async {
+    if (!await _refreshLaunchDetails() || !mounted) return;
+    final steps = app.externalIntegration?.authSteps ?? const [];
+    if (index < 0 || index >= steps.length) return;
+    final uri = Uri.tryParse(appSetupUrlWithUid(steps[index].url, SharedPreferencesUtil().uid));
+    if (uri == null) {
+      OmiFeedback.error(context, context.l10n.invalidIntegrationUrl);
+      return;
+    }
+    final uid = SharedPreferencesUtil().uid;
+    if (await (widget.launchSetupUrl ?? _launchUrlSafely)(uri) && mounted && SharedPreferencesUtil().uid == uid) {
+      checkSetupCompleted(autoInstallIfCompleted: true);
+    }
   }
 
   void _onExternalIntegrationUpdated() {
@@ -518,15 +551,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
                     AppSetupSteps(
                       steps: app.externalIntegration!.authSteps,
                       completed: setupCompleted,
-                      onStepTap: (step) async {
-                        final uri = Uri.tryParse(appSetupUrlWithUid(step.url, SharedPreferencesUtil().uid));
-                        if (uri == null) {
-                          OmiFeedback.error(context, l10n.invalidIntegrationUrl);
-                          return;
-                        }
-                        await _launchUrlSafely(uri);
-                        checkSetupCompleted(autoInstallIfCompleted: true);
-                      },
+                      onStepTap: (step) => _openSetupStep(app.externalIntegration!.authSteps.indexOf(step)),
                     ),
                   if (!hasAuthSteps && hasSetupInstructions)
                     ListTile(
@@ -747,6 +772,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   Future<void> _navigateToSetup() async {
+    if (!await _refreshLaunchDetails() || !mounted) return;
+    final uid = SharedPreferencesUtil().uid;
     final authSteps = app.externalIntegration?.authSteps ?? const [];
     if (app.worksExternally() && authSteps.isNotEmpty) {
       final uri = Uri.tryParse(appSetupUrlWithUid(authSteps.first.url, SharedPreferencesUtil().uid));
@@ -754,11 +781,11 @@ class _AppDetailPageState extends State<AppDetailPage> {
         if (mounted) OmiFeedback.error(context, context.l10n.invalidIntegrationUrl);
         return;
       }
-      await _launchUrlSafely(uri);
+      if (!await (widget.launchSetupUrl ?? _launchUrlSafely)(uri)) return;
     } else {
       await _openSetupInstructions();
     }
-    _startSetupCompletionCheck();
+    if (mounted && SharedPreferencesUtil().uid == uid) _startSetupCompletionCheck();
   }
 
   /// Opens an integration's setup instructions: rendered markdown, an external link, or inline text.
