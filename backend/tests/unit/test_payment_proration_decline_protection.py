@@ -33,13 +33,13 @@ def _source() -> str:
 
 
 def test_cross_plan_change_declares_error_if_incomplete():
-    """Verify source declares payment_behavior='error_if_incomplete' in modify_params."""
+    """Static source tripwire: verify source declares payment_behavior='error_if_incomplete' in modify_params."""
     source = _source()
     assert "'payment_behavior': 'error_if_incomplete'" in source
 
 
 def test_upgrade_subscription_endpoint_has_card_error_handler():
-    """Verify upgrade_subscription_endpoint catches stripe.error.CardError safely."""
+    """Static source tripwire: verify upgrade_subscription_endpoint catches stripe.error.CardError safely."""
     source = _source()
     start = source.index('def upgrade_subscription_endpoint(')
     end = source.index('\n@router.', start + 1) if '\n@router.' in source[start + 1 :] else len(source)
