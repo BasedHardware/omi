@@ -25,12 +25,16 @@ FIELDS = ('transcription_seconds', 'words_transcribed', 'insights_gained', 'memo
 SCHEMA_VERSION = 1
 
 
+class UsagePublicationRootMissing(DestructiveOperationInProgress):
+    """Usage must not recreate children after the account root disappears."""
+
+
 @contextmanager
 def publication_fence(user_ref: Any, transaction: Any, *, firestore_client: Any) -> Iterator[None]:
     """Hold erasure authorities and the user root through aggregate publication."""
     with external_write_fence(user_ref.id, firestore_client=firestore_client, transaction=transaction):
         if not user_ref.get(transaction=transaction).exists:
-            raise DestructiveOperationInProgress('usage publication requires an existing user')
+            raise UsagePublicationRootMissing('usage publication requires an existing user')
         yield
 
 

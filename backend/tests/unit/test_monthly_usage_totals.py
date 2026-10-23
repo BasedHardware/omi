@@ -152,3 +152,56 @@ def test_free_and_paid_allowance_remain_identical_through_real_resolver(monkeypa
     after = subscription.resolve_transcription_allowance('u', subscription=member, byok_active=False)
     assert after.as_dict() == before.as_dict()
     assert after.reason in {'plan_within_allowance', 'plan_allowance_exhausted'}
+
+
+@pytest.mark.parametrize('once', [False, True])
+@pytest.mark.parametrize('authority', ['missing_root', 'pending', 'completed', 'destructive_gate'])
+def test_record_usage_refusal_is_nonfatal_and_emits_bounded_counter(monkeypatch, caplog, once, authority):
+    from database import legal_holds
+    from utils import analytics
+    from utils.metrics import OMI_FALLBACK_TOTAL
+
+    store = Store({'users/u': {'synthetic': True}})
+    if authority == 'missing_root':
+        del store.docs['users/u']
+    elif authority == 'destructive_gate':
+        store.docs['legal_hold_deletion_gates/u'] = {
+            'schema_version': legal_holds.LEGAL_HOLD_DELETION_GATE_SCHEMA_VERSION,
+            'uid': 'u',
+            'kind': 'explicit_memory_deletion',
+            'token': 'test-gate',
+            'state': 'running',
+            'started_at': datetime.now(timezone.utc),
+        }
+    else:
+        store.docs['account_deletions/u'] = {'wipe_status': authority}
+    monkeypatch.setattr(user_usage, 'db', store)
+    monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *a, **k: 'free')
+    reason = 'usage_root_missing' if authority == 'missing_root' else 'usage_fence_blocked'
+    counter = OMI_FALLBACK_TOTAL.labels(
+        component='usage_publication', from_mode='publish', to_mode='skip', reason=reason, outcome='degraded'
+    )
+    before_count, before_writes = counter._value.get(), store.writes
+    before_docs = dict(store.docs)
+
+    analytics.record_usage('u', speech_seconds=5, transcription_seconds=5, idempotency_key='capture' if once else None)
+
+    assert store.writes == before_writes
+    assert store.docs == before_docs  # no hourly/monthly doc or committed usage receipt
+    assert counter._value.get() == before_count + 1
+    event = next(
+        record.getMessage() for record in caplog.records if 'component=usage_publication' in record.getMessage()
+    )
+    assert event == (
+        'omi_fallback_event component=usage_publication from=publish to=skip ' f'reason={reason} outcome=degraded'
+    )
+
+
+@pytest.mark.parametrize('once', [False, True])
+def test_record_usage_does_not_swallow_unrelated_write_errors(monkeypatch, once):
+    from utils import analytics
+
+    writer = 'update_hourly_usage_once' if once else 'update_hourly_usage'
+    monkeypatch.setattr(user_usage, writer, Mock(side_effect=RuntimeError('synthetic write failure')))
+    with pytest.raises(RuntimeError, match='synthetic write failure'):
+        analytics.record_usage('u', speech_seconds=5, idempotency_key='capture' if once else None)

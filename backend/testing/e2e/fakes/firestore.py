@@ -18,6 +18,7 @@ from fake_firestore.document import (
     NotFound,
     apply_transformations,
     get_by_path,
+    set_by_path,
 )
 
 # Module-level singleton — set by conftest.py before backend imports.
@@ -123,7 +124,7 @@ def _patch_delete_field_missing_key_noop():
 
 
 def _patch_document_delete_missing_doc_noop():
-    """Match Firestore: deleting a document that does not exist succeeds."""
+    """Match Firestore: root deletion preserves children; absent delete succeeds."""
     global _original_document_delete
     if _original_document_delete is not None:
         return
@@ -131,10 +132,18 @@ def _patch_document_delete_missing_doc_noop():
     _original_document_delete = FakeDocumentReference.delete
 
     def _delete(self, timeout: Optional[float] = None) -> None:
+        # fake-firestore nests children in the parent's data dict. Real
+        # Firestore deletes only the document's fields, never subcollections.
+        children = {
+            collection.id: deepcopy(get_by_path(self._data, self._path + [collection.id]))
+            for collection in self.collections()
+        }
         try:
             _original_document_delete(self, timeout=timeout)
         except KeyError:
             self._written_docs.discard(tuple(self._path))
+        if children:
+            set_by_path(self._data, self._path, children)
 
     FakeDocumentReference.delete = _delete
 

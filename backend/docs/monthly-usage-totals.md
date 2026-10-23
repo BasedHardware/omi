@@ -13,6 +13,18 @@ Ordinary/once/absolute/admin/migration writers also read the existing account
 deletion marker, destructive gate and user root in that transaction, before any
 receipt or source writes. Previously unfenced commits add three point reads
 (once-key replays also check authority); rejected commits do not stamp receipts.
+User-facing callers publish through `utils.analytics.record_usage`. If the
+fence refuses publication, this helper lets the conversation/transcript/audio
+pipeline complete while skipping the entire accounting transaction (including
+the once receipt). `omi_fallback_total{component="usage_publication",
+from_mode="publish",to_mode="skip",outcome="degraded"}` and its matching bounded log
+separate `usage_root_missing` from `usage_fence_blocked`. No UID or content is
+included. This includes roots absent before sync admission and roots removed
+immediately before publication. Other database failures retain existing retry
+semantics. Direct admin/migration writers still raise on refusal. Outside usage
+publication, this PR adds no existing-root requirement to a user path: cold
+reader rebuilds already return to the hourly query if the root is absent.
+
 Existing projection sessions already read deletion/root/privacy authority in
 their transaction, so their added monthly write reuses those checks. No
 authority is cached across attempts. Maintenance remains on while the reader
