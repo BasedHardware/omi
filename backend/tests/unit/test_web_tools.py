@@ -152,7 +152,7 @@ async def test_successful_fetch_url():
         assert "Content from https://omi.me:" in res
         assert "Omi Platform" in res
         assert "AI Wearable" in res
-        assert "[UNTRUSTED CONTENT LEGEND]" in res
+        assert wt.UNTRUSTED_LEGEND in res
 
 
 @pytest.mark.asyncio
@@ -185,3 +185,48 @@ async def test_empty_page_content():
         mock_fetch.return_value = (200, "text/html", "")
         res = await wt.fetch_url_tool.func("https://example.com/empty")
         assert res == "Error: Page appears to be empty or too large to read."
+
+
+def test_html_document_without_head_tag():
+    html_no_head = "<html><body><h1>Direct Body Header</h1><p>Body paragraph without head tag.</p></body></html>"
+    extracted = wt._html_to_text(html_no_head)
+    assert "Direct Body Header" in extracted
+    assert "Body paragraph without head tag." in extracted
+
+
+def test_html_unclosed_head_resets_on_body():
+    # A <head> missing its closing </head> tag should have its skip depth reset
+    # upon encountering <body>, ensuring body text is not silently dropped.
+    html_unclosed_head = "<html><head><title>Page Title</title><body><h1>Visible Main Content</h1><p>Body paragraph.</p></body></html>"
+    extracted = wt._html_to_text(html_unclosed_head)
+    assert "Page Title" in extracted
+    assert "Visible Main Content" in extracted
+    assert "Body paragraph." in extracted
+
+
+def test_html_unclosed_script_preceding_body():
+    # Confirms that a genuinely unclosed <script> before <body> is not masked:
+    # because HTMLParser treats everything until </script> as script CDATA,
+    # script contents are not leaked or extracted as body text.
+    html_unclosed_pre_body = (
+        "<html><head><script>var analytics = 1; <body>"
+        "<h1>Visible Main Content</h1>"
+        "<p>This text should be rendered properly.</p>"
+        "</body></html>"
+    )
+    extracted = wt._html_to_text(html_unclosed_pre_body)
+    assert "var analytics" not in extracted
+
+
+def test_html_unclosed_script_inside_body_does_not_mask_skip():
+    # Conversely, an unclosed script inside <body> keeps _skip_depth > 0,
+    # properly skipping script content and not leaking into extracted body text.
+    html_unclosed_in_body = (
+        "<html><body>"
+        "<h1>First Heading</h1>"
+        "<script>console.log('malformed script without close'); <p>Text inside unclosed script</p>"
+        "</body></html>"
+    )
+    extracted = wt._html_to_text(html_unclosed_in_body)
+    assert "First Heading" in extracted
+    assert "Text inside unclosed script" not in extracted
