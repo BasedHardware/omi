@@ -17,39 +17,47 @@ void main() {
   group('gate', () {
     for (final name in scenarioNames) {
       testWidgets(name, (tester) async {
+        final previousErrorBuilder = ErrorWidget.builder;
+        final previousPlatform = debugDefaultTargetPlatformOverride;
         debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
-        addTearDown(() => debugDefaultTargetPlatformOverride = null);
-        binding.testTextInput.register();
-        final world = PerfWorld();
-        await tester.runAsync(world.seed);
-        addTearDown(() async {
-          await tester.runAsync(world.close);
-        });
-        await world.boot(tester, extraProviders: providersFor(name, world));
-        await pumpFrames(tester, 10);
-        await tester.runAsync(() async {
-          await Future<void>.delayed(const Duration(milliseconds: 250));
-        });
-        final collector = PerfInstrumentation()..start(binding);
         try {
-          await runScenario(tester, world, name);
-          collector.endWindow();
+          binding.testTextInput.register();
+          final world = PerfWorld();
+          await tester.runAsync(world.seed);
+          addTearDown(() async {
+            await tester.runAsync(world.close);
+          });
+          await world.boot(tester, extraProviders: providersFor(name, world));
+          await pumpFrames(tester, 10);
           await tester.runAsync(() async {
             await Future<void>.delayed(const Duration(milliseconds: 250));
           });
+          final collector = PerfInstrumentation()..start(binding);
+          try {
+            await runScenario(tester, world, name);
+            collector.endWindow();
+            await tester.runAsync(() async {
+              await Future<void>.delayed(const Duration(milliseconds: 250));
+            });
+          } finally {
+            collector.stop(binding);
+            await tester.pumpWidget(const SizedBox.shrink());
+          }
+          final score = scenarioScore(name, collector, 1000 / 60);
+          final budgetPath = Platform.environment['PERF_BUDGET_FILE'] ?? 'integration_test/perf/budgets.json';
+          final budgets = jsonDecode(File(budgetPath).readAsStringSync()) as Map<String, dynamic>;
+          final budget = (budgets['_gate'] as Map<String, dynamic>)[name] as Map<String, dynamic>;
+          final violations = budgetViolations(collector, budget);
+          score['gate_violations'] = violations;
+          results[name] = score;
+          debugPrint(
+              'PERF $name frames=${collector.sampledFrames} work=${collector.workCounts} violations=$violations');
+          expect(violations, isEmpty, reason: '$name: ${violations.join('; ')}');
         } finally {
-          collector.stop(binding);
           await tester.pumpWidget(const SizedBox.shrink());
+          ErrorWidget.builder = previousErrorBuilder;
+          debugDefaultTargetPlatformOverride = previousPlatform;
         }
-        final score = scenarioScore(name, collector, 1000 / 60);
-        final budgetPath = Platform.environment['PERF_BUDGET_FILE'] ?? 'integration_test/perf/budgets.json';
-        final budgets = jsonDecode(File(budgetPath).readAsStringSync()) as Map<String, dynamic>;
-        final budget = (budgets['_gate'] as Map<String, dynamic>)[name] as Map<String, dynamic>;
-        final violations = budgetViolations(collector, budget);
-        score['gate_violations'] = violations;
-        results[name] = score;
-        debugPrint('PERF $name frames=${collector.sampledFrames} work=${collector.workCounts} violations=$violations');
-        expect(violations, isEmpty, reason: '$name: ${violations.join('; ')}');
       }, semanticsEnabled: false);
     }
   });
@@ -65,13 +73,12 @@ void main() {
         'scenarios': results,
         'complete': results.length == scenarioNames.length,
       };
-      await binding.traceAction(() async {
-        final directory = Directory(Platform.environment['PERF_SCORECARD_DIR'] ?? '/tmp/omi-perf');
-        directory.createSync(recursive: true);
-        final file = File('${directory.path}/scorecard-${DateTime.now().toUtc().microsecondsSinceEpoch}.json');
-        file.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(scorecard));
-        debugPrint('PERF_SCORECARD=${file.path}');
-      }, reportKey: 'perf_trace');
+      final directory = Directory(Platform.environment['PERF_SCORECARD_DIR'] ?? '/tmp/omi-perf');
+      directory.createSync(recursive: true);
+      final file = File('${directory.path}/scorecard-${DateTime.now().toUtc().microsecondsSinceEpoch}.json');
+      file.writeAsStringSync(const JsonEncoder.withIndent('  ').convert(scorecard));
+      debugPrint('PERF_SCORECARD=${file.path}');
+      binding.reportData ??= <String, dynamic>{};
       binding.reportData!['perf_scorecard'] = scorecard;
       expect(results.keys, containsAll(scenarioNames), reason: 'Scorecard must contain all scenarios');
     }, semanticsEnabled: false);

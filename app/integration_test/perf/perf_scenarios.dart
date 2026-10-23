@@ -423,6 +423,10 @@ Future<void> scrollRoundTrip(WidgetTester tester, Type page) async {
       if (direction < 0 ? pos.pixels >= pos.maxScrollExtent - 1 : pos.pixels <= pos.minScrollExtent + 1) break;
       if (n == 99) fail('$page did not reach scroll endpoint');
     }
+    // iOS bouncing physics may cross the endpoint before returning to rest.
+    // Fixed virtual frames keep this deterministic; the collector itself schedules
+    // frames, so pumpAndSettle would never finish during the measured window.
+    await pumpFrames(tester, 120);
   }
   expect(state.position.pixels, closeTo(state.position.minScrollExtent, 1));
 }
