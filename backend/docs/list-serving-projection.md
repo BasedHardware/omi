@@ -37,7 +37,9 @@ scope the validator. No response data is cached by this protocol.
 Ordinary action-item requests without validators retain their existing cache
 path and add zero reads. Existing action ETag clients graduate on their next
 source read. A nonconditional conversation GET adds two marker reads when the
-reader is active. Untracked owners or unavailable Firestore use the old reader.
+reader is active. A missing head is initialized once with create-only semantics,
+without scanning/backfilling source rows or overwriting a concurrent writer.
+Malformed heads, a lost baseline race or unavailable Firestore use the old reader.
 There is no Redis dependency for the version check; existing caches are unchanged.
 
 ## Deployment and ramp owner
@@ -82,7 +84,8 @@ measured over equal full-day windows. One successful 100-row fake poll changes
 from 100 source reads to 1 version read; this is a mechanism test, not fleet
 billing evidence. An unchanged legacy poll remains a source query/cache hit.
 
-Added writes are at most one small projected row per changed source row plus
+Added writes include one lazy baseline head per active owner/family, plus at most
+one small projected row per changed source row and
 one version per owner/family per atomic commit (account changes touch both).
 Even a content-only source write invalidates its family, so transcription
 activity may reduce the unchanged share. Include these writes, storage/index

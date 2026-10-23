@@ -6,9 +6,11 @@ import logging
 import os
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 from fastapi import Request, Response
 from prometheus_client import Counter
+from google.api_core.exceptions import AlreadyExists
 
 from database._client import get_firestore_client
 from database.action_items_cache import if_none_match_matches
@@ -30,14 +32,20 @@ ORIGINS = {
 
 def _version(uid: str, family: str) -> str | None:
     try:
-        snapshot = (
-            get_firestore_client()
-            .collection('users')
-            .document(uid)
-            .collection(STATE_COLLECTION)
-            .document(family)
-            .get(timeout=1.0, retry=None)
+        reference = (
+            get_firestore_client().collection('users').document(uid).collection(STATE_COLLECTION).document(family)
         )
+        snapshot = reference.get(timeout=1.0, retry=None)
+        if not snapshot.exists:
+            # Lazy baseline, not a backfill: unchanged legacy owners must not
+            # need a source mutation before they can use a validator. create
+            # cannot overwrite a concurrent writer's atomic version.
+            initial = uuid4().hex
+            try:
+                reference.create({'version': initial}, timeout=1.0, retry=None)
+            except AlreadyExists:
+                return None  # A writer won; the next GET can use its version.
+            return initial
         value = (snapshot.to_dict() or {}).get('version') if snapshot.exists else None
         return value if isinstance(value, str) and len(value) == 32 else None
     except Exception:

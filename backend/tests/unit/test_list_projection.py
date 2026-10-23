@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI, Depends, Request, Response, HTTPException
 from fastapi.testclient import TestClient
 from google.auth.credentials import AnonymousCredentials
+from google.api_core.exceptions import AlreadyExists
 from google.cloud import firestore
 from google.cloud.firestore_v1 import _helpers
 from google.cloud.firestore_v1.async_client import AsyncClient
@@ -170,6 +171,26 @@ async def test_async_sdk_contract(store, transaction):
     assert len(result) == len(batch.write_results) == 1
 
 
+class CountedQuery:
+    """Count documents actually consumed by the production list collector."""
+
+    def __init__(self, store, *, count=100, offset=0):
+        self.store, self.count, self.skip = store, count, offset
+
+    def limit(self, count):
+        return CountedQuery(self.store, count=min(self.count, count), offset=self.skip)
+
+    def offset(self, offset):
+        return CountedQuery(self.store, count=self.count, offset=offset)
+
+    def stream(self, **kwargs):
+        for index in range(self.skip, min(100, self.skip + self.count)):
+            self.store.reads += 1
+            key = 'legacy' if index == 99 else f'row-{index}'
+            row = {'id': key, 'status': 'completed', 'discarded': False}
+            yield SimpleNamespace(id=key, to_dict=lambda row=row: copy.deepcopy(row))
+
+
 def make_app(store, *, truncated=False, mutate=False):
     app = FastAPI()
 
@@ -184,11 +205,17 @@ def make_app(store, *, truncated=False, mutate=False):
         if check.not_modified is not None:
             return check.not_modified
         store.queries += 1
-        store.reads += 100  # real source list equivalent, including legacy rows
+        rows = conversation_routes.conversations_db._collect_visible_conversation_page(
+            CountedQuery(store),
+            limit=100,
+            offset=0,
+            include_discarded=False,
+            uid=uid,
+        )
         if mutate:
             store.client.document(f'users/{uid}/conversations/racing').set({'status': 'processing'})
         check.finish(response, truncated=truncated)
-        return [{'id': 'legacy', 'status': 'completed'}]
+        return rows
 
     return TestClient(app)
 
@@ -199,7 +226,8 @@ def test_http_equivalence_unchanged_poll_one_read_no_query_and_auth_preserved(st
     headers = {'authorization': 'synthetic-key'}
     first = client.get('/v1/conversations', headers=headers)
     assert first.status_code == 200
-    assert first.json() == [{'id': 'legacy', 'status': 'completed'}]
+    assert len(first.json()) == 100
+    assert first.json()[-1] == {'id': 'legacy', 'status': 'completed', 'discarded': False}
     assert store.reads == 102 and store.queries == 1
     headers['if-none-match'] = first.headers['etag']
     second = client.get('/v1/conversations', headers=headers)
@@ -268,6 +296,33 @@ def test_production_version_lookup_bounds_io_and_falls_back(monkeypatch):
     assert calls == ['users', 'synthetic-owner', projection.STATE_COLLECTION, 'conversations']
     monkeypatch.setattr(Reference, 'get', lambda *a, **k: (_ for _ in ()).throw(RuntimeError('offline')))
     assert checks._version('synthetic-owner', 'conversations') is None
+
+
+@pytest.mark.parametrize('race', [False, True])
+def test_missing_version_baseline_is_create_only_and_cannot_overwrite_writer(monkeypatch, race):
+    calls = []
+
+    class Reference:
+        def collection(self, name):
+            return self
+
+        def document(self, name):
+            return self
+
+        def get(self, **kwargs):
+            calls.append('read')
+            return SimpleNamespace(exists=False)
+
+        def create(self, data, **kwargs):
+            calls.append(data['version'])
+            assert kwargs == {'timeout': 1.0, 'retry': None}
+            if race:
+                raise AlreadyExists('atomic source writer won')
+
+    monkeypatch.setattr(checks, 'get_firestore_client', Reference)
+    value = checks._version('synthetic-owner', 'conversations')
+    assert len(calls) == 2 and calls[0] == 'read'
+    assert value is None if race else value == calls[1]
 
 
 def test_release_and_epoch_rotation_invalidate_existing_validator(store, monkeypatch):
