@@ -14,7 +14,7 @@ from utils.sync.assignment_errors import SyncAssignmentConflict
 from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
 
 
-def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, list[dict]]:
+def replace_record(current: dict, incoming: dict, span: dict, *, allocator=None) -> tuple[dict, list[dict]]:
     if current.get('record_lane_owner') not in {'batch_live_v1', 'batch_sync_v1'}:
         raise SyncAssignmentConflict('record route owner changed', subtype=Reason.RECORD_ROUTE_OWNER_CHANGED)
     if current.get('deleted'):
@@ -37,8 +37,9 @@ def replace_record(current: dict, incoming: dict, span: dict) -> tuple[dict, lis
     retained = [s for s in old if s not in covered]
     new = deepcopy(incoming['transcript_segments'])
     shift = incoming['started_at'].timestamp() - origin
-    allocator = ConversationSpeakerIdAllocator()
+    allocator = allocator or ConversationSpeakerIdAllocator()
     allocator.hydrate(old)
+    allocator.hydrate_receipt(current.get('manual_speaker_assignments'))
     for segment in new:
         segment['start'] += shift
         segment['end'] += shift

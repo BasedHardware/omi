@@ -213,3 +213,57 @@ def test_ciphertext_copied_to_another_conversation_cannot_import_voice_links():
     assert moved['conversation_id'] == 'different'
     assert set(moved['bindings']) == {'final:batch:b/SPEAKER_0'}
     assert moved['voices']['0']['embedding'] == [0.0, 1.0]
+
+
+@pytest.mark.parametrize('manual', [False, True])
+def test_native_record_replacement_links_units_and_keeps_manual_decisions(manual):
+    from datetime import datetime, timezone
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.unit.test_batch_pipeline_live import recording, incoming
+    from tests.unit.test_sync_cross_job_assignment import intake
+
+    store = StrictFirestore()
+    current = recording()
+    if manual:
+        current['manual_speaker_assignments'] = {'segments': {'old': {'is_user': True, 'generation': 1}}}
+    store.rows[('users', 'u', 'conversations', 'record')] = current
+    all_ids = []
+    for index in range(2):
+        value = incoming()
+        value.update(id=f'unit-{index}', finished_at=datetime.fromtimestamp(102 + index * 2, timezone.utc))
+        value['started_at'] = datetime.fromtimestamp(100 + index * 2, timezone.utc)
+        scope = f'final:batch:unit-{index}'
+        value['transcript_segments'][0].update(id=f'new-{index}', speaker_id_scope=scope)
+        value['_batch_voice_evidence'] = evidence(f'unit-{index}', {'SPEAKER_00': [1.0, 0.0]})
+        value['_batch_replace_live'] = {'start': 100 + index * 2, 'end': 102 + index * 2}
+        result, _, _ = intake(store, value, target_id='record')
+        all_ids.append(result['transcript_segments'][-1]['speaker_id'])
+    assert len(set(all_ids)) == 1
+    assert len(decode_registry(result[FIELD], 'u')['bindings']) == 2
+    if manual:
+        assert result['transcript_segments'][0]['id'] == 'old'
+        assert result['transcript_segments'][0]['is_user']
+    retried, _, _ = intake(store, value, target_id='record')
+    assert {s['speaker_id'] for s in retried['transcript_segments']} == set(all_ids)
+
+
+def test_native_unsafe_manual_remap_never_commits_unapplied_voice_anchors():
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from tests.unit.test_batch_pipeline_live import recording, incoming
+    from tests.unit.test_sync_cross_job_assignment import intake
+
+    store = StrictFirestore()
+    current = recording(has_transcript_corrections=True)
+    current['manual_speaker_assignments'] = {'segments': {'old': {'is_user': True, 'generation': 1}}}
+    store.rows[('users', 'u', 'conversations', 'record')] = current
+    value = incoming()
+    value.update(id='unsafe', _batch_replace_live={'start': 100, 'end': 102})
+    first = value['transcript_segments'][0]
+    first.update(end=1, speaker_id_scope='final:batch:unsafe')
+    value['transcript_segments'].append({**first, 'id': 'other', 'start': 1, 'end': 2, 'speaker': 'SPEAKER_01'})
+    value['_batch_voice_evidence'] = evidence('unsafe', {'SPEAKER_00': [1.0, 0.0], 'SPEAKER_01': [0.0, 1.0]})
+    result, _, _ = intake(store, value, target_id='record')
+    assert FIELD not in result
+    assert result['transcript_segments'][0]['id'] == 'old'
+    assert result['transcript_segments'][0]['is_user']
+    assert result['transcript_segments'][0]['speaker'].startswith('BATCH_UNASSIGNED_')

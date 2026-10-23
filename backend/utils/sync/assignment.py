@@ -261,7 +261,42 @@ def assign_in_transaction(
     if record_span is not None:
         if not target or not target_id:
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
-        result, survivors = replace_record(decode(target), incoming, record_span)
+        current = decode(target)
+        allocator = ConversationSpeakerIdAllocator()
+        allocator.hydrate(current.get('transcript_segments') or [])
+        allocator.hydrate_receipt(current.get('manual_speaker_assignments'))
+        if voice_evidence is not None:
+            from utils.stt import batch_voice_links
+
+            registry = batch_voice_links.link_unit_voices(
+                batch_voice_links.decode_registry(target.get(batch_voice_links.FIELD), user_ref.id),
+                voice_evidence,
+                incoming['transcript_segments'],
+                allocator,
+                receipt=current.get('manual_speaker_assignments') or {},
+                existing=current.get('transcript_segments') or [],
+                enabled=batch_voice_links.linking_enabled(),
+                conversation_id=target_id,
+            )
+        result, survivors = replace_record(current, incoming, record_span, allocator=allocator)
+        if voice_evidence is not None:
+            from utils.stt.speaker_identity import canonical_speaker_label
+
+            persisted_keys = {
+                (s.get('speaker_id_scope'), canonical_speaker_label(str(s.get('speaker')))) for s in survivors
+            }
+            planned_keys = {
+                (s.get('speaker_id_scope'), canonical_speaker_label(str(s.get('speaker'))))
+                for s in incoming['transcript_segments']
+            }
+            # Unsafe annotated remaps preserve the old text as fresh anonymous
+            # voices. Never teach anchors from candidates that were not applied.
+            if planned_keys <= persisted_keys:
+                result[batch_voice_links.FIELD] = batch_voice_links.encode_registry(registry, user_ref.id)
+            receipt = result.get('manual_speaker_assignments') or {}
+            result['transcript_segments'] = apply_manual_assignments(
+                batch_voice_links.arbitrate_linked_owner_claims(result['transcript_segments'], receipt), receipt
+            )
         invalidate(result)
         encoded = encode(result)
         transaction.update(collection.document(target_id), encoded)
