@@ -6,6 +6,13 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Sync redirect hydration reuses the survivor's raw snapshot and update-time
+within one owner read. A bridge with no donor lineage reuses metadata before
+any external effect; donor reads, transfer, retraction, audio copying and receipt writes retain
+the final refresh. `SYNC_OPERATION_SNAPSHOT_ENABLED=false` restores the prior
+reads. The [operation snapshot contract](sync-operation-snapshots.md) documents
+the constant read origin, counted savings and the separate P4/index designs.
+
 Python conversation/action commits also maintain compact list metadata rows and
 opaque per-owner versions in the same Firestore commit. This does not change
 transcript, lifecycle, privacy or hold policy. Conditional list reads require a

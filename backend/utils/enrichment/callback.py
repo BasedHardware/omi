@@ -70,14 +70,14 @@ def enrich_conversation(uid: str, conversation_id: str, language: str):
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
     if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
-        canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
         if context is not None:
+            canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
             # The outbox transfers custody atomically before acknowledging this donor.
             context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
             return
-        if canonical:
-            conversation_id = canonical
-            conversation_data = conversations_db.get_conversation(uid, canonical)
+        conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        if conversation_data:
+            conversation_id = conversation_data['id']
     if not conversation_data or conversation_data.get('deleted'):
         if context is not None:
             if conversation_data and conversation_data.get('deleted'):
