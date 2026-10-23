@@ -13,6 +13,7 @@ os.environ.setdefault(
     'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
 )
 
+import routers.retention_offer as router  # noqa: E402
 import utils.retention_offer as ro  # noqa: E402
 
 
@@ -529,8 +530,6 @@ def test_repeat_request_after_a_later_cancellation_keeps_it_cancelled(monkeypatc
 
 
 def test_endpoint_repeat_after_cancel_keeps_stripe_and_firestore_cancelled(monkeypatch):
-    import routers.retention_offer as router
-
     fake = _FakeStripe(monkeypatch, [_sub(cancel_at_period_end=True)])
     stored = {'stripe_subscription_id': 'sub_1', 'cancel_at_period_end': True}
 
@@ -563,8 +562,6 @@ def test_endpoint_repeat_after_cancel_keeps_stripe_and_firestore_cancelled(monke
 
 
 def test_endpoint_stale_acceptance_resuming_mid_write_keeps_both_stores_cancelled(monkeypatch):
-    import routers.retention_offer as router
-
     fake = _FakeStripe(monkeypatch, [_sub(cancel_at_period_end=True)])
     stored = {'stripe_subscription_id': 'sub_1', 'cancel_at_period_end': True}
     writes = []
