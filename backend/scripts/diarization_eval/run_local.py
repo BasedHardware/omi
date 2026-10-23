@@ -221,6 +221,9 @@ def evaluate(
         ROOT / 'utils/sync/assignment.py',
         Path(__file__).resolve().with_name('local_artifacts.py'),
     ]
+    voice_links_source = ROOT / 'utils/stt/batch_voice_links.py'
+    if voice_links_source.exists():
+        projection_sources.append(voice_links_source)
     projection_fingerprint = fingerprint(
         {str(p.resolve().relative_to(ROOT)): file_digest(p.resolve()) for p in projection_sources}
     )

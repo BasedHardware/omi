@@ -137,7 +137,7 @@ def persisted_word_turns(truth, turns):
     from math import isfinite
 
     ordered = sorted(enumerate(turns), key=lambda row: (row[1]['start'], row[1]['end'], row[0]))
-    if any(not isfinite(float(t[k])) or t['end'] <= t['start'] for _, t in ordered for k in ('start', 'end')):
+    if any(not isfinite(float(t[k])) or t['end'] < t['start'] for _, t in ordered for k in ('start', 'end')):
         raise ValueError('invalid persisted turn clock')
     selected = []
     for word in truth:
@@ -148,6 +148,11 @@ def persisted_word_turns(truth, turns):
         for rank, (index, turn) in enumerate(ordered):
             if turn['start'] > right:
                 break
+            # Production accepts point-timed words. Their faithful zero-width
+            # turns retain text/voice metadata but offer no temporal coverage,
+            # including for a point-timed reference word. Keep original indices.
+            if turn['end'] == turn['start']:
+                continue
             overlap = min(right, turn['end']) - max(left, turn['start'])
             if overlap > 0 or (left == right and turn['start'] <= left < turn['end']):
                 midpoint = (left + right) / 2

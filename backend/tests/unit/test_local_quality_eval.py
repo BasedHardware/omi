@@ -197,3 +197,42 @@ def test_end_to_end_retains_unaligned_asr_insertions():
         [word()], [turn(is_user=True), turn(2, text='hallucination')], {'owner': {'is_user': True}}
     )
     assert result['end_to_end_alignment']['insertions'] == 1
+
+
+def test_zero_width_turn_preserves_text_and_voice_but_has_no_temporal_coverage():
+    from utils.stt.diarization_eval import persisted_word_turns
+
+    truth = [word()]
+    turns = [turn(0.25, end=0.25, is_user=True, speaker='point-voice')]
+    result = score_recording(truth, turns, {'owner': {'is_user': True}})
+    assert result['words'] == result['input_words'] == 1
+    assert result['named_words'] == result['strict_all_word_correct'] == 0
+    assert result['abstention_words'] == 1
+    assert result['predicted_voices'] == 1
+    assert result['end_to_end_alignment']['hypothesis_tokens'] == 1
+    assert result['end_to_end_alignment']['aligned_words'] == 1
+    assert persisted_word_turns([{'start': 0.25, 'end': 0.25}], turns) == [None]
+    assert turns[0]['start'] == turns[0]['end'] == 0.25
+
+
+def test_zero_width_turn_does_not_shift_original_identity_indices():
+    from utils.stt.diarization_eval import persisted_word_turns
+
+    truth = [word(), word(1, 'person')]
+    turns = [
+        turn(1, person_id='p', speaker='person-voice'),
+        turn(0.25, end=0.25, person_id='unmatched', speaker='point-voice', text='extra'),
+        turn(is_user=True, speaker='owner-voice'),
+    ]
+    assert persisted_word_turns(truth, turns) == [2, 0]
+    result = score_recording(truth, turns, {'owner': {'is_user': True}, 'person': {'person_id': 'p'}})
+    assert result['strict_all_word_correct'] == result['words'] == 2
+    assert result['false_owner_words'] == result['wrong_name_words'] == 0
+    assert result['predicted_voices'] == 3
+    assert result['end_to_end_alignment']['insertions'] == 1
+
+
+@pytest.mark.parametrize('start,end', [(1, 0), (float('nan'), 1), (0, float('inf'))])
+def test_persisted_turn_reversed_and_nonfinite_clocks_still_fail(start, end):
+    with pytest.raises(ValueError, match='invalid persisted turn clock'):
+        score_recording([word()], [turn(start, end=end)], {'owner': {'is_user': True}})
