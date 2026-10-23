@@ -63,33 +63,6 @@ changing it), SD-card/flash-page sync refreshes the WAL list per downloaded chun
 | `test/unit/voice_recorder_mic_contention_test.dart` (waveform case) | 60 Hz provider notifies while dictating | `bash test.sh` |
 | `test/unit/local_segment_store_test.dart` (digest case) | Off-isolate transcript digest drifting from the inline one | `bash test.sh` |
 
-The same static checker also covers these scoped patterns:
-
-| Rule | Scope and remediation |
-|---|---|
-| `forced-semantics` | Absolute across handwritten `app/lib` sources: do not call `ensureSemantics()` to gather analytics context. Read existing render-object annotations on demand. A necessary accessibility owner requires a reviewed call-specific entry in `SEMANTICS_ALLOWLIST` (currently empty); neither merge-base debt nor inline allow comments exempt it. |
-| `global-input-listener` | `Listener` pointer-down/move/hover/signal/pan-zoom callbacks and scroll/catch-all `NotificationListener` callbacks at the app entry point or around an arbitrary child/app root. Scope observation to the affected surface and keep callbacks bounded. Local gestures, domain notifications and literal no-op callbacks are outside this rule. |
-| `unselected-provider-listener` | Raw `addListener` on statically recognizable Capture/Sync/Conversation/Message/Episode/Device/VoiceRecorder providers, including local aliases. Prefer `Selector`/`context.select` or a leaf listenable. An imperative listener can select a cheap key and return when unchanged before rebuilding or walking collections. An unrelated selector elsewhere does not exempt it. |
-| `json-in-build`, `sort-in-build` | JSON decode and collection sorts in `build`, builder callbacks and their same-file helpers. Decode/order before build and memoize on the relevant data version. Static analysis cannot infer collection size: justify a measured, bounded sort with a local allow comment. Event-handler callbacks and JSON/sorts directly inside `offUiIsolate` are excluded. |
-| `list-item-layer` | `Opacity`/`saveLayer` in item/separator builders, eager list children, same-file row helpers, and build methods of declared `*ListItem`/`*Row`/`*Tile` widgets. Paint alpha directly for simple content or use a measured leaf transition. Opacity outside list scopes is allowed. |
-
-These are lexical ratchets, not a Dart type checker or a phone performance measurement.
-Same-file helper resolution does not follow imports, dynamic dispatch or arbitrary aliases.
-Existing hits are baselined from each file's merge-base content, with no file-wide exemption;
-each rule's count may stay level or shrink, but cannot grow. `forced-semantics` instead fails
-even in previously existing or unchanged files. Other rules retain the narrow
-`// omi-perf-allow: <rule> -- <measured reason>` escape hatch on the hit line or immediately above.
-
-Incident evidence: [#23400](https://github.com/BasedHardware/omi/pull/23400) removed the
-app-lifetime semantics handle that enabled semantics compilation with VoiceOver off.
-[#21517](https://github.com/BasedHardware/omi/pull/21517) introduced this shared ratchet for
-history-sized work and notify amplification. [#21323](https://github.com/BasedHardware/omi/pull/21323),
-[#23018](https://github.com/BasedHardware/omi/pull/23018) and
-[#23278](https://github.com/BasedHardware/omi/pull/23278) provide harness, rebuild/paint isolation
-and per-notify derivation context. They do not establish that every lexical pattern above caused
-those incidents; in particular #23018 was not a frame-rate timer defect. Sort and list-layer
-fixtures are preventive controls, not new causal findings about those incidents.
-
 The ratchet compares each changed file with its merge-base version, so a renamed or moved file
 starts at zero and its existing hits read as new; carry them over with allow comments. The
 host perf harness below is deliberately not a CI gate: its frame times depend on the machine and
