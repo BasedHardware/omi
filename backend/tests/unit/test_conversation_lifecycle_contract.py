@@ -106,7 +106,6 @@ def lifecycle_store(monkeypatch):
         return locked
 
     monkeypatch.setattr(conversations_db, 'db', store)
-    monkeypatch.setattr(lifecycle_service.status_transitions_db, 'get_firestore_client', lambda: store)
     monkeypatch.setattr(conversations_db.firestore, 'transactional', transactional)
     return store
 
@@ -604,6 +603,8 @@ def test_failed_merge_restores_a_discarded_source_without_restoring_visibility(l
     assert lifecycle_service.complete('uid', 'conversation')
     row = lifecycle_store.conversation('uid', 'conversation')
     assert row['status'] == 'completed' and row['discarded'] is True
+
+
 @pytest.mark.parametrize('creator', ['create_completed_conversation', 'persist_imported_conversation'])
 def test_terminal_creation_always_stores_an_authorized_decision(lifecycle_store, creator):
     payload = {
@@ -620,12 +621,15 @@ def test_terminal_creation_always_stores_an_authorized_decision(lifecycle_store,
     assert row['relevance_decision']['reason'] in {'import_default', 'lifecycle_terminal_default'}
 
 
-@pytest.mark.parametrize('cas', [False, True])
-def test_merge_rollback_completes_with_decision(lifecycle_store, cas):
+@pytest.mark.parametrize('entrypoint', ['transition', 'complete'])
+def test_merge_rollback_completes_with_decision(lifecycle_store, entrypoint):
     lifecycle_store.put_conversation('uid', 'rollback', status='merging', discarded=False)
-    assert lifecycle_service.transition(
-        'uid', 'rollback', ConversationStatus.completed, expected=ConversationStatus.merging if cas else None
-    )
+    if entrypoint == 'transition':
+        assert lifecycle_service.transition(
+            'uid', 'rollback', ConversationStatus.completed, expected=ConversationStatus.merging
+        )
+    else:
+        assert lifecycle_service.complete('uid', 'rollback')
     row = lifecycle_store.conversation('uid', 'rollback')
     assert row['relevance_decision']['verdict'] == 'keep'
     assert row['relevance_decision']['reason'] == 'lifecycle_terminal_default'
@@ -646,14 +650,17 @@ def test_legacy_restore_records_user_verdict_without_restoring_tombstones(lifecy
         assert row['relevance_decision']['reason'] == 'restored'
 
 
-@pytest.mark.parametrize('cas', [False, True])
+@pytest.mark.parametrize('entrypoint', ['transition', 'complete'])
 @pytest.mark.parametrize('reason', ['filler_only', 'empty_transcript'])
-def test_merge_rollback_preserves_legacy_rule_discard_and_visibility(lifecycle_store, cas, reason):
+def test_merge_rollback_preserves_legacy_rule_discard_and_visibility(lifecycle_store, entrypoint, reason):
     prior = dict(verdict='discard', decided_by='rule', reason=reason, trigger='capture_end')
     lifecycle_store.put_conversation('uid', 'rollback', status='merging', discarded=False, relevance_decision=prior)
-    assert lifecycle_service.transition(
-        'uid', 'rollback', ConversationStatus.completed, expected=ConversationStatus.merging if cas else None
-    )
+    if entrypoint == 'transition':
+        assert lifecycle_service.transition(
+            'uid', 'rollback', ConversationStatus.completed, expected=ConversationStatus.merging
+        )
+    else:
+        assert lifecycle_service.complete('uid', 'rollback')
     row = lifecycle_store.conversation('uid', 'rollback')
     assert row['status'] == 'completed'
     assert row['relevance_decision'] == prior

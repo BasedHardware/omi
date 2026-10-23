@@ -168,3 +168,19 @@ def build_deterministic_minimum_structured(
         action_items=[],
         events=[],
     )
+
+
+def build_deferred_structured(conversation: Any) -> Structured:
+    """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
+    the first few words of the transcript so the conversation list stays usable until the user
+    opens it (which triggers the real enrichment). A non-empty title is required — an empty one
+    marks the conversation discarded in `_get_conversation_obj`."""
+    text = ''
+    for seg in list(getattr(conversation, 'transcript_segments', None) or []):
+        seg_text = (getattr(seg, 'text', '') or '').strip()
+        if seg_text:
+            text = seg_text
+            break
+    words = text.split()
+    title = ' '.join(words[:8]).strip() if words else ''
+    return Structured(title=title or 'Recording')

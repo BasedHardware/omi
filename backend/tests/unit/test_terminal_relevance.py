@@ -9,6 +9,15 @@ from utils.conversations.terminal_relevance import terminal_decision, valid_deci
 from database import conversation_terminal_title as terminal
 
 
+def test_current_processing_triggers_preserve_valid_prior_decisions():
+    from utils.conversations.processing_trigger import ProcessingTrigger
+
+    for trigger in ProcessingTrigger:
+        prior = dict(verdict='keep', decided_by='policy', reason=trigger.value, trigger=trigger.value)
+        assert valid_decision(prior)
+        assert terminal_decision({'relevance_decision': prior}, path='lifecycle_terminal') == prior
+
+
 @pytest.mark.parametrize(
     'path,assess',
     sorted(
@@ -314,7 +323,7 @@ def test_production_terminal_assessment_call_sites_are_pinned():
     root = Path(__file__).resolve().parents[2]
     expected = {
         'database/conversations.py': 2,
-        'database/conversation_status_transitions.py': 1,
+        'database/conversation_merge_jobs.py': 1,
         'database/conversation_terminal_title.py': 1,
         'utils/task_intelligence/chat_first_fixture_capture.py': 1,
         'utils/conversations/lifecycle.py': 3,

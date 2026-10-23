@@ -73,6 +73,7 @@ from utils.llm.notes_short_clip import quiet_minimum
 from utils.llm.output_language import resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
+    build_deferred_structured,
     deterministic_minimum_title,
 )
 from utils.conversations.duration import conversation_duration_seconds
@@ -112,7 +113,6 @@ from utils.conversations.relevance_io import (
 )
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
-    terminal_persist_payload,
     clear_summary_retryable,
     client_processing_mutation,
     omit_null_processing_state,
@@ -2115,24 +2115,6 @@ def _update_personas_async(uid: str):  # type: ignore[reportUnusedFunction]  # r
         logger.info(f"[PERSONAS] Finished persona updates in background thread for uid={uid}")
 
 
-def _build_deferred_structured(
-    conversation: Union[Conversation, CreateConversation, ExternalIntegrationCreateConversation],
-) -> Structured:
-    """A cheap, no-LLM placeholder Structured for a lazily-deferred conversation. The title is
-    the first few words of the transcript so the conversation list stays usable until the user
-    opens it (which triggers the real enrichment). A non-empty title is required — an empty one
-    marks the conversation discarded in `_get_conversation_obj`."""
-    text = ''
-    for seg in list(getattr(conversation, 'transcript_segments', None) or []):
-        seg_text = (getattr(seg, 'text', '') or '').strip()
-        if seg_text:
-            text = seg_text
-            break
-    words = text.split()
-    title = ' '.join(words[:8]).strip() if words else ''
-    return Structured(title=title or 'Recording')
-
-
 def _attach_client_projection(conversation: Conversation, client_projection: ClientProcessing | None) -> None:
     """Stamp a validated display projection on the server-authored conversation.
 
@@ -2169,7 +2151,7 @@ def _store_budget_waiting(uid, conversation, *, client_projection=None):
     initial = _is_ingress_create(conversation)
     estimate = defer_estimate(conversation)
     # Model-free title only; preserve every transcript and external text field.
-    structured = _build_deferred_structured(conversation)
+    structured = build_deferred_structured(conversation)
     result = _get_conversation_obj(uid, structured, conversation, relevance_discarded=False)
     effective_projection = (
         client_projection
@@ -2215,7 +2197,7 @@ def _store_deferred_conversation(
             uid, getattr(conversation, 'started_at', None), getattr(conversation, 'finished_at', None)
         ),
     )
-    structured = _build_deferred_structured(conversation)
+    structured = build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     _attach_client_projection(conversation, client_projection)
     conversation.deferred = True

@@ -187,6 +187,8 @@ def test_transient_failure_with_transcript_is_titled_and_retryable(failure_code)
     # Only the title changes; the rest of the stored structured map survives.
     assert patch['structured'] == {'title': 'We picked the venue for Friday.', 'overview': '', 'category': 'other'}
     assert patch['summary_retryable'] is True
+    assert patch['relevance_decision']['verdict'] == 'keep'
+    assert patch['relevance_decision']['trigger'] == 'dead_letter'
     assert patch['_zone_calls'] == []  # a transcript title needs no zone lookup
 
 
@@ -553,6 +555,8 @@ def test_attention_read_after_a_terminal_write_is_rejected():
             'final_attempt_failed',
             _NOW,
         )
+
+
 def test_legacy_undescribed_child_photo_blocks_new_terminal_discard(monkeypatch):
     monkeypatch.setattr(terminal_title, 'calendar_retains', lambda *_: False)
     conversation = _conversation(

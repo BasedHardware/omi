@@ -21,10 +21,12 @@ DECISION_TRIGGERS = TERMINAL_PATHS | frozenset(
         'client_finalize',
         'sync_update',
         'first_open',
+        'backlog_choice',
         'user_reprocess',
         'merge',
         'smart_merge',
         'server_recovery',
+        'silent_backfill',
         'backfill',
     }
 )

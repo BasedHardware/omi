@@ -25,7 +25,6 @@ from database import conversation_finalization_jobs as jobs_db
 from utils.conversations import merge_conversations_job
 
 from database import conversations as conversations_db
-from database import conversation_status_transitions as status_transitions_db
 from database import oversized_conversation_terminal as oversized_terminal_db
 from database import recording_sessions as recording_sessions_db
 from database import sync_cap_recovery

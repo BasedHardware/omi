@@ -127,35 +127,3 @@ def client_processing_mutation(projection: Any) -> dict[str, Any]:
     """
     dumped = projection.model_dump(mode='json') if hasattr(projection, 'model_dump') else projection
     return {'client_processing': dumped}
-
-
-def terminal_persist_payload(conversation: Any) -> dict[str, Any]:
-    """Generic persist dict for a free-tier terminal store.
-
-    Always strips ``client_processing``. A processor holding a stale in-memory
-    projection must not last-writer-wins over a later ingest mutation. An
-    ingress create (``_store_deterministic_minimum`` /
-    ``_store_projected_conversation`` when ``_is_ingress_create``) stamps the
-    field back via ``client_processing_mutation`` after calling this. An
-    existing-conversation persist leaves the field omitted.
-
-    ``Conversation.dict()`` does not model ``jit_first_open`` or the durable
-    terminal-disposition marker. Firestore persist uses ``merge=True``, so a
-    prior pending first-open obligation would survive this write (paid→basic
-    reprocess) and ``get_conversation_by_id`` would dispatch folder assignment
-    and app fan-out. There is no lifecycle_service or first_open_obligations
-    helper that deletes the field; write ``None`` in the same persist so the
-    merge clears it. The terminal marker must be written here too: a completed
-    minimum that then fails receipt/keyframe/fanout-completion is retried by
-    Cloud Tasks against ``status=completed``, which skips process_conversation
-    and would otherwise default the request-scoped disposition to RUN.
-
-    ``processing_state`` follows the dark discipline: a real value (the
-    flag-on minimum's ``local_pending``) passes through, but the modeled
-    field's None default is omitted — merge=True would stamp the explicit
-    null onto every conversation with both flags off.
-    """
-    payload = conversation.dict()
-    payload['jit_first_open'] = None
-    payload['terminal_no_derived_effects'] = True
-    return clear_summary_retryable(omit_null_processing_state(strip_client_processing(payload)))

@@ -29,9 +29,10 @@ threshold, recovery feature flag, client, or deletion contract changes.
 | Immutable Limitless / transcript-file imports (`persist_imported_conversation`) | Create completed once; duplicate import no-op | No | Explicit `import_default` keep policy: deliberate user import remains kept. Create-if-absent still preserves user edits. |
 | Sync intake and subsequent append (`utils/sync/assignment.py`) | Completed rule discard or provisional keep; live target retains lifecycle; donor redirects hidden | Discard yes; keep/promotion could clear decision to None | Existing intake discard rules unchanged. Every keep/promotion now records `sync_intake_default` if no valid keep exists, before the transactional survivor write. Paid `SYNC_UPDATE` assessment follows over full transcript. |
 | Sync processing (`utils/sync/pipeline.py`) | Completed keep/discard or recovery terminal | Normal assessment yes | Lifecycle result boundary now supplies a decision if any minimum/bypass omits one; transcript-revision CAS still rejects stale processors. |
-| Explicit merge (`merge_conversations.py`) | New survivor processing → completed; source rollback to completed; donors hidden/deleted | Survivor yes (`policy/merge`); legacy source rollback not guaranteed | The status storage primitive in `database/conversation_status_transitions.py` and CAS completion transitions now fill missing decisions. Any valid prior keep or discard survives, even when the legacy discarded flag disagrees. Only an explicit user restore replaces a discard. |
+| Explicit merge (`merge_conversations.py`) | New survivor processing → completed; source rollback to completed; donors hidden/deleted | Survivor yes (`policy/merge`); legacy source rollback not guaranteed | CAS completion transitions and durable merge-job crash rollback (`database/conversation_merge_jobs.py`) now fill missing decisions. Any valid prior keep or discard survives, even when the legacy discarded flag disagrees. Only an explicit user restore replaces a discard. |
 | Smart merge survivor / refresh | Existing survivor completed; refresh processing → completed; donors hidden | Normal survivor decision / `policy/smart_merge` yes | Existing relevance policy and refresh lease/revision fences remain. Generic completion boundary covers absent records. Donor tombstones are untouched. |
 | User discard / restore / deletion | Discard stays hidden; restore makes explicit user keep; deletion never recreated | Existing user-owned contract | Restore now adds user-decision metadata after the unchanged tombstone fence. No deletion/discard semantics change. New helper never turns an existing discard into keep, respects restores, and normal persistence still refuses missing/deleted rows. |
+| Approved historical noise close/restore (`database/stuck_backfill.py`) | Completed+discarded close; revision-fenced restore to saved in-progress state | No; never a visible terminal | Existing atomic discard + no-derived-effects + plan marker keep it hidden. Tripwire exempts only that full payload; no backfill is executed by this audit. Silent-summary processing keeps its existing explicit policy verdict. |
 | Finalization job completion/fanout bookkeeping, audio/segment/photo metadata updates | Do not independently create or terminalize a conversation row | Not a separate decision path | Job completion requires committed fanout; conversation completion is owned by processing. Metadata writes cannot set lifecycle fields through generic update. |
 | Canary and fixed local/offline fixture creation | Completed | Caller-dependent; fixture batch had no decision | Dream canaries use guarded lifecycle creation. Chat-first E2E batch seeding now stores explicit `fixture_seed_default` policy; existing runtime/account guards still prohibit production fixture writes. |
 
@@ -110,7 +111,7 @@ against 0.8 remains unchanged.
 
 The completion primitive now preserves any valid verdict regardless of the stored
 `discarded` flag. Explicit `sync_relevance_user_kept` or `user_restore` is required
-to replace a prior discard. Both CAS and unconditional merging-to-completed tests
+to replace a prior discard. Both lifecycle transition and completion entrypoint tests
 seed legacy `filler_only` / `empty_transcript` decisions with `discarded=false`
 and assert the verdict survives and the shared reader continues to hide the row.
 
@@ -133,3 +134,28 @@ and fixture contracts. Failing fixture expectations were corrected and their
 files rerun successfully. Backend `test-preflight.sh` passed 17 checks with nine
 optional environment/service warnings. The async-blocker scan and lifecycle
 write guard passed. No live provider or deployed-product acceptance is claimed.
+
+
+## Wave-2 integration (2026-10-23)
+
+Rebased onto main `53c38ccd984cb50e15d13e6fd33f115bf646bf5d`. The
+`conversation_terminal_title.dead_letter_conversation_updates` payload composes
+the mandatory relevance record with main's deterministic title and conditional
+`summary_retryable` marker; `_mark_finalization_dead_letter_txn` writes that
+payload once, atomically with the job terminal and processing-attention item.
+Attention's reads and all photo probes remain before the first transaction write.
+The transient transcript fixture asserts the decision, deterministic title and
+retry flag coexist in the same conversation update. Near the document ceiling,
+only title/retry metadata may be omitted; the decision remains mandatory.
+
+Main's lifecycle transitions require an expected status and retain CAS, privacy,
+and explicit discarded-source merge guards. The retired unconditional status
+writer and old free-tier terminal payload are not restored. Durable merge crash
+rollback stamps its exact bound source snapshot, preserves legacy rule discards
+even with `discarded=false`, and leaves a newer merge binding untouched. Main's
+`silent_backfill` processing trigger is recognized as existing decision provenance
+without changing its policy, classifier, approval fences, or delivery behavior.
+
+The existing eight-word deferred placeholder builder now lives beside the other
+pure title helpers in `deterministic_minimum.py`, keeping the processing
+coordinator below main's file-size ratchet without changing title policy.

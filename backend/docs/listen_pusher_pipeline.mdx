@@ -2156,7 +2156,8 @@ Kept rows receive `deterministic_minimum_title` when untitled; real/user titles
 survive. Only transient dead-letter failures with usable input and no prior
 summary get `summary_retryable=true`; enrichment and free-tier persistence clear
 it explicitly after funded work completes. Budget deferral retains the retry
-marker and any display projection until chosen funded work completes. Title/retry metadata is optional under the size guard; the
+marker and any display projection until chosen funded work completes. Title/retry
+metadata is optional under the size guard; the
 relevance decision is mandatory. If that cannot fit at the actual 1 MiB ceiling,
 the shrinking write sets `status=failed`, outside the default list, retaining all
 content without a discard/deletion flag. The undecided status-only completion

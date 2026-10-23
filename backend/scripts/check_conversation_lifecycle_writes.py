@@ -64,6 +64,24 @@ def _dict_keys(node: ast.AST) -> set[str]:
     return keys
 
 
+def _is_hidden_noise_close(relative_path: str, payload: ast.Dict) -> bool:
+    """The approved operator close cannot publish a visible row.
+
+    Its restore is revision-fenced and returns the saved in-progress state.
+    Require all atomic hide markers; a bare completed write still fails.
+    """
+    if relative_path != 'backend/database/stuck_backfill.py':
+        return False
+    fields = {
+        key.value if isinstance(key, ast.Constant) else key.id if isinstance(key, ast.Name) else None: value
+        for key, value in zip(payload.keys, payload.values)
+    }
+    return isinstance(fields.get('MARKER'), ast.Dict) and all(
+        isinstance(fields.get(key), ast.Constant) and fields[key].value is True
+        for key in ('discarded', 'TERMINAL_NO_DERIVED_EFFECTS_FIELD')
+    )
+
+
 def _is_sync_donor_tombstone_discard(relative_path: str, node: ast.Call) -> bool:
     """Assignment may stamp discarded=True only as part of a redirect tombstone.
 
@@ -173,7 +191,11 @@ class _LifecycleWriteVisitor(ast.NodeVisitor):
                         )
                         for key, value in zip(payload.keys, payload.values)
                     )
-                    if completed and 'relevance_decision' not in _dict_keys(payload):
+                    if (
+                        completed
+                        and 'relevance_decision' not in _dict_keys(payload)
+                        and not _is_hidden_noise_close(self.relative_path, payload)
+                    ):
                         self.errors.append(
                             f'{self.relative_path}:{node.lineno}: completed conversation write requires relevance_decision'
                         )

@@ -27,7 +27,6 @@ from google.api_core.exceptions import Aborted, AlreadyExists
 
 import database.conversation_finalization_jobs as finalization_jobs
 import database.conversations as conversations_db
-import database.conversation_status_transitions as status_transitions_db
 import database.people_stats_cache as people_stats_cache
 import database.proactivity as proactivity_db
 import database.recording_sessions as recording_sessions_db
@@ -622,7 +621,6 @@ def writer_env(monkeypatch):
     invalidated: List[str] = []
     monkeypatch.setattr(conversations_db, 'db', store)
     monkeypatch.setattr(conversations_db, 'invalidate_people_stats_cache', lambda uid: invalidated.append(uid))
-    monkeypatch.setattr(status_transitions_db, 'invalidate_people_stats_cache', lambda uid: invalidated.append(uid))
     monkeypatch.setattr(conversations_db, '_sync_conversation_search_index', lambda *a, **k: None)
     monkeypatch.setattr(conversations_db, '_delete_conversation_search_index', lambda *a, **k: None)
     monkeypatch.setattr(conversations_db, 'leave_capture_group', lambda *a, **k: None)
@@ -709,7 +707,11 @@ def test_delete_conversation_invalidates_cache_when_proactivity_cleanup_fails(wr
 def test_transition_conversation_status_invalidates(writer_env):
     store, invalidated = writer_env
     store.seed_conv('u1', 'c1', status='in_progress')
-    status_transitions_db.transition_conversation_status('u1', 'c1', 'processing', firestore_client=conversations_db.db)
+    from models.conversation_enums import ConversationStatus
+
+    assert conversations_db.claim_conversation_status(
+        'u1', 'c1', ConversationStatus.in_progress, ConversationStatus.processing
+    )
     assert store.rows[store.conv_path('u1', 'c1')]['status'] == 'processing'
     assert invalidated == ['u1']
 

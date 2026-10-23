@@ -122,8 +122,18 @@ def test_stuck_noise_storage_is_callable_only_through_lifecycle():
         assert violations(source, 'backend/utils/conversations/lifecycle.py') == []
         assert 'direct lifecycle database call' in violations(source, 'backend/services/operator.py')[0]
     raw = "ref = user.collection('conversations').document(cid)\ntransaction.update(ref, {'status': 'completed'})\n"
-    assert violations(raw, 'backend/database/stuck_backfill.py') == []
+    assert 'requires relevance_decision' in violations(raw, 'backend/database/stuck_backfill.py')[0]
     assert violations(raw, 'backend/database/other_backfill.py')
+
+
+def test_only_atomic_hidden_noise_close_is_exempt_from_visible_decision_contract():
+    source = "transaction.update(ref, {'status': 'completed', 'discarded': True, TERMINAL_NO_DERIVED_EFFECTS_FIELD: True, MARKER: {'version': 1}})"
+    assert violations(source, 'backend/database/stuck_backfill.py') == []
+    assert violations(source, 'backend/database/conversations.py')
+    for marker in ("'discarded': True, ", 'TERMINAL_NO_DERIVED_EFFECTS_FIELD: True, ', "MARKER: {'version': 1}"):
+        assert violations(source.replace(marker, ''), 'backend/database/stuck_backfill.py')
+
+
 def test_allowlisted_literal_completed_write_requires_atomic_decision():
     for path in ('backend/database/conversations.py', 'backend/database/conversation_finalization_jobs.py'):
         assert any(

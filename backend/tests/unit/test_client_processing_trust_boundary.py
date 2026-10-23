@@ -526,7 +526,6 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'dict'),
         # Storage payload strips the projection before the initial-create-only mutation.
         DumpSite('utils/conversations/process_conversation.py', '_store_budget_waiting', 'model_dump'),
-        DumpSite('utils/conversations/projection_payload.py', 'terminal_persist_payload', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
         DumpSite('utils/conversations/meeting_context.py', 'store_meeting_context', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
