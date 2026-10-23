@@ -96,7 +96,12 @@ def persist_assignment_effects(
     docs, now = {pid: doc for pid, (_, doc) in people.items()}, datetime.now(timezone.utc)
     evidence = (docs, previous, person_id, relabeled, evidence_source, conversation_id, resolved, now)
     updates, removed = person_updates_for_assignment(
-        *evidence, receipt, segments, rejected_person_id=rejected_person_id, save_other_voice_profiles=save_other
+        *evidence,
+        receipt,
+        segments,
+        rejected_person_id=rejected_person_id,
+        save_other_voice_profiles=save_other,
+        source_conversation_ids=donor_ids,
     )
     owner_update = retract_owner_contributions(user_doc, donor_ids, resolved, now)
     if bookkeeping.enabled:

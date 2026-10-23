@@ -29,6 +29,7 @@ LOCAL_NON_REST_SCHEMA_FILES = frozenset(
     {
         APP_SCHEMA_DIR / 'bt_device' / 'bt_device.dart',
         APP_SCHEMA_DIR / 'message_event.dart',  # local SSE/WS event schema, not a REST DTO
+        APP_SCHEMA_DIR / 'capture_committed_event.dart',  # exact-frame WS receipt; covered by L5 parser tests
     }
 )
 

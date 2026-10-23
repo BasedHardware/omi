@@ -1,5 +1,33 @@
 # Windowed TDT live rollout
 
+## Funded window finalize and local-send attribution
+
+The funded cap proxy advertises the underlying window class. Managed VAD pauses
+therefore call `finalize(vad_pause=True)` through that proxy. The proxy must
+forward the provider arguments; a narrower signature raises a local `TypeError`,
+which the send boundary reports as `send_failed` even though no HTTP request or
+WebSocket failed. The cap proxy preserves this call with
+`STT_CAP_FINALIZE_FORWARD_ENABLED` on by default. `false`, `0`, or `off` selects
+generic no-argument finalize as an emergency fallback without recreating the
+signature exception. Held providers remain unopened in either mode.
+Generic finalize omits the ordinary-speech guard, so sub-second speech blips
+may flush earlier in that emergency mode.
+
+`omi_stt_local_send_failures_total{provider,phase,exception_class}` and the
+`event=live_stt_local_send_failure` log distinguish raw send/refusal, usage
+accounting, capture mapping, finalize and the caller boundary. Labels and log
+fields are bounded; exception messages, content, IDs and endpoints are omitted.
+Logs also record raw dead/closed state and whether the socket is a cap proxy.
+These diagnostics do not change provider-health classification, routing stages,
+admission caps, deadlines or GPU placement. They count local boundary events,
+not unique failed sessions; caller and inner diagnostics can overlap.
+
+For a listen train carrying this fix, compare the new finalize/TypeError count,
+`send_failed` settlements, gate recovery stages, transcript availability and
+window POST latency against the previous release. Preserve the automatic gate;
+do not delete health keys or force an unbench. Deploy only in the approved
+22:00–13:00Z window unless the lead rules otherwise.
+
 The September 2026 live-chain incident exposed three different contracts:
 configured order did not govern connection fallback; account-state refusals were
 retried as transient failures; the healthy batch TDT model was not a live leg.
@@ -331,21 +359,36 @@ accelerated replay contract, so it also receives the conservative default.
 
 Each replacement target gets a **5s per-target setup budget** (dial plus
 serving check) and a **20s replay prefix wall**, both spent from the session's
-single **60s episode** total rather than restarting per target. Unanswered
-capture exceeding 20s is cut to the newest 20s (135s becomes 20s; 115s skipped),
-with `omi_stt_replay_skipped_seconds_total{source,successor}` recording the loss.
+single **60s episode** total rather than restarting per target. The retained
+prefix is the wall less a **1s margin** (`LISTEN_REPLAY_PREFIX_MARGIN_SECONDS`,
+`0` restores the exact-wall prefix), scaled by the target's declared rate:
+paced delivery at exactly 1x into a wall of the same length left only the last
+packet's write-confirm (~30ms) as slack, and ~1,050 prefixes/day landed past the
+wall as `replay_send_stalled` (2026-10-21, `omi_stt_replay_wall_seconds` 20–25s
+bucket). Unanswered capture exceeding that budget is cut to the newest 19s
+(135s becomes 19s; 116s skipped), with
+`omi_stt_replay_skipped_seconds_total{source,successor}` recording the loss.
 Emitted capture prefixes remain excluded. This is an intentional bounded-loss
 tradeoff; do not describe it as full-ring transcript preservation. Partial
 replay rejection retains the remaining obligation for the next eligible leg.
 
 Live ingestion does not await the failover lock. A supervisor-owned ordered tail
 holds at most **26s PCM** (832,000 bytes at 16 kHz), behind the replay prefix.
-At 1x live input the lag stays fixed until admitted audio actually pauses;
-silence still forwarded as PCM does not let it catch up. The
-healthy 20ms/packet test bounds delay by 20.532s after setup; allowing the full
-5s setup budget gives **25.532s at 16 kHz** (26.044s at 8 kHz, because a 16KiB
-packet represents 1.024s). This is audio delivery delay, not a vendor transcript
-latency guarantee. A nonresponsive transport is rejected: the replay helper
+While the tail holds more than **1s** of audio the pump drains it at the
+catch-up rate: `LISTEN_LIVE_TAIL_CATCHUP_RATE` (default **1.5**) times the
+endpoint's declared sustained rate, capped per successor family (Soniox,
+Modulate and Deepgram 2x; the Parakeet window, which has no wire, 4x), then
+returns to the sustained rate. `1` restores the exact-rate tail, whose lag
+stayed fixed until admitted audio paused and grew by every missed pump slot.
+Against real-time input the worst-case tail below drains to about 1s in ~47s at
+1.5x (half a second of backlog per second), a 750ms pump slip in a couple of
+seconds; `omi_stt_live_tail_catchup_seconds_total{successor}` counts the audio
+seconds delivered above the sustained rate and stays 0 with the switch off.
+The replay prefix itself is never accelerated. The
+healthy 20ms/packet test bounds delay by 19.532s after setup; allowing the full
+5s setup budget gives **24.532s at 16 kHz** (25.044s at 8 kHz, because a 16KiB
+packet represents 1.024s). This is the peak audio delivery delay, not a vendor
+transcript latency guarantee. A nonresponsive transport is rejected: the replay helper
 admits at most two packets counting queued plus in-flight audio and waits at most 2s for space; prefix wall
 admission also has a 20s deadline. Ordinary live sends retain the 2,000-item
 queue. Setup timeout skips its requested family and continues within that
@@ -390,8 +433,10 @@ Recovery legs opt into per-leg writer pacing at the transport, not just
 admission: the armed slot advances from the previously armed slot, so
 sub-frame timer oversleep is compensated against the accumulated slot instead
 of drifting, while a stall of one frame or longer rebases on the clock and
-discards missed-slot credit (sustained ≤1x, no catch-up burst on a
-stalled-then-resumed transport), with each `ws.send` bounded by `min(2s,
+discards missed-slot credit. The writer runs at the leg's tail catch-up
+ceiling and admission sets the sustained wire rate, so a stalled-then-resumed
+transport can close up only the packets the queue already held, never bank
+credit; each `ws.send` is bounded by `min(2s,
 episode remaining)`. The observable burst
 allowance is bounded queue+in-flight bytes (at most two 16KiB frames); that
 bound never grows. Prefix delivery — replay enqueues plus the frozen transport
@@ -400,8 +445,9 @@ episode, so `REPLAY_WALL` measures actual prefix delivery. Live audio carries
 first-admission birth time through tail→snapshot→successor; a bounded interval
 `BirthLedger` (8192 entries, adjacent coalescing by earliest birth) prunes at
 the retained ring head. Live-audio birth is the first capture acceptance,
-preserved across retry; contiguous silence arriving as PCM does not itself
-allow catch-up. Retained recovery-tail frames have a strict 28s maximum capture
+preserved across retry; catch-up is driven only by the bytes the tail holds,
+never by elapsed time, so contiguous silence arriving as PCM is drained like
+any other audio and earns no credit. Retained recovery-tail frames have a strict 28s maximum capture
 age: expired cuts are metered, queued writes already past that age reject as
 `capacity_full`, and intervals older than the bound are retired and metered
 once rather than replayed again. Stalls or repeated failures do not promise
@@ -421,7 +467,8 @@ Metrics use only bounded source/successor families (`parakeet`, `modulate`,
 first post-scrape event is visible to `increase()`/`rate()`:
 `omi_stt_replay_wall_seconds`, `omi_stt_replay_audio_seconds_total`,
 `omi_stt_replay_queue_high_water`, `omi_stt_replay_skipped_seconds_total`,
-`omi_stt_replay_successor_closed_total`, plus
+`omi_stt_replay_successor_closed_total`,
+`omi_stt_live_tail_catchup_seconds_total{successor}`, plus
 `omi_stt_recovery_attempts_total{source,successor}` on each real recovery dial
 and `omi_live_session_terminal_after_text_total{provider}` once when a session
 delivered text and still terminated on an STT failure. The wall histogram

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:path_provider/path_provider.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
@@ -176,7 +178,15 @@ class Wal {
 
   /// Explicit phone-only custody. Never admitted to a cloud audio drain.
   bool onDeviceOnly;
+
+  /// Explicit Transcribe Later consent: only a manual upload may release this hold.
+  bool holdForUser;
+  DeviceType? deviceType;
   Map<String, dynamic>? onDeviceConversation;
+
+  /// Immutable continuation input, retained until conversation receipt is durable.
+  Map<String, dynamic>? onDevicePreparedUpload;
+  String? onDeviceUploadFailure;
 
   /// Recording-time custody evidence. Null identifies pre-fix dev records.
   bool? capturedOnDeviceOnly;
@@ -265,6 +275,12 @@ class Wal {
   int syncedAt;
 
   bool keptForTranscriptRecovery;
+
+  /// Set only when [timerStart] is an app estimate (the device gave no
+  /// trustworthy recording time): names the one contiguous device recording
+  /// this audio belongs to. The upload filename carries it so the backend
+  /// never merges it with audio outside that run by invented adjacency.
+  String? clockRun;
 
   String get id => '${device}_$timerStart';
 
@@ -356,7 +372,11 @@ class Wal {
     this.status = WalStatus.inProgress,
     this.storage = WalStorage.mem,
     this.onDeviceOnly = false,
+    this.holdForUser = false,
+    this.deviceType,
     this.onDeviceConversation,
+    this.onDevicePreparedUpload,
+    this.onDeviceUploadFailure,
     this.capturedOnDeviceOnly,
     this.filePath,
     this.device = "phone",
@@ -384,6 +404,7 @@ class Wal {
     this.uploadedAt = 0,
     this.syncedAt = 0,
     this.keptForTranscriptRecovery = false,
+    this.clockRun,
   }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
@@ -397,8 +418,14 @@ class Wal {
       status: WalStatus.values.asNameMap()[json['status']] ?? WalStatus.inProgress,
       storage: WalStorage.values.asNameMap()[json['storage']] ?? WalStorage.mem,
       onDeviceOnly: json['on_device_only'] == true,
+      holdForUser: json['hold_for_user'] == true,
+      deviceType: DeviceType.values.asNameMap()[json['device_type']],
       onDeviceConversation:
           json['on_device_conversation'] is Map ? Map<String, dynamic>.from(json['on_device_conversation']) : null,
+      onDeviceUploadFailure: json['on_device_upload_failure'] as String?,
+      onDevicePreparedUpload: json['on_device_prepared_upload'] is Map
+          ? Map<String, dynamic>.from(json['on_device_prepared_upload'] as Map)
+          : null,
       capturedOnDeviceOnly: json['captured_on_device_only'] as bool?,
       filePath: json['file_path'],
       seconds: json['seconds'] ?? chunkSizeInSeconds,
@@ -429,7 +456,10 @@ class Wal {
       uploadedAt: json['uploaded_at'] ?? 0,
       syncedAt: json['synced_at'] ?? 0,
       keptForTranscriptRecovery: json['kept_for_transcript_recovery'] == true,
-    )..repairLegacyImportedCustody();
+      clockRun: json['clock_run'] as String?,
+    )
+      ..frameSize = json['frame_size'] ?? mapNameToCodec(json['codec']).getFrameSize()
+      ..repairLegacyImportedCustody();
   }
 
   Map<String, dynamic> toJson() {
@@ -441,7 +471,11 @@ class Wal {
       'status': status.name,
       'storage': storage.name,
       'on_device_only': onDeviceOnly,
+      'hold_for_user': holdForUser,
+      if (deviceType != null) 'device_type': deviceType!.name,
       'on_device_conversation': onDeviceConversation,
+      if (onDevicePreparedUpload != null) 'on_device_prepared_upload': onDevicePreparedUpload,
+      if (onDeviceUploadFailure != null) 'on_device_upload_failure': onDeviceUploadFailure,
       if (capturedOnDeviceOnly != null) 'captured_on_device_only': capturedOnDeviceOnly,
       'file_path': filePath,
       'seconds': seconds,
@@ -451,6 +485,7 @@ class Wal {
       'storage_total_bytes': storageTotalBytes,
       'file_num': fileNum,
       'total_frames': totalFrames,
+      'frame_size': frameSize,
       'synced_frame_offset': syncedFrameOffset,
       'original_storage': originalStorage?.name,
       'conversation_id': conversationId,
@@ -469,17 +504,27 @@ class Wal {
       'uploaded_at': uploadedAt,
       'synced_at': syncedAt,
       if (keptForTranscriptRecovery) 'kept_for_transcript_recovery': true,
+      if (clockRun != null) 'clock_run': clockRun,
     };
   }
 
   static List<Wal> fromJsonList(List<dynamic> jsonList) => jsonList.map((e) => Wal.fromJson(e)).toList();
 
   getFileName() {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timerStart}.bin";
+    return getFileNameByTimeStarts(timerStart, clockRun: clockRun);
   }
 
-  getFileNameByTimeStarts(int timestarts) {
-    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs${frameSize}_${timestarts}.bin";
+  /// `_clke<run>` sits directly before the timestamp: older backends read only
+  /// `_fs<n>` and the trailing part, so they ignore it.
+  getFileNameByTimeStarts(int timestarts, {String? clockRun}) {
+    final clock = clockRun == null ? '' : '_clke$clockRun';
+    return "audio_${device.replaceAll(RegExp(r'[^a-zA-Z0-9]'), "").toLowerCase()}_${codec}_${sampleRate}_${channel}_fs$frameSize${clock}_$timestarts.bin";
+  }
+
+  /// A fresh run name for audio whose recording time the app had to estimate.
+  static String newClockRun() {
+    final random = Random.secure();
+    return List.generate(12, (_) => '0123456789abcdefghijklmnopqrstuvwxyz'[random.nextInt(36)]).join();
   }
 
   static Future<String?> getFilePath(String? pathOrName) async {

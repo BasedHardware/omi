@@ -43,6 +43,12 @@ class DailySummaryDayStats(BaseModel):
     action_items_created: Optional[int] = None
     watching_minutes: Optional[int] = None
     proactive_moments: Optional[int] = None
+    memories_learned_count: Optional[int] = None
+    summarized_conversations: Optional[int] = None
+    watching_minutes_unit: str = 'minutes'
+    watching_minutes_basis: Optional[str] = None
+    watching_coverage: Optional[str] = None
+    reported_device_watching_minutes: Optional[int] = None
 
 
 class DailySummaryLocationPin(BaseModel):

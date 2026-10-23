@@ -27,6 +27,7 @@ from config.rollout_cohorts import (
 )
 from database.rollout_cohorts import read_memberships, read_cohort_members
 from utils import executors
+from utils.rollout.runtime_percent import configure_runtime_percent
 from utils.stt_cap_cohort import runtime_cohort
 
 TTL_SECONDS = 60
@@ -178,3 +179,5 @@ def configure_rollout_runtime() -> None:
         _warm_rollout_cohorts,
         env_readers={'batch-pipeline': batch_members, 'batch-pipeline-recovery': recovery_members},
     )
+    # Runtime percents and legacy_sync (`rollout_cohorts/_ramp`, contract (f)) bind with the cohorts.
+    configure_runtime_percent()

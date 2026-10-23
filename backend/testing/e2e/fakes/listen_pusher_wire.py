@@ -16,6 +16,7 @@ import time
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Callable, Optional
+from urllib.parse import parse_qs, urlsplit
 
 import websockets
 
@@ -26,6 +27,7 @@ import websockets
 PUSHER_TRANSCRIPT = 102
 PUSHER_PROCESS_CONVERSATION = 104
 PUSHER_PROCESS_RESULT = 201
+PUSHER_AUDIO_TIMELINE_ACK = 202
 
 
 @dataclass(frozen=True)
@@ -354,11 +356,19 @@ class ScriptedPusherPeer(_LoopbackWebSocketServer):
         await websocket.send(_encode_pusher_result(payload))
 
     async def _handle(self, websocket: Any, path: Optional[str] = None) -> None:
+        request_path = _peer_path(websocket, path)
         with self._condition:
             self.connection_count += 1
             connection = self.connection_count
-            self.paths.append(_peer_path(websocket, path))
+            self.paths.append(request_path)
             self._condition.notify_all()
+        if parse_qs(urlsplit(request_path).query).get('audio_timeline') == ['2']:
+            # Eligible sessions now always negotiate span storage. Act like the
+            # capable production pusher before listen announces readiness.
+            await websocket.send(
+                struct.pack('<I', PUSHER_AUDIO_TIMELINE_ACK)
+                + json.dumps({'type': 'audio_timeline_ack', 'version': 2}).encode('utf-8')
+            )
         async for raw in websocket:
             if not isinstance(raw, bytes) or len(raw) < 4:
                 continue

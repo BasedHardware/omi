@@ -65,7 +65,10 @@ LIVE_STT_IMPORT_UIDS = (
     "omi-stt-stage-disagreement",
     "omi-stt-enabled-state-unknown",
     "omi-stt-capacity-full-exhausted",
+    "omi-stt-local-delivery-exhausted",
     "omi-stt-provider-terminal-failure-ratio",
+    "omi-stt-chain-exhausted-ratio",
+    "omi-stt-no-full-stage-target",
 )
 DATASOURCE_CANARY_UIDS = ("omi-datasource-prometheus", "omi-datasource-cloud-monitoring")
 REDIS_CACHE_IMPORT_UIDS = ("omi-redis-cache-conn-warn", "omi-redis-cache-conn-page")

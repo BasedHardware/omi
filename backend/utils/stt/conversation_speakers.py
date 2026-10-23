@@ -45,17 +45,19 @@ from utils.stt.speaker_match import (
     select_speaker_match,
 )
 
+from utils.speakers.policy import ABSORB, CONVERSATION_CLUSTER, CROSS_SCOPE_CLUSTER, FINALIZE
+
 RESOLUTION_VERSION = 2
 
-AHC_THRESHOLD = float(os.getenv('CONVERSATION_SPEAKER_AHC_THRESHOLD', '0.70'))
+AHC_THRESHOLD = CONVERSATION_CLUSTER.distance
 ANCHOR_SECONDS = float(os.getenv('CONVERSATION_SPEAKER_ANCHOR_SECONDS', '30'))
-ABSORB_DISTANCE = float(os.getenv('CONVERSATION_SPEAKER_ABSORB_DISTANCE', '0.60'))
+ABSORB_DISTANCE = ABSORB.distance
 # A voice counts as a participant once it has spoken this long.
 SIGNIFICANT_SECONDS = float(os.getenv('CONVERSATION_SPEAKER_SIGNIFICANT_SECONDS', '10'))
 # Shorter segments are too noisy to embed; they inherit a voice instead.
 MIN_EMBED_SECONDS = 1.0
 # A voice's pooled centroid against an enrolled voiceprint.
-VOICE_MATCH_THRESHOLD = float(os.getenv('CONVERSATION_SPEAKER_VOICE_MATCH_THRESHOLD', '0.50'))
+VOICE_MATCH_THRESHOLD = FINALIZE.distance
 
 OWNER_IDENTITY = 'user'
 
@@ -93,6 +95,8 @@ class SpeakerResolution:
     match_scores: List[dict] = field(default_factory=list)
     voice_identity_statuses: Dict[int, str] = field(default_factory=dict)
     """Evidence states for automatic voices only; manual receipts remain authoritative."""
+    voice_distances: Dict[int, Dict[str, float]] = field(default_factory=dict)
+    voice_centroids: Dict[int, Any] = field(default_factory=dict)
     owner_voiceprint_available: bool = False
     """Whether this pass's validated roster included the owner for identity comparison."""
 
@@ -190,7 +194,7 @@ def resolve_conversation_speakers(
     embedding_seconds: Optional[Mapping[str, float]] = None,
     grouping: str = 'incumbent',
     provider_keys: Optional[Mapping[str, Tuple[str, int]]] = None,
-    cross_scope_threshold: float = 0.60,
+    cross_scope_threshold: float = CROSS_SCOPE_CLUSTER.distance,
     grouping_deadline: float = float('inf'),
 ) -> Optional[SpeakerResolution]:
     """Resolve one speaker_id per voice across the whole conversation.
@@ -611,6 +615,15 @@ def resolve_conversation_speakers(
     except Exception:
         match_scores.record_failure(None)
     return SpeakerResolution(
+        voice_distances={
+            new_id_of[pos]: {
+                pid: min(distances[i][pid] for i in score_members[root] if pid in distances.get(i, {}))
+                for pid in {pid for i in score_members[root] for pid in distances.get(i, {})}
+            }
+            for pos, root in enumerate(keep)
+            if pos in new_id_of
+        },
+        voice_centroids={new_id_of[pos]: centroid(cluster) for pos, cluster in enumerate(clusters) if pos in new_id_of},
         owner_voiceprint_available=OWNER_IDENTITY in prints,
         contradicted_segment_ids=contradicted,
         speaker_ids=speaker_ids,

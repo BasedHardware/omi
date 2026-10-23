@@ -154,6 +154,8 @@ env:
     value: "false"
   - name: PLAYBACK_ON_DEMAND_ENABLED
     value: "false"
+  - name: STALE_IN_PROGRESS_RECOVERY_ENABLED
+    value: "true"
   - name: REPEAT_WORK_REVISION_ENABLED
     value: "false"
   - name: REPEAT_WORK_LLM_VERSION
@@ -193,9 +195,9 @@ env:
   - name: BATCH_PIPELINE_RECOVERY_UID_ALLOWLIST
     value: ""
   - name: AUDIO_ARCHIVE_LIVE_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_READ_ENABLED
-    value: "false"
+    value: "true"
   - name: AUDIO_ARCHIVE_STOP_PCM_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_SYNC_ENABLED
@@ -207,6 +209,8 @@ env:
   - name: AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED
     value: "false"
   - name: AUDIO_ARCHIVE_PERCENT
+    value: "0"
+  - name: AUDIO_ARCHIVE_STOP_PCM_PERCENT
     value: "0"
   - name: AUDIO_ARCHIVE_UID_ALLOWLIST
     value: "vi7SA9ckQCe4ccobWNxlbdcNdC23"
@@ -222,7 +226,7 @@ env:
   - name: FIRESTORE_READ_LEDGER
     value: "1"
   - name: FIRESTORE_READ_LEVERS
-    value: '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}'
+    value: '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}'
   - name: FSR_QUEUE_AGE_PUBLISHER
     value: "1"
   - name: FSR_QUEUE_AGE_LEASE_SECONDS
@@ -247,11 +251,7 @@ env:
     value: "true"
   - name: CONVERSATION_SMART_MERGE_FLATTEN_ENABLED
     value: "true"
-  - name: SYNC_ASSIGNMENT_RECOVERY_ENABLED
-    value: "true"
   - name: SYNC_FINALIZE_TARGET_RECOVERY_ENABLED
-    value: "true"
-  - name: LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED
     value: "true"
   - name: CAPTURE_GROUP_CONTAINMENT_MODE
     value: "shadow"
@@ -373,6 +373,8 @@ env:
     value: "on"
   - name: MEMORY_CANONICAL_MAINTENANCE_ENABLED
     value: "false"
+  - name: LISTEN_QUIET_FINALIZATION_ENABLED
+    value: 'true'
   - name: LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS
     value: "900"
   - name: GOOGLE_MAPS_API_KEY
@@ -452,8 +454,6 @@ env:
     value: "false"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
   - name: STT_RESILIENT_RECONNECT
     value: "false"
   - name: STT_LIVE_DEMAND_ENABLED
@@ -627,15 +627,23 @@ env:
         key: TWILIO_API_KEY_SECRET
   - name: VAD_GATE_MODE
     value: "active"
+  # D2 edge shadow (plan D): mirror a static uid-hash cohort's raw frames to
+  # listen-edge for decode+VAD agreement. The URL alone mirrors nothing: the
+  # mirror needs EDGE_SHADOW_PERCENT > 0, which stays 0 until the lead ramps
+  # it per the EDGE_SHADOW_PERCENT registry row (declared in the prod values
+  # only; the registry checker allows one ramp declaration)
+  # (backend/docs/runbooks/edge-shadow-rollout.md).
+  - name: EDGE_SHADOW_URL
+    value: "ws://dev-omi-listen-edge.dev-omi-backend.svc.cluster.local:8080/v1/shadow"
+  # EDGE_SHADOW_TOKEN (sent as x-edge-shadow-token; must match listen-edge's)
+  # is a secret: never committed here, set only through privateEnv
+  # (LISTEN_PRIVATE_VALUES_YAML), which adds the entry at rollout. Unset,
+  # listen sends no token.
   # Audio-timeline v2: one capture coordinate for segments and stored audio.
   # Admits new eligible recordings only (single-channel, server STT);
   # existing v1 sessions and resumed v1 conversations are unaffected.
   - name: AUDIO_TIMELINE_V2
     value: "true"
-  - name: AUDIO_TIMELINE_SPANS
-    value: "false"
-  - name: LIVE_SPEAKER_SPAN_RESOLUTION
-    value: "false"
   - name: LIVE_CAPTURE_WINDOW_RETENTION
     value: 'false'
   - name: LIVE_CAPTURE_WINDOW_STRICT_PROJECTION
@@ -652,10 +660,6 @@ env:
     value: "false"
   - name: SONIOX_CAPTURE_AXIS_DIAGNOSTICS
     value: "false"
-  # S1 capture evidence (dedupe of sync uploads against live audio); mobile sends it only from
-  # builds with --dart-define=CAPTURE_EVIDENCE_V1_DARK_WRITE=true.
-  - name: CAPTURE_EVIDENCE_V1_DARK_WRITE
-    value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

@@ -57,6 +57,10 @@ from models.task_recommendation import (
     TaskIntelligenceOutcomeCode,
     WhatMattersNowProjection,
 )
+from utils.memory.index_window_cursor import (
+    encode_cursor as encode_memory_window_cursor,
+    query_scope as memory_window_scope,
+)
 from database.memories import MemoryListIndexState
 from database.funded_usage_session import LegacyUsageSession
 from database.memory_outbox_worker import CanonicalMemoryOutboxSideEffects, CanonicalMemoryOutboxWorkerConfig
@@ -135,6 +139,9 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.batch_pipeline_shadow.ShadowStore._busy': '3be03e458c8e65c535fed1475cbfae9c97421970c89dc751e2f4eaa4a46a4467',
+    'database.batch_pipeline_shadow.ShadowStore.reap': 'e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
+    'database.batch_ramp.ramp_admission_policy': 'af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
     'database.conversations._collect_cursor_conversation_page': '1d5fc817a402bd5bb5cb8fae5492d29b1e34cb4a15405bd06a784fc8730fa4e9',
     'database.batch_pipeline_store.FirestoreTransaction.ready_predecessor': '345662386754d78758580d321467fcd012838fc0a9ae8194eeb7b3e6ede54f14',
     'database.batch_pipeline_store.projection_pending': '52cc913cca9086557133a8f7118b9980ce5f13649897207fafcfa221513a5629',
@@ -150,7 +157,9 @@ BODY_DIGEST = {
     'database.batch_pipeline_store.FirestoreTransaction.first_pending': '48a4a9544add4433487df790e5884203eec835b9f8b16ed977c4743b88b596ea',
     'database.batch_pipeline_store.FirestoreTransaction.first_ready_pending': '9999bc14a1c88206f5d98e34284f7895c179c73ab563bf813b179faa417076ba',
     'database.batch_pipeline_store.FirestoreStore.longest_ready_pending': 'c36f3f2504728cdf4473b0443f0371b3c15e124eb1a2f740fab411eee14f6337',
-    'database.dream_scheduler.discover': '925cc08b93ece7ff9e68c75a87aaf0437b80575a4794325b5153dfa30d875d16',
+    'database.batch_pipeline_store.FirestoreStore.fresh_pending': 'd9b3d9c6a869efec2ed3ff0379930dbe43de3cadc01bba28c96051986be058c2',
+    'database.batch_pipeline_store.FirestoreStore.held_merge_owners': '55ac8d67e8e3e3fb689c9e9e086084a6acbcd7f5bb3b0b3f6186f5014cafc143',
+    'database.dream_scheduler.discover': 'e614de2d842268bb1b96e7e7a12c885b3e1bbcef9bd63da881baccf177d1c722',
     'database.proactivity_producers.mentor_history_query': '716c4f332e0ff0cf6fda3bcea41f479ce3bb7eb2956c8bfe37c61e0baabbfdb3',
     'database.proactivity_producers.recent_mentor_query': 'dc28a1084121daa40a430764d1c638ec4fe090e66dff499e0bec152444035dee',
     'database.proactivity_producers.task_items_query': '9e98b929e35f9118cdb76076bb526e41a5383d94d0304f098d17a0a2a3bc3cb5',
@@ -159,7 +168,7 @@ BODY_DIGEST = {
     'database.action_items._apply_action_item_date_filters': 'b69dc9810414753e0b0715560b872121566b965f36bdefc5b91869587037336f',
     'database.action_items._harvest_legacy_docs': 'f4b8069a91feae96d257470687bc383bb0652b002a009e79979815be58814f9a',
     'database.action_items._probe_legacy_completion_rows': '57a375ed6e56cdd9c6156ef4cee5944dbfb089a2477844c5b9c52de9a3214a30',
-    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'c7310ad7eaab2e1085c5493e4e2b6c7f618ea88f0aae670e4b4f84dd3e828b59',
+    'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn': 'edf090b47ae28c017f15251bc0c9a4fe6d92445745f3b89f585159ac51f0c8d1',
     'database.durable_queue_age._publish_queue_ages': '58e66cfc32f39bdc2e9b1e6c805d18599c1ff14be8dbcff68eadc23506656d9b',
     'database.firestore_query_types.FirestoreQuerySpec.build': '2c26a157a8e87be2bcfef668e3bd5cdc0a9c0d96e0b56bada98c30741c8be01a',
     'database.sync_backfill_sequencer._pending_for_uid': '0215df28fdc7128cc68bf0abf087e4f98854698851b22821008460b68b699ea9',
@@ -173,6 +182,10 @@ BODY_DIGEST = {
     'database.memory_ledger._append_commit_transaction': 'a30c4549844f8f10865249fc2c4444476c92a4d901191c69d2bac89a657ee7a8',
     'database.memory_ledger._append_commit_with_builder_transaction': '56a25d5b0c29b9ba6b58ddc4fe5e5fe83a78b54cdf5964b92f3c54e83aef01a3',
     'database.memory_ledger._assert_legacy_commit_privacy_fences': '59596ea3da66dd82e55c7a08ad949ee894ba1a4fe7714f79ced320955ed22959',
+    # Lane 12 A6 staging backfill: an operator Cloud Run job, never a serving path.
+    'database.jobstore.backfill._pages': 'b4170ee77666433d35e0d46a3ea23eed96930160fca3b84b9ffb4810c321b94f',
+    'database.jobstore.backfill.backfill': '4b979526157be71d49595ebc54f6c01eb5fd307279b245e07907a5dc86fe8ad8',
+    'database.jobstore.backfill.backfill_table': '7ebf380f5ac18bcdb96131861dc4be37d0377a821a8ce043f638dcc5e53a6d3d',
 }
 
 DRIVERS: dict[str, DriverEntry] = {}
@@ -749,8 +762,8 @@ _add(
     CoveredByEntry(
         'database.conversation_finalization_jobs._create_or_get_finalization_intent_txn',
         covered_by=('database.conversation_finalization_jobs._conversation_has_finalization_content',),
-        reason='orchestrator whose only querying dependency is the content probe, now driven '
-        'directly; its transaction body runs inside the caller-supplied transaction only',
+        reason='orchestrator whose only collection query is the directly driven content probe; '
+        'silent-backfill row/session/owner/privacy/job fences add transaction-bound direct document reads only',
         expect_observed=False,
         body_digest=BODY_DIGEST['database.conversation_finalization_jobs._create_or_get_finalization_intent_txn'],
     )
@@ -815,7 +828,10 @@ _add(
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.scan_in_progress_conversations',
-        domains={'resume_after_path': [None, 'users/shape-user/conversations/c-1']},
+        domains={
+            'resume_after_path': [None, 'users/shape-user/conversations/c-1'],
+            'content_due_before': [None, T0],
+        },
         neutrals={'page_size': _PAGE, 'max_scan': (200, 'scan bound; fixed, not filter-affecting')},
     )
 )
@@ -1006,9 +1022,9 @@ _add(DriverEntry('database.conversations.get_last_completed_conversation', base=
 _add(DriverEntry('database.conversations.get_processing_conversations', base={'uid': UID}))
 _add(
     DriverEntry(
-        'database.conversations.get_stale_in_progress_conversations',
-        base={'uid': UID, 'older_than_seconds': 3600},
-        neutrals={'limit': _LIMIT},
+        'database.stale_conversation_recovery.get_stale_recovery_page',
+        base={'uid': UID, 'cutoff': T0},
+        neutrals={'now': (T1, 'claim clock; does not change serving query')},
     )
 )
 _add(DriverEntry('database.conversations.iter_all_conversation_photos', base={'uid': UID}))
@@ -1041,6 +1057,26 @@ _add(
     )
 )
 _add(DriverEntry('database.daily_summaries.get_daily_summary_by_date', base={'uid': UID, 'date': '2026-01-01'}))
+_add(DriverEntry('database.daily_summaries.get_day_recording_count', base={'uid': UID, 'start': T0, 'end': T1}))
+_add(
+    DriverEntry(
+        'database.mcp_memory_queries.read_mcp_memory_candidates',
+        base={'uid': UID},
+        neutrals={'budget': _BUDGET, 'max_candidates': _LIMIT},
+        domains={
+            'origin': ['memory_items', 'memories'],
+            'filters': [
+                {},
+                {'updated_after': T0},
+                {'reviewed': True},
+                {'manually_added': True},
+                {'categories': ['manual']},
+                {'reviewed': False},
+                {'categories': ['interesting']},
+            ],
+        },
+    )
+)
 _add(DriverEntry('database.daily_summaries.get_desktop_daily_usage', base={'uid': UID, 'date': '2026-01-01'}))
 _add(DriverEntry('database.daily_summaries.get_summaries_count', base={'uid': UID}))
 
@@ -1642,14 +1678,54 @@ _add(
         reason='existence probe run for both stores on every count driver call',
     )
 )
+
+
+def _memory_window_bookmark(client, combo, trial):
+    if combo.get('cursor') == 'valid':
+        combo['cursor'] = encode_memory_window_cursor(
+            T0, 'mem-1', memory_window_scope({'uid': UID, 'order': combo['order_field']})
+        )
+
+
 _add(
-    CoveredByEntry(
+    DriverEntry(
         'database.memories._stream_memory_list_index_window',
-        covered_by=(
-            'database.memories.get_memories',
-            'database.memories.list_memory_updated_or_created_index',
+        base={'memories_ref': ref_collection(f'users/{UID}/memories')},
+        domains={
+            'uid': [None, UID],
+            'order_field': ['updated_at', 'created_at'],
+            'cursor': [None, '', 'invalid', 'valid'],
+            'full_documents': [False, True],
+        },
+        neutrals={
+            'candidate_limit': _LIMIT,
+            'budget': _BUDGET,
+            'cursor_snapshot': (None, 'legacy snapshot seeks covered by list consumer'),
+        },
+        setup=_memory_window_bookmark,
+        patchers=(
+            _stub('config.firestore_read_levers.lever_enabled', True),
+            lambda client: unittest.mock.patch(
+                'utils.memory.index_window_cursor.time.time', return_value=int(T0.timestamp())
+            ),
+            lambda client: unittest.mock.patch.dict('os.environ', {'MEMORY_V3_CURSOR_SECRET': 'shape-memory-window'}),
         ),
-        reason='candidate window streamer observed inside both listed consumers',
+    )
+)
+_add(
+    DriverEntry(
+        'database.memories.scan_memory_list_index_window',
+        base={'uid': UID},
+        domains={'order_field': ['updated_at', 'created_at'], 'cursor': [None, '', 'invalid', 'valid']},
+        neutrals={'limit': _LIMIT, 'budget': _BUDGET},
+        setup=_memory_window_bookmark,
+        patchers=(
+            _stub('config.firestore_read_levers.lever_enabled', True),
+            lambda client: unittest.mock.patch(
+                'utils.memory.index_window_cursor.time.time', return_value=int(T0.timestamp())
+            ),
+            lambda client: unittest.mock.patch.dict('os.environ', {'MEMORY_V3_CURSOR_SECRET': 'shape-memory-window'}),
+        ),
     )
 )
 _add(DriverEntry('database.memories.count_default_visible_memories', base={'uid': UID}))
@@ -2968,6 +3044,10 @@ def _messaging_claim(client, combo, trial):
     client.documents['channel_identities/link/inbox/job'] = {'status': 'pending', 'created_at': T0, 'payload': '{}'}
 
 
+def _messaging_supersede(client, combo, trial):
+    client.documents['channel_identities/link/inbox/job'] = {'status': 'running', 'created_at': T0, 'chat': 'c'}
+
+
 def _messaging_decryption(client):
     return unittest.mock.patch('utils.encryption.decrypt', lambda value, uid: '{}')
 
@@ -2989,6 +3069,7 @@ for method, base, setup in (
         _messaging_session,
     ),
     ('pending', {'message': SimpleNamespace(channel='loopback', provider='fake', external_user_id='external')}, None),
+    ('superseding_pending', {'path': 'channel_identities/link/inbox/job'}, _messaging_supersede),
     ('unlink', {'uid': UID, 'link_id': 'link'}, _messaging_identity),
     ('delete_account', {'uid': UID}, None),
 ):
@@ -3199,11 +3280,54 @@ _add(
 
 _add(
     DriverEntry(
-        'utils.sync.reprocess.sweep',
-        neutrals={'now': (T0.timestamp(), 'operand clock only'), 'limit': _LIMIT},
-        patchers=(_stub('utils.sync.reprocess._mutate', None), _stub('utils.sync.reprocess.owns_runtime', True)),
+        'utils.enrichment.outbox.sweep',
+        domains={'cursor': [True, False]},  # legacy checkpointed pass vs contract (b) pass from the oldest due row
+        neutrals={
+            'now': (T0.timestamp(), 'operand clock only'),
+            'limit': _LIMIT,
+            'discard': (None, 'privacy callback runs per row after the query'),
+            'client': (None, 'defaults to the shared Firestore client'),
+            'wake': (None, 'task creator runs per row after the query'),
+        },
+        patchers=(_stub('utils.enrichment.outbox._mutate', None), _stub('utils.enrichment.outbox.owns_runtime', True)),
     )
 )
+
+
+_add(
+    DriverEntry(
+        'utils.enrichment.outbox.due_rows',
+        neutrals={
+            'now': (T0.timestamp(), 'operand clock only'),
+            'limit': _LIMIT,
+            'client': (None, 'defaults to the shared Firestore client'),
+        },
+    )
+)
+
+
+from database.outbox_provider_stt import FirestoreProviderSttOutbox
+
+_provider_stt_outbox = FirestoreProviderSttOutbox(
+    privacy_blocked=lambda owner_id, payload: False,
+    create_wake=lambda row_id, token, available_at: None,
+    collection='batch_pipeline_prod_provider_stt_outbox',
+)
+for _method in ('claim', 'sweep'):
+    _add(
+        DriverEntry(
+            f'database.outbox_provider_stt.FirestoreProviderSttOutbox.{_method}',
+            base={'self': _provider_stt_outbox},
+            neutrals={
+                'now': (T0.timestamp(), 'operand clock only; due/lease checks run per row after the query'),
+                **(
+                    {'n': (4, 'claim count; bounds the page only'), 'lease_seconds': (1800, 'lease length only')}
+                    if _method == 'claim'
+                    else {'limit': _LIMIT}
+                ),
+            },
+        )
+    )
 
 
 _add(
@@ -3266,3 +3390,82 @@ _add(
         domains={'kind': ['choices', 'staging', 'cleanup']},
     )
 )
+_add(DriverEntry('database.cap_hold_redrive.fleet_snapshot'))
+
+
+# WQ7 canonical_statuses_dedupe: the lever-on helper batches missing-ID lookups as
+# __name__ IN document-reference queries (<=30 per batch) over the two owner
+# collections: memory_items first, then memory_historical_overrides for IDs still
+# missing. Queue order per trial matches that read order for the combo's ID list
+# (the queue is FIFO across both collections, so every queued row must be consumed).
+from utils.memory.memory_service import MemoryService as _WQ7MemoryService
+
+_WQ7_IDS = [f'mem-{i}' for i in range(31)]
+
+
+def _seed_canonical_status_pairs(client, combo, trial):
+    items = f'users/{UID}/memory_items'
+    overrides = f'users/{UID}/memory_historical_overrides'
+    ids = combo.get('memory_ids') or []
+    # Every trial below consumes its whole queue for either combo size.
+    if trial == 0:
+        return  # both queries stream empty
+    if len(ids) < 31:
+        # small combos: trial 1 items answers everything; trial 2 overrides answer everything.
+        if trial == 1:
+            client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids])
+        else:
+            client.queue_results([])
+            client.queue_results(
+                [client.snapshot(f'{overrides}/{i}', {'id': i, 'suppression': 'tombstoned'}) for i in ids]
+            )
+        return
+    if trial == 1:
+        # 31 IDs, batch 1 (ids[0:30]) fully answered by items; batch 2 misses, overrides answer.
+        client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:30]])
+        client.queue_results([])
+        client.queue_results([client.snapshot(f'{overrides}/{ids[30]}', {'id': ids[30], 'suppression': 'hidden'})])
+        return
+    if trial == 2:
+        # 31 IDs: batch 1 items answers 15, overrides 0; batch 2 items empty, overrides answer the last ID.
+        client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:15]])
+        client.queue_results([])
+        client.queue_results([])
+        client.queue_results([client.snapshot(f'{overrides}/{ids[30]}', {'id': ids[30], 'suppression': 'tombstoned'})])
+        return
+    # trial 3 + 31 IDs: batch 1 items answers 15, overrides 0; batch 2 items empty, overrides answer the last ID.
+    client.queue_results([client.snapshot(f'{items}/{i}', {'id': i, 'status': 'active'}) for i in ids[:15]])
+    client.queue_results([])
+    client.queue_results([])
+    client.queue_results([client.snapshot(f'{overrides}/{ids[30]}', {'id': ids[30], 'suppression': 'hidden'})])
+
+
+_add(
+    DriverEntry(
+        'utils.memory.memory_service.MemoryService._canonical_statuses_by_query',
+        base={'self': _WQ7MemoryService(), 'uid': UID},
+        domains={'memory_ids': [['mem-1'], _WQ7_IDS]},
+        neutrals={'budget': _BUDGET},
+        setup=_seed_canonical_status_pairs,
+        trials=4,
+        patchers=(_stub('config.firestore_read_levers.lever_enabled', True),),
+    )
+)
+
+
+for _key, _reason in (
+    (
+        'database.jobstore.backfill._pages',
+        'Lane 12 A6 staging backfill (operator Cloud Run job, never serving): pages one batch collection '
+        'ordered by document id only (built-in single-field order, no filter, no composite index).',
+    ),
+    (
+        'database.jobstore.backfill.backfill_table',
+        'Lane 12 A6 staging backfill: consumes _pages; no query of its own.',
+    ),
+    (
+        'database.jobstore.backfill.backfill',
+        'Lane 12 A6 staging backfill: loops backfill_table per table; no query of its own.',
+    ),
+):
+    _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))

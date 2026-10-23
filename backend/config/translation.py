@@ -155,6 +155,11 @@ def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTra
     }
 
     def switch(name: str) -> bool:
+        from config.refactor_modes import default_on, serving_for
+
+        if serving_for('CAPTURE_COVERAGE_MODE', None, environ=values):
+            return default_on(name, environ=values)
+        # refactor: superseded by config.refactor_modes when CAPTURE_COVERAGE_MODE=serve
         raw = values.get(name, switch_defaults[name]).strip().lower()
         if raw not in {'true', 'false'}:
             raise ValueError(f'{name} must be true or false')

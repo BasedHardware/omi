@@ -10,7 +10,7 @@ from hashlib import sha256
 
 from google.cloud import firestore
 
-from database import dream_store
+from database import dream_store, firestore_transaction_retry
 from config.dream_agent import enabled
 from utils.dream_cost import minute_burndown_tokens
 
@@ -99,7 +99,10 @@ def reserve(uid, run_id, tokens, caps, *, cost_micro_usd=None, now=None, firesto
         for shard, used in capacities.items():
             tx.set(headroom_ref(database, shard), {'minute': minute, 'tokens': used})
 
-    claim(database.transaction())
+    # The SDK retries commit aborts, but read-time shard contention escapes it.
+    firestore_transaction_retry.run_with_transaction_contention_retry(
+        database.transaction, claim, operation_name='dream_turn_reserve'
+    )
 
 
 def settle(uid, run_id, turn, *, firestore_client=None):
@@ -130,7 +133,12 @@ def settle(uid, run_id, turn, *, firestore_client=None):
         else:
             status = 'unpriced'
             row['cost_status'] = 'unpriced'
-        rows = [*(lease.get('turn_receipts') or []), row]
+        # Known-zero attempts still refund their minute hold, but are not model
+        # turns and must not consume receipt capacity during reservation retries.
+        known_zero = turn.tokens == 0 and charge == 0 and status == 'priced' and micro == 0
+        rows = list(lease.get('turn_receipts') or [])
+        if not known_zero:
+            rows.append(row)
         if len(rows) > 128:
             raise ValueError('dream_turn_cap')
         hold = lease.get('minute_hold') or {}
@@ -158,7 +166,7 @@ def settle(uid, run_id, turn, *, firestore_client=None):
         for ref, capacity in capacities:
             tx.set(ref, capacity)
         previous = _held_usd(lease)
-        priced = bool(rows) and all(item.get('cost_status') == 'priced' for item in rows)
+        priced = (bool(rows) or known_zero) and all(item.get('cost_status') == 'priced' for item in rows)
         if priced and type(micro) is int:
             actual_usd = sum(int(item['cost_micro_usd']) for item in rows) / 1000000
             observed_add = micro / 1000000
@@ -187,4 +195,6 @@ def settle(uid, run_id, turn, *, firestore_client=None):
             },
         )
 
-    receipt(database.transaction())
+    firestore_transaction_retry.run_with_transaction_contention_retry(
+        database.transaction, receipt, operation_name='dream_turn_settle'
+    )

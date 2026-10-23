@@ -27,10 +27,16 @@ from utils.observability.fallback import (
     first_text_fallback_kwargs,
     record_fallback,
 )
-from utils.stt.live_reason import LIVE_STT_FAILURE_REASONS, normalize_live_stt_reason
+from utils.stt.live_reason import (
+    LIVE_STT_FAILURE_REASONS,
+    LOCAL_DELIVERY_DEATH_REASONS,
+    LOCAL_DELIVERY_SEND_QUEUE_FULL,
+    normalize_live_stt_reason,
+)
 from config.live_stt_recovery import recovery_enabled, session_recovery_enabled
 from utils.stt.recovery_state import current_recovery
 from utils.stt.live_outcome import LiveLegOutcome
+from utils.stt.local_send_diagnostics import record_local_send_failure
 from utils.stt.stream_close import (
     ACCOUNT_REJECTION_REASONS,
     PROVIDER_AUTH_REJECTED,
@@ -423,6 +429,24 @@ def live_stt_terminal_reason(stt_socket: Any, fallback: str) -> str:
     return normalize_live_stt_reason(typed, raw, fallback)
 
 
+def local_tail_terminal_reason(stt_socket: Any) -> str:
+    """The bounded local cause for a live tail that refused audio.
+
+    The owner's exhausted-recovery terminate has never voted on the provider
+    circuit (it reported a fixed local token before the P34 split), so it may
+    forward only a local-delivery token: a tail that died without latching one
+    — a residence-deadline write stall with the vendor socket still open — must
+    not surface as the default ``connection_lost`` and bench the provider from
+    this site. Provider deaths keep their attribution through the death monitor.
+    """
+
+    try:
+        typed = getattr(stt_socket, 'typed_death_reason', None)
+    except Exception:
+        typed = None
+    return typed if typed in LOCAL_DELIVERY_DEATH_REASONS else LOCAL_DELIVERY_SEND_QUEUE_FULL
+
+
 def note_typed_provider_death(stt_socket: Any, provider: str | None) -> bool:
     """Open the selection circuit when a socket died by provider-level rejection.
 
@@ -682,10 +706,12 @@ async def send_live_stt_audio(
         # A socket that predates the capture-position seam: send without it.
         try:
             accepted = stt_socket.send(audio)
-        except Exception:
+        except Exception as error:
+            record_local_send_failure(provider, 'send_call', stt_socket, error)
             await _recoverable_failure('send_failed')
             return False
-    except Exception:
+    except Exception as error:
+        record_local_send_failure(provider, 'send_call', stt_socket, error)
         await _recoverable_failure('send_failed')
         return False
 

@@ -378,11 +378,18 @@ class UserProvider with ChangeNotifier {
   Future<bool> addVocabularyWords(List<String> words) async {
     if (words.isEmpty) return false;
     if (!await _loadVocabularyBeforeEdit()) return false;
-    final trimingWords = words.map((w) => w.trim()).where((w) => !_transcriptionVocabulary.contains(w));
-    if (trimingWords.isEmpty) {
+    final seen = _transcriptionVocabulary.toSet();
+    final newWords = <String>[];
+    for (final raw in words) {
+      final w = raw.trim();
+      if (w.isEmpty) continue;
+      if (!seen.add(w)) continue;
+      newWords.add(w);
+    }
+    if (newWords.isEmpty) {
       return false;
     }
-    final newVocabulary = [..._transcriptionVocabulary, ...trimingWords];
+    final newVocabulary = [..._transcriptionVocabulary, ...newWords];
     return updateTranscriptionVocabulary(newVocabulary);
   }
 

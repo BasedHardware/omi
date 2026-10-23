@@ -45,6 +45,20 @@ def _is_transaction_contention(error: BaseException) -> bool:
     return False
 
 
+def equal_jitter_delay(attempt: int, random_value: Callable[[], float] = random.random) -> float:
+    """Equal-jitter delay for one failed attempt. ``attempt`` is 1-based.
+
+    Two delays at the default schedule stay under half a second, so a
+    three-attempt caller finishes well inside a few seconds.
+    """
+    if attempt < 1:
+        raise ValueError("attempt must be positive")
+    high_delay = min(_INITIAL_MAX_DELAY_SECONDS * (2 ** (attempt - 1)), _MAX_DELAY_SECONDS)
+    low_delay = high_delay / 2
+    jitter = min(max(random_value(), 0.0), 1.0)
+    return low_delay + ((high_delay - low_delay) * jitter)
+
+
 def run_with_transaction_contention_retry(
     transaction_factory: Callable[[], Any],
     operation: Callable[[Any], T],
@@ -90,10 +104,7 @@ def run_with_transaction_contention_retry(
                     f"Firestore transaction contention exhausted for {operation_name}"
                 ) from error
 
-            high_delay = min(_INITIAL_MAX_DELAY_SECONDS * (2 ** (attempt - 1)), _MAX_DELAY_SECONDS)
-            low_delay = high_delay / 2
-            jitter = min(max(random_value(), 0.0), 1.0)
-            delay = low_delay + ((high_delay - low_delay) * jitter)
+            delay = equal_jitter_delay(attempt, random_value)
             logger.warning(
                 "firestore_transaction_contention operation=%s attempt=%d/%d outcome=retry delay_ms=%d",
                 operation_name,

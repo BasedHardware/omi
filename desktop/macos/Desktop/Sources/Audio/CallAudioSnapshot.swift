@@ -8,14 +8,22 @@ struct CallAudioProcessSnapshot: Sendable, Equatable {
   var isRunningOutput: Bool
 }
 
-/// One off-main probe of call audio. The meeting detector derives "in a call"
-/// and call identities from this instead of scanning CoreAudio twice.
+/// Browser window ownership keeps audio corroboration scoped to the same browser family.
+struct CallAudioBrowserWindow: Sendable, Equatable {
+  var bundleID: String
+  var title: String
+}
+
+/// One off-main probe of call audio, window ownership, and title permission state.
 struct CallAudioSnapshot: Sendable, Equatable {
   var processes: [CallAudioProcessSnapshot]
   /// `kAudioHardwarePropertyDefaultInputDevice`, or 0 when it cannot be read.
   var defaultInputDeviceID: UInt32
   /// On-screen browser window titles. Empty when this tick did not need them.
-  var browserWindowTitles: [String]
+  var browserWindows: [CallAudioBrowserWindow]
+  /// Explicit permission state: an empty title list is not evidence of denied permission.
+  var browserTitlesReadable: Bool = true
+
 }
 
 /// When a tick should pay for `CGWindowList`. Titles are the muted-browser

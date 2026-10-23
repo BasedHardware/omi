@@ -13395,9 +13395,6 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Tiếp tục với gói miễn phí';
-
-  @override
   String get paywallTrialCancelNote => 'Hủy bất cứ lúc nào. Không phí, không phạt.';
 
   @override
@@ -14385,4 +14382,161 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi vẫn đang ghi âm';
+
+  @override
+  String get episodeNow => 'Bây giờ';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Trực tiếp · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count khoảnh khắc',
+      one: '1 khoảnh khắc',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Khoảnh khắc';
+
+  @override
+  String get episodeSoFar => 'Cho đến giờ';
+
+  @override
+  String get episodeUpdatedJustNow => 'Vừa cập nhật · ghi chú đầy đủ khi kết thúc';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Cập nhật $minutes phút trước · ghi chú đầy đủ khi kết thúc';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Ghi chú xuất hiện sau vài phút đầu trò chuyện.';
+
+  @override
+  String get episodeOpenAll => 'Mở tất cả';
+
+  @override
+  String get episodeWrapUpNow => 'Kết thúc ngay';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi sẽ kết thúc khi bạn chuyển sang việc khác';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Đã ghi nhận việc: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Đã ghi nhận lời nhắc: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Đã lưu việc: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'đang thêm $duration từ Omi của bạn';
+  }
+
+  @override
+  String get episodeListeningNow => 'Đang lắng nghe';
+
+  @override
+  String get deviceHeardToday => 'Đã nghe hôm nay';
+
+  @override
+  String get deviceToSync => 'cần đồng bộ';
+
+  @override
+  String get deviceRightNow => 'Ngay lúc này';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Tập trực tiếp · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Đang bắt kịp';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total phút';
+  }
+
+  @override
+  String get deviceRecently => 'Gần đây';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Mất kết nối $duration';
+  }
+
+  @override
+  String get deviceControls => 'Điều khiển';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Ngoài ra: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Nhấn nút trên Omi của bạn';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Một lần nhấn ngắn. Sau đó hỏi bất cứ điều gì.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Đặt câu hỏi của bạn';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Nói to lên. Omi đang lắng nghe.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Xong chưa? Nhấn nút lần nữa để gửi.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Bạn được nâng lên $days ngày miễn phí';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days ngày Omi Pro miễn phí. Chúng tôi sẽ nhắc trước khi tính phí. Hủy bất cứ lúc nào.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Nhận dùng thử $days ngày';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Bắt đầu dùng thử miễn phí $days ngày';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Bật Omi của bạn';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Nhấn nút một lần và giữ gần điện thoại.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'Xong rồi. Omi sẽ tiếp tục ghi lại các cuộc trò chuyện của bạn ở chế độ nền.';
+
+  @override
+  String get noThanks => 'Không, cảm ơn';
+
+  @override
+  String get recapInTheBackground => 'Trong nền';
 }

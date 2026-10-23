@@ -1,15 +1,73 @@
 fullnameOverride: "prod-omi-cloud-run-metrics-exporter"
 
+# Only families an in-cluster consumer can read from job=cloud-run-application-metrics
+# are imported: a query with an explicit job match, a job regex including it, or no
+# job selector at all (checked 2026-10-21 across alert-rules.json, alerts/*, all
+# dashboards, the prometheus-adapter HPA rules, route-errors/, pending/, the GMP
+# query-migration inventory, and the workspace sentinel/firestore tooling that reads
+# in-cluster Prometheus). backend, desktop-backend and notifications-job run the
+# full backend codebase, so the old blanket omi_ prefix imported every registered
+# family once per Cloud Run instance: 188 families / ~54k live series, 156 of them
+# (~31k live) read by nothing in-cluster (omi_stt_cost_routing_* 5.9k,
+# omi_firestore_billed_reads_* 6.0k, omi_conversation_speech/segments 2.4k, ...).
+# Every instance replacement re-created the whole set, which is how this release
+# alone contributed ~380k of the 2.27M-series Prometheus head on 2026-10-21.
+# Pinning cuts ~57% of this release's collection, its head churn, and its
+# timeSeries.list billing. GMP keeps every family; only the in-cluster copy narrows.
+# The custom.googleapis.com/omi_sync_phase_ prefix and its filter are gone entirely:
+# those per-backend-sync-instance-uuid series had no in-cluster consumer, and the
+# sync-cloudrun-rightsizing runbook reads omi_sync_phase_* from GMP directly.
+# A trailing slash pins exactly one family (type suffix excluded). Add a family
+# here only together with the consumer that reads it from these namespaces, and
+# keep tests/unit/test_monitoring_telemetry_contract.py in step.
 stackdriver:
   projectIds:
     - "based-hardware"
   metrics:
     prefixes:
-      - 'prometheus.googleapis.com/omi_'
-      - 'custom.googleapis.com/omi_sync_phase_'
+      - 'prometheus.googleapis.com/omi_capture_finalization_failures_total/'
+      - 'prometheus.googleapis.com/omi_capture_finalization_reconciliations_total/'
+      - 'prometheus.googleapis.com/omi_chat_search_tool_outcomes_total/'
+      - 'prometheus.googleapis.com/omi_client_app_startup_duration_seconds/'
+      - 'prometheus.googleapis.com/omi_client_events_total/'
+      - 'prometheus.googleapis.com/omi_client_journey_accepted_total/'
+      - 'prometheus.googleapis.com/omi_client_journey_duration_seconds/'
+      - 'prometheus.googleapis.com/omi_client_journey_issues_total/'
+      - 'prometheus.googleapis.com/omi_client_journey_terminal_total/'
+      - 'prometheus.googleapis.com/omi_client_telemetry_rejected_total/'
+      - 'prometheus.googleapis.com/omi_conversation_duration_seconds/'
+      - 'prometheus.googleapis.com/omi_conversation_summary_vector_upserts_total/'
+      - 'prometheus.googleapis.com/omi_daily_summary_resumed_cohort_age_seconds/'
+      - 'prometheus.googleapis.com/omi_fallback_total/'
+      - 'prometheus.googleapis.com/omi_firestore_documents_per_operation/'
+      - 'prometheus.googleapis.com/omi_firestore_read_operations_total/'
+      - 'prometheus.googleapis.com/omi_journey_accepted_total/'
+      - 'prometheus.googleapis.com/omi_journey_latency_seconds/'
+      - 'prometheus.googleapis.com/omi_journey_terminal_total/'
+      - 'prometheus.googleapis.com/omi_listen_audio_decode_failures_total/'
+      - 'prometheus.googleapis.com/omi_listen_demand_failure_detail_total/'
+      - 'prometheus.googleapis.com/omi_live_session_transcript_outcome_total/'
+      - 'prometheus.googleapis.com/omi_owner_recognition_conversations_total/'
+      - 'prometheus.googleapis.com/omi_product_event_total/'
+      - 'prometheus.googleapis.com/omi_queue_oldest_ready_age_seconds/'
+      - 'prometheus.googleapis.com/omi_queue_oldest_ready_sample_unknown/'
+      - 'prometheus.googleapis.com/omi_stt_chain_exhausted_total/'
+      - 'prometheus.googleapis.com/omi_stt_provider_circuit_open/'
+      - 'prometheus.googleapis.com/omi_stt_provider_connect_total/'
+      - 'prometheus.googleapis.com/omi_stt_provider_retired/'
+      - 'prometheus.googleapis.com/omi_stt_stream_close_total/'
+      - 'prometheus.googleapis.com/omi_subscription_events_total/'
+      - 'prometheus.googleapis.com/omi_translation_cache_ops_total/'
+      - 'prometheus.googleapis.com/omi_translation_chars_total/'
+      - 'prometheus.googleapis.com/omi_translation_errors_total/'
+      - 'prometheus.googleapis.com/omi_translation_latency_seconds/'
+      - 'prometheus.googleapis.com/omi_translation_requests_total/'
+      - 'prometheus.googleapis.com/omi_translation_skip_total/'
+      - 'prometheus.googleapis.com/omi_vertex_managed_25_attempts_total/'
+      - 'prometheus.googleapis.com/omi_vertex_managed_25_on_demand_responses_total/'
+      - 'prometheus.googleapis.com/omi_vertex_non_dream_flash_after_cutover_attempts_total/'
     filters:
       - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend","notifications-job")'
-      - 'custom.googleapis.com/omi_sync_phase_:resource.labels.job=one_of("backend-sync","backend-sync-backfill")'
     interval: '10m'
     offset: '1m'
 

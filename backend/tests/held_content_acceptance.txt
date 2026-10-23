@@ -1,5 +1,6 @@
 tests/unit/test_held_content.py
 tests/unit/test_budget_choice_routes.py
+tests/unit/test_held_content_cohort.py
 tests/unit/test_held_content_deletion.py
 tests/unit/test_live_cap_hold.py
 tests/unit/test_cap_hold_durability.py

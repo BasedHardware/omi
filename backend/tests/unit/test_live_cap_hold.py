@@ -53,9 +53,7 @@ def persistence(monkeypatch, tmp_path):
     monkeypatch.setattr(
         live.live_cap_manifest,
         'publish',
-        lambda uid, path, source, meta, duration, **kwargs: cap_hold.upload_held_audio(
-            uid, path, source.identity, meta, immutable=True
-        ),
+        lambda uid, path, source, meta, duration, **kwargs: None,
     )
     monkeypatch.setattr(cap_hold, 'release', Mock())
     monkeypatch.setattr(cap_hold, 'holds', lambda uid: SimpleNamespace(document=lambda identity: identity))
@@ -119,7 +117,7 @@ async def test_failed_persistence_does_not_increment_receipt_or_discard_pcm(host
     hold = live.LiveHeldAudio(host)
     hold.append(b'\0' * 32000, 16000, 10, 'a')
     save = Mock(side_effect=RuntimeError('synthetic upload fault'))
-    monkeypatch.setattr(cap_hold, 'upload_held_audio', save)
+    monkeypatch.setattr(live.live_cap_manifest, 'publish', save)
     with pytest.raises(RuntimeError):
         await hold.flush(force=True)
     assert hold.seconds == 0 and len(hold.pending) == 1
@@ -164,8 +162,9 @@ def test_capture_replay_and_successful_prefix_are_never_held_twice(host, receive
     receiver._observe_cap_capture(pcm, 16000, 16000, False)
     receiver._observe_cap_capture(pcm, 16000, 16000, False)  # Replayed held tail.
     assert receiver.live_hold.pending_bytes == 0
-    buffer, timestamp = next(iter(receiver.live_hold.buffers.values()))
-    assert bytes(buffer) == pcm and timestamp == 101
+    assert receiver.live_hold.buffered_seconds() == 1
+    (span,) = receiver.live_hold._capture.spans
+    assert bytes(span.data) == pcm and span.timestamp == 101
 
 
 async def test_receive_cap_transition_and_resume_have_no_gap_or_paid_overlap(

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
@@ -38,6 +39,8 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
   late MessageProvider _messageProvider;
   bool _showContinue = false;
   bool _wasListening = false;
+  bool _showPressAgain = false;
+  Timer? _pressAgainTimer;
 
   late int _messageCountAtStart;
   String? _userQuestion;
@@ -87,6 +90,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
 
   @override
   void dispose() {
+    _pressAgainTimer?.cancel();
     _animController.dispose();
     _bounceController.dispose();
     _messageProvider.removeListener(_onMessagesChanged);
@@ -100,13 +104,36 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
         if (provider.voiceSessionActive && !_wasListening) {
           _wasListening = true;
           _bounceController.stop();
+          // Give the user a few seconds to speak before nudging the second press.
+          _pressAgainTimer?.cancel();
+          _pressAgainTimer = Timer(const Duration(seconds: 3), () {
+            if (mounted) setState(() => _showPressAgain = true);
+          });
         } else if (!provider.voiceSessionActive && _wasListening) {
           _wasListening = false;
+          _pressAgainTimer?.cancel();
+          _showPressAgain = false;
         }
 
+        final listening = provider.voiceSessionActive;
+        final waiting = !listening && !provider.questionSent && _aiResponse == null;
+        final String title;
+        final String subtitle;
+        if (_aiResponse != null || provider.questionSent) {
+          title = context.l10n.deviceOnboardingAskQuestionTitle;
+          subtitle = '';
+        } else if (listening) {
+          title = context.l10n.deviceOnboardingAskNowTitle;
+          subtitle = context.l10n.deviceOnboardingAskNowSubtitle;
+        } else {
+          title = context.l10n.deviceOnboardingPressButtonTitle;
+          subtitle = context.l10n.deviceOnboardingPressButtonSubtitle;
+        }
+        assert(waiting || listening || provider.questionSent || _aiResponse != null);
+
         return OnboardingStepScaffold(
-          title: context.l10n.deviceOnboardingAskQuestionTitle,
-          subtitle: _aiResponse != null ? '' : context.l10n.deviceOnboardingAskQuestionSubtitle,
+          title: title,
+          subtitle: subtitle,
           content: Column(children: [const Spacer(flex: 1), _buildContent(provider), const Spacer(flex: 2)]),
           bottomAction: _showContinue ? OnboardingContinueButton(onPressed: widget.onComplete) : null,
         );
@@ -250,12 +277,42 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
               );
             },
           ),
+          const SizedBox(height: 20),
+          AnimatedOpacity(
+            opacity: _showPressAgain ? 1 : 0,
+            duration: const Duration(milliseconds: 300),
+            child: _buildPressPill(context.l10n.deviceOnboardingPressAgainHint),
+          ),
         ],
       );
     }
 
-    // Waiting — Omi with bounce click animation
-    return _buildOmiWithBounce();
+    // Waiting — Omi with bounce click animation and an explicit "press once" cue
+    return Column(
+      children: [
+        _buildOmiWithBounce(),
+        const SizedBox(height: 24),
+        _buildPressPill('1×'),
+      ],
+    );
+  }
+
+  Widget _buildPressPill(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: OmiRadius.pillAll),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.touch_app_rounded, color: OmiColors.surface0, size: 20),
+          const SizedBox(width: 10),
+          Text(
+            label,
+            style: OmiType.subhead.copyWith(color: OmiColors.surface0, fontWeight: FontWeight.w600),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildOmiWithPulse() {

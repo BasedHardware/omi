@@ -8,7 +8,7 @@ handler in routers/sync.py.
 """
 
 from utils.other import owned_paths  # noqa: F401 - retain real scratch guard across legacy package stubs
-from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from models import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
 from utils import dream_vocabulary  # noqa: F401 - retain shared keyterms across legacy package stubs
 from utils import firestore_document_size  # noqa: F401 - retain pure size estimate across legacy package stubs
 from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
@@ -17,6 +17,7 @@ from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence
 from utils.stt import voiceprints  # noqa: F401 - retain pure voiceprint policy across legacy package stubs
 from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
 from utils.observability import sync_phases  # noqa: F401 - retain aggregate telemetry across legacy package stubs
+from config.sync_telemetry import SyncFailureReason
 
 import asyncio
 import hashlib
@@ -1204,6 +1205,7 @@ def _load_sync_router_for_fast_path():
     from utils.stt import outcomes as actual_outcomes
     from utils.stt import speaker_match as actual_speaker_match
     from utils.stt import speaker_identity as actual_speaker_identity
+    from utils.stt import transcript_admission as actual_transcript_admission
     from utils import manual_speaker_assignments as actual_manual_assignments
     from utils.sync import lanes as actual_sync_lanes, rate_limit as actual_rl
     from utils import capture_evidence as actual_capture_evidence
@@ -1441,21 +1443,27 @@ def _load_sync_router_for_fast_path():
     journeys_mod.record_journey_accepted = MagicMock()
     shape_mod = types.ModuleType('utils.conversation_shape')
     shape_mod.observe_completed_conversation_shape = MagicMock()
-    saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
-    saved_modules['utils.observability.journeys'] = sys.modules.get('utils.observability.journeys')
     saved_modules['utils.conversation_shape'] = sys.modules.get('utils.conversation_shape')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
     saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
+    saved_modules['utils.stt.transcript_admission'] = sys.modules.get('utils.stt.transcript_admission')
     saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
     sys.modules['utils.observability'] = obs_pkg
-    sys.modules['utils.observability.fallback'] = fallback_mod
-    sys.modules['utils.observability.transcription'] = transcription_mod
-    sys.modules['utils.observability.journeys'] = journeys_mod
+    # Empty __path__ hides new observability modules. Derive the rest from disk
+    # so held_content (and the next sibling) resolve; spies above stay in place.
+    from testing.import_isolation import install_package_submodule_stubs
+
+    install_package_submodule_stubs(
+        'utils.observability',
+        saved_modules,
+        overrides={
+            'utils.observability.fallback': fallback_mod,
+            'utils.observability.transcription': transcription_mod,
+            'utils.observability.journeys': journeys_mod,
+        },
+    )
     sys.modules['utils.conversation_shape'] = shape_mod
-    obs_pkg.fallback = fallback_mod
-    obs_pkg.transcription = transcription_mod
-    obs_pkg.journeys = journeys_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
     # Keep the decision policy real (pure, dependency-free): the sync pipeline now
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
@@ -1464,6 +1472,7 @@ def _load_sync_router_for_fast_path():
     # Keep allocator + receipt policy real: assignment.py imports both at module
     # scope, and MagicMock parents for utils / utils.stt are not packages.
     sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+    sys.modules['utils.stt.transcript_admission'] = actual_transcript_admission
     sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
     # Keep the S1 evidence envelope builder real (pure, stdlib-only): the sync
     # pipeline imports unknown_envelope at module scope, and a MagicMock parent
@@ -2520,10 +2529,45 @@ async def test_sync_task_final_attempt_publishes_one_bounded_terminal_failure():
             model='nova-3',
             lane='fresh',
             run_lock_token='1:lock-token',
+            failure_phase=None,
+            failure_class='TimeoutError',
+            failure_reason=SyncFailureReason.NONE,
         )
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
         module.release_job_run_lock.assert_called_once_with('job-1', '1:lock-token')
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        sys.modules.pop('utils.sync.ledger_completion', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_final_attempt_keeps_the_pipeline_internal_cause():
+    """A storage 429 re-raised from task mode must not be published as upstream_error."""
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+    error = RuntimeError('bridge copy rate limited')
+    setattr(error, 'sync_failure_reason', SyncFailureReason.STORAGE_RATE_LIMITED)
+    setattr(error, 'sync_failure_phase', 'finalize')
+    request = _configure_task_handler(
+        module,
+        pipeline_error=error,
+        latest_job={'job_id': 'job-1', 'status': 'processing', 'stt_provider': 'deepgram', 'stt_model': 'nova-3'},
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=2)
+
+        assert json.loads(response.body) == {'status': 'failed_final'}
+        kwargs = module._finalize_sync_job_failure.await_args.kwargs
+        assert kwargs['failure_reason'] is SyncFailureReason.STORAGE_RATE_LIMITED
+        assert kwargs['failure_phase'] == 'finalize'
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)
@@ -4059,7 +4103,8 @@ async def test_legacy_fresh_refusal_preserves_backfill_pause_instead_of_429(monk
 
 
 @pytest.mark.asyncio
-async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monkeypatch):
+async def test_byok_upload_enters_batch_admission_like_any_upload(monkeypatch):
+    """David 10-19: no special BYOK path; the request keys are never needed by the batch stages."""
     monkeypatch.setenv('BATCH_PIPELINE_LIVE_ADMISSION_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '0')
@@ -4070,6 +4115,8 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
     store.run.side_effect = lambda body: body(transaction)
     monkeypatch.setattr(_batch_intake, 'FirestoreStore', lambda *_: store)
     module.has_byok_keys = MagicMock(return_value=True)
+    authorize = MagicMock(side_effect=RuntimeError('synthetic staging stop'))
+    monkeypatch.setattr(_batch_intake, 'batch_artifact_authorize', authorize)
     accepted = AsyncMock(wraps=_batch_intake.accept_upload)
     module.accept_batch_upload = accepted
     try:
@@ -4078,12 +4125,12 @@ async def test_dark_unowned_allowlisted_byok_upload_keeps_batch_intake_hold(monk
             uid='test-uid',
             conversation_id='unowned-record',
         )
+        # The synthetic stop inside batch admission answers the ordinary batch retry, not a BYOK hold.
         assert response.status_code == 503
-        assert json.loads(response.body)['code'] == 'sync_batch_byok_unavailable'
-        assert response.headers['Retry-After'] == '30'
+        assert json.loads(response.body)['code'] == 'sync_batch_unavailable'
         accepted.assert_awaited_once()
         assert accepted.call_args.kwargs['byok_enabled'] is True
-        assert transaction.get.call_count == 1  # Existing content-ledger read only.
+        authorize.assert_called_once()
         transaction.put.assert_not_called()
         module.create_sync_job.assert_not_called()
         module.claim_sync_content.assert_not_called()

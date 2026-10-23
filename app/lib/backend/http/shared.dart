@@ -13,6 +13,7 @@ import 'package:omi/backend/http/http_pool_manager.dart';
 import 'package:omi/backend/http/streaming_error.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/app_channel.dart';
 import 'package:omi/utils/jwt_expiry.dart';
 import 'package:omi/services/account_cutover/account_cutover_runtime.dart';
 import 'package:omi/services/auth/auth_token_result.dart';
@@ -189,6 +190,7 @@ Future<Map<String, String>> buildHeaders({
     'X-App-Version': PlatformManager.instance.appVersion,
     'X-Omi-Plan-Identity': '1',
     'X-App-Build': PlatformManager.instance.appBuild,
+    appChannelHeader: currentAppChannel().wire,
     ...fromHeaders,
   };
 
@@ -770,6 +772,7 @@ Future<http.MultipartRequest> _buildMultipartRequest({
   required String fileFieldName,
   required String method,
   Future<void>? abortTrigger,
+  Map<String, File> namedFiles = const {},
 }) async {
   // Abortable when a trigger is supplied: an abandoned POST (setup deadline
   // expired) must not keep running server-side, or a user retry submits the
@@ -786,11 +789,24 @@ Future<http.MultipartRequest> _buildMultipartRequest({
     var multipartFile = http.MultipartFile(fileFieldName, stream, length, filename: basename(file.path));
     request.files.add(multipartFile);
   }
+  for (var entry in namedFiles.entries) {
+    var length = await entry.value.length();
+    var stream = http.ByteStream(entry.value.openRead());
+    request.files.add(http.MultipartFile(entry.key, stream, length, filename: basename(entry.value.path)));
+  }
 
   return request;
 }
 
 typedef UploadProgressCallback = void Function(int bytesSent, int totalBytes, double speedKBps);
+
+/// The upload send has a header timeout, but the body read had none: a socket
+/// that dies after the headers would hold the upload lane (and its transfer
+/// pass) forever. Bodies here are small JSON acknowledgements.
+const multipartBodyReadTimeout = Duration(minutes: 2);
+
+Future<http.Response> _readMultipartBody(http.StreamedResponse response) =>
+    http.Response.fromStream(response).timeout(multipartBodyReadTimeout);
 
 Future<http.Response> makeMultipartApiCall({
   required String url,
@@ -800,6 +816,7 @@ Future<http.Response> makeMultipartApiCall({
   String fileFieldName = 'files',
   String method = 'POST',
   UploadProgressCallback? onUploadProgress,
+  Map<String, File> namedFiles = const {},
 }) async {
   try {
     final bool requireAuthCheck = _isRequiredAuthCheck(url);
@@ -817,10 +834,11 @@ Future<http.Response> makeMultipartApiCall({
       fields: fields,
       fileFieldName: fileFieldName,
       method: method,
+      namedFiles: namedFiles,
     );
 
     var streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -836,9 +854,10 @@ Future<http.Response> makeMultipartApiCall({
             fields: fields,
             fileFieldName: fileFieldName,
             method: method,
+            namedFiles: namedFiles,
           );
           streamedResponse = await _sendMultipartWithProgress(request, onUploadProgress);
-          return http.Response.fromStream(streamedResponse);
+          return _readMultipartBody(streamedResponse);
         },
       );
     }
@@ -892,7 +911,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
 
     var streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
     ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
-    var response = await http.Response.fromStream(streamedResponse);
+    var response = await _readMultipartBody(streamedResponse);
 
     if (requireAuthCheck && response.statusCode == 401) {
       response = await refreshAndReplayAfter401(
@@ -912,7 +931,7 @@ Future<http.Response> makeMultipartApiCallUnpooled({
           HttpPoolManager.stampRequestTime(request);
           streamedResponse = await client.send(request).timeout(const Duration(minutes: 10));
           ApiEdgeThrottleTelemetry.instance.observe(request, streamedResponse);
-          return http.Response.fromStream(streamedResponse);
+          return _readMultipartBody(streamedResponse);
         },
       );
     }
@@ -1026,12 +1045,18 @@ Stream<String> makeStreamingApiCall({
   String body = '',
   String method = 'POST',
   ApiStreamingSeams? seams,
+  Future<void>? cancelSignal,
 }) async* {
   // Setup-deadline abort (same rationale as the multipart variant): the POST
   // must die with the wait, or a retry can submit the chat turn twice. Armed
   // before the try so the error handlers can cancel it.
   final setupAbort = Completer<void>();
   final setupAbortTimer = Timer(ApiClient.streamSetupTimeout, () {
+    if (!setupAbort.isCompleted) setupAbort.complete();
+  });
+  // The caller's stop aborts the request at any point, including mid-body, so
+  // the server sees the disconnect and stops generating.
+  cancelSignal?.then((_) {
     if (!setupAbort.isCompleted) setupAbort.complete();
   });
   try {

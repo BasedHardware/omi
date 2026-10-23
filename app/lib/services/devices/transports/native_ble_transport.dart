@@ -6,6 +6,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/services/devices/models.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
 
@@ -299,12 +300,28 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   bool hasCharacteristic(String serviceUuid, String characteristicUuid) =>
       _hasCharacteristic(serviceUuid, characteristicUuid);
 
+  /// A connected pendant can leave a GATT read or write unanswered (and older
+  /// native code orphaned a second same-characteristic read). Every awaited
+  /// operation is bounded so a capture or sync pass can never wait forever.
+  @visibleForTesting
+  static Duration operationTimeout = const Duration(seconds: 10);
+
+  void _logOperationTimeout(String op, String characteristicUuid) {
+    Logger.debug('[NativeBleTransport] $op $characteristicUuid timed out after ${operationTimeout.inSeconds}s');
+    unawaited(DebugLogManager.logWarning('ble_op_timeout', {'op': op, 'characteristic': characteristicUuid}));
+  }
+
   @override
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async {
     if (!_hasCharacteristic(serviceUuid, characteristicUuid)) return [];
     try {
-      final data = await _hostApi.readCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid);
+      final data = await _hostApi.readCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid).timeout(
+            operationTimeout,
+          );
       return data.toList();
+    } on TimeoutException {
+      _logOperationTimeout('read', characteristicUuid);
+      return [];
     } catch (e) {
       Logger.debug('[NativeBleTransport] Failed to read $serviceUuid:$characteristicUuid: $e');
       return [];
@@ -318,7 +335,12 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
       return;
     }
     try {
-      await _hostApi.writeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid, Uint8List.fromList(data));
+      await _hostApi
+          .writeCharacteristic(_peripheralUuid, serviceUuid, characteristicUuid, Uint8List.fromList(data))
+          .timeout(operationTimeout);
+    } on TimeoutException {
+      _logOperationTimeout('write', characteristicUuid);
+      rethrow;
     } catch (e) {
       Logger.debug('[NativeBleTransport] Failed to write characteristic: $e');
       rethrow;
@@ -359,8 +381,12 @@ class NativeBleTransport extends DeviceTransport implements CaptureSubscriptionE
   void _addToStream(String serviceUuid, String characteristicUuid, List<int> data) {
     final key = '${serviceUuid.toLowerCase()}:${characteristicUuid.toLowerCase()}';
     final controller = _streamControllers[key];
-    if (controller != null && !controller.isClosed) {
+    if (controller != null && !controller.isClosed && controller.hasListener) {
       controller.add(data);
+    } else if (characteristicUuid.toLowerCase() == audioDataStreamCharacteristicUuid) {
+      // Native stays subscribed after capture cancels its listener, and the
+      // pendant then streams instead of storing. Never drop those packets.
+      OrphanAudioRoute.deliver(deviceId, data);
     }
   }
 

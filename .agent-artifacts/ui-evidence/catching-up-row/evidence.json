@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-android-home-before.png",
+      "platform": "mobile-android",
+      "description": "Before: Home has a standalone row for a three-hour backlog.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "002-mobile-android-home-after.png",
+      "platform": "mobile-android",
+      "description": "After: the same Home backlog has no separate catch-up row.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "003-mobile-android-device-large-backlog.png",
+      "platform": "mobile-android",
+      "description": "Device: large waiting backlog, audio span and On the Way. Captured before the progress bar was removed (lead ruling d02cce); the bar and 'X of Y min' line no longer render.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "004-mobile-android-device-multiple-targets.png",
+      "platform": "mobile-android",
+      "description": "Device: a server job targeting two named conversations; progress stays indeterminate until measured.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "005-mobile-android-device-no-target.png",
+      "platform": "mobile-android",
+      "description": "Device: a server-only job before conversation targets are known.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    },
+    {
+      "file": "006-mobile-android-device-on-the-way.png",
+      "platform": "mobile-android",
+      "description": "Tapping the device card opens On the Way with its pending job.",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

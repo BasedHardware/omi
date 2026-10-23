@@ -2,7 +2,10 @@
 """Tests for the mobile internal build dispatch decision."""
 
 import importlib.util
+import os
 import pathlib
+import subprocess
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -324,6 +327,87 @@ class TestSourceIdentity(unittest.TestCase):
                     ]
                 )
         dispatch.assert_not_called()
+
+
+REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
+PIN_SCRIPT = REPO_ROOT / "app/scripts/checkout_release_source_pin.sh"
+
+
+class TestCodemagicSourcePinCheckout(unittest.TestCase):
+    """The Codemagic side of the pin: build the evaluated commit or fail closed."""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.repo = pathlib.Path(self._tmp.name)
+        self._git("init", "--quiet", "--initial-branch=main")
+        self.first = self._commit("first")
+
+    def _git(self, *args):
+        return subprocess.run(
+            ["git", "-c", "user.name=t", "-c", "user.email=t@example.invalid", *args],
+            cwd=self.repo,
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+
+    def _commit(self, message):
+        self._git("commit", "--quiet", "--allow-empty", "-m", message)
+        return self._git("rev-parse", "HEAD")
+
+    def _run(self, pin, **extra):
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("GIT_", "CM_"))}
+        env.update(extra)
+        if pin is not None:
+            env["OMI_RELEASE_SOURCE_SHA"] = pin
+        return subprocess.run(
+            ["bash", str(PIN_SCRIPT)], cwd=self.repo, env=env, capture_output=True, text=True
+        )
+
+    def test_matching_head_passes_unchanged(self):
+        result = self._run(self.first)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._git("rev-parse", "HEAD"), self.first)
+
+    def test_moved_tip_that_contains_the_pin_builds_the_pin(self):
+        """2026-10-20: main moved between dispatch and clone; both builds died."""
+        tip = self._commit("landed after dispatch")
+        cm_env = self.repo / "cm_env"
+        result = self._run(self.first, CM_BUILD_ID="b", CM_ENV=str(cm_env))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self._git("rev-parse", "HEAD"), self.first)
+        # build_provenance_dart_defines.sh accepts HEAD != CM_COMMIT only with this record.
+        self.assertEqual(cm_env.read_text(), f"OMI_RELEASE_PIN_CLONED_TIP={tip}\n")
+
+    def test_moved_tip_inside_codemagic_without_cm_env_fails_closed(self):
+        tip = self._commit("landed after dispatch")
+        self.assertNotEqual(self._run(self.first, CM_BUILD_ID="b").returncode, 0)
+        self.assertEqual(self._git("rev-parse", "HEAD"), tip)
+
+    def test_pin_off_the_tip_history_fails_closed(self):
+        self._git("checkout", "--quiet", "-b", "side")
+        side = self._commit("side")
+        self._git("checkout", "--quiet", "main")
+        tip = self._commit("main moved")
+        result = self._run(side)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("not contained", result.stderr)
+        self.assertEqual(self._git("rev-parse", "HEAD"), tip)
+
+    def test_invalid_or_unknown_pin_fails_closed(self):
+        for pin in ("main", "A" * 40, "c" * 40):
+            with self.subTest(pin=pin):
+                self.assertNotEqual(self._run(pin).returncode, 0)
+                self.assertEqual(self._git("rev-parse", "HEAD"), self.first)
+
+    def test_unpinned_build_keeps_the_branch_tip(self):
+        self.assertEqual(self._run(None).returncode, 0)
+
+    def test_both_internal_workflows_run_the_pin_checkout(self):
+        config = (REPO_ROOT / "codemagic.yaml").read_text(encoding="utf-8")
+        self.assertEqual(config.count("bash scripts/checkout_release_source_pin.sh"), 2)
+        self.assertNotIn("dispatcher source pin does not match checked-out HEAD", config)
 
 
 if __name__ == "__main__":

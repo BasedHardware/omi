@@ -176,6 +176,21 @@ def test_hold_manifest_fences_concurrent_recovery_and_stale_release(monkeypatch)
     assert client.rows[path]['lease_until'] == 0
 
 
+@pytest.mark.parametrize('state', ['completed', 'retained', 'purged', 'staging', 'sealing', 'superseded'])
+def test_claim_leaves_terminal_and_unsealed_rows_alone(monkeypatch, state):
+    from contextlib import nullcontext
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+    from utils.sync import cap_hold
+
+    path = ('users', 'synthetic', 'stt_cap_holds', 'hold')
+    client = StrictFirestore({path: {'state': state, 'lease_until': 0}})
+    ref = client.document('/'.join(path))
+    monkeypatch.setattr(cap_hold, 'get_firestore_client', lambda: client)
+    monkeypatch.setattr(cap_hold, 'external_write_fence', lambda _: nullcontext())
+    assert cap_hold.claim('synthetic', ref, 100) is None
+    assert client.rows[path] == {'state': state, 'lease_until': 0}
+
+
 def test_hold_persists_encrypted_audio_before_manifest_and_never_expires(tmp_path, monkeypatch):
     from contextlib import nullcontext
     from utils.sync import cap_hold

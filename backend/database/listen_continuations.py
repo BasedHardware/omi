@@ -11,7 +11,7 @@ from google.cloud import firestore
 from database._client import get_firestore_client
 from database.document_ids import calendar_meeting_doc_id
 from utils.observability.fallback import record_fallback
-from utils.conversation_continuity import (
+from models.conversation_continuity import (
     calendar_continuity_identity,
     calendar_continuity_window,
     continuation_timeout,

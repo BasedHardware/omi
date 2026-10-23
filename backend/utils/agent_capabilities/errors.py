@@ -1,5 +1,7 @@
 """Stable non-content error contracts for guarded owner mutations."""
 
+from utils.model_text import TIME_FORMAT_HINT
+
 TRANSCRIPT_EDIT_HTTP_ERRORS = {
     'not_found': (404, 'Conversation not found'),
     'locked': (402, 'Unlimited Plan Required to access this conversation.'),
@@ -50,7 +52,7 @@ SCHEMA_MESSAGES = frozenset(
         'Summary edits require their conversation as evidence and no other target',
         'Summary edits require a short changed value',
         'End must follow start',
-        'Time filters require UTC offsets',
+        TIME_FORMAT_HINT,
         'Exactly the matching question payload is required',
     }
 )

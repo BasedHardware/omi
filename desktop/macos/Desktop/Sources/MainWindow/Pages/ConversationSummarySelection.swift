@@ -110,7 +110,26 @@ enum ConversationSummarySelection {
   /// comparing the stored description.
   static func presentableText(_ text: String, segments: [TranscriptSegment]) -> String {
     let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } }.filter { !$0.isEmpty })
+    // Titles render on every list row: skip the regex passes when nothing can match. Without a
+    // bracket, a speaker label or a known ID the repair returns the text unchanged.
+    let lowered = text.lowercased()
+    let mayCarryDebris =
+      text.contains(where: { "[(［【".contains($0) }) || lowered.contains("spk") || lowered.contains("speaker")
+      || valid.contains(where: { text.contains($0) })
+    guard mayCarryDebris else { return text }
     return NoteCitationContract.repair(text, valid: valid).text
+  }
+
+  /// A conversation title for display: like `presentableText`, but ordinary bracketed words
+  /// ("Project [Q3]") are kept; see `NoteCitationContract.repairTitle`.
+  static func presentableTitle(_ title: String, segments: [TranscriptSegment]) -> String {
+    let valid = Set(segments.flatMap { [$0.id, $0.backendId].compactMap { $0 } }.filter { !$0.isEmpty })
+    let lowered = title.lowercased()
+    let mayCarryDebris =
+      title.contains(where: { "[(［【".contains($0) }) || lowered.contains("spk") || lowered.contains("speaker")
+      || valid.contains(where: { title.contains($0) })
+    guard mayCarryDebris else { return title }
+    return NoteCitationContract.repairTitle(title, valid: valid)
   }
 
   /// Suggested "Try with Apps" rows: memories-capable apps that have not

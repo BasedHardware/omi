@@ -178,6 +178,7 @@ def run(worker_flight, durations, *, vad=serial_vad, diarize=serial_diarize):
         return 'encrypted-result://' + work.segment_id
 
     worker = PipelineWorker(
+        language_of=lambda item: 'en',
         decode=lambda work: synthetic_audio(work.duration_seconds, 7),
         vad=counted_vad,
         words_providers={'parakeet': Words()},

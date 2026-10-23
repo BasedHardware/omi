@@ -910,14 +910,15 @@ class TestRichFailOpen:
         assert 'PARTICIPANTS' not in captured['prefix'].context
 
 
-def test_rich_prompt_anchors_still_match_legacy_wording():
-    """The rich rewrite anchors on exact legacy text and only logs on drift; pin it here."""
+def test_rich_prompt_composes_named_blocks_and_keeps_general_rules():
+    """Changing a named block cannot silently leave half of the legacy contract."""
     from utils.llm import meeting_notes_rich_prompts as rich
+    from utils.llm import conversation_notes_prompts as general
     from utils.llm.conversation_processing import _conversation_notes_static_instructions
 
     base = _conversation_notes_static_instructions('FORMAT')
-    assert rich._LEGACY_NOTE_BODY_OPENING in base
-    assert rich._LEGACY_SELECT_THREADS in base
+    assert general.NOTE_BODY_OPENING in base
+    assert general.SELECT_THREADS in base
     text = rich.rich_static_instructions('FORMAT', _conversation_notes_static_instructions)
-    assert rich._RICH_NOTE_BODY_OPENING in text and rich._LEGACY_NOTE_BODY_OPENING not in text
-    assert rich._RICH_SELECT_THREADS in text and rich._LEGACY_SELECT_THREADS not in text
+    assert rich._RICH_NOTE_BODY_OPENING in text and general.NOTE_BODY_OPENING not in text
+    assert rich._RICH_SELECT_THREADS in text and general.SELECT_THREADS not in text

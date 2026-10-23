@@ -17,8 +17,11 @@ PAID_EPOCH = 2
 
 
 class SpeechRedriveStore:
-    def __init__(self, store):
+    def __init__(self, store, *, server_flags):
+        """Operator-only. `server_flags` is the serving role's live settings for an
+        unpinned unit, or None to refuse it; never this process's environment."""
         self.store = store
+        self.server_flags = server_flags
 
     def checked(self, tx, segment_id):
         return RecoveryStore(self.store).checked(tx, segment_id, allow_completed_speech_redrive=True)
@@ -44,14 +47,18 @@ class SpeechRedriveStore:
             and not job.get('silence_disposition')
         )
 
-    def prepare(self, segment_id, owner_id, plan_digest, expected_recovery, now, *, gpu_padded_retry_empty=False):
+    def prepare(
+        self, segment_id, owner_id, plan_digest, expected_recovery, now, *, gpu_padded_retry_empty=False, silent=False
+    ):
         candidates, observations = {}, []
         token = uuid4().hex
 
         def commit(tx):
             observations.clear()
             job, binding = self.checked(tx, segment_id)
-            policy = stage_in_transaction(tx, job, 'recovery', candidates=candidates, observations=observations)
+            policy = stage_in_transaction(
+                tx, job, 'recovery', candidates=candidates, observations=observations, server_flags=self.server_flags
+            )
             if not policy.speech_empty_multilingual or not policy.recovery_enabled:
                 raise ProjectionBlocked('speech redrive disabled')
             existing = tx.get('results', segment_id)
@@ -70,6 +77,7 @@ class SpeechRedriveStore:
                     or marker.get('paid_epoch') != PAID_EPOCH
                     or marker.get('privacy_generation') != binding.privacy_generation
                     or marker.get('provider') != 'modulate'
+                    or marker.get('silent', False) is not silent
                 ):
                     raise ProjectionBlocked('different speech redrive intent')
                 return job
@@ -79,6 +87,7 @@ class SpeechRedriveStore:
                 raise ProjectionBlocked('padded retry was skipped')
             job['speech_redrive'] = {
                 'gpu_padded_retry_empty': gpu_padded_retry_empty,
+                'silent': silent,
                 'paid_epoch': PAID_EPOCH,
                 'token': token,
                 'plan_digest': plan_digest,
@@ -96,7 +105,7 @@ class SpeechRedriveStore:
         return result
 
     def start(self, segment_id, token, plan_digest, now):
-        _, policy = load_stage_policy(self.store, segment_id, 'recovery')
+        _, policy = load_stage_policy(self.store, segment_id, 'recovery', server_flags=self.server_flags)
         if policy is None or not policy.speech_empty_multilingual:
             return False
 
