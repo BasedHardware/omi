@@ -45,6 +45,7 @@ from utils.memory.index_window import (
 from config import firestore_read_levers
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
+from database.released_memory_projection import projected_stream_list
 from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
 from database.memory_ledger import purge_source_replacement_receipts_for_memories
 from database.legal_holds import (
@@ -2574,7 +2575,7 @@ class MemoryService:
                 refs = [client.document(f'{collection}/{memory_id}') for memory_id in missing_ids]
                 try:
                     query = client.collection(collection).where(filter=FieldFilter('__name__', 'in', refs))
-                    snapshots = budgeted_stream_list(query, budget)
+                    snapshots = projected_stream_list(query, budget, surface='status_pairs')
                     if not snapshots and budget is not None:
                         budget.charge(1)  # Empty-query billing floor.
                 except ListReadBudgetExhausted:

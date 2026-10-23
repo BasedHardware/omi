@@ -1,0 +1,237 @@
+"""Count billed documents and prove exact raw snapshot parity across mutations."""
+
+import copy
+from datetime import datetime, timezone
+from types import SimpleNamespace
+
+import pytest
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import firestore
+from google.cloud.firestore_v1.document import DocumentReference, DocumentSnapshot
+from google.cloud.firestore_v1.query import Query
+
+from database import released_memory_projection as projection
+from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted
+
+
+@pytest.fixture
+def store(monkeypatch):
+    monkeypatch.setenv('MEMORY_RELEASED_WRITERS_COVERED', 'v1:unit-test')
+    monkeypatch.delenv('MEMORY_RELEASED_PROJECTION', raising=False)
+    monkeypatch.setattr(projection, 'MIN_CACHE_ROWS', 0)
+    client = firestore.Client(project='demo-projection', credentials=AnonymousCredentials())
+    state = SimpleNamespace(client=client, reads=0, scans=0, heads=0, token='v1', blocked=None, rows={}, hook=None)
+    stamp = datetime(2026, 10, 23, tzinfo=timezone.utc)
+
+    def snapshot(path, data):
+        return DocumentSnapshot(client.document(path), copy.deepcopy(data), data is not None, stamp, stamp, stamp)
+
+    def get(ref, **kwargs):
+        state.reads += 1
+        state.heads += 1
+        if state.hook:
+            state.hook(state)
+        data = None if state.token is None else {'schema': 1, 'token': state.token}
+        if ref.path.endswith('/list_serving_versions/conversations') and data is not None:
+            data = {'version': state.token}
+        if state.blocked is not None and data is not None:
+            data['blocked'] = state.blocked
+        return snapshot(ref.path, data)
+
+    def stream(query, **kwargs):
+        state.scans += 1
+        rows = [
+            (path, data) for path, data in state.rows.items() if path.rsplit('/', 1)[0] == '/'.join(query._parent._path)
+        ]
+        state.reads += max(1, len(rows) + (query._offset or 0))
+        return iter([snapshot(path, data) for path, data in rows])
+
+    monkeypatch.setattr(DocumentReference, 'get', get)
+    monkeypatch.setattr(Query, 'stream', stream)
+    monkeypatch.setattr(projection, '_entries', projection.OrderedDict())
+    monkeypatch.setattr(projection, '_small_queries', projection.OrderedDict())
+    monkeypatch.setattr(projection, '_bytes', 0)
+    state.query = client.collection('users/u/memory_items').limit(100)
+    state.read = lambda **kwargs: projection.projected_stream_list(state.query, surface='canonical_scan', **kwargs)
+    return state
+
+
+def payloads(rows):
+    return [(row.reference.path, row.to_dict(), row.update_time) for row in rows]
+
+
+def test_repeated_page_100_billed_reads_becomes_two_and_preserves_snapshots(store):
+    store.rows = {f'users/u/memory_items/m{i}': {'content': str(i), 'nested': {'a': [1]}} for i in range(100)}
+    first = store.read()
+    assert store.reads == 102  # Source page plus before/after head.
+    before = store.reads
+    second = store.read()
+    assert store.reads - before == 2
+    assert store.scans == 1
+    assert payloads(first) == payloads(second)
+    second[0]._data['nested']['a'].append(2)
+    assert store.read()[0].to_dict()['nested']['a'] == [1]
+
+
+@pytest.mark.parametrize('mutation', ['update', 'delete', 'override', 'legacy'])
+def test_any_memory_domain_change_invalidates_cached_candidates(store, mutation):
+    path = 'users/u/memory_items/a'
+    store.rows[path] = {'status': 'active'}
+    store.read()
+    if mutation == 'delete':
+        del store.rows[path]
+    elif mutation == 'update':
+        store.rows[path]['status'] = 'tombstoned'
+    store.token = 'new-commit'
+    assert payloads(store.read()) == payloads(list(store.query.stream()))
+    assert store.scans == 3
+
+
+def test_empty_result_is_invalidated_by_create(store):
+    assert store.read() == []
+    assert store.read() == []
+    store.rows['users/u/memory_items/new'] = {'status': 'active'}
+    store.token = 'created'
+    assert len(store.read()) == 1
+
+
+@pytest.mark.parametrize('mode', ['off', 'no-coverage', 'missing', 'blocked'])
+def test_unproven_coverage_and_kill_switch_keep_old_path(store, monkeypatch, mode):
+    if mode == 'off':
+        monkeypatch.setenv('MEMORY_RELEASED_PROJECTION', 'off')
+    elif mode == 'no-coverage':
+        monkeypatch.delenv('MEMORY_RELEASED_WRITERS_COVERED')
+    elif mode == 'missing':
+        store.token = None
+    else:
+        store.blocked = True
+    store.read()
+    store.read()
+    assert store.scans == 2
+    assert not projection._entries
+
+
+def test_hit_racing_a_delete_discards_the_cached_page(store):
+    store.rows['users/u/memory_items/a'] = {'status': 'active'}
+    store.read()
+
+    def mutate(state):
+        if state.heads == 4:
+            state.token = 'deleted'
+            state.rows.clear()
+
+    store.hook = mutate
+    assert store.read() == []
+    assert store.scans == 2
+
+
+def test_fill_racing_a_mutation_is_never_published(store):
+    def mutate(state):
+        state.token = str(state.heads)
+
+    store.hook = mutate
+    store.read()
+    store.read()
+    assert store.scans == 2
+    assert not projection._entries
+
+
+def test_unavailable_head_falls_back_and_never_hides_query_errors(store, monkeypatch):
+    def broken(*args):
+        raise RuntimeError('unavailable')
+
+    monkeypatch.setattr(projection, '_head', broken)
+    assert store.read() == []
+    assert store.scans == 1
+
+    def broken_stream(*args):
+        raise ValueError('source failure')
+
+    monkeypatch.setattr(projection, 'budgeted_stream_list', broken_stream)
+    with pytest.raises(ValueError, match='source failure'):
+        store.read()
+
+
+def test_deadline_is_checked_on_warm_hits_and_head_reads_are_charged(store):
+    store.read()
+    budget = ListReadBudget(deadline_monotonic=24, max_documents=100, clock=lambda: 0)
+    store.read(budget=budget)
+    assert budget.docs_scanned == 2
+    exhausted = ListReadBudget(deadline_monotonic=0, max_documents=100, clock=lambda: 1)
+    with pytest.raises(ListReadBudgetExhausted):
+        store.read(budget=exhausted)
+
+
+def test_exact_query_account_database_and_field_mask_are_in_key(store):
+    store.read()
+    store.query = store.query.select(['status'])
+    store.read()
+    store.query = store.client.collection('users/other/memory_items').limit(100)
+    store.read()
+    assert store.scans == 3
+
+
+def test_retention_and_size_are_bounded(store, monkeypatch):
+    monkeypatch.setattr(projection, 'MAX_ENTRY_BYTES', 1)
+    store.read()
+    assert not projection._entries
+    monkeypatch.setattr(projection, 'MAX_ENTRY_BYTES', 1024)
+    monkeypatch.setattr(projection, 'TTL_SECONDS', -1)
+    store.read()
+    store.read()
+    assert store.scans == 3
+
+
+def test_small_queries_bypass_head_cost_after_first_observation(store, monkeypatch):
+    monkeypatch.setattr(projection, 'MIN_CACHE_ROWS', 3)
+    assert store.read() == []
+    before = store.reads
+    assert store.read() == []
+    assert store.reads - before == 1
+    assert not projection._entries
+
+
+def test_coverage_epoch_rotation_never_reuses_pre_gap_payloads(store, monkeypatch):
+    store.rows = {f'users/u/memory_items/{i}': {'n': i} for i in range(3)}
+    store.read()
+    store.rows['users/u/memory_items/0'] = {'n': 'changed-by-old-writer'}
+    monkeypatch.setenv('MEMORY_RELEASED_WRITERS_COVERED', 'v1:post-gap')
+    assert store.read()[0].to_dict()['n'] == 'changed-by-old-writer'
+    assert store.scans == 2
+
+
+def test_mcp_cards_reuse_p1_version_and_respect_its_kill_switch(store, monkeypatch):
+    monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'p1-coverage')
+    store.token = 'a' * 32
+    store.query = store.client.collection('users/u/conversations').limit(100)
+    store.rows = {f'users/u/conversations/{i}': {'n': i} for i in range(100)}
+    first = projection.projected_stream_list(store.query, surface='mcp_cards')
+    before = store.reads
+    assert payloads(projection.projected_stream_list(store.query, surface='mcp_cards')) == payloads(first)
+    assert store.reads - before == 2
+    store.rows.clear()
+    monkeypatch.setenv('OMI_LIST_PROJECTION_WRITER_ENABLED', 'false')
+    assert projection.projected_stream_list(store.query, surface='mcp_cards') == []
+
+
+def test_offset_is_charged_only_when_the_source_query_runs(store):
+    store.rows = {f'users/u/memory_items/{i}': {'n': i} for i in range(3)}
+    query = store.query.offset(10)
+    cold = ListReadBudget(deadline_monotonic=24, max_documents=100, clock=lambda: 0)
+    list(projection.projected_stream_iter(query, cold, surface='canonical_scan', offset_reads=10))
+    assert cold.docs_scanned == 15
+    warm = ListReadBudget(deadline_monotonic=24, max_documents=100, clock=lambda: 0)
+    list(projection.projected_stream_iter(query, warm, surface='canonical_scan', offset_reads=10))
+    assert warm.docs_scanned == 2
+
+
+def test_stream_partial_prefix_retains_existing_budget_semantics(store, monkeypatch):
+    monkeypatch.setenv('MEMORY_RELEASED_PROJECTION', 'off')
+    store.rows = {f'users/u/memory_items/{i}': {'n': i} for i in range(5)}
+    budget = ListReadBudget(deadline_monotonic=24, max_documents=3, clock=lambda: 0)
+    actual = []
+    with pytest.raises(ListReadBudgetExhausted):
+        for row in projection.projected_stream_iter(store.query, budget, surface='canonical_scan'):
+            actual.append(row.to_dict())
+    assert actual == [{'n': 0}, {'n': 1}, {'n': 2}]
+    assert not projection._entries

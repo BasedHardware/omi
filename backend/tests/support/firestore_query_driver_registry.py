@@ -22,6 +22,7 @@ from tests.support.firestore_query_drivers import (
     FROZEN_NOW,
     FROZEN_TODAY,
     SHAPE_UID,
+    ref_query,
     CallerProfile,
     CoveredByEntry,
     DriverEntry,
@@ -3469,3 +3470,34 @@ for _key, _reason in (
     ),
 ):
     _add(SkipEntry(_key, reason=_reason, body_digest=BODY_DIGEST[_key]))
+
+
+# Transparent raw-snapshot transport: the callers above continue to own every
+# filter/index shape. Direct drivers also cover this wrapper's empty-query path.
+for _function in ('_source_read', '_source_iter_read'):
+    _add(
+        DriverEntry(
+            f'database.released_memory_projection.{_function}',
+            base={'query': ref_query(f'users/{UID}/memory_items')},
+            neutrals={
+                'budget': _BUDGET,
+                **({'offset_reads': (None, 'raw-query offset accounting')} if _function == '_source_iter_read' else {}),
+            },
+        )
+    )
+for _function in ('projected_stream_list', 'projected_stream_iter'):
+    _add(
+        DriverEntry(
+            f'database.released_memory_projection.{_function}',
+            base={'query': ref_query(f'users/{UID}/memory_items')},
+            domains={'surface': ['canonical_scan', 'historical_scan', 'list_window', 'status_pairs', 'mcp_cards']},
+            neutrals={
+                'budget': _BUDGET,
+                **(
+                    {'_source': (None, 'default raw stream loader; no filter changes')}
+                    if _function == 'projected_stream_list'
+                    else {'offset_reads': (None, 'raw-query offset accounting')}
+                ),
+            },
+        )
+    )

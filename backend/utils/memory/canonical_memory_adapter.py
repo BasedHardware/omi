@@ -21,6 +21,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from config import firestore_read_levers
 from database._client import db as default_db_client
 from database import knowledge_graph as kg_db
+from database.released_memory_projection import projected_stream_list
 from database.firestore_index_registry import (
     UNIVERSAL_CANONICAL_LIST_SCAN_QUERY,
     UNIVERSAL_CANONICAL_RELEASED_PROCESSED_QUERY,
@@ -932,7 +933,7 @@ def read_canonical_scan_page(
                 }
             )
         try:
-            branch = budgeted_stream_list(query.limit(bounded_limit), budget)
+            branch = projected_stream_list(query.limit(bounded_limit), budget, surface='canonical_scan')
         except ListReadBudgetExhausted as exc:
             branch = getattr(exc, 'partial_snapshots', [])
             interrupted = True

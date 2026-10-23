@@ -183,6 +183,8 @@ The changed-file backend unit selector runs the Firestore guard set for every se
 
 **Redis** (cache/rate-limiting/locks): `from database import redis_db` — **fail-open** (all errors caught and logged, requests proceed). Rate limiting via Lua scripts. `try_acquire_listen_lock(uid)` prevents duplicate WS connections.
 
+Released-memory query projections: [writer coverage, rollout, and rollback](docs/released-memory-change-projection.md).
+
 ## Auth
 
 HTTP endpoints: `uid: str = Depends(get_current_user_uid)` from `utils.other.endpoints`.
