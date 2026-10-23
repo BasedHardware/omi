@@ -79,3 +79,13 @@ def test_retry_stops_at_deadline(pyannote, monkeypatch):
         # Deadline already spent when the retry would start.
         pyannote.diarize(b'pcm', deadline=time.monotonic() - 1)
     assert calls == []
+
+
+def test_response_arriving_past_deadline_is_rejected(pyannote, monkeypatch):
+    def slow_post(*args, **kwargs):
+        time.sleep(0.05)
+        return _ok_response()
+
+    monkeypatch.setattr(diarization.httpx, 'post', slow_post)
+    with pytest.raises(TimeoutError):
+        pyannote.diarize(b'pcm', deadline=time.monotonic() + 0.01)
