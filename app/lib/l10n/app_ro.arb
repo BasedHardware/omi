@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Verifică conexiunea și încearcă din nou.",
     "useFreePlan": "Folosește planul gratuit",
     "continueText": "Continuă",
+    "checkoutExistingSubscription": "Ai deja un abonament. Gestionează abonamentul actual în loc să începi unul nou.",
     "resubscribeFirstToChangePlans": "Reabonează-te mai întâi ca să schimbi planul.",
     "resubscribe": "Reabonează-te",
     "couldNotOpenPaymentSettings": "Nu s-au putut deschide setările de plată. Vă rugăm să încercați din nou.",

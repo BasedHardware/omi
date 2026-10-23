@@ -4430,6 +4430,10 @@ class AppLocalizationsUr extends AppLocalizations {
   String get continueText => 'جاری رکھیں';
 
   @override
+  String get checkoutExistingSubscription =>
+      'آپ کے پاس پہلے سے سبسکرپشن ہے۔ نئی شروع کرنے کے بجائے اپنی موجودہ سبسکرپشن کا نظم کریں۔';
+
+  @override
   String get resubscribeFirstToChangePlans => 'پلان بدلنے کے لیے پہلے دوبارہ رکنیت حاصل کریں۔';
 
   @override
