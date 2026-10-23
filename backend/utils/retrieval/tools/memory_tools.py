@@ -1,4 +1,4 @@
-﻿"""
+"""
 Tools for accessing user memories and facts.
 """
 

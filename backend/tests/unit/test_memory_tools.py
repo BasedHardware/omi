@@ -81,7 +81,8 @@ def _memory_tools_module():
         apply_chat_scope_dates=lambda scope, start, end: (start, end, None),
         chat_scope_from_config=MagicMock(return_value=None),
     )
-    mock_refs = _module("utils.retrieval.turn_refs", register_record_ref=MagicMock())
+    mock_register_ref = MagicMock()
+    mock_refs = _module("utils.retrieval.turn_refs", register_record_ref=mock_register_ref)
     mock_evidence = _module(
         "utils.retrieval.memory_evidence",
         MAX_MEMORY_EVIDENCE_CHARS=10000,
@@ -125,16 +126,20 @@ def _memory_tools_module():
         )
         globals()["memory_mod"] = module
         globals()["mock_service_inst"] = mock_service_instance
+        globals()["mock_register_ref"] = mock_register_ref
         yield
         globals().pop("memory_mod", None)
         globals().pop("mock_service_inst", None)
+        globals().pop("mock_register_ref", None)
 
 
 class TestMemoryTools(unittest.TestCase):
     def setUp(self):
         self.config = {"configurable": {"user_id": "test_uid"}}
         mock_service_inst.get_memories.reset_mock()
+        mock_service_inst.read.reset_mock()
         mock_service_inst.search.reset_mock()
+        mock_register_ref.reset_mock()
 
     def test_get_memories_handles_top_level_uid(self):
         res = memory_mod.get_memories_tool.func(config={"user_id": "top_uid"})
@@ -147,6 +152,13 @@ class TestMemoryTools(unittest.TestCase):
     def test_get_memories_coerces_string_limit_and_offset(self):
         res = memory_mod.get_memories_tool.func(limit="100", offset="5", config=self.config)
         self.assertIn("No memories found", res)
+        # Verify coerced integer values reach the service read call
+        mock_service_inst.read.assert_called_once()
+        _, kwargs = mock_service_inst.read.call_args
+        self.assertIsInstance(kwargs.get("limit"), int)
+        self.assertIsInstance(kwargs.get("offset"), int)
+        self.assertEqual(kwargs.get("limit"), 105)
+        self.assertEqual(kwargs.get("offset"), 0)
 
     def test_search_memories_handles_top_level_uid(self):
         res = memory_mod.search_memories_tool.func(
@@ -169,10 +181,18 @@ class TestMemoryTools(unittest.TestCase):
             config=self.config
         )
         self.assertIn("No memories found matching 'travel goals'", res)
+        # Verify coerced integer limit reaches the service search call
+        mock_service_inst.search.assert_called_once_with("test_uid", "travel goals", limit=10)
 
     def test_publish_memory_refs_handles_none_configurable(self):
-        # Must not raise AttributeError
+        # Must gracefully return without error and not register refs when memories list is empty
         memory_mod._publish_memory_refs(None, [])
+        mock_register_ref.assert_not_called()
+
+        # Must safely fallback to empty dict for configurable and register memory id
+        fake_mem = MagicMock(id="mem_test_123", content="Loves dark roast coffee")
+        memory_mod._publish_memory_refs(None, [fake_mem])
+        mock_register_ref.assert_called_once_with({}, 'memories', 'mem_test_123')
 
 
 if __name__ == "__main__":
