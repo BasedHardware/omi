@@ -7,7 +7,7 @@ heavy loads real inside the stub window.
 
 import importlib
 from types import ModuleType
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 from testing.import_isolation import AutoMockModule
 
@@ -16,7 +16,7 @@ def _build_pipeline_fakes() -> dict:
     """Minimal stub set for importing ``utils.sync.legacy_segment_core`` in isolation.
 
     Heavy leaves are AutoMocked; the real ``utils`` package tree stays intact
-    so light enum modules the coordinator needs by value (``utils.stt.outcomes``,
+    so light enum modules the core needs by value (``utils.stt.outcomes``,
     ``utils.sync.lanes``, ``utils.sync.telemetry``) keep their real semantics.
     ``database``/``models`` get package markers with dead paths so their real
     ``__init__``s never run (same trick as the transcription-prefs fakes).
@@ -90,37 +90,3 @@ def _build_pipeline_fakes() -> dict:
     fakes['database.sync_jobs'].QUEUED_DISPATCH_STALE_SECONDS = 1800
     fakes['utils.cloud_tasks'].DISPATCH_DEADLINE_SECONDS = 1500
     return fakes
-
-
-def _prepare(pipeline, wav_paths):
-    """Reduce the coordinator to decode→VAD→process_segment with fakes."""
-
-    async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
-        return fn(*args, **kwargs)
-
-    pipeline.run_blocking = _passthrough_run_blocking
-    pipeline.decode_files_to_wav = MagicMock(return_value=list(wav_paths))
-    pipeline.retrieve_vad_segments = MagicMock(
-        side_effect=lambda path, segmented, errors, **_kwargs: segmented.add(path)
-    )
-    pipeline._cleanup_files = MagicMock()
-    pipeline.get_timestamp_from_path = MagicMock(return_value=123)
-    pipeline.get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
-    pipeline.get_sync_job = MagicMock(return_value={})
-    pipeline.bind_or_converge_sync_ledger_completion = MagicMock(return_value=None)
-    pipeline._reprocess_merged_conversations = MagicMock()
-    pipeline._load_sync_segment_context = _fake_load_segment_context
-    pipeline.FAIR_USE_ENABLED = False
-
-    captured = []
-
-    def _capture_process_segment(path, uid, response, lock, errors, *args, **kwargs):
-        captured.append(kwargs.get('geolocation'))
-        return True
-
-    pipeline.process_segment = _capture_process_segment
-    return captured
-
-
-async def _fake_load_segment_context(_uid):
-    return False, None, {}
