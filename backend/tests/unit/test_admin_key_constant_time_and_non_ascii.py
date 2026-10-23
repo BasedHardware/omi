@@ -220,7 +220,11 @@ def routers_bundle():
     setattr(common_AutoMocks["models.shared"], "StatusResponse", type("StatusResponse", (), {}))
     for _cls_name in ("FcmTokenResponse", "SaveFcmTokenRequest", "SyncUserTimeZoneRequest"):
         setattr(common_AutoMocks["models.other"], _cls_name, type(_cls_name, (), {}))
-    setattr(common_AutoMocks["models.integrations"], "IntegrationNotificationResponse", type("IntegrationNotificationResponse", (), {}))
+    setattr(
+        common_AutoMocks["models.integrations"],
+        "IntegrationNotificationResponse",
+        type("IntegrationNotificationResponse", (), {}),
+    )
     for _cls_name in ("Announcement", "AnnouncementType", "Display", "Targeting"):
         setattr(common_AutoMocks["models.announcement"], _cls_name, type(_cls_name, (), {}))
     setattr(
@@ -252,8 +256,12 @@ def routers_bundle():
             "routers._test_feedback_admin", "routers/feedback_admin.py", common_AutoMocks
         ),
         "metrics": _load_router_isolated("routers._test_metrics", "routers/metrics.py", common_AutoMocks),
-        "notifications": _load_router_isolated("routers._test_notifications", "routers/notifications.py", common_AutoMocks),
-        "announcements": _load_router_isolated("routers._test_announcements", "routers/announcements.py", common_AutoMocks),
+        "notifications": _load_router_isolated(
+            "routers._test_notifications", "routers/notifications.py", common_AutoMocks
+        ),
+        "announcements": _load_router_isolated(
+            "routers._test_announcements", "routers/announcements.py", common_AutoMocks
+        ),
     }
 
 
@@ -352,7 +360,9 @@ def test_sibling_admin_and_metrics_verifiers_reject_non_ascii_without_type_error
         assert exc.value.status_code == 401
 
         with pytest.raises(_HTTPException) as exc:
-            notifications_router.send_notification_to_user(data={"uid": "u1", "title": "t", "body": "b"}, secret_key=non_ascii)
+            notifications_router.send_notification_to_user(
+                data={"uid": "u1", "title": "t", "body": "b"}, secret_key=non_ascii
+            )
         assert exc.value.status_code == 403
 
         with pytest.raises(_HTTPException) as exc:
@@ -366,7 +376,9 @@ def test_sibling_admin_and_metrics_verifiers_reject_non_ascii_without_type_error
     assert feedback_admin._verify_admin_key(x_admin_key="expected-admin-key", x_admin_user="alice").startswith("admin:")
     metrics_router.metrics(credentials=types.SimpleNamespace(credentials="expected-metrics-secret"))
     announcements_router._verify_admin_key("expected-admin-key")
-    with mock.patch.object(notifications_router.hmac, "compare_digest", wraps=notifications_router.hmac.compare_digest) as spy:
+    with mock.patch.object(
+        notifications_router.hmac, "compare_digest", wraps=notifications_router.hmac.compare_digest
+    ) as spy:
         assert notifications_router.send_notification_to_user(
             data={"uid": "u1", "title": "t", "body": "b"}, secret_key="expected-admin-key"
         ) == {"status": "Ok"}
