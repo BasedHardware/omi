@@ -121,7 +121,7 @@ def get_offer(subscription_id: Optional[str]) -> RetentionOffer:
 def _ensure_coupon() -> None:
     try:
         stripe.Coupon.retrieve(COUPON_ID)
-    except stripe.error.InvalidRequestError:
+    except stripe.InvalidRequestError:
         stripe.Coupon.create(
             id=COUPON_ID,
             percent_off=PERCENT_OFF,
@@ -213,5 +213,5 @@ def _claim(customer_id: str, subscription_id: str) -> None:
             metadata={USED_METADATA_KEY: subscription_id},
             idempotency_key=f'retention-claim-{customer_id}',
         )
-    except stripe.error.IdempotencyError:
+    except stripe.IdempotencyError:
         raise ValueError('already_used')

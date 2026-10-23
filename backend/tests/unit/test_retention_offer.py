@@ -126,7 +126,7 @@ class _FakeStripe:
         params = {k: v for k, v in kw.items() if k != 'idempotency_key'}
         if key in self.idempotency:
             if self.idempotency[key] != params:
-                raise ro.stripe.error.IdempotencyError('Keys for idempotent requests can only be used with the same parameters')
+                raise ro.stripe.IdempotencyError('Keys for idempotent requests can only be used with the same parameters')
             return True
         self.idempotency[key] = params
         return False
@@ -161,7 +161,7 @@ class _FakeStripe:
 
     def coupon_retrieve(self, cid):
         if cid not in self.coupons:
-            raise ro.stripe.error.InvalidRequestError('No such coupon', 'id')
+            raise ro.stripe.InvalidRequestError('No such coupon', 'id')
         return self.coupons[cid]
 
     def discounted(self):
