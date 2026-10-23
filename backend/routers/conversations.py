@@ -16,6 +16,7 @@ import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
+from utils.list_version_check import ListVersionCheck
 from database.vector_db import (
     delete_action_item_vector,
     delete_action_item_vectors_batch,
@@ -988,6 +989,10 @@ def get_conversations(
     _reject_oversized_filter(status_filter, "statuses")
     _reject_oversized_filter(source_list, "sources")
 
+    version_check = ListVersionCheck.start(request, uid, 'conversations')
+    if version_check.not_modified is not None:
+        return version_check.not_modified
+
     # Request-scoped budget: the server-side offset is charged before the
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
@@ -1012,6 +1017,7 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
+    version_check.finish(response, truncated=budget.truncated)
     return conversations
 
 
