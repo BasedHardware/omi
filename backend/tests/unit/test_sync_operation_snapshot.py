@@ -103,6 +103,71 @@ def test_legacy_photo_hydration_is_identical(world, monkeypatch):
     assert legacy['photos'] == [photo]
 
 
+@pytest.mark.parametrize('mode,expected_reads', [('true', 4), ('false', 5)])
+@pytest.mark.parametrize('injected', [True, False])
+def test_one_client_covers_resolution_hydration_and_legacy_photos(world, monkeypatch, mode, expected_reads, injected):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreCollection, StrictFirestoreSnapshot
+
+    conversations, store, reads, _ = world
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', mode)
+    store.rows[('users', 'u', 'conversations', 'survivor')].pop('has_photos')
+    before = deepcopy(store.rows)
+    photo = {'id': 'photo', 'data_protection_level': 'standard', 'description': 'Scoped synthetic photo'}
+    factory_calls, photo_reads = [], []
+
+    class UnusableLegacyClient:
+        def collection(self, name):
+            pytest.fail('redirect hydration escaped to the legacy client')
+
+    def factory():
+        assert not injected, 'an explicitly injected client must bypass the global factory'
+        factory_calls.append(True)
+        return store
+
+    def photos(collection):
+        assert collection._database is store
+        photo_reads.append(collection._path)
+        return iter([StrictFirestoreSnapshot(photo)])
+
+    monkeypatch.setattr(conversations, 'db', UnusableLegacyClient())
+    monkeypatch.setattr(conversations, 'get_firestore_client', factory)
+    monkeypatch.setattr(StrictFirestoreCollection, 'stream', photos)
+    kwargs = {'firestore_client': store} if injected else {}
+    result = conversations.get_sync_redirected_conversation('u', 'donor', **kwargs)
+    assert len(reads) == expected_reads
+    assert factory_calls == ([] if injected else [True])
+    assert photo_reads == [('users', 'u', 'conversations', 'survivor', 'photos')]
+    assert result['photos'] == [photo]
+    assert result['transcript_segments'][0]['text'] == 'Synthetic speech.'
+    assert store.rows == before
+
+
+def test_redirect_resolver_accepts_scoped_client_without_global_lookup(world, monkeypatch):
+    conversations, store, reads, _ = world
+
+    def unexpected_factory():
+        pytest.fail('explicit client must bypass the global factory')
+
+    monkeypatch.setattr(conversations, 'get_firestore_client', unexpected_factory)
+    assert conversations.resolve_sync_conversation_redirect('u', 'donor', firestore_client=store) == 'survivor'
+    assert len(reads) == 4
+    store.rows[('users', 'u', 'deleted_conversations', 'survivor')] = {'deleted': True}
+    assert conversations.resolve_sync_conversation_redirect('u', 'donor', firestore_client=store) is None
+
+
+@pytest.mark.parametrize('mode', ['true', 'false'])
+def test_invalid_redirect_id_does_not_initialize_a_client(world, monkeypatch, mode):
+    conversations, _, reads, _ = world
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', mode)
+
+    def unexpected_factory():
+        pytest.fail('invalid path must be rejected before client initialization')
+
+    monkeypatch.setattr(conversations, 'get_firestore_client', unexpected_factory)
+    assert conversations.get_sync_redirected_conversation('u', 'invalid/path') is None
+    assert reads == []
+
+
 @pytest.mark.parametrize('mode', ['true', 'false'])
 def test_legacy_survivor_routes_by_resolved_path_without_stored_id(world, monkeypatch, mode):
     conversations, store, _, _ = world

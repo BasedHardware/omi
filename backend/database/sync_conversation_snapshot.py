@@ -64,14 +64,22 @@ def read_redirected(
     read_site: Any,
 ) -> dict | None:
     """Hydrate one resolved owner read, retaining the path id for legacy rows."""
-    resolved = resolve_snapshot(uid, conversation_id, client_factory=client_factory)
+    client = None
+
+    def operation_client():
+        nonlocal client
+        if client is None:
+            client = client_factory()
+        return client
+
+    resolved = resolve_snapshot(uid, conversation_id, client_factory=operation_client)
     if resolved is None:
         return None
     if sync_operation_snapshot.enabled():
         sync_operation_snapshot.avoided('redirect_hydration')
-        data = hydrate(uid, resolved.to_dict(), read_site=read_site)
+        data = hydrate(uid, resolved.to_dict(), firestore_client=operation_client(), read_site=read_site)
     else:
-        data = read_current(uid, resolved.conversation_id, read_site=read_site)
+        data = read_current(uid, resolved.conversation_id, firestore_client=operation_client(), read_site=read_site)
     if data is not None:
         # Add the path id only AFTER ordinary photo/codec hydration, preserving
         # legacy photo behavior while allowing internal reprocessing to route.

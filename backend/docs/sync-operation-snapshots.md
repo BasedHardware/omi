@@ -11,6 +11,9 @@ raw conversation snapshot carries Firestore's update time into the ordinary
 photo and transcript decoding path. Hydration no longer fetches that same
 survivor document again. The snapshot is local to the call, the decoder takes
 a detached copy, and mutations keep their existing transaction reads and CAS.
+The redirect helpers accept a keyword-only `firestore_client`. Each redirected
+read selects one client lazily and uses it for resolution, both hydration modes
+and photo reads; invalid paths are rejected before client initialization.
 First-summary outbox custody still resolves only an id and transfers its
 obligation transactionally; no snapshot passes into the next delivery.
 

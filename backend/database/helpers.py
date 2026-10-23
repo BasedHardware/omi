@@ -288,7 +288,11 @@ def with_photos(photos_getter: Callable[..., Any]) -> Callable[[F], F]:
                     return data_dict
 
                 conversation_id = data_dict['id']
-                photos = photos_getter(uid=uid, conversation_id=conversation_id)
+                firestore_client = bound_args.arguments.get('firestore_client')
+                if firestore_client is not None:
+                    photos = photos_getter(uid=uid, conversation_id=conversation_id, firestore_client=firestore_client)
+                else:
+                    photos = photos_getter(uid=uid, conversation_id=conversation_id)
                 data_dict['photos'] = photos
                 return data_dict
 
