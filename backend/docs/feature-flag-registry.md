@@ -437,6 +437,7 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_ENABLED` | Global incident stop for canonical memory intake and reads | backend | env | closed | on | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, pusher (chart)) | on (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, job/memory-maintenance-job, job/x-connector-sync-job, pusher (chart)) | — | keep | keep | — | unowned |
 | `MEMORY_IMPORT_WRITE_BLOCK_MODE` | Block memory import writes during incident | backend | env | inverted | — | — | — | — | keep | keep | — | unowned |
 | `MEMORY_OBSERVATION_INTAKE_ENABLED` | Default on; route ordinary captured observations inline and in maintenance independently of Dream | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `MEMORY_RELEASED_PROJECTION` | Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_UNDECIDED_VISIBLE` | Default on; keep undecided and review Short-term memories visible until an explicit disposition | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OCCASION_CONVERSATIONS_ENABLED` | Default on unless set off (0/false/off/no); for the episodes cohort with a capable client, a mobile live conversation stays open across lulls and reconnects for 15 min (3 h span cap), one occasion per conversation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_DEV_ACTION_ITEMS_CACHE_NORMALIZE_ENABLED` | Default on unless false; canonicalize equivalent Developer action-item date query instants in cache keys only | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -546,6 +547,7 @@ and an explicit empty literal renders as `''`.
 | `MEETING_NOTES_EPISODE_EFFORT` | Episode writer thinking effort: default, high or xhigh; baseline unchanged | backend | env | closed | — | — | — | — | pending | keep | — | dazheng |
 | `MEETING_NOTES_EPISODE_THINKING_MAX_INPUT_BYTES` | Optional high/xhigh byte ceiling, default disabled (0); long transcript guard stays active | backend | env | closed | — | — | — | — | pending | keep | — | dazheng |
 | `MEMORY_IMPORT_BODY_STORAGE_MODE` | Select memory import body storage mode | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
+| `MEMORY_RELEASED_WRITERS_COVERED` | Initially absent; v1:<unique-epoch> attests every released-memory writer participates in atomic invalidation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_TYPESENSE_READINESS_REQUIRED` | Require Typesense projection readiness for memory reads | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `MENTOR_PIPELINE` | Per-user cohort mentor dispatch; only cohort is valid — flag false/error or any other value dispatches nothing (legacy lane deleted) | backend | env | closed | — | — | cohort (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, llm-gateway (chart), pusher (chart)) | — | keep | keep | — | dazheng |
 | `OMI_BACKGROUND_FLEX_CAPABLE` | Allow background gateway Flex work | backend | env | closed | true | true | true | — | keep | keep | — | unowned |
@@ -822,6 +824,8 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
 - `MEMORY_OBSERVATION_INTAKE_ENABLED` — Default on; route ordinary captured observations inline and in maintenance independently of Dream (fail: open)
+- `MEMORY_RELEASED_PROJECTION` — Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage (fail: open)
+- `MEMORY_RELEASED_WRITERS_COVERED` — Initially absent; v1:<unique-epoch> attests every released-memory writer participates in atomic invalidation (fail: closed)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
 - `MEMORY_UNDECIDED_VISIBLE` — Default on; keep undecided and review Short-term memories visible until an explicit disposition (fail: open)
 - `NOTES_PACKET_V2_MODE` — One notes packet, output contract, safe speaker rendering, output language, word floor and recap revisions; default shadow (fail: closed)
