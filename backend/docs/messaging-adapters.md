@@ -65,6 +65,11 @@ accepts only HTTPS `cdn.linqapp.com`. Redirects and credentials in URLs fail. Fi
 bounded at 20 MB. Voice bytes enter Omi's existing prerecorded STT before the turn.
 Photos/documents enter `FileChatTool.upload` and the existing per-user chat file collection;
 file IDs join the channel session so `search_files_tool` can find them.
+Videos (including Telegram video notes) are read as stills plus speech, in parallel
+(`utils/media/video_frames.py`): up to six distinct frames become one numbered contact
+sheet stored as the chat file, every sampled frame is kept in a filmstrip for
+`search_files_tool(start_seconds=, end_seconds=)`, and the clip itself is not stored.
+A muted clip still answers from its frames; a picture-less clip falls back to its transcript.
 
 Outbound files are looked up under the current principal UID; metadata and size must match.
 A model-supplied path or URL is never accepted. Telegram chooses document/photo/voice.
@@ -261,6 +266,15 @@ production-state changes are performed by this PR.
 A busy surface lease requeues the inbox head and does not wake that same head.
 The lease holder wakes the oldest pending row on release. The thirty-second
 pending drain covers a leaked lease. That avoids a claim/wake spin.
+
+A newer plain message replaces a running reply that nobody has seen yet. Enqueue
+stamps a content-free `supersedes` flag on each row (false for commands, button
+callbacks, link proofs and album parts). While a turn streams, a side task checks
+every `SUPERSEDE_POLL_SECONDS` for a newer flagged pending row, using the same
+`status`/`created_at` index as the drain. The turn stops at its next frame only if
+the sink has delivered nothing and no tool wrote anything. It sends no apology,
+completes its row and releases the lease, so the newer message is answered next
+with the replaced one still in the session history. Otherwise the queue stays FIFO.
 
 For the October 11 burst, logs establish the callback's canonical cleanup at
 09:17:36 / 09:22:34 UTC and two provider failures at 09:24:39 / 09:25:06. Task creation

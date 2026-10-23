@@ -9,7 +9,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/phone_call.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart' show RecordOptionsSheet, PendantListeningSheet;
 import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
@@ -171,7 +171,8 @@ class _LegacyHomeRecordButtonState extends State<LegacyHomeRecordButton> {
       return;
     }
     if (context.mounted) {
-      routeToPage(context, ConversationCapturingPage(topConversationId: captureProvider.topConversationId));
+      routeToPage(context,
+          LiveEpisodePage(topConversationId: captureProvider.topConversationId, initialTab: LiveEpisodeTab.transcript));
     }
   }
 

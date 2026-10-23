@@ -13398,9 +13398,6 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Pokračovat s bezplatným plánem';
-
-  @override
   String get paywallTrialCancelNote => 'Zrušte kdykoli. Žádné poplatky, žádné sankce.';
 
   @override
@@ -14403,4 +14400,175 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi stále nahrává';
+
+  @override
+  String get episodeNow => 'Teď';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Živě · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count okamžiků',
+      one: '1 okamžik',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Okamžiky';
+
+  @override
+  String get episodeSoFar => 'Zatím';
+
+  @override
+  String get episodeUpdatedJustNow => 'Aktualizováno právě teď · úplné poznámky na konci';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Aktualizováno před $minutes min · úplné poznámky na konci';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Poznámky se objeví po prvních minutách hovoru.';
+
+  @override
+  String get episodeOpenAll => 'Otevřít vše';
+
+  @override
+  String get episodeWrapUpNow => 'Uzavřít teď';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi to uzavře, až přejdete k něčemu jinému';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Zachycený úkol: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Zachycená připomínka: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Úkol uložen: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'přidává se $duration z vašeho Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Teď poslouchá';
+
+  @override
+  String get deviceHeardToday => 'Slyšeno dnes';
+
+  @override
+  String get deviceToSync => 'k synchronizaci';
+
+  @override
+  String get deviceRightNow => 'Právě teď';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Živá epizoda · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Dohání';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done z $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Nedávno';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Odpojeno na $duration';
+  }
+
+  @override
+  String get deviceControls => 'Ovládání';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Také: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Stiskněte tlačítko na Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Jedno krátké stisknutí. Pak se zeptejte na cokoli.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Položte otázku';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Řekněte to nahlas. Omi poslouchá.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Hotovo? Stiskněte tlačítko znovu pro odeslání.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Získali jste $days dní zdarma';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dní Omi Pro na nás. Připomeneme se před účtováním. Zrušte kdykoli.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Chci zkušební období $days dní';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Začněte zkušební období $days dní zdarma';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Zapněte Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Jednou stiskněte tlačítko a držte ho u telefonu.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'To je vše. Omi bude dál nahrávat vaše rozhovory na pozadí.';
+
+  @override
+  String get noThanks => 'Ne, díky';
+
+  @override
+  String get recapInTheBackground => 'Na pozadí';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Zůstat se slevou $percent %';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Zůstaňte a plaťte $price měsíčně po dobu dalších $months měsíců.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Hotovo. Sleva $percent % na dalších $months měsíců.';
+  }
 }

@@ -49,6 +49,24 @@ def enabled_arguments():
     ]
 
 
+@pytest.mark.parametrize('percent,cap', [(0, 200), (10, 17)])
+def test_shadow_settings_render_for_the_leads_activation(percent, cap):
+    result = render(
+        *enabled_arguments(),
+        '--set',
+        f'worker.shadowPercent={percent}',
+        '--set',
+        f'worker.shadowPaidRecoveryPerHour={cap}',
+    )
+    assert result.returncode == 0, result.stderr
+    deployment = next(doc for doc in yaml.safe_load_all(result.stdout) if doc and doc.get('kind') == 'Deployment')
+    env = {
+        entry['name']: entry.get('value') for entry in deployment['spec']['template']['spec']['containers'][0]['env']
+    }
+    assert env['BATCH_PIPELINE_SHADOW_PERCENT'] == str(percent)
+    assert env['BATCH_PIPELINE_SHADOW_PAID_RECOVERY_PER_HOUR'] == str(cap)
+
+
 def test_default_chart_has_no_resources_or_admission():
     values = yaml.safe_load((CHART / 'values.yaml').read_text())
     assert values['enabled'] is False and values['autoscaling']['minReplicas'] == 1
@@ -164,7 +182,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert account['annotations']['iam.gke.io/gcp-service-account'] == gsa
 
     deployment = manifests['Deployment']
-    assert deployment['spec']['progressDeadlineSeconds'] == 1800
+    assert deployment['spec']['progressDeadlineSeconds'] == 2400
     pod = deployment['spec']['template']['spec']
     # Prod runs a fixed two-worker floor (one L4 node each); dev stays at one.
     assert deployment['spec']['replicas'] == (2 if environment == 'prod' else 1)
@@ -206,7 +224,7 @@ def test_environment_values_render_worker_identity_and_gpu_pool(
     assert 'HorizontalPodAutoscaler' not in manifests
 
 
-@pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '1800s'), ('diarizer', '600s')])
+@pytest.mark.parametrize('service,timeout', [('batch-pipeline-worker', '2400s'), ('diarizer', '600s')])
 @pytest.mark.parametrize('rollout_exit', [0, 1])
 def test_rollout_wait_covers_worker_startup_and_still_fails_on_timeout(tmp_path, service, timeout, rollout_exit):
     workflow = yaml.safe_load((CHART.parents[2] / '.github/workflows/gcp_diarizer.yml').read_text())
@@ -242,6 +260,39 @@ def test_rollout_wait_covers_worker_startup_and_still_fails_on_timeout(tmp_path,
         f'deploy/synthetic-{service}',
         f'--timeout={timeout}',
     ]
+
+
+@pytest.mark.parametrize('deployed_digest,expected_exit', [('a' * 64, 0), ('f' * 64, 1)])
+def test_rollout_verify_requires_the_built_digest(tmp_path, deployed_digest, expected_exit):
+    workflow = yaml.safe_load((CHART.parents[2] / '.github/workflows/gcp_diarizer.yml').read_text())
+    deploy = workflow['jobs']['deploy']
+    step = next(step for step in deploy['steps'] if step.get('name') == 'Verify rollout')
+    # 2026-10-20: the job ran 47 min with no verdict; every layer must now be bounded.
+    assert deploy['timeout-minutes'] >= step['timeout-minutes'] > 2400 / 60
+    kubectl = tmp_path / 'kubectl'
+    kubectl.write_text(
+        '#!/bin/sh\ncase "$3" in rollout) exit 0;; get) printf "gcr.io/p/w@sha256:%s" "$DEPLOYED";; esac\n'
+    )
+    kubectl.chmod(0o755)
+    reporter = tmp_path / 'python3'
+    reporter.write_text('#!/bin/sh\nexit 0\n')
+    reporter.chmod(0o755)
+    result = subprocess.run(
+        ['bash', '-e', '-c', step['run']],
+        env={
+            **os.environ,
+            'PATH': f'{tmp_path}:{os.environ["PATH"]}',
+            'SERVICE': 'batch-pipeline-worker',
+            'DEPLOY_NAMESPACE': 'synthetic',
+            'DEPLOY_ENV': 'dev',
+            'TARGET_RELEASE': 'synthetic-batch-pipeline-worker',
+            'EXPECTED_DIGEST': 'sha256:' + 'a' * 64,
+            'DEPLOYED': deployed_digest,
+        },
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == expected_exit, result.stdout + result.stderr
 
 
 def test_production_worker_refuses_missing_or_mismatched_policy_binding():

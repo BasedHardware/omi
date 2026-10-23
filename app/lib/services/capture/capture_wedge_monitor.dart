@@ -490,7 +490,11 @@ class CaptureWedgeMonitor extends ChangeNotifier {
       return;
     }
     final now = _now();
-    if (now.difference(oldestPendingAt) < uploadSilenceThreshold) return;
+    if (now.difference(oldestPendingAt) < uploadSilenceThreshold) {
+      // The stalled recordings left the backlog (deleted, or out of retries) and what waits now is young.
+      _endUploadStall();
+      return;
+    }
     final lastUploadAt = _lastUploadAt;
     if (lastUploadAt != null && now.difference(lastUploadAt) < uploadSilenceThreshold) return;
     _updateUploadStall(since: _uploadStall?.since ?? now, pendingCount: pendingCount, pendingSeconds: pendingSeconds);
@@ -507,6 +511,13 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         },
       ),
     );
+  }
+
+  void _endUploadStall() {
+    if (_uploadStall == null) return;
+    _uploadStall = null;
+    _updateUnseenCaptureAttention();
+    notifyListeners();
   }
 
   /// Refreshes the upload-stall row's counts without re-declaring the episode:
@@ -897,11 +908,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     if (deviceId == localWalDeviceId) {
       // A resolving local-WAL observation proves upload progress, not recovered
       // disk: the storage row ends only with its own retention observation.
-      if (_uploadStall != null) {
-        _uploadStall = null;
-        _updateUnseenCaptureAttention();
-        notifyListeners();
-      }
+      _endUploadStall();
     }
     if (state.episode?.trigger == triggerIngressRecoveryFailed) {
       // The ingress failure stays (native owns it), but a transcript during

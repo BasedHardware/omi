@@ -16112,7 +16112,7 @@
             }
         }
     },
-    "paywallTrialCta": "Start for {price}",
+    "paywallTrialCta": "Try for {price}",
     "@paywallTrialCta": {
         "description": "Paywall primary button; price is a formatted zero price like $0.00",
         "placeholders": {
@@ -16120,10 +16120,6 @@
                 "type": "String"
             }
         }
-    },
-    "paywallTrialSecondary": "Continue with the free plan",
-    "@paywallTrialSecondary": {
-        "description": "Paywall secondary button"
     },
     "paywallTrialCancelNote": "Cancel anytime. No fees, no penalties.",
     "@paywallTrialCancelNote": {
@@ -17536,5 +17532,283 @@
     "activityAttentionLinkStalledSubtitle": "Still recording on your Omi",
     "@activityAttentionLinkStalledSubtitle": {
         "description": "Activity > Needs attention row subtitle when the Omi pendant's audio link stalled; the pendant keeps recording to its own storage"
+    },
+    "episodeNow": "Now",
+    "@episodeNow": {
+        "description": "Marks the moment of a live episode that is happening now, and starts a live row subtitle (Now · 24m)."
+    },
+    "episodeLiveFor": "Live · {duration}",
+    "@episodeLiveFor": {
+        "description": "Meta line of a live episode: it is live, and for how long so far (a compact duration such as 24m).",
+        "placeholders": {
+            "duration": {
+                "type": "String",
+                "example": "24m"
+            }
+        }
+    },
+    "episodeMomentsCount": "{count, plural, =1{1 moment} other{{count} moments}}",
+    "@episodeMomentsCount": {
+        "description": "How many moments (stretches of speech) an episode has.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
+    },
+    "episodeMoments": "Moments",
+    "@episodeMoments": {
+        "description": "Section title listing the moments (stretches of speech) of an episode."
+    },
+    "episodeSoFar": "So far",
+    "@episodeSoFar": {
+        "description": "Title of the running notes card on a live episode."
+    },
+    "episodeUpdatedJustNow": "Updated just now · full notes when it wraps up",
+    "@episodeUpdatedJustNow": {
+        "description": "Under the running notes of a live episode: the notes were just updated; complete notes come when it ends."
+    },
+    "episodeUpdatedMinutesAgo": "Updated {minutes} min ago · full notes when it wraps up",
+    "@episodeUpdatedMinutesAgo": {
+        "description": "Under the running notes of a live episode: how many minutes ago they were updated; complete notes come when it ends.",
+        "placeholders": {
+            "minutes": {
+                "type": "int"
+            }
+        }
+    },
+    "episodeNotesSoon": "Running notes appear after the first few minutes of talk.",
+    "@episodeNotesSoon": {
+        "description": "Shown in the running notes card before the first notes exist."
+    },
+    "episodeOpenAll": "Open All",
+    "@episodeOpenAll": {
+        "description": "Opens the full live transcript from its preview on a live episode."
+    },
+    "episodeWrapUpNow": "Wrap Up Now",
+    "@episodeWrapUpNow": {
+        "description": "Button that ends a live episode now and makes its full notes."
+    },
+    "episodeWrapsUpHint": "Omi wraps this up when you move on",
+    "@episodeWrapsUpHint": {
+        "description": "Above the Wrap Up Now button: the episode also ends by itself when the user moves on."
+    },
+    "episodeTaskCaptured": "Task captured: {text}",
+    "@episodeTaskCaptured": {
+        "description": "Inline in a live transcript: Omi heard a possible task. It is not in Tasks yet; Undo removes it.",
+        "placeholders": {
+            "text": {
+                "type": "String",
+                "example": "Book lunch table for 12:30"
+            }
+        }
+    },
+    "episodeReminderCaptured": "Reminder captured: {text}",
+    "@episodeReminderCaptured": {
+        "description": "Inline in a live transcript: Omi heard a possible reminder. It is not saved yet; Undo removes it.",
+        "placeholders": {
+            "text": {
+                "type": "String",
+                "example": "Book lunch table for 12:30"
+            }
+        }
+    },
+    "episodeTaskSaved": "Task saved: {text}",
+    "@episodeTaskSaved": {
+        "description": "Inline in a live transcript: a task Omi heard is now saved in Tasks.",
+        "placeholders": {
+            "text": {
+                "type": "String",
+                "example": "Book lunch table for 12:30"
+            }
+        }
+    },
+    "episodeAddingFromOmi": "adding {duration} from your Omi",
+    "@episodeAddingFromOmi": {
+        "description": "Subtitle of a conversation row that offline sync is still filling in: how much audio from the Omi device is being added.",
+        "placeholders": {
+            "duration": {
+                "type": "String",
+                "example": "24m"
+            }
+        }
+    },
+    "episodeListeningNow": "Listening now",
+    "@episodeListeningNow": {
+        "description": "Title of a live episode before Omi has named its topic."
+    },
+    "deviceHeardToday": "Heard today",
+    "@deviceHeardToday": {
+        "description": "Device page stat: how much speech the Omi heard today."
+    },
+    "deviceToSync": "to sync",
+    "@deviceToSync": {
+        "description": "Device page stat caption: the audio on the device still has to sync to the phone."
+    },
+    "deviceRightNow": "Right now",
+    "@deviceRightNow": {
+        "description": "Device page section: what the Omi is doing right now."
+    },
+    "deviceLiveEpisode": "Live episode · {duration}",
+    "@deviceLiveEpisode": {
+        "description": "Device page: the live episode row subtitle, with how long it has run (a compact duration such as 24m).",
+        "placeholders": {
+            "duration": {
+                "type": "String",
+                "example": "24m"
+            }
+        }
+    },
+    "deviceCatchingUp": "Catching up",
+    "@deviceCatchingUp": {
+        "description": "Device page: audio saved on the Omi while the phone was away is being synced."
+    },
+    "deviceCatchingUpProgress": "{done} of {total} min",
+    "@deviceCatchingUpProgress": {
+        "description": "Device page: how many minutes of the device backlog are synced, out of the total.",
+        "placeholders": {
+            "done": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "deviceRecently": "Recently",
+    "@deviceRecently": {
+        "description": "Device page section: recent connection events."
+    },
+    "deviceDisconnectedFor": "Disconnected for {duration}",
+    "@deviceDisconnectedFor": {
+        "description": "Device page event: the Omi was disconnected for this long (a compact duration such as 10m).",
+        "placeholders": {
+            "duration": {
+                "type": "String",
+                "example": "24m"
+            }
+        }
+    },
+    "deviceControls": "Controls",
+    "@deviceControls": {
+        "description": "Device page section: controls such as pausing recording."
+    },
+    "homeBackgroundLine": "Also: {items}",
+    "@homeBackgroundLine": {
+        "description": "Home, under a day header: one line listing that day's background conversations (TV playing, a passing remark), each as its title and length, joined by ' · '. Tapping it shows them. Episodes beta only.",
+        "placeholders": {
+            "items": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceOnboardingPressButtonTitle": "Press the button on your Omi",
+    "@deviceOnboardingPressButtonTitle": {
+        "description": "Device walkthrough, Ask Omi step: PressButtonTitle"
+    },
+    "deviceOnboardingPressButtonSubtitle": "One short press. Then ask anything.",
+    "@deviceOnboardingPressButtonSubtitle": {
+        "description": "Device walkthrough, Ask Omi step: PressButtonSubtitle"
+    },
+    "deviceOnboardingAskNowTitle": "Ask your question",
+    "@deviceOnboardingAskNowTitle": {
+        "description": "Device walkthrough, Ask Omi step: AskNowTitle"
+    },
+    "deviceOnboardingAskNowSubtitle": "Say it out loud. Omi is listening.",
+    "@deviceOnboardingAskNowSubtitle": {
+        "description": "Device walkthrough, Ask Omi step: AskNowSubtitle"
+    },
+    "deviceOnboardingPressAgainHint": "Done? Press the button again to send.",
+    "@deviceOnboardingPressAgainHint": {
+        "description": "Device walkthrough, Ask Omi step: PressAgainHint"
+    },
+    "trialUpsellTitle": "You've been upgraded to {days} days free",
+    "@trialUpsellTitle": {
+        "description": "Pocket onboarding arm: trialUpsellTitle",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "trialUpsellBody": "{days} days of Omi Pro, on us. We'll remind you before anything is charged. Cancel anytime.",
+    "@trialUpsellBody": {
+        "description": "Pocket onboarding arm: trialUpsellBody",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "trialUpsellClaim": "Claim my {days}-day trial",
+    "@trialUpsellClaim": {
+        "description": "Pocket onboarding arm: trialUpsellClaim",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "settingsUpgradeTrialSubtitle": "Start your {days}-day free trial",
+    "@settingsUpgradeTrialSubtitle": {
+        "description": "Pocket onboarding arm: settingsUpgradeTrialSubtitle",
+        "placeholders": {
+            "days": {
+                "type": "int"
+            }
+        }
+    },
+    "pairingPowerOnTitle": "Power on your Omi",
+    "@pairingPowerOnTitle": {
+        "description": "Pocket onboarding arm: pairingPowerOnTitle"
+    },
+    "pairingPowerOnSubtitle": "Press the button once and keep it near your phone.",
+    "@pairingPowerOnSubtitle": {
+        "description": "Pocket onboarding arm: pairingPowerOnSubtitle"
+    },
+    "walkthroughBackgroundRecordingNote": "That's it. Omi will keep recording your conversations in the background.",
+    "@walkthroughBackgroundRecordingNote": {
+        "description": "Pocket onboarding arm: walkthroughBackgroundRecordingNote"
+    },
+    "noThanks": "No thanks",
+    "@noThanks": {
+        "description": "Pocket onboarding arm: noThanks"
+    },
+    "recapInTheBackground": "In the background",
+    "@recapInTheBackground": {
+        "description": "Daily recap section listing the day's background conversations, which Home no longer shows"
+    },
+    "retentionOfferAccept": "Stay for {percent}% off",
+    "@retentionOfferAccept": {
+        "description": "Primary button on the last cancel step: keep the subscription with a discount",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "retentionOfferBody": "Stay and pay {price} a month for the next {months} months.",
+    "@retentionOfferBody": {
+        "description": "Offer shown on the last cancel step; price is the discounted monthly price",
+        "placeholders": {
+            "price": {
+                "type": "String"
+            },
+            "months": {
+                "type": "int"
+            }
+        }
+    },
+    "retentionOfferApplied": "Done. {percent}% off your next {months} months.",
+    "@retentionOfferApplied": {
+        "description": "Toast after accepting the stay offer",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            },
+            "months": {
+                "type": "int"
+            }
+        }
     }
 }

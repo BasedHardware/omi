@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:omi/pages/paywall/trial_paywall_page.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
@@ -112,6 +113,34 @@ class _HomePageProduct extends StatefulWidget {
 
 class _HomePageProductState extends State<_HomePageProduct> {
   String? _navigateToRoute;
+  bool _homeTrialSheetArmed = SharedPreferencesUtil().homeTrialSheetPending;
+  bool _homeTrialSheetChecking = false;
+
+  /// Pocket's placement: the trial paywall once more, on the first tap in Home, for a reader who
+  /// declined both sign-up offers. Fires at most once per device; a paid or ineligible reader
+  /// never sees it.
+  Future<void> _showHomeTrialSheetOnce() async {
+    if (!_homeTrialSheetArmed || _homeTrialSheetChecking) return;
+    final usage = context.read<UsageProvider>();
+    if (usage.subscription == null) {
+      // Eligibility is unknown until the subscription loads: wait for it rather than spend the offer.
+      _homeTrialSheetChecking = true;
+      await usage.fetchSubscription().timeout(const Duration(seconds: 6), onTimeout: () {});
+      _homeTrialSheetChecking = false;
+      if (!mounted) return;
+      // Still unknown (the request failed or is slow): stay armed so the next tap tries again.
+      if (usage.subscription == null) return;
+    }
+    setState(() => _homeTrialSheetArmed = false);
+    SharedPreferencesUtil().homeTrialSheetPending = false;
+    if (!usage.showSubscriptionUI) return;
+    if (usage.subscription?.subscription.plan.isPaid == true) return;
+    if (usage.subscription?.trialEligible != true) return;
+    PlatformManager.instance.analytics.track('Home Trial Sheet Shown', properties: {'source': 'home_first_tap'});
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    if (!mounted) return;
+    await routeToPage(context, const TrialPaywallPage(source: 'home_first_tap'));
+  }
 
   @override
   void initState() {
@@ -135,7 +164,13 @@ class _HomePageProductState extends State<_HomePageProduct> {
 
   @override
   Widget build(BuildContext context) {
-    return HomePage(navigateToRoute: _navigateToRoute);
+    final home = HomePage(navigateToRoute: _navigateToRoute);
+    if (!_homeTrialSheetArmed) return home;
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _showHomeTrialSheetOnce(),
+      child: home,
+    );
   }
 }
 
@@ -394,6 +429,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         captureProvider.onAppResumed();
         // Pick up any batch recordings the native layer wrote while backgrounded/closed.
         Provider.of<LocalRecordingsProvider>(context, listen: false).refresh();
+        if (context.read<HomeProvider>().selectedIndex == HomeProvider.tasksTab) {
+          unawaited(context.read<ActionItemsProvider>().forceRefreshActionItems());
+        }
       }
       // Sync Apple Reminders on foreground resume
       if (mounted && PlatformService.isApple) {
@@ -585,7 +623,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
           },
         );
 
-
         // Register callback for device connection to check firmware announcements and device onboarding
         deviceProvider.onDeviceConnected = (BtDevice device) {
           _onDeviceConnectedForAnnouncements(device);
@@ -750,7 +787,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               context.read<ConversationProvider>().upsertConversation(row);
               unawaited(context.read<LocalRecordingsProvider>().refresh());
             },
-            recordings: () => context.read<LocalRecordingsProvider>().recordings,
           );
           unawaited(_onDeviceRunner!.start());
         }
@@ -849,6 +885,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                               // Home keeps the calendar in the header instead.
                               trailing: redesign || !onHome ? _buildPageActions(context, onHome) : null,
                               onTabTap: (index, isRepeat) {
+                                if (index == HomeProvider.tasksTab) {
+                                  unawaited(context.read<ActionItemsProvider>().forceRefreshActionItems());
+                                }
                                 if (isRepeat) {
                                   _scrollToTop(index);
                                 } else {

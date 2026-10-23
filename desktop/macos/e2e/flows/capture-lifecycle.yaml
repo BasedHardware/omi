@@ -24,6 +24,7 @@ covers:
   - desktop/macos/Desktop/Sources/WakeWord/WakeWordSegmentParser.swift
   - desktop/macos/Desktop/Sources/AppState/LocalTranscriptionDuplicatePolicy.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
+  - desktop/macos/Desktop/Sources/AppState/STTLanguageCapability.swift
   - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
   - desktop/macos/Desktop/Sources/TranscriptionService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift

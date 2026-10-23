@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from hashlib import sha256
 from math import isfinite
 from os import environ as process_environ
 from typing import Mapping
@@ -129,27 +128,10 @@ def _positive_int(raw: str, name: str) -> int:
     return value
 
 
-def translation_profile_gate_enabled() -> bool:
-    """Reversible admission prior; read mutable env at the decision boundary."""
-    return process_environ.get('TRANSLATION_PROFILE_GATE_ENABLED', 'true').lower() == 'true'
-
-
-def translation_output_guard_enabled() -> bool:
-    """Conservative edit checks still have a recall rollback switch."""
-    return process_environ.get('TRANSLATION_OUTPUT_GUARD_ENABLED', 'true').lower() == 'true'
-
-
 @dataclass(frozen=True)
 class OnDemandTranslationConfig:
-    shadow_enabled: bool
     gate_enabled: bool
-    lease_v1_enabled: bool
-    # Compatibility name for the existing rollout env contract. When enabled,
-    # this selects the Luna-backed viewed translation policy.
-    gemini_enabled: bool
     onopen_enabled: bool
-    cohort_percent: int
-    uid_allowlist: frozenset[str]
     max_segments: int
     max_chars: int
     deadline_seconds: float
@@ -157,12 +139,6 @@ class OnDemandTranslationConfig:
     uid_daily_chars: int
     global_daily_chars: int
     max_catchup_pages: int
-
-    def admits(self, uid: str) -> bool:
-        if uid in self.uid_allowlist:
-            return True
-        bucket = int.from_bytes(sha256(uid.encode('utf-8')).digest()[:8], 'big') % 100
-        return bucket < self.cohort_percent
 
     @property
     def spend_configured(self) -> bool:
@@ -172,17 +148,18 @@ class OnDemandTranslationConfig:
 def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTranslationConfig:
     values = process_environ if env is None else env
 
-    # Owner decision 2026-09-29: on-demand ships enabled at merge; every switch
-    # is a kill switch back to legacy semantics (false restores exact legacy).
+    # On-demand ships enabled; these switches stop live or on-open translation.
     switch_defaults = {
-        'TRANSLATION_DEMAND_SHADOW_ENABLED': 'false',
         'TRANSLATION_DEMAND_GATE_ENABLED': 'true',
-        'TRANSLATION_DEMAND_LEASE_V1_ENABLED': 'true',
-        'TRANSLATION_ONDEMAND_GEMINI_ENABLED': 'true',
         'TRANSLATION_ONOPEN_ENABLED': 'true',
     }
 
     def switch(name: str) -> bool:
+        from config.refactor_modes import default_on, serving_for
+
+        if serving_for('CAPTURE_COVERAGE_MODE', None, environ=values):
+            return default_on(name, environ=values)
+        # refactor: superseded by config.refactor_modes when CAPTURE_COVERAGE_MODE=serve
         raw = values.get(name, switch_defaults[name]).strip().lower()
         if raw not in {'true', 'false'}:
             raise ValueError(f'{name} must be true or false')
@@ -204,15 +181,8 @@ def resolve_ondemand_config(env: Mapping[str, str] | None = None) -> OnDemandTra
     if deadline > 30:
         raise ValueError('TRANSLATION_ONDEMAND_DEADLINE_SECONDS must be at most 30')
     return OnDemandTranslationConfig(
-        shadow_enabled=switch('TRANSLATION_DEMAND_SHADOW_ENABLED'),
         gate_enabled=switch('TRANSLATION_DEMAND_GATE_ENABLED'),
-        lease_v1_enabled=switch('TRANSLATION_DEMAND_LEASE_V1_ENABLED'),
-        gemini_enabled=switch('TRANSLATION_ONDEMAND_GEMINI_ENABLED'),
         onopen_enabled=switch('TRANSLATION_ONOPEN_ENABLED'),
-        cohort_percent=bounded_int('TRANSLATION_ONDEMAND_COHORT_PERCENT', 100, 100, zero_allowed=True),
-        uid_allowlist=frozenset(
-            uid.strip() for uid in values.get('TRANSLATION_ONDEMAND_UID_ALLOWLIST', '').split(',') if uid.strip()
-        ),
         max_segments=bounded_int('TRANSLATION_ONDEMAND_MAX_SEGMENTS', 50, 50),
         max_chars=bounded_int('TRANSLATION_ONDEMAND_MAX_CHARS', 12000, 12000),
         deadline_seconds=deadline,

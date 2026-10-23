@@ -997,7 +997,7 @@ async def test_stalled_soniox_queue_during_drain_reports_local_capacity(monkeypa
         raw._send_queue.put_nowait(b'\x01\x00')
     try:
         assert not await raw.wait_send_capacity()
-        assert raw.typed_death_reason == 'capacity_full'
+        assert raw.typed_death_reason == 'replay_send_stalled'
         assert raw.is_connection_dead
     finally:
         await stop([raw])

@@ -18,9 +18,14 @@ LIFECYCLE_SERVICE = 'backend/utils/conversations/lifecycle.py'
 RAW_STORAGE_ALLOWLIST = {
     'backend/database/conversations.py',
     'backend/database/conversation_finalization_jobs.py',
+    # Atomic merge storage shares the finalization outbox; lifecycle.merge_jobs owns callers.
+    'backend/database/conversation_merge_jobs.py',
     # Storage primitive for the 1 MiB-ceiling in_progress terminal; its only
     # caller is lifecycle.close_oversized_in_progress_conversation.
     'backend/database/oversized_conversation_terminal.py',
+    # Snapshot-fenced close/restore storage; callable only via the lifecycle
+    # methods guarded below, like the oversized terminal primitive above.
+    'backend/database/stuck_backfill.py',
 }
 LIFECYCLE_METHODS = {
     'upsert_conversation_with_lifecycle',
@@ -30,6 +35,8 @@ LIFECYCLE_METHODS = {
     'claim_conversation_status',
     'set_conversation_as_discarded',
     'restore_conversation_from_discarded',
+    'close_noise',
+    'restore_noise',
 }
 GENERIC_LIFECYCLE_MUTATION_METHODS = {'update_conversation'}
 FINALIZATION_ADMISSION_METHODS = {

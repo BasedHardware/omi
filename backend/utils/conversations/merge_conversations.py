@@ -11,11 +11,15 @@ This module provides functions for merging multiple conversations into one.
 import config.speaker_match_scores as match_scores
 
 import copy
+import random
+import time
 import uuid
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+
+from google.api_core import exceptions as google_exceptions
 
 import database.conversations as conversations_db
 from database import conversation_tombstones
@@ -26,6 +30,7 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationStatus
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
+from utils.metrics import OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL
 from utils.memory.retraction_scope import (
     canonical_intake_is_fenced,
     historical_source_conversation_ids,
@@ -138,6 +143,7 @@ def validate_merge_compatibility(
 
     Rejection criteria (hard failures):
     - Less than 2 conversations
+    - Duplicate conversations
     - Any conversation is a soft-deleted tombstone
     - Any conversation is locked
     - Any conversation is not completed (processing/merging/in_progress)
@@ -147,6 +153,12 @@ def validate_merge_compatibility(
     """
     if len(conversations) < 2:
         return False, "At least 2 conversations required to merge", None
+
+    conv_ids = [conv.get("id") for conv in conversations if conv.get("id")]
+    if len(conv_ids) != len(set(conv_ids)):
+        return False, "Cannot merge duplicate conversations.", None
+    if len(set(conv_ids)) < 2:
+        return False, "At least 2 distinct conversations required to merge.", None
 
     # Check none are soft-deleted. A soft-deleted tombstone is invisible to the
     # user, so merging it resurrects deleted content into a new visible
@@ -199,7 +211,11 @@ def perform_merge_async(
     uid: str,
     conversation_ids: List[str],
     reprocess: bool = True,
-) -> None:
+    *,
+    merge_job_id: str | None = None,
+    merge_lease_epoch: int = 0,
+    merge_target_id: str | None = None,
+) -> bool | None:
     """
     Background task to perform conversation merge.
 
@@ -218,11 +234,16 @@ def perform_merge_async(
         reprocess: Whether to process merged conversation (generate summary, etc.)
     """
     from utils.conversations.process_conversation import process_conversation
-    from utils.notifications import send_merge_completed_message
+    from utils.notification_dispatch import dispatch_merge_completed
+
+    def checkpoint(phase: str | None = None) -> None:
+        if merge_job_id is not None:
+            lifecycle_service.merge_jobs.checkpoint(merge_job_id, merge_lease_epoch, phase)
 
     new_conversation_id: Optional[str] = None
     failure_phase = MergeFailurePhase.BEFORE_SOURCE_DELETION
     try:
+        checkpoint()
         # 1. Fetch all source conversations
         conversations = []
         for conv_id in conversation_ids:
@@ -232,7 +253,13 @@ def perform_merge_async(
 
         if len(conversations) < 2:
             logger.error(f"Merge failed: Not enough conversations found for uid={uid}")
-            _handle_merge_failure(uid, conversation_ids)
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
+            return
+
+        unique_conv_ids = {conv.get("id") for conv in conversations if conv.get("id")}
+        if len(unique_conv_ids) < 2 or len(conversations) != len(unique_conv_ids):
+            logger.error(f"Merge failed: Duplicate or insufficient unique conversations found for uid={uid}")
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
             return
 
         # A source can be soft-deleted between admission (validate_merge_compatibility
@@ -241,7 +268,7 @@ def perform_merge_async(
         # transcript/photos/audio into a new visible conversation. Abort rather than merge.
         if any(conv.get("deleted") for conv in conversations):
             logger.error(f"Merge aborted: a source was deleted after admission uid={uid}")
-            _handle_merge_failure(uid, conversation_ids)
+            checkpoint() if merge_job_id else _handle_merge_failure(uid, conversation_ids)
             return
 
         # Normalise timestamp fields once so the sort key, max() reducer,
@@ -261,7 +288,8 @@ def perform_merge_async(
         merged_photos = _collect_all_photos(uid, sorted_convs)
 
         # 3. Generate new conversation ID and copy audio chunks
-        new_conversation_id = str(uuid.uuid4())
+        checkpoint('target_started')
+        new_conversation_id = merge_target_id or str(uuid.uuid4())
         merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id)
 
         # 4. Determine basic fields from source conversations
@@ -339,6 +367,7 @@ def perform_merge_async(
         # 7. Save stub conversation to database. The modeled field's None
         # default is omitted, never stamped: persist is merge=True, so a
         # dumped None would become an explicit Firestore key.
+        checkpoint()
         lifecycle_service.create_processing_conversation(uid, omit_null_processing_state(new_conversation.model_dump()))
 
         # Build the conversation-level playback artifact for the merged conversation.
@@ -381,12 +410,14 @@ def perform_merge_async(
 
         from database.review_overlay_merge import transfer
 
+        checkpoint('source_retraction')
         if transfer(
             uid,
             [c['id'] for c in sorted_convs],
             new_conversation_id,
             placements=segment_placements,
             firestore_client=firestore_db,
+            **({'merge_job_id': merge_job_id, 'merge_lease_epoch': merge_lease_epoch} if merge_job_id else {}),
         ):
             # Undo receipts now name the merged record. Recovery must retain it.
             failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
@@ -415,6 +446,7 @@ def perform_merge_async(
                 nonlocal failure_phase
                 failure_phase = MergeFailurePhase.SOURCE_DELETION_STARTED
 
+            checkpoint()
             _delete_conversation_and_related_data(
                 uid,
                 conv["id"],
@@ -424,13 +456,20 @@ def perform_merge_async(
             )
 
         # 10. Send FCM notification
-        send_merge_completed_message(uid, new_conversation_id, conversation_ids)
+        dispatch_merge_completed(uid, new_conversation_id, conversation_ids)
 
         logger.info(
             f"Merge completed: uid={uid}, new_id={new_conversation_id}, merged={len(conversation_ids)} conversations"
         )
 
+        return True if merge_job_id else None
+
     except Exception as e:
+        if merge_job_id is not None:
+            # Recovery alone owns rollback of durable claims. A stale worker
+            # must never complete sources belonging to a newer lease/job.
+            logger.warning('event=conversation_merge outcome=recovery_pending exception_type=%s', type(e).__name__)
+            return False
         logger.error(f"Merge failed with exception: {e}")
         import traceback
 
@@ -615,6 +654,7 @@ def _copy_audio_chunks_for_merge(
     new_conversation_id: str,
     *,
     strict: bool = False,
+    skip_existing: bool = False,
 ) -> List[AudioFile]:
     """
     Copy audio chunks from all source conversations to new conversation.
@@ -635,12 +675,20 @@ def _copy_audio_chunks_for_merge(
         uid: User ID
         conversations: List of conversation dictionaries (sorted by started_at)
         new_conversation_id: ID for the new merged conversation
+        skip_existing: Sync bridges re-run for every late append to a donor. Skip a
+            destination that already holds the same bytes, and create/replace only under a
+            generation precondition so concurrent bridges never mutate one object twice.
 
     Returns:
         List of AudioFile objects
     """
     bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
     has_chunks = False
+    existing = (
+        {blob.name: blob for blob in bucket.list_blobs(prefix=f"chunks/{uid}/{new_conversation_id}/")}
+        if skip_existing
+        else None
+    )
 
     for conv in conversations:
         conv_id = conv["id"]
@@ -649,8 +697,10 @@ def _copy_audio_chunks_for_merge(
         # source conversation's original audio chunks (step 9) after this returns, so a swallowed
         # failure — while has_chunks may already be True from an earlier source — would let that
         # deletion destroy audio that was never copied anywhere. Raising instead aborts the merge
-        # into _handle_merge_failure, which runs before any source is deleted.
-        chunks = list_audio_chunks(uid, conv_id)
+        # into _handle_merge_failure, which runs before any source is deleted. For the same reason a
+        # failed raw-archive listing raises rather than returning only the legacy chunks.
+        identity = {'source_identity': True} if skip_existing else {}
+        chunks = list_audio_chunks(uid, conv_id, require_archive=True, **identity)
         for chunk in chunks:
             has_chunks = True
 
@@ -658,8 +708,11 @@ def _copy_audio_chunks_for_merge(
             original_filename = chunk["path"].split("/")[-1]
             new_path = f"chunks/{uid}/{new_conversation_id}/{original_filename}"
             source_blob = bucket.blob(chunk["path"])
-            with owner_storage_write_gate(uid, bucket):
-                bucket.copy_blob(source_blob, bucket, new_path)
+            if existing is None:
+                _copy_chunk_with_backoff(uid, bucket, source_blob, new_path)
+            else:
+                identity = _copied_source_identity(bucket, chunk)
+                _copy_bridge_chunk(uid, bucket, source_blob, new_path, identity, existing.get(new_path))
 
     # Create AudioFile records from copied chunks
     if has_chunks:
@@ -671,6 +724,84 @@ def _copy_audio_chunks_for_merge(
                 raise
 
     return []
+
+
+# GCS sustains about one mutation per second on one object name; a 429 there is
+# the per-object limit, so back off past it rather than failing the whole job.
+_COPY_RATE_LIMIT_ATTEMPTS = 4
+_COPY_RATE_LIMIT_BASE_SECONDS = 1.0
+
+
+def _copy_chunk_with_backoff(
+    uid: str,
+    bucket: Any,
+    source_blob: Any,
+    new_path: str,
+    *,
+    if_generation_match: Optional[int] = None,
+    bridge: bool = False,
+) -> None:
+    """Copy one object, retrying only GCS 429 with bounded equal-jitter backoff."""
+    for attempt in range(1, _COPY_RATE_LIMIT_ATTEMPTS + 1):
+        try:
+            with owner_storage_write_gate(uid, bucket):
+                if if_generation_match is None:
+                    bucket.copy_blob(source_blob, bucket, new_path)
+                else:
+                    # retry=None: the library's conditional policy would otherwise
+                    # retry 429 for up to two minutes, unbounded and uncounted.
+                    bucket.copy_blob(source_blob, bucket, new_path, if_generation_match=if_generation_match, retry=None)
+        except google_exceptions.TooManyRequests:
+            if bridge:
+                OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='rate_limited').inc()
+            if attempt >= _COPY_RATE_LIMIT_ATTEMPTS:
+                raise
+            high = _COPY_RATE_LIMIT_BASE_SECONDS * (2 ** (attempt - 1))
+            time.sleep(high / 2 + random.random() * high / 2)
+            continue
+        if bridge:
+            OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='copied').inc()
+        return
+
+
+def _copied_source_identity(bucket: Any, chunk: Dict) -> Dict:
+    """Checksum and size of the object copy_blob actually reads: private bucket, chunk path.
+
+    A chunk listed from BUCKET_AUDIO_DERIVED carries that bucket's checksum, not the
+    private object's, so stat the private source instead of trusting the listing.
+    """
+    if not chunk.get('bucket'):
+        return {'crc32c': chunk.get('crc32c'), 'size': chunk.get('size')}
+    source = bucket.get_blob(chunk['path'], retry=None)  # a 429 must not wait out the library's 120 s retry
+    return {} if source is None else {'crc32c': source.crc32c, 'size': source.size}
+
+
+def _same_object(blob: Any, identity: Dict) -> bool:
+    crc32c = identity.get('crc32c')
+    return (
+        bool(crc32c) and getattr(blob, 'crc32c', None) == crc32c and getattr(blob, 'size', None) == identity.get('size')
+    )
+
+
+def _copy_bridge_chunk(uid: str, bucket: Any, source_blob: Any, new_path: str, identity: Dict, current: Any) -> None:
+    """Idempotent bridge copy: skip identical bytes, never overwrite a concurrent writer."""
+    if current is not None and _same_object(current, identity):
+        OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='skipped').inc()
+        return
+    try:
+        # Generation 0 means "create only"; otherwise replace exactly the version listed.
+        # A GCS listing always carries a generation; None (test doubles only) keeps
+        # the pre-idempotency unconditional copy.
+        generation = getattr(current, 'generation', None) if current is not None else 0
+        _copy_chunk_with_backoff(uid, bucket, source_blob, new_path, if_generation_match=generation, bridge=True)
+    except google_exceptions.PreconditionFailed:
+        winner = bucket.get_blob(new_path, retry=None)
+        # Archive packs list no checksum; their capture-named object of the same size
+        # is the same pack another bridge copied a moment ago.
+        unverifiable = not identity.get('crc32c') and getattr(winner, 'size', None) == identity.get('size')
+        if winner is None or not (_same_object(winner, identity) or unverifiable):
+            raise
+        OMI_SYNC_BRIDGE_AUDIO_COPY_TOTAL.labels(outcome='raced').inc()
 
 
 def _determine_visibility(conversations: List[Dict]) -> str:
@@ -766,7 +897,7 @@ def retract_sync_bridge_source(uid: str, source_id: str) -> None:
 
 def copy_sync_bridge_audio(uid: str, source_id: str, target_id: str) -> None:
     """Copy retained donor audio strictly; never checkpoint a failed copy."""
-    _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True)
+    _copy_audio_chunks_for_merge(uid, [{'id': source_id}], target_id, strict=True, skip_existing=True)
 
 
 def delete_conversation_with_sync_sources(uid: str, conversation_id: str, *, merged_into: Optional[str] = None) -> None:
@@ -938,7 +1069,7 @@ def _delete_conversation_and_related_data(
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
 
 
-def _cleanup_merged_target_after_failure(uid: str, merged_conversation_id: str) -> bool:
+def cleanup_failed_merge_target(uid: str, merged_conversation_id: str) -> bool:
     """Retract merged-target memories and remove its artifacts.
 
     Returns True when cleanup completed. Canonical retraction failure aborts
@@ -1005,7 +1136,7 @@ def _handle_merge_failure(
     )
     if merged_conversation_id:
         if failure_phase == MergeFailurePhase.BEFORE_SOURCE_DELETION:
-            _cleanup_merged_target_after_failure(uid, merged_conversation_id)
+            cleanup_failed_merge_target(uid, merged_conversation_id)
         else:
             logger.error(
                 "Preserving merged target after source deletion started",
@@ -1020,3 +1151,8 @@ def _handle_merge_failure(
             lifecycle_service.complete(uid, conv_id)
         except Exception as e:
             logger.error(f"Error resetting status for {conv_id}: {e}")
+
+
+def delete_merged_source(uid: str, conversation_id: str, target_id: str) -> None:
+    """Replay the existing idempotent derived/source retraction for a sealed merge."""
+    _delete_conversation_and_related_data(uid, conversation_id, merged_into=target_id)

@@ -99,6 +99,8 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryLedgerReopenReceipt, MemoryOperation, MemoryOperationType
 from models.memory_source_replacement import ConversationSourceReplacementReceipt
 from models.product_memory import (
+    undecided_visible,
+    visible_memory_tier,
     LedgerWriteReason,
     MAX_MEMORY_ARGUMENTS_JSON_BYTES,
     MemoryAccessPolicy,
@@ -407,7 +409,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         user_review=user_review,
         visibility=item.visibility,
         evidence=evidence_payload,
-        memory_tier=item.tier,
+        memory_tier=visible_memory_tier(item),
         primary_capture_device=item.primary_capture_device,
         capture_device_ids=item.capture_device_ids or [],
         subject_entity_id=item.subject_entity_id,
@@ -849,16 +851,14 @@ def read_canonical_scan_page(
     budget: Optional[ListReadBudget] = None,
     as_of: Optional[datetime] = None,
     item_filter: Optional[Callable[[MemoryItem], bool]] = None,
+    candidate_snapshots: Optional[List[Any]] = None,
 ) -> Tuple[List[CanonicalScanSlot], bool]:
-    """Read one bounded canonical raw scan page via Firestore keyset order.
+    """Read a bounded canonical keyset, or apply its policy to supplied candidates.
 
-    Each slot corresponds to one candidate ``memory_items`` document in newest-first
-    ``updated_at DESC, __name__ ASC`` order. ``None`` memory means the row was
-    filtered by access/device/pending/archive/lineage policy and must still
-    advance the scan cursor. ``snapshot.id`` is the sole ``__name__`` authority;
-    payload ``memory_id`` mismatches fail closed as filtered slots. Callers
-    over-fetch additional pages when filters shrink the visible stream. Never
-    loads the full canonical set.
+    Normal order is ``updated_at DESC, __name__ ASC``. Ineligible rows yield
+    None slots so callers advance the scan; payload/document ID mismatches fail
+    closed. Supplied candidate snapshots retain all access/device/archive/lineage
+    checks. Callers refill filtered pages; the canonical set is never reloaded.
     """
     client = db_client if db_client is not None else default_db_client
     bounded_limit = max(1, min(int(limit or 100), _CANONICAL_SCAN_PAGE_MAX))
@@ -879,7 +879,9 @@ def read_canonical_scan_page(
             'source_state': 'active',
             'source_states': ['active', 'missing'],
             'processing_state': 'processed',
-            'tiers': ['short_term', 'long_term'],
+            # Historical Review archives are projected as Short-term while the
+            # mitigation is on. The policy below still rejects other archives.
+            'tiers': ['short_term', 'long_term', 'archive'] if undecided_visible() else ['short_term', 'long_term'],
         }
         if include_pending_processing:
             # Usually empty: prove the pending branch first so a subsequent
@@ -917,7 +919,7 @@ def read_canonical_scan_page(
     interrupted = False
     snapshots: List[Any] = []
     incomplete_boundaries: List[Optional[Tuple[int, int, str]]] = []
-    for query in queries:
+    for query in ([] if candidate_snapshots is not None else queries):
         query = query.order_by('updated_at', direction=firestore.Query.DESCENDING).order_by('__name__')
         if start_after is not None:
             cursor_time, cursor_memory_id = start_after
@@ -936,7 +938,9 @@ def read_canonical_scan_page(
             interrupted = True
             incomplete_boundaries.append(snapshot_key(branch[-1]) if branch else None)
         snapshots.extend(branch)
-    if len(queries) > 1:
+    if candidate_snapshots is not None:
+        snapshots = list(candidate_snapshots)
+    if candidate_snapshots is None and len(queries) > 1:
         snapshots = list({snapshot.id: snapshot for snapshot in snapshots}.values())
         snapshots.sort(key=snapshot_key)
     # Only emit a newest-first prefix proven by *both* branch frontiers.

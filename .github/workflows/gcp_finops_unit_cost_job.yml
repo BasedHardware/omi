@@ -34,6 +34,10 @@ on:
         options: ['false', 'true']
 
 env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
   SERVICE: finops-unit-cost-job
   SCHEDULER_JOB: finops-unit-cost-daily
   SCHEDULER_SA: finops-unit-cost-scheduler@based-hardware.iam.gserviceaccount.com
@@ -78,12 +82,15 @@ jobs:
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-notif-dev/providers/github
           service_account: omi-gha-notif-job-dev@based-hardware-dev.iam.gserviceaccount.com
 
-      - name: Google Auth (prod JSON, until prod WIF slice)
+      - name: Google Auth (prod, keyless)
         id: auth
         if: github.event.inputs.environment == 'prod'
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # GitHub OIDC -> Workload Identity Federation (no JSON key). Only this workflow on main may
+          # impersonate the prod deployer (principalSet bound to its workflow_ref@refs/heads/main).
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Login to GCR
         run: gcloud auth configure-docker
@@ -139,12 +146,45 @@ jobs:
       - name: Deploy to Cloud Run Job
         id: deploy
         run: |
+          # Required mounts: a missing resource here must fail the deploy.
+          secrets=/run/secrets/finops/OMI_PROMETHEUS_TOKEN/OMI_PROMETHEUS_TOKEN=OMI_PROMETHEUS_TOKEN:latest
+          secrets+=,/run/secrets/finops/OPENAI_ADMIN_KEY/OPENAI_ADMIN_KEY=WEB_ADMIN_OPENAI_COST_API_KEY:latest
+          secrets+=,/run/secrets/finops/ANTHROPIC_ADMIN_API_KEY/ANTHROPIC_ADMIN_API_KEY=WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest
+          secrets+=,/run/secrets/finops/MCP_POSTHOG_API_KEY/MCP_POSTHOG_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest
+          secrets+=,/run/secrets/finops/SONIOX_API_KEY/SONIOX_API_KEY=SONIOX_API_KEY:latest
+          secrets+=,/run/secrets/finops/finops-mercury-readonly/finops-mercury-readonly=finops-mercury-readonly:latest
+          # STRIPE_READ_API_KEY: required in prod (the book/fee pull is a core
+          # input and the prod secret exists, accessor finops-writer@). A
+          # development deploy mounts it only when the secret resource exists
+          # in the target project — based-hardware-dev has no dev-scoped read
+          # key, and a required mount would fail `gcloud run jobs deploy`
+          # during secret resolution before the job could start. The Stripe
+          # legs then skip as unavailable. Existence only: no payload is read.
+          if [[ "${{ github.event.inputs.environment }}" == "prod" ]] || \
+             gcloud secrets describe STRIPE_READ_API_KEY --project="${{ vars.GCP_PROJECT_ID }}" --format='value(name)' >/dev/null 2>&1; then
+            secrets+=,/run/secrets/finops/STRIPE_READ_API_KEY/STRIPE_READ_API_KEY=STRIPE_READ_API_KEY:latest
+          else
+            echo "STRIPE_READ_API_KEY: not provisioned in ${{ vars.GCP_PROJECT_ID }}; deploying without the Stripe legs"
+          fi
+          # Optional vendor organization keys (Soniox balance snapshots, Modulate).
+          # The producer skips an unmounted key as an unavailable line, but a Secret
+          # Manager resource that does not exist in the target project would fail
+          # `gcloud run jobs deploy` before the job could take that path, so mount
+          # each only when the resource exists. Existence only: no payload is read.
+          for name in FINOPS_SONIOX_ORG_KEY FINOPS_MODULATE_ORG_KEY; do
+            if gcloud secrets describe "$name" --project="${{ vars.GCP_PROJECT_ID }}" --format='value(name)' >/dev/null 2>&1; then
+              secrets+=",/run/secrets/finops/$name/$name=$name:latest"
+              echo "optional secret $name: mounted"
+            else
+              echo "optional secret $name: not provisioned in this project; line stays unavailable"
+            fi
+          done
           gcloud run jobs deploy "${{ env.SERVICE }}" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
             --region="${{ env.REGION }}" \
             --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
             --service-account="finops-writer@${{ vars.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-            --set-secrets=/run/secrets/finops/OMI_PROMETHEUS_TOKEN/OMI_PROMETHEUS_TOKEN=OMI_PROMETHEUS_TOKEN:latest,/run/secrets/finops/STRIPE_API_KEY/STRIPE_API_KEY=STRIPE_API_KEY:latest,/run/secrets/finops/OPENAI_ADMIN_KEY/OPENAI_ADMIN_KEY=WEB_ADMIN_OPENAI_COST_API_KEY:latest,/run/secrets/finops/ANTHROPIC_ADMIN_API_KEY/ANTHROPIC_ADMIN_API_KEY=WEB_ADMIN_ANTHROPIC_COST_API_KEY:latest,/run/secrets/finops/MCP_POSTHOG_API_KEY/MCP_POSTHOG_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest,/run/secrets/finops/SONIOX_API_KEY/SONIOX_API_KEY=SONIOX_API_KEY:latest,/run/secrets/finops/finops-mercury-readonly/finops-mercury-readonly=finops-mercury-readonly:latest \
+            --set-secrets="$secrets" \
             --set-env-vars=FINOPS_LOCK_BUCKET=${{ vars.GCP_PROJECT_ID }}-finops-runs,FINOPS_AUTH=cloudrun,FINOPS_WRITER_SA=finops-writer@based-hardware.iam.gserviceaccount.com,FINOPS_MERCURY_ENABLED=true \
             --region="${{ env.REGION }}" \
             --max-retries=1 \

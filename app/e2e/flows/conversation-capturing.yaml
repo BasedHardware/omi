@@ -5,7 +5,7 @@
 name: conversation-capturing
 description: Active recording page — live transcript, waveform, stop button, Ask Omi during recording
 covers:
-  - app/lib/pages/conversation_capturing/page.dart
+  - app/lib/pages/episodes/live_episode_page.dart
   - app/lib/pages/home/page.dart
 prerequisites:
   - auth_ready  # User completed real sign-in (Google/Apple) and onboarding. Android: `bash setup.sh android`. iOS: `bash setup.sh ios`. App must show home screen.

@@ -83,8 +83,7 @@ def configure(monkeypatch, config, uid):
 def clean_env(monkeypatch):
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
     monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', 'true')
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', 'off')
 
 
@@ -224,8 +223,8 @@ def test_metric_help_names_every_bounded_outcome():
     assert tuple(documented) == OUTCOMES
 
 
-async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None, s1=False):
-    """One coordinator attempt for harness owner ``uid``; returns (targets, enrichment intents)."""
+def _prepare_coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None, s1=False):
+    """Construct synthetic input and mocks before running the real coordinator."""
     configure(monkeypatch, config, 'uid')
     chunks = upload_straddling_next_two()
     captured, kwargs = _drive(
@@ -239,10 +238,25 @@ async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), parti
     pipeline._reprocess_merged_conversations = lambda _uid, response, *_a, **_k: enriched.append(
         dict(response.pop('_merged', {}))
     )
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
-    )
-    return [captured.get(chunk['id'], 'SKIPPED') for chunk in chunks], enriched
+
+    async def run():
+        await module._run_full_pipeline_background_async(
+            'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
+        )
+        return [captured.get(chunk['id'], 'SKIPPED') for chunk in chunks], enriched
+
+    return run
+
+
+async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None, s1=False):
+    run = _prepare_coordinate(module, stubs, monkeypatch, config, processed=processed, partial=partial, s1=s1)
+    return await run()
+
+
+@pytest.fixture
+def cold_cohort_attempt(coordinator, monkeypatch):
+    module, stubs = coordinator
+    return _prepare_coordinate(module, stubs, monkeypatch, ('', 'OTHER-A'), s1=True)
 
 
 @pytest.mark.asyncio
@@ -569,9 +583,8 @@ def test_all_gated_services_resolve_private_cohorts_without_manifest_allowlists(
 @pytest.mark.parametrize('membership', [True, False, 'error'])
 @pytest.mark.parametrize('expired', [False, True])
 async def test_oidc_coordinator_awaits_cold_and_expired_cohorts_before_selecting_lineage(
-    coordinator, monkeypatch, membership, expired
+    cold_cohort_attempt, monkeypatch, membership, expired
 ):
-    module, stubs = coordinator
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
     release = threading.Event()
     reads = []
@@ -601,7 +614,7 @@ async def test_oidc_coordinator_awaits_cold_and_expired_cohorts_before_selecting
 
         pulse = asyncio.create_task(unblock())
         try:
-            targets, _ = await _coordinate(module, stubs, monkeypatch, ('', 'OTHER-A'), s1=True)
+            targets, _ = await cold_cohort_attempt()
         finally:
             release.set()
             await pulse

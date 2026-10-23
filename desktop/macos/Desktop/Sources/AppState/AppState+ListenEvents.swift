@@ -520,16 +520,7 @@ extension AppState {
       }
 
     case "speaker_label_suggestion":
-      let speakerId = event.raw["speaker_id"] as? Int ?? 0
-      let personId = event.raw["person_id"] as? String
-      let personName = event.raw["person_name"] as? String ?? "Unknown"
-      log(
-        "Transcription: Speaker \(speakerId) identified as \(personName) (person_id: \(personId ?? "nil"))"
-      )
-      // Update live speaker-person mapping
-      if let personId = personId {
-        liveSpeakerPersonMap[speakerId] = personId
-      }
+      applyRefactorSpeakerEvent(event.raw)
 
     case "segments_deleted":
       if let segmentIds = event.raw["segment_ids"] as? [String] {

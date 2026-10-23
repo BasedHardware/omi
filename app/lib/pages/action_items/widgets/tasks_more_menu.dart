@@ -74,7 +74,7 @@ class TasksMoreMenu extends StatelessWidget {
           },
         ),
         PullDownMenuItem(
-          title: l10n.exportButton,
+          title: l10n.taskIntegrations,
           iconWidget: const Icon(Icons.ios_share_rounded, size: 18),
           onTap: () {
             PlatformManager.instance.analytics.exportTasksBannerClicked();

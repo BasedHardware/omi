@@ -23,6 +23,7 @@ import 'task_delete_undo.dart';
 import 'widgets/action_item_form_sheet.dart';
 import 'widgets/action_item_shimmer_widget.dart';
 import 'widgets/task_row_parts.dart';
+import 'widgets/task_suggestions_section.dart';
 
 // Re-export Goal from goals.dart for use in this file
 export 'package:omi/backend/http/api/goals.dart' show Goal;
@@ -90,6 +91,10 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       if (!mounted) return;
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
+      final suggestions = provider.suggestions;
+      if (suggestions != null && !suggestions.loaded && suggestions.loadProblem == null) {
+        suggestions.load();
+      }
       final phase = provider.apiViewState.phase;
       final typedResultAlreadyProjected = phase == ApiViewPhase.error ||
           phase == ApiViewPhase.locked ||
@@ -424,6 +429,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               physics: const AlwaysScrollableScrollPhysics(),
                               slivers: [
                                 if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: _pullRefresh),
+                                SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
                                 SliverFillRemaining(
                                   hasScrollBody: false,
                                   child: Center(child: ActionItemsApiStatus(provider: provider)),
@@ -431,7 +437,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                               ],
                             )
                           : categorizedItems.values.every((l) => l.isEmpty)
-                              ? _buildEmptyTasksList()
+                              ? _buildEmptyTasksList(provider)
                               : _buildTasksList(categorizedItems, provider),
                 ),
               ),
@@ -462,13 +468,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     );
   }
 
-  Widget _buildEmptyTasksList() {
+  Widget _buildEmptyTasksList(ActionItemsProvider provider) {
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
       slivers: [
         if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: _pullRefresh),
-        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+        SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
+        if (provider.suggestions?.items.isEmpty ?? true)
+          SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+        SliverPadding(padding: EdgeInsets.only(bottom: homeBottomClearance(context))),
       ],
     );
   }
@@ -503,6 +512,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         if (OmiRefreshControl.supported) OmiRefreshControl(onRefresh: _pullRefresh),
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
         SliverToBoxAdapter(child: _buildPageHeader(provider)),
+        if (!isSearching) SliverToBoxAdapter(child: TaskSuggestionsSection(controller: provider.suggestions)),
 
         if (isSearching) ...[
           if (filteredItems.isEmpty)

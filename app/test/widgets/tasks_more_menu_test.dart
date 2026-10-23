@@ -11,7 +11,7 @@ import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/ui/ui.dart';
 
 // Tasks' page actions live in one bare "⋯" beside the Home / Tasks switcher: the completed view
-// and export, with no circle behind the glyph.
+// and task integrations, with no circle behind the glyph.
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -52,12 +52,12 @@ void main() {
     expect(find.bySemanticsLabel('More options'), findsOneWidget);
   });
 
-  testWidgets('the menu holds the completed view and export, even with no tasks', (tester) async {
+  testWidgets('the menu holds the completed view and task integrations, even with no tasks', (tester) async {
     final provider = await pump(tester);
     await tester.tap(find.byKey(TasksMoreMenu.buttonKey));
     await tester.pumpAndSettle();
     expect(find.text('Show Completed'), findsOneWidget);
-    expect(find.text('Export'), findsOneWidget);
+    expect(find.text("Task Integrations"), findsOneWidget);
 
     await tester.tap(find.text('Show Completed'));
     await tester.pumpAndSettle();

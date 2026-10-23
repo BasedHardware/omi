@@ -13401,9 +13401,6 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Jatka ilmaisella suunnitelmalla';
-
-  @override
   String get paywallTrialCancelNote => 'Peruuta milloin tahansa. Ei maksuja, ei sakkoja.';
 
   @override
@@ -14408,4 +14405,175 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi tallentaa edelleen';
+
+  @override
+  String get episodeNow => 'Nyt';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Live · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count hetkeä',
+      one: '1 hetki',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Hetket';
+
+  @override
+  String get episodeSoFar => 'Tähän mennessä';
+
+  @override
+  String get episodeUpdatedJustNow => 'Päivitetty juuri · täydet muistiinpanot lopuksi';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Päivitetty $minutes min sitten · täydet muistiinpanot lopuksi';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Muistiinpanot näkyvät ensimmäisten puheminuuttien jälkeen.';
+
+  @override
+  String get episodeOpenAll => 'Avaa kaikki';
+
+  @override
+  String get episodeWrapUpNow => 'Päätä nyt';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi päättää tämän, kun siirryt eteenpäin';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Tehtävä havaittu: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Muistutus havaittu: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Tehtävä tallennettu: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'lisätään $duration Omistasi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Kuuntelee nyt';
+
+  @override
+  String get deviceHeardToday => 'Kuultu tänään';
+
+  @override
+  String get deviceToSync => 'synkronoitavana';
+
+  @override
+  String get deviceRightNow => 'Juuri nyt';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Live-jakso · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Kirii kiinni';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total min';
+  }
+
+  @override
+  String get deviceRecently => 'Äskettäin';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Yhteys katkesi $duration ajaksi';
+  }
+
+  @override
+  String get deviceControls => 'Säätimet';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Lisäksi: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Paina Omin painiketta';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Yksi lyhyt painallus. Kysy sitten mitä tahansa.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Esitä kysymyksesi';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Sano se ääneen. Omi kuuntelee.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Valmis? Paina painiketta uudelleen lähettääksesi.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Sait $days päivää ilmaiseksi';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days päivää Omi Prota meidän piikkiimme. Muistutamme ennen veloitusta. Peru milloin vain.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Ota $days päivän kokeilu';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Aloita $days päivän ilmainen kokeilu';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Käynnistä Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Paina painiketta kerran ja pidä se lähellä puhelinta.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Siinä kaikki. Omi jatkaa keskustelujesi tallentamista taustalla.';
+
+  @override
+  String get noThanks => 'Ei kiitos';
+
+  @override
+  String get recapInTheBackground => 'Taustalla';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Jatka $percent % alennuksella';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Jatka ja maksa $price kuukaudessa seuraavat $months kuukautta.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Valmis. $percent % alennus seuraavat $months kuukautta.';
+  }
 }

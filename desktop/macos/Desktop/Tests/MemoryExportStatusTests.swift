@@ -177,7 +177,7 @@ final class MemoryExportStatusTests: XCTestCase {
     let status = await MemoryExportService.shared.status(for: .chatgpt)
 
     XCTAssertTrue(status.hasConnection)
-    let signal = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry().last {
+    let signal = DesktopDiagnosticsManager.shared.currentSnapshots().last {
       $0["seam"] as? String == DesktopStateAuthoritySeam.connectorStatus.rawValue
     }
     XCTAssertEqual(signal?["direction"] as? String, "cloud_grant_status_inferred")

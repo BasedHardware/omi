@@ -287,7 +287,7 @@ class GlobalShortcutManager: @unchecked Sendable {
       }
     } else {
       // The shortcut will not fire on this machine. Keep the local NSLog for
-      // debugging and surface the failure to ops/Sentry via the incident path
+      // debugging and surface the failure to ops via the incident path
       // (NOT recordFallback — this is a hard-terminal failure with no mode switch).
       // User-visible conflict surfacing in shortcut settings is tracked separately.
       logger("GlobalShortcutManager: Failed to register hotkey (keycode \(keyCode)), error: \(attempt.status)")

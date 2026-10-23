@@ -193,3 +193,23 @@ def confirmed_corrections_context(conversation):
         '\nOwner-confirmed corrections (use these facts in the title and summary; do not rewrite the transcript):\n'
         + text
     )
+
+
+def notes_capture_sources(conversation: Any) -> list[str]:
+    """Capture surfaces that recorded this event (one entry per capture-group member)."""
+    group = getattr(conversation, 'capture_group', None)
+    members = getattr(group, 'members', None) or []
+    sources = [str(getattr(member, 'source', None) or 'unknown') for member in members]
+    if sources:
+        return sources
+    source = getattr(conversation, 'source', None)
+    return [str(getattr(source, 'value', source) or 'unknown')]
+
+
+def notes_agent_inputs(conversation: Any, desktop_capture: bool) -> Dict[str, Any]:
+    """Extra notes-call inputs the agentic writer budgets on: window end and capture evidence."""
+    return {
+        'finished_at': getattr(conversation, 'finished_at', None),
+        'desktop_meeting_capture': desktop_capture,
+        'capture_sources': notes_capture_sources(conversation),
+    }

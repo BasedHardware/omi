@@ -18,6 +18,8 @@ void main() {
   test('parse: yinka is native, reid needs an https URL from a map or a JSON string', () {
     expect(OnboardingVariantGate.parse(variant: 'yinka'), OnboardingArm.yinka);
     expect(OnboardingVariantGate.parse(variant: ' yinka ', payload: 'ignored'), OnboardingArm.yinka);
+    expect(OnboardingVariantGate.parse(variant: 'pocket'), OnboardingArm.pocket);
+    expect(OnboardingVariantGate.parse(variant: 'pocket', payload: 'ignored').variant, OnboardingVariant.pocket);
     expect(OnboardingVariantGate.parse(variant: 'reid', payload: {'url': 'https://x.example/onboarding'}).variant,
         OnboardingVariant.reid);
     expect(OnboardingVariantGate.parse(variant: 'reid', payload: {'url': 'https://x.example/onboarding'}).webUrl,

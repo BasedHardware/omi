@@ -196,7 +196,8 @@ def test_one_failing_user_does_not_abort_the_rest_of_the_group() -> None:
 
 def test_per_user_budget_exceeded_is_recorded_and_skipped() -> None:
     with _loaded_job() as (notifications, _db, _redis, fallbacks):
-        notifications.DAILY_SUMMARY_USER_BUDGET_SECONDS = 0.05
+        # The three fast accounts must finish inside this real budget on a loaded runner; 50ms raced them.
+        notifications.DAILY_SUMMARY_USER_BUDGET_SECONDS = 0.5
         release = threading.Event()
         served: List[str] = []
 

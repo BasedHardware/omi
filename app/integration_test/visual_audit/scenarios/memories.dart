@@ -59,6 +59,46 @@ Future<Map<String, dynamic>> _graphLoaded() async => {
 
 final memoriesScenarios = <AuditScenario>[
   AuditScenario(
+    id: 'memories-mind-map-distinct-identities',
+    title: 'Mind Map: owner, same-name people and a concept called I stay distinct',
+    page: 'lib/pages/memories/widgets/memory_graph_page.dart (MemoryGraphPage)',
+    state: 'Synthetic Sam Altman account; canonical owner follows distinct people and a concept in response order',
+    prefs: const {'givenName': 'Sam', 'familyName': 'Altman'},
+    run: (a) async {
+      await a.pump(
+          MemoryGraphPage(
+            trackOpenEvent: false,
+            loadGraph: () async => {
+              'nodes': [
+                {'id': 'ent_1611f3f21a8027b7c4f5', 'label': 'Sam Altman', 'node_type': 'person'},
+                {'id': 'contact-sam', 'label': 'Sam', 'node_type': 'person'},
+                {'id': 'ent_f33e07a0450b65412254', 'label': 'I', 'node_type': 'concept'},
+                {'id': 'user', 'label': 'user', 'node_type': 'person'},
+              ],
+              'edges': [
+                {'source_id': 'user', 'target_id': 'ent_1611f3f21a8027b7c4f5', 'label': 'knows'},
+                {'source_id': 'user', 'target_id': 'contact-sam', 'label': 'knows'},
+                {'source_id': 'user', 'target_id': 'ent_f33e07a0450b65412254', 'label': 'studies'},
+              ],
+            },
+          ),
+          scaffold: false);
+      void assertIdentities() {
+        final graph = a.tester.state<MemoryGraphPageState>(find.byType(MemoryGraphPage)).simulation;
+        expect(graph.nodes.map((node) => node.id).toSet(),
+            {'user', 'ent_1611f3f21a8027b7c4f5', 'contact-sam', 'ent_f33e07a0450b65412254'});
+        expect(graph.nodes.singleWhere((node) => node.isFixed).id, 'user');
+        expect(graph.edges.length, 3);
+      }
+
+      assertIdentities();
+      await a.shot('Distinct people and concept retain their owner relationships', step: 'loaded');
+      await a.tap(find.byKey(const ValueKey('mind_map_refresh')));
+      assertIdentities();
+      await a.shot('Refresh preserves all identities and relationships', step: 'refreshed');
+    },
+  ),
+  AuditScenario(
     id: 'memories-mind-map-recovery',
     title: 'Mind Map: saved memories without assertions, then a later graph page',
     page: 'lib/pages/memories/widgets/memory_graph_page.dart (MemoryGraphPage)',

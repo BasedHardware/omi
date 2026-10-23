@@ -174,7 +174,7 @@ redirects preserve late audio. `merge_conversations.delete_conversation_with_syn
 owns retained-source purging for user/source deletion, called by the frame-evidence
 service and developer delete endpoint. Raw DB deletion and new-target rollback do
 not orchestrate external cleanup. The shared gap
-predicate lives in `utils/conversation_continuity.py`; both paths supply speech
+predicate lives in `models/conversation_continuity.py`; both paths supply speech
 silence (sync uses the default timeout; realtime can configure it per session). See `utils/sync/ARCHITECTURE.md`.
 
 EXP-004 closed under David's 2026-10-18 rulings. Owner flip and owner

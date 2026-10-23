@@ -75,6 +75,16 @@ final class ServerConversationDecodingTests: XCTestCase {
     XCTAssertTrue(conversation.shouldFetchDetailForTranscript)
   }
 
+  func testCalendarIdentityDecodesFromExplicitMeetingContext() throws {
+    let conversation = try decodeConversation(
+      ",\n\"external_data\": {\"calendar_meeting_context\": {\"calendar_event_id\": \"event-1\", \"calendar_source\": \"system_calendar\", \"title\": \"Atlas planning\", \"participants\": [{\"name\": \"Sara\", \"email\": \"SARA@EXAMPLE.COM\"}]}}"
+    )
+
+    XCTAssertEqual(conversation.meetingIdentity?.eventID, "event-1")
+    XCTAssertEqual(conversation.meetingIdentity?.title, "Atlas planning")
+    XCTAssertEqual(conversation.meetingIdentity?.attendeeEmails, Set(["sara@example.com"]))
+  }
+
   func testOmittedVisibilityUsesBackendPrivateDefaultForSiri() throws {
     let legacy = try decodeConversation("")
     let hidden = try decodeConversation(",\n\"visibility\": \"hidden\"")

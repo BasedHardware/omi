@@ -1,14 +1,44 @@
 name: Web Checks
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: main
+    # Superset of the detect-changes has_frontend/has_web_app/has_admin/
+    # has_personas filters that gate this workflow's jobs, so a main push
+    # that cannot wake any of them skips the workflow entirely.
+    paths:
+      - 'web/frontend/**'
+      - 'web/app/**'
+      - 'web/admin/**'
+      - 'web/personas-open-source/**'
+      - 'web/packages/note-shared/**'
+      - 'firestore.indexes.json'
+      - '.github/actions/detect-changes/**'
+      - '.github/workflows/web-checks.yml'
   pull_request:
     branches: main
 
 concurrency:
-  group: web-checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: web-checks-${{ github.event.pull_request.number || github.ref }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
+  # A newer PR push supersedes that PR's older run. A newer main push must not
+  # cancel the running one: with cancel-in-progress false GitHub replaces only
+  # the pending run in the group, so the running SHA finishes and the newest
+  # pending SHA runs next — main always gets a complete run.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   changes:
@@ -16,16 +46,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
-      has_admin: ${{ steps.changes.outputs.has_admin }}
-      has_frontend: ${{ steps.changes.outputs.has_frontend }}
-      has_personas: ${{ steps.changes.outputs.has_personas }}
-      has_web_app: ${{ steps.changes.outputs.has_web_app }}
-      has_web_build: ${{ steps.changes.outputs.has_web_build }}
-      has_web_lint: ${{ steps.changes.outputs.has_web_lint }}
+      has_admin: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_admin) }}
+      has_frontend: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_frontend) }}
+      has_personas: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_personas) }}
+      has_web_app: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_web_app) }}
+      has_web_build: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_web_build) }}
+      has_web_lint: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changes.outputs.has_web_lint) }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # detect-changes diffs against the merge base, so it needs history;
           # blob:none skips file contents, which is what made the unfiltered
           # clone of this ~1.25GB repo take minutes.
@@ -46,6 +77,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # Lint/test only reads the worktree; no git history is consulted.
           fetch-depth: 1
 
@@ -88,6 +120,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # Builds only read the worktree; no git history is consulted.
           fetch-depth: 1
 

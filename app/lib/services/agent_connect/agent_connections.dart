@@ -5,6 +5,7 @@ import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/services/agent_connect/agent_prompts.dart';
 import 'package:omi/services/agent_connect/zkr_share.dart';
+import 'package:omi/utils/logger.dart';
 
 /// Product name; never translated.
 const chatGptBrandName = 'ChatGPT';
@@ -176,12 +177,37 @@ class AgentConnectService {
     try {
       final older = (await _loadKeys()).where((key) => key.name == agent.keyName && key.id != keepKeyId);
       await Future.wait(older.map((key) => _deleteKey(key.id)));
-    } catch (_) {}
+    } catch (e) {
+      // Still best effort, but no longer silent: revokeAgent sweeps any key left behind.
+      Logger.debug('retireOlderKeys failed for ${agent.keyName}: $e');
+    }
   }
 
   String get _base => _apiBase ?? Env.apiBaseUrl ?? 'https://api.omi.me/';
 
   Future<void> revokeKey(String keyId) => _deleteKey(keyId);
+
+  /// Revokes every key [agent] holds, not only the one on screen: a failed [retireOlderKeys] can
+  /// leave an older key alive under the same name. Reloads the list first, so a stale screen cannot
+  /// miss one, and throws if any delete fails so the agent is never shown gone while a key works.
+  ///
+  /// If the list itself cannot load, the shown key is still revoked and the call throws, so the
+  /// sheet says it failed and a retry (with a working list) sweeps the rest. A key the list no
+  /// longer has is already gone and is not deleted twice.
+  Future<void> revokeAgent(ComputerAgent agent, {required String shownKeyId}) async {
+    final List<McpApiKey> listed;
+    try {
+      listed = await _loadKeys();
+    } catch (_) {
+      await _deleteKey(shownKeyId);
+      rethrow;
+    }
+    final ids = [
+      for (final key in listed)
+        if (key.name == agent.keyName) key.id
+    ];
+    await Future.wait(ids.map(_deleteKey));
+  }
 }
 
 @immutable

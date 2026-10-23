@@ -117,4 +117,21 @@ describe('TaskHub list view shortcuts under a search', () => {
     expect(mocks.bulkComplete).toHaveBeenCalledTimes(1);
     expect(mocks.bulkComplete).toHaveBeenCalledWith(['task-email']);
   });
+
+  it('selects the search results when another selected task is hidden', async () => {
+    // A task selected before the search stays selected but cannot stand in for the
+    // visible row: Select All must compare ids, not the size of the whole selection.
+    const user = userEvent.setup();
+    render(<TaskHub />);
+
+    await user.keyboard('{ArrowDown}'); // focuses "Buy milk"
+    await user.keyboard(' '); // selects it
+    search('email'); // hides "Buy milk"; only "Email boss" is shown
+
+    await user.keyboard('{Control>}a{/Control}');
+    await user.keyboard('{Enter}');
+
+    expect(mocks.bulkComplete).toHaveBeenCalledTimes(1);
+    expect(mocks.bulkComplete).toHaveBeenCalledWith(['task-email']);
+  });
 });

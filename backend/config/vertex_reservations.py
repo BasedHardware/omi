@@ -24,15 +24,19 @@ class Reservation:
     unknown_capacity: str = 'shared'
     overflow: str = 'shared'
     thinking_level: str = ''
+    saturation_seconds: int = 120
 
 
 RESERVATIONS = {
     'gemini-2.5-flash': Reservation('flash-5-gsu', 'us-central1', unknown_capacity='dedicated', overflow='ladder'),
-    'gemini-3.8-flash': Reservation('flash-5-gsu', 'us', 'OMI_VERTEX_PT_TARGET_LOCATION', thinking_level='low'),
+    'gemini-3.8-flash': Reservation(
+        'flash-5-gsu', 'us', 'OMI_VERTEX_PT_TARGET_LOCATION', thinking_level='low', saturation_seconds=10
+    ),
 }
 STATE_OVERRIDE_ENV = 'OMI_VERTEX_RESERVATION_STATES'
 ENFORCEMENT_ENV = 'OMI_VERTEX_LEGACY_TASK_MODE'
 PROBE_SECONDS = 600
+PROBE_TIMEOUT_SECONDS = 30
 INACTIVE_WINDOW_SECONDS = 1800
 EVIDENCE_FRESH_SECONDS = 900
 ACTIVE_FRESH_SECONDS = 86400

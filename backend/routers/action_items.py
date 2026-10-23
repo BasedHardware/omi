@@ -858,7 +858,7 @@ def toggle_action_item_completion(
     )
 
     # Notify sender if this was a shared task that just got completed
-    if completed and existing_item.get('shared_from'):
+    if completed and not existing_item.get('completed') and existing_item.get('shared_from'):
         shared_from = existing_item['shared_from']
         sender_uid = shared_from.get('sender_uid')
         if sender_uid:

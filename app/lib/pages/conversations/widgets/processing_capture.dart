@@ -11,7 +11,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/pages/conversation_capturing/page.dart';
+import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/conversations/live_capture_summary.dart';
@@ -27,7 +28,8 @@ import 'package:omi/pages/phone_calls/active_call_page.dart';
 import 'package:omi/ui/ui.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
-  const ConversationCaptureWidget({super.key, this.showsCall = false, this.deviceStatusInBottomBar = false});
+  const ConversationCaptureWidget(
+      {super.key, this.showsCall = false, this.deviceStatusInBottomBar = false, this.deferStreamingToEpisode = false});
 
   /// Home shows an Omi call on this card; the Conversations tab has its own call banner.
   final bool showsCall;
@@ -36,6 +38,10 @@ class ConversationCaptureWidget extends StatefulWidget {
   /// tapping it opens this card in a sheet when there is more to say), so this card shows nothing
   /// for a recording here. An Omi call still shows.
   final bool deviceStatusInBottomBar;
+
+  /// Episodes on: a streaming capture is the live episode row in Today, so this card stays for the
+  /// states that are not an episode (a call, Transcribe Later, a dropped pendant).
+  final bool deferStreamingToEpisode;
 
   @override
   State<ConversationCaptureWidget> createState() => _ConversationCaptureWidgetState();
@@ -60,10 +66,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     _offlineTicker = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
       final provider = context.read<CaptureProvider>();
-      if (provider.offlineRecordingStartedAt != null ||
-          provider.customSttBufferingDuration != null ||
-          provider.liveCaptureSource != null ||
-          (widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active)) {
+      final callActive = widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active;
+      // With the live episode row drawing the streaming capture, this card has no elapsed time.
+      final deferred = widget.deferStreamingToEpisode && EpisodePresentation.streamingSource(provider) != null;
+      if (callActive ||
+          (!deferred &&
+              (provider.offlineRecordingStartedAt != null ||
+                  provider.customSttBufferingDuration != null ||
+                  provider.liveCaptureSource != null))) {
         setState(() {}); // the elapsed time on the card
       }
       _offlineTick++;
@@ -141,6 +151,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         if (provider.liveCaptureSource == null && !phoneLive && !batch) {
           return const SizedBox.shrink();
         }
+        if (widget.deferStreamingToEpisode && EpisodePresentation.streamingSource(provider) != null) {
+          return switch (provider.localSttFailure) {
+            final failure? => LocalSttRecoveryNotice(
+                failure: failure,
+                onRetry: provider.retryLocalTranscription,
+                onSetup: () => routeToPage(context, const TranscriptionSettingsPage())),
+            null => const SizedBox.shrink(),
+          };
+        }
 
         return Column(children: [
           if (provider.localSttFailure case final failure?)
@@ -172,7 +191,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 segmentCount: provider.segments.length,
                 photoCount: provider.photos.length,
               );
-              routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
+              routeToPage(context, LiveEpisodePage(topConversationId: provider.topConversationId));
             },
             child: Semantics(
               button: !batch,

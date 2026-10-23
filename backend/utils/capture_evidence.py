@@ -350,21 +350,30 @@ class SourcePositionMap:
 
 def parse_sync_file_claims(value: str | None, filenames: Iterable[str]) -> dict[str, dict]:
     """Validate a bounded, versioned upload header; absent/invalid claims abstain."""
-    if not value or len(value.encode()) > MAX_ENVELOPE_BYTES:
+    if not isinstance(value, str) or not value or len(value.encode()) > MAX_ENVELOPE_BYTES:
         return {}
     try:
         parsed = json.loads(value)
-        if (
-            type(parsed.get('version')) is not int
-            or parsed['version'] != 1
-            or not isinstance(parsed.get('files'), list)
-        ):
+        if type(parsed.get('version')) is not int or parsed['version'] != 1:
             return {}
+        return validate_sync_file_claims(parsed.get('files'), filenames)
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return {}
+
+
+def validate_sync_file_claims(files: object, filenames: Iterable[str]) -> dict[str, dict]:
+    """Validate parsed claims without reapplying the HTTP wire-byte budget.
+
+    HTTP parsing can normalize UUID spellings into longer canonical strings.
+    Revalidation shares the exact schema and basename checks, not a new wire
+    representation of metadata already admitted at the boundary.
+    """
+    if not isinstance(files, list) or len(files) > 20:
+        return {}
+    try:
         allowed = set(filenames)
-        if len(parsed['files']) > 20:
-            return {}
         result = {}
-        for item in parsed['files']:
+        for item in files:
             name = item['name']
             root = str(uuid.UUID(item['capture_root']))
             epoch, start, count, rate = (

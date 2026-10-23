@@ -182,7 +182,7 @@ enum OnDeviceMeetingIdentityExtractor {
     }
     if metadata.contains("webex") || snapshot.combinedText.lowercased().contains("webex.com/meet") { return "Webex" }
     if metadata.contains("facetime") { return "FaceTime" }
-    if ConferencingApps.isMessagingCallApp(appName: snapshot.appName) {
+    if ConferencingApps.isMessagingCallApp(appName: snapshot.appName), hasCallControlChrome(snapshot) {
       return ConferencingApps.nativeCallPlatform(forAppName: snapshot.appName)
     }
     return nil
@@ -218,15 +218,13 @@ enum OnDeviceMeetingIdentityExtractor {
   }
 
   /// For native messaging-call apps only: a name-shaped window title is a
-  /// participation assertion when the row also shows in-call chrome, or when one
-  /// stable call window dominates the interval. Unrelated chat titles are ignored.
+  /// participation assertion only when the row also shows in-call chrome.
   private static func messagingCallParticipants(from snapshots: [MeetingScreenActivitySnapshot])
     -> [DesktopMeetingParticipant]
   {
     let messaging = snapshots.filter { ConferencingApps.isMessagingCallApp(appName: $0.appName) }
     guard !messaging.isEmpty else { return [] }
-    let callRows = messaging.filter(hasCallControlChrome)
-    let source = callRows.isEmpty ? dominatingCallWindows(in: messaging) : callRows
+    let source = messaging.filter(hasCallControlChrome)
     guard !source.isEmpty else { return [] }
 
     var names: [String] = []
@@ -237,25 +235,6 @@ enum OnDeviceMeetingIdentityExtractor {
       if !names.contains(title) { names.append(title) }
     }
     return names.prefix(maximumParticipants).map { DesktopMeetingParticipant(name: $0, email: nil) }
-  }
-
-  private static func dominatingCallWindows(in snapshots: [MeetingScreenActivitySnapshot])
-    -> [MeetingScreenActivitySnapshot]
-  {
-    var counts: [String: Int] = [:]
-    for snapshot in snapshots {
-      let title = cleanLine(snapshot.windowTitle ?? "")
-      guard !title.isEmpty else { continue }
-      counts[title, default: 0] += 1
-    }
-    let titledCount = counts.values.reduce(0, +)
-    guard titledCount > 0, let (topTitle, topCount) = counts.max(by: { $0.value < $1.value }) else {
-      return []
-    }
-    guard looksLikePersonName(topTitle) else { return [] }
-    let runnerUp = counts.filter { $0.key != topTitle }.map(\.value).max() ?? 0
-    guard topCount * 2 > titledCount, topCount > runnerUp else { return [] }
-    return snapshots.filter { cleanLine($0.windowTitle ?? "") == topTitle }
   }
 
   // MARK: - Call tiles

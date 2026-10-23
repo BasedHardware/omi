@@ -1,6 +1,5 @@
 import AppKit
 import Foundation
-import Sentry
 
 /// Closed reason a presented notification left the screen. Auto-hide and explicit
 /// close must not share a single "dismissed" bucket — that made engagement
@@ -623,13 +622,7 @@ class AnalyticsManager {
   /// Report when ScreenCaptureKit broken state is detected (TCC granted but capture failing).
   func screenCaptureBrokenDetected() {
     guard !Self.isDevBuild else { return }
-    let breadcrumb = Breadcrumb(level: .warning, category: "screen_capture")
-    breadcrumb.message = "Screen Capture Broken Detected"
-    SentrySDK.addBreadcrumb(breadcrumb)
-    SentrySDK.capture(message: "Screen Capture Broken Detected") { scope in
-      scope.setLevel(.warning)
-      scope.setTag(value: "screen_capture_broken", key: "diagnostic")
-    }
+    log("Analytics: Screen Capture Broken Detected")
   }
 
   /// Track when user clicks reset button or notification to reset screen capture
@@ -686,32 +679,9 @@ class AnalyticsManager {
 
     if hadPreviousSession && !lastCleanExit {
       log("Analytics: Previous session did not exit cleanly — reporting crash")
-      let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
-      let attachmentURL = DesktopDiagnosticsManager.shared.writeIncidentDiagnosticsAttachment(
-        area: "crash",
-        failureClass: "unknown",
-        phase: "startup")
-      defer {
-        if let attachmentURL {
-          try? FileManager.default.removeItem(at: attachmentURL)
-        }
-      }
-      SentrySDK.capture(message: "App Crash Detected") { scope in
-        scope.setLevel(.warning)
-        scope.setTag(value: "app_crash_detected", key: "diagnostic")
-        scope.setContext(
-          value: [
-            "app_version": version,
-            "os_version": ProcessInfo.processInfo.operatingSystemVersionString,
-          ], key: "crash")
-        if let attachmentURL {
-          scope.addAttachment(
-            Attachment(
-              path: attachmentURL.path,
-              filename: "desktop-incident-diagnostics.json",
-              contentType: "application/json"))
-        }
-      }
+      log(
+        "Analytics: App Crash Detected; version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown")"
+      )
     }
   }
 
@@ -751,14 +721,6 @@ class AnalyticsManager {
     if let timeToInteractiveMs {
       properties["time_to_interactive_ms"] = round(timeToInteractiveMs)
     }
-
-    // Also a Sentry breadcrumb so the numbers stay attached to a same-session
-    // crash report. Sentry is a per-issue view; it cannot answer "is startup
-    // getting slower across the fleet", which is why this is in PostHog too.
-    let breadcrumb = Breadcrumb(level: .info, category: "app.startup")
-    breadcrumb.message = "App Startup Timing"
-    breadcrumb.data = properties
-    SentrySDK.addBreadcrumb(breadcrumb)
 
     PostHogManager.shared.track("App Startup Timing", properties: properties)
   }
