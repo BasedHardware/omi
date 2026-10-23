@@ -67,10 +67,9 @@ from models.conversation_enums import (
 )
 from config.refactor_modes import serving_for
 from utils.conversations.relevance import content_minimum
+from utils.conversations.relevance_salience import finish_home_salience
 from utils.conversations.relevance_content import exclude_from_derived, noise_hidden_from_home
 from utils.llm.notes_short_clip import quiet_minimum
-from utils.llm.notes_output_contract import finish_home_salience
-from utils.conversations.llm_input_dedupe import output_fingerprint
 from utils.llm.output_language import resolve_output_language
 from utils.conversations.deterministic_minimum import (
     build_deterministic_minimum_structured,
@@ -2744,7 +2743,7 @@ def process_conversation(
     if serving_for('MEDIA_NOISE_MODE', uid):
         payload[TERMINAL_NO_DERIVED_EFFECTS_FIELD] = True if content_excluded else None
     from config.sync_reprocess import dedupe_enabled
-    from utils.conversations.llm_input_dedupe import NOTES_HASH, NOTES_OUTPUT_HASH, L1_HASH
+    from utils.conversations.llm_input_dedupe import NOTES_HASH, NOTES_OUTPUT_HASH, L1_HASH, output_fingerprint
 
     if NOTES_OUTPUT_HASH in llm_hashes:
         llm_hashes[NOTES_OUTPUT_HASH] = output_fingerprint(structured)

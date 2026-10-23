@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import unicodedata
+from importlib import import_module
 from typing import Any, Sequence
 
 from models.speaker_evidence import SpeakerEvidence
@@ -81,3 +82,27 @@ def finalize_salience(structured: Any, conversation: Any, evidence: SpeakerEvide
     elif value(structured, 'salience') is None and minimum_is_background(conversation, structured, evidence):
         structured.salience = 'background'
     return structured
+
+
+def get_evidence(uid: str | None, conversation_id: str | None) -> SpeakerEvidence | None:
+    """The L2 evidence read, fail-open: an unavailable read leaves the model's vote to the guards."""
+    if not uid or not conversation_id:
+        return None
+    try:
+        return import_module('utils.speakers.evidence').get_evidence(uid, conversation_id)
+    except Exception:
+        return None
+
+
+def finish_home_salience(uid: str, structured: Any, conversation: Any, *, user_kept: bool = False) -> Any:
+    """Finalize after notes reuse and minimum paths, before completed persistence.
+
+    Only candidate background rows need the evidence read; normal highlights incur no I/O.
+    """
+    if value(structured, 'salience') != 'background' and value(structured, 'title_provenance') != 'server_minimum':
+        return structured
+    if user_kept:
+        structured.salience = 'highlight'
+        return structured
+    evidence = get_evidence(uid, value(conversation, 'id') or value(conversation, 'processing_conversation_id'))
+    return finalize_salience(structured, conversation, evidence)

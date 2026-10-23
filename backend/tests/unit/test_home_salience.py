@@ -8,7 +8,7 @@ import pytest
 from models.speaker_evidence import SpeakerCandidate, SpeakerEvidence, VoiceCluster
 from models.structured import Structured
 from utils.conversations.relevance_salience import finalize_salience, minimum_is_background, repetitive_clip
-from utils.llm import notes_output_contract as contract
+from utils.conversations import relevance_salience as contract
 
 
 def segments(*, owner=False, turns=1, text='Synthetic broadcast. Synthetic broadcast.'):

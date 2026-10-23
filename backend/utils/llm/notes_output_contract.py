@@ -19,8 +19,6 @@ from utils.llm.meeting_notes_presentation import enforce_static_conversation_not
 from utils.llm.notes_refactor_metrics import shadow, result
 from utils.observability.fallback import record_fallback
 from utils.llm.notes_lengths import length_ceiling, length_floor
-from utils.llm.notes_packet import get_evidence
-from utils.conversations.relevance_salience import finalize_salience, value
 from utils.llm.shaped_agent import Problem
 
 # Words that make a heading a task list rather than discussion.
@@ -347,18 +345,3 @@ def finish_notes_contract(
         title_people=() if rich_mode else prefix.title_people,
     )
     return structured
-
-
-def finish_home_salience(uid: str, structured: Any, conversation: Any, *, user_kept: bool = False) -> Any:
-    """Finalize after notes reuse and minimum paths, before completed persistence.
-
-    Evidence reads use the existing fail-open adapter. Only candidate background
-    rows need the read; normal highlights incur no additional I/O.
-    """
-    if value(structured, 'salience') != 'background' and value(structured, 'title_provenance') != 'server_minimum':
-        return structured
-    if user_kept:
-        structured.salience = 'highlight'
-        return structured
-    evidence = get_evidence(uid, value(conversation, 'id') or value(conversation, 'processing_conversation_id'))
-    return finalize_salience(structured, conversation, evidence)
