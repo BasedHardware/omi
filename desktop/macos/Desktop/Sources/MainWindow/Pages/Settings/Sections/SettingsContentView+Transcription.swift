@@ -700,7 +700,7 @@ private struct VoiceAssistantLanguagesCard: View {
 /// One-line notice that meetings in the selected language use cloud STT, because no on-device
 /// Parakeet model covers it (`STTLanguageCapability`). Intel Macs are always cloud, so no notice.
 struct CloudTranscriptionLanguageHint: View {
-  static func isShown(for language: STTLanguageCapability.Selection, isAppleSilicon: Bool) -> Bool {
+  nonisolated static func isShown(for language: STTLanguageCapability.Selection, isAppleSilicon: Bool) -> Bool {
     isAppleSilicon && !language.isCoveredOnDevice
   }
 
