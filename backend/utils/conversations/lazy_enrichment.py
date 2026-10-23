@@ -5,6 +5,7 @@ import json
 
 from database import conversations as conversations_db
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.silent_redrive import is_silent_redrive
 
 CHECKPOINT = 'demand_enrichment_applied_hash'
 
@@ -20,7 +21,7 @@ def enrich_settled(uid: str, conversation_id: str, language: str) -> None:
     from utils.conversations.process_conversation import apply_settled_enrichment
 
     row = conversations_db.get_conversation(uid, conversation_id)
-    if not row or row.get('deleted') or row.get('discarded'):
+    if not row or row.get('deleted') or row.get('discarded') or is_silent_redrive(row):
         return
     # Active capture and a smart-merge donor never own final enrichment.
     if row.get('status') != 'completed':

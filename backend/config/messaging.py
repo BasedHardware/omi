@@ -4,6 +4,7 @@ import json
 import os
 
 from config.rollout_cohorts import in_rollout_cohort
+from config.refactor_switches import default_off as rollout_default_off
 from urllib.parse import quote
 
 
@@ -12,7 +13,9 @@ def channel_policy(channel):
     raw = os.getenv('OMI_MESSAGING_CHANNEL_POLICY')
     if raw is None:
         return {
-            'enabled': os.getenv('OMI_MESSAGING_CHANNELS', 'off').lower() == 'on',
+            'enabled': rollout_default_off(
+                'OMI_MESSAGING_CHANNELS', os.getenv('OMI_MESSAGING_CHANNELS', 'off').lower() == 'on'
+            ),
             'cohort': [v.strip() for v in os.getenv('OMI_MESSAGING_CHANNELS_UIDS', '').split(',') if v.strip()],
         }
     try:

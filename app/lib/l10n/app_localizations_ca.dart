@@ -13465,9 +13465,6 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Continua amb el pla gratuït';
-
-  @override
   String get paywallTrialCancelNote => 'Cancel·la en qualsevol moment. Sense comissions ni penalitzacions.';
 
   @override
@@ -14458,4 +14455,176 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi continua enregistrant';
+
+  @override
+  String get episodeNow => 'Ara';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'En directe · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count moments',
+      one: '1 moment',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Moments';
+
+  @override
+  String get episodeSoFar => 'Fins ara';
+
+  @override
+  String get episodeUpdatedJustNow => 'Actualitzat ara mateix · notes completes en acabar';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Actualitzat fa $minutes min · notes completes en acabar';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Les notes apareixen després dels primers minuts de conversa.';
+
+  @override
+  String get episodeOpenAll => 'Obre-ho tot';
+
+  @override
+  String get episodeWrapUpNow => 'Tanca ara';
+
+  @override
+  String get episodeWrapsUpHint => 'Omi ho tanca quan passes a una altra cosa';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Tasca detectada: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Recordatori detectat: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Tasca desada: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 's\'afegeixen $duration del teu Omi';
+  }
+
+  @override
+  String get episodeListeningNow => 'Escoltant ara';
+
+  @override
+  String get deviceHeardToday => 'Escoltat avui';
+
+  @override
+  String get deviceToSync => 'per sincronitzar';
+
+  @override
+  String get deviceRightNow => 'Ara mateix';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Episodi en directe · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Posant-se al dia';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done de $total min';
+  }
+
+  @override
+  String get deviceRecently => 'Recentment';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Desconnectat durant $duration';
+  }
+
+  @override
+  String get deviceControls => 'Controls';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'També: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Prem el botó de l\'Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Una pulsació curta. Després pregunta el que vulguis.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Fes la teva pregunta';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Digues-ho en veu alta. L\'Omi t\'escolta.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Fet? Prem el botó de nou per enviar.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'T\'hem ampliat a $days dies gratis';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dies d\'Omi Pro a càrrec nostre. T\'avisarem abans de cobrar. Cancel·la quan vulguis.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Vull la prova de $days dies';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Comença la prova gratuïta de $days dies';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Encén l\'Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Prem el botó un cop i mantén-lo a prop del mòbil.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'Ja està. L\'Omi continuarà gravant les teves converses en segon pla.';
+
+  @override
+  String get noThanks => 'No, gràcies';
+
+  @override
+  String get recapInTheBackground => 'En segon pla';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Queda\'t amb un $percent% de descompte';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Queda\'t i paga $price al mes durant els propers $months mesos.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Fet. $percent% de descompte els propers $months mesos.';
+  }
 }

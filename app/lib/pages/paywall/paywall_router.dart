@@ -26,6 +26,7 @@ abstract final class PaywallRouter {
     bool trackOpen = true,
     PaywallExperimentConfig? config,
     bool Function(String key, String variant)? record,
+    void Function(Object? result)? onResult,
   }) async {
     final usage = context.read<UsageProvider>();
     if (!usage.showSubscriptionUI) return false;
@@ -57,7 +58,8 @@ abstract final class PaywallRouter {
       PaywallVariant.control => null,
     };
     if (page == null) return false;
-    await routeToPage(context, page);
+    final result = await routeToPage(context, page);
+    onResult?.call(result);
     return true;
   }
 

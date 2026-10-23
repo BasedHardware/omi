@@ -492,7 +492,7 @@ async def test_the_fallback_chain_names_an_account_refusal_as_auth():
     assert service == STTService.modulate
     assert record.call_args.kwargs['reason'] == 'auth'
     assert record.call_args.kwargs['outcome'] == 'recovered'
-    breaker.record_failure.assert_called_once_with()
+    breaker.record_failure.assert_called_once_with(error_class='auth')
 
 
 async def test_an_exhausted_chain_still_counts_the_refusal_on_the_circuit():
@@ -509,7 +509,7 @@ async def test_an_exhausted_chain_still_counts_the_refusal_on_the_circuit():
             primary_service=STTService.deepgram,
             connect_primary=AsyncMock(side_effect=_refusal(402)),
         )
-    breaker.record_failure.assert_called_once_with()
+    breaker.record_failure.assert_called_once_with(error_class='auth')
     record.assert_not_called()  # the telemetry loop never ran — no legs were configured
 
 

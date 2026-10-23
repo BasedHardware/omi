@@ -49,6 +49,8 @@ For development worktrees, run the baseline local setup once. It installs the Gi
 make setup
 ```
 
+The pre-push hook first runs `scripts/worktree_env_doctor.py`, which fails in seconds when a phase the push selects needs local state this worktree lacks (app dependencies, `backend/.venv`, a stale SwiftPM `.build`) and prints the one command that fixes it. Run `python3 scripts/worktree_env_doctor.py --all --fix` to bring a new worktree's app, backend, and desktop state up front.
+
 <details>
   <summary>Full Installation</summary>
   
@@ -121,7 +123,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 │  └─────────┘  └──────────┘  └─────────┘  └──────────┘  │
 │                                                         │
 │  ┌─────────┐  ┌──────────┐  ┌─────────┐  ┌──────────┐  │
-│  │ Deepgram│  │ Firestore│  │ Redis   │  │ LLMs     │  │
+│  │ Soniox  │  │ Firestore│  │ Redis   │  │ LLMs     │  │
 │  │ (STT)   │  │ (DB)     │  │ (Cache) │  │ (AI)     │  │
 │  └─────────┘  └──────────┘  └─────────┘  └──────────┘  │
 └─────────────────────────────────────────────────────────┘

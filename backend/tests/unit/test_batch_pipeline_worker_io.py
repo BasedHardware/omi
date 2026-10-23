@@ -105,6 +105,7 @@ class Model:
 
     def worker(self, io_concurrency, **overrides):
         settings = dict(
+            language_of=lambda item: 'en',  # Synthetic English fixture.
             decode=self.decode,
             vad=self.vad,
             words_providers={'parakeet': self},

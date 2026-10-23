@@ -794,7 +794,6 @@
         "backend/charts/backend-listen/**",
         "backend/charts/pusher/**",
         "backend/charts/parakeet/**",
-        "backend/charts/deepgram-self-hosted/**",
         "backend/scripts/audit_audio_fleet_callers.py",
         "backend/scripts/qualify_parakeet_route.py",
         "backend/scripts/fixtures/parakeet_route_synthetic.*"

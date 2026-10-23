@@ -3,6 +3,11 @@
 Counters are process-local and can undercount a lost transaction reply or process
 exit. Sum rates/increases across CPU and GPU processes; never equate a sampled
 counter delta with a durable ledger census. Labels contain only closed tokens.
+
+`failed` counts every quarantine (CUDA, validation, empty ASR) and `recovered`
+automatic recoveries with a result (epoch-2 operator successes are not counted),
+so failed/admitted is not an unrecovered-empty-ASR rate.
+Gate a ramp on durable job fields (`recovery_state`, `worker_empty_evidence`).
 """
 
 import os

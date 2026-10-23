@@ -64,6 +64,11 @@ struct ChatAttachment: Identifiable, Equatable {
     mimeType.hasPrefix("image/")
   }
 
+  /// A clip still on disk: uploaded as sampled frames + audio, never as the whole file.
+  var isVideo: Bool {
+    mimeType.hasPrefix("video/")
+  }
+
   /// True once the backend has accepted the upload and returned an id.
   var isUploaded: Bool {
     if case .uploaded = state { return true }
@@ -125,6 +130,9 @@ struct ChatAttachment: Identifiable, Equatable {
     case "xlsx":
       return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     case "zip": return "application/zip"
+    case "mov", "qt": return "video/quicktime"
+    case "mp4", "m4v": return "video/mp4"
+    case "webm": return "video/webm"
     default: return "application/octet-stream"
     }
   }

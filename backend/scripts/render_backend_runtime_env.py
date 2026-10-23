@@ -95,12 +95,80 @@ FIRESTORE_READ_RUNTIME_ENV_NAMES = (
 )
 
 
-def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
-    """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
+def _action_removed_env_names(service: str) -> set[str]:
+    """The literal --remove-env-vars names the deploy action passes for this service."""
     listed: set[str] = set(RETIRED_ENV_NAMES)
     if service not in PUSHER_CLIENT_SERVICES:
         listed.add('HOSTED_PUSHER_API_URL')
+    return listed
+
+
+def _remove_env_extra(service: str, service_config: ConfigDict) -> str:
+    """Manifest forbidden keys the action's literal list lacks, each with a leading comma."""
+    listed = _action_removed_env_names(service)
     return ''.join(f',{name}' for name in sorted(set(service_config.get('forbidden_env', [])) - listed))
+
+
+def _job_removed_env_names(job_config: ConfigDict) -> set[str]:
+    """Names a job deploy removes: its forbidden_env plus its own rendered --remove-env-vars flag."""
+    flags = _render_flag_values(_as_config_dict(job_config.get('flags')) or {})
+    listed = {name for name in flags.get('--remove-env-vars', '').split(',') if name}
+    return listed | set(job_config.get('forbidden_env', []))
+
+
+def _parse_deploy_cloud_run_env_vars(rendered: str) -> list[tuple[str, str]]:
+    """Invert _render_env_vars: split deploy-cloudrun's escaped grammar back into pairs."""
+    entries: list[str] = []
+    current: list[str] = []
+    characters = iter(rendered)
+    for character in characters:
+        if character == '\\':
+            current.append(next(characters, ''))
+        elif character == '\n':
+            entries.append(''.join(current))
+            current = []
+        else:
+            current.append(character)
+    entries.append(''.join(current))
+    pairs: list[tuple[str, str]] = []
+    for entry in entries:
+        if entry:
+            name, _, value = entry.partition('=')
+            pairs.append((name, value))
+    return pairs
+
+
+def assert_manifest_env_renders(workload: str, config: ConfigDict, rendered: str, removed: set[str]) -> None:
+    """Fail the deploy before it mutates anything if a manifest env key would not land.
+
+    Ops keys silently reverting after every train is what this guards: each manifest
+    key must come back out of the exact text handed to deploy-cloudrun, once, with its
+    manifest value, and must not also be named for removal in the same deploy. A
+    provisional key with no supplied value is the documented preserve-live omission.
+    """
+    expected = {
+        entry['name']: entry['value'] for entry in _render_env_entries(_as_config_dict(config.get('env')) or {})
+    }
+    pairs = _parse_deploy_cloud_run_env_vars(rendered)
+    names = [name for name, _ in pairs]
+    errors: list[str] = []
+    duplicated = sorted({name for name in names if names.count(name) > 1})
+    if duplicated:
+        errors.append(f'rendered more than once: {", ".join(duplicated)}')
+    missing = sorted(set(expected) - set(names))
+    if missing:
+        errors.append(f'manifest keys missing from the rendered env: {", ".join(missing)}')
+    unexpected = sorted(set(names) - set(expected))
+    if unexpected:
+        errors.append(f'rendered keys not in the manifest: {", ".join(unexpected)}')
+    changed = sorted(name for name, value in pairs if name in expected and expected[name] != value)
+    if changed:
+        errors.append(f'rendered value differs from the manifest: {", ".join(changed)}')
+    removed_too = sorted(set(expected) & removed)
+    if removed_too:
+        errors.append(f'manifest keys also removed by the deploy: {", ".join(removed_too)}')
+    if errors:
+        raise ValueError(f'Cloud Run {workload} env does not render every manifest key; ' + '; '.join(errors))
 
 
 def _as_config_dict(value: object) -> ConfigDict | None:
@@ -232,9 +300,16 @@ def main() -> int:
             if service_config is None:
                 raise ValueError(f'Cloud Run service {service} must be a mapping')
             output_prefix = _output_prefix(service)
+            service_env_vars = _render_env_vars(service_config.get('env', {}))
+            assert_manifest_env_renders(
+                f'service {service}',
+                service_config,
+                service_env_vars,
+                _action_removed_env_names(service) | set(service_config.get('forbidden_env', [])),
+            )
             rendered_outputs.extend(
                 (
-                    (f'{output_prefix}_env_vars', _render_env_vars(service_config.get('env', {}))),
+                    (f'{output_prefix}_env_vars', service_env_vars),
                     (f'{output_prefix}_secrets', _render_secrets(service_config.get('secrets', {}))),
                     (f'{output_prefix}_secret_names', _render_secret_names(service_config.get('secrets', {}))),
                     (f'{output_prefix}_identity_flags', _render_identity_flags(service, service_config)),
@@ -248,10 +323,12 @@ def main() -> int:
         if job_config is None:
             raise ValueError(f'Cloud Run job {job} must be a mapping')
         output_prefix = _output_prefix(job)
+        job_env_vars = _render_env_vars(job_config.get('env', {}))
+        assert_manifest_env_renders(f'job {job}', job_config, job_env_vars, _job_removed_env_names(job_config))
         rendered_outputs.extend(
             (
                 (f'{output_prefix}_flags', _render_flags(_as_config_dict(job_config.get('flags')) or {})),
-                (f'{output_prefix}_env_vars', _render_env_vars(job_config.get('env', {}))),
+                (f'{output_prefix}_env_vars', job_env_vars),
                 (f'{output_prefix}_secrets', _render_secrets(job_config.get('secrets', {}))),
                 (f'{output_prefix}_secret_names', _render_secret_names(job_config.get('secrets', {}))),
             )

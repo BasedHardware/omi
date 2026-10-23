@@ -103,7 +103,6 @@ def test_hpa_and_adapter_changes_select_this_contract():
         'vad',
         'diarizer',
         'nllb-translation',
-        'deepgram-self-hosted',
         'monitoring',
     }
     all_tests = selector.discover_all_tests()

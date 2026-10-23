@@ -20,6 +20,7 @@ RUN_SCRIPT="$MACOS_DIR/run.sh"
 BASE_ENTITLEMENTS="$MACOS_DIR/Desktop/Omi.entitlements"
 
 LIBRARY_VALIDATION_KEY="com.apple.security.cs.disable-library-validation"
+CALENDAR_ACCESS_KEY="com.apple.security.personal-information.calendars"
 DEVELOPER_ID_IDENTITY="Developer ID Application: Based Hardware INC (9536L8KLMP)"
 DEVELOPER_ID_TEAM="9536L8KLMP"
 APPLE_DEVELOPMENT_IDENTITY="Apple Development: dev@example.com (AB12CD34EF)"
@@ -104,6 +105,8 @@ team_scoped_entitlements="$(<"$team_scoped_path")"
 
 has_key "$teamless_entitlements" "com.apple.developer.applesignin" \
     && fail "teamless fallback retained Sign in with Apple"
+[ "$(/usr/libexec/PlistBuddy -c "Print :$CALENDAR_ACCESS_KEY" "$teamless_entitlements")" = "true" ] \
+    || fail "teamless fallback lost Calendar access"
 teamless_library_validation="$(/usr/libexec/PlistBuddy \
     -c "Print :$LIBRARY_VALIDATION_KEY" \
     "$teamless_entitlements")"
@@ -112,8 +115,12 @@ teamless_library_validation="$(/usr/libexec/PlistBuddy \
 
 has_key "$team_scoped_entitlements" "com.apple.developer.applesignin" \
     && fail "team-scoped fallback retained Sign in with Apple"
+[ "$(/usr/libexec/PlistBuddy -c "Print :$CALENDAR_ACCESS_KEY" "$team_scoped_entitlements")" = "true" ] \
+    || fail "team-scoped fallback lost Calendar access"
 has_key "$team_scoped_entitlements" "$LIBRARY_VALIDATION_KEY" \
     && fail "team-scoped fallback disabled library validation"
+[ "$(/usr/libexec/PlistBuddy -c "Print :$CALENDAR_ACCESS_KEY" "$MACOS_DIR/Desktop/Omi-Release.entitlements")" = "true" ] \
+    || fail "release signing lost Calendar access"
 
 # Named apps in one worktree also get distinct generated files.
 second_bundle_entitlements="$("$PREPARE_SCRIPT" \

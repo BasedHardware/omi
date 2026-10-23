@@ -1,6 +1,14 @@
 name: Desktop Swift CI
 
 on:
+  # Nightly calls run these same jobs against one immutable main snapshot.
+  workflow_call:
+    inputs:
+      nightly_main_sha:
+        description: Main SHA pinned by the unfiltered nightly caller
+        type: string
+        required: false
+        default: ''
   push:
     branches: main
   pull_request:
@@ -26,8 +34,19 @@ permissions:
 concurrency:
   # Supersede stale revisions of the same PR, but never let a later main push
   # cancel the exact-SHA evidence consumed by desktop release planning.
-  group: desktop-swift-${{ github.event.pull_request.number || github.sha }}
+  group: desktop-swift-${{ github.event.pull_request.number || github.sha }}-${{ inputs.nightly_main_sha != '' && format('nightly-{0}', github.run_id) || 'normal' }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # Abort a stalled git HTTP transfer instead of hanging. Hosted-runner fetches
+  # from github.com intermittently stop receiving data for 7-10 minutes before
+  # the connection resets (Backend Hermetic E2E run 39435458398 spent 498 s in
+  # "Checkout code" and hit its 10-minute cap). With these set, git aborts any
+  # transfer that stays under 1 KB/s for 60 s, and actions/checkout retries the
+  # fetch (its built-in 3 attempts); a healthy depth-1 fetch takes ~20 s.
+  # Applies to every git network call in the workflow, including script steps.
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
 
 jobs:
   changes:
@@ -35,22 +54,28 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       diff_base: ${{ steps.changed.outputs.diff_base }}
-      full_ci: ${{ steps.tier.outputs.full_ci }}
-      should_run: ${{ steps.changed.outputs.should_run }}
-      should_run_static: ${{ steps.changed.outputs.should_run_static }}
-      should_run_tests: ${{ steps.changed.outputs.should_run_tests }}
+      full_ci: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.tier.outputs.full_ci) }}
+      should_run: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changed.outputs.should_run) }}
+      should_run_static: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changed.outputs.should_run_static) }}
+      should_run_tests: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changed.outputs.should_run_tests) }}
       should_test_compile: ${{ steps.changed.outputs.should_test_compile }}
       should_siri_advisory: ${{ steps.changed.outputs.should_siri_advisory }}
-      should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
+      should_release_compile: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changed.outputs.should_release_compile) }}
       should_release_test_compile: ${{ steps.changed.outputs.should_release_test_compile }}
-      should_notification_release_regression: ${{ steps.changed.outputs.should_notification_release_regression }}
+      should_notification_release_regression: ${{ inputs.nightly_main_sha != '' && 'true' || (steps.changed.outputs.should_notification_release_regression) }}
       desktop_swift_changed_files: ${{ steps.changed.outputs.desktop_swift_changed_files }}
-      swift_test_effective_lane: ${{ steps.changed.outputs.swift_test_effective_lane }}
+      swift_test_effective_lane: ${{ inputs.nightly_main_sha != '' && 'full' || steps.changed.outputs.swift_test_effective_lane }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 0
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Resolve current CI tier
         id: tier
@@ -75,7 +100,7 @@ jobs:
           echo "$FILES"
           echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
 
-          IMPACT_FILES=$(mktemp)
+          IMPACT_FILES=/tmp/desktop-impact-files.txt
           printf '%s\n' "$FILES" > "$IMPACT_FILES"
           python3 scripts/pre_push_ci_prediction.py \
             --changed-files "$IMPACT_FILES" \
@@ -92,7 +117,7 @@ jobs:
             --exclusive-platform \
             --base "$DIFF_BASE" \
             --skip-pr-body-checks \
-            --changed-files "$IMPACT_FILES" \
+            --changed-files "${{ inputs.nightly_main_sha != '' && '/tmp/nightly-all-files.txt' || '/tmp/desktop-impact-files.txt' }}" \
             --output json > /tmp/macos-manifest-selection.json
           SHOULD_RUN_STATIC=$(python3 - <<'PY'
           import json
@@ -162,11 +187,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           # Static-check diffing needs full history; blob:none keeps that while
           # skipping the ~1.25 GB of blob download that made this checkout cost
           # a macOS-runner minute per run.
           fetch-depth: 0
           filter: blob:none
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Select and assert pinned Xcode 26.6
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
@@ -234,6 +265,7 @@ jobs:
             MANIFEST_ARGS+=(--skip-changelog)
           fi
           python3 .github/scripts/run_checks.py \
+            ${{ inputs.nightly_main_sha != '' && '--changed-files /tmp/nightly-all-files.txt --skip-pr-body-checks --keep-going' || '' }} \
             --lane ci \
             --platform macos \
             --exclusive-platform \
@@ -557,7 +589,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 1
+
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
 
       - name: Select and assert pinned Xcode 26.6
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
@@ -633,7 +671,7 @@ jobs:
   post-merge-failure-issue:
     name: Post-merge Desktop Swift Release Compile failure issue
     needs: [changes, desktop-swift-release-compile]
-    if: ${{ always() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    if: ${{ always() && inputs.nightly_main_sha == '' && (github.event_name == 'push' || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -681,7 +719,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          ref: ${{ inputs.nightly_main_sha || github.sha }}
           fetch-depth: 1
+      - name: Inventory all nightly paths
+        if: inputs.nightly_main_sha != ''
+        shell: bash
+        run: git ls-files -- . ':!omi/**' ':!omiGlass/**' > /tmp/nightly-all-files.txt
+
       - name: Select Xcode 27 release toolchain
         run: |
           echo "DEVELOPER_DIR=/Applications/Xcode_27.0.app/Contents/Developer" >> "$GITHUB_ENV"

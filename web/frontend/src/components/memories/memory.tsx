@@ -13,6 +13,10 @@ import {
 } from '@/src/lib/shared-note.mjs';
 import MemoryWithTabs from './summary/memory-with-tabs';
 import { Fragment } from 'react';
+import {
+  noteTranscriptIDs,
+  presentableNoteTitle,
+} from '@omi/note-shared/note-sources.mjs';
 
 interface MemoryProps {
   memory: MemoryType;
@@ -21,7 +25,11 @@ interface MemoryProps {
 }
 
 export default function Memory({ memory, screenshots = null }: MemoryProps) {
-  const title = memory.structured?.title || DEFAULT_TITLE_MEMORY;
+  const title =
+    presentableNoteTitle(
+      memory.structured?.title,
+      noteTranscriptIDs(memory.transcript_segments),
+    ) || DEFAULT_TITLE_MEMORY;
   const stamp = shareDateTime(memory);
   const minutes = durationMinutes(memory.started_at, memory.finished_at);
   const duration = formatDuration(minutes);

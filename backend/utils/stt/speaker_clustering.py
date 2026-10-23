@@ -10,7 +10,9 @@ from typing import Any, Callable, Sequence
 # short capture clips to noisy in-session centroids, so it deliberately has a
 # separate operating point. This changes clustering only; enrollment verification
 # is tuned from the offline bench, not from here.
-SPEAKER_CLUSTERING_THRESHOLD = float(os.getenv('SPEAKER_CLUSTERING_THRESHOLD', '0.60'))
+from utils.speakers.policy import ONLINE_CLUSTER
+
+SPEAKER_CLUSTERING_THRESHOLD = ONLINE_CLUSTER.distance
 
 # Eight active speakers preserves ordinary group conversations while making a
 # pathological run of noisy embeddings finite. Once full, the nearest centroid

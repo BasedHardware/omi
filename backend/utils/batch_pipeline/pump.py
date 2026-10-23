@@ -56,6 +56,7 @@ class Pump:
         leader: LeaderLease | None = None,
         inline_metrics: bool = True,
         flights: int = 1,
+        shadow=None,
     ):
         if publish_concurrency is None:
             publish_concurrency = configured_publish_concurrency()
@@ -94,6 +95,8 @@ class Pump:
         self.flights = flights
         self._gpu = asyncio.Lock()
         self._maintenance = asyncio.Lock()
+        self.shadow = shadow
+        self._normal_flights = 0
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """SIGTERM sets stop_event; in-flight chains drain with heartbeats intact."""
@@ -190,6 +193,11 @@ class Pump:
         return await self._flight(stop_event)
 
     async def _maintain(self) -> None:
+        if self.shadow is not None:
+            try:
+                await self.shadow.maintain()
+            except Exception:
+                pass
         sampled_at = time.monotonic()
         if sampled_at - self._last_recovery >= 5:
             # Expired-lease recovery and the global result_ready drain are
@@ -202,11 +210,39 @@ class Pump:
                     await run_blocking(sync_executor, self.project_pending)
                 await run_blocking(db_executor, self.scheduler.recover, time.time())
                 ready = await run_blocking(db_executor, self.scheduler.store.due, 'result_ready', time.time(), 100)
-                await self._drain_ready_owners(ready)
+                try:
+                    await self._drain_ready_owners(ready)
+                except Exception as error:
+                    # A fenced head on the page must not stop the held-owner re-offer below.
+                    self._log_held_retry('ready_page', error)
+                # Durable hold markers outlive the in-memory set below (restarts).
+                marked = await run_blocking(db_executor, self.merge.marked_page, 50)
+                for key, owner_id in marked:
+                    try:
+                        if owner_id:
+                            await self.drain_owner(owner_id)
+                        await run_blocking(db_executor, self.merge.release_hold, key, force=not owner_id)
+                    except Exception as error:
+                        self._log_held_retry('marker', error)
+            # Every pump re-offers the owners its merge held for projection
+            # depth; their rows may never surface in the 100-row page above.
+            for owner_id in list(self.merge.held_owners):
+                try:
+                    await self.drain_owner(owner_id)
+                except Exception as error:
+                    self._log_held_retry('held', error)
             self._last_recovery = sampled_at
         if self.inline_metrics and self.metrics and sampled_at - self._last_metrics >= 15:
             await self.sample_metrics()
             self._last_metrics = sampled_at
+
+    @staticmethod
+    def _log_held_retry(scope: str, error: Exception) -> None:
+        logger.warning(
+            'event=batch_merge action=held_reoffer outcome=retry scope=%s exception_type=%s count=1',
+            scope,
+            type(error).__name__,
+        )
 
     async def _flight(self, stop_event: asyncio.Event | None) -> int:
         now = time.time()
@@ -223,11 +259,25 @@ class Pump:
 
         leases = await run_blocking(db_executor, claim)
         if not leases:
+            if self.shadow is not None:
+                try:
+                    return await self.shadow.run_once(self, capacity=snapshot)
+                except FatalGpuError:
+                    raise
+                except Exception as error:
+                    logger.info('event=batch_shadow_worker outcome=error exception_type=%s', type(error).__name__)
             return 0
+        self._normal_flights += 1
+        claimed = leases
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
         try:
+            if self.shadow is not None:
+                try:
+                    await self.shadow.close()
+                except Exception:
+                    pass  # Shadow control failure cannot interrupt ordinary work.
             required = [
                 v for v in leases if v.item.requires_compute_admission or cap_dispatch_enabled(v.item.owner_id, 'batch')
             ]
@@ -330,9 +380,25 @@ class Pump:
                 raise ValueError('worker returned duplicate or foreign results')
             await self._publish_flight(leases, result_map, lost)
             return len(leases)
+        except FatalGpuError:
+            raise  # Its handler already refunded every lease without an attempt charge.
+        except Exception:
+            # Nothing else will touch these leases before LEASE_SECONDS expiry.
+            # Release is fenced, so published, deferred or re-leased work is untouched.
+            await self._release(claimed)
+            raise
         finally:
+            self._normal_flights -= 1
             done.set()
             await renew
+
+    async def _release(self, leases: list[LeasedWork]) -> None:
+        for lease in leases:
+            try:
+                await run_blocking(db_executor, self.scheduler.release, lease.item.segment_id, lease.token, time.time())
+            except Exception as error:
+                # Ambiguous release leaves lease expiry as the durable fallback.
+                logger.error('event=batch_flight outcome=lease_release exception_type=%s', type(error).__name__)
 
     @contextlib.asynccontextmanager
     async def _owner_serial(self, owner_id: str):

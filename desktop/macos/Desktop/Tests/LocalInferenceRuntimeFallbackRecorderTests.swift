@@ -27,7 +27,7 @@ import XCTest
       for (from, to, reason, outcome) in cases {
         recorder.recordLocalInferenceFallback(from: from, to: to, reason: reason, outcome: outcome)
       }
-      let snapshots = DesktopDiagnosticsManager.shared.currentSnapshotsForSentry()
+      let snapshots = DesktopDiagnosticsManager.shared.currentSnapshots()
       XCTAssertEqual(snapshots.count, cases.count, "one shared health event per fallback")
       for (index, snapshot) in snapshots.enumerated() {
         let expected = cases[index]

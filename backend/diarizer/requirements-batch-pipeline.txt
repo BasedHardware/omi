@@ -20,3 +20,6 @@ onnxruntime==1.19.0
 
 # Shared Firestore SDK task-write fencing; no task reads or Redis IO until a task write.
 redis==5.0.8
+
+# Job-store A2 shadow (BATCH_JOBSTORE_MODE=shadow): Postgres driver, imported lazily; same pin as backend/requirements.txt.
+psycopg[binary]==3.2.10

@@ -13209,9 +13209,6 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => '無料プランで続行';
-
-  @override
   String get paywallTrialCancelNote => 'いつでもキャンセル可能。手数料や違約金なし。';
 
   @override
@@ -14180,4 +14177,175 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi で録音を続けています';
+
+  @override
+  String get episodeNow => '現在';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'ライブ · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件のモーメント',
+      one: '1 件のモーメント',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'モーメント';
+
+  @override
+  String get episodeSoFar => 'ここまで';
+
+  @override
+  String get episodeUpdatedJustNow => 'たった今更新 · 終了時に完全なメモ';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes 分前に更新 · 終了時に完全なメモ';
+  }
+
+  @override
+  String get episodeNotesSoon => '会話が数分続くとメモが表示されます。';
+
+  @override
+  String get episodeOpenAll => 'すべて開く';
+
+  @override
+  String get episodeWrapUpNow => '今すぐまとめる';
+
+  @override
+  String get episodeWrapsUpHint => '次のことに移ると Omi がまとめます';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'タスクを検出: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'リマインダーを検出: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'タスクを保存: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'Omi から $duration を追加中';
+  }
+
+  @override
+  String get episodeListeningNow => '聞き取り中';
+
+  @override
+  String get deviceHeardToday => '今日聞いた時間';
+
+  @override
+  String get deviceToSync => '同期待ち';
+
+  @override
+  String get deviceRightNow => '現在';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'ライブのエピソード · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => '追いつき中';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total 分';
+  }
+
+  @override
+  String get deviceRecently => '最近';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration 切断';
+  }
+
+  @override
+  String get deviceControls => 'コントロール';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'その他: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Omi のボタンを押してください';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => '短く1回押します。あとは何でも聞いてください。';
+
+  @override
+  String get deviceOnboardingAskNowTitle => '質問をどうぞ';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => '声に出して話してください。Omi が聞いています。';
+
+  @override
+  String get deviceOnboardingPressAgainHint => '話し終えたら、もう一度ボタンを押して送信します。';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return '$days日間無料にアップグレードされました';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return 'Omi Pro を $days 日間無料で。請求前にお知らせします。いつでもキャンセルできます。';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days日間の無料トライアルを使う';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '$days日間の無料トライアルを始める';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Omi の電源を入れてください';
+
+  @override
+  String get pairingPowerOnSubtitle => 'ボタンを1回押して、スマートフォンの近くに置いてください。';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'これで完了です。Omi はバックグラウンドで会話を記録し続けます。';
+
+  @override
+  String get noThanks => 'いいえ、結構です';
+
+  @override
+  String get recapInTheBackground => 'バックグラウンド';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent%オフで続ける';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return '続ければ月額$price、次の$monthsか月間。';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return '完了しました。$percent%オフが$monthsか月続きます。';
+  }
 }

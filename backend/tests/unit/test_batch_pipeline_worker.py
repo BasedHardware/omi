@@ -83,6 +83,7 @@ def setup_worker(**kwargs):
         return {'turns': []}
 
     settings = dict(
+        language_of=lambda item: 'en',  # Synthetic English fixture.
         decode=decode,
         vad=lambda s: [(0, len(s) / 16000)],
         words_providers={'parakeet': provider},

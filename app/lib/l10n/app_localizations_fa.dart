@@ -13392,9 +13392,6 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'ادامه با طرح رایگان';
-
-  @override
   String get paywallTrialCancelNote => 'هر زمان خواستید لغو کنید. بدون کارمزد، بدون جریمه.';
 
   @override
@@ -14379,4 +14376,175 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi همچنان در حال ضبط است';
+
+  @override
+  String get episodeNow => 'اکنون';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'زنده · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count لحظه',
+      one: '۱ لحظه',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'لحظه‌ها';
+
+  @override
+  String get episodeSoFar => 'تا اینجا';
+
+  @override
+  String get episodeUpdatedJustNow => 'همین حالا به‌روز شد · یادداشت کامل در پایان';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes دقیقه پیش به‌روز شد · یادداشت کامل در پایان';
+  }
+
+  @override
+  String get episodeNotesSoon => 'یادداشت‌ها پس از چند دقیقهٔ اول گفت‌وگو نمایش داده می‌شوند.';
+
+  @override
+  String get episodeOpenAll => 'باز کردن همه';
+
+  @override
+  String get episodeWrapUpNow => 'اکنون جمع‌بندی کن';
+
+  @override
+  String get episodeWrapsUpHint => 'وقتی سراغ کار دیگری بروید، Omi این را جمع‌بندی می‌کند';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'کار ثبت شد: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'یادآوری ثبت شد: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'کار ذخیره شد: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'در حال افزودن $duration از Omi شما';
+  }
+
+  @override
+  String get episodeListeningNow => 'در حال گوش دادن';
+
+  @override
+  String get deviceHeardToday => 'شنیده‌شده امروز';
+
+  @override
+  String get deviceToSync => 'در انتظار همگام‌سازی';
+
+  @override
+  String get deviceRightNow => 'همین حالا';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'بخش زنده · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'در حال همگام شدن';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done از $total دقیقه';
+  }
+
+  @override
+  String get deviceRecently => 'اخیراً';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'قطع اتصال به مدت $duration';
+  }
+
+  @override
+  String get deviceControls => 'کنترل‌ها';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'همچنین: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'دکمه Omi را فشار دهید';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'یک فشار کوتاه. سپس هر چیزی بپرسید.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'سؤال خود را بپرسید';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'بلند بگویید. Omi گوش می‌دهد.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'تمام شد؟ برای ارسال دوباره دکمه را فشار دهید.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'به $days روز رایگان ارتقا یافتید';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days روز Omi Pro مهمان ما. قبل از هر پرداختی یادآوری می‌کنیم. هر زمان لغو کنید.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'دریافت آزمایشی $days روزه';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'آزمایش رایگان $days روزه را شروع کنید';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Omi را روشن کنید';
+
+  @override
+  String get pairingPowerOnSubtitle => 'یک بار دکمه را فشار دهید و نزدیک گوشی نگه دارید.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'همین. Omi به ضبط مکالمات شما در پس‌زمینه ادامه می‌دهد.';
+
+  @override
+  String get noThanks => 'نه، ممنون';
+
+  @override
+  String get recapInTheBackground => 'در پس‌زمینه';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'با $percent% تخفیف بمانید';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'بمانید و ماهانه $price بپردازید، برای $months ماه آینده.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'انجام شد. $percent% تخفیف برای $months ماه آینده.';
+  }
 }

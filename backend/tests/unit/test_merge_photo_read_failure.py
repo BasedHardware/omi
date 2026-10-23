@@ -50,7 +50,7 @@ def _install(monkeypatch, photos_by_conv, written, deleted, failed):
     monkeypatch.setattr(merge, 'canonical_intake_is_fenced', lambda: False)
     monkeypatch.setattr(merge.lifecycle_service, 'create_processing_conversation', lambda *_a, **_k: None)
     monkeypatch.setattr(merge.lifecycle_service, 'complete', lambda *_a, **_k: None)
-    monkeypatch.setattr(merge, '_cleanup_merged_target_after_failure', lambda *_a, **_k: True)
+    monkeypatch.setattr(merge, 'cleanup_failed_merge_target', lambda *_a, **_k: True)
     monkeypatch.setattr(merge, '_delete_conversation_and_related_data', lambda _uid, cid, **_k: deleted.append(cid))
     monkeypatch.setattr(merge, '_handle_merge_failure', lambda _uid, ids, **_k: failed.append(list(ids)))
     monkeypatch.setattr(notifications, 'send_merge_completed_message', lambda *_a, **_k: None)

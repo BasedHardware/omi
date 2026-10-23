@@ -881,6 +881,8 @@ extension SettingsContentView {
 
         await MainActor.run {
           dailySummaryEnabled = dailySummary.enabled
+          savedDailySummaryEnabled = dailySummary.enabled
+          dailySummaryEnabledError = nil
           dailySummaryHour = dailySummary.hour
           if dailySummaryDepthRevision == dailySummaryDepthRevisionAtLoadStart {
             savedDailySummaryDepth = dailySummary.depth
@@ -894,7 +896,11 @@ extension SettingsContentView {
           notificationFrequency = NotificationService.currentFrequencyLevel()
           userLanguage = language.language
           recordingPermissionEnabled = recording.enabled
+          savedRecordingPermissionEnabled = recording.enabled
+          recordingPermissionError = nil
           privateCloudSyncEnabled = cloudSync.enabled
+          savedPrivateCloudSyncEnabled = cloudSync.enabled
+          privateCloudSyncError = nil
           singleLanguageMode = transcription.singleLanguageMode
           // Do not let a GET that began before a local/PATCH mutation overwrite
           // the newer vocabulary when it finally completes.

@@ -382,7 +382,8 @@ The CLI is built so an LLM can use it without a wrapper:
 * `--json` returns valid JSON to stdout. Nothing else writes to stdout in JSON
   mode (errors go to stderr as `{"error": "...", "detail": "..."}`).
 * `--timeout SECONDS` bounds individual HTTP operations against the Developer
-  API (retries/backoff may exceed this limit; defaults to 30s read/write, 10s connect).
+  API and the local Desktop API (retries/backoff may exceed this limit; defaults to
+  30s read/write, 10s connect).
 * Use `omi --json version` for a machine-readable version object
   (`{"version": "..."}`). `omi version` and the eager `omi --version` flag
   retain their plain-text output.
