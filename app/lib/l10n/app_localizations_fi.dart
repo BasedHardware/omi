@@ -14494,5 +14494,52 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get deviceOnboardingPressButtonTitle => 'Paina Omin painiketta';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Yksi lyhyt painallus. Kysy sitten mitä tahansa.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Esitä kysymyksesi';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Sano se ääneen. Omi kuuntelee.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Valmis? Paina painiketta uudelleen lähettääksesi.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Sait $days päivää ilmaiseksi';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days päivää Omi Prota meidän piikkiimme. Muistutamme ennen veloitusta. Peru milloin vain.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Ota $days päivän kokeilu';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Aloita $days päivän ilmainen kokeilu';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Käynnistä Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Paina painiketta kerran ja pidä se lähellä puhelinta.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Siinä kaikki. Omi jatkaa keskustelujesi tallentamista taustalla.';
+
+  @override
+  String get noThanks => 'Ei kiitos';
+
+  @override
   String get recapInTheBackground => 'Taustalla';
 }

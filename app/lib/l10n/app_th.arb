@@ -4408,5 +4408,18 @@
     "deviceDisconnectedFor": "ตัดการเชื่อมต่อ {duration}",
     "deviceControls": "การควบคุม",
     "homeBackgroundLine": "นอกจากนี้: {items}",
+    "deviceOnboardingPressButtonTitle": "กดปุ่มบน Omi ของคุณ",
+    "deviceOnboardingPressButtonSubtitle": "กดสั้นๆ หนึ่งครั้ง แล้วถามอะไรก็ได้",
+    "deviceOnboardingAskNowTitle": "ถามคำถามของคุณ",
+    "deviceOnboardingAskNowSubtitle": "พูดออกมาเลย Omi กำลังฟังอยู่",
+    "deviceOnboardingPressAgainHint": "เสร็จแล้ว? กดปุ่มอีกครั้งเพื่อส่ง",
+    "trialUpsellTitle": "คุณได้รับฟรี {days} วัน",
+    "trialUpsellBody": "Omi Pro ฟรี {days} วัน เราจะเตือนก่อนเรียกเก็บเงิน ยกเลิกได้ทุกเมื่อ",
+    "trialUpsellClaim": "รับทดลองใช้ {days} วัน",
+    "settingsUpgradeTrialSubtitle": "เริ่มทดลองใช้ฟรี {days} วัน",
+    "pairingPowerOnTitle": "เปิด Omi ของคุณ",
+    "pairingPowerOnSubtitle": "กดปุ่มหนึ่งครั้งและวางไว้ใกล้โทรศัพท์",
+    "walkthroughBackgroundRecordingNote": "เรียบร้อย Omi จะบันทึกบทสนทนาของคุณต่อไปในพื้นหลัง",
+    "noThanks": "ไม่เป็นไร ขอบคุณ",
     "recapInTheBackground": "ในเบื้องหลัง"
 }

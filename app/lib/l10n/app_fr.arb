@@ -4443,5 +4443,18 @@
     "deviceDisconnectedFor": "Déconnecté pendant {duration}",
     "deviceControls": "Commandes",
     "homeBackgroundLine": "Aussi : {items}",
+    "deviceOnboardingPressButtonTitle": "Appuie sur le bouton de ton Omi",
+    "deviceOnboardingPressButtonSubtitle": "Une pression courte. Puis demande ce que tu veux.",
+    "deviceOnboardingAskNowTitle": "Pose ta question",
+    "deviceOnboardingAskNowSubtitle": "Dis-le à voix haute. Omi écoute.",
+    "deviceOnboardingPressAgainHint": "Terminé ? Appuie à nouveau sur le bouton pour envoyer.",
+    "trialUpsellTitle": "Tu passes à {days} jours gratuits",
+    "trialUpsellBody": "{days} jours d'Omi Pro offerts. On te prévient avant tout prélèvement. Annulable à tout moment.",
+    "trialUpsellClaim": "Profiter de mon essai de {days} jours",
+    "settingsUpgradeTrialSubtitle": "Commence ton essai gratuit de {days} jours",
+    "pairingPowerOnTitle": "Allume ton Omi",
+    "pairingPowerOnSubtitle": "Appuie une fois sur le bouton et garde-le près du téléphone.",
+    "walkthroughBackgroundRecordingNote": "C'est tout. Omi continue d'enregistrer tes conversations en arrière-plan.",
+    "noThanks": "Non merci",
     "recapInTheBackground": "En arrière-plan"
 }

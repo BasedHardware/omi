@@ -14554,5 +14554,52 @@ class AppLocalizationsMk extends AppLocalizations {
   }
 
   @override
+  String get deviceOnboardingPressButtonTitle => 'Притиснете го копчето на Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Едно кратко притискање. Потоа прашајте што било.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Постави го прашањето';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Кажете го гласно. Omi слуша.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Готово? Притиснете го копчето повторно за да испратите.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Добивте $days дена бесплатно';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days дена Omi Pro на наша сметка. Ќе ве потсетиме пред наплата. Откажете кога сакате.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Земи проба од $days дена';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Започнете бесплатна проба од $days дена';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Вклучете го Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Притиснете го копчето еднаш и држете го блиску до телефонот.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Тоа е сè. Omi ќе продолжи да ги снима вашите разговори во заднина.';
+
+  @override
+  String get noThanks => 'Не, благодарам';
+
+  @override
   String get recapInTheBackground => 'Во позадина';
 }

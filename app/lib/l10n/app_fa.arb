@@ -11834,5 +11834,18 @@
     "deviceDisconnectedFor": "قطع اتصال به مدت {duration}",
     "deviceControls": "کنترل‌ها",
     "homeBackgroundLine": "همچنین: {items}",
+    "deviceOnboardingPressButtonTitle": "دکمه Omi را فشار دهید",
+    "deviceOnboardingPressButtonSubtitle": "یک فشار کوتاه. سپس هر چیزی بپرسید.",
+    "deviceOnboardingAskNowTitle": "سؤال خود را بپرسید",
+    "deviceOnboardingAskNowSubtitle": "بلند بگویید. Omi گوش می‌دهد.",
+    "deviceOnboardingPressAgainHint": "تمام شد؟ برای ارسال دوباره دکمه را فشار دهید.",
+    "trialUpsellTitle": "به {days} روز رایگان ارتقا یافتید",
+    "trialUpsellBody": "{days} روز Omi Pro مهمان ما. قبل از هر پرداختی یادآوری می‌کنیم. هر زمان لغو کنید.",
+    "trialUpsellClaim": "دریافت آزمایشی {days} روزه",
+    "settingsUpgradeTrialSubtitle": "آزمایش رایگان {days} روزه را شروع کنید",
+    "pairingPowerOnTitle": "Omi را روشن کنید",
+    "pairingPowerOnSubtitle": "یک بار دکمه را فشار دهید و نزدیک گوشی نگه دارید.",
+    "walkthroughBackgroundRecordingNote": "همین. Omi به ضبط مکالمات شما در پس‌زمینه ادامه می‌دهد.",
+    "noThanks": "نه، ممنون",
     "recapInTheBackground": "در پس‌زمینه"
 }

@@ -11834,5 +11834,18 @@
     "deviceDisconnectedFor": "{duration} ಸಂಪರ್ಕ ಕಡಿತ",
     "deviceControls": "ನಿಯಂತ್ರಣಗಳು",
     "homeBackgroundLine": "ಜೊತೆಗೆ: {items}",
+    "deviceOnboardingPressButtonTitle": "உங்கள் Omi பொத்தானை அழுத்துங்கள்",
+    "deviceOnboardingPressButtonSubtitle": "ಒಂದು ಸಣ್ಣ ಒತ್ತು. ನಂತರ ಏನು ಬೇಕಾದರೂ ಕೇಳಿ.",
+    "deviceOnboardingAskNowTitle": "ನಿಮ್ಮ ಪ್ರಶ್ನೆ ಕೇಳಿ",
+    "deviceOnboardingAskNowSubtitle": "ಜೋರಾಗಿ ಹೇಳಿ. Omi ಕೇಳುತ್ತಿದೆ.",
+    "deviceOnboardingPressAgainHint": "ಮುಗಿಯಿತೇ? ಕಳುಹಿಸಲು ಮತ್ತೆ ಬಟನ್ ಒತ್ತಿ.",
+    "trialUpsellTitle": "ನಿಮಗೆ {days} ದಿನ ಉಚಿತ ಸಿಕ್ಕಿದೆ",
+    "trialUpsellBody": "{days} ದಿನ Omi Pro ನಮ್ಮಿಂದ ಉಚಿತ. ಶುಲ್ಕಕ್ಕೆ ಮೊದಲು ನೆನಪಿಸುತ್ತೇವೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ರದ್ದು ಮಾಡಿ.",
+    "trialUpsellClaim": "{days} ದಿನದ ಪ್ರಯೋಗ ಪಡೆಯಿರಿ",
+    "settingsUpgradeTrialSubtitle": "{days} ದಿನಗಳ ಉಚಿತ ಪ್ರಯೋಗ ಪ್ರಾರಂಭಿಸಿ",
+    "pairingPowerOnTitle": "ನಿಮ್ಮ Omi ಆನ್ ಮಾಡಿ",
+    "pairingPowerOnSubtitle": "ಒಮ್ಮೆ ಬಟನ್ ಒತ್ತಿ ಫೋನ್ ಹತ್ತಿರ ಇರಿಸಿ.",
+    "walkthroughBackgroundRecordingNote": "ಅಷ್ಟೇ. Omi ಹಿನ್ನೆಲೆಯಲ್ಲಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಲೇ ಇರುತ್ತದೆ.",
+    "noThanks": "ಬೇಡ, ಧನ್ಯವಾದ",
     "recapInTheBackground": "ಹಿನ್ನೆಲೆಯಲ್ಲಿ"
 }

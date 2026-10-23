@@ -114,9 +114,19 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     return currentPlanDisplayName(context, usage.subscription);
   }
 
+  /// Free readers who can still start a trial get Pocket's Upgrade row above Plan & Usage.
+  bool _showUpgradeRow(UsageProvider usage) {
+    final subscription = usage.subscription;
+    if (subscription == null || subscription.subscription.plan.isPaid) return false;
+    if (subscription.trialEligible != true) return false;
+    return usage.showSubscriptionUI;
+  }
+
   Widget _buildSettings(BuildContext context) {
     final l10n = context.l10n;
-    final planValue = _planValue(context.watch<UsageProvider>());
+    final usage = context.watch<UsageProvider>();
+    final planValue = _planValue(usage);
+    final showUpgrade = _showUpgradeRow(usage);
     final prefs = SharedPreferencesUtil();
     final name = prefs.givenName;
     final email = prefs.email;
@@ -138,6 +148,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         // Plan, referrals and feedback stay one tap from the sheet (David, 2026-09-24).
         OmiSettingsGroup(
           children: [
+            if (showUpgrade)
+              _row(
+                SettingsDestination.upgrade,
+                key: 'settings_row_upgrade',
+                icon: FontAwesomeIcons.crown,
+                title: l10n.upgrade,
+                subtitle: l10n.settingsUpgradeTrialSubtitle(7),
+              ),
             _row(
               SettingsDestination.planAndUsage,
               key: 'settings_row_planAndUsage',

@@ -14520,5 +14520,52 @@ class AppLocalizationsUk extends AppLocalizations {
   }
 
   @override
+  String get deviceOnboardingPressButtonTitle => 'Натисніть кнопку на Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Одне коротке натискання. Потім запитайте будь-що.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Поставте запитання';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Скажіть уголос. Omi слухає.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Готово? Натисніть кнопку ще раз, щоб надіслати.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Вам продовжили безкоштовний період до $days днів';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days днів Omi Pro за наш рахунок. Нагадаємо перед списанням. Скасування будь-коли.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Отримати $days днів пробно';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Почніть безкоштовний період на $days днів';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Увімкніть Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Натисніть кнопку один раз і тримайте поруч із телефоном.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Готово. Omi продовжить записувати ваші розмови у фоні.';
+
+  @override
+  String get noThanks => 'Ні, дякую';
+
+  @override
   String get recapInTheBackground => 'У фоні';
 }

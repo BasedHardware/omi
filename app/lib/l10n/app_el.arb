@@ -4408,5 +4408,18 @@
     "deviceDisconnectedFor": "Αποσυνδεδεμένο για {duration}",
     "deviceControls": "Χειριστήρια",
     "homeBackgroundLine": "Επίσης: {items}",
+    "deviceOnboardingPressButtonTitle": "Πάτησε το κουμπί στο Omi",
+    "deviceOnboardingPressButtonSubtitle": "Ένα σύντομο πάτημα. Μετά ρώτα ό,τι θέλεις.",
+    "deviceOnboardingAskNowTitle": "Κάνε την ερώτησή σου",
+    "deviceOnboardingAskNowSubtitle": "Πες το δυνατά. Το Omi ακούει.",
+    "deviceOnboardingPressAgainHint": "Τελείωσες; Πάτησε ξανά το κουμπί για αποστολή.",
+    "trialUpsellTitle": "Αναβαθμίστηκες σε {days} ημέρες δωρεάν",
+    "trialUpsellBody": "{days} ημέρες Omi Pro κερασμένες. Θα σε ειδοποιήσουμε πριν από κάθε χρέωση. Ακύρωση ανά πάσα στιγμή.",
+    "trialUpsellClaim": "Θέλω τη δοκιμή {days} ημερών",
+    "settingsUpgradeTrialSubtitle": "Ξεκίνα τη δωρεάν δοκιμή {days} ημερών",
+    "pairingPowerOnTitle": "Άναψε το Omi σου",
+    "pairingPowerOnSubtitle": "Πάτησε μία φορά το κουμπί και κράτα το κοντά στο κινητό.",
+    "walkthroughBackgroundRecordingNote": "Αυτό ήταν. Το Omi θα συνεχίσει να ηχογραφεί τις συζητήσεις σου στο παρασκήνιο.",
+    "noThanks": "Όχι, ευχαριστώ",
     "recapInTheBackground": "Στο παρασκήνιο"
 }

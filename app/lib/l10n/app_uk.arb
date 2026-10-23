@@ -4408,5 +4408,18 @@
     "deviceDisconnectedFor": "Відключено на {duration}",
     "deviceControls": "Керування",
     "homeBackgroundLine": "Також: {items}",
+    "deviceOnboardingPressButtonTitle": "Натисніть кнопку на Omi",
+    "deviceOnboardingPressButtonSubtitle": "Одне коротке натискання. Потім запитайте будь-що.",
+    "deviceOnboardingAskNowTitle": "Поставте запитання",
+    "deviceOnboardingAskNowSubtitle": "Скажіть уголос. Omi слухає.",
+    "deviceOnboardingPressAgainHint": "Готово? Натисніть кнопку ще раз, щоб надіслати.",
+    "trialUpsellTitle": "Вам продовжили безкоштовний період до {days} днів",
+    "trialUpsellBody": "{days} днів Omi Pro за наш рахунок. Нагадаємо перед списанням. Скасування будь-коли.",
+    "trialUpsellClaim": "Отримати {days} днів пробно",
+    "settingsUpgradeTrialSubtitle": "Почніть безкоштовний період на {days} днів",
+    "pairingPowerOnTitle": "Увімкніть Omi",
+    "pairingPowerOnSubtitle": "Натисніть кнопку один раз і тримайте поруч із телефоном.",
+    "walkthroughBackgroundRecordingNote": "Готово. Omi продовжить записувати ваші розмови у фоні.",
+    "noThanks": "Ні, дякую",
     "recapInTheBackground": "У фоні"
 }

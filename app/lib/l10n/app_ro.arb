@@ -4408,5 +4408,18 @@
     "deviceDisconnectedFor": "Deconectat timp de {duration}",
     "deviceControls": "Comenzi",
     "homeBackgroundLine": "De asemenea: {items}",
+    "deviceOnboardingPressButtonTitle": "Apasă butonul de pe Omi",
+    "deviceOnboardingPressButtonSubtitle": "O apăsare scurtă. Apoi întreabă orice.",
+    "deviceOnboardingAskNowTitle": "Pune întrebarea",
+    "deviceOnboardingAskNowSubtitle": "Spune cu voce tare. Omi ascultă.",
+    "deviceOnboardingPressAgainHint": "Gata? Apasă din nou butonul pentru a trimite.",
+    "trialUpsellTitle": "Ai primit {days} de zile gratuit",
+    "trialUpsellBody": "{days} de zile de Omi Pro din partea noastră. Te anunțăm înainte de orice plată. Anulezi oricând.",
+    "trialUpsellClaim": "Vreau perioada de probă de {days} de zile",
+    "settingsUpgradeTrialSubtitle": "Începe perioada gratuită de {days} zile",
+    "pairingPowerOnTitle": "Pornește Omi",
+    "pairingPowerOnSubtitle": "Apasă butonul o dată și ține-l aproape de telefon.",
+    "walkthroughBackgroundRecordingNote": "Gata. Omi va continua să-ți înregistreze conversațiile în fundal.",
+    "noThanks": "Nu, mulțumesc",
     "recapInTheBackground": "În fundal"
 }

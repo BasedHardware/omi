@@ -14489,5 +14489,52 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get deviceOnboardingPressButtonTitle => 'Stiskněte tlačítko na Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Jedno krátké stisknutí. Pak se zeptejte na cokoli.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Položte otázku';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Řekněte to nahlas. Omi poslouchá.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Hotovo? Stiskněte tlačítko znovu pro odeslání.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Získali jste $days dní zdarma';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dní Omi Pro na nás. Připomeneme se před účtováním. Zrušte kdykoli.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Chci zkušební období $days dní';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Začněte zkušební období $days dní zdarma';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Zapněte Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Jednou stiskněte tlačítko a držte ho u telefonu.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'To je vše. Omi bude dál nahrávat vaše rozhovory na pozadí.';
+
+  @override
+  String get noThanks => 'Ne, díky';
+
+  @override
   String get recapInTheBackground => 'Na pozadí';
 }

@@ -4408,5 +4408,18 @@
     "deviceDisconnectedFor": "{duration} 切断",
     "deviceControls": "コントロール",
     "homeBackgroundLine": "その他: {items}",
+    "deviceOnboardingPressButtonTitle": "Omi のボタンを押してください",
+    "deviceOnboardingPressButtonSubtitle": "短く1回押します。あとは何でも聞いてください。",
+    "deviceOnboardingAskNowTitle": "質問をどうぞ",
+    "deviceOnboardingAskNowSubtitle": "声に出して話してください。Omi が聞いています。",
+    "deviceOnboardingPressAgainHint": "話し終えたら、もう一度ボタンを押して送信します。",
+    "trialUpsellTitle": "{days}日間無料にアップグレードされました",
+    "trialUpsellBody": "Omi Pro を {days} 日間無料で。請求前にお知らせします。いつでもキャンセルできます。",
+    "trialUpsellClaim": "{days}日間の無料トライアルを使う",
+    "settingsUpgradeTrialSubtitle": "{days}日間の無料トライアルを始める",
+    "pairingPowerOnTitle": "Omi の電源を入れてください",
+    "pairingPowerOnSubtitle": "ボタンを1回押して、スマートフォンの近くに置いてください。",
+    "walkthroughBackgroundRecordingNote": "これで完了です。Omi はバックグラウンドで会話を記録し続けます。",
+    "noThanks": "いいえ、結構です",
     "recapInTheBackground": "バックグラウンド"
 }

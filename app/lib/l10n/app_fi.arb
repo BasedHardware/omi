@@ -4408,5 +4408,18 @@
     "deviceDisconnectedFor": "Yhteys katkesi {duration} ajaksi",
     "deviceControls": "Säätimet",
     "homeBackgroundLine": "Lisäksi: {items}",
+    "deviceOnboardingPressButtonTitle": "Paina Omin painiketta",
+    "deviceOnboardingPressButtonSubtitle": "Yksi lyhyt painallus. Kysy sitten mitä tahansa.",
+    "deviceOnboardingAskNowTitle": "Esitä kysymyksesi",
+    "deviceOnboardingAskNowSubtitle": "Sano se ääneen. Omi kuuntelee.",
+    "deviceOnboardingPressAgainHint": "Valmis? Paina painiketta uudelleen lähettääksesi.",
+    "trialUpsellTitle": "Sait {days} päivää ilmaiseksi",
+    "trialUpsellBody": "{days} päivää Omi Prota meidän piikkiimme. Muistutamme ennen veloitusta. Peru milloin vain.",
+    "trialUpsellClaim": "Ota {days} päivän kokeilu",
+    "settingsUpgradeTrialSubtitle": "Aloita {days} päivän ilmainen kokeilu",
+    "pairingPowerOnTitle": "Käynnistä Omi",
+    "pairingPowerOnSubtitle": "Paina painiketta kerran ja pidä se lähellä puhelinta.",
+    "walkthroughBackgroundRecordingNote": "Siinä kaikki. Omi jatkaa keskustelujesi tallentamista taustalla.",
+    "noThanks": "Ei kiitos",
     "recapInTheBackground": "Taustalla"
 }
