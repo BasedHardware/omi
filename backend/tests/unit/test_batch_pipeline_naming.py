@@ -18,6 +18,15 @@ import pytest
 from config.batch_pipeline_providers import ProviderConfig
 from diarizer import batch_pipeline as module
 from diarizer.batch_pipeline import PipelineWorker
+
+# Collect pure production imports before the per-test CPU budget, matching the
+# file-isolated backend contract rather than charging one test for cold schemas.
+from database import batch_pipeline_projection_session as projection_module
+from database.batch_pipeline_projection_session import ProjectionSession
+from database.conversations import encode_conversation_for_write
+from models.transcript_segment import TranscriptSegment
+from utils.batch_pipeline.projection import build_incoming
+from utils.speakers import processing
 from utils.batch_pipeline.contracts import Priority, WorkItem
 from utils.stt.voice_centroids import (
     COMMUNITY_MODEL_REVISION,
@@ -173,9 +182,8 @@ def test_persistence_failure_is_retryable_and_does_not_leave_leaf_jobs(monkeypat
 
 
 def test_newly_discovered_manual_owner_withdraws_only_new_automatic_owner_without_retry(monkeypatch):
-    from database import batch_pipeline_projection_session as module
 
-    session = object.__new__(module.ProjectionSession)
+    session = object.__new__(projection_module.ProjectionSession)
     session.incoming_segment_ids = {'new-auto', 'new-manual'}
     session.guard = lambda *_: None
     session.loaded_naming_snapshot = lambda: snapshot(manual_receipt={'speakers': {'7': {'is_user': True}}})
@@ -217,7 +225,6 @@ def test_newly_discovered_manual_owner_withdraws_only_new_automatic_owner_withou
 
 
 def test_missing_manual_receipt_does_not_fabricate_reservation():
-    from database.batch_pipeline_projection_session import ProjectionSession
 
     session = object.__new__(ProjectionSession)
     session.binding = ProjectionBinding('owner', 'job', 'content', ('unit',))
@@ -226,9 +233,8 @@ def test_missing_manual_receipt_does_not_fabricate_reservation():
 
 
 def test_snapshot_revocation_fence_runs_inside_guard(monkeypatch):
-    from database import batch_pipeline_projection_session as module
 
-    session = object.__new__(module.ProjectionSession)
+    session = object.__new__(projection_module.ProjectionSession)
     session.binding = ProjectionBinding('owner', 'job', 'content', ('unit',))
     session.client = object()
     session._naming_snapshot = None
@@ -238,11 +244,11 @@ def test_snapshot_revocation_fence_runs_inside_guard(monkeypatch):
         snapshots['user'] = {'speaker_embedding': [1, 0]}
         return 0
 
-    monkeypatch.setattr(module, 'assert_batch_write_allowed', privacy)
-    monkeypatch.setattr(module, 'lever_enabled', lambda *_: False)
+    monkeypatch.setattr(projection_module, 'assert_batch_write_allowed', privacy)
+    monkeypatch.setattr(projection_module, 'lever_enabled', lambda *_: False)
     session.guard(object())
     session.freeze_naming_snapshot(replace(snapshot(), validate=lambda *_: False))
-    with pytest.raises(module.ProjectionBlocked, match='enrollment revoked'):
+    with pytest.raises(projection_module.ProjectionBlocked, match='enrollment revoked'):
         session.guard(object())
 
 
@@ -265,8 +271,6 @@ def test_snapshot_revocation_fence_runs_inside_guard(monkeypatch):
     ],
 )
 def test_evidence_abstention_preserves_batch_identity_and_manual_receipts_dominate(monkeypatch, receipt, expected):
-    from models.transcript_segment import TranscriptSegment
-    from utils.speakers import processing
 
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'serve')
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT', '0')
@@ -291,8 +295,6 @@ def test_evidence_abstention_preserves_batch_identity_and_manual_receipts_domina
 
 
 def test_forged_source_strings_do_not_create_identity_evidence(monkeypatch):
-    from models.transcript_segment import TranscriptSegment
-    from utils.speakers import processing
 
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE', 'serve')
     monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT', '0')
@@ -375,9 +377,8 @@ def test_faithful_turns_use_max_overlap_preserve_clocks_and_strict_two_second_bo
 
 
 def test_owner_enrollment_change_is_fenced_before_write(monkeypatch):
-    from database import batch_pipeline_projection_session as module
 
-    session = object.__new__(module.ProjectionSession)
+    session = object.__new__(projection_module.ProjectionSession)
     session.binding = ProjectionBinding('owner', 'job', 'content', ('unit',))
     session.client = object()
     session._naming_snapshot = None
@@ -388,14 +389,13 @@ def test_owner_enrollment_change_is_fenced_before_write(monkeypatch):
         snapshots['user'] = {'speaker_embedding': [0, 1]}
         return 0
 
-    monkeypatch.setattr(module, 'assert_batch_write_allowed', privacy)
-    monkeypatch.setattr(module, 'lever_enabled', lambda *_: False)
-    with pytest.raises(module.ProjectionBlocked, match='snapshot changed'):
+    monkeypatch.setattr(projection_module, 'assert_batch_write_allowed', privacy)
+    monkeypatch.setattr(projection_module, 'lever_enabled', lambda *_: False)
+    with pytest.raises(projection_module.ProjectionBlocked, match='snapshot changed'):
         session.guard(object())
 
 
 def test_production_projection_publishes_named_owner_and_anonymous_voice_with_capture_clocks(monkeypatch):
-    from utils.batch_pipeline.projection import build_incoming
 
     monkeypatch.setenv('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', 'true')
     payload = {
@@ -440,8 +440,6 @@ def test_hosted_embedding_encodes_bounded_pcm_for_existing_v2_endpoint(monkeypat
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
 def test_loaded_manual_owner_receipt_decodes_actual_storage_encoding(monkeypatch, level):
-    from database.conversations import encode_conversation_for_write
-    from database.batch_pipeline_projection_session import ProjectionSession
     from utils.manual_speaker_assignments import manual_owner_reserved
 
     monkeypatch.setenv('ENCRYPTION_SECRET', '01' * 32)
