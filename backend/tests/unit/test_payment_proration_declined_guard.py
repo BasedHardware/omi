@@ -263,3 +263,96 @@ def test_upgrade_subscription_endpoint_success_updates_plan():
         mock_update_db.assert_called_once()
         saved_sub = mock_update_db.call_args[0][1]
         assert saved_sub['plan'] == 'unlimited'
+
+
+@pytest.mark.asyncio
+async def test_webhook_past_due_stale_shield_preserves_current_paid_sub():
+    from routers.payment import _handle_stripe_event
+
+    now = int(time.time())
+    current_paid = Subscription(
+        plan=PlanType.unlimited,
+        status=SubscriptionStatus.active,
+        current_period_start=now - 100,
+        current_period_end=now + 10000,
+        stripe_subscription_id='sub_new_active',
+    )
+
+    stale_past_due_event = {
+        'type': 'customer.subscription.updated',
+        'data': {
+            'object': {
+                'id': 'sub_old_superseded',
+                'customer': 'cus_123',
+                'status': 'past_due',
+                'current_period_start': now - 2000,
+                'current_period_end': now + 5000,
+                'items': {'data': [{'price': {'id': 'price_plus'}}]},
+            }
+        }
+    }
+
+    with (
+        patch('routers.payment.users_db.get_user_by_stripe_customer_id', return_value={'uid': 'user_123'}),
+        patch('routers.payment.users_db.get_existing_user_subscription', return_value=current_paid),
+        patch('routers.payment.preserves_current_paid_subscription', return_value=True),
+        patch('routers.payment.users_db.update_user_subscription') as mock_update,
+    ):
+        res = await _handle_stripe_event(stale_past_due_event)
+        assert res == {'status': 'success'}
+        mock_update.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_webhook_past_due_same_sub_grants_grace():
+    from routers.payment import _handle_stripe_event
+
+    now = int(time.time())
+    current_sub = Subscription(
+        plan=PlanType.plus,
+        status=SubscriptionStatus.active,
+        current_period_start=now - 100,
+        current_period_end=now + 10000,
+        stripe_subscription_id='sub_same',
+    )
+
+    past_due_event = {
+        'type': 'customer.subscription.updated',
+        'data': {
+            'object': {
+                'id': 'sub_same',
+                'customer': 'cus_123',
+                'status': 'past_due',
+                'current_period_start': now - 100,
+                'current_period_end': now + 10000,
+                'items': {'data': [{'price': {'id': 'price_plus'}}]},
+            }
+        }
+    }
+
+    with (
+        patch('routers.payment.users_db.get_user_by_stripe_customer_id', return_value={'uid': 'user_123'}),
+        patch('routers.payment.users_db.get_existing_user_subscription', return_value=current_sub),
+        patch('routers.payment.preserves_current_paid_subscription', return_value=False),
+        patch('routers.payment.find_active_paid_subscription_for_user', return_value=None),
+        patch('routers.payment.get_plan_type_from_price_id', return_value=PlanType.plus),
+        patch('routers.payment.get_plan_limits', side_effect=get_plan_limits),
+        patch('routers.payment.get_basic_plan_limits', side_effect=lambda: get_plan_limits(PlanType.basic)),
+        patch('routers.payment.users_db.update_user_subscription') as mock_update,
+        patch('routers.payment.users_db.get_user_profile', return_value={'uid': 'user_123'}),
+        patch('routers.payment.users_db.set_stripe_customer_id'),
+        patch('routers.payment.conversations_db.unlock_all_conversations'),
+        patch('routers.payment.memories_db.unlock_all_memories'),
+        patch('routers.payment.action_items_db.unlock_all_action_items'),
+        patch('routers.payment.clear_trial_paywall_cache'),
+        patch('routers.payment.clear_fair_use_on_upgrade'),
+        patch('routers.payment.set_credits_invalidation_signal'),
+        patch('routers.payment.funded_processing_enabled', return_value=False),
+    ):
+        res = await _handle_stripe_event(past_due_event)
+        assert res == {'status': 'success'}
+        mock_update.assert_called_once()
+        saved = mock_update.call_args[0][1]
+        assert saved['plan'] == 'plus'
+        assert saved['status'] == 'active'
+

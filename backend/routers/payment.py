@@ -817,8 +817,8 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
                 try:
                     retrieved_inv = stripe.Invoice.retrieve(latest_inv, expand=['payment_intent'])
                     latest_inv = retrieved_inv.to_dict() if hasattr(retrieved_inv, 'to_dict') else retrieved_inv
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug("Failed to retrieve latest_invoice %s during plan change: %s", latest_inv, e)
 
             payment_failed = False
             failure_reason = None
@@ -1259,7 +1259,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 # A paid-through canceled snapshot (grace) is downgrade-shaped for
                 # the stale shield: a newer stored paid sub or an adoptable active
                 # paid sub must still win over the grace candidate.
-                if not is_paid_plan(new_subscription.plan) or subscription_obj.get('status') == 'canceled':
+                if not is_paid_plan(new_subscription.plan) or subscription_obj.get('status') in ('canceled', 'past_due'):
                     event_sub_id = subscription_obj.get('id')
                     current_subscription = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
                     if preserves_current_paid_subscription(current_subscription, event_sub_id, now):
