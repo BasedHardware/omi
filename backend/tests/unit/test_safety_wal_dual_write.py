@@ -390,6 +390,90 @@ def test_different_or_unknown_speakers_are_kept(person):
     assert dedupe_segments_for_merge(T, live, incoming, fuzzy_live_overlap=True, estimated_offset_seconds=0) == incoming
 
 
+def test_fuzzy_overlap_dedupes_unidentified_speakers_and_joins_unidentified_live_windows():
+    # Regression for #22755 / #23364: in a 1-on-1 conversation where the owner's
+    # live line is short (<8 tokens) and the other participant is unidentified
+    # (person_id=None, is_user=False), fuzzy live+sync overlap must still
+    # corroborate the clock offset from unidentified speaker anchors, join
+    # consecutive unidentified live segments in _live_windows, and drop duplicates.
+    live = [
+        dict(
+            text='I am really excited to be here.',
+            timestamp=T + 232.92,
+            start=232.92,
+            end=234.12,
+            speaker='SPEAKER_0',
+            speaker_id=10,
+            is_user=True,
+            person_id=None,
+        ),
+        dict(
+            text='How are you? Good to see you. It has been a while.',
+            timestamp=T + 235.16,
+            start=235.16,
+            end=240.38,
+            speaker='SPEAKER_1',
+            speaker_id=11,
+            is_user=False,
+            person_id=None,
+        ),
+        dict(
+            text='Wait, let me grab a chair',
+            timestamp=T + 241.00,
+            start=241.00,
+            end=246.00,
+            speaker='SPEAKER_2',
+            speaker_id=12,
+            is_user=False,
+            person_id=None,
+        ),
+        dict(
+            text='so we can sit down and talk properly.',
+            timestamp=T + 246.50,
+            start=246.50,
+            end=252.52,
+            speaker='SPEAKER_2',
+            speaker_id=12,
+            is_user=False,
+            person_id=None,
+        ),
+    ]
+    incoming = [
+        dict(
+            text='How are you? Good to see you. It has been a while.',
+            timestamp=T + 233.80,
+            start=233.80,
+            end=239.00,
+            speaker='SPEAKER_1',
+            speaker_id=15,
+            is_user=False,
+            person_id=None,
+        ),
+        dict(
+            text='Wait, let me grab a chair so we can sit down and talk properly.',
+            timestamp=T + 239.50,
+            start=239.50,
+            end=251.10,
+            speaker='SPEAKER_2',
+            speaker_id=16,
+            is_user=False,
+            person_id=None,
+        ),
+        dict(
+            text='Yes, let us go over the schedule first.',
+            timestamp=T + 290.76,
+            start=290.76,
+            end=293.04,
+            speaker='SPEAKER_0',
+            speaker_id=19,
+            is_user=True,
+            person_id=None,
+        ),
+    ]
+    survivors = dedupe_segments_for_merge(T, live, incoming, fuzzy_live_overlap=True, text_match_slop_seconds=60)
+    assert survivors == [incoming[2]]
+
+
 def test_two_inconsistent_text_offsets_preserve_all_speech():
     first = 'Please bring the blue notebook to our planning meeting'
     second = 'Our synthetic budget discussion needs a separate exact transcript anchor'
