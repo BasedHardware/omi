@@ -1,0 +1,3 @@
+{
+  "change": "Adding an MCP server that does not need sign-in now opens its page so you can enable it, and editing the server address while a connection is starting no longer interrupts the new connection"
+}

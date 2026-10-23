@@ -35,7 +35,10 @@ export async function claimReferralTrial(
     if (!current()) throw new ReferralClaimError('Referral attempt cancelled', false);
     const token = await getIdToken();
     if (!current()) throw new ReferralClaimError('Referral attempt cancelled', false);
-    if (!token) throw new ReferralClaimError('Not authenticated', false);
+    // Claims only start for a signed-in account, and getIdToken also returns null when
+    // Firebase cannot read the token right now. Keep that ambiguous failure manually
+    // retryable; the caller's account fence still applies to every retry.
+    if (!token) throw new ReferralClaimError('Sign-in token unavailable', true);
     const response = await fetch('/api/referrals/claim', {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },

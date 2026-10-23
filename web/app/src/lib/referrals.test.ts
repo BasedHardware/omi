@@ -48,11 +48,14 @@ describe('web referral handoff', () => {
     );
   });
 
-  it('fails closed without an authenticated user', async () => {
+  it('fails closed without a token but keeps the signed-in claim manually retryable', async () => {
     getIdToken.mockResolvedValue(null);
-    await expect(claimReferralTrial('ref1.test.code', 'prod')).rejects.toThrow(
-      'Not authenticated',
-    );
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const failure = await claimReferralTrial('ref1.test.code', 'prod').catch((e) => e);
+    expect(failure).toBeInstanceOf(ReferralClaimError);
+    expect(failure.retryable).toBe(true);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
   it('bounds token refresh and cannot dispatch after the deadline', async () => {
     vi.useFakeTimers();

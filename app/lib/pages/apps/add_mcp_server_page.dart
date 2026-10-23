@@ -36,12 +36,13 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
 
   bool _isLoading = false;
   bool _isPolling = false;
-  String? _appId;
   ConnectionWait? _connectionWait;
   App? _readyApp;
-  String? _submittedUrl;
-  String? _authUrl;
-  String? _submittedUid;
+
+  /// Registrations the server has already made, keyed by account and URL. Only an
+  /// explicit Connect on that exact URL for that account reuses one; it is never the
+  /// active state, so a late response for a retired attempt cannot touch the current one.
+  final _registrations = <(String, String), _Registration>{};
 
   /// The one connect attempt allowed to act on this page. Each Connect press mints a
   /// new one; editing the URL, an account change or disposal retires it. Every await
@@ -107,24 +108,14 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
   Future<void> _connect() async {
     if (_isLoading || _isPolling || !_formKey.currentState!.validate()) return;
     final uid = SharedPreferencesUtil().uid;
-    if (_submittedUid != null && _submittedUid != uid) {
-      _retireAttempt();
-      _appId = null;
-      _authUrl = null;
-      _submittedUrl = null;
-    }
     // Own the submission before awaiting: everything that follows belongs to this
     // URL and account, not to whatever the field holds when a response arrives.
     final url = _urlController.text.trim();
     final attempt = _beginAttempt(url, uid);
-    if (_appId != null && _submittedUrl == url) {
+    final cached = _registrations[(uid, url)];
+    if (cached != null) {
       // An explicit retry on the URL the registration was made for reuses it.
-      final authUrl = _authUrl;
-      if (authUrl != null && !await launchIntegrationOAuth(() async => authUrl, isCurrent: () => _owns(attempt))) {
-        if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
-        return;
-      }
-      if (_owns(attempt)) _startPollingForCompletion(attempt);
+      await _continueRegistration(attempt, cached);
       return;
     }
     setState(() => _isLoading = true);
@@ -145,22 +136,13 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
         return;
       }
       // The server registered this URL for this account even if the attempt was
-      // retired meanwhile; keep it keyed to that URL for an explicit retry.
-      _appId = id;
-      _submittedUrl = url;
-      _submittedUid = uid;
+      // retired meanwhile; cache it under that account and URL for an explicit retry,
+      // without touching whichever attempt is active now.
       final authUrl = result['auth_url'];
-      _authUrl = result['requires_oauth'] == true && authUrl is String ? authUrl : null;
+      final registration = _Registration(id, result['requires_oauth'] == true, authUrl is String ? authUrl : null);
+      _registrations[(uid, url)] = registration;
       if (!_owns(attempt)) return;
-      if (result['requires_oauth'] == true) {
-        if (authUrl is! String || !await launchIntegrationOAuth(() async => authUrl, isCurrent: () => _owns(attempt))) {
-          if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
-          return;
-        }
-        if (_owns(attempt)) _startPollingForCompletion(attempt);
-      } else {
-        await _navigateToAppDetail(id, attempt);
-      }
+      await _continueRegistration(attempt, registration);
     } catch (_) {
       if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
     } finally {
@@ -170,20 +152,32 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
     }
   }
 
-  void _startPollingForCompletion(_ConnectAttempt attempt) {
-    final id = _appId;
-    if (id == null || !_owns(attempt)) return;
+  Future<void> _continueRegistration(_ConnectAttempt attempt, _Registration registration) async {
+    if (!registration.requiresOAuth) {
+      await _navigateToAppDetail(registration.appId, attempt);
+      return;
+    }
+    final authUrl = registration.authUrl;
+    if (authUrl == null || !await launchIntegrationOAuth(() async => authUrl, isCurrent: () => _owns(attempt))) {
+      if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
+      return;
+    }
+    if (_owns(attempt)) _startPollingForCompletion(attempt, registration.appId);
+  }
+
+  void _startPollingForCompletion(_ConnectAttempt attempt, String id) {
+    if (!_owns(attempt)) return;
     _connectionWait?.cancel();
     _readyApp = null;
     setState(() => _isPolling = true);
     late final ConnectionWait wait;
     wait = ConnectionWait(
-      isCurrent: () => _owns(attempt) && _appId == id,
+      isCurrent: () => _owns(attempt),
       probeTimeout: widget.probeTimeout,
       waitTimeout: widget.waitTimeout,
       probe: () async {
         final data = await widget.appDetailsLoader(id);
-        if (!wait.isActive || !_owns(attempt) || _appId != id) {
+        if (!wait.isActive || !_owns(attempt)) {
           return ConnectionProbe.pending;
         }
         if (data == null) return ConnectionProbe.failed;
@@ -219,16 +213,18 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
       return;
     }
     final app = App.fromJson(data);
-    if (app.id != id || app.status != 'approved' || !app.enabled) {
+    if (app.id != id || app.status != 'approved') {
       _showError(context.l10n.mcpConnectionFailed);
       return;
     }
-    _showConnectedApp(app);
+    // A server without OAuth is registered approved but not enabled: its detail page
+    // owns the Enable action. Only a server-confirmed enabled app is announced as connected.
+    _showConnectedApp(app, announce: app.enabled);
   }
 
-  void _showConnectedApp(App app) {
+  void _showConnectedApp(App app, {bool announce = true}) {
     if (!mounted || ModalRoute.of(context)?.isCurrent != true) return;
-    OmiFeedback.confirm(context, context.l10n.mcpServerConnected(app.chatTools?.length ?? 0));
+    if (announce) OmiFeedback.confirm(context, context.l10n.mcpServerConnected(app.chatTools?.length ?? 0));
     Navigator.of(context).pushReplacement(MaterialPageRoute<void>(builder: (_) => AppDetailPage(app: app)));
   }
 
@@ -309,7 +305,9 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
                 label: l10n.connect,
                 expand: true,
                 isLoading: _isLoading,
-                onPressed: (_isLoading || _isPolling) ? null : _connect,
+                // The page owns loading and attempt state; editing the URL retires a pending
+                // attempt, so the button must not stay locked on that attempt's future.
+                onPressed: (_isLoading || _isPolling) ? null : () => unawaited(_connect()),
               ),
             ],
           ),
@@ -317,6 +315,14 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
       ),
     );
   }
+}
+
+/// A server registration, fixed to the account and URL it was made for.
+class _Registration {
+  const _Registration(this.appId, this.requiresOAuth, this.authUrl);
+  final String appId;
+  final bool requiresOAuth;
+  final String? authUrl;
 }
 
 /// One Connect press: the URL and account it was made for, and its place in order.
