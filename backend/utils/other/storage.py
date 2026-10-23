@@ -185,6 +185,14 @@ def _delete_owner_bucket_prefix(bucket: Any, prefix: str) -> int:
     in-memory test fake converges immediately). Only residue that survives a
     fresh delete of itself is the fail-closed signal the account-wipe caller
     needs.
+
+    A delete answered ``404 NotFound`` is not a fault at all: the empty-
+    generation sweep, the rollover-loser cleanup, the merge cleanup and the
+    account wipe can all be sweeping the same owner prefixes, so a listing
+    entry can already be gone when this loop reaches it. The object is
+    exactly where this delete wanted it — gone — so the entry is skipped
+    without being counted among this call's deletes and the verify re-list
+    stays the only authority on what survived.
     """
 
     listing_kwargs = {'versions': True} if _uses_real_gcs_bucket(bucket) else {}
@@ -194,7 +202,10 @@ def _delete_owner_bucket_prefix(bucket: Any, prefix: str) -> int:
         if not blobs:
             return deleted
         for blob in blobs:
-            blob.delete()
+            try:
+                blob.delete()
+            except BlobNotFound:
+                continue
             deleted += 1
     remaining = list(bucket.list_blobs(prefix=prefix, **listing_kwargs))
     if remaining:
@@ -1073,7 +1084,13 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
                     except (TypeError, ValueError):
                         links = []
                     if metadata.get('conversation_id') == conversation_id or conversation_id in links:
-                        blob.delete()
+                        try:
+                            blob.delete()
+                        except BlobNotFound:
+                            # A parallel sweep of the conversation this original
+                            # was linked to already removed it; the object is
+                            # where this delete wanted it.
+                            continue
         invalidate_pack_index(bucket, uid, conversation_id)
 
 

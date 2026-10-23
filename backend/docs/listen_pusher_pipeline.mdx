@@ -779,6 +779,26 @@ reclaim unreferenced audio` with its traceback and degradation event). The
 racing object survives until the next reclamation attempt sweeps it — the
 generation is already terminal, so no serving path reads it.
 
+Two more race shapes arrive at the same boundary and get the same treatment,
+because the row is already gone in both and the delete's committed outcome
+cannot be reopened:
+
+- A delete answered `404 NotFound` is the race's success half. Several sweeps
+  can walk the same owner prefixes within seconds — the empty-generation
+  cleanup, the rollover-loser cleanup, the merge cleanup, the account wipe —
+  so a listing entry can already be gone when the loop reaches it. The purge
+  skips the entry (without counting it among its own deletes) and lets the
+  verify re-list stay the only authority on what survived; the linked-original
+  scan (`raw-sync`, `raw-mobile-batch`) absorbs the same 404 for the identical
+  reason.
+- A momentary storage fault — 503/504/500, or the GCS SDK's drained-retry
+  envelope around one — defers the sweep to the next teardown, rollover-loser
+  cleanup or reclamation (`Unreferenced audio sweep deferred behind a storage
+  blip`, WARNING, no traceback, no degradation event). The classification set
+  is the shared availability classifier the Firestore writers use
+  (`is_transient_availability_error`); permanent refusals and unknown
+  failures keep the failed-write arm.
+
 When the private-cloud flush writes `audio_files` onto a conversation that a
 mid-session delete removes between the flush's existence read and its commit,
 `update_conversation` reports the owner as gone (returns `False`) instead of

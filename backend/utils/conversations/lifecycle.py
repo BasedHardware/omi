@@ -857,6 +857,18 @@ def _is_residual_audio_sweep(error: BaseException) -> bool:
     return isinstance(error, RuntimeError) and 'owner storage purge left' in str(error)
 
 
+def _is_storage_blip(error: BaseException) -> bool:
+    """Recognize the storage's momentary faults as sweep-deferrable.
+
+    The same availability set the rest of the backend retries (503
+    ``ServiceUnavailable``, 504 ``DeadlineExceeded``, 500
+    ``InternalServerError``, including one wrapped in the SDK's drained
+    ``RetryError``) applies to GCS reads and writes exactly as it does to
+    Firestore, and the GCS SDK's own retry budget sits under this boundary.
+    """
+    return is_transient_availability_error(error)
+
+
 def _discard_unreferenced_audio(
     uid: str,
     conversation_id: str,
@@ -893,6 +905,23 @@ def _discard_unreferenced_audio(
             # delete as a failed write.
             logger.info(
                 'Retained unreferenced audio behind a late writer uid=%s conversation_id=%s',
+                uid,
+                conversation_id,
+            )
+            return
+        if _is_storage_blip(error):
+            # A momentary storage fault — 503/504/500 or its drained-retry
+            # envelope — under a sweep whose authoritative outcome already
+            # committed. The row is gone, so nothing can be kept consistent
+            # with it: deferring the sweep to the next teardown, rollover-loser
+            # cleanup or reclamation keeps the committed delete classified as
+            # successful, exactly like the residual arm above, instead of a
+            # traceback and an ``omi_fallback_total`` exhausted event on every
+            # failing attempt. The orphaned bytes stay until the next sweep
+            # re-attacks them — no serving path reads them, the generation is
+            # terminal.
+            logger.warning(
+                'Unreferenced audio sweep deferred behind a storage blip uid=%s conversation_id=%s',
                 uid,
                 conversation_id,
             )
