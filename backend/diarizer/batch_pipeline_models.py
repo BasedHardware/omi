@@ -8,6 +8,7 @@ from collections import OrderedDict
 import io
 from copy import deepcopy
 from contextlib import nullcontext
+from typing import TypeGuard
 import math
 import wave
 import numpy as np
@@ -202,7 +203,7 @@ MAX_SELF_LID_PROBE_SECONDS = 30.0
 SELF_LID_DURATION_TOLERANCE_SECONDS = 1 / 16000 + 1e-9
 
 
-def _finite_number(value) -> bool:
+def _finite_number(value: object) -> TypeGuard[int | float]:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return False
     try:

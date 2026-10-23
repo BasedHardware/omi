@@ -14,7 +14,7 @@ import threading
 import time
 import math
 import logging
-from typing import TYPE_CHECKING, Callable, NamedTuple
+from typing import TYPE_CHECKING, Callable, NamedTuple, cast
 from uuid import NAMESPACE_URL, uuid5
 
 from config.batch_pipeline import (
@@ -147,7 +147,7 @@ def fence_reason_field(error: BaseException) -> str:
 def projection_block_reason(error: BaseException) -> str:
     """Return only the closed, log-safe projection block reason token."""
     try:
-        attributes = error.__dict__
+        attributes = cast(object, error.__dict__)
         reason = attributes.get('block_reason') if isinstance(attributes, dict) else None
     except Exception:
         reason = None
