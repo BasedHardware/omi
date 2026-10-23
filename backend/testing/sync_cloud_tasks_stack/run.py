@@ -505,7 +505,7 @@ def _seed_capture_conversation(stack: Stack, uid: str, conversation_id: str) -> 
         raise StackFailure(f'isolated capture provenance seed returned HTTP {response.status_code}')
 
 
-def _submit_and_capture_task(stack: Stack, uid: str) -> tuple[str, dict[str, Any]]:
+def _upload_with_manifest(stack: Stack, uid: str) -> tuple[str, httpx.Response]:
     stack.seed_user(uid)
     filename = _fresh_pcm_filename()
     audio = _pcm16_upload_bytes()
@@ -537,6 +537,32 @@ def _submit_and_capture_task(stack: Stack, uid: str) -> tuple[str, dict[str, Any
         headers={**common_headers, 'X-Omi-Sync-Capture-Manifest': manifest},
         timeout=20.0,
     )
+    return capture_conversation_id, response
+
+
+def _retired_admission(stack: Stack) -> None:
+    """A real signed upload cannot recreate legacy work after C9."""
+    uid = stack.scenario_uid('legacy-admission-retired')
+    _, response = _upload_with_manifest(stack, uid)
+    if response.status_code != 409:
+        raise StackFailure(f'retired legacy admission returned HTTP {response.status_code}')
+    body = response.json()
+    if body.get('code') != 'sync_content_in_progress' or body.get('job_id') is not None:
+        raise StackFailure('retired admission did not preserve the client retry contract')
+    if int(response.headers.get('Retry-After', '0')) < 60:
+        raise StackFailure('retired admission omitted the client cooldown hint')
+    if any(stack.evidence_events(stream) for stream in ('tasks', 'providers', 'jobs', 'storage', 'worker')):
+        raise StackFailure('retired admission dispatched or mutated legacy work')
+    if stack.fair_use_meter_ms(uid) != 0:
+        raise StackFailure('retired admission consumed speech allowance')
+    (stack.evidence_dir / 'admission.jsonl').write_text(
+        json.dumps({'event': 'legacy_admission_retired', 'http_status': 409, 'legacy_work_events': 0}) + '\n',
+        encoding='utf-8',
+    )
+
+
+def _submit_and_capture_task(stack: Stack, uid: str) -> tuple[str, dict[str, Any]]:
+    capture_conversation_id, response = _upload_with_manifest(stack, uid)
     if response.status_code != 202:
         raise StackFailure(f'Sync admission returned HTTP {response.status_code}: {response.text[:160]}')
     admitted = response.json()
@@ -969,10 +995,10 @@ def _ambiguous_enqueue_and_expired_blob(stack: Stack) -> None:
         raise StackFailure('expired staged blob unexpectedly invoked STT')
 
 
-def _assert_evidence_is_sanitized(stack: Stack) -> None:
+def _assert_evidence_is_sanitized(stack: Stack, *, retired_admission: bool = False) -> None:
     # A deliberate pre-pipeline failure has no provider event; all scenarios
     # must still produce task, worker, durable-job, and storage evidence.
-    expected_streams = {'tasks', 'jobs', 'worker', 'storage'}
+    expected_streams = {'admission'} if retired_admission else {'tasks', 'jobs', 'worker', 'storage'}
     present = {path.stem for path in stack.evidence_dir.glob('*.jsonl')}
     if not expected_streams.issubset(present):
         raise StackFailure(f'missing sanitized evidence streams: {sorted(expected_streams - present)}')
@@ -1014,7 +1040,7 @@ def _run_scenario(
     try:
         stack.start()
         scenario(stack)
-        _assert_evidence_is_sanitized(stack)
+        _assert_evidence_is_sanitized(stack, retired_admission=scenario is _retired_admission)
     finally:
         stack.close()
         stack.cleanup_workspace_files()
@@ -1028,7 +1054,7 @@ def main() -> int:
         '--only',
         choices=('all', 'sync', 'batch'),
         default='all',
-        help='run only the legacy Sync Cloud Tasks scenarios or only the batch-lane scenarios',
+        help='run the Sync admission-retirement contract, batch-lane scenarios, or both',
     )
     args = parser.parse_args()
     if not PYTHON.exists():
@@ -1039,33 +1065,7 @@ def main() -> int:
     succeeded = False
     try:
         if args.only in {'all', 'sync'}:
-            _run_scenario(state_dir / 'happy-duplicate', scenario=_happy_path_and_terminal_duplicate)
-            _run_scenario(
-                state_dir / 'cleanup-retry', cleanup_failures=1, scenario=_cleanup_retry_preserves_terminal_work
-            )
-            _run_scenario(
-                state_dir / 'pre-ledger-retry', pre_ledger_failures=1, scenario=_pre_ledger_failure_retries_once
-            )
-            _run_scenario(
-                state_dir / 'post-ledger-retry', post_ledger_failures=1, scenario=_post_ledger_failure_converges_once
-            )
-            _run_scenario(
-                state_dir / 'final-attempt-ledger',
-                worker_failures=1,
-                post_ledger_failures=1,
-                scenario=_final_attempt_post_ledger_failure_converges,
-            )
-            _run_scenario(
-                state_dir / 'terminal-failure', worker_failures=2, scenario=_retry_budget_terminalizes_truthfully
-            )
-            _run_scenario(state_dir / 'concurrent', hold_processor=True, scenario=_concurrent_delivery_is_lease_fenced)
-            _run_scenario(
-                state_dir / 'nonprod-legacy-backfill',
-                scenario=_nonprod_legacy_backfill_is_acked_before_worker_state,
-            )
-            _run_scenario(
-                state_dir / 'lost-ack-expired', task_ack_failures=1, scenario=_ambiguous_enqueue_and_expired_blob
-            )
+            _run_scenario(state_dir / 'legacy-admission-retired', scenario=_retired_admission)
         if args.only in {'all', 'batch'}:
             from .batch import run_batch_scenarios
 
