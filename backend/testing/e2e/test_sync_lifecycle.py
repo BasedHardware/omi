@@ -167,7 +167,7 @@ def _patch_sync_pipeline(
     return pending_coroutines
 
 
-def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, monkeypatch):
+def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, monkeypatch, live_user):
     patch_fresh_sync_lane(monkeypatch)
     reprocessed = []
     pending_coroutines = _patch_sync_pipeline(
@@ -209,8 +209,87 @@ def test_sync_v2_completes_job_and_creates_conversation(client, auth_headers, mo
     assert reprocessed == ["sync-created-conversation"]
 
 
+@pytest.mark.parametrize('authority', ['live', 'pending', 'completed', 'missing_root'])
+def test_sync_finalize_usage_preserves_erasure_and_once_receipt(
+    client, auth_headers, monkeypatch, live_user, fake_firestore, authority
+):
+    from database.legal_holds import DestructiveOperationInProgress
+    import utils.sync.pipeline as sync_pipeline
+
+    patch_fresh_sync_lane(monkeypatch)
+    pending = _patch_sync_pipeline(monkeypatch, transcript_text="Finalize usage boundary regression.", reprocessed=[])
+    real_record_usage = sync_pipeline.record_usage
+    attempts, errors = [], []
+
+    def record_after_authority_change(*args, **kwargs):
+        # Reach the real usage/finalize boundary after ingestion has succeeded.
+        attempts.append((args, kwargs))
+        if authority == 'missing_root':
+            live_user.delete()
+        elif authority != 'live':
+            fake_firestore.collection('account_deletions').document(live_user.id).set({'wipe_status': authority})
+        try:
+            return real_record_usage(*args, **kwargs)
+        except DestructiveOperationInProgress as exc:
+            errors.append(exc)
+            raise
+
+    monkeypatch.setattr(sync_pipeline, 'record_usage', record_after_authority_change)
+    assert live_user.get().exists
+    assert not fake_firestore.collection('account_deletions').document(live_user.id).get().exists
+    assert not fake_firestore.collection('legal_hold_deletion_gates').document(live_user.id).get().exists
+    # Each scenario is a different recording, including any durable capture
+    # evidence outside the user subtree that the session-scoped fake retains.
+    offset_seconds = 300 + 60 * ['live', 'pending', 'completed', 'missing_root'].index(authority)
+    response = client.post(
+        '/v2/sync-local-files',
+        files=[('files', (_sync_filename(offset_seconds), b'fake-pcm-frame', 'application/octet-stream'))],
+        headers=auth_headers,
+    )
+    assert response.status_code == 202, response.text
+    _drain_background_coroutines(pending)
+    job_id = response.json()['job_id']
+    if authority in {'pending', 'completed'}:
+        from database.sync_jobs import get_sync_job
+
+        # Deletion correctly revokes HTTP polling as well as publication.
+        assert client.get(f'/v2/sync-local-files/{job_id}', headers=auth_headers).status_code == 403
+        job = get_sync_job(job_id)
+        assert job is not None
+    else:
+        job = _poll_sync_job(client, auth_headers, job_id)
+    assert len(attempts) == 1, job
+    args, kwargs = attempts[0]
+    assert kwargs['speech_seconds'] > 0
+    assert kwargs['idempotency_key']
+    receipt = live_user.collection('sync_content_ledger').document(kwargs['idempotency_key'])
+    hourly = list(live_user.collection('hourly_usage').stream())
+    monthly = list(live_user.collection('monthly_usage_totals').stream())
+
+    if authority == 'live':
+        assert not errors
+        assert job['status'] == 'completed', job
+        assert receipt.get().to_dict()['usage_committed_at'] is not None
+        assert len(hourly) == len(monthly) == 1
+        source, total = hourly[0].to_dict(), monthly[0].to_dict()
+        for field in ('speech_seconds', 'transcription_seconds'):
+            assert source[field] == total['totals'][field] == kwargs[field]
+        real_record_usage(*args, **kwargs)
+        assert hourly[0].reference.get().to_dict() == source
+        assert monthly[0].reference.get().to_dict() == total
+    else:
+        assert len(errors) == 1
+        assert job['status'] == 'failed', job
+        assert job['error'] == 'sync_finalize_failed'
+        assert not hourly and not monthly
+        assert (receipt.get().to_dict() or {}).get('usage_committed_at') is None
+        assert live_user.get().exists is (authority != 'missing_root')
+
+
 @pytest.mark.parametrize('empty_target', [False, True])
-def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(client, auth_headers, monkeypatch, empty_target):
+def test_sync_v2_merges_into_target_conversation_and_reprocesses_once(
+    client, auth_headers, monkeypatch, empty_target, live_user
+):
     patch_fresh_sync_lane(monkeypatch)
     import database.conversations as conversations_db
 

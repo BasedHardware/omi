@@ -313,6 +313,7 @@ def clear_user_data(uid: str):
         "folders",
         "hourly_usage",
         "monthly_usage_totals",
+        "sync_content_ledger",
         # Universal memory authority. The E2E store is session-scoped, so
         # omitting these collections leaks apply state and canonical rows from
         # an earlier test into later legacy-compatibility scenarios.
@@ -344,6 +345,13 @@ def clear_user_data(uid: str):
         user_ref.delete()
     except Exception:
         pass
+    # fake-firestore deletes the nested data dict with the root but leaves
+    # descendant existence entries behind. Clear those ghost snapshots too,
+    # including when an erasure test already removed the root before teardown.
+    user_path = ('users', uid)
+    db._written_docs.difference_update({path for path in db._written_docs if path[:2] == user_path})
+    # Finalize-time erasure tests write this authority outside the user tree.
+    db.collection("account_deletions").document(uid).delete()
     # The maintenance inventory is deliberately outside the user document so
     # account cleanup must remove its content-free marker separately.
     try:
