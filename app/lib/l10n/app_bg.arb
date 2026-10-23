@@ -4407,5 +4407,18 @@
     "deviceRecently": "Наскоро",
     "deviceDisconnectedFor": "Без връзка за {duration}",
     "deviceControls": "Управление",
-    "homeBackgroundLine": "Също: {items}"
+    "homeBackgroundLine": "Също: {items}",
+    "deviceOnboardingPressButtonTitle": "Натиснете бутона на Omi",
+    "deviceOnboardingPressButtonSubtitle": "Едно кратко натискане. После питайте каквото искате.",
+    "deviceOnboardingAskNowTitle": "Задайте въпроса си",
+    "deviceOnboardingAskNowSubtitle": "Кажете го на глас. Omi слуша.",
+    "deviceOnboardingPressAgainHint": "Готово? Натиснете бутона отново, за да изпратите.",
+    "trialUpsellTitle": "Получавате {days} дни безплатно",
+    "trialUpsellBody": "{days} дни Omi Pro за наша сметка. Ще ви напомним преди таксуване. Отказ по всяко време.",
+    "trialUpsellClaim": "Вземи {days} дни пробен период",
+    "settingsUpgradeTrialSubtitle": "Започнете {days}-дневен безплатен пробен период",
+    "pairingPowerOnTitle": "Включете Omi",
+    "pairingPowerOnSubtitle": "Натиснете бутона веднъж и го дръжте близо до телефона.",
+    "walkthroughBackgroundRecordingNote": "Готово. Omi ще продължи да записва разговорите ви във фонов режим.",
+    "noThanks": "Не, благодаря"
 }

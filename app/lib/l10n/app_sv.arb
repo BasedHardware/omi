@@ -4407,5 +4407,18 @@
     "deviceRecently": "Nyligen",
     "deviceDisconnectedFor": "Frånkopplad i {duration}",
     "deviceControls": "Kontroller",
-    "homeBackgroundLine": "Även: {items}"
+    "homeBackgroundLine": "Även: {items}",
+    "deviceOnboardingPressButtonTitle": "Tryck på knappen på din Omi",
+    "deviceOnboardingPressButtonSubtitle": "Ett kort tryck. Fråga sedan vad som helst.",
+    "deviceOnboardingAskNowTitle": "Ställ din fråga",
+    "deviceOnboardingAskNowSubtitle": "Säg det högt. Omi lyssnar.",
+    "deviceOnboardingPressAgainHint": "Klar? Tryck på knappen igen för att skicka.",
+    "trialUpsellTitle": "Du har fått {days} dagar gratis",
+    "trialUpsellBody": "{days} dagar Omi Pro på oss. Vi påminner dig före debitering. Avsluta när som helst.",
+    "trialUpsellClaim": "Ta min {days}-dagars prövning",
+    "settingsUpgradeTrialSubtitle": "Starta din {days}-dagars gratis prövning",
+    "pairingPowerOnTitle": "Slå på din Omi",
+    "pairingPowerOnSubtitle": "Tryck en gång på knappen och håll den nära telefonen.",
+    "walkthroughBackgroundRecordingNote": "Det var allt. Omi fortsätter spela in dina samtal i bakgrunden.",
+    "noThanks": "Nej tack"
 }

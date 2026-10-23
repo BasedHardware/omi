@@ -4503,5 +4503,18 @@
     "deviceRecently": "Nemrég",
     "deviceDisconnectedFor": "{duration} szétkapcsolva",
     "deviceControls": "Vezérlők",
-    "homeBackgroundLine": "Továbbá: {items}"
+    "homeBackgroundLine": "Továbbá: {items}",
+    "deviceOnboardingPressButtonTitle": "Nyomd meg az Omi gombját",
+    "deviceOnboardingPressButtonSubtitle": "Egy rövid nyomás. Aztán kérdezz bármit.",
+    "deviceOnboardingAskNowTitle": "Tedd fel a kérdésed",
+    "deviceOnboardingAskNowSubtitle": "Mondd ki hangosan. Az Omi figyel.",
+    "deviceOnboardingPressAgainHint": "Kész? Nyomd meg újra a gombot a küldéshez.",
+    "trialUpsellTitle": "{days} nap ingyen a tiéd",
+    "trialUpsellBody": "{days} nap Omi Pro, a mi vendégünk vagy. Terhelés előtt emlékeztetünk. Bármikor lemondható.",
+    "trialUpsellClaim": "Kérem a {days} napos próbát",
+    "settingsUpgradeTrialSubtitle": "Indítsd el a {days} napos ingyenes próbát",
+    "pairingPowerOnTitle": "Kapcsold be az Omit",
+    "pairingPowerOnSubtitle": "Nyomd meg egyszer a gombot, és tartsd a telefon közelében.",
+    "walkthroughBackgroundRecordingNote": "Ennyi. Az Omi a háttérben tovább rögzíti a beszélgetéseidet.",
+    "noThanks": "Nem, köszönöm"
 }

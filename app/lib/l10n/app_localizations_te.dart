@@ -14546,4 +14546,52 @@ class AppLocalizationsTe extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'అలాగే: $items';
   }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'మీ Omi బటన్ నొక్కండి';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'ఒక చిన్న నొక్కు. తర్వాత ఏదైనా అడగండి.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'మీ ప్రశ్న అడగండి';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'బిగ్గరగా చెప్పండి. Omi వింటోంది.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'పూర్తయిందా? పంపడానికి బటన్ మళ్లీ నొక్కండి.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'మీకు $days రోజులు ఉచితం';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days రోజుల Omi Pro మా తరఫున. ఛార్జ్‌కు ముందు గుర్తు చేస్తాం. ఎప్పుడైనా రద్దు చేయండి.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days రోజుల ట్రయల్ పొందండి';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'మీ $days రోజుల ఉచిత ట్రయల్ ప్రారంభించండి';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'మీ Omi ఆన్ చేయండి';
+
+  @override
+  String get pairingPowerOnSubtitle => 'బటన్‌ను ఒకసారి నొక్కి ఫోన్ దగ్గర ఉంచండి.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'అంతే. Omi బ్యాక్‌గ్రౌండ్‌లో మీ సంభాషణలను రికార్డ్ చేస్తూనే ఉంటుంది.';
+
+  @override
+  String get noThanks => 'వద్దు, ధన్యవాదాలు';
 }

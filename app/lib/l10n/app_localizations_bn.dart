@@ -14483,4 +14483,51 @@ class AppLocalizationsBn extends AppLocalizations {
   String homeBackgroundLine(String items) {
     return 'এছাড়াও: $items';
   }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'আপনার Omi-র বোতাম টিপুন';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'একবার ছোট করে টিপুন। তারপর যা খুশি জিজ্ঞেস করুন।';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'আপনার প্রশ্ন করুন';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'জোরে বলুন। Omi শুনছে।';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'শেষ? পাঠাতে আবার বোতাম টিপুন।';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'আপনাকে $days দিনের ফ্রি ট্রায়ালে আপগ্রেড করা হয়েছে';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days দিন Omi Pro আমাদের খরচে। চার্জের আগে মনে করিয়ে দেব। যেকোনো সময় বাতিল করুন।';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days দিনের ট্রায়াল নিন';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'আপনার $days দিনের ফ্রি ট্রায়াল শুরু করুন';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'আপনার Omi চালু করুন';
+
+  @override
+  String get pairingPowerOnSubtitle => 'একবার বোতাম টিপুন এবং ফোনের কাছে রাখুন।';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'এটুকুই। Omi ব্যাকগ্রাউন্ডে আপনার কথোপকথন রেকর্ড করতে থাকবে।';
+
+  @override
+  String get noThanks => 'না, ধন্যবাদ';
 }

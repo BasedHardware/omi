@@ -11833,5 +11833,18 @@
     "deviceRecently": "حال ہی میں",
     "deviceDisconnectedFor": "{duration} تک منقطع",
     "deviceControls": "کنٹرولز",
-    "homeBackgroundLine": "نیز: {items}"
+    "homeBackgroundLine": "نیز: {items}",
+    "deviceOnboardingPressButtonTitle": "اپنے Omi کا بٹن دبائیں",
+    "deviceOnboardingPressButtonSubtitle": "ایک مختصر دباؤ۔ پھر کچھ بھی پوچھیں۔",
+    "deviceOnboardingAskNowTitle": "اپنا سوال پوچھیں",
+    "deviceOnboardingAskNowSubtitle": "بلند آواز میں کہیں۔ Omi سن رہا ہے۔",
+    "deviceOnboardingPressAgainHint": "ہو گیا؟ بھیجنے کے لیے بٹن دوبارہ دبائیں۔",
+    "trialUpsellTitle": "آپ کو {days} دن مفت مل گئے",
+    "trialUpsellBody": "{days} دن Omi Pro ہماری طرف سے۔ کسی بھی چارج سے پہلے یاد دلائیں گے۔ کبھی بھی منسوخ کریں۔",
+    "trialUpsellClaim": "میرا {days} دن کا ٹرائل لیں",
+    "settingsUpgradeTrialSubtitle": "اپنا {days} دن کا مفت ٹرائل شروع کریں",
+    "pairingPowerOnTitle": "اپنا Omi آن کریں",
+    "pairingPowerOnSubtitle": "بٹن ایک بار دبائیں اور فون کے قریب رکھیں۔",
+    "walkthroughBackgroundRecordingNote": "بس اتنا ہی۔ Omi پس منظر میں آپ کی گفتگو ریکارڈ کرتا رہے گا۔",
+    "noThanks": "نہیں، شکریہ"
 }

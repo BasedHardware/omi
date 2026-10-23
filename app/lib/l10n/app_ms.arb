@@ -4407,5 +4407,18 @@
     "deviceRecently": "Baru-baru ini",
     "deviceDisconnectedFor": "Terputus selama {duration}",
     "deviceControls": "Kawalan",
-    "homeBackgroundLine": "Juga: {items}"
+    "homeBackgroundLine": "Juga: {items}",
+    "deviceOnboardingPressButtonTitle": "Tekan butang pada Omi anda",
+    "deviceOnboardingPressButtonSubtitle": "Satu tekanan pendek. Kemudian tanya apa sahaja.",
+    "deviceOnboardingAskNowTitle": "Tanya soalan anda",
+    "deviceOnboardingAskNowSubtitle": "Sebut dengan kuat. Omi sedang mendengar.",
+    "deviceOnboardingPressAgainHint": "Selesai? Tekan butang sekali lagi untuk menghantar.",
+    "trialUpsellTitle": "Anda dapat {days} hari percuma",
+    "trialUpsellBody": "{days} hari Omi Pro percuma daripada kami. Kami ingatkan sebelum dicaj. Batal bila-bila masa.",
+    "trialUpsellClaim": "Dapatkan percubaan {days} hari",
+    "settingsUpgradeTrialSubtitle": "Mulakan percubaan percuma {days} hari",
+    "pairingPowerOnTitle": "Hidupkan Omi anda",
+    "pairingPowerOnSubtitle": "Tekan butang sekali dan letak dekat telefon.",
+    "walkthroughBackgroundRecordingNote": "Itu sahaja. Omi akan terus merakam perbualan anda di latar belakang.",
+    "noThanks": "Tidak, terima kasih"
 }
