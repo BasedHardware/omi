@@ -304,6 +304,9 @@ CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 # at two attempts plus one inter-attempt delay bound (3x).
 NOTES_LOOP_DEADLINE_SECONDS = 3 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
+# The gate counts approved frames available (`screen_frame_count` from the wiring),
+# never the attached-image budget: MAX_NOTES_FRAME_IMAGES caps attached images at
+# four, so counting images alone kept this >=5 threshold unreachable.
 _NOTES_TIER_MIN_WORDS = 1500
 _NOTES_TIER_MIN_SCREEN_FRAMES = 5
 
@@ -437,7 +440,9 @@ def _get_shaped_conversation_notes(
     context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     words = _word_count(context)
     rich_mode = kwargs.get('rich_context_enabled', False)
-    screen_count = len(frames)
+    # Approved-frame volume, not attached images: reads can fail or hit the budget
+    # cap, and the escalation gate must still see the screen-heavy meeting.
+    screen_count = max(kwargs.get('screen_frame_count') or 0, len(frames))
     escalated, escalation_reason = _shaped_notes_tier(words, screen_count)
     _record_shaped_notes_tier(escalated, escalation_reason, words, screen_count)
     if not prefix.has_usable_content and not frames:
@@ -458,6 +463,10 @@ def _get_shaped_conversation_notes(
                     'account_owner_name': prefix.account_owner_name or next(iter(prefix.owner_names), None),
                     'open_tasks': kwargs.get('existing_action_items') or [],
                     'capture_evidence': context,
+                    # The background pack plus owner-confirmed corrections the agentic
+                    # writer gets as `background`; without this key the one-shot path
+                    # silently dropped both whenever the agent lane was unavailable.
+                    **({'meeting_context': kwargs['meeting_context']} if kwargs.get('meeting_context') else {}),
                     **({'known_spellings': prefix.known_spellings} if prefix.known_spellings else {}),
                     **({'title_people': title_people_block(prefix)} if not rich_mode else {}),
                 },
