@@ -113,6 +113,13 @@ Failed revocation retains an inactive encrypted token solely for retry and tells
 the user how to revoke access directly in pCloud. Omi does not delete remote
 files or promise retention beyond pCloud's own policies.
 
+Disconnect also rotates a durable per-account authorization epoch, even when no
+connection exists. Every OAuth attempt is stamped with the epoch at Connect, and
+the callback checks it under the account lock before and after the token
+exchange. An attempt started before Disconnect therefore never exchanges its
+code, and one already exchanging revokes the token it was just issued instead of
+storing it. A newer connection is never overwritten; canceled jobs stay canceled.
+
 To rotate encryption keys: back up the volume, configure `[new_key, old_key, ...]`,
 run `configured_store().rotate_keys()` in an administrative shell on that volume,
 verify reads with the new key, then remove retired keys. The transaction rewraps

@@ -15,7 +15,8 @@ session plus CSRF-protected POST forms for mutations. A query UID never authoriz
 A launch grant is one-use and short-lived, so every client fetches fresh details
 immediately before each home-page or authentication-step open instead of reusing a catalog or earlier
 response: the Flutter app detail page (auto-open, the settings button and
-post-install), the macOS and Windows app sheets, and the web app detail page.
+post-install), the macOS and Windows app sheets, the Windows Apps page's first-time
+Install, and the web app detail page.
 Refresh failure never falls back to an earlier capability. Query-aware UID
 helpers preserve signed query bytes, and late reads for a departed account or
 page cannot launch the browser. Setup retries use the existing client owners,

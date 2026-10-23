@@ -277,6 +277,131 @@ def test_oauth_rejects_untrusted_host_and_stale_state(env):
     )
 
 
+def begin_oauth(env, csrf, client=None):
+    client = client or env.client
+    initiation = client.post('/auth/pcloud', data={'csrf': csrf}, follow_redirects=False)
+    assert initiation.status_code == 303
+    return parse_qs(urlsplit(initiation.headers['location']).query)['state'][0]
+
+
+def finish_oauth(env, state, client=None):
+    client = client or env.client
+    return client.get(
+        '/auth/pcloud/callback',
+        params={'state': state, 'code': f'code-{state[:6]}', 'locationid': 1, 'hostname': 'api.pcloud.com'},
+    )
+
+
+def synthetic_provider(env, before_exchange=None, revoke_ok=True):
+    """Synthetic token endpoint: each exchange issues a distinct token; logouts are recorded."""
+    issued, revoked = [], []
+
+    def exchange(url, **kwargs):
+        if before_exchange:
+            before_exchange()
+        issued.append(f'token-{len(issued) + 1}')
+        return SimpleNamespace(
+            status_code=200,
+            raise_for_status=lambda: None,
+            json=lambda token=issued[-1]: {'result': 0, 'access_token': token, 'uid': 123},
+        )
+
+    env.monkeypatch.setattr(requests, 'post', exchange)
+    env.monkeypatch.setattr(PCloudClient, 'get_user_info', lambda self: ({'email': 'synthetic@example.invalid'}, None))
+    env.monkeypatch.setattr(
+        PCloudClient, 'logout', lambda self: revoked.append(self.access_token) or ((True, None) if revoke_ok else (False, 'x'))
+    )
+    return issued, revoked
+
+
+def test_disconnect_retires_an_older_pending_authorization(env):
+    csrf = login(env)
+    issued, revoked = synthetic_provider(env)
+    first, second = begin_oauth(env, csrf), begin_oauth(env, csrf)
+    assert finish_oauth(env, first).status_code == 200
+    assert env.client.post('/disconnect', data={'csrf': csrf}).status_code == 200
+    late = finish_oauth(env, second)
+    assert late.status_code == 409 and 'disconnected' in late.text.lower()
+    assert env.store.get('connection', UID) is None
+    assert issued == ['token-1'] and revoked == ['token-1']  # the retired code is never exchanged
+
+
+def test_disconnect_without_a_connection_still_retires_pending_authorization(env):
+    csrf = login(env)
+    issued, _ = synthetic_provider(env)
+    pending = begin_oauth(env, csrf)
+    assert env.client.post('/disconnect', data={'csrf': csrf}).status_code == 200
+    assert finish_oauth(env, pending).status_code == 409
+    assert env.store.get('connection', UID) is None and issued == []
+    # A genuinely new Connect after Disconnect works.
+    assert finish_oauth(env, begin_oauth(env, csrf)).status_code == 200
+    assert env.store.get('connection', UID)['access_token'] == 'token-1'
+
+
+@pytest.mark.parametrize('revoke_ok', [True, False])
+def test_disconnect_during_token_exchange_cannot_revive_the_account(env, revoke_ok):
+    csrf = login(env)
+    exchanging, release = concurrent.futures.Future(), concurrent.futures.Future()
+
+    def pause():
+        if not exchanging.done():
+            exchanging.set_result(True)
+            release.result(timeout=10)
+
+    issued, revoked = synthetic_provider(env, before_exchange=pause, revoke_ok=revoke_ok)
+    state = begin_oauth(env, csrf)
+    with concurrent.futures.ThreadPoolExecutor(1) as pool:
+        pending = pool.submit(finish_oauth, env, state)
+        exchanging.result(timeout=10)
+        assert env.client.post('/disconnect', data={'csrf': csrf}).status_code == 200
+        release.set_result(True)
+        result = pending.result(timeout=10)
+    assert result.status_code == 409 and 'disconnected' in result.text.lower()
+    assert env.store.get('connection', UID) is None
+    assert revoked == issued == ['token-1']  # the stale grant is revoked, not stored
+    assert ('not confirmed' in result.text) is not revoke_ok
+
+
+def test_stale_exchange_never_overwrites_a_newer_connection(env):
+    csrf = login(env)
+    exchanging, release = concurrent.futures.Future(), concurrent.futures.Future()
+
+    def pause():
+        if not exchanging.done():
+            exchanging.set_result(True)
+            release.result(timeout=10)
+
+    issued, revoked = synthetic_provider(env, before_exchange=pause)
+    stale = begin_oauth(env, csrf)
+    with concurrent.futures.ThreadPoolExecutor(1) as pool:
+        pending = pool.submit(finish_oauth, env, stale)
+        exchanging.result(timeout=10)
+        assert env.client.post('/disconnect', data={'csrf': csrf}).status_code == 200
+        assert finish_oauth(env, begin_oauth(env, csrf)).status_code == 200  # new attempt issues token-1
+        release.set_result(True)
+        assert pending.result(timeout=10).status_code == 409  # the stale attempt then issues token-2
+    assert env.store.get('connection', UID)['access_token'] == 'token-1'
+    assert revoked == ['token-2']
+
+
+def test_disconnect_leaves_other_accounts_and_canceled_jobs_alone(env):
+    csrf = login(env)
+    other = TestClient(main.app, base_url='https://pcloud.example.invalid')
+    other_csrf = login(env, uid='synthetic-user-b', client=other)
+    synthetic_provider(env)
+    other_state = begin_oauth(env, other_csrf, client=other)
+    connection(env)
+    settings(env)
+    assert deliver(env).status_code == 202
+    assert env.client.post('/disconnect', data={'csrf': csrf}).status_code == 200
+    assert finish_oauth(env, other_state, client=other).status_code == 200
+    assert env.store.get('connection', 'synthetic-user-b')['status'] == 'active'
+    assert finish_oauth(env, begin_oauth(env, csrf)).status_code == 200
+    worker.run_next_job(env.store)
+    assert [job['state'] for job in env.store.jobs(UID)] == ['canceled']
+    other.close()
+
+
 def test_failed_revocation_stops_exports_but_preserves_recovery_token(env):
     csrf = login(env)
     connection(env)

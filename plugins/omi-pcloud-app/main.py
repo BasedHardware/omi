@@ -211,6 +211,22 @@ def save_settings(
     return success_page(request, 'Backup preferences saved. Changes apply to unfinished files as well as new backups.')
 
 
+def authorization_epoch(store, uid: str, *, rotate: bool = False) -> str:
+    """Per-account authorization generation; callers hold the account lock.
+
+    Each OAuth attempt is stamped with it. Disconnect rotates it, so every attempt
+    started before the Disconnect is retired, whether or not a connection exists.
+    """
+    record = None if rotate else store.get('authorization', uid)
+    if not record:
+        record = {'epoch': secrets.token_urlsafe(16)}
+        store.put('authorization', uid, uid, record, ttl=10 * 365 * 86400)
+    return record['epoch']
+
+
+RETIRED_ATTEMPT = 'You disconnected pCloud after this connection started, so it was not completed. Connect again to continue.'
+
+
 @app.post('/auth/pcloud')
 def connect(request: Request, csrf: str = Form(...)):
     principal = session(request, csrf)
@@ -220,7 +236,15 @@ def connect(request: Request, csrf: str = Form(...)):
             return page(request, 'Disconnect your current pCloud account before connecting another.', 409)
         state = secrets.token_urlsafe(32)
         store.put(
-            'oauth', state, principal['uid'], {'uid': principal['uid'], 'session_csrf': principal['csrf']}, ttl=900
+            'oauth',
+            state,
+            principal['uid'],
+            {
+                'uid': principal['uid'],
+                'session_csrf': principal['csrf'],
+                'epoch': authorization_epoch(store, principal['uid']),
+            },
+            ttl=900,
         )
     return RedirectResponse(
         'https://my.pcloud.com/oauth2/authorize?'
@@ -246,13 +270,17 @@ def callback(
     error: str = '',
 ):
     principal = session(request)
-    data = get_store().get('oauth', state, consume=True)
+    store = get_store()
+    data = store.get('oauth', state, consume=True)
     if not data or data['uid'] != principal['uid'] or not hmac.compare_digest(data['session_csrf'], principal['csrf']):
         return page(request, 'The connection request expired or belongs to another session. Start again.', 400)
     if error or not code:
         return page(request, 'pCloud authorization was not completed. Your existing backups were not changed.', 400)
     if locationid not in REGIONS or hostname != REGIONS[locationid]:
         return page(request, 'pCloud returned an unsupported data-center address. Restart the connection.', 400)
+    with store.account_lock(principal['uid']):
+        if data.get('epoch') != authorization_epoch(store, principal['uid']):
+            return page(request, RETIRED_ATTEMPT, 409)
     try:
         response = requests.post(
             f'https://{REGIONS[locationid]}/oauth2_token',
@@ -284,8 +312,19 @@ def callback(
             'generation': secrets.token_urlsafe(24),
             'status': 'revoke_pending' if profile_error else 'active',
         }
-        store = get_store()
         with store.account_lock(principal['uid']):
+            # Disconnect may have run while the code was being exchanged. The token
+            # just issued belongs to a retired attempt: revoke it, never store it.
+            if data.get('epoch') != authorization_epoch(store, principal['uid']):
+                revoked, _ = client.logout()
+                if revoked:
+                    return page(request, RETIRED_ATTEMPT, 409)
+                return page(
+                    request,
+                    RETIRED_ATTEMPT + ' pCloud has not confirmed revocation of the access it just issued; '
+                    'remove this app in your pCloud account settings.',
+                    409,
+                )
             if store.get('connection', principal['uid']):
                 client.logout()
                 return page(request, 'Another connection finished first. Disconnect it before changing accounts.', 409)
@@ -308,6 +347,7 @@ def disconnect(request: Request, csrf: str = Form(...)):
     principal = session(request, csrf)
     store = get_store()
     with store.account_lock(principal['uid']):
+        authorization_epoch(store, principal['uid'], rotate=True)
         connection = store.get('connection', principal['uid'])
         store.cancel_jobs(principal['uid'])
         if connection:
