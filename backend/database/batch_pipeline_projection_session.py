@@ -54,6 +54,10 @@ class ProjectionSession:
         self.audio_end: float | None = None
         self.speaker_scope: str | None = None
         self.total_speech_seconds = 0.0
+        self._naming_guard_snapshots = {}
+        self._naming_snapshot = None
+        self._naming_fingerprint = None
+        self.incoming_segment_ids = set()
 
     def receipt(self) -> dict:
         parts = self.entry.get('projection_parts') or {}
@@ -79,14 +83,75 @@ class ProjectionSession:
         options = {}
         if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
             options['memo'] = getattr(self, '_privacy_memo', None)
-        return assert_batch_write_allowed(
+        snapshots = {}
+        generation = assert_batch_write_allowed(
             self.client,
             transaction,
             self.binding.owner_id,
             conversation_ids=conversation_ids,
             expected_generation=self.binding.privacy_generation,
+            snapshots=snapshots,
             **options,
         )
+        self._naming_guard_snapshots = snapshots
+        if self._naming_snapshot is not None:
+            current = self.loaded_naming_snapshot()
+            if current is None or self._snapshot_fingerprint(current) != self._naming_fingerprint:
+                raise ProjectionBlocked('batch naming snapshot changed')
+            validate = self._naming_snapshot.validate
+            if validate is not None and validate(transaction, snapshots) is not True:
+                raise ProjectionBlocked('batch naming enrollment revoked')
+        return generation
+
+    @staticmethod
+    def _snapshot_fingerprint(snapshot):
+        import hashlib
+        import json
+
+        return hashlib.sha256(
+            json.dumps(
+                {
+                    'owner': snapshot.owner_profile.get('speaker_embedding'),
+                    'owner_updated_at': snapshot.owner_profile.get('speaker_embedding_updated_at'),
+                    'generation': snapshot.privacy_generation,
+                },
+                sort_keys=True,
+                default=str,
+            ).encode()
+        ).hexdigest()
+
+    def loaded_naming_snapshot(self):
+        from utils.stt.batch_naming import NamingSnapshot
+
+        snapshots = self._naming_guard_snapshots
+        if 'user' not in snapshots:
+            return None
+        # These canonical conversations and user were already read by the
+        # privacy guard. No enrollment/profile fetch or new read is introduced.
+        from utils.manual_speaker_assignments import manual_owner_reserved
+
+        reserved = any(
+            manual_owner_reserved(row.get('manual_speaker_assignments') or {})
+            for row in snapshots.get('conversations', {}).values()
+        )
+        receipt = {'speakers': {'reserved': {'is_user': True}}} if reserved else {}
+        return NamingSnapshot(
+            owner_id=self.binding.owner_id,
+            privacy_generation=self.binding.privacy_generation,
+            owner_profile=snapshots['user'],
+            manual_receipt=receipt,
+        )
+
+    def freeze_naming_snapshot(self, snapshot):
+        from utils.stt.batch_naming import NamingSnapshot
+
+        if (
+            isinstance(snapshot, NamingSnapshot)
+            and snapshot.owner_id == self.binding.owner_id
+            and snapshot.privacy_generation == self.binding.privacy_generation
+        ):
+            self._naming_snapshot = snapshot
+            self._naming_fingerprint = self._snapshot_fingerprint(snapshot)
 
     def prepare(self, transaction, *, replay=True):
         if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
@@ -174,6 +239,30 @@ class ProjectionSession:
     def validate_plan(self, transaction, planned):
         # encode is still in assignment's read-only planning phase.
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
+        from utils.manual_speaker_assignments import apply_manual_assignments, manual_owner_reserved
+
+        current = self.loaded_naming_snapshot()
+        if current is not None and manual_owner_reserved(current.manual_receipt):
+            # A previously unbound canonical candidate may first be known here.
+            # Withdraw only this part's NEW automatic owner accepts, then honor
+            # the assignment's canonical receipt; do not retry forever.
+            for segment in planned.get('transcript_segments') or []:
+                if (
+                    segment.get('id') in self.incoming_segment_ids
+                    and segment.get('is_user')
+                    and segment.get('speaker_match_source') == 'final_centroid:batch-v1'
+                    and segment.get('speaker_label_source') not in ('manual', 'carried')
+                ):
+                    segment.update(
+                        is_user=False,
+                        person_id=None,
+                        speaker_label_source=None,
+                        speaker_match_source='batch_owner_reserved',
+                        speaker_identity_status='ambiguous',
+                    )
+            planned['transcript_segments'] = apply_manual_assignments(
+                planned.get('transcript_segments') or [], planned.get('manual_speaker_assignments') or {}
+            )
 
     def persist(self, transaction, planned=None, *, superseded=False):
         assigned, created, survivors = planned if planned is not None else ({}, False, [])

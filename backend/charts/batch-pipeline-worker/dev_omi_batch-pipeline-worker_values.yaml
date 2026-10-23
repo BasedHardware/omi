@@ -26,5 +26,6 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  embeddingApiUrl: "http://172.16.48.49/diarizer"
   shadowRecoveryApiUrl: "https://backend-integration-dt5lrfkkoa-uc.a.run.app"
   headPriorityEnabled: false

@@ -9,6 +9,7 @@ import io
 from copy import deepcopy
 from contextlib import nullcontext
 import wave
+import threading
 import numpy as np
 
 try:
@@ -34,6 +35,57 @@ from diarizer.batch_pipeline import (
 from diarizer.batch_pipeline_context import capture_stream
 from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
 from utils.batch_pipeline.audio import read_context
+from utils.stt.voice_centroids import MAX_CLIP_SECONDS, MIN_CLIP_SECONDS
+
+
+def _validate_centroid_clip(samples):
+    if not MIN_CLIP_SECONDS * 16000 <= len(samples) <= MAX_CLIP_SECONDS * 16000:
+        raise ValueError('centroid clip outside bounded evidence duration')
+
+
+class HostedCentroidEmbedding:
+    """Omi v2 enrollment-compatible embeddings through the existing service.
+
+    Called only in the lock-free artifact lane. Each encoded buffer is <=10s;
+    no endpoint, model-gallery or cloud configuration is loaded at construction.
+    """
+
+    def __call__(self, samples):
+        _validate_centroid_clip(samples)
+        from utils.stt.speaker_embedding import extract_embedding_from_bytes
+
+        pcm = np.clip(np.asarray(samples) * 32768, -32768, 32767).astype('<i2')
+        body = io.BytesIO()
+        with wave.open(body, 'wb') as handle:
+            handle.setnchannels(1)
+            handle.setsampwidth(2)
+            handle.setframerate(16000)
+            handle.writeframes(pcm.tobytes())
+        return extract_embedding_from_bytes(body.getvalue(), timeout=30.0)
+
+
+class LocalCentroidEmbedding:
+    """The same pinned diarizer.embedding v2 model in process; never HTTP.
+
+    Lazy initialization keeps silence/kill-off evaluations free of extra models.
+    Serialize its calls because artifact jobs may share this inference instance.
+    """
+
+    def __init__(self, device='cpu'):
+        self.device = device
+        self._lock = threading.Lock()
+        self._inference = None
+
+    def __call__(self, samples):
+        _validate_centroid_clip(samples)
+        if torch is None:
+            raise RuntimeError('local embedding requires torch')
+        from diarizer.embedding import _get_inference
+
+        with self._lock, torch.inference_mode():
+            if self._inference is None:
+                self._inference = _get_inference(2, self.device)
+            return self._inference({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
 
 
 def pin_parakeet_decoding(model):
@@ -235,7 +287,8 @@ def create_local_worker(
     pyannote_model,
     live_words=None,
     single_speaker=None,
-    on_failure=None
+    on_failure=None,
+    centroid_extractor=None,
 ):
     """Compose once per GPU process after explicit model startup.
 
@@ -271,4 +324,5 @@ def create_local_worker(
         flight_models=flight,
         stream_of=staged.stream,
         language_of=staged.language,
+        centroid_extractor=centroid_extractor,
     )

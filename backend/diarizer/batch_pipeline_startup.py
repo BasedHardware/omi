@@ -18,10 +18,11 @@ except ImportError:
     VoiceActivityDetection = None
     hf_hub_download = None
 
-from diarizer.batch_pipeline_models import create_local_worker
+from diarizer.batch_pipeline_models import create_local_worker, HostedCentroidEmbedding, LocalCentroidEmbedding
+from utils.stt.voice_centroids import COMMUNITY_MODEL_REVISION
 
 ASR_REVISION = '541d1f99c6b0c3cd0b11a95167540bb8edefd82b'
-DIARIZER_REVISION = '3533c8cf8e369892e6b79ff1bf80f7b0286a54ee'
+DIARIZER_REVISION = COMMUNITY_MODEL_REVISION
 BATCH_SIZE_ENV = 'BATCH_PIPELINE_MODEL_BATCH_SIZE'
 
 
@@ -104,7 +105,7 @@ def load_local_models(*, device='cpu', dtype='float32', model_batch_size=1):
     return asr, diarizer, vad
 
 
-def load_local_worker(artifacts, *, device='cpu', dtype='float32', model_batch_size=1):
+def load_local_worker(artifacts, *, device='cpu', dtype='float32', model_batch_size=1, centroid_extractor=None):
     """Compose the real worker adapters with caller-owned filesystem artifacts.
 
     The caller explicitly configures the dedicated-batch provider policy, just
@@ -117,6 +118,7 @@ def load_local_worker(artifacts, *, device='cpu', dtype='float32', model_batch_s
         vad_model=vad,
         parakeet_model=asr,
         pyannote_model=diarizer,
+        centroid_extractor=centroid_extractor if centroid_extractor is not None else LocalCentroidEmbedding(device),
     )
 
 
@@ -128,7 +130,13 @@ def load_worker(artifacts):
         raise RuntimeError('batch worker requires exactly one visible dedicated CUDA GPU')
     if not torch.cuda.is_bf16_supported():
         raise RuntimeError('batch worker requires BF16 ASR support')
-    return load_local_worker(artifacts, device='cuda:0', dtype='bfloat16', model_batch_size=model_batch_size)
+    return load_local_worker(
+        artifacts,
+        device='cuda:0',
+        dtype='bfloat16',
+        model_batch_size=model_batch_size,
+        centroid_extractor=HostedCentroidEmbedding(),
+    )
 
 
 def synchronize_gpu():

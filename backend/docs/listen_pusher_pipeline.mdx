@@ -6561,3 +6561,37 @@ Both one-shot and agentic notes mounts receive cohort-gated owner-involved task
 rules, authenticated identity and matching cache identity. Exact-reference stale
 capture policy still lacks its producer binding/CAS lifecycle adapter; no fuzzy
 or historical task cancellation is performed.
+
+
+### Batch local quality naming and faithful turns
+
+`BATCH_PIPELINE_LOCAL_QUALITY_ENABLED` defaults on. CPU projection builds turns
+from maximum-overlap word assignment, splits at every voice change and joins
+consecutive same-voice words only when their gap is strictly below two seconds.
+Gap words remain explicit anonymous abstentions. Word/capture clocks, deterministic
+segment IDs and the original unit's `final:batch:<unit>` scope survive multipart
+projection; conversation partitioning thresholds are unchanged.
+
+Naming requires Omi v2 WeSpeaker centroids with pinned embedding/model revisions
+and the existing evidence, cosine threshold, margin and owner arbitration rules.
+The GPU worker never sees an enrollment gallery. Projection reuses the user
+profile already read by the transactional privacy guard for owner-only naming;
+no profile acquisition, enrollment read or owner audio repair is introduced.
+A changed owner vector between planning and commit blocks assignment for a fresh
+retry. A newly discovered canonical manual owner reservation withdraws only this
+part's new automatic owner accepts before the manual receipt is reapplied. The canonical manual receipt remains
+transactional authority. A callback may supply already-loaded people only with
+an enrollment revocation fence, paid entitlement, active v3 samples and matching
+privacy generation; absent or incompatible snapshots leave speakers anonymous.
+Names never come from transcript text, a roster or channel numbers.
+
+Setting the switch false restores the previous word grouper and stops new
+centroid naming/extraction. This is a live override even for an older pinned
+projection policy. It preserves committed batch authority and manual labels.
+The independent local scorecard reports strict automatic identity separately
+from the Hungarian oracle; missing gallery evidence cannot qualify naming.
+
+Speaker evidence modes retain their existing authority: an abstention supplies
+no replacement label, a fresh accepted acoustic decision may replace it, and
+positive or negative manual receipts dominate. Scope/source strings alone never
+create an identity candidate or bypass the evidence producer.

@@ -51,8 +51,10 @@ def _validate_audio_duration(file_path: str) -> None:
 
 
 @lru_cache(maxsize=2)
-def _get_inference(version: int) -> Any:
-    device: Any = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def _get_inference(version: int, device_name: str | None = None) -> Any:
+    device: Any = torch.device(
+        device_name if device_name is not None else "cuda" if torch.cuda.is_available() else "cpu"
+    )
     if version == 2:
         model = Model.from_pretrained(
             "pyannote/wespeaker-voxceleb-resnet34-LM",

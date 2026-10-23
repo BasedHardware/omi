@@ -16,6 +16,7 @@ class ProjectionPolicy(PolicyPart):
     authoritative_labels: bool = False
     require_live_target: bool = False
     projection_timing: bool = False
+    local_quality_enabled: bool = True
 
 
 @dataclass(frozen=True)
@@ -97,6 +98,7 @@ def resolve_stage_policy(uid: str, stage: str, *, flags=None, obligation=None) -
             authoritative_labels=boolean(env, 'BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', strip=False),
             require_live_target=boolean(env, 'BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED', strip=False),
             projection_timing=boolean(env, 'BATCH_PIPELINE_PROJECTION_TIMING_ENABLED'),
+            local_quality_enabled=boolean(env, 'BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', 'true'),
         )
     if stage == 'scheduler':
         try:
