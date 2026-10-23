@@ -175,7 +175,11 @@ def test_stranded_and_capped_never_503(mode):
         response = fence_response(decision, total_files=1, lane='backfill')
         assert response.status_code == 409
         assert int(response.headers['retry-after']) >= 1
-        assert json.loads(response.body)['reason'] == 'dependency_warming'
+        body = json.loads(response.body)
+        assert body['reason'] == 'dependency_warming'
+        assert body['code'] == 'sync_content_in_progress'
+        assert body['job_id'] is None  # no expired owner handle for clients to follow
+        assert body['poll_after_ms'] == int(response.headers['retry-after']) * 1000
     capped = fence_decision(LEGACY_ROWS[3], mode, now=NOW)
     assert capped.retry_after_seconds == 3601
 
@@ -208,6 +212,11 @@ def test_admission_counter_bounds_labels_and_flags_violations(caplog):
 def test_refusal_and_sequencer_responses_are_not_5xx():
     refused = legacy_dark.admission_refused_response()
     assert refused.status_code == 409 and 'retry-after' in refused.headers
+    body = json.loads(refused.body)
+    assert body['code'] == 'sync_content_in_progress'
+    assert body['job_id'] is None
+    assert int(refused.headers['retry-after']) == legacy_dark.DARK_RETRY_AFTER_SECONDS
+    assert body['poll_after_ms'] == legacy_dark.DARK_RETRY_AFTER_SECONDS * 1000
     swept = legacy_dark.sequencer_dark_response()
     assert swept.status_code == 200 and json.loads(swept.body)['status'] == 'legacy_dark'
 

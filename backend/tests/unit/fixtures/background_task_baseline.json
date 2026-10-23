@@ -15,20 +15,6 @@
       "why": "reviewed safe: UID-sequencer lease heartbeat; stop.set() and awaited in finally before the response, so it never outlives the request"
     },
     {
-      "path": "routers/sync.py",
-      "function": "sync_local_files",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed; deprecated v1: fair-use soft-cap classifier (advisory LLM) may be lost at SIGKILL"
-    },
-    {
-      "path": "routers/sync.py",
-      "function": "sync_local_files_v2",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed; LIVE RISK: inline fallback (BYOK, dispatch disabled, enqueue failure) runs the full sync pipeline (STT + conversation writes) after the 202; a revision replacement kills it and recovery depends on lease expiry/retry claim"
-    },
-    {
       "path": "services/users/account_deletion.py",
       "function": "enqueue_deletion_wipe",
       "kind": "submit_with_context",

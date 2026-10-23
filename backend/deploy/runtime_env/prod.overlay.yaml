@@ -796,21 +796,9 @@ overlay:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://172.16.160.20/diarizer
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'
             category: rollout
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '100'
-            category: rollout
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '120'
-            category: reliability
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '60'
-            category: reliability
           POSTHOG_HOST:
             value: https://us.posthog.com
           HOSTED_DIARIZATION_API_URL:
@@ -1145,21 +1133,9 @@ overlay:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
             value: http://172.16.160.20/diarizer
-          SYNC_LEGACY_FRESH_ENABLED:
-            value: 'true'
-            category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             value: 'true'
             category: rollout
-          SYNC_LEGACY_FRESH_PERCENT:
-            value: '100'
-            category: rollout
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            value: '120'
-            category: reliability
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            value: '60'
-            category: reliability
           POSTHOG_HOST:
             value: https://us.posthog.com
           HOSTED_DIARIZATION_API_URL:
