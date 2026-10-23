@@ -195,11 +195,11 @@ autoscaling:
   enabled: true
   # Dark: one-line activation after mixed-load live-latency qualification.
   # Roll back to false to restore the existing External Value latency guard.
-  workloadOnly: false
+  workloadOnly: true
   # The ratified 2 active requests / 35% GPU targets trigger scale-out;
   # they are not hard per-pod capacity. Five to seven pods carry the 7-day peak.
-  # Floor 3 controls idle cost; cap 12 gives the demand-routing ramp headroom.
-  minReplicas: 3
+  # Floor 5 controls idle cost (live since 10-23, David fast mode); cap 12 gives ramp headroom.
+  minReplicas: 5
   maxReplicas: 12
   behavior:
     scaleUp:
