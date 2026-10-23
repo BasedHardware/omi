@@ -4420,5 +4420,6 @@
     "pairingPowerOnTitle": "Accendi il tuo Omi",
     "pairingPowerOnSubtitle": "Premi una volta il pulsante e tienilo vicino al telefono.",
     "walkthroughBackgroundRecordingNote": "Fatto. Omi continuerà a registrare le tue conversazioni in background.",
-    "noThanks": "No, grazie"
+    "noThanks": "No, grazie",
+    "recapInTheBackground": "In sottofondo"
 }

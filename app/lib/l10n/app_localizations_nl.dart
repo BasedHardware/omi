@@ -14573,4 +14573,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get noThanks => 'Nee, bedankt';
+
+  @override
+  String get recapInTheBackground => 'Op de achtergrond';
 }

@@ -14310,4 +14310,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get noThanks => '不用了，谢谢';
+
+  @override
+  String get recapInTheBackground => '背景中';
 }

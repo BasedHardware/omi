@@ -14609,4 +14609,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get noThanks => 'No, gràcies';
+
+  @override
+  String get recapInTheBackground => 'En segon pla';
 }

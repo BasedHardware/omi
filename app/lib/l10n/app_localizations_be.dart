@@ -14570,4 +14570,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get noThanks => 'Не, дзякуй';
+
+  @override
+  String get recapInTheBackground => 'У фоне';
 }

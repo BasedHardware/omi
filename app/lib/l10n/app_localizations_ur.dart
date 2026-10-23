@@ -14547,4 +14547,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get noThanks => 'نہیں، شکریہ';
+
+  @override
+  String get recapInTheBackground => 'پس منظر میں';
 }

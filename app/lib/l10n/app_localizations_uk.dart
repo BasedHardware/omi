@@ -14565,4 +14565,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get noThanks => 'Ні, дякую';
+
+  @override
+  String get recapInTheBackground => 'У фоні';
 }

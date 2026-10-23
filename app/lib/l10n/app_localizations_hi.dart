@@ -14518,4 +14518,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get noThanks => 'नहीं, धन्यवाद';
+
+  @override
+  String get recapInTheBackground => 'पृष्ठभूमि में';
 }

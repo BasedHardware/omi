@@ -14649,4 +14649,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get noThanks => 'Non merci';
+
+  @override
+  String get recapInTheBackground => 'En arrière-plan';
 }

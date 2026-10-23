@@ -14596,4 +14596,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noThanks => 'Nu, mulțumesc';
+
+  @override
+  String get recapInTheBackground => 'În fundal';
 }

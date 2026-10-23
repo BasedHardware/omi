@@ -14534,4 +14534,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get noThanks => 'Ne, díky';
+
+  @override
+  String get recapInTheBackground => 'Na pozadí';
 }

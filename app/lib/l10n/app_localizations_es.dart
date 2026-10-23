@@ -14578,4 +14578,7 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get noThanks => 'No, gracias';
+
+  @override
+  String get recapInTheBackground => 'En segundo plano';
 }

@@ -14529,4 +14529,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get noThanks => 'نه، ممنون';
+
+  @override
+  String get recapInTheBackground => 'در پس‌زمینه';
 }

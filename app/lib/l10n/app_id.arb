@@ -4455,5 +4455,6 @@
     "pairingPowerOnTitle": "Nyalakan Omi kamu",
     "pairingPowerOnSubtitle": "Tekan tombol sekali dan dekatkan ke ponsel.",
     "walkthroughBackgroundRecordingNote": "Selesai. Omi akan terus merekam percakapanmu di latar belakang.",
-    "noThanks": "Tidak, terima kasih"
+    "noThanks": "Tidak, terima kasih",
+    "recapInTheBackground": "Di latar belakang"
 }

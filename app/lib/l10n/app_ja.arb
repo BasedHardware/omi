@@ -4420,5 +4420,6 @@
     "pairingPowerOnTitle": "Omi の電源を入れてください",
     "pairingPowerOnSubtitle": "ボタンを1回押して、スマートフォンの近くに置いてください。",
     "walkthroughBackgroundRecordingNote": "これで完了です。Omi はバックグラウンドで会話を記録し続けます。",
-    "noThanks": "いいえ、結構です"
+    "noThanks": "いいえ、結構です",
+    "recapInTheBackground": "バックグラウンド"
 }

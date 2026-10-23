@@ -4516,5 +4516,6 @@
     "pairingPowerOnTitle": "Kapcsold be az Omit",
     "pairingPowerOnSubtitle": "Nyomd meg egyszer a gombot, és tartsd a telefon közelében.",
     "walkthroughBackgroundRecordingNote": "Ennyi. Az Omi a háttérben tovább rögzíti a beszélgetéseidet.",
-    "noThanks": "Nem, köszönöm"
+    "noThanks": "Nem, köszönöm",
+    "recapInTheBackground": "A háttérben"
 }

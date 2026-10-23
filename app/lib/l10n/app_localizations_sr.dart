@@ -14541,4 +14541,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get noThanks => 'Ne, hvala';
+
+  @override
+  String get recapInTheBackground => 'У позадини';
 }

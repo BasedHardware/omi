@@ -14547,4 +14547,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noThanks => 'Hayır, teşekkürler';
+
+  @override
+  String get recapInTheBackground => 'Arka planda';
 }

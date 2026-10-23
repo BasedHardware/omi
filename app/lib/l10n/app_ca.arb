@@ -4420,5 +4420,6 @@
     "pairingPowerOnTitle": "Encén l'Omi",
     "pairingPowerOnSubtitle": "Prem el botó un cop i mantén-lo a prop del mòbil.",
     "walkthroughBackgroundRecordingNote": "Ja està. L'Omi continuarà gravant les teves converses en segon pla.",
-    "noThanks": "No, gràcies"
+    "noThanks": "No, gràcies",
+    "recapInTheBackground": "En segon pla"
 }

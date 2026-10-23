@@ -14530,4 +14530,7 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get noThanks => 'Nie, ďakujem';
+
+  @override
+  String get recapInTheBackground => 'V pozadí';
 }

@@ -25712,6 +25712,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No thanks'**
   String get noThanks;
+
+  /// Daily recap section listing the day's background conversations, which Home no longer shows
+  ///
+  /// In en, this message translates to:
+  /// **'In the background'**
+  String get recapInTheBackground;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

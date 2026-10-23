@@ -14542,4 +14542,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get noThanks => 'Nej tack';
+
+  @override
+  String get recapInTheBackground => 'I bakgrunden';
 }

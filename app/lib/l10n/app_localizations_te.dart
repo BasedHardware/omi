@@ -14594,4 +14594,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get noThanks => 'వద్దు, ధన్యవాదాలు';
+
+  @override
+  String get recapInTheBackground => 'నేపథ్యంలో';
 }

@@ -14527,4 +14527,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get noThanks => 'Ei, aitäh';
+
+  @override
+  String get recapInTheBackground => 'Taustal';
 }

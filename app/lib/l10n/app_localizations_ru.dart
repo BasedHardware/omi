@@ -14583,4 +14583,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get noThanks => 'Нет, спасибо';
+
+  @override
+  String get recapInTheBackground => 'На фоне';
 }

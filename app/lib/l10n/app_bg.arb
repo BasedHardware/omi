@@ -4420,5 +4420,6 @@
     "pairingPowerOnTitle": "Включете Omi",
     "pairingPowerOnSubtitle": "Натиснете бутона веднъж и го дръжте близо до телефона.",
     "walkthroughBackgroundRecordingNote": "Готово. Omi ще продължи да записва разговорите ви във фонов режим.",
-    "noThanks": "Не, благодаря"
+    "noThanks": "Не, благодаря",
+    "recapInTheBackground": "На заден план"
 }

@@ -14454,4 +14454,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get noThanks => 'لا، شكرًا';
+
+  @override
+  String get recapInTheBackground => 'في الخلفية';
 }

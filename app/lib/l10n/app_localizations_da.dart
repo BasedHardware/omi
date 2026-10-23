@@ -14525,4 +14525,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get noThanks => 'Nej tak';
+
+  @override
+  String get recapInTheBackground => 'I baggrunden';
 }

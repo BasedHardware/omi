@@ -14642,4 +14642,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get noThanks => 'Nein, danke';
+
+  @override
+  String get recapInTheBackground => 'Im Hintergrund';
 }

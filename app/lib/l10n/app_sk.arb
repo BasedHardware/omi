@@ -4420,5 +4420,6 @@
     "pairingPowerOnTitle": "Zapnite Omi",
     "pairingPowerOnSubtitle": "Raz stlačte tlačidlo a držte ho pri telefóne.",
     "walkthroughBackgroundRecordingNote": "To je všetko. Omi bude ďalej nahrávať vaše rozhovory na pozadí.",
-    "noThanks": "Nie, ďakujem"
+    "noThanks": "Nie, ďakujem",
+    "recapInTheBackground": "V pozadí"
 }

@@ -14462,4 +14462,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get noThanks => 'ไม่เป็นไร ขอบคุณ';
+
+  @override
+  String get recapInTheBackground => 'ในเบื้องหลัง';
 }

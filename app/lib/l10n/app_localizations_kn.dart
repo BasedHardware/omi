@@ -14582,4 +14582,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get noThanks => 'ಬೇಡ, ಧನ್ಯವಾದ';
+
+  @override
+  String get recapInTheBackground => 'ಹಿನ್ನೆಲೆಯಲ್ಲಿ';
 }

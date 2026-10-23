@@ -14649,4 +14649,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get noThanks => 'Hindi, salamat';
+
+  @override
+  String get recapInTheBackground => 'Sa background';
 }

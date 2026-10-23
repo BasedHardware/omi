@@ -14611,4 +14611,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get noThanks => 'No, grazie';
+
+  @override
+  String get recapInTheBackground => 'In sottofondo';
 }

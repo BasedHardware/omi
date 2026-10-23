@@ -14563,4 +14563,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get noThanks => 'Não, obrigado';
+
+  @override
+  String get recapInTheBackground => 'Em segundo plano';
 }

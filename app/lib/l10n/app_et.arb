@@ -4420,5 +4420,6 @@
     "pairingPowerOnTitle": "Lülita Omi sisse",
     "pairingPowerOnSubtitle": "Vajuta korra nuppu ja hoia telefoni lähedal.",
     "walkthroughBackgroundRecordingNote": "Ongi kõik. Omi salvestab su vestlusi taustal edasi.",
-    "noThanks": "Ei, aitäh"
+    "noThanks": "Ei, aitäh",
+    "recapInTheBackground": "Taustal"
 }

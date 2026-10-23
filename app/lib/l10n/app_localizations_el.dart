@@ -14629,4 +14629,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noThanks => 'Όχι, ευχαριστώ';
+
+  @override
+  String get recapInTheBackground => 'Στο παρασκήνιο';
 }

@@ -14633,4 +14633,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get noThanks => 'வேண்டாம், நன்றி';
+
+  @override
+  String get recapInTheBackground => 'பின்னணியில்';
 }

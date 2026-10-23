@@ -14577,4 +14577,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get noThanks => 'Nie, dziękuję';
+
+  @override
+  String get recapInTheBackground => 'W tle';
 }

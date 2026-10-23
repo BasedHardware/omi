@@ -14558,4 +14558,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get noThanks => 'Ne, ačiū';
+
+  @override
+  String get recapInTheBackground => 'Fone';
 }

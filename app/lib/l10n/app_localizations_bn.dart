@@ -14530,4 +14530,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get noThanks => 'না, ধন্যবাদ';
+
+  @override
+  String get recapInTheBackground => 'পটভূমিতে';
 }

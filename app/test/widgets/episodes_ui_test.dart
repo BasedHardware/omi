@@ -28,6 +28,7 @@ import 'package:omi/providers/episode_provider.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/widgets/transcript.dart';
@@ -350,7 +351,7 @@ void main() {
   });
 
   group('home live row', () {
-    testWidgets('elapsed time advances once a second through the minute boundary', (tester) async {
+    testWidgets('elapsed time counts seconds through the first minute, then whole minutes', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
       final clock = tester.binding.clock;
@@ -362,11 +363,11 @@ void main() {
       );
       addTearDown(episodes.dispose);
       await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
-      expect(find.textContaining('Now · 59s', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Live · 59s', findRichText: true), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.textContaining('Now · 1m', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Live · 1m', findRichText: true), findsOneWidget);
       await tester.pump(const Duration(seconds: 1));
-      expect(find.textContaining('Now · 1m 1s', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Live · 1m', findRichText: true), findsOneWidget);
       await _unmount(tester);
     });
     testWidgets('a pendant lease lapsing mid-stream keeps the running length (no 0s)', (tester) async {
@@ -376,17 +377,17 @@ void main() {
       final episodes = _episodes(live: null, clock: clock.now);
       addTearDown(episodes.dispose);
       await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
-      expect(find.textContaining('Now · 3m 12s', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Live · 3m', findRichText: true), findsOneWidget);
       // The verified-ingress start reads null between health updates, then re-arms later on reconnect.
       capture.startedAt = null;
       await tester.pump(const Duration(seconds: 1));
-      expect(find.textContaining('Now · 3m 13s', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Live · 3m', findRichText: true), findsOneWidget);
       capture.startedAt = clock.now();
       await tester.pump(const Duration(seconds: 1));
-      expect(find.textContaining('Now · 3m 14s', findRichText: true), findsOneWidget);
+      expect(find.textContaining('Live · 3m', findRichText: true), findsOneWidget);
       await _unmount(tester);
     });
-    testWidgets('shows the live episode as a normal row: title, Now, length and topics', (tester) async {
+    testWidgets('shows the live episode as a quiet outlined row: its topic as title, Live and length', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
       final episodes = _episodes(live: _liveEpisode());
@@ -397,7 +398,11 @@ void main() {
       expect(find.byKey(const Key('home_live_episode_row')), findsOneWidget);
       expect(find.text('Lunch plans with Maya'), findsOneWidget);
       expect(find.textContaining('24m', findRichText: true), findsOneWidget);
-      expect(find.textContaining('Where to eat', findRichText: true), findsOneWidget);
+      // A titled episode's title is its topic; the moment headings would repeat it.
+      expect(find.textContaining('Where to eat', findRichText: true), findsNothing);
+      // No filled green tile: the live mark is the small breathing dot.
+      expect(find.byType(OmiBreathingDot), findsOneWidget);
+      expect(find.byType(OmiLiveDot), findsNothing);
       await _unmount(tester);
     });
   });

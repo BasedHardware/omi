@@ -14539,4 +14539,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get noThanks => 'Ei kiitos';
+
+  @override
+  String get recapInTheBackground => 'Taustalla';
 }

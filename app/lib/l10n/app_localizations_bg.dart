@@ -14586,4 +14586,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get noThanks => 'Не, благодаря';
+
+  @override
+  String get recapInTheBackground => 'На заден план';
 }

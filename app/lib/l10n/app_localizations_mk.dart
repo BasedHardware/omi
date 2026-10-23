@@ -14599,4 +14599,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get noThanks => 'Не, благодарам';
+
+  @override
+  String get recapInTheBackground => 'Во позадина';
 }

@@ -4420,5 +4420,6 @@
     "pairingPowerOnTitle": "شغّل جهاز Omi",
     "pairingPowerOnSubtitle": "اضغط الزر مرة واحدة وأبقه قريبًا من هاتفك.",
     "walkthroughBackgroundRecordingNote": "هذا كل شيء. سيستمر Omi في تسجيل محادثاتك في الخلفية.",
-    "noThanks": "لا، شكرًا"
+    "noThanks": "لا، شكرًا",
+    "recapInTheBackground": "في الخلفية"
 }

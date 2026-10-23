@@ -14548,4 +14548,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get noThanks => 'Tidak, terima kasih';
+
+  @override
+  String get recapInTheBackground => 'Di latar belakang';
 }

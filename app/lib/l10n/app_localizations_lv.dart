@@ -14566,4 +14566,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noThanks => 'Nē, paldies';
+
+  @override
+  String get recapInTheBackground => 'Fonā';
 }

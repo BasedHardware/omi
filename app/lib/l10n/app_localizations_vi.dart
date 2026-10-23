@@ -14536,4 +14536,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get noThanks => 'Không, cảm ơn';
+
+  @override
+  String get recapInTheBackground => 'Trong nền';
 }

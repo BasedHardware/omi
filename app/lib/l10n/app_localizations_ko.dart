@@ -14336,4 +14336,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get noThanks => '괜찮아요';
+
+  @override
+  String get recapInTheBackground => '배경에서';
 }

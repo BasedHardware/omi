@@ -14592,4 +14592,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get noThanks => 'Nem, köszönöm';
+
+  @override
+  String get recapInTheBackground => 'A háttérben';
 }
