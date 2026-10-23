@@ -58,6 +58,8 @@ Map<String, Object?> scenarioScore(String name, PerfInstrumentation sample, doub
         {'widget': e.key, 'count': e.value, 'source_files': sourcesFor(e.key)}
     ],
     'rebuilders_by_widget': sample.rebuilds,
+    'semantics_enabled': sample.semanticsEnabled,
+    'ui_phase_ms': sample.phaseMs,
     'ticker_census': {
       'method': 'scheduler_transient_callbacks_proxy',
       'max_concurrent': sample.animationCallbacks.fold<int>(0, (a, b) => a > b ? a : b),

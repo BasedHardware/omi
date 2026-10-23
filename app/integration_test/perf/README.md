@@ -65,6 +65,38 @@ already finished during the sampled frame. Runtime-type source hints can be
 ambiguous and rebuild counts include Flutter infrastructure. Attribution points
 to investigation targets; it does not prove causation.
 
+## Production conditions and phase split
+
+Scenarios run with semantics off, as production does unless an assistive
+technology is on (`testWidgets` defaults it on). `PERF_SEMANTICS=1` turns it
+back on to measure VoiceOver-style conditions. Each scenario's scorecard
+reports `semantics_enabled` and `ui_phase_ms`: UI-thread time per pipeline
+phase (BUILD, LAYOUT, PAINT, COMPOSITING, SEMANTICS, FINALIZE TREE) from
+`FlutterTimeline`. Host wall-clock swings between runs, but the split within
+one run is stable, so a phase's share is comparable across arms.
+
+## Device lag capture (what the host cannot see)
+
+Host runs cannot raster, run AOT code, or reproduce a real phone's data and
+thermal state, and an earlier round's host timings swung 5–10× between runs.
+For lag a user feels, use the in-app recorder
+(`lib/utils/analytics/lag_recorder.dart`). It runs in release and TestFlight
+builds while Settings → Developer → Debug logs is on, and writes only to the
+local debug log:
+
+- for each surface (pushed page type or Home tab): frames, slow (>16.7 ms on
+  either thread), severe (>33.3 ms) and freeze (>100 ms) counts, build-bound
+  versus raster-bound, and whether the user was scrolling, had just tapped or
+  was idle;
+- the worst frames with wall-clock time, tap-to-frame latency (it includes the
+  tap handler's own synchronous work), and UI-isolate stalls between frames
+  (a 250 ms watchdog that runs only while capture is on).
+
+To capture: turn on Debug logs, background and reopen the app, use it until it
+lags, background it once (that writes `mobile_lag_report`), then use
+Developer → Share logs. Then run
+`python3 app/tool/lag_report.py omi_debug_YYYYMMDD.log` for a ranked table.
+
 ## Hill-climb contract
 
 Keep scenario behavior, data sizes, sampling, and measurement definitions

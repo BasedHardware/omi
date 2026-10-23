@@ -105,6 +105,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/analytics/app_session_telemetry.dart';
 import 'package:omi/utils/analytics/phone_battery_sample_telemetry.dart';
+import 'package:omi/utils/analytics/lag_recorder.dart';
 import 'package:omi/utils/analytics/mobile_performance_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -569,7 +570,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     },
     identityEpoch: () => AnalyticsManager.identityEpoch,
     diagnosticsEnabled: () => SharedPreferencesUtil().devLogsToFileEnabled,
+    lag: _lagRecorder,
   );
+  // Local lag capture (Settings → Developer → Debug logs); see lag_recorder.dart.
+  final LagRecorder _lagRecorder = LagRecorder(emit: DebugLogManager.logEvent);
 
   @override
   void initState() {
@@ -774,7 +778,13 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 value: brightness == Brightness.dark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
                 child: KeyedSubtree(key: ValueKey(brightness), child: child!),
               );
-              final guidedContent = BluetoothGuidanceListener(child: content);
+              final guidedContent = LagInputScope(
+                recorder: PhysicalQualification.enabled ? null : _lagRecorder,
+                child: _LagHomeTabListener(
+                  onTab: _performanceTelemetry.setHomeTab,
+                  child: BluetoothGuidanceListener(child: content),
+                ),
+              );
               return PlatformService.isIOS && Env.posthogApiKey != null
                   ? RageClickContextTracker(child: guidedContent)
                   : guidedContent;
@@ -846,4 +856,40 @@ class CustomErrorWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Tells the lag recorder which Home tab is showing; tab switches are not route changes.
+class _LagHomeTabListener extends StatefulWidget {
+  const _LagHomeTabListener({required this.onTab, required this.child});
+
+  final ValueChanged<int> onTab;
+  final Widget child;
+
+  @override
+  State<_LagHomeTabListener> createState() => _LagHomeTabListenerState();
+}
+
+class _LagHomeTabListenerState extends State<_LagHomeTabListener> {
+  HomeProvider? _home;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final home = context.read<HomeProvider>();
+    if (identical(home, _home)) return;
+    _home?.removeListener(_changed);
+    _home = home..addListener(_changed);
+    _changed();
+  }
+
+  void _changed() => widget.onTab(_home!.selectedIndex);
+
+  @override
+  void dispose() {
+    _home?.removeListener(_changed);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
