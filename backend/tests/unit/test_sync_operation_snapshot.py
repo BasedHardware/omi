@@ -57,8 +57,16 @@ def world(monkeypatch):
     return conversations, store, reads, revision
 
 
-def test_redirect_hydration_uses_four_reads_instead_of_five_with_identical_content(world, monkeypatch):
+@pytest.mark.parametrize('level', ['standard', 'enhanced'])
+def test_redirect_hydration_uses_four_reads_instead_of_five_with_identical_content(world, monkeypatch, level):
     conversations, store, reads, revision = world
+    if level == 'enhanced':
+        row = deepcopy(store.rows[('users', 'u', 'conversations', 'survivor')])
+        row['transcript_segments'] = json.loads(zlib.decompress(row['transcript_segments']))
+        row.pop('transcript_segments_compressed')
+        store.rows[('users', 'u', 'conversations', 'survivor')] = conversations._prepare_conversation_for_write(
+            row, 'u', level
+        )
     before = deepcopy(store.rows)
     monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', 'false')
     legacy = conversations.get_sync_redirected_conversation('u', 'donor')
@@ -78,6 +86,20 @@ def test_redirect_hydration_uses_four_reads_instead_of_five_with_identical_conte
     assert store.rows == before  # Stored compressed bytes never change.
     current['transcript_segments'][0]['text'] = 'Changed only in the caller.'
     assert conversations.get_sync_redirected_conversation('u', 'donor') == legacy
+
+
+def test_legacy_photo_hydration_is_identical(world, monkeypatch):
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreCollection, StrictFirestoreSnapshot
+
+    conversations, store, _, _ = world
+    store.rows[('users', 'u', 'conversations', 'survivor')].pop('has_photos')
+    photo = {'id': 'photo', 'data_protection_level': 'standard', 'description': 'Synthetic photo'}
+    monkeypatch.setattr(StrictFirestoreCollection, 'stream', lambda *args: iter([StrictFirestoreSnapshot(photo)]))
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', 'false')
+    legacy = conversations.get_sync_redirected_conversation('u', 'donor')
+    monkeypatch.setenv('SYNC_OPERATION_SNAPSHOT_ENABLED', 'true')
+    assert conversations.get_sync_redirected_conversation('u', 'donor') == legacy
+    assert legacy['photos'] == [photo]
 
 
 @pytest.mark.parametrize('mode', ['true', 'false'])
