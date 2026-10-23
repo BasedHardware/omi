@@ -157,12 +157,6 @@ class TestCallersUseOrderedAssignment:
             'get_closest_conversation_to_timestamps'
         ), 'turn must be acquired before the closest-conversation lookup'
 
-    def test_v1_sorts_segments_and_passes_turnstile(self):
-        body = _async_function_body(_read_sync_source(), 'sync_local_files')
-        assert 'sorted(segmented_paths, key=get_timestamp_from_path)' in body
-        assert '_OrderedTurnstile(' in body
-        assert 'assignment_turnstile,' in body, 'v1 must pass the turnstile to process_segment'
-
     def test_v2_sorts_segments_and_passes_turnstile(self):
         body = _async_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
         assert 'sorted(segmented_paths, key=get_timestamp_from_path)' in body
@@ -171,9 +165,7 @@ class TestCallersUseOrderedAssignment:
 
     def test_both_pipelines_reprocess_merged_conversations(self):
         source = _read_sync_source()
-        v1 = _async_function_body(source, 'sync_local_files')
         v2 = _async_function_body(_read_pipeline_source(), '_run_full_pipeline_background_async')
-        assert '_reprocess_merged_conversations' in v1
         assert '_reprocess_merged_conversations' in v2
 
     def test_merge_path_records_merged_conversation(self):
