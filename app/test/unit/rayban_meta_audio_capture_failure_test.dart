@@ -51,8 +51,8 @@ void main() {
 
       expect(audioController.hasListener, isFalse);
 
-      expect(
-        () => connection.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {}),
+      await expectLater(
+        connection.performGetBleAudioBytesListener(onAudioBytesReceived: (_) {}),
         throwsA(isA<StateError>().having((e) => e.message, 'message', contains('Audio capture start failed'))),
       );
 
