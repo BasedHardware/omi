@@ -44,7 +44,7 @@ def update_conversation(
     a transcript or delete a whole conversation. Returns a structured undo receipt.
     """
     uid = owner(config)
-    configurable = (config.get('configurable') if isinstance(config, dict) else None) or {}
+    configurable = (config.get('configurable') if isinstance(cast(object, config), dict) else None) or {}
     conversation_id, error = resolve_edit_ref(
         configurable,
         'conversations',
@@ -96,7 +96,7 @@ def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
     retaining the previous name as an alias. Undo restores the prior name and aliases.
     """
     uid = owner(config)
-    configurable = (config.get('configurable') if isinstance(config, dict) else None) or {}
+    configurable = (config.get('configurable') if isinstance(cast(object, config), dict) else None) or {}
     resolved_id, error = resolve_edit_ref(configurable, 'people', person_id, parameter='person_id')
     if error:
         return error
@@ -109,7 +109,9 @@ def rename_person(person_id: str, name: str, *, config: RunnableConfig) -> str:
         return 'Error: person not found.'
     before = chat_edits.snapshot(uid, 'person', person_id)
     write_state = {'before': before}
-    result = mcp_people.rename_person(uid, {'person_id': person_id, 'name': clean_name}, expected_chat_state=write_state)
+    result = mcp_people.rename_person(
+        uid, {'person_id': person_id, 'name': clean_name}, expected_chat_state=write_state
+    )
     after = write_state['after']
     summary = 'Name → ' + result['person']['name']
     record_write(uid, 'person', person_id, envelope(before, 'Person'), envelope(after, summary))
@@ -124,7 +126,7 @@ def edit_memory(memory_id: str, content: str, *, config: RunnableConfig) -> str:
     preserving canonical correction history. Returns a structured undo receipt.
     """
     uid = owner(config)
-    configurable = (config.get('configurable') if isinstance(config, dict) else None) or {}
+    configurable = (config.get('configurable') if isinstance(cast(object, config), dict) else None) or {}
     resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error
@@ -157,7 +159,7 @@ def delete_memory(memory_id: str, *, config: RunnableConfig) -> str:
     controls for permanent erasure. Returns a structured undo receipt.
     """
     uid = owner(config)
-    configurable = (config.get('configurable') if isinstance(config, dict) else None) or {}
+    configurable = (config.get('configurable') if isinstance(cast(object, config), dict) else None) or {}
     resolved_id, error = resolve_edit_ref(configurable, 'memories', memory_id, parameter='memory_id')
     if error:
         return error
