@@ -1457,12 +1457,6 @@ environment_shared:
             provisional: true
             value: 'false'
             category: rollout
-          SYNC_BACKFILL_UID_SEQUENCER:
-            provisional: true
-            value: 'off'
-            category: rollout
-          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
-            category: rollout
           SYNC_REPROCESS_COALESCE_ENABLED:
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
@@ -1518,16 +1512,8 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
-          SYNC_LEGACY_FRESH_ENABLED:
-            category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             category: rollout
-          SYNC_LEGACY_FRESH_PERCENT:
-            category: rollout
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            category: reliability
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            category: reliability
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'
@@ -1636,9 +1622,6 @@ environment_shared:
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'false', category: rollout}
           STT_CAP_DISPATCH_COHORT: {value: '', category: rollout}
           STT_CAP_DISPATCH_LANES: {value: 'live', category: rollout}
-          SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED: {value: 'on', category: ops_kill}
-          SYNC_BACKFILL_OWNER_CONCURRENCY: {value: '2', category: reliability}
-          SYNC_BACKFILL_OWNER_CONCURRENCY_THRESHOLD: {value: '8', category: reliability}
           PLAYBACK_ON_DEMAND_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_REVISION_ENABLED: {value: 'false', category: rollout}
           REPEAT_WORK_LLM_VERSION: {value: '2026-10-16-v1', category: rollout}
@@ -1814,12 +1797,6 @@ environment_shared:
             provisional: true
             value: 'false'
             category: rollout
-          SYNC_BACKFILL_UID_SEQUENCER:
-            provisional: true
-            value: 'off'
-            category: rollout
-          SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
-            category: rollout
           SYNC_REPROCESS_COALESCE_ENABLED:
             category: rollout
           SYNC_REPROCESS_SETTLE_SECONDS:
@@ -1875,16 +1852,8 @@ environment_shared:
             provisional: true
             value: '2592000'
             category: rollout
-          SYNC_LEGACY_FRESH_ENABLED:
-            category: rollout
           SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED:
             category: rollout
-          SYNC_LEGACY_FRESH_PERCENT:
-            category: rollout
-          SYNC_LEGACY_FRESH_HOURLY_TOKENS:
-            category: reliability
-          SYNC_LEGACY_FRESH_BURST_TOKENS:
-            category: reliability
           SYNC_FRESH_MAX_AGE_SECONDS:
             provisional: true
             value: '21600'

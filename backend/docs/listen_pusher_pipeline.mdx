@@ -6305,9 +6305,26 @@ retained uncertainty, kill switches, three new group indexes, deployment order,
 15-second SIGKILL residual window and measured cost increase. Enforcement flags
 remain off; this source change does not activate the cap cohort.
 
-## Operator minimal sync redrive
+## Legacy sync retirement and retained recovery
 
-Operator redrive payloads may carry `redrive_mode: 'minimal'` to re-transcribe preserved legacy sync audio at minimum cost: Parakeet-only pre-recorded STT with no Modulate recovery, attach-first assignment to a compatible row within 10 minutes through the normal lifecycle owner, and one gpt-5-nano title per newly created row instead of conversation processing. Details and the kill switch live in `backend/utils/sync/ARCHITECTURE.md`.
+The retired sync routes do not start a legacy job coordinator. V1 uploads return
+410 with a successor link; v2 offers uploads to batch first and otherwise uses
+the durable ownership fence and client cooldown response. Existing poll and
+held-capture recovery boundaries remain available. Stale non-enrichment task
+deliveries acknowledge `dropped/legacy_retired` rather than dispatching old work.
+
+Batch and cap-hold recovery retain the current segment-processing closure in
+`utils/sync/legacy_segment_core.py`: transcript admission, assignment/owner fences,
+recording-session and clock-run provenance, language selection, empty-success
+protection and paid-recovery checks. The legacy sequencer, job coordinator and
+minimal-redrive runner are deleted. Enrichment and summary-debt maintenance must
+already have their replacement owners serving before retirement is deployed.
+
+Deletion releases require qualified batch coverage, held-capture rehome, verified
+overlapping phone/Watch S1 behavior, drain confirmation and a continuous **12-hour**
+legacy-dark soak. The shared soak checker's older six-hour floor alone does not
+qualify this deletion sequence. Repeat the clean soak between deletion steps and
+retain the predecessor image plus queue/scheduler restoration specifications.
 
 Runtime STT-cap and ladder execution scope shares the 60-second, environment-fenced
 Firestore token cache; session admission does not wait for it. Existing live sessions

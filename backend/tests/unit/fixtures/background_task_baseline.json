@@ -1,34 +1,6 @@
 {
   "entries": [
     {
-      "path": "routers/sync.py",
-      "function": "_run_sync_job_attempt",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "reviewed safe (#22184): best-effort owner prefetch into a local cache; holds no task slot, job lock, ledger claim or conversation authority, so losing it only costs a cache miss"
-    },
-    {
-      "path": "routers/sync.py",
-      "function": "run_sync_job",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "reviewed safe: UID-sequencer lease heartbeat; stop.set() and awaited in finally before the response, so it never outlives the request"
-    },
-    {
-      "path": "routers/sync.py",
-      "function": "sync_local_files",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed; deprecated v1: fair-use soft-cap classifier (advisory LLM) may be lost at SIGKILL"
-    },
-    {
-      "path": "routers/sync.py",
-      "function": "sync_local_files_v2",
-      "kind": "start_background_task",
-      "count": 1,
-      "why": "pre-existing; unreviewed; LIVE RISK: inline fallback (BYOK, dispatch disabled, enqueue failure) runs the full sync pipeline (STT + conversation writes) after the 202; a revision replacement kills it and recovery depends on lease expiry/retry claim"
-    },
-    {
       "path": "services/users/account_deletion.py",
       "function": "enqueue_deletion_wipe",
       "kind": "submit_with_context",
@@ -288,18 +260,11 @@
       "why": "reviewed safe: telemetry-only vendor sample; losing it only leaves the gauge stale and has no listen-request or admission effect"
     },
     {
-      "path": "utils/sync/pipeline.py",
+      "path": "utils/sync/legacy_segment_core.py",
       "function": "_reprocess_conversation_after_update",
       "kind": "submit_with_context",
       "count": 1,
       "why": "pre-existing; unreviewed"
-    },
-    {
-      "path": "utils/sync/pipeline.py",
-      "function": "_run_full_pipeline_background_async",
-      "kind": "start_background_task",
-      "count": 2,
-      "why": "pre-existing; unreviewed; one site is the inline lease heartbeat (awaited in finally, safe); the other is the fair-use soft-cap classifier (advisory LLM)"
     },
     {
       "path": "utils/sync/playback.py",

@@ -380,22 +380,10 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
     sync_step = stack.split('id: deploy-backend-sync\n', 1)[1].split('- name:', 1)[0]
     assert '--max-instances=${{ steps.live-max-scale.outputs.max_scale }}' in sync_step
-    assert 'gcloud tasks queues create "$BACKFILL_QUEUE"' in action
-    # The reconcile step manages the manifest-selected queue (prod: sync-backfill-fresh).
-    reconcile = next(
-        step
-        for step in yaml.safe_load(action)['runs']['steps']
-        if step.get('name') == 'Reconcile bounded sync backfill queue'
-    )
-    assert reconcile['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
-    assert 'backfill_env_vars: ${{ steps.runtime-env.outputs.backend_sync_backfill_env_vars }}' in stack
-    assert '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"' in action
-    assert '--max-dispatches-per-second=15' in action
-    assert '--max-backoff=60s' in action
-    # The queue's attempt cap must mirror get_sync_tasks_max_attempts()
-    # (default 5): omitted queue fields keep Google's default of 100, so a
-    # handler-budget deferral chain ended through the 409 would keep retrying
-    # past the preserved run lock and re-run whole-budget pipelines.
+    # C10 (legacy-retire): the backfill sequencer and its queue are retired; the
+    # lifecycle no longer creates or reconciles a backfill queue or the sweep job.
+    assert 'gcloud tasks queues create' not in action
+    assert '--jobs sync-backfill-uid-sequencer' not in action
     assert '--max-attempts=5' in action
     # The fresh lane and the fallback route in _enqueue_sync_job_routed deliver
     # through the main sync-jobs queue (SYNC_TASKS_QUEUE), so its attempt cap
@@ -434,7 +422,7 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
     )
     lsteps = {step['name']: step for step in lifecycle['runs']['steps']}
     iam = lsteps['Bind backend-sync invoker to backfill worker']
-    queue = lsteps['Reconcile bounded sync backfill queue']
+    queue = lsteps['Reconcile sync-jobs attempt contract']
     ttl = lsteps['Provision and verify sync ledger TTL']
     budget = lsteps['Provision routed backfill budget alerts']
     abort = lsteps['Provision sync-backfill dispatch-abort alert']
@@ -448,18 +436,7 @@ def test_sync_backfill_dispatch_mode_reconciles_queue_without_platform_mutation(
 
     resolver = next(step for step in lifecycle['runs']['steps'] if step.get('id') == 'live-max-scale')
     assert 'if' not in resolver  # Also resolve for platform/dispatch, not just the worker deploy.
-    assert lifecycle['runs']['steps'].index(resolver) < lifecycle['runs']['steps'].index(queue)
-    assert queue['env']['BACKFILL_MAX_CONCURRENT_DISPATCHES'] == (
-        '${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}'
-    )
-    run = queue['run']
-    for flag in (
-        '--max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES"',
-        '--max-dispatches-per-second=15',
-        '--min-backoff=5s',
-        '--max-backoff=60s',
-    ):
-        assert run.count(flag) == 2
+    assert 'gcloud tasks queues update sync-jobs' in queue['run']
     assert 'sync_backfill_dispatch_abort' in abort['run']
     assert 'THRESHOLD=30' in abort['run'] and 'WINDOW=1800s' in abort['run']
     assert abort['run'].count('--threshold-value="$THRESHOLD" --alignment-period="$WINDOW"') == 2
@@ -555,21 +532,6 @@ def test_production_cloud_run_only_smokes_the_promoted_serving_api():
         'gcloud run services describe backend --project=${{ inputs.project_id }}'
         in by_name['Verify validated revisions are still current']['run']
     )
-
-
-def test_static_processed_segment_marker_follows_partial_result_checkpoint():
-    """Static ordering contract for retry-safe partial-result persistence."""
-    pipeline = (Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py').read_text()
-    checkpoint = pipeline.index("_update_sync_job_for_run(job_id, active_run_lock_token, {'partial_result': partial})")
-    durable_checkpoint = pipeline.index('checkpoint_sync_content_partial_result(', checkpoint)
-    marker = pipeline.index('_add_processed_segment_for_run(job_id, active_run_lock_token, path)', checkpoint)
-
-    assert checkpoint < durable_checkpoint < marker
-    durable_call = pipeline[durable_checkpoint:marker]
-    assert 'run_token=active_run_lock_token' in durable_call
-    assert 'run_epoch=active_run_lock_epoch' in durable_call
-    assert "set(partial_result.get('new_memories') or [])" in pipeline
-    assert 'get_sync_content_partial_result' in pipeline
 
 
 def test_segment_identity_survives_job_directory_change(tmp_path, monkeypatch):

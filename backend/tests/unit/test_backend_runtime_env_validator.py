@@ -398,8 +398,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     for service in ('backend-sync', 'backend-sync-backfill'):
         payload = re.sub(
             rf'("{service}":\s*\{{.*?"env":\s*\[\s*\{{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\}},)',
-            r'\1\n        {"name": "SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM", "value": "false"},'
-            r'\n        {"name": "SYNC_REPROCESS_COALESCE_ENABLED", "value": "false"},'
+            r'\1\n        {"name": "SYNC_REPROCESS_COALESCE_ENABLED", "value": "false"},'
             r'\n        {"name": "SYNC_REPROCESS_SETTLE_SECONDS", "value": "600"},'
             r'\n        {"name": "CONVERSATION_LLM_INPUT_DEDUPE_ENABLED", "value": "false"},',
             payload,
@@ -502,12 +501,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
     # Keep unrelated Cloud Run failure fixtures complete under the new dark gate.
     payload = re.sub(
         r'("backend-sync(?:-backfill)?":\s*\{.*?"env":\s*\[)',
-        r'\1\n        {"name": "SYNC_LEGACY_FRESH_ENABLED", "value": "false"},'
-        r'\n        {"name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED", "value": "false"},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_UID_ALLOWLIST", "value": ""},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_PERCENT", "value": "0"},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_HOURLY_TOKENS", "value": "60"},'
-        r'\n        {"name": "SYNC_LEGACY_FRESH_BURST_TOKENS", "value": "10"},',
+        r'\1\n        {"name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED", "value": "false"},',
         payload,
         flags=re.DOTALL,
     )

@@ -32,7 +32,6 @@ from google.protobuf import duration_pb2
 from google.protobuf import timestamp_pb2
 
 from utils.log_sanitizer import sanitize
-from utils.sync.backfill_order import direct_schedule_at
 
 logger = logging.getLogger(__name__)
 
@@ -66,23 +65,17 @@ SYNC_JOB_TASK_PAYLOAD_KEYS = frozenset(
         'ledger_fence_mode',
     }
 )
-SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS = SYNC_JOB_TASK_PAYLOAD_KEYS | {'sequencer_epoch'}
 # Present only when the upload carried parsed S1 capture-evidence claims
 # (routers/sync.py). An exact-set check without this key raised ValueError at
 # enqueue for every claims-bearing upload and wedged that uid's sequencer.
 # ``budget_deferrals`` rides only on handler-budget replacement tasks: the count
 # of whole-budget attempts the job has already spent (routers/sync.py).
-# ``redrive_mode`` rides only on operator-built redrive payloads and must survive
-# budget replacements and sequencer re-dispatch (utils/sync/minimal_redrive.py).
-SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims', 'budget_deferrals', 'redrive_mode'})
+SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS = frozenset({'capture_evidence_claims', 'budget_deferrals'})
 
 
-def sync_job_payload_keys_valid(keys: Iterable[str], *, allow_sequenced: bool = True) -> bool:
+def sync_job_payload_keys_valid(keys: Iterable[str]) -> bool:
     """True when keys are a durable sync job schema plus only optional keys."""
-    core = frozenset(keys) - SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS
-    if core == SYNC_JOB_TASK_PAYLOAD_KEYS:
-        return True
-    return allow_sequenced and core == SYNC_JOB_SEQUENCED_TASK_PAYLOAD_KEYS
+    return frozenset(keys) - SYNC_JOB_OPTIONAL_TASK_PAYLOAD_KEYS == SYNC_JOB_TASK_PAYLOAD_KEYS
 
 
 _tasks_client: Optional[tasks_v2.CloudTasksClient] = None
@@ -324,42 +317,16 @@ def named_task_exists(queue: str, task_id: str) -> bool:
         return False
 
 
-def enqueue_sync_job(payload: Dict[str, Any], *, dispatch_attempt: int = 0) -> None:
-    """Enqueue one named HTTP task for a sync job.
+def enqueue_sync_job(payload: Dict[str, Any]) -> None:
+    """Enqueue one named HTTP task for a legacy sync job (deleted with C11).
 
-    Sequenced redrives use a persisted dispatch attempt in the task name while
-    retaining the execution epoch in the payload. Re-enqueueing that attempt is
-    idempotent; a later attempt can bypass a deleted task's name tombstone.
-
-    Duplicate names are success. Callers retry the same name a bounded number
-    of times, then retain staged retry material if acknowledgement remains
-    uncertain; they never fall back inline after submitting this task.
-
-    Queue selection stays on the main queue unless SYNC_BACKFILL_ROUTING_ENABLED
-    is true, the payload lane is backfill, and both SYNC_BACKFILL_TASKS_QUEUE
-    and SYNC_BACKFILL_TASKS_HANDLER_URL are set. Missing backfill env falls
-    back to the main queue so a job is never dropped.
-
-    The two-lane split was collapsed in #10400 after a customer incident: every
-    offline upload classifies as backfill (no server capture proof), and the
-    backfill worker then admitted only a few jobs at once, so Cloud Tasks
-    retried the surplus with exponential backoff until recordings sat
-    unprocessed for many hours. Restoring the split is gated default-off
-    because the backfill worker is now maxScale 30 / concurrency 1
-    (request-based) rather than the ~4-dispatch lane that caused the incident.
-    The lane label is always carried on the payload for metering and reporting.
+    Duplicate names are success. The backfill sequencer, its wake tasks, its
+    epoch-named redrives and the direct-backfill eligibility delay were deleted
+    with C10 (legacy-retire).
     """
     if not sync_job_payload_keys_valid(payload):
         raise ValueError('sync job payload does not match the durable worker schema')
-    sequencer_epoch = payload.get('sequencer_epoch')
-    if sequencer_epoch is not None and (not isinstance(sequencer_epoch, int) or sequencer_epoch <= 0):
-        raise ValueError('sync job sequencer epoch must be a positive integer')
-    task_id = f"{payload['job_id']}-s{sequencer_epoch}" if sequencer_epoch is not None else str(payload['job_id'])
-    if dispatch_attempt:
-        if sequencer_epoch is None or dispatch_attempt < 0:
-            raise ValueError('sync job dispatch attempt requires a sequencer epoch and a positive value')
-        task_id += f'-d{dispatch_attempt}'
-    _enqueue_sync_job_routed(payload, task_id, direct_schedule_at(payload))
+    _enqueue_sync_job_routed(payload, str(payload['job_id']), None)
 
 
 def _enqueue_sync_job_routed(payload: Dict[str, Any], task_id: str, schedule_at: Optional[int]) -> None:
@@ -394,22 +361,6 @@ def enqueue_sync_job_budget_replacement(payload: Dict[str, Any], schedule_at: in
     if not sync_job_payload_keys_valid(payload):
         raise ValueError('sync job payload does not match the durable worker schema')
     _enqueue_sync_job_routed(payload, f"{payload['job_id']}-rb{schedule_at}", schedule_at)
-
-
-def enqueue_sync_uid_wake(uid: str, uid_hash: str, deadline: int) -> None:
-    """Wake a cutover-delayed UID without occupying a worker during the wait."""
-    handler = _handler_url()
-    if not handler.endswith('/v2/sync-jobs/run'):
-        raise RuntimeError('sync task handler URL is not the expected v2 route')
-    wake_url = handler.removesuffix('/v2/sync-jobs/run') + '/v2/sync-backfill-sequencer/wake'
-    enqueue_named_task(
-        os.getenv('SYNC_TASKS_QUEUE', ''),
-        wake_url,
-        f'sbu-{uid_hash}-{deadline}',
-        {'uid': uid},
-        audience=_oidc_audience(),
-        schedule_at=deadline,
-    )
 
 
 def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:

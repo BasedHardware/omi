@@ -169,10 +169,12 @@ def test_flags_default_off(monkeypatch):
 def pipeline():
     from pathlib import Path
     from testing.import_isolation import load_module_fresh, stub_modules
-    from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
+    from tests.unit._sync_pipeline_fakes import _build_pipeline_fakes
 
     with stub_modules(_build_pipeline_fakes()):
-        yield load_module_fresh('utils.sync.pipeline', Path(__file__).resolve().parents[2] / 'utils/sync/pipeline.py')
+        yield load_module_fresh(
+            'utils.sync.legacy_segment_core', Path(__file__).resolve().parents[2] / 'utils/sync/legacy_segment_core.py'
+        )
 
 
 def test_pipeline_flags_off_eager_and_process_now_bypasses_coalescing(monkeypatch, pipeline):
@@ -282,12 +284,6 @@ def test_train1_runtime_flags_are_on_only_for_prod_sync_hosts(runtime_manifest):
                 assert str(service.get('env', {}).get(switch, {}).get('value', 'false')).lower() != 'true'
 
 
-def test_expired_backfill_retirement_is_disabled_for_prod_sync_hosts(runtime_manifest):
-    services = runtime_manifest['environments']['prod']['cloud_run']['services']
-    for name in ('backend-sync', 'backend-sync-backfill'):
-        assert services[name]['env']['SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM']['value'] == 'false'
-
-
 @pytest.fixture(scope='module')
 def sync_router():
     import importlib
@@ -295,39 +291,6 @@ def sync_router():
 
     with stub_modules({}):
         yield importlib.import_module('routers.sync')
-
-
-@pytest.mark.parametrize(
-    'sequencer_errors,repair_errors,repair_raises,status',
-    [
-        (0, 2, False, 200),
-        (0, 0, True, 200),
-        (1, 0, False, 500),
-    ],
-)
-def test_sweep_reports_repair_errors_without_failing_successful_retirement(
-    sync_router, monkeypatch, sequencer_errors, repair_errors, repair_raises, status
-):
-    import asyncio
-    import json
-
-    async def run(_executor, fn):
-        return fn()
-
-    monkeypatch.setattr(sync_router, 'run_blocking', run)
-    monkeypatch.setattr(sync_router.uid_sequencer, 'sweep', Mock(return_value={'error': sequencer_errors}))
-    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
-    repair = Mock(return_value={'repaired': 3, 'error': repair_errors})
-    if repair_raises:
-        repair.side_effect = RuntimeError('query failed')
-    monkeypatch.setattr(reprocess, 'sweep', repair)
-    response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
-    assert response.status_code == status
-    assert json.loads(response.body)['outcomes'] == {
-        'error': sequencer_errors,
-        'reprocess_repaired': 0 if repair_raises else 3,
-        'reprocess_repair_errors': 1 if repair_raises else repair_errors,
-    }
 
 
 def test_lazy_mark_blind_write_preserves_live_lease(monkeypatch):
@@ -870,31 +833,6 @@ def test_superseded_repair_retires_only_its_own_generation(state, monkeypatch):
 
     assert reprocess.run(key, tasks[-1]['task_token'], append_then_supersede, now=320) == 'superseded'
     assert rows[key]['lease_until'] == 0 and not rows[key]['summary_repair']
-
-
-@pytest.mark.parametrize('enabled', [False, True])
-def test_only_scheduled_owner_runs_bounded_summary_scan(sync_router, monkeypatch, enabled):
-    import asyncio
-    import json
-
-    async def run(_executor, fn):
-        return fn()
-
-    monkeypatch.setattr(sync_router, 'run_blocking', run)
-    monkeypatch.setattr(sync_router.uid_sequencer, 'sweep', Mock(return_value={'error': 0}))
-    monkeypatch.setattr(reprocess, 'owns_runtime', lambda: True)
-    monkeypatch.setattr(reprocess, 'sweep', Mock(return_value={'repaired': 0, 'error': 0}))
-    monkeypatch.setattr(sync_router, 'summary_repair_enabled', lambda: enabled)
-    scan = Mock(return_value={'scanned': 100, 'admitted': 10, 'errors': 0})
-    monkeypatch.setattr(sync_router.summary_debt_repair, 'tick', scan)
-    response = asyncio.run(sync_router.sweep_sync_backfill_sequencer(0))
-    outcomes = json.loads(response.body)['outcomes']
-    if enabled:
-        scan.assert_called_once_with()
-        assert outcomes['summary_debt_scanned'] == 100 and outcomes['summary_debt_admitted'] == 10
-    else:
-        scan.assert_not_called()
-        assert 'summary_debt_scanned' not in outcomes
 
 
 def test_discard_is_terminal_but_does_not_count_as_a_first_summary(state, monkeypatch):

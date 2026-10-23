@@ -1,28 +1,15 @@
-"""Incompatible explicit targets recover temporally; equal partitions behave as before.
-
-Partition compatibility is equality of source, device and lock state. Two locked
-captures are compatible, so locked chunks merge and retry exactly like unlocked
-ones; only a genuine difference is a mismatch.
-"""
+"""Retained shared and recovery-core cases after legacy coordinator retirement."""
 
 from copy import deepcopy
-import json
-import sys
-from unittest.mock import MagicMock
-
-from starlette.datastructures import UploadFile
-
 from google.api_core.exceptions import InvalidArgument
 import pytest
-
 from database import sync_ledger
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
-from tests.unit.test_sync_cloud_tasks import _load_sync_router_for_fast_path
 from tests.unit.test_sync_cross_job_assignment import chunk, conversations, intake
 from utils.sync.assignment import auto_mergeable, capture_mismatch
 from utils.sync.live_overlap import compatible_capture
 from utils.sync.assignment_errors import SyncAssignmentConflict
-from utils.sync.pipeline import _firestore_error_class
+from utils.sync.legacy_segment_core import _firestore_error_class
 
 _ALL_TOKENS = {
     'none',
@@ -35,7 +22,7 @@ _ALL_TOKENS = {
     'source_device_lock',
 }
 
-# (fields changed on the stored explicit target, incoming is_locked, bounded token)
+
 _TARGET_MISMATCHES = [
     ({'source': 'desktop'}, False, 'source'),
     ({'client_device_id': 'other-device'}, False, 'device'),
@@ -232,45 +219,6 @@ def test_ledger_has_no_permanent_segment_guard():
     """The bounded batch cap is the only pause; nothing reads a per-segment guard."""
     assert not hasattr(sync_ledger, 'get_sync_segment_quarantine')
     assert not hasattr(sync_ledger, 'quarantine_sync_segment')
-
-
-@pytest.fixture
-def admission_router():
-    module, saved, jobs, bytes_io, _, _ = _load_sync_router_for_fast_path()
-    try:
-        yield module, jobs, bytes_io
-    finally:
-        sys.modules.pop('routers.sync', None)
-        sys.modules.pop('utils.sync.pipeline', None)
-        sys.modules.pop('utils.sync.ledger_completion', None)
-        for name, original in saved.items():
-            if original is None:
-                sys.modules.pop(name, None)
-            else:
-                sys.modules[name] = original
-
-
-@pytest.mark.asyncio
-async def test_paused_persistence_upload_keeps_the_retaining_contract_before_dispatch(admission_router, caplog):
-    module, jobs, bytes_io = admission_router
-    module.claim_sync_content = MagicMock(
-        return_value={'outcome': 'capped', 'failure_key': 'persistent_persistence', 'retry_after': 3600}
-    )
-    module.start_background_task = MagicMock()
-    response = await module.sync_local_files_v2(
-        files=[UploadFile(filename='synthetic.opus', file=bytes_io(b'synthetic'))],
-        uid='test-uid',
-    )
-    assert response.status_code == 202
-    assert json.loads(response.body)['status'] == 'failed'
-    module.mark_job_failed.assert_called_once()
-    assert module.mark_job_failed.call_args.kwargs['reason_code'] == 'sync_repeat_failure_paused'
-    module.enqueue_sync_job.assert_not_called()
-    module.start_background_task.assert_not_called()
-    jobs.mark_job_completed.assert_not_called()
-    event = next(r.message for r in caplog.records if 'event=sync_repeat_failure_cap' in r.message)
-    assert 'outcome=paused' in event and 'failure_key=persistent_persistence' in event
-    assert 'quarantined' not in event and 'test-uid' not in event
 
 
 def test_batch_explicit_live_target_missing_holds_and_replays_after_live_create():

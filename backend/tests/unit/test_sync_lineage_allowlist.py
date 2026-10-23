@@ -1,48 +1,28 @@
-"""Staged rollout of sync lineage binding: ``SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST``.
+"""Retained shared and recovery-core cases after legacy coordinator retirement."""
 
-Lineage binding is gated by uid. A uid outside a non-empty allowlist must match
-the kill switch being off at that site. Adopted live targets always pin their
-origin and fence late speech, and open-live enrichment is always deferred.
-Each site test compares the non-admitted outcome against the OFF outcome itself,
-not merely against "not the new behavior". All ids are
-synthetic; ``u`` and ``uid`` are the owners the shared harnesses write under.
-"""
-
-import asyncio
-from concurrent.futures import ThreadPoolExecutor
 import logging
-import os
-import threading
 from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock
-
 import pytest
 import yaml
-
 import tests.unit.test_listen_reconnect_continuity as continuity
 from config import sync_lineage
-from utils import rollout_cohorts
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_sync_cross_job_assignment import intake
-from tests.unit.test_sync_recording_lineage import (  # noqa: F401 - fixtures
+from tests.unit.test_sync_recording_lineage import (
     L,
     ORIGIN,
-    _drive,
     at,
-    coordinator,
     dependencies,
     gen_id,
     gen_start,
     generation,
     seeded_store,
     sync_chunk,
-    upload_straddling_next_two,
 )
 from utils.sync import recording_lineage
 from utils.sync.recording_lineage import OUTCOMES, lineage_resolution_requested
-
-os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 S1_CLAIMS = {
     'f.opus': {
@@ -56,14 +36,18 @@ S1_CLAIMS = {
     }
 }
 
-# (kill switch value, allowlist template); ``{uid}`` is the owner under test.
+
 OFF = ('off', '')
+
+
 ACTIVE = {
     'unset_allowlist': ('', ''),
     'blank_allowlist': ('', ' , ,'),
     'allowlisted': ('', 'OTHER-A, {uid} ,OTHER-B'),
     'allowlisted_explicit_on': ('true', '{uid}'),
 }
+
+
 INACTIVE = {
     'kill_switch_off': OFF,
     'not_allowlisted': ('', 'OTHER-A,OTHER-B'),
@@ -77,30 +61,6 @@ def configure(monkeypatch, config, uid):
     flag, allowlist = config
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, flag)
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, allowlist.format(uid=uid))
-
-
-@pytest.fixture(autouse=True)
-def clean_env(monkeypatch):
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
-    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
-
-    monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', 'off')
-
-
-@pytest.fixture(autouse=True)
-def no_real_firestore_client(monkeypatch):
-    import database._client
-    import database.conversations
-    import firebase_admin.firestore
-    from google.cloud import firestore
-
-    def forbidden(*_args, **_kwargs):
-        raise AssertionError('real Firestore client construction is forbidden in this suite')
-
-    monkeypatch.setattr(database._client, 'get_firestore_client', forbidden)
-    monkeypatch.setattr(database.conversations, 'get_firestore_client', forbidden)
-    monkeypatch.setattr(firestore, 'Client', forbidden)
-    monkeypatch.setattr(firebase_admin.firestore, 'client', forbidden)
 
 
 def test_real_firestore_client_paths_fail_closed_without_io():
@@ -117,9 +77,6 @@ def test_real_firestore_client_paths_fail_closed_without_io():
         firestore.Client()
     with pytest.raises(AssertionError):
         firebase_admin.firestore.client()
-
-
-# --- Parsing ------------------------------------------------------------------
 
 
 @pytest.mark.parametrize('name', sorted(ACTIVE))
@@ -147,9 +104,6 @@ def test_empty_allowlist_admits_everyone_and_the_kill_switch_still_wins(monkeypa
         assert sync_lineage.sync_lineage_resolve_uid_allowed('ANY-UID')
     monkeypatch.setenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, 'false')
     assert not sync_lineage.sync_lineage_resolve_active_for('ANY-UID')
-
-
-# --- Site 1: per-segment binding request (backend-sync, backend REST) ------------
 
 
 def _decision(monkeypatch, caplog, config, uid='u', s1=False):
@@ -223,115 +177,6 @@ def test_metric_help_names_every_bounded_outcome():
     assert tuple(documented) == OUTCOMES
 
 
-def _prepare_coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None, s1=False):
-    """Construct synthetic input and mocks before running the real coordinator."""
-    configure(monkeypatch, config, 'uid')
-    chunks = upload_straddling_next_two()
-    captured, kwargs = _drive(
-        module, stubs, chunks, monkeypatch, stamp=gen_id(L), s1_claims=deepcopy(S1_CLAIMS) if s1 else None
-    )
-    pipeline = stubs['pipeline']
-    pipeline.get_sync_job = MagicMock(return_value={'partial_result': partial or {}})
-    by_id = {chunk['id']: f"/tmp/job-lineage/seg_{chunk['started_at'].timestamp():.0f}.wav" for chunk in chunks}
-    pipeline.get_processed_segments = MagicMock(return_value={by_id[cid] for cid in processed})
-    enriched = []
-    pipeline._reprocess_merged_conversations = lambda _uid, response, *_a, **_k: enriched.append(
-        dict(response.pop('_merged', {}))
-    )
-
-    async def run():
-        await module._run_full_pipeline_background_async(
-            'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
-        )
-        return [captured.get(chunk['id'], 'SKIPPED') for chunk in chunks], enriched
-
-    return run
-
-
-async def _coordinate(module, stubs, monkeypatch, config, *, processed=(), partial=None, s1=False):
-    run = _prepare_coordinate(module, stubs, monkeypatch, config, processed=processed, partial=partial, s1=s1)
-    return await run()
-
-
-@pytest.fixture
-def cold_cohort_attempt(coordinator, monkeypatch):
-    module, stubs = coordinator
-    return _prepare_coordinate(module, stubs, monkeypatch, ('', 'OTHER-A'), s1=True)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('name', sorted(INACTIVE))
-@pytest.mark.parametrize('s1', [False, True])
-async def test_coordinator_for_a_refused_uid_is_the_kill_switch_outcome(coordinator, monkeypatch, name, s1):
-    module, stubs = coordinator
-    off = await _coordinate(module, stubs, monkeypatch, OFF, s1=s1)
-    assert off == ([None] * 4, [{}])  # whole-batch resolver: stamp dropped, no lineage retry intent
-    assert await _coordinate(module, stubs, monkeypatch, INACTIVE[name], s1=s1) == off
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('name', sorted(ACTIVE))
-@pytest.mark.parametrize('s1', [False, True])
-async def test_coordinator_replay_binds_generations_for_an_admitted_uid(coordinator, monkeypatch, name, s1):
-    module, stubs = coordinator
-    expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if s1 else [None] * 4
-    targets, _ = await _coordinate(module, stubs, monkeypatch, ACTIVE[name], s1=s1)
-    assert targets == expected
-    # A retry under the same configuration plans the same rows.
-    assert (await _coordinate(module, stubs, monkeypatch, ACTIVE[name], s1=s1))[0] == targets
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('s1', [False, True])
-async def test_allowlist_change_between_attempts_reroutes_only_unlanded_segments_to_the_new_config(
-    coordinator, monkeypatch, s1
-):
-    """Decision: the gate is evaluated per attempt, like the kill switch.
-
-    Landed segments are skipped by the processed-segment ledger and never
-    re-bound; the rest go exactly where a pure run under the new configuration
-    sends them. The lineage retry-intent marker follows the attempt too.
-    """
-    module, stubs = coordinator
-    chunks = upload_straddling_next_two()
-    landed = [chunk['id'] for chunk in chunks[:2]]
-    partial = {'updated_memories': [gen_id(L + 1)]}
-    admitted, refused = ('', '{uid}'), ('', 'OTHER-A')
-    pure_off, _ = await _coordinate(module, stubs, monkeypatch, OFF, s1=s1)
-    pure_on, _ = await _coordinate(module, stubs, monkeypatch, admitted, s1=s1)
-    narrowed, narrowed_intent = await _coordinate(
-        module, stubs, monkeypatch, refused, processed=landed, partial=partial, s1=s1
-    )
-    assert narrowed == ['SKIPPED'] * 2 + pure_off[2:]
-    assert narrowed_intent == [{}]
-    widened, widened_intent = await _coordinate(
-        module, stubs, monkeypatch, admitted, processed=landed, partial=partial, s1=s1
-    )
-    assert widened == ['SKIPPED'] * 2 + pure_on[2:]
-    expected_intent = [{gen_id(L + 1): stubs['pipeline']._LINEAGE_RETRY_LANGUAGE}] if s1 else [{}]
-    assert widened_intent == expected_intent
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize('config', [('', 'OTHER-A'), OFF])
-@pytest.mark.parametrize('s1', [False, True])
-async def test_narrowing_preserves_an_already_owed_refresh(coordinator, monkeypatch, config, s1):
-    module, stubs = coordinator
-    landed = [chunk['id'] for chunk in upload_straddling_next_two()]
-    owed = gen_id(L + 1)
-    partial = {
-        'updated_memories': [owed, 'FENCED'],
-        'lineage_enrichment_pending': [owed, 'FENCED'],
-        'fenced_conversation_ids': ['FENCED'],
-    }
-    targets, intent = await _coordinate(module, stubs, monkeypatch, config, processed=landed, partial=partial, s1=s1)
-    assert targets == ['SKIPPED'] * 4
-    assert intent == [{owed: stubs['pipeline']._LINEAGE_RETRY_LANGUAGE}]
-
-
-# --- Site 2: pinned live origin on a sync append (assign_in_transaction) -------
-
-
 def _pinned_append(monkeypatch, config, store=None):
     configure(monkeypatch, config, 'u')
     store = store or seeded_store([generation(L, audio_timeline={'version': 2})])
@@ -384,9 +229,6 @@ def test_row_pinned_while_admitted_follows_the_new_config_without_moving_speech(
     assert absolute(store.rows) == after
 
 
-# --- Site 3: live revision fence (backend-listen update_conversation_segments) -
-
-
 def _live_write(monkeypatch, config):
     from database import conversations as db
 
@@ -421,9 +263,6 @@ def test_live_target_fence_is_independent_of_lineage_rollout(monkeypatch, name):
     off = _live_write(monkeypatch, OFF)
     assert off['sync_content_revision'] == 2
     assert _live_write(monkeypatch, INACTIVE[name]) == off
-
-
-# --- Site 4: open-live enrichment deferral (_reprocess_conversation_after_update)
 
 
 def _reprocess(pipeline, monkeypatch, config, *, language='en', row_status='in_progress'):
@@ -487,53 +326,6 @@ def test_admitted_refresh_debt_survives_both_receipt_stores_and_excludes_fenced_
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('s1', [False, True])
-async def test_coordinator_checkpoints_admitted_refresh_debt_before_marking_audio_processed(
-    coordinator, monkeypatch, s1
-):
-    module, stubs = coordinator
-    configure(monkeypatch, ACTIVE['allowlisted'], 'uid')
-    captured, kwargs = _drive(
-        module,
-        stubs,
-        upload_straddling_next_two(),
-        monkeypatch,
-        stamp=gen_id(L),
-        s1_claims=deepcopy(S1_CLAIMS) if s1 else None,
-    )
-    pipeline = stubs['pipeline']
-    original = pipeline.process_segment
-    events = []
-
-    def append(*args, **kw):
-        result = original(*args, **kw)
-        args[2].setdefault('_merged', {})[args[9]] = 'en'
-        return result
-
-    def checkpoint(_job_id, _token, updates):
-        if 'partial_result' in updates:
-            events.append(('receipt', deepcopy(updates['partial_result'])))
-        return updates
-
-    pipeline.process_segment = append
-    pipeline._update_sync_job_for_run = checkpoint
-    pipeline._add_processed_segment_for_run = lambda *_args: events.append(('processed', None))
-    pipeline._reprocess_merged_conversations = lambda *_a, **_k: None
-    await module._run_full_pipeline_background_async(
-        'job-lineage', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/job-lineage', task_mode=True, **vars(kwargs)
-    )
-    assert len(captured) == 4
-    assert [event[0] for event in events] == ['receipt', 'processed'] * 4
-    if s1:
-        assert events[-2][1]['lineage_enrichment_pending'] == [gen_id(L + 1), gen_id(L + 2)]
-    else:
-        assert 'lineage_enrichment_pending' not in events[-2][1]
-
-
-# --- Metadata-only origin stamp stays on the kill switch alone -----------------
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(('config', 'stamped'), [(('', 'OTHER-A'), True), (('off', '{uid}'), False)])
 async def test_live_origin_stamp_ignores_the_allowlist(monkeypatch, config, stamped):
     configure(monkeypatch, config, 'original')
@@ -544,10 +336,6 @@ async def test_live_origin_stamp_ignores_the_allowlist(monkeypatch, config, stam
     assert origin == ('fresh' if stamped else None)
 
 
-# --- Deployment wiring ------------------------------------------------------------
-
-# Every service that runs a gated site. A service without the variable admits
-# everyone, so the staged value must be identical on all of them.
 GATED_SERVICES = (
     ('cloud_run', 'backend'),  # inline BYOK sync (routers/sync.py)
     ('cloud_run', 'backend-sync'),
@@ -579,45 +367,25 @@ def test_all_gated_services_resolve_private_cohorts_without_manifest_allowlists(
     assert all(_declared(dev, kind, service) in (None, '') for kind, service in GATED_SERVICES)
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize('membership', [True, False, 'error'])
-@pytest.mark.parametrize('expired', [False, True])
-async def test_oidc_coordinator_awaits_cold_and_expired_cohorts_before_selecting_lineage(
-    cold_cohort_attempt, monkeypatch, membership, expired
-):
-    monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
-    release = threading.Event()
-    reads = []
+@pytest.fixture(autouse=True)
+def clean_env(monkeypatch):
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_ENV, raising=False)
+    monkeypatch.delenv(sync_lineage.SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST_ENV, raising=False)
 
-    def read(uid):
-        reads.append(uid)
-        assert release.wait(1)
-        if membership == 'error':
-            raise RuntimeError('synthetic unavailable store')
-        return {'prod': {'sync-lineage-resolve': membership}}
+    monkeypatch.setenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', 'off')
 
-    rollout_cohorts.configure_rollout_runtime()
-    cache = rollout_cohorts._TTLReads(read)
-    monkeypatch.setattr(rollout_cohorts, '_cache', cache)
-    with ThreadPoolExecutor(max_workers=1) as pool:
-        monkeypatch.setattr(rollout_cohorts, '_background_submitter', pool.submit)
-        if expired:
-            release.set()
-            await rollout_cohorts.warm_rollout_cohorts('uid')
-            cache.entries['uid'].expires = 0
-        # The read can only finish after the coordinator yields to warmup.
-        release.clear()
 
-        async def unblock():
-            await asyncio.sleep(0)
-            release.set()
+@pytest.fixture(autouse=True)
+def no_real_firestore_client(monkeypatch):
+    import database._client
+    import database.conversations
+    import firebase_admin.firestore
+    from google.cloud import firestore
 
-        pulse = asyncio.create_task(unblock())
-        try:
-            targets, _ = await cold_cohort_attempt()
-        finally:
-            release.set()
-            await pulse
-        expected = [gen_id(L + 1)] * 2 + [gen_id(L + 2)] * 2 if membership is True else [None] * 4
-        assert targets == expected
-        assert reads == ['uid'] * (2 if expired else 1)
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError('real Firestore client construction is forbidden in this suite')
+
+    monkeypatch.setattr(database._client, 'get_firestore_client', forbidden)
+    monkeypatch.setattr(database.conversations, 'get_firestore_client', forbidden)
+    monkeypatch.setattr(firestore, 'Client', forbidden)
+    monkeypatch.setattr(firebase_admin.firestore, 'client', forbidden)

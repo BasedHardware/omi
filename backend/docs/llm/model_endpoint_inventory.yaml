@@ -48,7 +48,6 @@ model_config_features:
     - persona_clone
     - session_titles
     - smart_glasses
-    - sync_redrive_title
     - episode_incremental
     - wrapped_analysis
     - x_memory_extraction_flex
@@ -131,7 +130,6 @@ surfaces:
   - utils/llm/chat.py::feature:chat_extraction
   - utils/llm/conversation_folder.py::feature:conv_folder
   - utils/llm/conversation_processing.py::feature:conv_discard
-  - utils/sync/minimal_redrive.py::feature:sync_redrive_title
   - utils/episodes/incremental.py::feature:episode_incremental
   - utils/llm/conversation_processing.py::feature:conv_structure
   - utils/llm/conversation_processing.py::feature:conv_app_result
@@ -638,7 +636,7 @@ surfaces:
   test_guardrail_coverage: backend/tests/unit/test_free_tier_entrypoint_matrix.py
 - surface: sync_limitless
   funded_budget_gate: utils/llm/clients.py:get_llm
-  code_path: backend/utils/sync/pipeline.py:_reprocess_conversation_after_update
+  code_path: backend/utils/enrichment/callback.py:enrich_conversation
   entrypoint: sync / Limitless create+reprocess
   feature: conv_structure
   plan_gating: basic_not_entitled

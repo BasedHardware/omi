@@ -159,7 +159,6 @@ paths_timeout = {
     "/v2/candidate-integrations/sweep": 90,  # Sweep stops at 50s; Scheduler allows 120s.
     "/v2/dream-agent/canary": 90,
     "/v1/dream/runs": 90,
-    "/v2/sync-backfill-sequencer/sweep": 150,  # Below Scheduler's 180s deadline.
     "/v2/audio-merge-jobs/run": os.environ.get('HTTP_AUDIO_MERGE_RUN_TIMEOUT', 600),
     "/v1/users/account-deletion-wipes/run": os.environ.get('HTTP_ACCOUNT_DELETION_WIPE_RUN_TIMEOUT', 1500),
     "/v1/conversation-finalization-jobs/run": os.environ.get('HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT', 1500),

@@ -274,8 +274,8 @@ def sync_module():
         with stub_modules({**fakes, **_intake_fakes}):
             load_module_fresh("routers.sync", os.path.join(str(_BACKEND), "routers", "sync.py"))
             load_module_fresh(
-                "utils.sync.pipeline",
-                os.path.join(str(_BACKEND), "utils", "sync", "pipeline.py"),
+                "utils.sync.legacy_segment_core",
+                os.path.join(str(_BACKEND), "utils", "sync", "legacy_segment_core.py"),
             )
             load_module_fresh("utils.stt.pre_recorded", os.path.join(str(_BACKEND), "utils", "stt", "pre_recorded.py"))
             yield
@@ -306,15 +306,18 @@ class TestProcessSegmentPreferences:
             {'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_00', 'text': 'world'},
         ]
 
-    @patch('utils.sync.pipeline.process_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_vocabulary_passed_to_deepgram(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    @patch('utils.sync.legacy_segment_core.process_conversation')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
+    def test_vocabulary_passed_to_deepgram(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """User vocabulary should be passed as keywords to deepgram_prerecorded."""
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
         mock_process.return_value = MagicMock(id='test-id')
@@ -338,17 +341,20 @@ class TestProcessSegmentPreferences:
         assert 'Kubernetes' in kw_list
         assert 'FastAPI' in kw_list
 
-    @patch('utils.sync.pipeline.process_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    @patch('utils.sync.legacy_segment_core.process_conversation')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
     def test_single_language_mode_passes_user_language(
-        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process
     ):
         """Single language mode with a language should pass the user language."""
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
         mock_process.return_value = MagicMock(id='test-id')
@@ -365,15 +371,18 @@ class TestProcessSegmentPreferences:
         assert kwargs['language'] == 'en'
         assert kwargs['return_language'] is True
 
-    @patch('utils.sync.pipeline.process_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_chinese_passes_user_language(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    @patch('utils.sync.legacy_segment_core.process_conversation')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
+    def test_chinese_passes_user_language(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """Chinese language should be passed through in single-language mode."""
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'zh')
         mock_process.return_value = MagicMock(id='test-id')
@@ -390,15 +399,18 @@ class TestProcessSegmentPreferences:
         assert kwargs['language'] == 'zh'
         assert kwargs['return_language'] is True
 
-    @patch('utils.sync.pipeline.process_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_no_prefs_uses_defaults(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    @patch('utils.sync.legacy_segment_core.process_conversation')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
+    def test_no_prefs_uses_defaults(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """Without preferences, should use multi-language defaults."""
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
         mock_process.return_value = MagicMock(id='test-id')
@@ -415,15 +427,18 @@ class TestProcessSegmentPreferences:
         # Vocabulary should still include "Omi" even without prefs
         assert 'Omi' in kwargs['keywords']
 
-    @patch('utils.sync.pipeline.process_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_vocabulary_capped_at_100(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    @patch('utils.sync.legacy_segment_core.process_conversation')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
+    def test_vocabulary_capped_at_100(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """Vocabulary should be capped at 100 items."""
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
         mock_process.return_value = MagicMock(id='test-id')
@@ -442,17 +457,20 @@ class TestProcessSegmentPreferences:
         # "Omi" must be preserved even after truncation
         assert 'Omi' in kwargs['keywords']
 
-    @patch('utils.sync.pipeline.process_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    @patch('utils.sync.legacy_segment_core.process_conversation')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
     def test_single_language_empty_language_falls_back(
-        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process
     ):
         """single_language_mode=True with empty language should fall back to multi."""
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
         mock_process.return_value = MagicMock(id='test-id')
@@ -469,15 +487,18 @@ class TestProcessSegmentPreferences:
         assert kwargs['language'] == 'multi'
         assert kwargs['return_language'] is True
 
-    @patch('utils.sync.pipeline.process_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_multi_language_mode_default(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process):
+    @patch('utils.sync.legacy_segment_core.process_conversation')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
+    def test_multi_language_mode_default(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process):
         """Non-single-language mode should use multi-language detection."""
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
         mock_process.return_value = MagicMock(id='test-id')
@@ -494,14 +515,17 @@ class TestProcessSegmentPreferences:
         assert kwargs['language'] == 'multi'
         assert kwargs['return_language'] is True
 
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_single_language_trusts_user_language(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest):
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
+    def test_single_language_trusts_user_language(self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest):
         """Single-language mode should trust user's language, not Deepgram's detection."""
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         # Deepgram detects 'fr' but user chose 'en' in single-language mode
         mock_dg.return_value = (self._make_mock_words(), 'fr')
@@ -525,16 +549,19 @@ class TestProcessSegmentPreferences:
         assert incoming['language'] == 'en', "Should use user's language 'en', not Deepgram's detected 'fr'"
         assert 'test-id' in response['new_memories']
 
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
     def test_private_cloud_sync_flag_passed_to_new_conversation(
-        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest
+        self, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest
     ):
         """New offline sync conversations must retain private-cloud audio metadata intent."""
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._make_mock_words(), 'en')
 
@@ -566,43 +593,6 @@ class TestProcessSegmentPreferences:
 # ---------------------------------------------------------------------------
 # Structural: endpoint wires transcription_prefs into threads
 # ---------------------------------------------------------------------------
-
-
-class TestSyncEndpointPrefsWiring:
-    """Verify sync_local_files fetches prefs and passes to process_segment threads."""
-
-    @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            return f.read()
-
-    def test_endpoint_fetches_transcription_prefs(self):
-        """sync_local_files must call get_user_transcription_preferences before threads."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_body = source[fn_start:]
-        assert 'get_user_transcription_preferences' in fn_body
-
-    def test_endpoint_passes_prefs_to_thread(self):
-        """Each thread must receive transcription_prefs as an argument."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_body = source[fn_start:]
-        assert 'transcription_prefs' in fn_body
-
-    def test_endpoint_forwards_private_cloud_and_data_protection(self):
-        """Private-cloud v1 sync must persist chunks with the user's protection level and finalize audio metadata."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_end = source.index('@router.post(  # v2 async sync-local-files', fn_start)
-        fn_body = source[fn_start:fn_end]
-
-        assert 'get_user_private_cloud_sync_enabled' in fn_body
-        assert 'get_data_protection_level' in fn_body
-        assert 'private_cloud_sync_enabled=private_cloud_sync_enabled' in fn_body
-        assert 'data_protection_level=data_protection_level' in fn_body
-        assert '_finalize_sync_audio_files' in fn_body
 
 
 # ---------------------------------------------------------------------------
@@ -744,7 +734,7 @@ class TestBuildPersonEmbeddingsCache:
     """Verify build_person_embeddings_cache loads user + people embeddings."""
 
     def test_loads_user_embedding(self, monkeypatch):
-        pipeline = importlib.import_module('utils.sync.pipeline')
+        pipeline = importlib.import_module('utils.sync.legacy_segment_core')
         mock_users_db = MagicMock()
         monkeypatch.setattr(pipeline, 'users_db', mock_users_db)
 
@@ -761,9 +751,9 @@ class TestBuildPersonEmbeddingsCache:
         resolved_name.assert_called_once_with('uid1')
         assert cache['user']['embedding'].shape == (1, 512)
 
-    @patch('utils.sync.pipeline.users_db')
+    @patch('utils.sync.legacy_segment_core.users_db')
     def test_loads_people_embeddings(self, mock_users_db):
-        from utils.sync.pipeline import build_person_embeddings_cache
+        from utils.sync.legacy_segment_core import build_person_embeddings_cache
 
         mock_users_db.get_user_speaker_embedding.return_value = None
         mock_users_db.get_people.return_value = [
@@ -792,9 +782,9 @@ class TestBuildPersonEmbeddingsCache:
         assert 'p3' in cache
         assert cache['p1']['name'] == 'Alice'
 
-    @patch('utils.sync.pipeline.users_db')
+    @patch('utils.sync.legacy_segment_core.users_db')
     def test_empty_when_no_embeddings(self, mock_users_db):
-        from utils.sync.pipeline import build_person_embeddings_cache
+        from utils.sync.legacy_segment_core import build_person_embeddings_cache
 
         mock_users_db.get_user_speaker_embedding.return_value = None
         mock_users_db.get_people.return_value = []
@@ -803,11 +793,11 @@ class TestBuildPersonEmbeddingsCache:
         assert cache == {}
 
     @patch('utils.sync.speaker_identity.named_speaker_prompts_allowed', lambda uid: False)
-    @patch('utils.sync.pipeline.get_user_name', MagicMock(return_value='David'))
-    @patch('utils.sync.pipeline.users_db')
+    @patch('utils.sync.legacy_segment_core.get_user_name', MagicMock(return_value='David'))
+    @patch('utils.sync.legacy_segment_core.users_db')
     def test_free_plan_loads_owner_only(self, mock_users_db):
         """The PR's core sync gate: a free plan keeps the owner and prunes people."""
-        pipeline = importlib.import_module('utils.sync.pipeline')
+        pipeline = importlib.import_module('utils.sync.legacy_segment_core')
 
         mock_users_db.get_user_speaker_embedding.return_value = [0.1] * 512
         mock_users_db.get_people.return_value = [
@@ -891,7 +881,7 @@ class TestIdentifySpeakersForSegments:
 
     @pytest.mark.parametrize('second_distances', [(0.40, 0.43), (0.10, 0.40)])
     def test_assigned_candidate_remains_in_margin_comparison(self, monkeypatch, second_distances):
-        import utils.sync.pipeline as sync_module
+        import utils.sync.legacy_segment_core as sync_module
 
         # A fragmented/ambiguous second diarized speaker must not become Alice
         # merely because the owner was assigned by the first, longer clip.
@@ -915,9 +905,9 @@ class TestIdentifySpeakersForSegments:
         if second_distances[0] == 0.10:
             assert all(s.speaker_identity_status == 'ambiguous' for s in segments)
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_voice_match_assigns_person(self, mock_extract):
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         # Create a "matching" embedding — same as Alice's
         alice_emb = np.ones((1, 512), dtype=np.float32)
@@ -941,9 +931,9 @@ class TestIdentifySpeakersForSegments:
         assert not segments[0].is_user
         assert not segments[1].is_user
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_user_match_sets_is_user(self, mock_extract):
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         user_emb = np.ones((1, 512), dtype=np.float32)
         mock_extract.return_value = user_emb
@@ -962,9 +952,9 @@ class TestIdentifySpeakersForSegments:
         assert segments[0].is_user is True
         assert segments[0].person_id is None
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_no_match_above_threshold(self, mock_extract):
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         # Return an embedding far from the cached one
         mock_extract.return_value = np.ones((1, 512), dtype=np.float32)
@@ -985,10 +975,10 @@ class TestIdentifySpeakersForSegments:
         assert segments[0].person_id is None
         assert not segments[0].is_user
 
-    @patch('utils.sync.pipeline.users_db')
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.users_db')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_text_detection_fallback(self, mock_extract, mock_users_db):
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         # Embedding extraction fails (too short clip), so voice matching skips
         mock_extract.side_effect = ValueError("Audio too short")
@@ -1006,9 +996,9 @@ class TestIdentifySpeakersForSegments:
         # Text detection should match "Bob" and assign person_id
         assert segments[0].person_id == 'p2'
 
-    @patch('utils.sync.pipeline.users_db')
+    @patch('utils.sync.legacy_segment_core.users_db')
     def test_empty_cache_still_runs_text_detection(self, mock_users_db):
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         mock_users_db.get_person_by_name.return_value = {'id': 'p1', 'name': 'Alice'}
 
@@ -1022,7 +1012,7 @@ class TestIdentifySpeakersForSegments:
         assert segments[0].person_id == 'p1'
 
     def test_unset_embedding_url_skips_voice_match(self, monkeypatch):
-        import utils.sync.pipeline as sync_module
+        import utils.sync.legacy_segment_core as sync_module
 
         mock_extract = MagicMock()
         mock_users_db = MagicMock()
@@ -1042,9 +1032,9 @@ class TestIdentifySpeakersForSegments:
         assert segments[0].person_id == 'p2'
         assert not segments[0].is_user
 
-    @patch('utils.sync.pipeline.users_db')
+    @patch('utils.sync.legacy_segment_core.users_db')
     def test_no_audio_still_runs_text_detection(self, mock_users_db):
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         mock_users_db.get_person_by_name.return_value = {'id': 'p2', 'name': 'Bob'}
 
@@ -1059,9 +1049,9 @@ class TestIdentifySpeakersForSegments:
 
         assert segments[0].person_id == 'p2'
 
-    @patch('utils.sync.pipeline.users_db')
+    @patch('utils.sync.legacy_segment_core.users_db')
     def test_undiarized_text_detection_assigns_per_segment(self, mock_users_db):
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         mock_users_db.get_person_by_name.return_value = {'id': 'p1', 'name': 'Alice'}
 
@@ -1079,9 +1069,9 @@ class TestIdentifySpeakersForSegments:
         # (speaker_to_person_map not updated for speaker_id=0)
         assert segments[1].person_id is None
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_short_segments_skip_embedding(self, mock_extract):
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         cache = {'p1': {'embedding': np.ones((1, 512), dtype=np.float32), 'name': 'Alice'}}
 
@@ -1098,9 +1088,9 @@ class TestIdentifySpeakersForSegments:
         mock_extract.assert_not_called()
         assert segments[0].person_id is None
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_multiple_speakers_matched(self, mock_extract):
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
         bob_emb = np.array([[0.0, 1.0] + [0.0] * 510], dtype=np.float32)
@@ -1124,10 +1114,10 @@ class TestIdentifySpeakersForSegments:
         assert segments[0].person_id == 'p1'
         assert segments[1].person_id == 'p2'
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_matched_person_not_reused_across_speakers(self, mock_extract):
         """A matched person cannot be assigned twice, but still contributes to ambiguity."""
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
         # Both speakers return embeddings close to Alice
@@ -1151,10 +1141,10 @@ class TestIdentifySpeakersForSegments:
         # Speaker 2 should NOT match Alice again — person already used
         assert segments[1].person_id is None
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_best_clip_speaker_matched_first(self, mock_extract):
         """Speakers are sorted by best single segment (clip quality) not total duration."""
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
         # Both speakers return embeddings close to Alice
@@ -1181,11 +1171,11 @@ class TestIdentifySpeakersForSegments:
         # Speaker 1 (best clip 1.2s) can't match — Alice already taken
         assert segments[0].person_id is None
 
-    @patch('utils.sync.pipeline.compare_embeddings')
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.compare_embeddings')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_dedup_keeps_matched_candidates_in_margin_comparison(self, mock_extract, mock_compare):
         """Dedup must not weaken the measured household ambiguity margin."""
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         emb_a = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
         emb_b = np.array([[0.0, 1.0] + [0.0] * 510], dtype=np.float32)
@@ -1214,10 +1204,10 @@ class TestIdentifySpeakersForSegments:
         assert segments[0].person_id == 'p1'
         assert segments[1].person_id == 'p2'
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_dedup_does_not_resolve_an_ambiguous_voice(self, mock_extract):
         """A voice equidistant from two people has no evidence for choosing either."""
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
         bob_emb = np.array([[0.0, 1.0] + [0.0] * 510], dtype=np.float32)
@@ -1243,10 +1233,10 @@ class TestIdentifySpeakersForSegments:
         # Both distances are ~0.293: neither candidate wins the 0.10 margin.
         assert segments[1].person_id is None
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_equal_best_clip_stable_order(self, mock_extract):
         """When speakers have equal best clip duration, stable input order is preserved."""
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         alice_emb = np.array([[1.0] + [0.0] * 511], dtype=np.float32)
         bob_emb = np.array([[0.0, 1.0] + [0.0] * 510], dtype=np.float32)
@@ -1271,7 +1261,6 @@ class TestIdentifySpeakersForSegments:
         assert segments[1].person_id == 'p2'
 
 
-@patch('utils.sync.pipeline.run_blocking', MagicMock())
 class TestProcessSegmentSpeakerIdIntegration:
     """Verify process_segment wires speaker identification correctly."""
 
@@ -1282,18 +1271,21 @@ class TestProcessSegmentSpeakerIdIntegration:
             {'timestamp': [0.5, 1.0], 'speaker': 'SPEAKER_00', 'text': 'world'},
         ]
 
-    @patch('utils.sync.pipeline.process_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    @patch('utils.sync.pipeline.identify_speakers_for_segments')
-    @patch('utils.sync.pipeline._download_audio_bytes')
+    @patch('utils.sync.legacy_segment_core.process_conversation')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
+    @patch('utils.sync.legacy_segment_core.identify_speakers_for_segments')
+    @patch('utils.sync.legacy_segment_core._download_audio_bytes')
     def test_speaker_id_called_when_cache_provided(
-        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_download, mock_identify, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process
     ):
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._mock_words(), 'en')
         mock_process.return_value = MagicMock(id='test-id')
@@ -1317,18 +1309,21 @@ class TestProcessSegmentSpeakerIdIntegration:
         mock_download.assert_called_once()
         mock_identify.assert_called_once()
 
-    @patch('utils.sync.pipeline.process_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    @patch('utils.sync.pipeline.identify_speakers_for_segments')
-    @patch('utils.sync.pipeline._download_audio_bytes')
+    @patch('utils.sync.legacy_segment_core.process_conversation')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
+    @patch('utils.sync.legacy_segment_core.identify_speakers_for_segments')
+    @patch('utils.sync.legacy_segment_core._download_audio_bytes')
     def test_no_cache_skips_download_but_runs_identification(
-        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_process
+        self, mock_download, mock_identify, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_process
     ):
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._mock_words(), 'en')
         mock_process.return_value = MagicMock(id='test-id')
@@ -1352,30 +1347,6 @@ class TestProcessSegmentSpeakerIdIntegration:
         mock_identify.assert_called_once()
 
 
-class TestSyncEndpointSpeakerIdWiring:
-    """Verify sync_local_files builds speaker embeddings cache."""
-
-    @staticmethod
-    def _read_sync_source():
-        sync_path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py')
-        with open(sync_path, encoding='utf-8') as f:
-            return f.read()
-
-    def test_endpoint_builds_embeddings_cache(self):
-        """sync_local_files must call build_person_embeddings_cache."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_body = source[fn_start:]
-        assert 'build_person_embeddings_cache' in fn_body
-
-    def test_endpoint_passes_cache_to_thread(self):
-        """Each thread must receive person_embeddings_cache as an argument."""
-        source = self._read_sync_source()
-        fn_start = source.index('async def sync_local_files(')
-        fn_body = source[fn_start:]
-        assert 'person_embeddings_cache' in fn_body
-
-
 # ---------------------------------------------------------------------------
 # Additional coverage: download, exception handling, boundaries, propagation
 # ---------------------------------------------------------------------------
@@ -1384,9 +1355,9 @@ class TestSyncEndpointSpeakerIdWiring:
 class TestDownloadAudioBytes:
     """Verify _download_audio_bytes handles success and failure."""
 
-    @patch('utils.sync.pipeline.httpx')
+    @patch('utils.sync.legacy_segment_core.httpx')
     def test_download_success(self, mock_httpx):
-        from utils.sync.pipeline import _download_audio_bytes
+        from utils.sync.legacy_segment_core import _download_audio_bytes
 
         mock_resp = MagicMock()
         mock_resp.content = b'wav-bytes'
@@ -1397,9 +1368,9 @@ class TestDownloadAudioBytes:
         assert result == b'wav-bytes'
         mock_httpx.get.assert_called_once_with('http://example.com/audio.wav', timeout=60.0)
 
-    @patch('utils.sync.pipeline.httpx')
+    @patch('utils.sync.legacy_segment_core.httpx')
     def test_download_failure_returns_none(self, mock_httpx):
-        from utils.sync.pipeline import _download_audio_bytes
+        from utils.sync.legacy_segment_core import _download_audio_bytes
 
         mock_httpx.get.side_effect = Exception("Connection refused")
 
@@ -1407,7 +1378,6 @@ class TestDownloadAudioBytes:
         assert result is None
 
 
-@patch('utils.sync.pipeline.run_blocking', MagicMock())
 class TestSpeakerIdExceptionHandling:
     """Verify process_segment swallows speaker ID exceptions gracefully."""
 
@@ -1419,17 +1389,22 @@ class TestSpeakerIdExceptionHandling:
         ]
 
     @patch('utils.conversations.lifecycle.ingest_sync_conversation')
-    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
-    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
-    @patch('utils.sync.pipeline.prerecorded')
-    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
-    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    @patch('utils.sync.pipeline.identify_speakers_for_segments', side_effect=RuntimeError("embedding API down"))
-    @patch('utils.sync.pipeline._download_audio_bytes', return_value=b'audio')
+    @patch('utils.sync.legacy_segment_core.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.legacy_segment_core.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.legacy_segment_core.prerecorded')
+    @patch('utils.sync.legacy_segment_core.schedule_syncing_temporal_file_deletion')
+    @patch(
+        'utils.sync.legacy_segment_core.get_syncing_file_temporal_signed_url',
+        return_value='http://example.com/audio.wav',
+    )
+    @patch(
+        'utils.sync.legacy_segment_core.identify_speakers_for_segments', side_effect=RuntimeError("embedding API down")
+    )
+    @patch('utils.sync.legacy_segment_core._download_audio_bytes', return_value=b'audio')
     def test_speaker_id_exception_does_not_break_processing(
-        self, mock_download, mock_identify, mock_url, mock_delete, mock_dg, mock_ts, mock_closest, mock_intake
+        self, mock_download, mock_identify, mock_url, mock_schedule, mock_dg, mock_ts, mock_closest, mock_intake
     ):
-        from utils.sync.pipeline import process_segment
+        from utils.sync.legacy_segment_core import process_segment
 
         mock_dg.return_value = (self._mock_words(), 'en')
         assigned = _make_assigned_conversation()
@@ -1479,10 +1454,10 @@ class TestSpeakerIdBoundaries:
         clip = evidence.clips[0][0] if evidence.clips else None  # 0.99s < 1.0s
         assert clip is None
 
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_speaker_id_none_normalized_to_zero(self, mock_extract):
         """Segments with speaker_id=None should be treated as speaker_id=0."""
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         mock_extract.return_value = np.ones((1, 512), dtype=np.float32)
 
@@ -1498,11 +1473,11 @@ class TestSpeakerIdBoundaries:
         # Should be grouped under speaker_id=0, and still get voice matched
         assert segments[0].person_id == 'p1'
 
-    @patch('utils.sync.pipeline.users_db')
-    @patch('utils.sync.pipeline.extract_embedding_from_bytes')
+    @patch('utils.sync.legacy_segment_core.users_db')
+    @patch('utils.sync.legacy_segment_core.extract_embedding_from_bytes')
     def test_diarized_text_match_propagates_to_all_speaker_segments(self, mock_extract, mock_users_db):
         """When text detection matches a diarized speaker, all segments with that speaker_id get assigned."""
-        from utils.sync.pipeline import identify_speakers_for_segments
+        from utils.sync.legacy_segment_core import identify_speakers_for_segments
 
         # Embedding doesn't match anyone
         mock_extract.return_value = np.zeros((1, 512), dtype=np.float32)

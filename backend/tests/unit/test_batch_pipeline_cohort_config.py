@@ -5,8 +5,6 @@ from pathlib import Path
 import pytest
 import yaml
 
-from config.batch_pipeline import recovery_owners
-
 ROOT = Path(__file__).resolve().parents[2]
 UID = 'vi7SA9ckQCe4ccobWNxlbdcNdC23'
 SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
@@ -87,8 +85,6 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest,
     assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in listen_chart_envs[1]
     assert listen_chart_envs[1]['BATCH_PIPELINE_ENABLED'] == 'true'
     prod_hosts = hosts(manifest['prod'])
-    assert prod_hosts['backend-sync']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '100'
-    assert prod_hosts['backend-sync-backfill']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '0'
     assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
 
 
@@ -96,11 +92,8 @@ def test_prod_sync_redrive_and_summary_deadline_manifest_fail_safe(manifest, mon
     from config import summary_guarantee
 
     prod_hosts = hosts(manifest['prod'])
-    for service in ('backend-sync', 'backend-sync-backfill'):
-        env = prod_hosts[service]
-        assert env['SYNC_DURABLE_REDRIVE_GUARD'] == {'value': 'true', 'category': 'rollout'}
-        assert env['SYNC_LEGACY_COMPLETION_CONVERGENCE'] == {'value': 'true', 'category': 'rollout'}
-    for service in ('backend', 'backend-integration', 'backend-listen'):
+    # Legacy-retire C11 deleted the redrive guard and its flags with legacy transcription.
+    for service in ('backend', 'backend-integration', 'backend-listen', 'backend-sync', 'backend-sync-backfill'):
         env = prod_hosts[service]
         assert 'SYNC_DURABLE_REDRIVE_GUARD' not in env
         assert 'SYNC_LEGACY_COMPLETION_CONVERGENCE' not in env

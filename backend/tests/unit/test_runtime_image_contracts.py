@@ -189,7 +189,7 @@ def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
     )
     assert 'utils.conversations.transcription_shadow' in closure
     assert 'utils.sync.speaker_identity' in closure
-    assert 'utils.sync.pipeline' not in closure
+    assert 'utils.sync.legacy_segment_core' not in closure
     assert not {dependency.split('.', 1)[0] for dependency in dependencies} & {
         'imageio_ffmpeg',
         'onnxruntime',

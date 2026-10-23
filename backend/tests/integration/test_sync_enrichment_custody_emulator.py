@@ -252,7 +252,7 @@ def test_loopback_http_acks_redirect_deferred_busy_and_real_deletion(custody, mo
     import uvicorn
     from routers import sync as router
     from utils.batch_pipeline import enrichment
-    from utils.sync import pipeline
+    from utils.sync import legacy_segment_core as pipeline
 
     client, uid, tasks, user = custody
     monkeypatch.setenv('OMI_ENV_STAGE', 'prod')
@@ -269,7 +269,7 @@ def test_loopback_http_acks_redirect_deferred_busy_and_real_deletion(custody, mo
         .get()
         .to_dict(),
     )
-    monkeypatch.setattr(router.uid_sequencer, 'production_fence_mode', lambda: None)
+    monkeypatch.setattr(router, 'get_sync_ledger_fence_mode', lambda: None)
 
     async def authenticate(authorization: str = Header('')):
         if authorization != 'Bearer local-emulator-task':

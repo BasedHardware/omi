@@ -1,14 +1,10 @@
 """Core hermetic E2E coverage for high-churn backend flows."""
 
-from testing.e2e.sync_helpers import patch_fresh_sync_lane
-import asyncio
 import json
 import sys
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 
-from fakes.firestore import read_conversation, seed_conversation
 from fakes.stt import fake_suggested_transcript_event
 from listen_test_helpers import (
     is_conversation_session_event,
@@ -162,100 +158,3 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
     assert persisted_body["status"] == "completed"
     assert persisted_body["structured"]["title"] == "Finalized hermetic listen session"
     assert persisted_body["transcript_segments"] == emitted_segments
-
-
-def test_sync_v2_job_runs_pipeline_and_polls_completed_result(client, auth_headers, monkeypatch):
-    """The v2 sync API should create, run, and expose a completed job against hermetic fakes."""
-    patch_fresh_sync_lane(monkeypatch)
-    scheduled = []
-    sync_conversation_id = "sync-core-flow-conversation"
-
-    def capture_background_task(coro, *, name):
-        scheduled.append((name, coro))
-        return None
-
-    def fake_decode_files_to_wav(raw_paths):
-        assert raw_paths
-        wav_paths = []
-        for raw_path in raw_paths:
-            wav_path = str(Path(raw_path).with_suffix(".wav"))
-            Path(wav_path).write_bytes(b"fake wav bytes")
-            wav_paths.append(wav_path)
-        return wav_paths
-
-    def fake_retrieve_vad_segments(path, segmented_paths, errors=None):
-        from utils.sync.files import get_timestamp_from_path
-
-        segment_path = f"{Path(path).parent}/{int(get_timestamp_from_path(path))}.wav"
-        Path(segment_path).write_bytes(b"fake wav bytes")
-        segmented_paths.add(segment_path)
-
-    def fake_process_segment(
-        path,
-        uid,
-        response,
-        lock,
-        errors,
-        source,
-        is_locked,
-        transcription_prefs,
-        person_embeddings_cache,
-        target_conversation_id,
-        turnstile,
-        **kwargs,
-    ):
-        if turnstile:
-            turnstile.complete(path)
-        seed_conversation(
-            uid,
-            _completed_conversation_payload(sync_conversation_id, source=getattr(source, "value", source)),
-        )
-        with lock:
-            response["new_memories"].add(sync_conversation_id)
-        return True
-
-    sync_router = sys.modules["routers.sync"]
-    sync_pipeline = sys.modules["utils.sync.pipeline"]
-    monkeypatch.setattr(sync_router, "start_background_task", capture_background_task)
-    monkeypatch.setattr(sync_pipeline, "decode_files_to_wav", fake_decode_files_to_wav)
-    monkeypatch.setattr(sync_pipeline, "retrieve_vad_segments", fake_retrieve_vad_segments)
-    monkeypatch.setattr(sync_pipeline, "get_wav_duration", lambda path: 2.0)
-    monkeypatch.setattr(sync_pipeline, "process_segment", fake_process_segment)
-    monkeypatch.setattr(sync_pipeline, "_reprocess_merged_conversations", lambda uid, response, on_fenced=None: None)
-    monkeypatch.setattr(sync_pipeline, "build_person_embeddings_cache", lambda uid: {})
-    monkeypatch.setattr(sync_router, "get_hard_restriction_status", lambda uid: (False, None))
-    monkeypatch.setattr(sync_router, "has_transcription_credits", lambda uid: True)
-    monkeypatch.setattr(sync_router, "is_cloud_tasks_dispatch_enabled", lambda: False)
-    monkeypatch.setattr(sync_router, "has_byok_keys", lambda: False)
-    monkeypatch.setattr(sync_pipeline, "FAIR_USE_ENABLED", False)
-
-    response = client.post(
-        "/v2/sync-local-files",
-        headers=auth_headers,
-        files={
-            "files": (
-                "audio_omi_pcm16_16000_1_1760000000.bin",
-                b"fake-pcm-frame",
-                "application/octet-stream",
-            )
-        },
-    )
-    assert response.status_code == 202, response.text
-    created_job = response.json()
-    assert created_job["status"] == "queued"
-    assert created_job["total_files"] == 1
-    assert len(scheduled) == 1
-    assert scheduled[0][0].startswith("sync_pipeline:")
-
-    asyncio.run(scheduled[0][1])
-
-    status = client.get(f"/v2/sync-local-files/{created_job['job_id']}", headers=auth_headers)
-    assert status.status_code == 200, status.text
-    status_body = status.json()
-    assert status_body["status"] == "completed"
-    assert status_body["successful_segments"] == 1
-    assert status_body["result"]["new_memories"] == [sync_conversation_id]
-
-    conversation = read_conversation("123", sync_conversation_id)
-    assert conversation is not None
-    assert conversation["status"] == "completed"

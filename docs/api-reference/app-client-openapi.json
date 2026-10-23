@@ -82978,7 +82978,7 @@
     },
     "/v2/sync-local-files": {
       "post": {
-        "description": "Async version of sync-local-files. Saves raw files and returns 202\nimmediately, then runs the full pipeline (decode → VAD → STT → LLM) as\nan async background task. The app polls GET /v2/sync-local-files/{job_id}.",
+        "description": "Save raw files and admit supported uploads to the batch pipeline.\nLegacy-owned content is answered by its durable fence; new legacy jobs are retired.\nThe app polls GET /v2/sync-local-files/{job_id}.",
         "operationId": "sync_local_files_v2_v2_sync_local_files_post",
         "parameters": [
           {

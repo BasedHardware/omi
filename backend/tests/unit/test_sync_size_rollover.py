@@ -24,7 +24,7 @@ from tests.unit.test_sync_cross_job_assignment import _smart_merge_pair, chunk, 
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from utils.sync import assignment
 from utils.sync.assignment_errors import SyncAssignmentSuperseded
-from utils.sync.pipeline import _firestore_doc_kind
+from utils.sync.legacy_segment_core import _firestore_doc_kind
 
 _LONG = 'An unusually long stretch of narration that fills the conversation. ' * 60
 

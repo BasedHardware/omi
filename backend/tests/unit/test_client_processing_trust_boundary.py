@@ -1457,7 +1457,7 @@ PINNED_INVALIDATION_OPT_OUTS: FrozenSet[tuple[str, str]] = frozenset(
 _SEGMENT_MUTATION_FILES: tuple[str, ...] = (
     'routers/conversations.py',
     'routers/listen/transcripts.py',
-    'utils/sync/pipeline.py',
+    'utils/sync/legacy_segment_core.py',
     'utils/conversations/process_conversation.py',
 )
 
