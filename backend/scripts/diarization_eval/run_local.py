@@ -129,12 +129,14 @@ def reference_text(path, recording, wav, engine):
         and artifact.get('crop_sha256') == file_digest(crop)
         and provenance.get('engine') == engine
         and provenance.get('repo') == expected['repo']
+        and lock.get('repo') == expected['repo']
         and provenance.get('revision') == lock['revision']
         and len(lock['revision']) == 40
         and provenance.get('model_files') == lock['files']
         and lock['files']
         and provenance.get('cloud_inference_calls') == 0
         and provenance.get('clock') == 'crop'
+        and provenance.get('role') == ('model_reference_not_truth' if 'large-v3' in engine else 'baseline')
         and fingerprint(provenance.get('decoding')) == fingerprint(expected['decoding'])
         and artifact.get('cache_key')
         == artifact_key(
