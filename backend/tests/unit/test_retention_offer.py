@@ -55,12 +55,18 @@ def test_monthly_paid_subscription_is_eligible_with_half_price():
         (_sub(discounts=['di_1']), _customer(), 'already_discounted'),
         (_sub(), _customer(used=True), 'already_used'),
         (
-            _sub(items={'data': [{'price': {'unit_amount': 26991, 'currency': 'usd', 'recurring': {'interval': 'year'}}}]}),
+            _sub(
+                items={
+                    'data': [{'price': {'unit_amount': 26991, 'currency': 'usd', 'recurring': {'interval': 'year'}}}]
+                }
+            ),
             _customer(),
             'not_monthly',
         ),
         (
-            _sub(items={'data': [{'price': {'unit_amount': 0, 'currency': 'usd', 'recurring': {'interval': 'month'}}}]}),
+            _sub(
+                items={'data': [{'price': {'unit_amount': 0, 'currency': 'usd', 'recurring': {'interval': 'month'}}}]}
+            ),
             _customer(),
             'free_price',
         ),
@@ -128,7 +134,9 @@ class _FakeStripe:
         params = {k: v for k, v in kw.items() if k != 'idempotency_key'}
         if key in self.idempotency:
             if self.idempotency[key] != params:
-                raise ro.stripe.IdempotencyError('Keys for idempotent requests can only be used with the same parameters')
+                raise ro.stripe.IdempotencyError(
+                    'Keys for idempotent requests can only be used with the same parameters'
+                )
             return True
         self.idempotency[key] = params
         return False
