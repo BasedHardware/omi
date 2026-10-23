@@ -122,4 +122,50 @@ void main() {
     await Future<void>.delayed(Duration.zero);
     expect(provider.live, isNull);
   });
+
+  group('ending the live conversation', () {
+    test('the count restarts at 0 and the next episode never jumps it back', () {
+      final anchor = LiveStartAnchor();
+      final end = _t0.add(const Duration(minutes: 40));
+      expect(anchor.resolve(episode: _episode(_t0), captureStart: _t0, streaming: true, now: end), _t0);
+      anchor.restart(end);
+      expect(anchor.resolve(episode: null, captureStart: _t0, streaming: true, now: end), end);
+      // Not streaming for a moment (the pendant between health updates) still counts from the restart.
+      final quiet = end.add(const Duration(seconds: 20));
+      expect(anchor.resolve(episode: null, captureStart: null, streaming: false, now: quiet), end);
+      // The next episode opens at its first words a minute later; the count keeps the restart.
+      final firstWords = end.add(const Duration(minutes: 1));
+      final next = _episode(firstWords, id: 'ep2');
+      expect(anchor.resolve(episode: next, captureStart: _t0, streaming: true, now: firstWords), end);
+      expect(anchor.resolve(episode: next, captureStart: _t0, streaming: true, now: firstWords), end);
+    });
+
+    test('the live episode closes at once and is never adopted again', () async {
+      final calls = <(String, String?)>[];
+      final live = _episode(_t0);
+      final provider = EpisodeProvider(
+        clock: () => _t0.add(const Duration(minutes: 40)),
+        fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: live)),
+        wrapUp: (id, {conversationId}) async {
+          calls.add((id, conversationId));
+          return ApiSuccess(live);
+        },
+      );
+      provider.debugSetLive(live);
+      provider.onLiveFinalized();
+      expect(provider.live, isNull);
+      expect(calls, [('ep1', null)]);
+      // The server can still report it live for a few minutes; it must not come back.
+      await provider.refreshLive();
+      expect(provider.live, isNull);
+      // A later episode is adopted normally.
+      final next = _episode(_t0.add(const Duration(minutes: 41)), id: 'ep2');
+      final second = EpisodeProvider(fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: next)));
+      await second.refreshLive();
+      expect(second.live?.id, 'ep2');
+      // Ending with nothing live still restarts the clock and makes no call.
+      provider.onLiveFinalized();
+      expect(calls, hasLength(1));
+    });
+  });
 }

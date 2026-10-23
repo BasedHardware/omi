@@ -32,6 +32,7 @@ import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
 import 'package:omi/pages/conversations/background_conversations.dart';
+import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
@@ -50,7 +51,7 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, conversation, recording, groupSpacer }
+enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, processing, conversation, recording, groupSpacer }
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -253,6 +254,30 @@ List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTi
       r.kind == _ConversationListRowKind.dateHeader && r.isFirst
           ? (kind: r.kind, date: r.date, isFirst: false, conversation: null, recording: null, conversationIndex: -1)
           : r,
+  ];
+}
+
+/// One row per conversation still processing, right under Today's live row: the conversation the
+/// person just ended (Wrap up, a pendant double-tap) shows at once, then turns into its own row.
+List<_ConversationListRow> _withProcessingRows(
+    List<_ConversationListRow> rows, List<ServerConversation> processing, DateTime now) {
+  if (processing.isEmpty) return rows;
+  final marked = _withTodayRow(rows, now, _ConversationListRowKind.processing);
+  final at = marked.indexWhere((r) => r.kind == _ConversationListRowKind.processing);
+  if (at < 0) return rows;
+  final slot = marked[at];
+  return [
+    ...marked.take(at),
+    for (var i = 0; i < processing.length; i++)
+      (
+        kind: _ConversationListRowKind.processing,
+        date: slot.date,
+        isFirst: slot.isFirst && i == 0,
+        conversation: processing[i],
+        recording: null,
+        conversationIndex: -1,
+      ),
+    ...marked.skip(at + 1),
   ];
 }
 
@@ -601,8 +626,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
         );
-        final conversationRows =
+        final withLive =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
+        // Only the default view: a search or folder shows what it matched.
+        final conversationRows = showRecordings && !convoProvider.isSelectionModeActive
+            ? _withProcessingRows(withLive, snapshot.processingConversations, DateTime.now())
+            : withLive;
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -751,6 +780,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           children: [
                             if (row.isFirst) DateListItem(date: row.date, isFirst: true),
                             const LiveEpisodeRow(),
+                          ],
+                        );
+                      case _ConversationListRowKind.processing:
+                        return Column(
+                          key: ValueKey('processing_${row.conversation!.id}'),
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (row.isFirst) DateListItem(date: row.date, isFirst: true),
+                            ProcessingConversationRow(conversation: row.conversation!),
                           ],
                         );
                       case _ConversationListRowKind.conversation:

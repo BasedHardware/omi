@@ -971,6 +971,11 @@ class CaptureController extends ChangeNotifier
   int _voiceCommandSubmissionGeneration = 0;
   bool _voiceCommandStartedDuringOnboarding = false;
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
+
+  /// When the person last ended the live conversation. A second double-tap within
+  /// [_finalizeDebounce] would only end a near-empty stretch, so it is ignored.
+  DateTime? _lastLiveFinalizeAt;
+  static const Duration _finalizeDebounce = Duration(seconds: 3);
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
 
@@ -2062,8 +2067,12 @@ class CaptureController extends ChangeNotifier
         }
       } else {
         // End conversation and process (default)
+        final last = _lastLiveFinalizeAt;
+        if (last != null && DateTime.now().difference(last) < _finalizeDebounce) return;
         Logger.debug("Double tap: processing conversation");
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+        // The tap gives no other feedback on the phone; the processing row follows.
+        HapticFeedback.lightImpact();
         forceProcessingCurrentConversation();
       }
       return;
@@ -3797,6 +3806,9 @@ class CaptureController extends ChangeNotifier
     // Add the placeholder before reset so a concurrent rebuild cannot drop it.
     final placeholderOwner = ++_processingPlaceholderOwner;
     externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    // The live episode closes now and the next one counts from this moment.
+    _lastLiveFinalizeAt = DateTime.now();
+    externalActions.onLiveFinalized();
 
     await phoneSync.finalizeCurrentSession();
     if (lifetime.isClosed ||

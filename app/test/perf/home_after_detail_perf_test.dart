@@ -44,6 +44,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
+import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
 import 'package:omi/services/wals/wal.dart' show Wal;
 import 'package:omi/services/wals/wal_interfaces.dart';
@@ -430,6 +431,22 @@ void main() {
   tearDown(() {
     AnalyticsManager.resetForTesting();
     VisibilityDetectorController.instance.updateInterval = const Duration(milliseconds: 500);
+  });
+
+  testWidgets('a conversation the person just ended shows as a processing row under the live row', (tester) async {
+    final home = await _pumpHome(tester);
+    home.conversations.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    await tester.pump();
+    final row = find.byKey(const Key('home_processing_row'));
+    expect(row, findsOneWidget);
+    expect(find.descendant(of: row, matching: find.text('Processing…')), findsOneWidget);
+    expect(tester.getTopLeft(row).dy, greaterThan(tester.getTopLeft(find.byType(LiveEpisodeRow)).dy));
+    expect(tester.getTopLeft(row).dy, lessThan(tester.getTopLeft(find.byKey(const ValueKey('conv-0'))).dy));
+    // The server's row replaces it, then the finished conversation takes its own row.
+    home.conversations.removeProcessingConversation(OptimisticProcessingPlaceholder.id);
+    await tester.pump();
+    expect(find.byKey(const Key('home_processing_row')), findsNothing);
+    await _drainAndUnmount(tester);
   });
 
   testWidgets('background conversations leave Home for the daily recap, with no line or toggle', (tester) async {
