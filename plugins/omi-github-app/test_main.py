@@ -1084,6 +1084,60 @@ class OAuthAndHtmlSinkSanitizationTests(unittest.TestCase):
             self.assertNotIn('"><script>alert("auth_uid")</script>', resp.content)
 
 
+class OAuthCallbackRebindTests(unittest.TestCase):
+    """Already-linked users must recover, while other identities stay blocked."""
+
+    EXISTING = {
+        "uid": "u1",
+        "access_token": "old-token",
+        "github_username": "Octocat",
+        "available_repos": [],
+        "selected_repo": "",
+    }
+
+    def tearDown(self):
+        main.oauth_states.clear()
+
+    def _run_callback(self, login, user=None, request=None, state="rebind_state"):
+        main.oauth_states[state] = "u1"
+        with patch.object(main.SimpleUserStorage, "get_user", return_value=user), patch.object(
+            main.github_client, "exchange_code_for_token", return_value={"access_token": "new-token"}
+        ), patch.object(
+            main.github_client, "get_user_info", return_value={"login": login}
+        ), patch.object(
+            main.github_client, "list_user_repos", return_value=[]
+        ), patch.object(
+            main.SimpleUserStorage, "save_user"
+        ) as save_user:
+            resp = asyncio.run(main.auth_callback(request or _Request(), code="c", state=state))
+        return resp, save_user
+
+    def test_same_identity_reauth_recovers_a_linked_user_without_a_session(self):
+        resp, save_user = self._run_callback("octocat", user=self.EXISTING)
+        self.assertEqual(resp.status_code, 200)
+        save_user.assert_called_once()
+        self.assertEqual(resp.cookie["key"], main.COOKIE_NAME)
+
+    def test_different_identity_cannot_rebind_without_a_session(self):
+        resp, save_user = self._run_callback("attacker", user=self.EXISTING)
+        self.assertEqual(resp.status_code, 403)
+        self.assertIn("Already Connected", resp.content)
+        save_user.assert_not_called()
+        self.assertFalse(hasattr(resp, "cookie"))
+
+    def test_valid_session_can_rebind_a_different_identity(self):
+        request = _Request()
+        request.cookies = {main.COOKIE_NAME: main.session_value("u1")}
+        resp, save_user = self._run_callback("attacker", user=self.EXISTING, request=request)
+        self.assertEqual(resp.status_code, 200)
+        save_user.assert_called_once()
+
+    def test_first_link_for_an_unlinked_uid_is_still_allowed(self):
+        resp, save_user = self._run_callback("octocat", user=None)
+        self.assertEqual(resp.status_code, 200)
+        save_user.assert_called_once()
+
+
 class JsonEndpointErrorHandlingTests(unittest.TestCase):
     def test_update_repo_exception_returns_stable_error(self):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
@@ -1119,6 +1173,11 @@ class JsonEndpointErrorHandlingTests(unittest.TestCase):
         with patch.object(main.SimpleUserStorage, "get_user", side_effect=RuntimeError("db crash: /secret/path")):
             resp = asyncio.run(main.test_agent(_settings_request("u1", {"uid": "u1", "prompt": "hello"})))
             self.assertEqual(resp, {"success": False, "error": "Failed to execute agent test"})
+
+    def test_test_agent_missing_session_surfaces_401(self):
+        with self.assertRaises(main.HTTPException) as ctx:
+            asyncio.run(main.test_agent(_Request({"uid": "u1", "prompt": "hello"})))
+        self.assertEqual(ctx.exception.status_code, 401)
 
 
 if __name__ == "__main__":

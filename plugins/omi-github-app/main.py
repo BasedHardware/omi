@@ -1414,24 +1414,6 @@ async def auth_callback(
             status_code=400
         )
 
-
-    if SimpleUserStorage.is_authenticated(uid) and not session_matches(request, uid):
-        return HTMLResponse(
-            content="""
-            <html>
-                <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
-                <body>
-                    <div class="container">
-                        <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
-                            <h2 style="font-size: 24px; margin-bottom: 12px;">Already Connected</h2>
-                            <p style="margin-bottom: 0;">This Omi account is already linked. Open the GitHub app settings from Omi to reconnect.</p>
-                        </div>
-                    </div>
-                </body>
-            </html>
-            """,
-            status_code=403,
-        )
     try:
         # Exchange code for access token
         token_data = github_client.exchange_code_for_token(code)
@@ -1440,6 +1422,39 @@ async def auth_callback(
         # Get user info
         user_info = github_client.get_user_info(access_token)
         github_username = user_info.get("login", "Unknown")
+
+        # A uid that already has a stored token may only be rebound by a browser
+        # holding its signed settings session, or by re-authenticating the same
+        # GitHub identity. The identity check lets users who linked before this
+        # guard shipped recover access themselves, while a different GitHub
+        # account still cannot overwrite the existing binding.
+        existing_user = SimpleUserStorage.get_user(uid)
+        if existing_user and existing_user.get("access_token"):
+            stored_username = (existing_user.get("github_username") or "").casefold()
+            new_username = (github_username or "").casefold()
+            same_identity = (
+                bool(stored_username)
+                and stored_username != "unknown"
+                and stored_username == new_username
+            )
+            if not session_matches(request, uid) and not same_identity:
+                oauth_states.pop(state, None)
+                return HTMLResponse(
+                    content="""
+                    <html>
+                        <head><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+                        <body>
+                            <div class="container">
+                                <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
+                                    <h2 style="font-size: 24px; margin-bottom: 12px;">Already Connected</h2>
+                                    <p style="margin-bottom: 0;">This Omi account is already linked to a different GitHub account. Open the GitHub app settings from Omi to reconnect.</p>
+                                </div>
+                            </div>
+                        </body>
+                    </html>
+                    """,
+                    status_code=403,
+                )
 
         # Get user's repositories
         repos = github_client.list_user_repos(access_token)
@@ -1731,16 +1746,23 @@ async def test_agent(request: Request):
     """Send a direct test command to the selected agent provider."""
     try:
         body = await request.json()
-        uid = body.get("uid")
-        prompt = body.get("prompt")
+    except Exception as e:
+        log(f"Error reading agent test request: {e}")
+        return {"success": False, "error": "Failed to execute agent test"}
+
+    uid = body.get("uid")
+    prompt = body.get("prompt")
+    if not uid or not prompt:
+        return {"success": False, "error": "User ID and prompt are required"}
+
+    # Run outside the try so a missing or invalid session surfaces as 401/503
+    # instead of being reported as a generic agent-test failure.
+    require_settings_session(request, uid)
+
+    try:
         repo = body.get("repo")
         provider_override = body.get("provider")
         send_all = bool(body.get("all"))
-
-        if not uid or not prompt:
-            return {"success": False, "error": "User ID and prompt are required"}
-
-        require_settings_session(request, uid)
 
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):

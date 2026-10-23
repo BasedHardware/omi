@@ -9,8 +9,10 @@ After a successful GitHub OAuth callback the plugin now issues an HMAC-signed
 session cookie bound to that uid, and every settings write requires the cookie
 to name the same uid with a valid signature. ``/auth/callback`` also refuses to
 rebind a uid that already has a stored access token unless that signed session
-is present, so an attacker cannot overwrite an existing GitHub binding by
-starting OAuth for someone else's uid.
+is present or the OAuth token belongs to the same GitHub identity that is
+already stored, so an attacker cannot overwrite an existing GitHub binding by
+starting OAuth for someone else's uid. The identity path lets users who linked
+before this guard shipped recover their own session by reconnecting.
 
 Fails closed: 503 when ``GITHUB_SETTINGS_SECRET`` is unset, 401 when the cookie
 is missing, names another uid, or carries a bad signature. Mirrors the
