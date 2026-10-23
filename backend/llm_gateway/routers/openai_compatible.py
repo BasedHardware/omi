@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, Request
 import httpx
 import os
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.requests import ClientDisconnect
 
 from llm_gateway.gateway.accounting import (
     AccountingContext,
@@ -36,6 +37,7 @@ from llm_gateway.gateway.credentials import (
     parse_forwarded_byok_headers,
 )
 from llm_gateway.gateway.errors import (
+    GatewayClientDisconnectedError,
     GatewayError,
     GatewayErrorCode,
     GatewayInvalidRouteConfigError,
@@ -155,6 +157,20 @@ async def create_chat_completion(
             content=with_dream_usage(result.response, resolved_route.lane.lane_id, attempt_trace),
             headers=_jit_receipt_headers(accounting_context, attempt_trace),
         )
+    except GatewayClientDisconnectedError as exc:
+        if accounting_context is not None:
+            schedule_attempt_trace(accounting_context, attempt_trace)
+        _safe_observe(
+            lambda: observe_request_rejection(
+                api_surface='openai_chat_completions',
+                error_class='invalid_request',
+                request_id=request_id,
+                error=exc,
+            ),
+            request_id=request_id,
+            api_surface='openai_chat_completions',
+        )
+        return await _discard_abandoned_body(exc)
     except asyncio.CancelledError:
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, attempt_trace)
@@ -267,8 +283,22 @@ def _safe_observe(fn: Callable[[], None], *, request_id: str, api_surface: str) 
 
 
 async def _request_json(request: Request) -> dict[str, Any]:
+    # Failure-Class: FC-peer-close-aborts-owed-write — a caller that closed the
+    # connection before its body arrived is an expected peer event, not a
+    # gateway fault. Starlette raises ClientDisconnect from the body read and
+    # it used to escape every JSON surface as an unhandled ASGI traceback; it
+    # is classified here, at the one seam all surfaces share, before any
+    # surface's own accounting runs. The same transport-level OSError family
+    # (raw socket close under the pinned uvicorn/starlette pairing) belongs to
+    # the same expected peer departure and is classified beside it; anything
+    # else still propagates unclassified.
     try:
         body = await request.json()
+    except (ClientDisconnect, OSError) as exc:
+        raise GatewayClientDisconnectedError(
+            'request body not received: client disconnected',
+            rejection_reason='request_body_disconnected',
+        ) from exc
     except ValueError as exc:
         raise GatewayInvalidRequestError(
             'request body must be valid JSON', rejection_reason='request_body_json'
@@ -276,6 +306,21 @@ async def _request_json(request: Request) -> dict[str, Any]:
     if not isinstance(body, dict):
         raise GatewayInvalidRequestError('request body must be an object', rejection_reason='request_body_object')
     return cast(dict[str, Any], body)
+
+
+async def _discard_abandoned_body(exc: GatewayClientDisconnectedError) -> JSONResponse:
+    """Answer a classified disconnect without the handler's provider work.
+
+    A caller that vanished cannot read any response, but one that half-closed
+    after sending (or a probe reusing the connection race) still can; the 400
+    carries the same OpenAI-shaped error envelope as other request rejections.
+    Returning instead of re-raising also keeps uvicorn's logger free of the
+    'Exception in ASGI application' traceback the escape produced.
+    """
+    return JSONResponse(
+        status_code=400,
+        content={'error': {'message': exc.message, 'type': 'invalid_request_error', 'code': exc.code.value}},
+    )
 
 
 def _resolve_credentials(request: Request, caller: ServiceAuthDependency) -> CredentialContext:
@@ -354,9 +399,22 @@ def _status_code_for_error(exc: GatewayError) -> int:
 
 @router.post('/v1/images/generations')
 async def create_image_generation(request: Request, caller: ServiceAuthDependency):
-    request_body = await _request_json(request)
-    _normalize_image_request_defaults(request_body)
     request_id = request_id_for(request)
+    try:
+        request_body = await _request_json(request)
+    except GatewayClientDisconnectedError as exc:
+        _safe_observe(
+            lambda: observe_request_rejection(
+                api_surface='openai_images_generations',
+                error_class='invalid_request',
+                request_id=request_id,
+                error=exc,
+            ),
+            request_id=request_id,
+            api_surface='openai_images_generations',
+        )
+        return await _discard_abandoned_body(exc)
+    _normalize_image_request_defaults(request_body)
     context = _accounting_context(
         request_id=request_id,
         caller=caller,

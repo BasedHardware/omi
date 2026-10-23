@@ -18,7 +18,7 @@ from llm_gateway.gateway.proactivity_budget import attempt_scope, context_from_r
 from llm_gateway.gateway.accounting_sink import schedule_attempt_trace
 from llm_gateway.gateway.auth import ServiceAuthDependency
 from llm_gateway.gateway.config_loader import GatewayConfig
-from llm_gateway.gateway.errors import GatewayError
+from llm_gateway.gateway.errors import GatewayClientDisconnectedError, GatewayError
 from llm_gateway.gateway.executor import ProviderRegistry, execute_systemone
 from llm_gateway.gateway.metrics import (
     observe_error,
@@ -33,6 +33,7 @@ from llm_gateway.gateway.schemas import RouteServingClass
 from llm_gateway.routers.dependencies import get_gateway_config, get_provider_registry
 from llm_gateway.routers.openai_compatible import (
     _accounting_context,  # pyright: ignore[reportPrivateUsage]
+    _discard_abandoned_body,  # pyright: ignore[reportPrivateUsage]
     _error_response,  # pyright: ignore[reportPrivateUsage]
     _request_json,  # pyright: ignore[reportPrivateUsage]
     _resolve_credentials,  # pyright: ignore[reportPrivateUsage]
@@ -98,6 +99,19 @@ async def create_systemone(
             request_id=request_id,
         )
         return JSONResponse(content=response)
+    except GatewayClientDisconnectedError as exc:
+        if accounting_context is not None:
+            schedule_attempt_trace(accounting_context, attempt_trace)
+        _safe_observe(
+            lambda: observe_request_rejection(
+                api_surface=API_SURFACE,
+                error_class='invalid_request',
+                request_id=request_id,
+                error=exc,
+            ),
+            request_id=request_id,
+        )
+        return await _discard_abandoned_body(exc)
     except GatewayError as exc:
         if accounting_context is not None:
             schedule_attempt_trace(accounting_context, attempt_trace)

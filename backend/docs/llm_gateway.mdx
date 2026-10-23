@@ -577,6 +577,18 @@ The validator rejects streaming, tools, missing or invalid messages, non-text or
 
 Runtime fail-open means active route failure may use LKG only for failure classes allowed by the route artifact. Deploy/startup fail-closed means invalid LKG or invalid config prevents the service from starting. Do not use LKG for BYOK credential failures, capability mismatches, missing BYOK keys, or invalid config.
 
+### Client Disconnects At The Request-Body Read
+
+A caller that closes its connection before the JSON body finishes arriving is an expected peer event, not a gateway fault. Starlette raises `starlette.requests.ClientDisconnect` from the first body read; before the shared boundary classified it, that exception escaped every JSON surface (`/v1/chat/completions`, `/v1/embeddings`, `/v1/systemone`, `/v1/images/generations`, `/v1/messages`) as an unhandled ASGI traceback — a full `Exception in ASGI application` log entry per abandoned request, with no rejection metric and no classified error. Prod llm-gateway logged that shape at a steady ×7/30m in October 2026.
+
+The body-read boundary (`_request_json`, shared by the OpenAI-compatible surfaces) now wraps the disconnect — and the same transport-level `OSError` family — in `GatewayClientDisconnectedError` with rejection reason `request_body_disconnected` (a registered member of `INVALID_REQUEST_REJECTION_CODES`). Each surface's handler:
+
+- records the ordinary `llm_gateway_request_rejected{error_class="invalid_request"}` rejection metric with the bounded reason, so abandoned requests are counted instead of logged as tracebacks;
+- runs no provider work, route accounting, or attempt trace for a body that never arrived;
+- returns a bounded 400 in the surface's normal error envelope. A caller that already left never reads it, but the pinned uvicorn drops responses to disconnected transports quietly, so the reply cannot itself produce a new traceback.
+
+The anthropic `/v1/messages` surface keeps its HTTPException-based shape and classifies the same event as `request_body_disconnected` through its own rejection helper. Unknown receive failures (anything that is not a disconnect or transport `OSError`) still propagate unclassified.
+
 ## HTTP Surface
 
 `GET /ready` is implemented as a service-authenticated readiness check. It loads the same repo-local gateway config used by the route dependency, validates active/LKG artifacts through `load_gateway_config(prod_mode=True)`, and returns lane IDs plus route artifact count. Config validation failures return 503 with a generic message.

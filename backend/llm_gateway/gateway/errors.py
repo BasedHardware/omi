@@ -48,6 +48,7 @@ INVALID_REQUEST_REJECTION_CODES = frozenset(
         'proactivity_streaming',
         'request_body_json',
         'request_body_object',
+        'request_body_disconnected',
     }
 ) | {f'proactivity_admission.{reason}' for reason in PROACTIVITY_ADMISSION_REASONS}
 
@@ -109,6 +110,26 @@ class GatewayError(Exception):
 class GatewayInvalidRequestError(GatewayError):
     def __init__(self, message: str, *, param: str | None = None, rejection_reason: str | None = None) -> None:
         super().__init__(message, code=GatewayErrorCode.INVALID_REQUEST, param=param)
+        self.rejection_reason = rejection_reason
+
+
+class GatewayClientDisconnectedError(GatewayError):
+    """The caller abandoned the request before its body finished arriving.
+
+    This is the peer's event, not a gateway failure: the caller already ended
+    the exchange, so there is nothing to answer and no retry can succeed. The
+    error exists so the body-read boundary can classify the disconnect through
+    the gateway's normal vocabulary instead of letting Starlette's
+    ``ClientDisconnect`` escape as an unhandled ASGI failure — the shape prod
+    logged as a full traceback from every JSON surface's first read
+    (llm-gateway 2026-10: ``starlette.requests.ClientDisconnect`` ×7/30m, one
+    abandoned-request noise entry per occurrence, and no rejection metric).
+    Handlers may return it as a 400 for callers still listening, but callers
+    that left are gone: the disconnected transport drops the response quietly.
+    """
+
+    def __init__(self, message: str, *, rejection_reason: str) -> None:
+        super().__init__(message, code=GatewayErrorCode.INVALID_REQUEST)
         self.rejection_reason = rejection_reason
 
 

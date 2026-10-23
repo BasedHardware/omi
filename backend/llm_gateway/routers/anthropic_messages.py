@@ -12,6 +12,7 @@ from typing import Any, cast
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse, StreamingResponse
+from starlette.requests import ClientDisconnect
 
 from llm_gateway.gateway.accounting import (
     AccountingContext,
@@ -58,6 +59,14 @@ async def create_anthropic_message(
     request_id = request_id_for(request)
     try:
         request_body = await request.json()
+    except ClientDisconnect:
+        # Failure-Class: FC-peer-close-aborts-owed-write — a caller that closed
+        # its connection before the body arrived is an expected peer event.
+        # Classify it through the shared rejection metric instead of letting it
+        # escape as an unhandled ASGI traceback; nothing is owed to a caller
+        # that already left.
+        _observe_anthropic_request_rejection(request_id, 'request_body_disconnected')
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='request body not received') from None
     except ValueError as exc:
         _observe_anthropic_request_rejection(request_id, 'invalid_json')
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='request body must be valid JSON') from exc
