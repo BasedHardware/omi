@@ -87,8 +87,6 @@ def test_batch_pipeline_admission_is_configured_without_uid_allowlists(manifest,
     assert 'BATCH_PIPELINE_UID_ALLOWLIST' not in listen_chart_envs[1]
     assert listen_chart_envs[1]['BATCH_PIPELINE_ENABLED'] == 'true'
     prod_hosts = hosts(manifest['prod'])
-    assert prod_hosts['backend-sync']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '100'
-    assert prod_hosts['backend-sync-backfill']['SYNC_BACKFILL_ORDER_PERCENT']['value'] == '0'
     assert prod_hosts['backend-integration']['BATCH_PIPELINE_TERMINAL_EMPTY_DISPOSITION_ENABLED']['value'] == 'true'
 
 

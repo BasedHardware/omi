@@ -98,19 +98,6 @@ def test_default_on_call_sites_use_central_parser(monkeypatch, module, function,
     assert getattr(importlib.import_module('config.' + module), function)() is expected
 
 
-@pytest.mark.parametrize('token', ['on', 'true', 'TRUE', '1', 'yes'])
-def test_owner_concurrency_accepts_on_tokens_only_after_migration(monkeypatch, token):
-    from config.sync_owner_concurrency import preparation_width
-
-    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', token)
-    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY', '3')
-    assert preparation_width() == (3 if token == 'on' else 1)
-    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
-    assert preparation_width() == 3
-    monkeypatch.setenv('SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED', 'no')
-    assert preparation_width() == 1
-
-
 @pytest.mark.parametrize(
     'key,function',
     [
@@ -129,22 +116,6 @@ def test_explicit_child_disable_wins_over_repeat_work_in_serve(monkeypatch, key,
     assert not getattr(sync_reprocess, function)()
     monkeypatch.delenv(key)
     assert getattr(sync_reprocess, function)()
-
-
-def test_backfill_default_zero_is_gated_and_allowlist_still_wins(monkeypatch):
-    from utils.sync.backfill_order import newest_first
-
-    identity = 'synthetic-' + str(7)
-    monkeypatch.setenv('SYNC_BACKFILL_ORDER', 'newest')
-    monkeypatch.delenv('SYNC_BACKFILL_ORDER_PERCENT', raising=False)
-    monkeypatch.delenv('SYNC_BACKFILL_ORDER_UID_ALLOWLIST', raising=False)
-    assert newest_first(identity)
-    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
-    assert not newest_first(identity)
-    monkeypatch.setenv('SYNC_BACKFILL_ORDER_UID_ALLOWLIST', identity)
-    assert newest_first(identity)
-    monkeypatch.setenv('SYNC_BACKFILL_ORDER_PERCENT', '100')
-    assert newest_first('synthetic-' + str(8))
 
 
 RECIPES = [
@@ -219,7 +190,7 @@ def test_registry_fail_fields_follow_shared_boolean_defaults():
     ]
     by_key = {row['key']: row for row in rows}
     assert by_key['BATCH_PIPELINE_FRESH_GPU_PRIORITY_ENABLED']['fail'] == 'open'
-    assert by_key['SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED']['fail'] == 'open'
+    assert 'SYNC_BACKFILL_OWNER_CONCURRENCY_ENABLED' not in by_key
 
 
 def test_jev_empty_salt_retains_the_legacy_nul_prefix():

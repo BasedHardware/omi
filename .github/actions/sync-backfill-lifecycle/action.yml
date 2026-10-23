@@ -272,63 +272,15 @@ runs:
           --role=roles/run.invoker \
           --quiet
 
-    - name: Reconcile bounded sync backfill queue
+    - name: Reconcile sync-jobs attempt contract
       if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
       shell: bash
-      env:
-        BACKFILL_MAX_CONCURRENT_DISPATCHES: ${{ steps.live-max-scale.outputs.max_concurrent_dispatches }}
-        BACKFILL_ENV: ${{ inputs.backfill_env_vars }}
       run: |
         set -euo pipefail
-        # B4: in prod the live backfill queue's name and rates are ops values
-        # (backend/deploy/ops/prod.yaml cloud_tasks), applied and verified only by the
-        # config-train, so a train never rewrites them (one source, not train + ops file).
-        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then
-          echo "prod backfill queue is owned by the ops file and config-train; train does not reconcile it"
-          exit 0
-        fi
-        # Elsewhere reconcile the queue the manifest routes backfill to, defaulting to sync-backfill.
-        BACKFILL_QUEUE="$(sed -n 's/^SYNC_BACKFILL_TASKS_QUEUE=//p' <<<"${BACKFILL_ENV:-}" | tail -n 1)"
-        BACKFILL_QUEUE="${BACKFILL_QUEUE:-sync-backfill}"
-        # Keep the train ceiling of 90, bounded by the live worker cap x concurrency 6.
-        # The 15/s rate caps starts, not in-flight work; the concurrency limit below
-        # independently prevents dispatch beyond worker capacity, including bursts.
-        # Retain 8 GiB and one owner per UID. Later operator steps require
-        # latency/retry/GPU/Firestore/Redis gates and a follow-up config train.
-        # Dispatch concurrency must not exceed the worker's capacity:
-        # --max-instances x --concurrency (service-level --max above; the
-        # service cap wins when it is lower).
-        # Offering more than the worker can admit makes Cloud Run reject the
-        # surplus with "no available instance", and Cloud Tasks then retries
-        # each rejection with exponential backoff. At the previous four-worker
-        # sizing that compounded until queued recordings were scheduled almost
-        # a day out. The bounded backoff keeps a transient rejection from
-        # stranding a recording for hours.
-        # --max-attempts must mirror utils/cloud_tasks.py
-        # get_sync_tasks_max_attempts() (default 5): omitted queue fields keep
-        # Google's default of 100, so a handler-budget deferral chain that has
-        # spent its attempt contract and ended through the 409 would keep
-        # retrying long after the preserved run lock expired, re-running
-        # whole-budget pipelines the code-side bound already gave up on.
-        if gcloud tasks queues describe "$BACKFILL_QUEUE" --location=${{ inputs.region }} --project=${{ inputs.project_id }} >/dev/null 2>&1; then
-          gcloud tasks queues update "$BACKFILL_QUEUE" \
-            --location=${{ inputs.region }} \
-            --project=${{ inputs.project_id }} \
-            --max-attempts=5 \
-            --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
-            --max-dispatches-per-second=15 \
-            --min-backoff=5s \
-            --max-backoff=60s
-        else
-          gcloud tasks queues create "$BACKFILL_QUEUE" \
-            --location=${{ inputs.region }} \
-            --project=${{ inputs.project_id }} \
-            --max-attempts=5 \
-            --max-concurrent-dispatches="$BACKFILL_MAX_CONCURRENT_DISPATCHES" \
-            --max-dispatches-per-second=15 \
-            --min-backoff=5s \
-            --max-backoff=60s
-        fi
+        # C10 (legacy-retire, named by David 10-19): the backfill sequencer and its
+        # sync-backfill queue are retired, so this step no longer creates or
+        # reconciles a backfill queue. Queue deletion is a scripted lead action
+        # (backend/scripts/legacy_dark/legacy_queues.py capture first).
         # The fresh lane and the fallback route in _enqueue_sync_job_routed
         # deliver through the main sync-jobs queue (SYNC_TASKS_QUEUE), whose
         # throughput limits another team owns; update-only reconciliation
@@ -341,22 +293,6 @@ runs:
             --project=${{ inputs.project_id }} \
             --max-attempts=5
         fi
-
-    - name: Reconcile backfill UID sequencer sweep
-      if: ${{ inputs.mode == 'platform' || inputs.mode == 'dispatch' }}
-      shell: bash
-      run: |
-        set -euo pipefail
-        python3 -m pip install -q PyYAML==6.0.1 google-auth==2.32.0 requests==2.33.1
-        DEPLOY_CONTROL_SCRIPT_DIR="${DEPLOY_CONTROL_SCRIPTS:-backend/scripts}"
-        ENVIRONMENT=dev
-        if [[ '${{ inputs.project_id }}' == 'based-hardware' ]]; then ENVIRONMENT=prod; fi
-        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/scheduler_reconcile.py" \
-          --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' \
-          --apply --jobs sync-backfill-uid-sequencer
-        python3 "$DEPLOY_CONTROL_SCRIPT_DIR/scheduler_reconcile.py" \
-          --environment "$ENVIRONMENT" --project '${{ inputs.project_id }}' \
-          --check --jobs sync-backfill-uid-sequencer
 
     - name: Provision and verify sync ledger TTL
       if: ${{ inputs.mode == 'platform' && inputs.provision_sync_ledger_ttl == 'true' }}

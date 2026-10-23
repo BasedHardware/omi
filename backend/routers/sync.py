@@ -39,7 +39,6 @@ from routers.batch_pipeline import enrichment_response
 from database import conversations as conversations_db
 from database import fair_use as fair_use_db
 from database import sync_dead_letters
-from database import sync_backfill_sequencer
 from database import users as users_db
 from database.memories import historical_scan_memo_scope
 from database.firestore_read_metrics import FirestoreReadSite
@@ -213,9 +212,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, legacy_dark, legacy_fresh, stage as sync_stage, uid_sequencer
-from config.sync_owner_concurrency import preparation_width
-from utils.sync.owner_prefetch import warm_owner
+from utils.sync import legacy_dark, stage as sync_stage
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
 
 from utils.sync import cap_hold_redrive
@@ -520,467 +517,17 @@ def download_audio_file_endpoint(
 
 # response_model omitted: deprecated v1 endpoint with mixed dict + JSONResponse returns;
 # the v2 typed equivalent (SyncJobStatusResponse) covers the contract.
-@router.post("/v1/sync-local-files", deprecated=True)
-@max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
-async def sync_local_files(
-    request: Request,
-    response: Response,
-    files: List[UploadFile] = File(...),
-    uid: str = Depends(auth.get_current_user_uid),
-    conversation_id: str = Query(
-        None, description="Target conversation ID to attach audio to (auto-sync from live capture)"
-    ),
-):
-    if await run_blocking(db_executor, get_sync_ledger_fence_mode) is SyncLedgerFenceMode.STANDBY:
-        return JSONResponse(
-            status_code=503,
-            headers={**_V1_DEPRECATION_HEADERS, 'Retry-After': '60'},
-            content={
-                'code': 'sync_ledger_fence_cutover',
-                'detail': 'Sync is briefly pausing safely; local audio was not consumed',
-            },
-        )
-    logger.warning(
-        f'sync: deprecated v1 sync-local-files called uid={uid} files={len(files)} '
-        f'user_agent={request.headers.get("user-agent", "")}'
+@router.post("/v1/sync-local-files", deprecated=True, status_code=410)
+def sync_local_files(uid: str = Depends(auth.get_current_user_uid)):
+    """Retired by legacy-retire C6; v2 is the successor and the client retains local audio."""
+    return JSONResponse(
+        status_code=410,
+        headers=_V1_DEPRECATION_HEADERS,
+        content={
+            'code': 'sync_v1_retired',
+            'detail': 'Use /v2/sync-local-files; local audio was not consumed',
+        },
     )
-    response.headers.update(_V1_DEPRECATION_HEADERS)
-    client_device_context = resolve_client_device_from_request(request)
-    filenames = [f.filename or '' for f in files]
-    has_server_capture_proof = False
-    lane_decision = classify_sync_lane(
-        filenames,
-        client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
-    )
-    logger.info(
-        'sync_lane_admission uid=%s device_hash=%s platform=%s app_version=%s lane=%s trust=%s age_seconds=%s reason=%s',
-        uid,
-        client_device_context.device_hash,
-        client_device_context.platform,
-        client_device_context.app_version,
-        lane_decision.lane.value,
-        lane_decision.trust.value,
-        lane_decision.maximum_age_seconds,
-        lane_decision.reason,
-    )
-    if lane_decision.lane == SyncLane.BACKFILL and os.getenv('SYNC_BACKFILL_ENABLED', 'true').lower() != 'true':
-        return JSONResponse(
-            status_code=503,
-            headers={
-                **_V1_DEPRECATION_HEADERS,
-                'Retry-After': '3600',
-                'X-Omi-Rate-Limit-Reason': 'backfill_capacity',
-            },
-            content={
-                'code': 'backfill_capacity',
-                'detail': 'Historical recovery is paused; local audio was not consumed',
-            },
-        )
-    if lane_decision.lane == SyncLane.BACKFILL:
-        # The deprecated inline endpoint has no isolated worker boundary.
-        # Historical audio must use v2 so it can never consume fresh capacity.
-        return JSONResponse(
-            status_code=503,
-            headers={
-                **_V1_DEPRECATION_HEADERS,
-                'Retry-After': '30',
-                'X-Omi-Rate-Limit-Reason': 'backfill_capacity',
-            },
-            content={
-                'code': 'backfill_capacity',
-                'detail': 'Historical recovery requires the v2 isolated worker; local audio was not consumed',
-            },
-        )
-    if not lane_decision.automatic_recovery_allowed:
-        return JSONResponse(
-            status_code=422,
-            headers=_V1_DEPRECATION_HEADERS,
-            content={
-                'code': 'backfill_lookback_exceeded',
-                'detail': 'Recording is older than the automatic recovery window; local audio was not consumed',
-            },
-        )
-
-    # Pre-check gates (#5854)
-    hard_restricted, retry_after = await run_blocking(critical_executor, get_hard_restriction_status, uid)
-    if lane_decision.lane == SyncLane.FRESH and hard_restricted:
-        return await _fair_use_restriction_response(
-            uid=uid,
-            retry_after=retry_after,
-            client_platform=client_device_context.platform,
-            device_hash=client_device_context.device_hash,
-            app_version=client_device_context.app_version,
-            request_id=request.headers.get('x-request-id'),
-            cloud_trace_context=request.headers.get('x-cloud-trace-context'),
-            base_headers=_V1_DEPRECATION_HEADERS,
-        )
-
-    # Hard anti-abuse daily-audio ceiling (all plans): reject fresh sync once the user is
-    # already over the rolling-24h total. Set high enough that no legitimate user hits it;
-    # it exists to stop bulk-sync dumps. Backfill has its own separate pacing.
-    if lane_decision.lane == SyncLane.FRESH and await run_blocking(db_executor, is_daily_audio_ceiling_exceeded, uid):
-        logger.info(f'sync: daily audio ceiling reached uid={uid}')
-        return await _fair_use_restriction_response(
-            uid=uid,
-            retry_after=retry_after_until_next_utc_day(),
-            client_platform=client_device_context.platform,
-            device_hash=client_device_context.device_hash,
-            app_version=client_device_context.app_version,
-            request_id=request.headers.get('x-request-id'),
-            cloud_trace_context=request.headers.get('x-cloud-trace-context'),
-            base_headers=_V1_DEPRECATION_HEADERS,
-        )
-
-    # Legacy exhaustion retains the installed-client path below.
-
-    # A lookup failure must not durably lock: unlike gating the live listen socket, nothing
-    # routinely re-checks is_locked later, so a transient blip would paywall it forever (#15232).
-    has_credits = await run_blocking(critical_executor, has_transcription_credits, uid)
-    should_lock = False
-    if not has_credits:
-        allowance = await run_blocking(critical_executor, resolve_transcription_allowance, uid)
-        should_lock = (
-            allowance.reason not in TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS
-            and allowance.reason != 'usage_budget_exhausted'
-        )
-
-    # Detect source from filenames
-    source = detect_source_from_filenames([f.filename for f in files])
-
-    paths = []
-    wav_paths = []
-    segmented_paths = set()
-    backfill_slot_token: Optional[str] = None
-    if lane_decision.lane == SyncLane.BACKFILL:
-        backfill_slot_token = f'v1-{_uuid.uuid4()}'
-        try:
-            if not await run_blocking(db_executor, try_acquire_backfill_slot, uid, backfill_slot_token):
-                return JSONResponse(
-                    status_code=429,
-                    headers={
-                        **_V1_DEPRECATION_HEADERS,
-                        'Retry-After': '30',
-                        'X-Omi-Rate-Limit-Reason': 'backfill_paced',
-                    },
-                    content={'code': 'backfill_paced', 'detail': 'Another historical recovery job is in flight'},
-                )
-        except Exception:
-            return JSONResponse(
-                status_code=503,
-                headers={
-                    **_V1_DEPRECATION_HEADERS,
-                    'Retry-After': '30',
-                    'X-Omi-Rate-Limit-Reason': 'backfill_capacity',
-                },
-                content={'code': 'backfill_capacity', 'detail': 'Historical recovery is temporarily unavailable'},
-            )
-
-    try:
-        try:
-            paths = await run_blocking(sync_executor, retrieve_file_paths, files, uid)
-            archive_paths = await run_blocking(
-                sync_executor,
-                archive_mobile_batch_raw_files,
-                uid,
-                paths,
-                {
-                    'app_version': client_device_context.app_version,
-                    'firmware': request.headers.get('x-omi-firmware-version'),
-                    'device_model': request.headers.get('x-omi-device-model'),
-                },
-            )
-            await _offer_shadow_upload(
-                uid=uid,
-                content_id=None,
-                paths=paths,
-                lane=lane_decision.lane.value,
-                age=lane_decision.maximum_age_seconds,
-                conversation_id=conversation_id,
-                source=source.value,
-                device_id=client_device_context.client_device_id,
-                byok=has_byok_keys(),
-                policy=resolve_batch_policy(uid),
-                should_lock=should_lock,
-            )
-            wav_paths = await run_blocking(sync_executor, decode_files_to_wav, paths)
-        except HTTPException as e:
-            raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
-
-        cap_held = False
-        cap_admission: dict = {}
-        if cap_dispatch_enabled(uid, 'sync'):
-            cap_held = await hold_capture_if_exhausted(
-                uid,
-                wav_paths,
-                source,
-                admission=cap_admission,
-                target_conversation_id=conversation_id,
-                client_device_id=client_device_context.client_device_id,
-                client_platform=client_device_context.platform,
-            )
-        if cap_held:
-            return JSONResponse(
-                status_code=200,
-                headers=_V1_DEPRECATION_HEADERS,
-                content={
-                    'new_memories': [],
-                    'updated_memories': [],
-                    'credits_exhausted': cap_admission.get('reason')
-                    in {'plan_allowance_exhausted', 'usage_budget_exhausted'},
-                    'held_audio': True,
-                    'held_files': len(wav_paths),
-                },
-            )
-        vad_errors = []
-        vad_segment_lock = threading.Lock()
-
-        def _run_vad(path):
-            retrieve_vad_segments(path, segmented_paths, vad_errors, segment_source_lock=vad_segment_lock)
-
-        await asyncio.gather(*[run_blocking(sync_executor, _run_vad, path) for path in wav_paths])
-
-        # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
-        await run_blocking(sync_executor, _cleanup_files, wav_paths)
-        wav_paths = []  # Clear to avoid double cleanup in finally
-
-        # Check for VAD errors - if any failed, abort to prevent data loss
-        if vad_errors:
-            error_detail = f"VAD processing failed for {len(vad_errors)} file(s): {'; '.join(vad_errors[:3])}"
-            if len(vad_errors) > 3:
-                error_detail += f" (and {len(vad_errors) - 3} more)"
-            raise HTTPException(status_code=500, detail=error_detail, headers=_V1_DEPRECATION_HEADERS)
-
-        # Fair-use speech tracking from raw VAD segments (#5854)
-        # Compute duration from raw segments BEFORE merging (silence gaps not counted)
-        total_speech_seconds = sum(get_wav_duration(p) for p in segmented_paths)
-        total_speech_ms = int(total_speech_seconds * 1000)
-        logger.info(
-            f'sync_local_files len(segmented_paths) {len(segmented_paths)} speech_seconds={int(total_speech_seconds)}'
-        )
-
-        if lane_decision.lane == SyncLane.BACKFILL:
-            reservation = await run_blocking(
-                db_executor,
-                reserve_backfill_speech,
-                uid,
-                backfill_slot_token or f'v1-{_uuid.uuid4()}',
-                total_speech_ms,
-            )
-            if not reservation.allowed:
-                return JSONResponse(
-                    status_code=429,
-                    headers={
-                        **_V1_DEPRECATION_HEADERS,
-                        'Retry-After': str(reservation.retry_after or retry_after_next_utc_day()),
-                        'X-Omi-Rate-Limit-Reason': reservation.reason or 'backfill_paced',
-                    },
-                    content={
-                        'code': reservation.reason or 'backfill_paced',
-                        'detail': 'Historical recovery is paced; local audio should be retained',
-                    },
-                )
-
-        if FAIR_USE_ENABLED and total_speech_ms > 0:
-            meter_source = 'sync_backfill' if lane_decision.lane == SyncLane.BACKFILL else 'sync_fresh'
-            await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source=meter_source)
-            if lane_decision.lane == SyncLane.FRESH:
-                fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
-                fair_use_plan = fair_use_sub.plan if fair_use_sub else None
-                speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
-                triggered_caps = check_soft_caps(uid, speech_totals=speech_totals, plan=fair_use_plan)
-                if triggered_caps:
-                    logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
-                    start_background_task(
-                        trigger_classifier_if_needed(uid, triggered_caps), name=f'sync_fair_use_classifier:{uid}'
-                    )
-
-        is_locked = should_lock
-
-        response = {'updated_memories': set(), 'new_memories': set()}
-        segment_errors = []
-        segment_lock = threading.Lock()
-        total_segments = len(segmented_paths)
-
-        # DG budget gate: throttle cloud STT for restrict-stage users (#6083)
-        # Check budget first; only record usage after successful processing.
-        dg_budget_blocked = False
-        fair_use_restrict_dg = False
-        if FAIR_USE_ENABLED and lane_decision.lane == SyncLane.FRESH:
-            try:
-                fair_use_stage = await run_blocking(db_executor, get_enforcement_stage, uid)
-                if fair_use_stage == 'restrict' and FAIR_USE_RESTRICT_DAILY_DG_MS > 0:
-                    fair_use_restrict_dg = True
-                    dg_budget_blocked = await run_blocking(db_executor, is_dg_budget_exhausted, uid)
-            except Exception as e:
-                logger.error(f'sync: DG budget check error for {uid}: {e}')
-
-        if dg_budget_blocked:
-            logger.info(f'sync: DG budget exhausted, skipping {total_segments} segments uid={uid}')
-            await run_blocking(sync_executor, _cleanup_files, list(segmented_paths))
-            return await _fair_use_restriction_response(
-                uid=uid,
-                retry_after=retry_after_until_next_utc_day(),
-                client_platform=client_device_context.platform,
-                device_hash=client_device_context.device_hash,
-                app_version=client_device_context.app_version,
-                request_id=request.headers.get('x-request-id'),
-                cloud_trace_context=request.headers.get('x-cloud-trace-context'),
-                base_headers=_V1_DEPRECATION_HEADERS,
-                extra_content={
-                    'new_memories': [],
-                    'updated_memories': [],
-                    'credits_exhausted': should_lock,
-                    'dg_budget_exhausted': True,
-                    'skipped_segments': total_segments,
-                },
-            )
-
-        # Fetch user transcription preferences once before spawning threads
-        transcription_prefs = await run_blocking(db_executor, users_db.get_user_transcription_preferences, uid)
-        private_cloud_sync_enabled = bool(
-            await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
-        )
-        data_protection_level = (
-            await run_blocking(db_executor, users_db.get_data_protection_level, uid)
-            if private_cloud_sync_enabled
-            else None
-        )
-
-        # Build speaker embeddings cache once for all segments (voice + text identification)
-        try:
-            person_embeddings_cache = await run_blocking(db_executor, build_person_embeddings_cache, uid)
-            if person_embeddings_cache:
-                logger.info(f'sync: loaded {len(person_embeddings_cache)} person embeddings for speaker ID uid={uid}')
-        except Exception as e:
-            logger.warning(f'sync: failed to load person embeddings, skipping speaker ID uid={uid}: {e}')
-            person_embeddings_cache = {}
-
-        # Chronological order + turnstile: STT runs in parallel, but conversation
-        # assignment is serialized oldest-first so adjacent chunks merge instead of
-        # racing into separate conversations (#6551, #5747).
-        ordered_paths = sorted(segmented_paths, key=get_timestamp_from_path)
-        assignment_turnstile = _OrderedTurnstile(ordered_paths)
-        await asyncio.gather(
-            *[
-                run_blocking(
-                    sync_executor,
-                    process_segment,
-                    path,
-                    uid,
-                    response,
-                    segment_lock,
-                    segment_errors,
-                    source,
-                    is_locked,
-                    transcription_prefs,
-                    person_embeddings_cache,
-                    conversation_id,
-                    assignment_turnstile,
-                    private_cloud_sync_enabled=private_cloud_sync_enabled,
-                    data_protection_level=data_protection_level,
-                    client_device_id=client_device_context.client_device_id,
-                    client_platform=client_device_context.platform,
-                )
-                for path in ordered_paths
-            ]
-        )
-
-        cap_holds = response.get('_cap_holds', {}) if cap_dispatch_enabled(uid, 'sync') else {}
-        cap_held_seconds = sum(item['seconds'] for item in cap_holds.values())
-
-        await run_blocking(sync_executor, _reprocess_merged_conversations, uid, response)
-        if private_cloud_sync_enabled:
-            await run_blocking(sync_executor, _finalize_sync_audio_files, uid, response)
-        schedule_person_voice_learning_retries(uid, response, _RESPONSE_FENCED_CONVERSATION_IDS)
-
-        # Record DG usage after successful processing (not before, to avoid charging on retries)
-        if fair_use_restrict_dg:
-            try:
-                dg_ms = int(total_speech_seconds * 1000)
-                if cap_holds:
-                    dg_ms = int(max(0, total_speech_seconds - cap_held_seconds) * 1000)
-                if dg_ms > 0:
-                    await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
-            except Exception as e:
-                logger.error(f'sync: DG usage record error for {uid}: {e}')
-
-        if archive_paths:
-            await run_blocking(
-                storage_executor,
-                link_archive_captures,
-                uid,
-                archive_paths,
-                sorted(set(response['new_memories']) | set(response['updated_memories'])),
-            )
-
-        # Build JSON-serializable response
-        result = {
-            'new_memories': sorted(response['new_memories']),
-            'updated_memories': sorted(response['updated_memories']),
-        }
-        if cap_holds:
-            result.update(
-                held_audio=True,
-                credits_exhausted=any(item.get('reason') == 'plan_allowance_exhausted' for item in cap_holds.values()),
-                held_segments=len(cap_holds),
-            )
-
-        failed_segments = len(segment_errors)
-        successful_segments = total_segments - failed_segments
-        if cap_holds:
-            successful_segments -= len(cap_holds)
-
-        if failed_segments > 0:
-            result['failed_segments'] = failed_segments
-            result['total_segments'] = total_segments
-            result['errors'] = segment_errors[:10]  # Cap error details to avoid huge responses
-            logger.error(
-                f'sync_local_files partial failure uid={uid} '
-                f'success={successful_segments}/{total_segments} errors={segment_errors[:3]}'
-            )
-
-        if total_segments > 0 and successful_segments == 0:
-            # All segments failed — return 500 (consistent with VAD error behavior)
-            if not cap_holds:
-                raise HTTPException(
-                    status_code=500,
-                    detail=f"All {total_segments} segment(s) failed processing: {'; '.join(segment_errors[:3])}",
-                    headers=_V1_DEPRECATION_HEADERS,
-                )
-
-        # Record subscription usage only when at least one segment succeeded
-        try:
-            usage_seconds = int(total_speech_seconds)
-            if cap_holds:
-                usage_seconds = int(max(0, total_speech_seconds - cap_held_seconds)) if successful_segments > 0 else 0
-            if usage_seconds > 0:
-                await run_blocking(
-                    db_executor, record_usage, uid, transcription_seconds=usage_seconds, speech_seconds=usage_seconds
-                )
-        except Exception as e:
-            logger.error(f'sync: usage record error for {uid}: {e}')
-
-        if failed_segments > 0:
-            # Partial failure — return 207 Multi-Status so old clients retry the batch
-            return JSONResponse(
-                status_code=207,
-                headers=_V1_DEPRECATION_HEADERS,
-                content=result,
-            )
-
-        return result
-    finally:
-        # Clean up any remaining temporary files
-        await run_blocking(
-            sync_executor, _cleanup_files, paths
-        )  # .bin files (in case decode_files_to_wav didn't finish)
-        await run_blocking(sync_executor, _cleanup_files, wav_paths)  # Original wav files (if VAD didn't complete)
-        await run_blocking(sync_executor, _cleanup_files, segmented_paths)  # Segmented wav files after processing
-        if backfill_slot_token:
-            try:
-                await run_blocking(db_executor, release_backfill_slot, uid, backfill_slot_token)
-            except Exception as e:
-                logger.warning('sync: failed to release v1 backfill slot uid=%s error=%s', uid, type(e).__name__)
 
 
 @router.post(  # v2 async sync-local-files
@@ -1018,15 +565,14 @@ async def sync_local_files_v2(
     x_omi_conversation_geolocation: Optional[str] = Header(None, alias='X-Omi-Conversation-Geolocation'),
 ):
     """
-    Async version of sync-local-files. Saves raw files and returns 202
-    immediately, then runs the full pipeline (decode → VAD → STT → LLM) as
-    an async background task. The app polls GET /v2/sync-local-files/{job_id}.
+    Save raw files and admit supported uploads to the batch pipeline.
+    Legacy-owned content is answered by its durable fence; new legacy jobs are retired.
+    The app polls GET /v2/sync-local-files/{job_id}.
     """
     if isinstance(recording_session_id, str):
         recording_session_id = recording_session_id.strip() or None
     else:
         recording_session_id = None
-    sync_app_build = sanitize_app_build(x_app_version)
     ledger_fence_mode = await run_blocking(db_executor, get_sync_ledger_fence_mode)
     if ledger_fence_mode is SyncLedgerFenceMode.STANDBY:
         # The one-time hard-revision-retirement cutover intentionally blocks
@@ -1040,7 +586,6 @@ async def sync_local_files_v2(
                 'detail': 'Sync is briefly pausing safely; local audio was not consumed',
             },
         )
-    ledger_fence_active = ledger_fence_mode is SyncLedgerFenceMode.ACTIVE
 
     # Browser/mobile clients carry capture provenance in these request headers.
     # It must survive both the inline and Cloud Tasks pipeline branches.
@@ -1074,16 +619,10 @@ async def sync_local_files_v2(
     # fresh instance cannot admit legacy work on the 'on' default after the ramp went
     # draining/dark (M3 review; batch intake reads the mode the same way).
     legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
-    legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
-    legacy_mode_read_at = time.monotonic()
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
-        # Legacy-dark: the legacy fresh budget is never consulted outside ``on``.
-        allow_legacy_fresh=legacy_allowed and legacy_fresh.enabled_for(uid),
     )
-    if legacy_allowed and lane_decision.reason == 'recent_legacy_capture':
-        lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])
     # Fresh is optional for LEGACY uploads: a live-only refusal must preserve
     # their existing backfill acceptance. Resolve before recording the final lane.
     fresh_refused = False
@@ -1172,9 +711,7 @@ async def sync_local_files_v2(
     # Detect source
     source = detect_source_from_filenames([f.filename for f in files])
 
-    cloud_tasks_dispatch_enabled = is_cloud_tasks_dispatch_enabled()
     byok_enabled = has_byok_keys()
-    cloud_task_eligible = cloud_tasks_dispatch_enabled and not byok_enabled
 
     # Create job_id early so we have it for the directory
     job_id = str(_uuid.uuid4())
@@ -1300,509 +837,25 @@ async def sync_local_files_v2(
                 return batch_response
             sequencer_registration_started = False
 
-        if legacy_allowed and time.monotonic() - legacy_mode_read_at > legacy_dark.ADMISSION_REVALIDATE_SECONDS:
-            # A legacy job is created only on a young mode read: a request that read 'on'
-            # and then stalled (a long batch decode, a slow fallback) must not carry it past
-            # a draining re-home of the same conversation (final_pass_rehome's flip grace).
-            legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
-            legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
-
-        if not legacy_allowed:
-            # Legacy-dark (contract (h)): never create a legacy job. Content legacy
-            # already owns is answered by the fence; anything else keeps its audio.
-            ledger_row = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
-            owner_job_present = await run_blocking(db_executor, legacy_dark.legacy_owner_job_present, ledger_row)
-            decision = legacy_dark.fence_decision(ledger_row, legacy_mode, owner_job_present=owner_job_present)
-            if record_response is RecordUploadRoute.LEGACY and decision.action is not legacy_dark.FenceAction.ACK:
-                # The conversation's durable legacy_final_pass_v1 owner holds this recording
-                # (h, invariant 4), even with no content-ledger row: acknowledge it as batch
-                # intake does, never a 409 retry loop and never a new legacy job (M3 review).
-                decision = legacy_dark.FenceDecision(
-                    legacy_dark.FenceAction.ACK,
-                    legacy_dark.LegacyDarkReason.LEGACY_ACTIVE,
-                    legacy_dark.LegacyOwnership.ACTIVE,
-                )
-            await run_blocking(sync_executor, _cleanup_files, paths)
-            await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
-            return (
-                legacy_dark.fence_response(decision, total_files=len(files), lane=lane_decision.lane.value)
-                or legacy_dark.admission_refused_response()
-            )
-        if record_response is RecordUploadRoute.LEGACY:
-            admission_reason = legacy_dark.LegacyAdmissionReason.LEGACY_RECORD_OWNER
-        elif batch_attempted:
-            admission_reason = legacy_dark.LegacyAdmissionReason.INTAKE_FALLBACK
-        else:
-            admission_reason = legacy_dark.LegacyAdmissionReason.BATCH_NOT_ENABLED
-        legacy_dark.record_legacy_admission(admission_reason, legacy_mode)
-
-        # Create Redis job — total_segments=0 until VAD completes in background
-        await run_blocking(
-            db_executor,
-            create_sync_job,
-            uid,
-            total_files=len(files),
-            total_segments=0,
-            job_id=job_id,
-            lane=lane_decision.lane.value,
-            capture_time_trust=lane_decision.trust.value,
-            recording_age_seconds=lane_decision.maximum_age_seconds,
-            content_id=content_id,
-            # A named enqueue can lose its acknowledgement after Cloud Tasks
-            # accepts it. Mark eligible jobs as Cloud Tasks-owned before that
-            # call so the ambiguity never starts an unfenced inline twin.
-            dispatch_mode=(
-                'sequenced'
-                if cloud_task_eligible and lane_decision.lane == SyncLane.BACKFILL and uid_sequencer.enabled()
-                else 'cloud_tasks' if cloud_task_eligible else 'inline'
-            ),
-            policy=batch_policy,
-            ledger_fence_mode=(
-                SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
-            ),
+        # C9 (legacy-retire): legacy admission is gone. Content legacy already
+        # owns is answered by the fence; anything else keeps its audio (409).
+        ledger_row = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
+        owner_job_present = await run_blocking(db_executor, legacy_dark.legacy_owner_job_present, ledger_row)
+        decision = legacy_dark.fence_decision(
+            ledger_row, legacy_dark.LegacySyncMode.DARK, owner_job_present=owner_job_present
         )
-        claim = await run_blocking(
-            db_executor,
-            claim_sync_content,
-            uid,
-            content_id,
-            job_id,
-            lane_decision.lane.value,
-        )
-        if claim.get('outcome') in {'completed', 'held'}:
-            cached_result = claim.get('result') or {}
-            await run_blocking(db_executor, mark_job_completed, job_id, cached_result)
-            if backfill_slot_acquired:
-                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
-                backfill_slot_acquired = False
-            return JSONResponse(
-                status_code=202,
-                content={
-                    'job_id': job_id,
-                    'status': 'completed',
-                    'total_files': len(files),
-                    'total_segments': cached_result.get('total_segments', 0),
-                    'poll_after_ms': 0,
-                    'lane': lane_decision.lane.value,
-                },
+        if record_response is RecordUploadRoute.LEGACY and decision.action is not legacy_dark.FenceAction.ACK:
+            # Preserve the durable final-pass owner acknowledgement while a re-home is held.
+            decision = legacy_dark.FenceDecision(
+                legacy_dark.FenceAction.ACK,
+                legacy_dark.LegacyDarkReason.LEGACY_ACTIVE,
+                legacy_dark.LegacyOwnership.ACTIVE,
             )
-        if claim.get('outcome') == 'capped':
-            # Keep the ordinary 202 -> failed-job contract: the shipped WAL
-            # reconciler retries this content with its per-file budget. An
-            # upload 400 strands it, while a scoped 503 pauses the whole account.
-            await run_blocking(
-                db_executor,
-                mark_job_failed,
-                job_id,
-                'Repeated content failure paused',
-                reason_code='sync_repeat_failure_paused',
-            )
-            if backfill_slot_acquired:
-                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
-                backfill_slot_acquired = False
-            failure_key = claim.get('failure_key')
-            logger.warning(
-                'event=sync_repeat_failure_cap outcome=paused lane=%s failure_key=%s device_hash=%s',
-                lane_decision.lane.value,
-                failure_key if failure_key in {'invalid_audio', 'persistent_persistence'} else 'unknown',
-                client_device_context.client_device_id[-8:] if client_device_context.client_device_id else 'none',
-            )
-            return JSONResponse(
-                status_code=202,
-                content={
-                    'job_id': job_id,
-                    'status': 'failed',
-                    'total_files': len(files),
-                    'total_segments': 0,
-                    'poll_after_ms': 0,
-                    'lane': lane_decision.lane.value,
-                },
-            )
-        if claim.get('outcome') == 'busy':
-            await run_blocking(db_executor, delete_sync_job, job_id)
-            if backfill_slot_acquired:
-                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
-                backfill_slot_acquired = False
-            return sync_content_in_progress_response(claim.get('job_id'))
-        try:
-            OMI_SYNC_LANE_JOBS_TOTAL.labels(
-                lane=lane_decision.lane.value,
-                trust=lane_decision.trust.value,
-                outcome='admitted',
-            ).inc()
-        except Exception:
-            pass
-
-        # Transfer ownership of raw paths to the background task
-        await _offer_shadow_upload(
-            uid=uid,
-            content_id=content_id,
-            paths=paths,
-            lane=lane_decision.lane.value,
-            age=lane_decision.maximum_age_seconds,
-            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
-            source=source.value,
-            device_id=client_device_context.client_device_id,
-            byok=byok_enabled,
-            policy=batch_policy,
-            should_lock=should_lock,
-        )
-        owned_paths = list(paths)
-        paths = []  # Prevent finally cleanup of files now owned by bg task
-
-        if lane_decision.lane == SyncLane.BACKFILL and not cloud_task_eligible:
-            # Fail closed: backfill may run only on the dedicated queue/service.
-            # BYOK cannot be serialized into Cloud Tasks, so it is retained on
-            # device until an isolated BYOK path exists.
-            await run_blocking(sync_executor, _cleanup_files, owned_paths)
-            await _finalize_sync_job_failure(
-                job_id=job_id,
-                uid=uid,
-                content_id=content_id,
-                error_code='sync_backfill_dispatch_unavailable',
-                outcome=TranscriptionOutcome.CONFIG_ERROR,
-                provider='unknown',
-                model='unknown',
-                lane=lane_decision.lane.value,
-            )
-            if backfill_slot_acquired:
-                await run_blocking(db_executor, release_backfill_slot, uid, job_id)
-                backfill_slot_acquired = False
-            return JSONResponse(
-                status_code=503,
-                headers={'Retry-After': '30', 'X-Omi-Rate-Limit-Reason': 'backfill_capacity'},
-                content={
-                    'code': 'backfill_capacity',
-                    'detail': 'Historical recovery is temporarily unavailable; local audio was not consumed',
-                },
-            )
-
-        dispatched = False
-        # Fresh BYOK requests retain the legacy inline path. Backfill was
-        # rejected above because it may never consume fresh capacity.
-        if cloud_task_eligible:
-            try:
-                # sync_executor, NOT storage_executor — same reasoning as the
-                # file save above (#7372): a saturated storage pool would queue
-                # the staging upload and delay the 202.
-                await run_blocking(sync_executor, _stage_files_to_gcs, owned_paths)
-            except Exception as e:
-                logger.error(
-                    'event=sync_dispatch outcome=staging_failed lane=%s exception_type=%s',
-                    lane_decision.lane.value,
-                    type(e).__name__,
-                )
-                # Staging failed before any task was submitted, so it is safe
-                # to remove partial blobs, terminalize, and free the claim for
-                # a client WAL retry.
-                await _delete_staged_blobs_async(owned_paths)
-                await run_blocking(sync_executor, _cleanup_files, owned_paths)
-                await _finalize_sync_job_failure(
-                    job_id=job_id,
-                    uid=uid,
-                    content_id=content_id,
-                    error_code='sync_dispatch_staging_failed',
-                    outcome=TranscriptionOutcome.UPSTREAM_ERROR,
-                    provider='unknown',
-                    model='unknown',
-                    lane=lane_decision.lane.value,
-                )
-                if backfill_slot_acquired:
-                    await run_blocking(db_executor, release_backfill_slot, uid, job_id)
-                    backfill_slot_acquired = False
-                return JSONResponse(
-                    status_code=503,
-                    headers={'Retry-After': '30'},
-                    content={
-                        'code': 'sync_dispatch_unavailable',
-                        'detail': 'Sync dispatch is temporarily unavailable; local audio was not consumed',
-                    },
-                )
-
-            enqueue_payload = {
-                'schema_version': 1,
-                'job_id': job_id,
-                'uid': uid,
-                'raw_blob_paths': owned_paths,
-                **({'raw_capture_paths': archive_paths} if archive_paths else {}),
-                **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
-                'source': source.value,
-                'should_lock': should_lock,
-                'conversation_id': conversation_id,
-                'recording_session_id': recording_session_id,
-                'audio_start_seconds': audio_start_seconds,
-                'audio_end_seconds': audio_end_seconds,
-                'geolocation': geolocation.model_dump(mode='json') if geolocation else None,
-                'client_device_id': client_device_context.client_device_id,
-                'client_platform': client_device_context.platform,
-                'enqueued_at': time.time(),
-                'lane': lane_decision.lane.value,
-                'capture_time_trust': lane_decision.trust.value,
-                'recording_age_seconds': lane_decision.maximum_age_seconds,
-                'content_id': content_id,
-                'ledger_fence_mode': (
-                    SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
-                ),
-            }
-            if (
-                lane_decision.lane == SyncLane.BACKFILL
-                and uid_sequencer.enabled()
-                and legacy_dark.sequencer_registration_allowed(legacy_mode)
-            ):
-                # The Firestore record, not a Cloud Task acknowledgement, is
-                # the durable 202 boundary. Waiting jobs hold no HTTP worker.
-                # An ambiguous Firestore acknowledgement may already have
-                # committed. Never release its content claim on that path.
-                sequencer_registration_started = True
-                try:
-                    await run_blocking(
-                        db_executor,
-                        sync_backfill_sequencer.register_job,
-                        uid,
-                        job_id,
-                        enqueue_payload,
-                        lane_decision.oldest_capture_at,
-                    )
-                except Exception as error:
-                    # A committed Firestore transaction can lose its reply.
-                    # An authoritative read converts that to a safe 202.
-                    # If the read also fails, keep all recovery material and
-                    # refuse to assert that the job was accepted.
-                    registered = await run_blocking(db_executor, sync_backfill_sequencer.is_registered, uid, job_id)
-                    if not registered:
-                        # A fast worker may have consumed the last pending
-                        # document and cleared its active owner before this read.
-                        observed_job = await run_blocking(db_executor, get_sync_job, job_id)
-                        registered = bool(observed_job and observed_job.get('status') in TERMINAL_STATUSES)
-                    if not registered:
-                        sequencer_registration_started = False
-                        await _delete_staged_blobs_async(owned_paths)
-                        await run_blocking(sync_executor, _cleanup_files, owned_paths)
-                        await _finalize_sync_job_failure(
-                            job_id=job_id,
-                            uid=uid,
-                            content_id=content_id,
-                            error_code='sync_sequencer_registration_failed',
-                            outcome=TranscriptionOutcome.UPSTREAM_ERROR,
-                            provider='unknown',
-                            model='unknown',
-                            lane=lane_decision.lane.value,
-                        )
-                        logger.error(
-                            'event=sync_uid_sequencer action=registered outcome=failed exception_type=%s',
-                            type(error).__name__,
-                        )
-                        return JSONResponse(
-                            status_code=503,
-                            headers={'Retry-After': '30'},
-                            content={
-                                'code': 'sync_dispatch_unavailable',
-                                'detail': 'Historical recovery is temporarily unavailable',
-                            },
-                        )
-                try:
-                    await run_blocking(db_executor, uid_sequencer.kick, uid)
-                except Exception as error:
-                    # The accepted record is durable. A Scheduler tick will
-                    # rediscover it; returning 503 here would trigger a second
-                    # phone upload for the same content.
-                    logger.error(
-                        'event=sync_uid_sequencer action=kick outcome=deferred exception_type=%s',
-                        type(error).__name__,
-                    )
-                dispatched = True
-            enqueue_error = None
-            if lane_decision.lane == SyncLane.BACKFILL and not dispatched:
-                # Register the direct path before its task can run. A later
-                # flag-on revision waits for this bounded direct-work window.
-                await run_blocking(db_executor, backfill_cutover.note_direct_admission, uid, job_id)
-            for enqueue_attempt in range(0 if dispatched else 2):
-                try:
-                    await run_blocking(db_executor, enqueue_sync_job, enqueue_payload)
-                    dispatched = True
-                    break
-                except Exception as e:
-                    enqueue_error = e
-
-            if dispatched:
-                try:
-                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='cloud_tasks', app_build=sync_app_build).inc()
-                except Exception:
-                    pass
-                record_product_event(
-                    'sync_job_enqueued',
-                    client_kind=resolve_client_kind(x_app_platform=x_app_platform, user_agent=None),
-                    app_build=sync_app_build,
-                    uid=uid,
-                )
-            else:
-                # A lost Cloud Tasks acknowledgement is ambiguous: the named
-                # task may already exist and can be executing. Preserve every
-                # durable worker input and claim, and never start inline work.
-                logger.error(
-                    'event=sync_dispatch outcome=enqueue_uncertain lane=%s enqueue_attempts=2 exception_type=%s',
-                    lane_decision.lane.value,
-                    type(enqueue_error).__name__ if enqueue_error is not None else 'Exception',
-                )
-                try:
-                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='enqueue_uncertain', app_build=sync_app_build).inc()
-                except Exception:
-                    pass
-                try:
-                    await run_blocking(sync_executor, _cleanup_files, owned_paths)
-                    await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
-                except Exception as e:
-                    logger.error(
-                        'event=sync_post_enqueue_cleanup outcome=failed exception_type=%s',
-                        type(e).__name__,
-                    )
-                return JSONResponse(
-                    status_code=202,
-                    content={
-                        'job_id': job_id,
-                        'status': 'queued',
-                        'total_files': len(files),
-                        'total_segments': 0,
-                        'poll_after_ms': 3000,
-                        'lane': lane_decision.lane.value,
-                    },
-                )
-
-            if dispatched:
-                try:
-                    # The handler instance downloads from GCS; local copies are done
-                    await run_blocking(sync_executor, _cleanup_files, owned_paths)
-                    await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
-                except Exception as e:
-                    logger.error(
-                        'event=sync_post_enqueue_cleanup outcome=failed exception_type=%s',
-                        type(e).__name__,
-                    )
-
-        if not dispatched:
-            if not cloud_tasks_dispatch_enabled:
-                record_fallback(
-                    component='sync_dispatch',
-                    from_mode='cloud_tasks',
-                    to_mode='inline',
-                    reason='dispatch_disabled',
-                    outcome='recovered',
-                )
-                try:
-                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline', app_build=sync_app_build).inc()
-                except Exception:
-                    pass
-                record_product_event(
-                    'sync_job_enqueued',
-                    client_kind=resolve_client_kind(x_app_platform=x_app_platform, user_agent=None),
-                    app_build=sync_app_build,
-                    uid=uid,
-                )
-            elif byok_enabled:
-                record_fallback(
-                    component='sync_dispatch',
-                    from_mode='cloud_tasks',
-                    to_mode='inline',
-                    reason='byok',
-                    outcome='recovered',
-                )
-                try:
-                    OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL.labels(mode='inline', app_build=sync_app_build).inc()
-                except Exception:
-                    pass
-                record_product_event(
-                    'sync_job_enqueued',
-                    client_kind=resolve_client_kind(x_app_platform=x_app_platform, user_agent=None),
-                    app_build=sync_app_build,
-                    uid=uid,
-                )
-
-            # Inline work needs the same lease as Cloud Tasks. Without it, a
-            # long healthy inline worker looks stale to a polling client and its
-            # durable retry claim can be released underneath it.
-            acquire_inline_lock = try_acquire_sync_job_run_lock if ledger_fence_active else try_acquire_job_run_lock
-            inline_run_lock_token = await run_blocking(db_executor, acquire_inline_lock, job_id)
-            if inline_run_lock_token:
-                converged = None
-                can_start = True
-                if ledger_fence_active:
-                    try:
-                        converged = await run_blocking(
-                            db_executor,
-                            bind_or_converge_sync_ledger_completion,
-                            job_id=job_id,
-                            uid=uid,
-                            content_id=content_id,
-                            run_lock_token=inline_run_lock_token,
-                        )
-                    except SyncJobRunLeaseLost:
-                        # A higher epoch is now the durable owner. Drop our
-                        # unused Redis lease so the winner is not blocked for
-                        # the full lock TTL, and keep local material for retry.
-                        can_start = False
-                        logger.warning('event=sync_inline outcome=ledger_lease_lost')
-                        try:
-                            await run_blocking(db_executor, release_job_run_lock, job_id, inline_run_lock_token)
-                        except Exception:
-                            pass
-                        inline_run_lock_token = None
-                if can_start:
-                    if converged is not None:
-                        await run_blocking(sync_executor, _cleanup_files, owned_paths)
-                        await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
-                        await run_blocking(db_executor, release_job_run_lock, job_id, inline_run_lock_token)
-                        return JSONResponse(
-                            status_code=202,
-                            content={
-                                'job_id': job_id,
-                                'status': 'completed',
-                                'total_files': len(files),
-                                'total_segments': converged.get('total_segments', 0),
-                                'poll_after_ms': 0,
-                                'lane': lane_decision.lane.value,
-                            },
-                        )
-                    # Async coordinator: runs on event loop, offloads blocking work to pools.
-                    # No thread pool slot held for the full pipeline duration (fixes #7361).
-                    start_background_task(
-                        _run_full_pipeline_background_async(
-                            job_id,
-                            uid,
-                            owned_paths,
-                            source,
-                            should_lock,
-                            job_dir,
-                            conversation_id,
-                            geolocation=geolocation,
-                            client_device_id=client_device_context.client_device_id,
-                            client_platform=client_device_context.platform,
-                            sync_lane=lane_decision.lane.value,
-                            content_id=content_id,
-                            run_lock_token=inline_run_lock_token if ledger_fence_active else None,
-                            inline_run_lock_token=inline_run_lock_token,
-                            content_run_bound=ledger_fence_active,
-                            ledger_fence_active=ledger_fence_active,
-                            **({'raw_capture_paths': archive_paths} if archive_paths else {}),
-                            **({'capture_evidence_claims': capture_claims} if capture_claims else {}),
-                            recording_session_id=recording_session_id,
-                            audio_start_seconds=audio_start_seconds,
-                            audio_end_seconds=audio_end_seconds,
-                        ),
-                        name=f'sync_pipeline:{job_id}',
-                    )
-            else:
-                logger.warning('event=sync_inline outcome=lease_unavailable')
-
-        return JSONResponse(
-            status_code=202,
-            content={
-                'job_id': job_id,
-                'status': 'queued',
-                'total_files': len(files),
-                'total_segments': 0,
-                'poll_after_ms': 3000,
-                'lane': lane_decision.lane.value,
-            },
+        await run_blocking(sync_executor, _cleanup_files, paths)
+        await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+        return (
+            legacy_dark.fence_response(decision, total_files=len(files), lane=lane_decision.lane.value)
+            or legacy_dark.admission_refused_response()
         )
     except HTTPException:
         if backfill_slot_acquired:
@@ -2037,83 +1090,6 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     return with_poll_hint(resp, surface_open=surface_open)
 
 
-async def _maintain_uid_sequencer_lease(
-    uid: str, job_id: str, epoch: int, stop: asyncio.Event, owner: asyncio.Task | None
-) -> None:
-    while not stop.is_set():
-        try:
-            await asyncio.wait_for(stop.wait(), timeout=sync_backfill_sequencer.HEARTBEAT_SECONDS)
-            return
-        except asyncio.TimeoutError:
-            pass
-        try:
-            renewed = await run_blocking(db_executor, sync_backfill_sequencer.renew_job, uid, job_id, epoch)
-        except Exception as error:
-            logger.error(
-                'event=sync_uid_sequencer action=heartbeat outcome=error exception_type=%s', type(error).__name__
-            )
-            renewed = False
-        if not renewed:
-            logger.error('event=sync_uid_sequencer action=heartbeat outcome=lease_lost')
-            if owner is not None:
-                owner.cancel()
-            return
-
-
-@router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
-@read_origin('job:sync_backfill_sequencer')
-async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
-    # Legacy-dark: ``dark`` stops claiming/dispatching only. Enrichment repair and
-    # summary-debt repair below keep running until C4 moves them (lead ruling 10-19).
-    if legacy_dark.sequencer_dispatch_allowed():
-        outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
-    else:
-        legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_DARK)
-        outcomes = {'legacy_dark': 1}
-    from utils.sync import reprocess
-
-    if reprocess.owns_runtime():
-        try:
-            repair = await run_blocking(db_executor, reprocess.sweep)
-        except Exception as error:
-            logger.error('event=sync_reprocess action=sweep outcome=error exception_type=%s', type(error).__name__)
-            repair = {'repaired': 0, 'error': 1}
-        outcomes['reprocess_repaired'] = repair['repaired']
-        outcomes['reprocess_repair_errors'] = repair['error']
-        if summary_repair_enabled():
-            # Only the scheduled two-minute owner scans conversation debt.
-            # Batch pumps replay the outbox without paying a per-pump cursor read.
-            try:
-                summary = await run_blocking(db_executor, summary_debt_repair.tick)
-            except Exception as error:
-                logger.error('event=summary_debt_repair outcome=error exception_type=%s', type(error).__name__)
-                summary = {'scanned': 0, 'admitted': 0, 'errors': 1}
-            outcomes['summary_debt_scanned'] = summary['scanned']
-            outcomes['summary_debt_admitted'] = summary['admitted']
-            outcomes['summary_debt_errors'] = summary['errors']
-    return JSONResponse(status_code=500 if outcomes.get('error') else 200, content={'outcomes': outcomes})
-
-
-@router.post('/v2/sync-backfill-sequencer/wake', include_in_schema=False)
-async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(verify_cloud_tasks_oidc)):
-    payload = await request.json()
-    uid = payload.get('uid') if isinstance(payload, dict) else None
-    if not isinstance(uid, str) or not uid:
-        return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
-    if not legacy_dark.sequencer_dispatch_allowed():
-        return legacy_dark.sequencer_dark_response()
-    try:
-        dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
-    except Exception as error:
-        logger.error(
-            'event=sync_uid_sequencer action=wake outcome=error uid_hash=%s exception_type=%s',
-            backfill_cutover.uid_hash(uid),
-            type(error).__name__,
-        )
-        return JSONResponse(status_code=500, content={'status': 'retry'})
-    return JSONResponse(status_code=200, content={'status': 'dispatched' if dispatched else 'deferred'})
-
-
 @router.post("/v2/sync-jobs/run", include_in_schema=False)
 async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_cloud_tasks_oidc)):
     """Persisted sequencer epochs survive the kill switch; old tasks keep their legacy path."""
@@ -2136,7 +1112,9 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     route_deadline = entry_state['budget_deadline_monotonic']
     try:
         async with asyncio.timeout_at(route_deadline):
-            fence_mode = await run_blocking(db_executor, uid_sequencer.production_fence_mode)
+            fence_mode = (
+                await run_blocking(db_executor, get_sync_ledger_fence_mode) if sync_stage.production_stage() else None
+            )
     except TimeoutError:
         logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=fence_read')
         return _budget_deferral_fallback('preamble_timeout', 'degraded')
@@ -2160,255 +1138,21 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
     if isinstance(payload, dict) and payload.get('kind') == 'sync_reprocess':
         return await enrichment_response(payload)
     if minimal_redrive.parse_mode(payload) and not minimal_redrive.enabled():
-        # Kill switch, before the sequencer lease and any lock, download or paid
-        # call: the task, staged audio and ledger claim stay retained.
+        # Kill switch, before any lock, download or paid call: the task, staged
+        # audio and ledger claim stay retained.
         logger.warning('event=sync_minimal_redrive outcome=refused reason=disabled')
         return JSONResponse(status_code=409, content={'status': 'minimal_redrive_disabled'})
-    epoch = payload.get('sequencer_epoch') if isinstance(payload, dict) else None
-    if uid_sequencer.foreign_delivery(payload):
+    if (
+        sync_stage.nonproduction_stage()
+        and isinstance(payload, dict)
+        and (payload.get('sequencer_epoch') is not None or payload.get('lane') == SyncLane.BACKFILL.value)
+    ):
+        # Non-prod stages never run legacy backfill against shared state.
         return JSONResponse(status_code=200, content={'status': 'foreign_stage'})
-    if epoch is None:
-        # Sequencer off: direct work runs at once, in parallel with the drain of
-        # already-sequenced entries, instead of queueing behind them.
-        if (
-            isinstance(payload, dict)
-            and payload.get('lane') == SyncLane.BACKFILL.value
-            and uid_sequencer.production_stage()
-            and uid_sequencer.enabled()
-            and not legacy_dark.sequencer_registration_allowed()
-            and isinstance(payload.get('uid'), str)
-            and isinstance(payload.get('job_id'), str)
-        ):
-            # Legacy-dark (draining/dark): an epoch-less backfill delivery can no
-            # longer migrate into the sequencer, so it must not start a second
-            # transcriber for a uid whose sequencer owner is live (M1 review L10-1).
-            try:
-                async with asyncio.timeout_at(route_deadline):
-                    registered = await run_blocking(
-                        db_executor, sync_backfill_sequencer.is_registered, payload['uid'], payload['job_id']
-                    )
-                    owner = (
-                        {}
-                        if registered
-                        else await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
-                    )
-            except TimeoutError:
-                logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=dark_owner_probe')
-                return _budget_deferral_fallback('preamble_timeout', 'degraded')
-            if registered and legacy_dark.sequencer_dispatch_allowed():
-                # The draining sweep dispatches this job; acking keeps it the only dispatcher.
-                legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_OWNS_JOB)
-                return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
-            active_job_id = owner.get('active_job_id')
-            if isinstance(active_job_id, str) and active_job_id and active_job_id != payload['job_id']:
-                # Never 503/429 from a task target (contract d): the queue retries
-                # until the live owner finishes, the client keeps its audio.
-                legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_OWNER_ACTIVE)
-                return JSONResponse(status_code=409, content={'status': 'locked', 'reason': 'sequencer_owner_active'})
-        if (
-            isinstance(payload, dict)
-            and payload.get('lane') == SyncLane.BACKFILL.value
-            and uid_sequencer.production_stage()
-            and uid_sequencer.enabled()
-            and legacy_dark.sequencer_registration_allowed()
-            and isinstance(payload.get('uid'), str)
-            and isinstance(payload.get('job_id'), str)
-        ):
-            legacy_job = None
-            active_owner: dict = {}
-            try:
-                async with asyncio.timeout_at(route_deadline):
-                    legacy_job = await run_blocking(db_executor, get_sync_job, payload['job_id'])
-                    if legacy_job and legacy_job.get('status') == 'processing':
-                        active_owner = await run_blocking(
-                            db_executor, sync_backfill_sequencer.get_owner, payload['uid']
-                        )
-            except TimeoutError:
-                logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=legacy_probe')
-                return _budget_deferral_fallback('preamble_timeout', 'degraded')
-            if legacy_job and legacy_job.get('status') == 'processing':
-                if active_owner.get('active_job_id'):
-                    logger.error(
-                        'event=sync_uid_sequencer action=cutover_overlap outcome=direct_and_sequenced '
-                        'job_id=%s sequenced_job_id=%s uid_hash=%s',
-                        payload['job_id'],
-                        active_owner['active_job_id'],
-                        backfill_cutover.uid_hash(payload['uid']),
-                    )
-                else:
-                    logger.info(
-                        'event=sync_uid_sequencer action=cutover_direct_active outcome=observed '
-                        'job_id=%s uid_hash=%s',
-                        payload['job_id'],
-                        backfill_cutover.uid_hash(payload['uid']),
-                    )
-            if legacy_job and legacy_job.get('status') == 'queued':
-                try:
-                    async with asyncio.timeout_at(route_deadline):
-                        marked = await run_blocking(
-                            db_executor, update_sync_job, payload['job_id'], {'dispatch_mode': 'sequenced'}
-                        )
-                        if marked is None:
-                            return await _run_sync_job_body(request, task_retry_count, entry_state)
-                        enqueued_at = payload.get('enqueued_at')
-                        age = payload.get('recording_age_seconds')
-                        captured_at = (
-                            float(enqueued_at) - float(age)
-                            if isinstance(enqueued_at, (int, float)) and isinstance(age, (int, float))
-                            else None
-                        )
-                        await run_blocking(
-                            db_executor,
-                            sync_backfill_sequencer.register_job,
-                            payload['uid'],
-                            payload['job_id'],
-                            payload,
-                            captured_at,
-                        )
-                except TimeoutError:
-                    logger.warning(
-                        'event=sync_transcription_job outcome=handler_preamble_expired phase=legacy_migration'
-                    )
-                    return _budget_deferral_fallback('preamble_timeout', 'degraded')
-                try:
-                    async with asyncio.timeout_at(route_deadline):
-                        await run_blocking(db_executor, uid_sequencer.kick, payload['uid'])
-                except TimeoutError:
-                    # Registration already committed: a 409 would redeliver a
-                    # payload that no longer needs the queue.
-                    logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=legacy_kick')
-                except Exception as error:
-                    logger.error(
-                        'event=sync_uid_sequencer action=legacy_migration outcome=deferred exception_type=%s',
-                        type(error).__name__,
-                    )
-                logger.info('event=sync_uid_sequencer action=legacy_migration outcome=registered')
-                return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
-            if legacy_job and legacy_job.get('status') in ('queued', 'processing'):
-                try:
-                    async with asyncio.timeout_at(route_deadline):
-                        await run_blocking(
-                            db_executor, backfill_cutover.refresh_direct_run, payload['uid'], payload['job_id']
-                        )
-                except TimeoutError:
-                    logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=direct_refresh')
-                    return _budget_deferral_fallback('preamble_timeout', 'degraded')
-                except Exception as error:
-                    logger.error(
-                        'event=sync_transcription_job outcome=direct_refresh_failed exception_type=%s',
-                        type(error).__name__,
-                    )
-        return await _run_sync_job_body(request, task_retry_count, entry_state)
-    uid = payload.get('uid')
-    job_id = payload.get('job_id')
-    if not isinstance(uid, str) or not isinstance(job_id, str) or not isinstance(epoch, int) or epoch <= 0:
-        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_sequencer_identity'})
-    # One absolute budget deadline for the whole sequenced request (entry_state,
-    # captured and enforced at route entry): the fence read, payload parsing,
-    # begin_job, and the prior-job read below each run inside a timeout_at
-    # against that deadline, so a stall in any of them ends the request through
-    # the queue-owned 409 instead of carrying it past the Cloud Tasks dispatch
-    # deadline or the middleware cap this change exists to stay under.
-    sequenced_attempt_state: dict = entry_state
-    try:
-        async with asyncio.timeout_at(route_deadline):
-            began = await run_blocking(db_executor, sync_backfill_sequencer.begin_job, uid, job_id, epoch)
-    except TimeoutError:
-        logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=begin_job')
-        return _budget_deferral_fallback('preamble_timeout', 'degraded')
-    if not began:
-        logger.info('event=sync_uid_sequencer action=delivery outcome=stale_epoch')
-        return JSONResponse(status_code=200, content={'status': 'stale_sequencer_epoch'})
-    stop = asyncio.Event()
-    heartbeat = start_background_task(
-        _maintain_uid_sequencer_lease(uid, job_id, epoch, stop, asyncio.current_task()),
-        name=f'sync:uid-lease:{job_id}',
-    )
-    try:
-        try:
-            async with asyncio.timeout_at(route_deadline):
-                prior_job = await run_blocking(db_executor, get_sync_job, job_id)
-        except TimeoutError:
-            logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=prior_read')
-            return _budget_deferral_fallback('preamble_timeout', 'degraded')
-        prior_attempt = prior_job.get('attempt', 0) if isinstance(prior_job, dict) else 0
-        effective_retry_count = max(task_retry_count, prior_attempt if isinstance(prior_attempt, int) else 0)
-        # One state dict carries the post-budget deadline from the deferral
-        # into this finally block: the marker clear inside the deferral and
-        # this heartbeat drain must share one absolute cleanup deadline
-        # (post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS)
-        # instead of each spending a fresh margin-sized timeout whose sum
-        # reaches the attempt wall before the response is serialized.
-        response = await _run_sync_job_body(request, effective_retry_count, sequenced_attempt_state)
-    finally:
-        stop.set()
-        # Setting stop cannot interrupt a renewal already blocked inside its
-        # Firestore run_blocking, and this join sits between the attempt's
-        # response and its return: without a bound, a stuck renewal holds the
-        # request open past every wall the handler budget exists to stay
-        # under. wait_for cancels the heartbeat at the bound; the orphaned
-        # renewal finishing later only logs lease_lost or renews an epoch the
-        # response has already left behind.
-        post_budget_deadline = sequenced_attempt_state.get('post_budget_deadline')
-        shared_drain_bound = (
-            post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
-            if isinstance(post_budget_deadline, float)
-            else None
-        )
-        if shared_drain_bound is not None:
-            # One absolute bound for both cleanup waits: the marker clear in
-            # the deferral already consumed up to this deadline, so the drain
-            # takes only what remains — never a fresh margin-sized timeout on
-            # top. The standalone bound stays the ceiling so a large explicit
-            # enqueue-timeout override cannot extend the drain past its own
-            # contract.
-            drain_timeout = min(
-                SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS,
-                max(0.0, shared_drain_bound - time.monotonic()),
-            )
-        else:
-            drain_timeout = SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
-        try:
-            await asyncio.wait_for(heartbeat, drain_timeout)
-        except TimeoutError:
-            logger.warning('event=sync_uid_sequencer action=heartbeat_drain outcome=cancelled')
-    if response.status_code < 300 and not _is_handler_budget_deferral(response):
-        # A budget deferral is an ack, not a completion claim: the epoch still
-        # owns the job and the delayed replacement (or the sweep's lease-expiry
-        # redrive) re-enters it, so the owner must not be finished here — and
-        # the nonterminal check below must not turn it into a retry-burning 500.
-        # The completion drain is bounded by the same absolute request
-        # deadline plus the post-attempt cleanup headroom the heartbeat drain
-        # uses: a slow Redis/Firestore call here must not consume the
-        # remaining response margin and let the middleware or Cloud Tasks
-        # deadline terminate the request before its response is returned.
-        # Fencing stays intact — finish_job's transaction re-checks the lease
-        # — so an expired bound only skips the release; the next sweep's
-        # lease-expiry path releases the owner instead.
-        completion_bound = sequenced_attempt_state.get('budget_deadline_monotonic')
-        completion_timeout = (
-            max(
-                0.0,
-                (completion_bound + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS) - time.monotonic(),
-            )
-            if isinstance(completion_bound, float)
-            else SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
-        )
-        try:
-            async with asyncio.timeout(completion_timeout):
-                job = await run_blocking(db_executor, get_sync_job, job_id)
-                if job is not None and job.get('status') not in TERMINAL_STATUSES:
-                    logger.error('event=sync_uid_sequencer action=delivery outcome=nonterminal_ack')
-                    return JSONResponse(status_code=500, content={'status': 'nonterminal_ack'})
-                outcome = job.get('status') if job else 'expired'
-                released = await run_blocking(
-                    db_executor, sync_backfill_sequencer.finish_job, uid, job_id, epoch, outcome
-                )
-                if released:
-                    await run_blocking(db_executor, uid_sequencer.kick, uid)
-        except TimeoutError:
-            logger.warning('event=sync_uid_sequencer action=delivery outcome=completion_drain_cancelled')
-    return response
+    if isinstance(payload, dict) and payload.get('sequencer_epoch') is not None:
+        # C10: a task enqueued by the deleted backfill sequencer; its owner state no longer exists.
+        return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'sequencer_retired'})
+    return await _run_sync_job_body(request, task_retry_count, entry_state)
 
 
 # The TimeoutMiddleware cap (HTTP_SYNC_JOBS_RUN_TIMEOUT, default 1500s) answers
@@ -2647,7 +1391,8 @@ async def _defer_sync_job_after_handler_budget_expiry(
     try:
         payload = dict(await request.json())
         job_id = payload['job_id']
-        uid = payload['uid']
+        if not isinstance(payload['uid'], str):
+            raise ValueError('budget deferral payload requires a uid')
         deferrals = payload.get(SYNC_JOB_BUDGET_DEFERRALS_PAYLOAD_KEY, 0)
         if isinstance(deferrals, bool) or not isinstance(deferrals, int) or deferrals < 0:
             raise ValueError('budget deferral count must be a non-negative integer')
@@ -2686,82 +1431,6 @@ async def _defer_sync_job_after_handler_budget_expiry(
     )
     if attempt_state is not None:
         attempt_state['post_budget_deadline'] = post_budget_deadline
-    if payload.get('sequencer_epoch') is not None:
-        # Sequenced deliveries only, and REQUIRED BEFORE anything schedules a
-        # replacement: the sweep's lease-expiry redrive re-dispatches the
-        # owner's original payload, which carries no chain count — the
-        # owner-side copy is the only bound on that path. The replacement is
-        # scheduled past the lease (RUN_LOCK_TTL + 60s), so a redrive can
-        # always arrive before it; without the count persisted first, that
-        # redrive restarts the chain at zero and invalidates the
-        # already-scheduled epoch. A write that fails or cannot settle inside
-        # the shared deadline therefore aborts the deferral BEFORE the marker
-        # or enqueue exists — the queue-owned 409 keeps the task, and no
-        # unbounded whole-budget sequence can be restored behind a lost
-        # count. Only an owner that has moved on (completed/released, or a
-        # newer epoch) makes the write inert: nothing left can redrive this
-        # job from the owner, so the deferral may proceed.
-        owner_count_write = asyncio.ensure_future(
-            run_blocking(
-                db_executor,
-                sync_backfill_sequencer.note_budget_deferral,
-                uid,
-                job_id,
-                int(payload['sequencer_epoch']),
-                deferrals + 1,
-            )
-        )
-        try:
-            async with asyncio.timeout_at(post_budget_deadline):
-                owner_count_written = await asyncio.shield(owner_count_write)
-        except Exception as error:
-            logger.warning(
-                'event=sync_transcription_job outcome=handler_budget_owner_deferral_write_failed exception_type=%s',
-                type(error).__name__,
-            )
-            # The timeout cancels only the await: the Firestore transaction
-            # can still be running in db_executor and commit later. An
-            # abandoned leaf that lands records active_budget_deferrals with
-            # no marker or replacement behind it — the sequencer sweep then
-            # reads the count plus absent marker as an exhausted chain and
-            # terminally fails the job a whole attempt short. Drain the
-            # retained write within the cleanup allowance: a settled True
-            # rescues the deferral (the count the sweep will see is exactly
-            # the one this chain carries), a settled False/exception is the
-            # plain failure below, and a write that cannot settle skips the
-            # rescue and keeps the queue-owned 409 — with the leaf's possible
-            # late commit fenced by the sweep's own lease-expiry recheck of
-            # the owner it would read.
-            rescued: Optional[bool] = None
-            try:
-                async with asyncio.timeout_at(post_budget_deadline + SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS):
-                    rescued = await asyncio.shield(owner_count_write)
-            except Exception:
-                _consume_detached_outcome(owner_count_write)
-                logger.warning('event=sync_transcription_job outcome=handler_budget_owner_deferral_drain_failed')
-            if rescued is None:
-                return _budget_deferral_fallback('owner_write_failed', 'degraded')
-            # A settled False is the inert owner (moved on, nothing written)
-            # — the same proceed-outcome as the settled path; only a write
-            # that cannot settle at all keeps the queue-owned 409.
-            owner_count_written = rescued
-            # The drain consumed the original enqueue window, so the rescued
-            # deferral's remaining work (acquire drain, marker, replacement
-            # enqueue) runs against the drain's absolute wall — the one
-            # cleanup allowance past the original deadline that the wrapper's
-            # heartbeat drain also bounds itself by — instead of the
-            # already-expired deadline, whose instant expiry would turn every
-            # rescue into a marker_timeout/enqueue_failed 409 and leave the
-            # late commit the drain just rescued with no replacement behind
-            # it. attempt_state carries the extended wall so the wrapper's
-            # post-response drains share it instead of stacking a fresh
-            # allowance on top.
-            post_budget_deadline += SYNC_JOB_POST_ATTEMPT_CLEANUP_TIMEOUT_SECONDS
-            if attempt_state is not None:
-                attempt_state['post_budget_deadline'] = post_budget_deadline
-            logger.info('event=sync_transcription_job outcome=handler_budget_owner_deferral_late_commit_rescued')
-        if owner_count_written is False:
-            logger.info('event=sync_transcription_job outcome=handler_budget_owner_deferral_inert')
     # The expiry that reached here may have cancelled only the await of the run
     # lock acquire: its executor leaf can still land the TTL'd SET minutes
     # later, so a schedule computed from now can come due while that lock is
@@ -3289,19 +1958,6 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
             logger.info('event=sync_transcription_job outcome=skipped reason=account_cutover lane=%s', sync_lane)
             return JSONResponse(status_code=200, content={'status': 'skipped', 'reason': 'account_cutover'})
 
-        sequencer_epoch = payload.get('sequencer_epoch')
-        if (
-            sync_lane == SyncLane.BACKFILL.value
-            and isinstance(sequencer_epoch, int)
-            and sequencer_epoch > 0
-            and preparation_width() > 1
-        ):
-            # Pure future downloads share this instance with a possible next
-            # task. They hold no Cloud Tasks slot, job lock, ledger claim, or
-            start_background_task(
-                run_blocking(storage_executor, warm_owner, uid, job_id, sequencer_epoch),
-                name='sync:owner-prefetch',
-            )
         if sync_lane == SyncLane.BACKFILL.value:
             staged = await run_blocking(storage_executor, _download_staged_files, blob_paths, bounded_backfill=True)
         else:

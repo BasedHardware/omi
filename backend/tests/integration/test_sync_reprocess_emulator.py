@@ -153,7 +153,7 @@ def test_loopback_worker_http_runs_current_transcript_once(store, monkeypatch):
         return 0
 
     monkeypatch.setattr(callback, 'enrich_conversation', provider_leaf)
-    monkeypatch.setattr(sync_router.uid_sequencer, 'production_fence_mode', lambda: None)
+    monkeypatch.setattr(sync_router, 'get_sync_ledger_fence_mode', lambda: None)
     app = FastAPI()
     app.include_router(sync_router.router)
     app.dependency_overrides[sync_router.verify_cloud_tasks_oidc] = authenticate

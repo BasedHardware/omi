@@ -36,7 +36,6 @@ from database.legal_holds import external_write_fence, destructive_operation_gat
 from utils.other import audio_packs
 from utils.request_validation import parse_sync_filename_timestamp
 from utils import encryption
-from utils.sync.staged_prefetch import MAX_FILE_BYTES, StagedBytes, staged_prefetch
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from database.audio_timeline import (
     chunk_span,
@@ -625,22 +624,9 @@ def download_syncing_temporal_file(file_path: str, *, max_bytes: int | None = No
     directory = os.path.dirname(file_path)
     if directory:
         os.makedirs(directory, exist_ok=True)
-    prepared = staged_prefetch.take(file_path)
     for name in dict.fromkeys(filter(None, (os.getenv('BUCKET_AUDIO_DERIVED'), syncing_local_bucket))):
         try:
             blob = _get_storage_client().bucket(name).blob(file_path)
-            if prepared is not None and prepared.bucket == name:
-                # Lifecycle deletion, replacement, or a higher-priority derived
-                # object must win over cached bytes. Never resurrect expired audio.
-                blob.reload()
-                if int(blob.generation) == prepared.generation and not blob.content_encoding:
-                    if max_bytes is not None and len(prepared.data) > max_bytes:
-                        from utils.sync.input_limits import BackfillInputLimitExceeded
-
-                        raise BackfillInputLimitExceeded('backfill staged bytes exceeded')
-                    _write_prefetched_bytes(file_path, prepared.data, map_pressure=max_bytes is not None)
-                    logger.info('event=sync_owner_prefetch outcome=hit')
-                    return True
             if max_bytes is None:
                 blob.download_to_filename(file_path)
             else:
@@ -649,20 +635,6 @@ def download_syncing_temporal_file(file_path: str, *, max_bytes: int | None = No
         except BlobNotFound:
             continue
     return False
-
-
-def _write_prefetched_bytes(file_path: str, data: bytes, *, map_pressure: bool) -> None:
-    try:
-        with open(file_path, 'wb') as output:
-            output.write(data)
-    except Exception as error:
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        if map_pressure:
-            from utils.sync.input_limits import raise_sync_storage_pressure
-
-            raise_sync_storage_pressure(error)
-        raise
 
 
 def _download_blob_bounded(blob, file_path: str, max_bytes: int) -> None:
@@ -687,26 +659,6 @@ def _download_blob_bounded(blob, file_path: str, max_bytes: int) -> None:
             os.remove(file_path)
         raise_sync_storage_pressure(error)
         raise
-
-
-def prefetch_syncing_temporal_file(file_path: str) -> StagedBytes | None:
-    """Read a small immutable generation; never write job paths or cloud state."""
-    for name in dict.fromkeys(filter(None, (os.getenv('BUCKET_AUDIO_DERIVED'), syncing_local_bucket))):
-        try:
-            blob = _get_storage_client().bucket(name).blob(file_path)
-            blob.reload(timeout=(1, 3), retry=None)
-            if blob.size is None or blob.size > MAX_FILE_BYTES or blob.content_encoding:
-                return None
-            generation = int(blob.generation)
-            data = blob.download_as_bytes(
-                start=0, end=MAX_FILE_BYTES, if_generation_match=generation, timeout=(1, 3), retry=None
-            )
-            if len(data) == blob.size:
-                return StagedBytes(data, name, generation)
-            return None
-        except BlobNotFound:
-            continue
-    return None
 
 
 # ************************************************

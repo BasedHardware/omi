@@ -668,7 +668,6 @@ def test_scheduler_job_exists_only_for_prod():
     assert 'candidate-integration-sweep' not in dev_names
     jobs = manifest['environments']['prod']['jobs']
     job = next(item for item in jobs if item['name'] == 'candidate-integration-sweep')
-    sequencer = next(item for item in jobs if item['name'] == 'sync-backfill-uid-sequencer')
     host = 'https://backend-sync-hhibjajaja-uc.a.run.app'
     assert 'lifecycle' not in job  # active: backend-sync serves the route since 7741a1a
     assert job['schedule'] == '*/15 * * * *'
@@ -678,9 +677,14 @@ def test_scheduler_job_exists_only_for_prod():
     assert job['target']['method'] == 'POST'
     assert job['target']['oidc'] == {
         'service_account': 'sync-tasks-invoker@based-hardware.iam.gserviceaccount.com',
-        'audience': sequencer['target']['oidc']['audience'],
+        'audience': host + '/v2/sync-jobs/run',
     }
-    assert job['retry'] == sequencer['retry']
+    assert job['retry'] == {
+        'max_backoff': '3600s',
+        'max_doublings': 5,
+        'max_retry': '0s',
+        'min_backoff': '5s',
+    }
 
 
 @pytest.fixture

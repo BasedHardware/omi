@@ -10,12 +10,24 @@ No unique match keeps today's temporal assignment.
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import logging
 import math
+import os
 from datetime import datetime, timezone
 from typing import Any, Mapping, Sequence, cast
 
 logger = logging.getLogger(__name__)
+
+
+def _log_uid_hash(uid: str) -> str:
+    """Keyed log correlation id (formerly ``backfill_cutover.uid_hash``; same value)."""
+    secret = os.getenv('SYNC_CONTENT_ID_SECRET') or os.getenv('ENCRYPTION_SECRET')
+    if not secret:
+        raise RuntimeError('sync identity secret is required')
+    return hmac.new(secret.encode(), f'sync-uid-log:{uid}'.encode(), hashlib.sha256).hexdigest()[:16]
+
 
 _CANDIDATE_LIMIT = 5
 # The socket can open after the first buffered frames (or the phone clock can
@@ -159,9 +171,7 @@ def resolve_recording_session_sync_target(
         rows = _candidate_rows(uid, session_id, firestore_client=firestore_client)
     except Exception as exc:
         try:
-            from utils.sync.backfill_cutover import uid_hash
-
-            log_uid_hash = uid_hash(uid)
+            log_uid_hash = _log_uid_hash(uid)
         except Exception:
             log_uid_hash = 'unavailable'
         logger.warning(
