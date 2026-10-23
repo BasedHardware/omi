@@ -99,6 +99,8 @@ from models.memory_contracts import DurablePatchDecision, LifecycleState, determ
 from models.memory_operations import MemoryLedgerReopenReceipt, MemoryOperation, MemoryOperationType
 from models.memory_source_replacement import ConversationSourceReplacementReceipt
 from models.product_memory import (
+    undecided_visible,
+    visible_memory_tier,
     LedgerWriteReason,
     MAX_MEMORY_ARGUMENTS_JSON_BYTES,
     MemoryAccessPolicy,
@@ -407,7 +409,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         user_review=user_review,
         visibility=item.visibility,
         evidence=evidence_payload,
-        memory_tier=item.tier,
+        memory_tier=visible_memory_tier(item),
         primary_capture_device=item.primary_capture_device,
         capture_device_ids=item.capture_device_ids or [],
         subject_entity_id=item.subject_entity_id,
@@ -877,7 +879,9 @@ def read_canonical_scan_page(
             'source_state': 'active',
             'source_states': ['active', 'missing'],
             'processing_state': 'processed',
-            'tiers': ['short_term', 'long_term'],
+            # Historical Review archives are projected as Short-term while the
+            # mitigation is on. The policy below still rejects other archives.
+            'tiers': ['short_term', 'long_term', 'archive'] if undecided_visible() else ['short_term', 'long_term'],
         }
         if include_pending_processing:
             # Usually empty: prove the pending branch first so a subsequent
