@@ -26,14 +26,35 @@ class PocketPairingStep extends StatefulWidget {
 class _PocketPairingStepState extends State<PocketPairingStep> {
   bool _done = false;
 
+  bool _advanceScheduled = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      // The pendant was already connected when the step opened: pairing is done.
-      final devices = context.read<DeviceProvider>();
-      if (devices.isConnected && devices.connectedDevice != null) _finish(true);
+      if (mounted) _maybeAdvanceOnReconnect();
+    });
+  }
+
+  /// The pendant already connected, or a saved one reconnecting on its own while the step is open,
+  /// completes pairing once. A tap-to-connect is left to [OnboardingProvider.handleTap]: it calls
+  /// goNext itself after its settle and persistence, and marks [OnboardingProvider.isConnected].
+  void _maybeAdvanceOnReconnect() {
+    if (_done || _advanceScheduled) return;
+    final devices = context.read<DeviceProvider>();
+    final onboarding = context.read<OnboardingProvider>();
+    if (!devices.isConnected || devices.connectedDevice == null) return;
+    if (onboarding.isClicked || onboarding.connectingToDeviceId != null || onboarding.isConnected) return;
+    _advanceScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _advanceScheduled = false;
+      if (!mounted || _done) return;
+      // Re-check after the frame: the pendant may have dropped, or a tap may have started.
+      final d = context.read<DeviceProvider>();
+      final o = context.read<OnboardingProvider>();
+      if (d.isConnected && d.connectedDevice != null && !o.isClicked && o.connectingToDeviceId == null) {
+        _finish(true);
+      }
     });
   }
 
@@ -67,7 +88,15 @@ class _PocketPairingStepState extends State<PocketPairingStep> {
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _back();
       },
-      child: _scaffold(context),
+      // Rebuilds on connection changes so a delayed reconnect of the saved pendant still advances.
+      child: Consumer<DeviceProvider>(
+        builder: (context, devices, _) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _maybeAdvanceOnReconnect();
+          });
+          return _scaffold(context);
+        },
+      ),
     );
   }
 
