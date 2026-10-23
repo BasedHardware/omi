@@ -724,7 +724,11 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
                 // Drop zone for first position
                 if (orderedItems.isNotEmpty && (category != TaskCategory.noDeadline || _noDeadlineExpanded))
-                  _buildFirstPositionDropZone(category, orderedItems, candidateData.isNotEmpty),
+                  _buildFirstPositionDropZone(
+                    category,
+                    orderedItems,
+                    candidateData.isNotEmpty || _hoveredCategory == category,
+                  ),
               ],
             ),
           );
@@ -792,7 +796,9 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xxs),
       sliver: TweenAnimationBuilder<Color?>(
         tween: ColorTween(
-          end: _hoveredCategory == category && _hoveredItemId == null ? OmiColors.surface1 : Colors.transparent,
+          end: category != TaskCategory.overdue && _hoveredCategory == category && _hoveredItemId == null
+              ? OmiColors.surface1
+              : Colors.transparent,
         ),
         duration: const Duration(milliseconds: 200),
         builder: (context, color, child) => DecoratedSliver(
@@ -933,10 +939,12 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
 
     return DragTarget<ActionItemWithMetadata>(
       onWillAcceptWithDetails: (details) {
+        _setHoveredCategory(category);
         // Accept if it's a different item
         return details.data.id != item.id;
       },
       onAcceptWithDetails: (details) {
+        _setHoveredCategory(null);
         final draggedItem = details.data;
         final targetIndent = _hoverIndent;
 
@@ -986,6 +994,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         }
       },
       onLeave: (data) {
+        _setHoveredCategory(null);
         if (_hoveredItemId == item.id) {
           setState(() {
             _hoveredItemId = null;
@@ -1088,6 +1097,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         if (!_dragHasMoved) _showTaskMenu(item, categoryItems);
         setState(() {
           _hoveredItemId = null;
+          _hoveredCategory = null;
           _dragHasMoved = false;
           _hoverIndent = 0;
           _dragStartX = null;

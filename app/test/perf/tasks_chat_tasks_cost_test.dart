@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/review.dart';
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/env/env.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/action_items/project_task_sections.dart';
 import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
@@ -29,7 +30,11 @@ class _Tasks extends ActionItemsProvider {
 }
 
 void main() {
-  setUp(PlatformManager.initializeForLocalHarness);
+  setUp(() {
+    PlatformManager.initializeForLocalHarness();
+    Env.overrideApiBaseUrl('http://127.0.0.1:9/');
+  });
+  tearDown(Env.clearApiBaseUrlOverrideForTesting);
   for (final semantics in [false, true]) {
     for (final overdue in [false, true]) {
       testWidgets('240 ${overdue ? 'overdue' : 'undated'} tasks stay lazy, semantics=$semantics', (tester) async {
@@ -78,6 +83,28 @@ void main() {
       });
     }
   }
+
+  testWidgets('lazy sections retain the expanded first-position drag target', (tester) async {
+    final provider = _Tasks(List.generate(
+        20, (i) => ActionItemWithMetadata(id: '$i', description: 'Task $i', completed: false, sortOrder: i + 1)));
+    addTearDown(provider.dispose);
+    await tester.pumpWidget(await buildTypedActionItemsScreen(provider));
+    await provider.ensureLoaded();
+    await tester.pumpAndSettle();
+    final before = tester.getTopLeft(find.text('Task 0')).dy;
+    final gesture = await tester.startGesture(tester.getCenter(find.text('Task 1')));
+    await tester.pump(const Duration(milliseconds: 450));
+    await gesture.moveBy(const Offset(0, 70));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    final expansion = tester.getTopLeft(find.text('Task 0')).dy - before;
+    debugPrint('TASKS_DRAG first_position_expansion=$expansion');
+    await gesture.cancel();
+    await tester.pumpAndSettle();
+    expect(expansion, closeTo(16, 0.5), reason: 'the first-position target expands from 4 to 20 during a section drag');
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('one 240-task project only builds visible rows', (tester) async {
     final handle = tester.ensureSemantics();
     addTearDown(handle.dispose);
