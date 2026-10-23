@@ -7,6 +7,7 @@ from typing import Any
 from database._client import get_data_plane_firestore_client
 from database.memory_collections import RELEASED_MEMORY_CHANGE_HEAD
 from database.staged_promote_cache import invalidate_around_write
+from config.list_projection import STATE_COLLECTION, ROW_COLLECTIONS
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,10 @@ def purge_user_subtree(uid: str, client: Any, delete_collection: Callable) -> di
     # Atomic source deletes also maintain this derived head. Erase it after
     # every source collection, including when memory_state was visited first.
     user_ref.collection('memory_state').document(RELEASED_MEMORY_CHANGE_HEAD).delete()
+    # Source deletes can rotate these content-free heads after their collection
+    # was walked, including a retry whose root user document is already absent.
+    for family in ROW_COLLECTIONS:
+        user_ref.collection(STATE_COLLECTION).document(family).delete()
 
     if root_exists:
         logger.info(f"Deleting user document: {uid}")

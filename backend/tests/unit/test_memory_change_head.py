@@ -3,11 +3,67 @@
 from types import SimpleNamespace
 
 import pytest
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import firestore
+from google.cloud.firestore_v1.async_client import AsyncClient
+from google.cloud.firestore_v1.services.firestore import FirestoreClient, FirestoreAsyncClient
 from google.cloud.firestore_v1.types import CommitRequest, CommitResponse, Document, Write, WriteResult
 
-from database import memory_change_head as head
+from database import _client, memory_change_head as head
 
 ROOT = 'projects/demo/databases/(default)/documents'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('asynchronous', [False, True])
+@pytest.mark.parametrize('operation', ['set', 'delete'])
+async def test_list_and_memory_writers_share_one_commit_and_keep_source_results(monkeypatch, asynchronous, operation):
+    # Exercise both installers from the production entrypoint, through real SDK
+    # batches and GAPIC request preparation, stopping only at the network edge.
+    _client._install_memory_change_heads()
+    _client._install_list_projection_writer()
+    monkeypatch.delenv('OMI_LIST_PROJECTION_WRITER_ENABLED', raising=False)
+    calls = []
+
+    def capture(client, request=None, **kwargs):
+        prepared = CommitRequest(request)
+        calls.append(prepared)
+        return CommitResponse(write_results=[WriteResult() for _ in prepared.writes])
+
+    if asynchronous:
+
+        async def capture_async(client, request=None, **kwargs):
+            return capture(client, request=request, **kwargs)
+
+        monkeypatch.setattr(FirestoreAsyncClient, 'commit', head._wrap_commit(capture_async))
+        client = AsyncClient(project='demo', credentials=AnonymousCredentials())
+        client._firestore_api_internal = FirestoreAsyncClient(credentials=AnonymousCredentials())
+    else:
+        monkeypatch.setattr(FirestoreClient, 'commit', head._wrap_commit(capture))
+        client = firestore.Client(project='demo', credentials=AnonymousCredentials())
+        client._firestore_api_internal = FirestoreClient(credentials=AnonymousCredentials())
+
+    batch = client.batch()
+    for collection in ('memory_items', 'conversations'):
+        ref = client.document(f'users/u/{collection}/one')
+        if operation == 'delete':
+            batch.delete(ref)
+        else:
+            batch.set(ref, {'status': 'completed'})
+    result = await batch.commit() if asynchronous else batch.commit()
+    assert len(result) == len(batch.write_results) == 2
+    assert len(calls) == 1
+    writes = calls[0].writes
+    paths = [write.delete or write.update.name for write in writes]
+    assert len(paths) == len(set(paths)) == 5
+    assert paths[:2] == [f'{ROOT}/users/u/{family}/one' for family in ('memory_items', 'conversations')]
+    assert set(paths[2:]) == {
+        f'{ROOT}/users/u/conversation_list_rows/one',
+        f'{ROOT}/users/u/list_serving_versions/conversations',
+        f'{ROOT}/users/u/memory_state/{head.HEAD_DOCUMENT}',
+    }
+    assert bool(writes[2].delete) == (operation == 'delete')
+    assert writes[-1].update.fields['token'].string_value
 
 
 @pytest.mark.parametrize('collection', sorted(head.SOURCE_COLLECTIONS))

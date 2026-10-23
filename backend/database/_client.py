@@ -141,6 +141,17 @@ def _install_memory_change_heads() -> None:
 _install_memory_change_heads()
 
 
+def _install_list_projection_writer() -> None:
+    try:
+        from database.list_projection import install_list_projection_writer
+    except ImportError:
+        return
+    install_list_projection_writer()
+
+
+_install_list_projection_writer()
+
+
 _firestore_client = None
 _firestore_client_lock = Lock()
 _customer_firestore_client = None

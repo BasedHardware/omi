@@ -353,11 +353,17 @@ def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, 
     monkeypatch.setattr(batch_pipeline_purge, 'purge_batch_owner', lambda uid: None)
     monkeypatch.setattr(user_data_deletion, 'get_data_plane_firestore_client', lambda: MagicMock())
     head = user_data_deletion.RELEASED_MEMORY_CHANGE_HEAD
-    rows = {head: {'token': 'before'}}
+    list_heads = tuple(user_data_deletion.ROW_COLLECTIONS)
+    rows = {head: {'token': 'before'}, **{family: {'version': 'before'} for family in list_heads}}
     events = []
     user_ref = SimpleNamespace(
         get=lambda: SimpleNamespace(exists=root_exists),
-        collections=lambda: [SimpleNamespace(id='memory_state'), SimpleNamespace(id='memories')],
+        collections=lambda: [
+            SimpleNamespace(id='memory_state'),
+            SimpleNamespace(id=user_data_deletion.STATE_COLLECTION),
+            SimpleNamespace(id='memories'),
+            SimpleNamespace(id='conversations'),
+        ],
         collection=lambda name: SimpleNamespace(
             document=lambda doc: SimpleNamespace(delete=lambda: rows.pop(doc, None))
         ),
@@ -366,15 +372,19 @@ def test_account_wipe_erases_head_recreated_after_state_collection(monkeypatch, 
 
     def erase(sub, **kwargs):
         events.append(sub.id)
-        if sub.id == 'memory_state':
+        if sub.id in {'memory_state', user_data_deletion.STATE_COLLECTION}:
             rows.clear()
-        else:
+        elif sub.id == 'memories':
             rows[head] = {'token': 'source-delete-commit'}
+        else:
+            rows.update({family: {'version': 'source-delete-commit'} for family in list_heads})
 
     client = SimpleNamespace(collection=lambda name: SimpleNamespace(document=lambda uid: user_ref))
     assert user_data_deletion.purge_user_subtree(UID, client, erase)['status'] == 'ok'
     assert rows == {}
-    assert events == ['memory_state', 'memories'] + (['root'] if root_exists else [])
+    assert events == ['memory_state', user_data_deletion.STATE_COLLECTION, 'memories', 'conversations'] + (
+        ['root'] if root_exists else []
+    )
 
 
 def test_scan_inside_a_memo_scope_reads_fresh_pages(world, monkeypatch):
