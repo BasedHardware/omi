@@ -25,6 +25,7 @@ from models.conversation_enums import ConversationStatus
 from models.geolocation import Geolocation
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations.call_metadata import apply_call_metadata
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.episode_runtime import process_with_episode_budget
@@ -296,6 +297,7 @@ async def finalize_persisted_conversation(
         # The post-processing bulkhead preserves request context (including
         # validated live BYOK keys) while isolating this expensive sync path
         # from WebSocket and Cloud Tasks event loops.
+        conversation = await run_blocking(db_executor, apply_call_metadata, uid, conversation)
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
         # Admission only schedules a bounded shadow job. It never awaits audio,
         # STT or metric persistence and cannot alter this processing input.

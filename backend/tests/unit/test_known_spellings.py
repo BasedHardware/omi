@@ -265,6 +265,7 @@ def test_external_text_memory_prompt_receives_hints_as_instructions(sources, mon
         {'label_evidence': {'card_picks': 1}},
         {'label_evidence': {'auto_confirmed': 1}},
         {'aliases': ['Old Synthetic Name']},
+        {'is_user_created': True},
     ],
 )
 def test_stored_user_evidence_admits_mononyms_and_unicode_names(signal):
@@ -295,6 +296,7 @@ def test_junk_names_are_rejected_even_with_stale_evidence(name, signal):
         {'label_evidence': {'card_picks': -1}},
         {'speech_samples': [None, '', '  ', 1]},
         {'speech_samples': 'synthetic/sample.wav'},
+        {'is_user_created': 'true'},
     ],
 )
 def test_unconfirmed_detections_and_guessed_metadata_are_not_authority(signal):

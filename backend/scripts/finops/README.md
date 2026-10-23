@@ -135,7 +135,8 @@ BigQuery `based-hardware.omi_finops` (location US, same as the billing export, s
 
 All four are partitioned by `date` and clustered. Loads are **idempotent per date**: the run's
 dates are deleted and re-inserted inside one BigQuery transaction, so re-running a date replaces
-it rather than doubling it.
+it rather than doubling it. A column added to a loader's `SCHEMAS` is added to the live table
+automatically (nullable, before the load); any other schema change needs a migration.
 
 ## Validation
 
@@ -623,8 +624,8 @@ The same `pull_stripe.py` run writes the book first (`raw/stripe_plan_mrr.json`)
   `non_usd_paying_subs` lets the wall label the figure partial.
 * **Customers, not items.** `paying_subs` counts a customer once per plan,
   never per subscription item; `paying_customers` (new nullable
-  `plan_revenue_daily` column, added to a live table by the loader's one-shot
-  `ALTER TABLE … ADD COLUMN IF NOT EXISTS`) is the book-wide distinct customer
+  `plan_revenue_daily` column, added to a live table automatically by the
+  loader's schema reconcile) is the book-wide distinct customer
   count repeated on every plan row — the wall takes MAX per snapshot day, not
   the plan-row sum, and falls back to the sum (labelled item-based) on rows
   written before the column existed. Old artifacts load with NULL.

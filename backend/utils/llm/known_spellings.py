@@ -188,7 +188,9 @@ def _trusted_people_spellings(people) -> list[dict[str, Any]]:
         renamed = isinstance(aliases, list) and any(
             (alias := _name(value)) and alias.casefold() != name.casefold() for value in aliases
         )
-        if backed_label or has_sample or renamed:
+        # create_person and the rename transaction stamp this; automatic detection never creates people.
+        user_created = person.get('is_user_created') is True
+        if backed_label or has_sample or renamed or user_created:
             # Old detected names retained during rename are not prompt aliases:
             # mapping a filler word to a person could invent a reference.
             spellings.append({'name': name})

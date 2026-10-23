@@ -28,6 +28,8 @@ from utils.manual_speaker_assignments import (
     manual_rejected_speakers,
 )
 from utils.speakers import policy
+from utils.speakers.context import participant_hint, unique_roster
+from utils.speakers.refinement import anchor_owner, merge_surplus, unit
 
 # Explicit declaration of the shared parser's derived env contract, so registry
 # tooling and operators can enumerate it without adding a second env reader.
@@ -78,7 +80,14 @@ def _person(person_id: str) -> str:
 def roster_candidates(context: Any) -> list[dict]:
     """Only explicit attendee names; never infer an identity from a meeting title."""
     attendees = _get(context, 'participants', []) or _get(context, 'attendees', []) or []
-    return [{'name': _get(p, 'name') or _get(p, 'display_name')} for p in attendees]
+    return [
+        {
+            'name': _get(p, 'name') or _get(p, 'display_name'),
+            'email': _get(p, 'email'),
+            'person_id': _get(p, 'person_id'),
+        }
+        for p in attendees
+    ]
 
 
 def _receipt_scope(segment: Any, scope: str | None) -> str | None:
@@ -106,6 +115,18 @@ def _manual_decision(current: Mapping, origin: Mapping, receipt: Mapping, reject
     return max(decisions, key=lambda d: d.get('generation', 0), default=None)
 
 
+def cluster_key(segment: Any, resolution: Any, channel_ids: set[str]) -> tuple:
+    """The producer and count observer share the same voice/channel partition."""
+    sid = _get(segment, 'id')
+    resolved = resolution.speaker_ids.get(sid) if resolution else None
+    key = (
+        ('resolved', resolved)
+        if resolved is not None
+        else (_get(segment, 'speaker_id_scope'), _get(segment, 'speaker_id'))
+    )
+    return (*key, sid in channel_ids)
+
+
 def build_evidence(
     segments: Sequence[Any],
     resolution: Any = None,
@@ -113,8 +134,14 @@ def build_evidence(
     receipt: Mapping | None = None,
     roster: Sequence[Mapping] = (),
     abstentions: Sequence[str] = (),
+    channel_ids: Sequence[str] = (),
+    energies: Mapping[str, float] | None = None,
+    near_field_allowed: bool = False,
 ) -> SpeakerEvidence:
     receipt = receipt or {}
+    roster = unique_roster(roster)
+    hint = participant_hint(roster, segments)
+    channel_set = set(channel_ids)
     groups: dict[tuple, list] = defaultdict(list)
     refs = []
     for segment in segments:
@@ -123,8 +150,7 @@ def build_evidence(
         if not sid or speaker == 99:
             continue
         scope = _get(segment, 'speaker_id_scope')
-        resolved = resolution.speaker_ids.get(sid) if resolution else None
-        key = ('resolved', resolved) if resolved is not None else (scope, speaker)
+        key = cluster_key(segment, resolution, channel_set)
         groups[key].append(segment)
         refs.append(EvidenceSegment(id=sid, speaker_id=speaker, speaker_id_scope=_receipt_scope(segment, scope)))
     references = {ref.id: ref.model_dump() for ref in refs}
@@ -142,6 +168,13 @@ def build_evidence(
         candidates = []
         # Owner is always present, even without an enrolled print or usable audio.
         ranked = sorted(((pid, d) for pid, d in distances.items() if isfinite(d)), key=lambda x: x[1])
+        # Finalize historically rejected enrolled people in the 0.50-0.65 gap
+        # after live accepted them. Reuse live's point and runner-up margin.
+        if ranked and not accepted:
+            pid, distance = ranked[0]
+            runner = ranked[1][1] if len(ranked) > 1 else float('inf')
+            if pid != 'user' and policy.ENROLLED_PERSON.accepts(distance) and runner - distance >= policy.MATCH_MARGIN:
+                accepted = pid
         ranked = ranked[:MAX_VOICE_CANDIDATES]
         if not any(pid == 'user' for pid, _ in ranked):
             ranked.append(('user', distances.get('user', float('inf'))))
@@ -192,7 +225,9 @@ def build_evidence(
         clusters.append(cluster)
         centroid = resolution.voice_centroids.get(voice) if resolution else None
         if centroid is not None:
-            centroids[cluster.id] = centroid
+            normalized = unit(centroid)
+            if normalized is not None:
+                centroids[cluster.id] = normalized
         if voice is None:
             reasons.add(
                 'no_compatible_centroid'
@@ -201,11 +236,23 @@ def build_evidence(
             )
         elif not accepted and not any(c.source == 'manual' for c in candidates):
             reasons.add(resolution.voice_identity_statuses.get(voice, 'insufficient_evidence'))
+    clusters, centroids, count_abstained = merge_surplus(clusters, centroids, hint, channel_ids=channel_ids)
+    if count_abstained:
+        reasons.add('participant_count_unresolved')
+    owner_anchor = anchor_owner(
+        clusters,
+        channel_ids=channel_ids,
+        energies=energies,
+        near_field_allowed=near_field_allowed and bool(resolution) and resolution.coverage >= 0.9,
+    )
+    if owner_anchor == 'none':
+        reasons.add('owner_unanchored')
     similarities = []
     for i, a in enumerate(clusters):
         for b in clusters[i + 1 :]:
-            if a.id in centroids and b.id in centroids:
-                similarity = float(np.dot(centroids[a.id], centroids[b.id]))
+            a_vector, b_vector = centroids.get(a.id), centroids.get(b.id)
+            if a_vector is not None and b_vector is not None and a_vector.shape == b_vector.shape:
+                similarity = float(np.dot(a_vector, b_vector))
                 if isfinite(similarity) and similarity >= policy.SIMILARITY_FLOOR:
                     pair = (max(-1.0, min(1.0, similarity)), a.id, b.id)
                     if len(similarities) < MAX_SIMILARITIES:
@@ -214,9 +261,13 @@ def build_evidence(
                         heapq.heapreplace(similarities, pair)
     similarities = [ClusterSimilarity(a=a, b=b, similarity=value) for value, a, b in sorted(similarities, reverse=True)]
     status = 'resolved' if resolution and resolution.coverage >= 0.9 else 'partial' if resolution else 'unavailable'
+    if owner_anchor == 'channel' and status == 'unavailable':
+        status = 'partial'
     return SpeakerEvidence(
         status=status,
         policy_version=policy.POLICY_VERSION,
+        participant_count_hint=hint,
+        owner_anchor=owner_anchor,
         clusters=clusters,
         segments=refs,
         similarities=similarities[:MAX_SIMILARITIES],
@@ -230,7 +281,9 @@ def project_labels(evidence: SpeakerEvidence, receipt: Mapping) -> dict[str, tup
     rejected = manual_rejected_speakers(receipt)
     projected = {}
     for cluster in evidence.clusters:
-        accepted = next((c for c in cluster.candidates if c.label_eligible and c.source == 'voice'), None)
+        accepted = next(
+            (c for c in cluster.candidates if c.label_eligible and c.source in ('voice', 'channel', 'near_field')), None
+        )
         for sid in cluster.segment_ids:
             current = {'id': sid, 'speaker_id': cluster.speaker_id, 'speaker_id_scope': cluster.speaker_id_scope}
             decision = _manual_decision(current, metadata.get(sid, current), receipt, rejected)

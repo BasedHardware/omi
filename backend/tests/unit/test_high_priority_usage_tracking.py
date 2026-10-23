@@ -176,6 +176,7 @@ for submodule in [
     "goals",
     "knowledge_graph",
     "daily_summaries",
+    "screen_activity",
     "mem_db",
     "notifications",
 ]:
@@ -474,7 +475,7 @@ class TestExternalIntegrationsTracking:
         count = source.count("with track_usage(uid, Features.DAILY_SUMMARY):")
         assert count == 2, f"Expected 2 track_usage(DAILY_SUMMARY) wrappers, found {count}"
 
-    def test_get_conversation_summary_sets_context(self):
+    def test_get_conversation_summary_sets_context(self, monkeypatch):
         """Verify get_conversation_summary sets context during LLM call."""
         captured_ctx = {}
         original_invoke = mock_llm_mini.invoke
@@ -488,9 +489,13 @@ class TestExternalIntegrationsTracking:
 
         mock_llm_mini.invoke = capturing_invoke
         try:
-            from utils.llm.external_integrations import get_conversation_summary
+            from utils.llm import external_integrations
 
-            get_conversation_summary("test-uid-summary", [])
+            monkeypatch.setattr(external_integrations, 'conversations_to_string', lambda *a, **k: 'history')
+            # Empty input now returns before paid generation. Supply an eligible
+            # recording so this test continues to exercise the usage scope.
+            conversation = types.SimpleNamespace(content_kind='conversation', get_person_ids=lambda: [])
+            external_integrations.get_conversation_summary("test-uid-summary", [conversation])
             assert captured_ctx.get('feature') == Features.DAILY_SUMMARY
             assert captured_ctx.get('uid') == "test-uid-summary"
         finally:

@@ -18,6 +18,11 @@ from models.audio_file import AudioFile, ChunkSpan
 
 
 @pytest.fixture(autouse=True)
+def explicit_shadow_storage_sample(monkeypatch):
+    monkeypatch.setenv('SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT', '100')
+
+
+@pytest.fixture(autouse=True)
 def evidence_store(monkeypatch):
     rows = []
     monkeypatch.setattr(
@@ -43,7 +48,12 @@ def test_one_batch_scope_only_blocks_legacy_path(env, monkeypatch, evidence_stor
     stage.resolve_speakers_for_processing(str(uuid.uuid4()), conversation)
     assert diarizer.calls == expected
     if mode == 'shadow':
-        assert evidence_store[-1].abstentions == ['batch_authoritative', 'no_compatible_centroid', 'no_voice_evidence']
+        assert evidence_store[-1].abstentions == [
+            'batch_authoritative',
+            'no_compatible_centroid',
+            'no_voice_evidence',
+            'owner_unanchored',
+        ]
     if mode == 'serve':
         assert len(evidence_store[-1].clusters) == 2
         assert conversation.speaker_resolution.status == 'resolved'

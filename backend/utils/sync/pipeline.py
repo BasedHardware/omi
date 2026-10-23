@@ -88,6 +88,7 @@ from database.sync_ledger import (
     release_sync_content_claim_after_job_retired,
     release_sync_content_claim,
 )
+from utils.stt.transcript_admission import admit_segments
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.capture_evidence import bounded_envelope, unknown_envelope
 from models.conversation import Conversation, CreateConversation
@@ -1617,6 +1618,19 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             empty_retried = True
             _log_empty_retry('started', words=len(words or []), raw_empty=not words)
 
+        # refactor: superseded by utils.stt.transcript_admission when MEDIA_NOISE_MODE=serve
+        transcript_segments = admit_segments(uid, transcript_segments, origin='sync')
+        if not transcript_segments:
+            _record_empty_segment_as_silence(
+                provider=provider,
+                model=model,
+                lane=sync_lane,
+                deferred_outcome=deferred_outcome,
+                job_id=job_id,
+                segment_key=segment_key,
+                attempt_ref=attempt_ref,
+            )
+            return False
         phase = 'assignment'
         if turnstile and not turnstile.wait_turn(path):
             logger.warning(f'sync: ordered assignment wait timed out for {path}, proceeding out of order')

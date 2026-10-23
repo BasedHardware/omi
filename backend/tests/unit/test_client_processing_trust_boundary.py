@@ -643,6 +643,8 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'plugins_results',
         'external_data',
         'app_id',
+        # Server-authored media/noise eligibility metadata, not a display projection.
+        'content_kind',
         'discarded',
         'imported',
         'visibility',
@@ -655,6 +657,13 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'data_protection_level',
         'folder_id',
         'call_id',
+        # V4 finalizer projects boundary-derived identity and owner/remote location scope.
+        # These are server metadata, not client-authored display projection siblings.
+        'is_call',
+        'call_platform',
+        'calendar_event_id',
+        'geolocation_scope',
+        'other_participants_location',
         'calendar_event',
         'client_device_id',
         'client_platform',

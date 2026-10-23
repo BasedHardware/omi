@@ -40,13 +40,22 @@ def context_signal(context: Mapping[str, Any]) -> BoundarySignal | None:
     if start is None:
         return None
     participants = context.get('participants') or []
+    screen = context.get('calendar_source') == 'screen_activity'
+    # Screen windows carry the shared sentinel id 'screen-activity'; it is not an event identity.
+    # Leaving external_id empty keys each window by its own start (boundary_store.signal_id).
+    external_id = context.get('calendar_event_id') or context.get('id')
+    if screen or external_id == 'screen-activity':
+        external_id = None
     return BoundarySignal(
-        kind='screen_meeting' if context.get('calendar_source') == 'screen_activity' else 'calendar_event',
+        kind='screen_meeting' if screen else 'calendar_event',
         started_at=start,
         ended_at=end,
         title=context.get('title'),
+        meeting_link=context.get('meeting_link'),
+        call_controls_detected=context.get('call_controls_detected'),
+        call_platform=context.get('platform'),
         participants=[BoundaryParticipant.model_validate(p) for p in participants if isinstance(p, dict)],
-        external_id=context.get('calendar_event_id') or context.get('id'),
+        external_id=external_id,
     )
 
 

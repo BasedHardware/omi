@@ -38,11 +38,28 @@ _warned: set[str] = set()
 CAPTURE_COVERAGE_MODE_ENV = 'CAPTURE_COVERAGE_MODE'
 CAPTURE_COVERAGE_SERVE_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_PERCENT'
 CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV = 'CAPTURE_COVERAGE_MODE_SERVE_UID_SHA256S'
+CALLS_RECAP_SERVE_PERCENT_ENV = 'CALLS_RECAP_MODE_SERVE_PERCENT'
+CALLS_RECAP_SERVE_UID_SHA256S_ENV = 'CALLS_RECAP_MODE_SERVE_UID_SHA256S'
+ACTION_ITEMS_V2_SERVE_PERCENT_ENV = 'ACTION_ITEMS_V2_MODE_SERVE_PERCENT'
+ACTION_ITEMS_V2_SERVE_UID_SHA256S_ENV = 'ACTION_ITEMS_V2_MODE_SERVE_UID_SHA256S'
+STT_VOCAB_SERVE_PERCENT_ENV = 'STT_VOCAB_MODE_SERVE_PERCENT'
+STT_VOCAB_SERVE_UID_SHA256S_ENV = 'STT_VOCAB_MODE_SERVE_UID_SHA256S'
 _COHORT_ENVS = {
+    'CALLS_RECAP_MODE': (CALLS_RECAP_SERVE_PERCENT_ENV, CALLS_RECAP_SERVE_UID_SHA256S_ENV),
+    'ACTION_ITEMS_V2_MODE': (ACTION_ITEMS_V2_SERVE_PERCENT_ENV, ACTION_ITEMS_V2_SERVE_UID_SHA256S_ENV),
+    'STT_VOCAB_MODE': (STT_VOCAB_SERVE_PERCENT_ENV, STT_VOCAB_SERVE_UID_SHA256S_ENV),
     CAPTURE_COVERAGE_MODE_ENV: (CAPTURE_COVERAGE_SERVE_PERCENT_ENV, CAPTURE_COVERAGE_SERVE_UID_SHA256S_ENV),
 }
 CAPTURE_COVERAGE_SHADOW_PERCENT_ENV = 'CAPTURE_COVERAGE_MODE_SHADOW_PERCENT'
-_SHADOW_PERCENT_ENVS = {CAPTURE_COVERAGE_MODE_ENV: CAPTURE_COVERAGE_SHADOW_PERCENT_ENV}
+SPEAKER_EVIDENCE_SHADOW_PERCENT_ENV = 'SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT'
+EPISODE_BOUNDARIES_SHADOW_PERCENT_ENV = 'EPISODE_BOUNDARIES_MODE_SHADOW_PERCENT'
+MEDIA_NOISE_SHADOW_PERCENT_ENV = 'MEDIA_NOISE_MODE_SHADOW_PERCENT'
+_SHADOW_PERCENT_ENVS = {
+    CAPTURE_COVERAGE_MODE_ENV: CAPTURE_COVERAGE_SHADOW_PERCENT_ENV,
+    'SPEAKER_EVIDENCE_MODE': SPEAKER_EVIDENCE_SHADOW_PERCENT_ENV,
+    'EPISODE_BOUNDARIES_MODE': EPISODE_BOUNDARIES_SHADOW_PERCENT_ENV,
+    'MEDIA_NOISE_MODE': MEDIA_NOISE_SHADOW_PERCENT_ENV,
+}
 
 
 def _warn_once(name: str, raw: str) -> None:
@@ -117,6 +134,27 @@ def shadow_or_serve(name: str, default: Mode = 'shadow') -> bool:
     return mode(name, default) != 'off'
 
 
+def cohort_configured(name: str, *, environ: Mapping[str, str] | None = None) -> bool:
+    """Whether scheduling may need to discover a serve cohort before knowing its uid.
+
+    Discovery never admits a user: the caller must still use serving_for on every
+    selected row. Malformed/empty cohorts remain dormant like the serving parser.
+    """
+    env = os.environ if environ is None else environ
+    current = mode(name, environ=env)
+    if current != 'shadow':
+        return current == 'serve'
+    percent_env, digests_env = _COHORT_ENVS.get(name, (f'{name}_SERVE_PERCENT', f'{name}_SERVE_UID_SHA256S'))
+    digests = [d.strip().lower() for d in env.get(digests_env, '').split(',')]
+    if any(len(d) == 64 and all(c in '0123456789abcdef' for c in d) for d in digests):
+        return True
+    try:
+        percent = float(env.get(percent_env, '0') or 0)
+        return math.isfinite(percent) and 0 < percent <= 100
+    except ValueError:
+        return False
+
+
 def shadow_sampled(name: str, uid: str | None, default_percent: float, default: Mode = 'shadow') -> bool:
     """Whether a costly shadow path runs for this uid: always for the serve cohort, else a uid sample.
 
@@ -132,6 +170,9 @@ def shadow_sampled(name: str, uid: str | None, default_percent: float, default: 
     try:
         percent = float(raw) if raw else default_percent
     except ValueError:
+        _warn_once(env, raw)
+        percent = default_percent
+    if not math.isfinite(percent) or not 0 <= percent <= 100:
         _warn_once(env, raw)
         percent = default_percent
     return percent > 0 and cohort_bucket(uid, f'{name.lower()}:shadow') < percent

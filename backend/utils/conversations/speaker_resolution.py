@@ -132,9 +132,11 @@ def encode_cache(entries: CacheEntries, evidence_seconds: Optional[Mapping[str, 
             }
     except Exception:
         match_scores.record_failure(logger, reason='malformed_doc')
+    energies = speaker_evidence.energy_metadata()
     header = json.dumps(
         {
             'v': CACHE_FORMAT_VERSION,
+            **({'energies': energies} if energies else {}),
             **optional_header,
             'ids': ids,
             'durations': [round(entries[i][0], 3) for i in ids],
@@ -153,6 +155,7 @@ def decode_cache(data: Optional[bytes], evidence_seconds: Optional[Dict[str, flo
         header = json.loads(data[4 : 4 + length])
         if header.get('v') != CACHE_FORMAT_VERSION or not header.get('ids'):
             return {}
+        speaker_evidence.restore_energy(header.get('energies'))
         if evidence_seconds is not None:
             try:
                 evidence_seconds.update(header.get('evidence_seconds') or {})
@@ -442,6 +445,7 @@ def _embed_missing(
             if embedded >= limit or (max_attempts is not None and diagnostics.attempted >= max_attempts):
                 return embedded, 'max_embeddings'
             diagnostics.attempted += 1
+            speaker_evidence.capture_energy(segment_id, clip)
             try:
                 vector = extract_embedding_from_bytes(
                     pcm_to_wav(clip, SAMPLE_RATE), client=client, timeout=EMBED_TIMEOUT_SECONDS
@@ -899,7 +903,7 @@ def resolve_speakers_for_processing(
         return False
     if trace is not None and trace.pass_name == 'first':
         record_retry('first', 'eligible', 'candidate')
-    evidence_token = speaker_evidence.begin()
+    evidence_token = speaker_evidence.begin(conversation)
     resolver_reason('disabled')
     try:
         if match_scores.enabled():
