@@ -300,6 +300,11 @@ def _prepare_conversation_for_write(
 ) -> Dict[str, Any]:
     data = copy.deepcopy(data)
 
+    # Voice evidence is encrypted at every protection level and never enters a
+    # client read. Only assignment owns its encrypted representation.
+    if 'batch_voice_registry' in data and not isinstance(data['batch_voice_registry'], str):
+        raise ValueError('batch voice registry must be encrypted')
+    data.pop('_batch_voice_evidence', None)
     summary_delivery.prepare(data, uid)
     if owner_diagnostics.FIELD in data:
         try:
@@ -585,6 +590,7 @@ def prepare_conversation_for_read(
 
     data = copy.deepcopy(conversation_data)
     data.pop('live_transcript_replay_receipt', None)
+    data.pop('batch_voice_registry', None)
     _reveal_user_corrections_for_read(data, uid)
     if is_completed_rule_discard(data):
         data['discarded'] = True

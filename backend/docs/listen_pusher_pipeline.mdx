@@ -6561,3 +6561,32 @@ Both one-shot and agentic notes mounts receive cohort-gated owner-involved task
 rules, authenticated identity and matching cache identity. Exact-reference stale
 capture policy still lacks its producer binding/CAS lifecycle adapter; no fuzzy
 or historical task cancellation is performed.
+
+
+### Conversation-local batch voice continuity
+
+Authoritative batch projection carries compatible clean-speech centroids into the
+existing assignment transaction. `utils/stt/batch_voice_links.py` matches each
+unit voice against immutable anchors in the canonical conversation, before the
+integer speaker allocator runs. It performs no enrollment, gallery or additional
+Firestore reads. Multipart parts retain the original unit scope. Five seconds of
+clean evidence, compatible model/revision provenance, the shared cross-scope
+cosine threshold and a nearest-candidate margin are required. Distinct voices
+from one unit cannot link; competing matches abstain. Manual conflicting names
+veto links, and owner claims are re-arbitrated across resulting voice IDs.
+
+The registry is always encrypted, including standard-protection conversations,
+and removed at the client read boundary. It has at most 32 voice anchors, 256
+scope bindings and 192 KiB of plaintext; exhaustion retains committed IDs and
+stops expanding evidence rather than dropping transcript speech. Canonical
+merges retain the canonical registry only; donor evidence is never imported.
+Existing privacy-generation and deletion checks fence the same transaction as
+the transcript and projection receipt. A generation change discards old anchors;
+a missing or invalid registry never triggers audio backfill.
+
+`BATCH_PIPELINE_VOICE_LINKING_ENABLED` defaults to `true`. Setting it to `false`
+stops new acoustic links and anchors; existing scope bindings and persisted
+speaker IDs continue to replay unchanged. The environment is checked at the
+reversible projection boundary, so a historical pinned stage policy cannot
+prevent an incident rollback. This does not enable batch admission or change
+its rollout percentage.

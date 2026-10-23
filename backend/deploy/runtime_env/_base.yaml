@@ -486,6 +486,7 @@ environment_shared:
           category: rollout
         BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+        BATCH_PIPELINE_VOICE_LINKING_ENABLED: {value: 'true', category: ops_kill}
         BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
           value: 'false'
           category: rollout
@@ -525,6 +526,7 @@ environment_shared:
         FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
         BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+        BATCH_PIPELINE_VOICE_LINKING_ENABLED: {value: 'true', category: ops_kill}
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '0', category: rollout}
         BATCH_LIVE_STT_RETIRE_PERCENT: {value: '0', category: rollout}
         BATCH_PIPELINE_LIVE_ADMISSION_ENABLED: {value: 'false', category: rollout}
@@ -1235,6 +1237,7 @@ environment_shared:
             category: rollout
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_VOICE_LINKING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
@@ -1605,6 +1608,7 @@ environment_shared:
             category: rollout
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_VOICE_LINKING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
@@ -1955,6 +1959,7 @@ environment_shared:
             category: rollout
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_VOICE_LINKING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout
@@ -2255,6 +2260,7 @@ environment_shared:
             category: rollout
           BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED: {value: 'false', category: rollout}
           BATCH_PIPELINE_PROJECTION_TIMING_ENABLED: {value: 'false', category: rollout}
+          BATCH_PIPELINE_VOICE_LINKING_ENABLED: {value: 'true', category: ops_kill}
           BATCH_PIPELINE_PROJECTION_CONTENTION_ENABLED:
             value: 'false'
             category: rollout

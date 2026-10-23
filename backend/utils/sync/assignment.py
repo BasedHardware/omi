@@ -195,6 +195,7 @@ def assign_in_transaction(
     if absorbed is not None:
         absorbed.clear()
     incoming = deepcopy(incoming)
+    voice_evidence = incoming.pop('_batch_voice_evidence', None)
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
@@ -449,6 +450,7 @@ def assign_in_transaction(
         existing = []
         allocator = ConversationSpeakerIdAllocator()
         allocator.hydrate(result.get('transcript_segments', []) if current else [])
+        allocator.hydrate_receipt(result.get('manual_speaker_assignments'))
         for row in sorted(records, key=lambda row: row['id'] != canonical):
             new = deepcopy(row.get('transcript_segments', []))
             for segment in new:
@@ -560,9 +562,27 @@ def assign_in_transaction(
         )
         surviving = {id(segment) for segment in survivors}
         kept = tuple(i for i, segment in indexed_new if id(segment) in surviving)
+        if voice_evidence is not None:
+            from utils.stt import batch_voice_links
+
+            registry = batch_voice_links.decode_registry((current or {}).get(batch_voice_links.FIELD), user_ref.id)
+            registry = batch_voice_links.link_unit_voices(
+                registry,
+                voice_evidence,
+                survivors,
+                allocator,
+                receipt=result.get('manual_speaker_assignments') or {},
+                existing=existing,
+                enabled=batch_voice_links.linking_enabled(),
+            )
+            result[batch_voice_links.FIELD] = batch_voice_links.encode_registry(registry, user_ref.id)
         for segment in survivors:
             allocator.assign(segment)
         segments = existing + deepcopy(survivors)
+        if voice_evidence is not None:
+            segments = batch_voice_links.arbitrate_linked_owner_claims(
+                segments, result.get('manual_speaker_assignments') or {}
+            )
         segments.sort(key=lambda s: (s['timestamp'], s['end'] - s['start'], s.get('text', '')))
         for segment in segments:
             duration = segment['end'] - segment['start']

@@ -1564,3 +1564,36 @@ def test_head_wait_commit_order_converges_to_one_conversation(lane, monkeypatch,
             assert row.get('sync_merged_into') == rows[0]['id']
     for unit in units:
         assert unit.ledger.get().to_dict()['status'] == 'completed'
+
+
+def test_voice_registry_atomic_restart_replay_and_private_read(lane, monkeypatch):
+    """Production codecs, assignment and receipt agree across separate upload units."""
+    from utils.stt.batch_voice_links import FIELD, decode_registry
+
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    lane.payload['diarization'].update(
+        centroids={'SPEAKER_00': {'embedding': [1.0, 0.0], 'evidence_seconds': 8}},
+        embedding_space='synthetic:v2',
+        provenance={'embedding_model': 'synthetic', 'embedding_revision': 'immutable'},
+    )
+    batch = lane.seed(names=('voice-a', 'voice-b'))
+    for index in range(2):
+        lane.finish(batch, index)
+        lane.projector.project(batch.ids[index])
+    rows = active_rows(lane)
+    assert len(rows) == 1
+    row = rows[0]
+    assert len({segment['speaker_id'] for segment in row['transcript_segments']}) == 1
+    assert isinstance(row[FIELD], str)
+    registry = decode_registry(row[FIELD], lane.uid)
+    assert len(registry['voices']) == 1 and len(registry['bindings']) == 2
+    assert FIELD not in lane.conversations.prepare_conversation_for_read(row, lane.uid)
+    monkeypatch.setenv('BATCH_PIPELINE_VOICE_LINKING_ENABLED', 'false')
+    for segment_id in reversed(batch.ids):
+        lane.projector.project(segment_id)
+    replay = active_rows(lane)
+    assert replay[0]['transcript_segments'] == row['transcript_segments']
+    assert decode_registry(replay[0][FIELD], lane.uid) == registry
+    for segment_id in batch.ids:
+        receipt = lane.projector.store.ref('results', segment_id).get().to_dict()['projection']
+        assert receipt['conversation_id'] == row['id']

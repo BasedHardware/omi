@@ -101,6 +101,16 @@ class ConversationSpeakerIdAllocator:
             if speaker_id != OMI_SPEAKER_ID_SENTINEL:
                 self._next_id = max(self._next_id, speaker_id + 1)
 
+    def lookup(self, scope: str, speaker: str) -> Optional[int]:
+        return self._speaker_ids.get((scope, canonical_speaker_label(speaker)))
+
+    def bind(self, scope: str, speaker: str, speaker_id: int) -> None:
+        """Restore a durable voice link without replacing persisted assignments."""
+        if type(speaker_id) is not int or speaker_id < 0 or speaker_id == OMI_SPEAKER_ID_SENTINEL:
+            raise ValueError('invalid conversation voice id')
+        self._speaker_ids.setdefault((scope, canonical_speaker_label(speaker)), speaker_id)
+        self._next_id = max(self._next_id, speaker_id + 1)
+
     def _allocate(self) -> int:
         speaker_id = self._next_id
         if speaker_id == OMI_SPEAKER_ID_SENTINEL:

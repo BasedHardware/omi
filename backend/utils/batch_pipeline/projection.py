@@ -241,6 +241,15 @@ def build_incoming(
         **create.model_dump(),
     ).model_dump()
     incoming['data_protection_level'] = binding.data_protection_level
+    if authoritative:
+        diarization = payload['diarization']
+        incoming['_batch_voice_evidence'] = {
+            'scope': f'final:batch:{batch_segment_id or item.segment_id}',
+            'privacy_generation': binding.privacy_generation,
+            'centroids': diarization.get('centroids') or {},
+            'embedding_space': diarization.get('embedding_space'),
+            'provenance': diarization.get('provenance') or {},
+        }
     from utils.sync.intake_completion import apply_capture_evidence_dark_write
 
     apply_capture_evidence_dark_write(incoming, None, segments)
