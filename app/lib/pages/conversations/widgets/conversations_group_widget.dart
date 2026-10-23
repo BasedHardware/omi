@@ -2,10 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/models/local_recording.dart';
-import 'package:omi/models/local_recording_group.dart';
 import 'conversation_list_item.dart';
 import 'date_list_item.dart';
-import 'recording_group_list_item.dart';
+import 'recording_list_item.dart';
 
 class ConversationsGroupWidget extends StatelessWidget {
   final List<ServerConversation> conversations;
@@ -29,8 +28,7 @@ class ConversationsGroupWidget extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final entries =
-        buildConversationGroupEntries(conversations: conversations, recordings: groupLocalRecordings(recordings));
+    final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -45,7 +43,7 @@ class ConversationsGroupWidget extends StatelessWidget {
               date: date,
             );
           }
-          return RecordingGroupListItem(key: ValueKey('rec_${e.recording!.id}'), recording: e.recording!);
+          return RecordingListItem(key: ValueKey('rec_${e.recording!.id}'), recording: e.recording!);
         }),
         const SizedBox(height: 10),
       ],
@@ -53,14 +51,14 @@ class ConversationsGroupWidget extends StatelessWidget {
   }
 }
 
-typedef ConversationGroupEntry = ({DateTime time, ServerConversation? conversation, LocalRecordingGroup? recording});
+typedef ConversationGroupEntry = ({DateTime time, ServerConversation? conversation, LocalRecording? recording});
 
 /// Merge conversations and local recordings into the time-sorted order used by
 /// the conversations page. The page consumes these lightweight descriptors in
 /// a sliver builder so only visible rows become widgets.
 List<ConversationGroupEntry> buildConversationGroupEntries({
   required List<ServerConversation> conversations,
-  required List<LocalRecordingGroup> recordings,
+  required List<LocalRecording> recordings,
 }) {
   return <ConversationGroupEntry>[
     for (final conversation in conversations)

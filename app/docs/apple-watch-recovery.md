@@ -66,17 +66,21 @@ missing receipts for a few files cannot starve a long recording's later segments
 
 ## User workflow
 
-Saved recovery copies appear as one Home entry per Watch recording session.
-Opening the entry shows the original parts in Recordings, where they can be
-played or processed through the existing upload/job-confirmation pipeline. They
-are manual, including when auto-sync is enabled: automatically retranscribing
-successful live audio would create duplicate conversations. They remain local
-until the user chooses processing or deletion. Originals may span several
-one-minute copies; this change does not promise one eleven-hour conversation.
-The shared sync coordinator treats a single selected Watch recovery segment as
-an explicit keep choice, just like phone Transcribe Later. It restores retained
-rule-discarded speech before enrichment; automatic and mixed/bulk sync policy
-is unchanged. Silence still produces no conversation.
+Current main uses the shared custody ledger described in
+[CUSTODY.md](../lib/services/wals/CUSTODY.md). Watch recovery copies enter Offline
+Sync as automatic WAL work. Home lists only explicit user-held recordings, such
+as Transcribe Later; it does not list every Watch minute copy. The previous
+manual-only Watch backup policy has been superseded by #23288. Copies without
+sufficient live coverage upload automatically. Deduplication can remove a copy
+only after the ledger proves server-reachable coverage; locally durable but
+unconfirmed live audio is not deletion proof. The durable iPhone receipt remains
+so a later retransmission is acknowledged without recreating the backup.
+
+Explicit Process Now keeps the user's intent through the shared processing
+pipeline. Silence can still produce no conversation. Original files may span
+many one-minute parts; this protocol does not promise one eleven-hour
+conversation. Neither a zero-pending phone inventory nor the new custody flow
+establishes recovery of an older missing recording.
 
 The Watch shows when saved audio awaits transfer and offers Retry transfer.
 Opening the Watch app, session activation, reachability changes and a periodic
@@ -125,12 +129,14 @@ paired-device testing for WatchConnectivity file delivery:
 https://developer.apple.com/documentation/watchconnectivity/wcsessiondelegate/session(_:didreceive:)
 
 
-## Visible Stop and session presentation (#23275)
+## Visible Stop and microphone cleanup (#23275, PR #23280)
 
 The active Watch control is a labelled native Stop recording button. It stays
-visible while recovery transfers wait; Retry transfer remains a separate action. At accessibility text sizes the Stop title uses the full button width so words remain readable.
-The 40 mm layout fits both controls; the stopped-state Record target is 44 pt when recovery status is present so Retry also fits. The stopped state offers Record and retains
-saved-audio status. Recovery status never gates the recording control.
+visible while recovery transfers wait; Retry transfer remains a separate action.
+At accessibility text sizes the Stop title uses the full button width so words
+remain readable. The 40 mm layout fits both controls; the stopped-state Record
+target is 44 pt when recovery status is present so Retry also fits. The stopped
+state offers Record and retains saved-audio status. Recovery status never gates the recording control.
 
 The recorder validates its original start attempt after permission before
 activating AVAudioSession. Stop retires that attempt, removes the installed tap,
@@ -140,50 +146,61 @@ Late permission answers cannot activate capture after cancellation or adopt a
 newer start. Audio-session and permission closures are native I/O seams; their
 production defaults preserve the real AVFoundation calls.
 
-Home uses one cached `LocalRecordingGroup` projection per original Watch session
-ID. Grouping happens before date bucketing, so late delivery and midnight do not
-produce additional Home rows. Duration sums only available parts. The underlying
-receipt-owned `.bin` files, job IDs and per-file operations remain authoritative.
-A pushed Recordings page reads the current account's group and lazily renders the
-original parts with the existing playback, detail, Process Now, share and
-confirmed deletion controls. Account clear also clears that projection, without
-deleting audio. Phone batch recordings and distinct Watch sessions stay separate.
+Home recovery presentation is owned by the shared custody pipeline merged in
+[#23288](https://github.com/BasedHardware/omi/pull/23288), rather than a second
+provider scanner or a Watch grouping projection. Watch minute copies are
+ordinary automatic WAL work and appear in Offline Sync; Home shows only
+explicit user-held recordings. Proven redundant Watch copies follow the
+existing server-reachable coverage policy in [CUSTODY.md](../lib/services/wals/CUSTODY.md).
+The earlier proposed Home grouping has been removed after integrating current
+main, so it cannot conflict with that pipeline or change its retention policy.
 
-No recovery file is joined, deleted, automatically uploaded or retranscribed to
-make the Home list shorter. This follow-up adds no backend/firmware/API contract
-and requires an iPhone release with its Watch companion after merge.
+This follow-up adds no backend/firmware/API contract and requires an iPhone
+release with its Watch companion after merge. A merged custody change is not
+proof that the corresponding public store binary has shipped.
 
-### Controls/grouping checklist
+### Controls and microphone checklist
 
 - [x] Native Watch target compiles and the 40 mm render shows Stop and Retry.
 - [x] Seven real view-model lifecycle cases pass in the Watch simulator with
   synthetic permission/audio-session I/O; no microphone is opened by the probe.
 - [x] Native custody/presentation/relay regressions pass (24 tests).
-- [x] Grouping retains 666 original parts, stable identity, out-of-order delivery
-  and cross-midnight grouping; unrelated recordings never join.
-- [x] Production row/navigation tests pass in light/dark at 200% text size,
-  including account clear without deleting the original files.
-- [x] Analyzer ratchet, 23 selected journeys and 30 preflight checks pass.
+- [x] Integrate main's canonical custody pipeline without adding a second
+  Home projection or changing file retention and upload ownership.
+- [x] Previous head passes analyzer ratchet, 23 selected journeys and 30
+  preflight checks; current-main analyzer ratchet also passes.
 - [x] Additional simulator inspection catches and fixes the 40 mm stopped-state
   Retry clipping; active/error/accessibility text states retain a visible Stop.
-- [ ] Obtain a clean full app/CI result for the final commit. The initial full
-  run passed 7,070 tests and skipped four, but two new detail-sheet tests failed
-  on missing native waveform I/O and unsettled sheet animation, and an unrelated
-  analytics wall-clock timeout failed under load. The corrected detail tests and
-  analytics test pass together in isolation (seven tests total).
+- [x] Previous head `9811d2d534` passes full app checks (7,092 passed,
+  four skipped), the separate 138 protected contracts, and remote iOS compile,
+  Dart/analyzer, generated-file and static checks. These precede the current
+  main integration and are not final-head verification for it.
+- [x] Physical iPhone 16 Pro, iOS 27.0.1: separate Personal Team-signed QA host
+  runs the unchanged production recorder/view/store with real AVFoundation.
+  The bounded 70.46-second run crosses a minute boundary, stops, reports one
+  successful audio-session deactivation and no deactivation errors, validates
+  retained frames, and finds unchanged file sizes after two seconds. Result UTC:
+  2026-10-23T03:50:31Z. A prior QA part remains in the sandbox; the reported three
+  parts are not all attributed to this run. This is an iPhone-host result, not a
+  Watch, physical Stop-button tap, microphone-indicator or transfer qualification.
+  The battery adapter is a no-op; no production app/account or backend is used.
+- [ ] Repeat affected checks and final CI after current-main integration and
+  removal of the superseded Home grouping.
 - [ ] Keep the PR in draft until physical paired-device acceptance and required
   final checks pass. The simulator does not support WatchConnectivity file
   transfers; a harness receipt roundtrip is not an OS-delivery acceptance test.
 - [ ] Merge, then release the signed iPhone app with the updated Watch companion.
 - [ ] Qualify on paired hardware: Stop must remove the microphone indicator with
   the phone reachable and unavailable, during pending transfers and after screen
-  off/resume. Confirm saved parts still transfer and the iPhone shows one session
-  entry with playback/processing access. Simulator closure tests and screenshots
-  do not establish physical microphone, radio or background behavior.
+  off/resume. Confirm saved parts still transfer and the iPhone shows a Home
+  view without one-minute backup rows; original retained audio remains accessible
+  in Offline Sync. Simulator closure tests and screenshots do not establish
+  physical microphone, radio or background behavior.
 
 Reproduce the native policy probe in the CocoaPods Ruby environment:
 `ruby app/ios/test/watch_recording_controls_probe.rb --device <booted-watch-uuid>
 --output <temporary-output-directory>`. It compiles the actual production view,
 recorder and store with the synthetic app under `app/ios/test/fixtures/`.
-The iPhone UI fixture is `app/integration_test/watch_session_capture.dart`;
-run it in the supported dev/local_dev simulator profile and use agent-flutter.
+The earlier synthetic iPhone grouping fixture has been retired with its superseded
+projection. Actual Home and native-intake verification uses the shared custody
+pipeline's existing contracts and simulator fixture.

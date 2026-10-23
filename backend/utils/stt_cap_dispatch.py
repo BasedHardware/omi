@@ -358,8 +358,15 @@ class CapSocket(STTSocket):
         if self.raw is not None:
             return self.raw.finish()
 
-    def finalize(self):
+    def finalize(self, *args, **kwargs):
         if self.raw is not None:
+            # The proxy exposes the provider's class, so managed window VAD
+            # calls finalize(vad_pause=True) through it. Preserve that protocol
+            # just as send() does; otherwise a local TypeError kills the leg.
+            if os.getenv('STT_CAP_FINALIZE_FORWARD_ENABLED', 'true').strip().lower() not in {'false', '0', 'off'}:
+                return self.raw.finalize(*args, **kwargs)
+            # Emergency generic-finalize mode retains the provider's no-arg
+            # behavior without reintroducing the proxy signature exception.
             return self.raw.finalize()
 
 

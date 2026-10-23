@@ -128,6 +128,18 @@ async def test_every_replacement_late_rejects_once_then_terminates_when_chain_ex
     monkeypatch.setattr(window, 'connect_window', initial)
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram is retired (2026-08-27); pin the policy and session seams so
+    # this window-replay regression keeps a third leg to hand off to, exactly
+    # the wiring a pre-retirement deployment had.
+    _real_provider_is_enabled = st.provider_is_enabled
+
+    def _admit_deepgram_streaming(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _real_provider_is_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_deepgram_streaming)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     legs['deepgram'] = []
 
@@ -211,6 +223,18 @@ async def test_empty_snapshot_handoff_tracks_new_speech_and_replays_it_on_next_f
     monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if timeline_v2 else 'false')
     actual, base, previous, legs, capture = await setup_chain(monkeypatch)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'modulate-velma-2', 'soniox', 'dg-nova-3'])
+    # Deepgram is retired (2026-08-27); pin the policy and session seams so
+    # this window-replay regression keeps a third leg to hand off to, exactly
+    # the wiring a pre-retirement deployment had.
+    _real_provider_is_enabled = st.provider_is_enabled
+
+    def _admit_deepgram_streaming(provider, surface):
+        if provider in ('deepgram_cloud', 'deepgram_self_hosted') and surface is st.STTServingSurface.STREAMING:
+            return True
+        return _real_provider_is_enabled(provider, surface)
+
+    monkeypatch.setattr(st, 'provider_is_enabled', _admit_deepgram_streaming)
+    monkeypatch.setattr(st, 'deepgram_fallback_model', lambda language: 'nova-3')
     monkeypatch.setenv('DEEPGRAM_API_KEY', 'test')
     legs['deepgram'] = []
 

@@ -16,3 +16,4 @@ class MomentInput:
     ended_at: datetime
     trigger: str  # pause | rollover | interval | session_end | finalize
     calendar_identity: Optional[str] = None
+    language: Optional[str] = None

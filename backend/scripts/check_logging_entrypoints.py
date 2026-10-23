@@ -272,7 +272,7 @@ def inventory(root: Path = ROOT) -> dict[str, dict[str, int]]:
                 inspect(dockerfile, context, workdir, target, f'docker:{label}:{target}', stage)
     # Helm overrides add application entrypoints independently of Docker CMD.
     for chart in (root / 'backend/charts').iterdir():
-        if chart.name in ('deepgram-self-hosted', 'monitoring') or not chart.is_dir():
+        if chart.name == 'monitoring' or not chart.is_dir():
             continue
         for path in sorted(set(chart.rglob('*.yaml')) | set(chart.rglob('*.yml'))):
             for position, target in enumerate(helm_targets(path.read_text())):

@@ -4564,7 +4564,7 @@
             "type": "__expr__",
             "uid": "__expr__"
           },
-          "expression": "$A >= 100 && $B > 0.03",
+          "expression": "$A >= 100 && $B > 0.02",
           "intervalMs": 1000,
           "maxDataPoints": 43200,
           "refId": "C",
@@ -4614,7 +4614,7 @@
         }
       }
     ],
-    "updated": "2026-10-22T00:00:00Z",
+    "updated": "2026-10-22T16:00:00Z",
     "noDataState": "OK",
     "execErrState": "KeepLast",
     "for": "30m",
@@ -4622,13 +4622,13 @@
     "annotations": {
       "__dashboardUid__": "omi-resilience-fallbacks",
       "__panelId__": "16",
-      "summary": "More than 3% of accepted /v4/listen sessions per 15m end exhausted after a local delivery death (send_queue_full, replay_send_stalled, delivery_expired)",
-      "threshold": "exhausted local-delivery fallbacks / listen-accepted > 0.03 with >= 100 accepted sockets in 15m, for 30m",
+      "summary": "More than 2% of accepted /v4/listen sessions per 15m end exhausted after a local delivery death (send_queue_full, replay_send_stalled, delivery_expired)",
+      "threshold": "exhausted local-delivery fallbacks / listen-accepted > 0.02 with >= 100 accepted sockets in 15m, for 30m",
       "user_impact": "Sessions lose live transcription because our own send path to the vendor backed up (pacing/catch-up), not because a vendor refused; clients fall back to offline sync.",
       "scope": "backend-listen omi_fallback_total{component=stt_live_session,reason=~send_queue_full|replay_send_stalled|delivery_expired,outcome=exhausted} over omi_listen_accepted_total. Sibling of omi-stt-capacity-full-exhausted: since P34 (#23074, train P 2026-10-21 22:24Z) these local deaths no longer report capacity_full, so that rule no longer sees them.",
-      "verification": "Backtest on prod Prometheus, 15m steps. Post-P34 pre-#23147 (2026-10-21 22:40Z..10-22 03:10Z, the replay-pacing bug live): ratio p50 0.039, max 0.060, up to 32 exhausted per 15m; at > 0.03 for 30m it fires through that window. Post-#23147 live-tail catch-up (10-22 03:40Z..08:00Z): p50 0.000, max 0.012; does not fire. Thresholds set off-peak; revisit after the 10-22 14-16Z peak read.",
+      "verification": "Backtest on prod Prometheus, 15m steps. Post-P34 pre-#23147 (2026-10-21 22:40Z..10-22 03:10Z, the replay-pacing bug live): ratio p50 0.039, max 0.060, up to 32 exhausted per 15m; at > 0.02 for 30m it fires through that window. Post-#23147 live-tail catch-up (10-22 03:40Z..08:00Z): p50 0.000, max 0.012; does not fire. Peak re-check 2026-10-22 08-16Z incl. the 14-16Z peak (386-1,021 accepted/15m): p50 0.000, p90 0.0033, max 0.0047; lowered 0.03 -> 0.02 (4x above that max, half the broken median).",
       "evaluated_bad": "0.060 (2026-10-22 pre-#23147, replay pacing at 1.0x into an equal wall)",
-      "evaluated_good": "0.012 max (2026-10-22 03:40Z..08:00Z, after #23147)",
+      "evaluated_good": "0.0047 max (2026-10-22 08:00-16:00Z incl. peak, after #23147)",
       "safe_next_action": "Split by reason and from_mode: sum by (reason, from_mode) (increase(omi_fallback_total{component=\"stt_live_session\",reason=~\"send_queue_full|replay_send_stalled|delivery_expired\"}[15m])). Read the per-death WARNING 'Soniox local delivery death subtype=... queue_age_seconds since_last_send_seconds' lines: large since_last_send with a full queue means the writer was starved (pod pressure); small means the vendor socket stopped accepting. Check LISTEN_LIVE_TAIL_CATCHUP_RATE and replay wall (omi_stt_replay_wall_seconds) before touching capacity.",
       "runbook": "backend/docs/operational/windowed-live-stt.md"
     },

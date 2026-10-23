@@ -14540,4 +14540,56 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceControls => 'Vezérlők';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Továbbá: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Nyomd meg az Omi gombját';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Egy rövid nyomás. Aztán kérdezz bármit.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Tedd fel a kérdésed';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Mondd ki hangosan. Az Omi figyel.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Kész? Nyomd meg újra a gombot a küldéshez.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return '$days nap ingyen a tiéd';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days nap Omi Pro, a mi vendégünk vagy. Terhelés előtt emlékeztetünk. Bármikor lemondható.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Kérem a $days napos próbát';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Indítsd el a $days napos ingyenes próbát';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Kapcsold be az Omit';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Nyomd meg egyszer a gombot, és tartsd a telefon közelében.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Ennyi. Az Omi a háttérben tovább rögzíti a beszélgetéseidet.';
+
+  @override
+  String get noThanks => 'Nem, köszönöm';
 }

@@ -10,6 +10,9 @@ import 'package:omi/core/app_shell.dart';
 import 'package:omi/pages/settings/data_export.dart';
 import 'package:omi/pages/settings/widgets/leave_flow_widgets.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/services/services.dart';
+import 'package:omi/services/wals/deleted_account_uids.dart';
+import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/auth/clear_user_state.dart';
 import 'package:omi/utils/auth/clear_deleted_account_session.dart';
@@ -171,6 +174,8 @@ class _DeleteConfirmStep extends StatefulWidget {
 class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
   bool _isDeleting = false;
 
+  LocalWalSync _phoneWalSync() => ServiceManager.instance().wal.getSyncs().phone as LocalWalSync;
+
   _DeleteAccountFlow get _flow => widget.flow;
 
   Future<void> _confirmDelete() async {
@@ -193,11 +198,17 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
       );
       PlatformManager.instance.analytics.deleteUser();
       _flow.exit.finished = true;
+      final deletedUid = SharedPreferencesUtil().uid;
+      final previouslyDeleted = await readDeletedAccountUids();
       await clearDeletedAccountSession(
         authService: AuthService.instance,
+        purgeAccountAudio: () => _phoneWalSync().purgeAccountWals(deletedUid),
         clearUserState: () => clearAllUserState(context),
         clearWal: WalFileManager.clearAll,
         clearPreferences: SharedPreferencesUtil().clear,
+        rememberDeletedAccount: deletedUid.isEmpty
+            ? null
+            : () => saveDeletedAccountUids(withDeletedAccountUid(previouslyDeleted, deletedUid)),
       );
       if (!mounted) return;
       routeToPage(context, const AppShell(), replace: true);

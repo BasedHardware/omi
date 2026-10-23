@@ -40,7 +40,9 @@ MOMENT_OUTCOMES = frozenset(
 MOMENT_TRIGGERS = frozenset({'pause', 'rollover', 'interval', 'session_end', 'finalize'})
 # Gated work that never ran: ended moments by trigger, plus conversation attaches.
 SKIP_TRIGGERS = MOMENT_TRIGGERS | {'attach'}
-CLOSE_REASON_LABELS = frozenset({'user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on'})
+CLOSE_REASON_LABELS = frozenset(
+    {'user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on', 'boundary'}
+)
 PROVISIONAL_OUTCOMES = frozenset({'kept', 'dropped', 'dismissed'})
 BOUNDARY_OUTCOMES = frozenset(
     {'new', 'continue', 'parallel', 'pending', 'close', 'jev_continue', 'jev_close', 'jev_no_answer'}

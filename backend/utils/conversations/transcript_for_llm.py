@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any, Iterable, List, Optional, Protocol, Sequence
 
+from config.refactor_modes import serving_for
 from database.auth import get_user_name
 from models.other import Person
 from models.transcript_segment import TranscriptSegment
@@ -64,7 +65,7 @@ class SpeakerCluster:
     words: int
 
 
-class SpeakerMap(dict[int, Optional[str]]):
+class SpeakerMap(dict[Any, Optional[str]]):
     """``cluster -> bound name`` mapping that also carries owner-aware identity evidence.
 
     It is the plain mapping every caller already reads, and the rendered ``spk``
@@ -84,6 +85,7 @@ class SpeakerMap(dict[int, Optional[str]]):
     ) -> None:
         super().__init__(*args, **kwargs)
         self.owner_name = owner_name
+        self.source_segment_ids: Optional[frozenset[str]] = None
         self.clusters: tuple[SpeakerCluster, ...] = tuple(clusters)
 
 
@@ -278,6 +280,20 @@ def conversation_transcript_and_speaker_map(
 
     profile_name = get_user_name(uid, use_default=False)
     people_map = {person.id: person.name for person in people} if people else {}
+    if serving_for('NOTES_PACKET_V2_MODE', uid):
+        from utils.llm.notes_packet import get_evidence
+        from utils.llm.notes_language_inputs import in_profile_segments
+
+        return render_cluster_transcript(
+            in_profile_segments(segments),
+            names=people_map,
+            owner_name=profile_name,
+            evidence=get_evidence(uid, getattr(conversation, 'id', None)),
+            mark_wake_words=mark_wake_words,
+            resolution_available=getattr(getattr(conversation, 'speaker_resolution', None), 'status', None)
+            != 'unavailable',
+        )
+    # refactor: superseded by render_cluster_transcript when NOTES_PACKET_V2_MODE=serve
     speaker_map = _speaker_map(segments, profile_name or 'User', people_map, owner_name=profile_name)
     wake_word_segment_ids = find_wake_word_segment_ids(segments) if mark_wake_words else frozenset()
     lines: list[str] = []
@@ -334,3 +350,63 @@ __all__ = [
     'conversation_transcript_for_llm',
     'conversation_transcripts_for_llm',
 ]
+
+
+def render_cluster_transcript(
+    segments: Sequence[Any],
+    *,
+    names: Mapping[str, str],
+    owner_name: Optional[str] = None,
+    evidence: Any = None,
+    mark_wake_words: bool = False,
+    resolution_available: bool = True,
+) -> tuple[str, SpeakerMap]:
+    """The notes/moments renderer: scoped voice keys, one owner gate and evidence bands.
+
+    Copies are prompt-only. It never rewrites stored segment labels or infers an
+    identity from calendar, contacts, story content or a numeric speaker key.
+    """
+    safe, owner_note = owner_safe_transcript_segments(segments)
+    rows = [SimpleNamespace(**dict(row)) if isinstance(row, Mapping) else row for row in safe]
+    by_segment = {}
+    if evidence is not None and evidence.status != 'unavailable':
+        for cluster in evidence.clusters:
+            for segment_id in cluster.segment_ids:
+                by_segment[segment_id] = cluster
+    keys: dict[Any, str] = {}
+    labels = SpeakerMap(owner_name=owner_name)
+    labels.source_segment_ids = frozenset(str(row.id) for row in rows if getattr(row, 'id', None))
+    turns = []
+    wake_ids = find_wake_word_segment_ids(rows) if mark_wake_words else frozenset()
+    for index, row in enumerate(rows):
+        text = str(getattr(row, 'text', '') or '').strip()
+        if not text:
+            continue
+        segment_id = str(getattr(row, 'id', None) or f'moment-{index}')
+        cluster = by_segment.get(segment_id)
+        legacy_key = (getattr(row, 'speaker_id_scope', None), getattr(row, 'speaker_id', None))
+        # Missing keys carry no identity across unrelated turns.
+        if legacy_key[1] is None:
+            legacy_key = ('unresolved', index)
+        key = cluster.id if cluster else keys.setdefault(legacy_key, f'c{len(keys)}')
+        name = None
+        if evidence is not None and evidence.status != 'unavailable':
+            best = max(cluster.candidates, key=lambda item: item.probability, default=None) if cluster else None
+            if best and best.band != 'unknown':
+                display = best.name or (owner_name if best.person_id == 'owner' else names.get(best.person_id))
+                if display:
+                    name = ('likely ' if best.band == 'likely' else '') + display
+        elif resolution_available:
+            name = owner_name if getattr(row, 'is_user', False) else names.get(str(getattr(row, 'person_id', '') or ''))
+        # If a fallback cluster has contradictory labels, retain no named claim.
+        if key in labels and labels[key] != name:
+            labels[key] = None
+        elif key not in labels:
+            labels[key] = name
+        marker = f'{WAKE_WORD_MARKER} ' if segment_id in wake_ids else ''
+        if mark_wake_words:
+            text = escape_spoken_wake_word_marker(text)
+            segment_id = escape_spoken_wake_word_marker(segment_id)
+        turns.append(f'[{segment_id} {key}] {marker}{text}')
+    metadata = '\n'.join(f'spk {key} {name or "?"}' for key, name in labels.items())
+    return '\n'.join(part for part in (owner_note, metadata, '\n\n'.join(turns)) if part), labels

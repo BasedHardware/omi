@@ -4,15 +4,13 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/models/local_recording.dart';
-import 'package:omi/models/local_recording_group.dart';
 import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
 
 void main() {
   test('conversation group entries preserve newest-first ordering across sources', () {
     final olderConversation = _conversation('older', DateTime.utc(2026, 8, 10, 9));
     final newerRecording = _recording('newer.bin', DateTime.utc(2026, 8, 10, 10));
-    final entries = buildConversationGroupEntries(
-        conversations: [olderConversation], recordings: groupLocalRecordings([newerRecording]));
+    final entries = buildConversationGroupEntries(conversations: [olderConversation], recordings: [newerRecording]);
 
     expect(entries.map((entry) => entry.conversation?.id ?? entry.recording?.id), ['newer.bin', 'older']);
   });

@@ -29,7 +29,12 @@ class Structured {
 
   List<Event> events = [];
 
-  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other'});
+  /// 'highlight' or 'background' from the notes pass (Episodes M3); null on legacy notes.
+  String? salience;
+
+  Structured(this.title, this.overview, {this.id = 0, this.emoji = '', this.category = 'other', this.salience});
+
+  bool get isBackground => salience == 'background';
 
   getEmoji() {
     try {
@@ -47,6 +52,7 @@ class Structured {
       json['overview'] ?? '',
       emoji: json['emoji'] ?? '🧠',
       category: json['category'] ?? 'other',
+      salience: json['salience'] is String ? json['salience'] as String : null,
     );
     final sections = json['sections'];
     if (sections is List) {
@@ -115,6 +121,7 @@ class Structured {
       generated.overview,
       emoji: generated.emoji,
       category: generated.category,
+      salience: generated.salience,
     );
     structured.sections = generated.sections?.toList() ?? [];
     structured.actionItems = generated.actionItems?.indexed
@@ -164,6 +171,7 @@ class Structured {
               })
           .toList(),
       'events': events.map((event) => event.toJson()).toList(),
+      if (salience != null) 'salience': salience,
     };
   }
 
@@ -176,6 +184,7 @@ class Structured {
       sections: sections.toList(),
       actionItems: actionItems.map((item) => item.toGenerated()).toList(),
       events: events.map((event) => event.toGenerated()).toList(),
+      salience: salience,
     );
   }
 }

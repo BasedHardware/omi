@@ -5543,7 +5543,7 @@
     {
       "type": "timeseries",
       "title": "Cost vs revenue",
-      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month Soniox-console estimate as of 2026-10-16 until a measured FinOps line exists (the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS uses the dated fixed $4.8K/month estimate as of 2026-10-16 until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). Measured lines are labeled by source; an estimate older than 35 days is marked stale under Margin by plan. Settled through D\u22122. Measured/invoiced lines are solid blue-greys; STT est. (Soniox console) and SaaS est. (fixed) are sand-colored. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2\u00d7 and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR \u00f7 30.4.",
+      "description": "All-in cost counts every line: GCP net of committed-use credits (one-time incidents excluded), Vertex/Gemini LLM, OpenAI and Anthropic invoices, STT and SaaS. STT uses the dated $5.3K/month Soniox-console estimate as of 2026-10-16 until a measured FinOps line exists (the FinOps stt_vendor_low model overstated it ~2\u00d7). SaaS uses the dated fixed $4.8K/month estimate as of 2026-10-16 until a complete fresh Mercury row exists, then it is measured SaaS (Mercury). Measured lines are labeled by source; an estimate older than 35 days is marked stale under Margin by plan. Settled through D\u22122. Measured/invoiced lines are solid blue-greys: STT measured is the Soniox prepaid-balance delta plus measured Deepgram usage only; STT cash is Mercury vendor cash; measured SaaS (Mercury) is the daily SaaS aggregate. Modulate modelled (measured volume \u00d7 committed price), STT est. (Soniox console) and SaaS est. (fixed) are sand-colored because they are not measured. The stack top is the Cost / day stat. One-time GCP spikes (a service-day above 2\u00d7 and $500 over its 14-day median, e.g. the 2026-09-07 Coldline migration) are excluded and shown in the tooltip. Revenue (violet line) = FinOps MRR \u00f7 30.4.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -5593,6 +5593,16 @@
             {
               "selector": "sttMeasuredUsd",
               "text": "STT measured",
+              "type": "number"
+            },
+            {
+              "selector": "sttCashUsd",
+              "text": "STT cash (Mercury)",
+              "type": "number"
+            },
+            {
+              "selector": "sttModulateModelledUsd",
+              "text": "Modulate modelled",
               "type": "number"
             },
             {
@@ -5759,6 +5769,25 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "STT cash (Mercury)"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "STT cash (Mercury)"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#bfc9d6"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "SaaS measured (Mercury)"
             },
             "properties": [
@@ -5817,6 +5846,33 @@
                 "value": {
                   "mode": "fixed",
                   "fixedColor": "#eedcb3"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 55
+              },
+              {
+                "id": "custom.lineWidth",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Modulate modelled"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Modulate modelled"
+              },
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#e3c98a"
                 }
               },
               {
@@ -5923,12 +5979,14 @@
               "OpenAI": 3,
               "Anthropic": 4,
               "STT measured": 5,
-              "STT est.": 6,
-              "SaaS measured (Mercury)": 7,
-              "SaaS est.": 8,
-              "Revenue": 9,
-              "One-time excluded": 10,
-              "All-in total": 11
+              "STT cash (Mercury)": 6,
+              "Modulate modelled": 7,
+              "STT est.": 8,
+              "SaaS measured (Mercury)": 9,
+              "SaaS est.": 10,
+              "Revenue": 11,
+              "One-time excluded": 12,
+              "All-in total": 13
             },
             "excludeByName": {},
             "renameByName": {}

@@ -19,7 +19,7 @@ import json
 import logging
 import time
 from collections import Counter
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Awaitable, Callable, Mapping, Optional, Protocol, Sequence
 
 from prometheus_client import Counter as PromCounter, Histogram
@@ -28,7 +28,9 @@ from pydantic import ValidationError
 from models.structured_extraction import AgentNotesSubmission
 from utils.llm.notes_agent_policy import NotesAgentBudget, estimate_cost_usd
 from utils.llm.notes_agent_prompt import INSTRUCTIONS, SUBMIT, TOOL_SCHEMAS, screenshot_message
-from utils.llm.notes_agent_validation import FORMAT, check_notes, repair_notes
+from utils.llm.notes_output_contract import FORMAT, check_notes, repair_notes, repair_contract, OUTPUT_RULES
+from utils.llm.notes_output import NotesOutput, submit_tool
+from utils.llm.notes_packet import PACKET_RULES
 from utils.llm.shaped_agent import (
     Budget,
     LoopStop,
@@ -155,9 +157,22 @@ async def run_notes_agent(
     owner_names: Sequence[str] = (),
     naming_leads: Sequence[str] = (),
     clock: Callable[[], float] = time.monotonic,
+    contract_v2: bool = False,
+    transcript_segment_ids: Sequence[str] = (),
+    uid: str | None = None,
 ) -> NotesAgentResult:
     started = clock()
     mount = notes_agent_mount(budget, owner, getattr(toolbox, 'window', None))
+    from utils.llm.action_item_v2 import instructions_for
+
+    mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
+    if contract_v2:
+        mount = replace(
+            mount,
+            instructions=mount.instructions + '\n\n' + PACKET_RULES + '\n\n' + OUTPUT_RULES,
+            tools=tuple(tool for tool in mount.tools if tool['function']['name'] != SUBMIT) + (submit_tool(),),
+        )
+    last_submission: Optional[dict[str, Any]] = None
     send_backs = SendBackBudget(SEND_BACKS)
     result = NotesAgentResult(submission=None, stop='no_submission')
     state: dict[str, Any] = {'last_turn_cost': 0.0, 'force': False}
@@ -212,6 +227,7 @@ async def run_notes_agent(
         )
 
     async def execute(calls: tuple[Any, ...]) -> list[Any] | LoopStop:
+        nonlocal last_submission
         responses: list[Any] = []
         images: list[Any] = []
         accepted: Optional[dict[str, Any]] = None
@@ -232,11 +248,27 @@ async def run_notes_agent(
                 continue
             if name == SUBMIT:
                 arguments = normalize_output(AgentNotesSubmission, arguments)
+                if contract_v2:
+                    try:
+                        candidate = validate_output(NotesOutput, arguments).model_dump(mode='json')
+                        candidate, _ = repair_contract(
+                            candidate,
+                            transcript_words=transcript_words,
+                            open_tasks=open_tasks,
+                            owner_names=owner_names,
+                            transcript_segment_ids=transcript_segment_ids,
+                        )
+                        # Save only a usable, schema-valid submission; later malformed turns cannot erase it.
+                        if candidate.get('sections') and candidate.get('title'):
+                            last_submission = candidate
+                    except ValidationError:
+                        pass
                 sent_back, payload = _review_submission(
                     arguments,
                     transcript_words=transcript_words,
                     lookups_missing=max(0, budget.min_tool_calls - result.tool_calls),
                     naming_leads=naming_leads,
+                    contract_v2=contract_v2,
                     send_backs=send_backs,
                     # Only while a further turn still fits the budget.
                     may_reject=result.turns < budget.max_turns
@@ -282,10 +314,28 @@ async def run_notes_agent(
             result.stop = 'forced_submit' if result.forced else 'submitted'
         else:
             result.stop = 'deadline' if loop.reason == 'deadline' else 'no_submission'
+    except Exception:
+        if not contract_v2 or last_submission is None:
+            raise
+        result.stop = 'malformed'
     finally:
         result.latency_seconds = clock() - started
+    if contract_v2 and result.submission is None and last_submission is not None:
+        result.submission = last_submission
+        result.repairs.append('salvaged_submission')
+        REPAIRS.labels(kind='salvaged_submission').inc()
     if result.submission is not None:
-        result.submission, result.repairs = _final_repairs(result.submission, open_tasks, owner_names)
+        if contract_v2:
+            result.submission, repairs = repair_contract(
+                result.submission,
+                transcript_words=transcript_words,
+                open_tasks=open_tasks,
+                owner_names=owner_names,
+                transcript_segment_ids=transcript_segment_ids,
+            )
+            result.repairs.extend(repairs)
+        result.submission, final_repairs = _final_repairs(result.submission, open_tasks, owner_names)
+        result.repairs.extend(final_repairs)
     return result
 
 
@@ -301,16 +351,17 @@ def _review_submission(
     may_reject: bool,
     send_backs: SendBackBudget,
     naming_leads: Sequence[str] = (),
+    contract_v2: bool = False,
 ) -> tuple[list[Problem], Optional[dict[str, Any]]]:
     """``(problems sent back, None)`` or ``([], accepted payload)``."""
     try:
-        validate_output(AgentNotesSubmission, arguments)
+        validate_output(NotesOutput if contract_v2 else AgentNotesSubmission, arguments)
     except ValidationError as error:
         fields = sorted({'.'.join(map(str, row['loc'])) for row in error.errors(include_input=False)})[:6]
         problem = Problem(FORMAT, 'Schema problems at: ' + ', '.join(fields))
         # An invalid payload cannot be accepted; past the format budget it is returned uncharged.
         return send_backs.review([problem], may_send_back=may_reject) or [problem], None
-    check = check_notes(arguments, transcript_words=transcript_words)
+    check = check_notes(arguments, transcript_words=transcript_words, contract_v2=contract_v2)
     if lookups_missing:
         check.findings.insert(
             0,

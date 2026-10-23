@@ -279,7 +279,10 @@ async def test_soniox_primary_with_a_402_deepgram_hop_condemns_it_and_raises_whe
             new=AsyncMock(side_effect=ProviderAccountRejection('deepgram', 'HTTP 402 payment required')),
         ),
         patch.object(streaming, '_deepgram_is_available', return_value=True),
-        patch.object(streaming, 'deepgram_fallback_model', return_value='nova-3'),
+        # Deepgram is retired (2026-08-27): the policy gate answers None now, so
+        # this regression pins the receiver-level seam directly — the exact
+        # wiring a still-listed dg deployment would produce.
+        patch.object(receiver_mod, 'deepgram_fallback_model', lambda language: 'nova-3'),
         patch.object(streaming, 'record_fallback'),
     ):
         # The mocked dg leg raises what the real connect path produces once it

@@ -15,8 +15,9 @@ import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
 import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
-import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'live_episode_visibility.dart';
+import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -25,15 +26,16 @@ import 'package:omi/services/capture/empty_recording_notice.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/providers/review_provider.dart';
 import 'package:omi/services/pending_work/pending_work_store.dart';
-import 'package:omi/models/local_recording_group.dart';
+import 'package:omi/models/local_recording.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
+import 'package:omi/pages/conversations/widgets/background_day_line.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
-import 'package:omi/pages/conversations/widgets/recording_group_list_item.dart';
+import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -48,14 +50,22 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, conversation, recording, groupSpacer }
+enum _ConversationListRowKind {
+  topSpacer,
+  dateHeader,
+  liveEpisode,
+  backgroundLine,
+  conversation,
+  recording,
+  groupSpacer
+}
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
   DateTime date,
   bool isFirst,
   ServerConversation? conversation,
-  LocalRecordingGroup? recording,
+  LocalRecording? recording,
   int conversationIndex,
 });
 
@@ -63,7 +73,7 @@ typedef _ConversationPageSnapshot = ({
   List<ServerConversation> conversations,
   Map<DateTime, List<ServerConversation>> groupedConversations,
   List<ServerConversation> processingConversations,
-  List<LocalRecordingGroup> recordings,
+  List<LocalRecording> recordings,
   String previousQuery,
   String? selectedFolderId,
   String? selectedSpeakerId,
@@ -124,7 +134,7 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     conversations: conversations.conversations,
     groupedConversations: conversations.groupedConversations,
     processingConversations: conversations.processingConversations,
-    recordings: recordings.homeRecordings,
+    recordings: recordings.recordings,
     previousQuery: conversations.previousQuery,
     selectedFolderId: conversations.selectedFolderId,
     selectedSpeakerId: conversations.selectedSpeakerId,
@@ -138,7 +148,7 @@ _ConversationPageSnapshot _conversationPageSnapshot(
     apiViewPhase: conversations.apiViewState.phase,
     conversationIdentitySignature: _identitySignature(conversations.conversations),
     processingIdentitySignature: _identitySignature(conversations.processingConversations),
-    recordingIdentitySignature: _identitySignature(recordings.homeRecordings),
+    recordingIdentitySignature: _identitySignature(recordings.recordings),
     pendingDeleteCount: conversations.memoriesToDelete.length,
     homeEmptyExplanation: conversations.homeEmptyExplanation,
   );
@@ -147,7 +157,7 @@ _ConversationPageSnapshot _conversationPageSnapshot(
 List<_ConversationListRow> _buildConversationListRows({
   required List<DateTime> dates,
   required Map<DateTime, List<ServerConversation>> conversationsByDate,
-  required Map<DateTime, List<LocalRecordingGroup>> recordingsByDate,
+  required Map<DateTime, List<LocalRecording>> recordingsByDate,
 }) {
   final rows = <_ConversationListRow>[];
   var hasRenderedDate = false;
@@ -155,7 +165,7 @@ List<_ConversationListRow> _buildConversationListRows({
   for (var dateIndex = 0; dateIndex < dates.length; dateIndex++) {
     final date = dates[dateIndex];
     final conversations = conversationsByDate[date] ?? const <ServerConversation>[];
-    final recordings = recordingsByDate[date] ?? const <LocalRecordingGroup>[];
+    final recordings = recordingsByDate[date] ?? const <LocalRecording>[];
     final entries = buildConversationGroupEntries(conversations: conversations, recordings: recordings);
     final conversationIndexes = <String, int>{
       for (var index = 0; index < conversations.length; index++) conversations[index].id: index,
@@ -254,17 +264,48 @@ List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTi
   ];
 }
 
-/// Conversations offline sync is still adding audio to, with how much: the server's pending sync
-/// jobs that name their target conversation.
-Map<String, int> _fillingSeconds(List<PendingWorkItem> pending) {
-  final filling = <String, int>{};
-  for (final item in pending) {
-    if (item.kind != 'sync_job' || item.state == 'summarizing' || item.conversationIds.length != 1) continue;
-    final seconds = item.durationSeconds ?? 0;
-    if (seconds <= 0) continue;
-    filling.update(item.conversationIds.single, (v) => v + seconds, ifAbsent: () => seconds);
+/// Each day's background conversations (Episodes M3), split out of [byDate] for that day's one-line
+/// recap. A day keeps them as rows when nothing else would be left to show under its header.
+({Map<DateTime, List<ServerConversation>> rows, Map<DateTime, List<ServerConversation>> background}) _foldBackground(
+    Map<DateTime, List<ServerConversation>> byDate, Map<DateTime, List<LocalRecording>> recordingsByDate) {
+  final rows = <DateTime, List<ServerConversation>>{};
+  final background = <DateTime, List<ServerConversation>>{};
+  for (final entry in byDate.entries) {
+    final folded = entry.value.where(foldsIntoBackgroundLine).toList();
+    final kept = entry.value.where((c) => !foldsIntoBackgroundLine(c)).toList();
+    if (folded.isEmpty || (kept.isEmpty && (recordingsByDate[entry.key]?.isEmpty ?? true))) {
+      rows[entry.key] = entry.value;
+      continue;
+    }
+    rows[entry.key] = kept;
+    background[entry.key] = folded;
   }
-  return filling;
+  return (rows: rows, background: background);
+}
+
+/// [rows] with a background line under each day header that has one, below a live episode row.
+List<_ConversationListRow> _withBackgroundLines(List<_ConversationListRow> rows, Set<DateTime> days) {
+  if (days.isEmpty) return rows;
+  final out = <_ConversationListRow>[];
+  for (var i = 0; i < rows.length; i++) {
+    out.add(rows[i]);
+    final row = rows[i];
+    final opensDay = row.kind == _ConversationListRowKind.dateHeader ||
+        (row.kind == _ConversationListRowKind.liveEpisode && row.isFirst);
+    if (!opensDay || !days.contains(row.date)) continue;
+    while (i + 1 < rows.length && rows[i + 1].kind == _ConversationListRowKind.liveEpisode) {
+      out.add(rows[++i]);
+    }
+    out.add((
+      kind: _ConversationListRowKind.backgroundLine,
+      date: row.date,
+      isFirst: false,
+      conversation: null,
+      recording: null,
+      conversationIndex: -1,
+    ));
+  }
+  return out;
 }
 
 bool _isLockedRow(List<_ConversationListRow> rows, int index) =>
@@ -315,6 +356,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   String? _loadMoreFilterKey;
   String? _lastLoadMoreRequestKey;
   bool _isBootstrapping = true;
+
+  /// Days whose background line is open, showing its conversations as rows.
+  final Set<DateTime> _openBackgroundDays = {};
 
   @override
   bool get wantKeepAlive => true;
@@ -542,27 +586,30 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     final episodesOn = episodes?.enabled == true;
     final streaming = context.select<CaptureProvider, bool>((c) => EpisodePresentation.streamingSource(c) != null);
     final episodeLive = episodesOn && streaming;
-    final hiddenByLive = episodeLive ? episodes!.liveConversationIds : const <String>{};
-    final filling = episodesOn ? _fillingSeconds(_pendingWork.pending) : const <String, int>{};
+    final filling = episodesOn ? fillingSeconds(_pendingWork.pending) : const <String, int>{};
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
+        final hiddenByLive = episodeLive
+            ? hiddenLiveConversations(episodes!.liveConversationIds, snapshot.conversations,
+                serving: ClientRefactorFlags.serving)
+            : const <String>{};
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
         final bool showRecordings = convoProvider.previousQuery.isEmpty &&
             convoProvider.selectedFolderId == null &&
             !convoProvider.showStarredOnly;
-        final recordingsByDate = <DateTime, List<LocalRecordingGroup>>{};
+        final recordingsByDate = <DateTime, List<LocalRecording>>{};
         if (showRecordings) {
           // Batch/offline-mode recordings captured locally — a separate subsystem
           // from device offline-sync (which lives on the Sync page).
           for (final rec in snapshot.recordings) {
             final dt = DateTime.fromMillisecondsSinceEpoch(rec.timerStart * 1000);
             final day = DateTime(dt.year, dt.month, dt.day);
-            (recordingsByDate[day] ??= <LocalRecordingGroup>[]).add(rec);
+            (recordingsByDate[day] ??= <LocalRecording>[]).add(rec);
           }
         }
         final bool hasRecordings = recordingsByDate.isNotEmpty;
@@ -592,13 +639,24 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       if (!hiddenByLive.contains(c.id)) c
                   ],
               };
+        // Episodes beta, default view: background conversations fold into one line per day.
+        final folding = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
+        final fold = folding
+            ? _foldBackground(conversationsByDate, recordingsByDate)
+            : (rows: conversationsByDate, background: const <DateTime, List<ServerConversation>>{});
         final builtRows = _buildConversationListRows(
           dates: mergedDates,
-          conversationsByDate: conversationsByDate,
+          conversationsByDate: {
+            for (final entry in fold.rows.entries)
+              entry.key: _openBackgroundDays.contains(entry.key)
+                  ? (conversationsByDate[entry.key] ?? entry.value)
+                  : entry.value,
+          },
           recordingsByDate: recordingsByDate,
         );
-        final conversationRows =
+        final withLive =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
+        final conversationRows = _withBackgroundLines(withLive, fold.background.keys.toSet());
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -749,6 +807,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                             const LiveEpisodeRow(),
                           ],
                         );
+                      case _ConversationListRowKind.backgroundLine:
+                        final day = row.date;
+                        return BackgroundDayLine(
+                          key: ValueKey('background_${day.toIso8601String()}'),
+                          background: fold.background[day] ?? const [],
+                          expanded: _openBackgroundDays.contains(day),
+                          onTap: () => setState(() {
+                            if (!_openBackgroundDays.remove(day)) _openBackgroundDays.add(day);
+                          }),
+                        );
                       case _ConversationListRowKind.conversation:
                         // Consecutive locked rows share one frosted card and one upgrade action;
                         // the run's first row draws it and the rest of the run draws nothing.
@@ -769,8 +837,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           fillingSeconds: filling[row.conversation!.id],
                         );
                       case _ConversationListRowKind.recording:
-                        return RecordingGroupListItem(
-                            key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);
+                        return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);
                       case _ConversationListRowKind.groupSpacer:
                         return const SizedBox(height: 10);
                     }

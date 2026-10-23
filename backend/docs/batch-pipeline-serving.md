@@ -533,15 +533,17 @@ an empty multilingual response from Modulate alone stays `failed_held` rather
 than terminal-empty. Timeouts, malformed responses, uncertain calls, missing
 evidence, and provider failures stay held. There are no paid-intent resets.
 
-**Second multilingual provider (long-speech units).** A unit with
-`padded_retry=skipped_long_speech` evidence, at least 5 s of strict-VAD speech
-and a validated empty Modulate response gets exactly one more call, to cloud
-Deepgram nova-3 with language detection (`second_transcribe`), inside the same
-`running` intent. Deepgram is the only other provider with a batch client
-(Soniox is streaming-only), and `config/stt_provider_policy.py` names it
-`HELD_RECOVERY_SECOND_PROVIDER` without admitting it to the general
-pre-recorded route. The batch allowance and consent are rechecked first; the
-client's own retry is disabled. Outcomes:
+**Second multilingual provider (long-speech units) — retired 2026-08-27.**
+This step used to spend exactly one more call, to cloud Deepgram nova-3 with
+language detection (`second_transcribe`), inside the same `running` intent.
+Deepgram is retired (no contract since 2026-08-27), so
+`config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` is `None` and
+`second_provider_eligible` answers False for every unit: no second call is
+spent, and an empty multilingual Modulate response settles `failed_held`
+(Modulate-only recovery, the same behavior as
+`BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false`). The wiring, flag and
+metering stay so a future second batch provider can be introduced by naming it
+in the policy again. Historical behavior, kept for reference:
 
 - Deepgram returns words: the unit recovers with those words (ordinary
   `success` result).

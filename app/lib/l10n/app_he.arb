@@ -11832,5 +11832,19 @@
     "deviceCatchingUpProgress": "{done} מתוך {total} דק׳",
     "deviceRecently": "לאחרונה",
     "deviceDisconnectedFor": "מנותק למשך {duration}",
-    "deviceControls": "פקדים"
+    "deviceControls": "פקדים",
+    "homeBackgroundLine": "גם: {items}",
+    "deviceOnboardingPressButtonTitle": "לחץ על הכפתור ב‑Omi",
+    "deviceOnboardingPressButtonSubtitle": "לחיצה קצרה אחת. ואז שאל מה שתרצה.",
+    "deviceOnboardingAskNowTitle": "שאל את השאלה שלך",
+    "deviceOnboardingAskNowSubtitle": "אמור זאת בקול. Omi מקשיב.",
+    "deviceOnboardingPressAgainHint": "סיימת? לחץ שוב על הכפתור כדי לשלוח.",
+    "trialUpsellTitle": "שודרגת ל‑{days} ימים חינם",
+    "trialUpsellBody": "{days} ימים של Omi Pro עלינו. נזכיר לך לפני כל חיוב. ביטול בכל עת.",
+    "trialUpsellClaim": "קבל ניסיון של {days} ימים",
+    "settingsUpgradeTrialSubtitle": "התחל ניסיון חינם של {days} ימים",
+    "pairingPowerOnTitle": "הפעל את ה‑Omi",
+    "pairingPowerOnSubtitle": "לחץ פעם אחת על הכפתור והשאר אותו קרוב לטלפון.",
+    "walkthroughBackgroundRecordingNote": "זהו. Omi ימשיך להקליט את השיחות שלך ברקע.",
+    "noThanks": "לא, תודה"
 }

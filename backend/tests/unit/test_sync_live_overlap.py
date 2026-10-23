@@ -343,3 +343,26 @@ def test_database_adapter_discovers_and_appends_with_real_storage_codecs(monkeyp
     assert not created and row['id'] == 'live' and row['status'] == 'in_progress'
     assert len(row['transcript_segments']) == 2
     discover.assert_called_once()
+
+
+def test_capture_mode_discovers_no_device_open_target_and_projection_keeps_its_key(monkeypatch):
+    from database import conversations as db
+
+    monkeypatch.setenv('CAPTURE_COVERAGE_MODE', 'serve')
+    capture = {'capture_root': 'synthetic-root', 'channel': 'mono', 'clock_epoch': 0}
+    live = live_row('in_progress')
+    live.update(client_device_id=None, capture_evidence={'origin': 'live', **capture})
+    incoming = dict(
+        chunk('wal', 1005),
+        client_device_id=None,
+        capture_evidence={'origin': 'sync', **capture},
+        data_protection_level='standard',
+    )
+    store = StrictFirestore()
+    store.rows[('users', 'u', 'conversations', 'live')] = db._prepare_conversation_for_write(live, 'u', 'standard')
+    discover = MagicMock(return_value=('live',))
+    monkeypatch.setattr(db, 'find_sync_live_overlap_candidates', discover)
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *args: None)
+    row, created, _ = db.assign_sync_conversation('u', incoming, firestore_client=store)
+    discover.assert_called_once()
+    assert not created and row['id'] == 'live' and row['status'] == 'in_progress'

@@ -14510,4 +14510,57 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get deviceControls => 'Controles';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Também: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Pressiona o botão do teu Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Um toque curto. Depois pergunta o que quiseres.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Faz a tua pergunta';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Di-lo em voz alta. O Omi está a ouvir.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Pronto? Pressiona o botão outra vez para enviar.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Tens $days dias grátis';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dias de Omi Pro por nossa conta. Avisamos antes de qualquer cobrança. Cancela quando quiseres.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Quero a prova de $days dias';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Começa a tua prova grátis de $days dias';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Liga o teu Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Pressiona o botão uma vez e mantém-no perto do telemóvel.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'É isso. O Omi continua a gravar as tuas conversas em segundo plano.';
+
+  @override
+  String get noThanks => 'Não, obrigado';
 }

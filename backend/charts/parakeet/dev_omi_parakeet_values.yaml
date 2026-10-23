@@ -74,6 +74,9 @@ ingress:
           pathType: Prefix
         - path: /v3/stream
           pathType: Prefix
+        # Spoken-language gate for prerecorded routing (backend shadow/enforce callers).
+        - path: /v2/language
+          pathType: Prefix
         - path: /health
           pathType: Prefix
 

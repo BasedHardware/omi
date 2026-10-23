@@ -7,7 +7,7 @@ import {
 /**
  * Server-side privileged read of GET /v1/telemetry/client/aggregates.
  * Uses the admin dashboard's existing X-Admin-Key / X-Admin-User gate after
- * verifyAdmin. The browser Firebase token is never forwarded.
+ * requireScope. The browser Firebase token is never forwarded.
  *
  * Integration dependency: Lane 1 must accept this admin gate (the same one
  * feedback admin uses). Ordinary user auth is not sufficient.

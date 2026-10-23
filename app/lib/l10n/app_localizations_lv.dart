@@ -14514,4 +14514,56 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get deviceControls => 'Vadīklas';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Arī: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Nospiediet Omi pogu';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Viens īss spiediens. Tad jautājiet jebko.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Uzdodiet jautājumu';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Sakiet skaļi. Omi klausās.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Gatavs? Nospiediet pogu vēlreiz, lai nosūtītu.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Jums $days dienas bez maksas';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days dienas Omi Pro uz mūsu rēķina. Atgādināsim pirms maksas. Atceliet jebkurā brīdī.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Saņemt $days dienu izmēģinājumu';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Sāciet $days dienu bezmaksas izmēģinājumu';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Ieslēdziet Omi';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Nospiediet pogu vienreiz un turiet tuvu tālrunim.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote => 'Tas arī viss. Omi turpinās ierakstīt jūsu sarunas fonā.';
+
+  @override
+  String get noThanks => 'Nē, paldies';
 }

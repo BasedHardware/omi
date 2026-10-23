@@ -1,8 +1,10 @@
 """One owner session, two independent verifiers, one reversible effect boundary."""
 
 from utils.generated_compute import generated_compute_allowed, generated_compute_configured
+from config.vertex_reservations import PROBE_SECONDS, PROBE_TIMEOUT_SECONDS
 
 import asyncio
+import time
 import logging
 from datetime import datetime, timezone
 from collections import Counter
@@ -21,6 +23,7 @@ from config.dream_agent import (
     on_demand_enabled,
     PASS_TIMEOUT_SECONDS,
     DRAIN_TIMEOUT_SECONDS,
+    FINISH_MARGIN_SECONDS,
 )
 from database import dream_scheduler, dream_store, dream_turns, legal_holds, review_store
 from config.rollout_cohorts import warm_rollout_cohorts
@@ -831,14 +834,21 @@ async def run_pass(
             await dream_capacity.release(slot)
 
 
-RESERVED_RECHECKS = 4
 RESERVED_RECHECK_SECONDS = 30
+# A previous replica can leave a full discovery lease after an inconclusive
+# probe or shutdown. Wait for its expiry, one bounded probe, and a final read.
+RESERVED_RECHECKS = (PROBE_SECONDS + PROBE_TIMEOUT_SECONDS) // RESERVED_RECHECK_SECONDS + 1
+# A pass starting late in the drain gets only the drain's remaining budget, so
+# it ends through its own deadline (and finish) instead of being cancelled by the
+# drain's outer timeout; below this floor the owner waits for the next sweep.
+MIN_PASS_SECONDS = 300
 
 
 async def drain(*, limit=5000):
     if not enabled() or limit <= 0:
         return []
     results = []
+    drain_deadline = time.monotonic() + DRAIN_TIMEOUT_SECONDS
     try:
         async with asyncio.timeout(DRAIN_TIMEOUT_SECONDS):
             reserved_open = await dream_capacity.available_model(mode='reserved') is not None
@@ -847,6 +857,8 @@ async def drain(*, limit=5000):
                 # before giving up the hourly sweep.
                 for _ in range(RESERVED_RECHECKS):
                     await asyncio.sleep(RESERVED_RECHECK_SECONDS)
+                    if not enabled():
+                        return results
                     if await dream_capacity.available_model(mode='reserved') is not None:
                         reserved_open = True
                         break
@@ -860,8 +872,13 @@ async def drain(*, limit=5000):
             async def worker():
                 for uid in owners:
                     while enabled():
+                        remaining = drain_deadline - time.monotonic() - FINISH_MARGIN_SECONDS
+                        if remaining < MIN_PASS_SECONDS:
+                            # Too little drain budget left for a useful pass; the owner stays
+                            # due and runs with a full window next sweep.
+                            return
                         try:
-                            report = await run_pass(uid)
+                            report = await run_pass(uid, timeout_seconds=int(min(PASS_TIMEOUT_SECONDS, remaining)))
                         except Exception as exc:
                             _log_pass_failure(exc, stage='pass')
                             report = {

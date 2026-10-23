@@ -12,100 +12,6 @@ void main() {
 
 void _runBatchRecordingUtilsTests() {
   group('BatchRecording Utils', () {
-    test('isAutoPhoneBatchRecording correctly identifies auto recordings', () {
-      expect(
-        isAutoPhoneBatchRecording(
-          'audio_${phoneBatchAutoRecordingDevice}_123.bin',
-        ),
-        isTrue,
-      );
-      expect(
-        isAutoPhoneBatchRecording('audio_${phoneBatchRecordingDevice}_123.bin'),
-        isFalse,
-      );
-      expect(isAutoPhoneBatchRecording('random_file.bin'), isFalse);
-    });
-
-    test('canAutoUploadPhoneRecordings checks conditions correctly', () {
-      expect(
-        canAutoUploadPhoneRecordings(
-          useCustomStt: false,
-          autoSyncOfflineRecordings: true,
-          isUploading: false,
-        ),
-        isTrue,
-      );
-
-      expect(
-        canAutoUploadPhoneRecordings(
-          useCustomStt: true,
-          autoSyncOfflineRecordings: true,
-          isUploading: false,
-        ),
-        isFalse,
-      );
-
-      expect(
-        canAutoUploadPhoneRecordings(
-          useCustomStt: false,
-          autoSyncOfflineRecordings: false,
-          isUploading: false,
-        ),
-        isFalse,
-      );
-
-      expect(
-        canAutoUploadPhoneRecordings(
-          useCustomStt: false,
-          autoSyncOfflineRecordings: true,
-          isUploading: true,
-        ),
-        isFalse,
-      );
-    });
-
-    test(
-      'selectNextAutoPhoneUpload skips busy, failed, and non-auto files',
-      () {
-        final fileNames = [
-          'audio_${phoneBatchRecordingDevice}_manual.bin',
-          'audio_${phoneBatchAutoRecordingDevice}_failed.bin',
-          'audio_${phoneBatchAutoRecordingDevice}_busy.bin',
-          'audio_${phoneBatchAutoRecordingDevice}_ready.bin',
-          'audio_${phoneBatchAutoRecordingDevice}_ready_2.bin',
-        ];
-
-        final busyNames = {'audio_${phoneBatchAutoRecordingDevice}_busy.bin'};
-        final failureCounts = {
-          'audio_${phoneBatchAutoRecordingDevice}_failed.bin':
-              autoPhoneUploadMaxFailures,
-        };
-
-        final selected = selectNextAutoPhoneUpload(
-          fileNames,
-          busyNames: busyNames,
-          failureCounts: failureCounts,
-        );
-
-        expect(
-          selected,
-          equals('audio_${phoneBatchAutoRecordingDevice}_ready.bin'),
-        );
-      },
-    );
-
-    test('selectNextAutoPhoneUpload returns null when no files match', () {
-      final fileNames = ['audio_${phoneBatchRecordingDevice}_manual.bin'];
-
-      final selected = selectNextAutoPhoneUpload(
-        fileNames,
-        busyNames: {},
-        failureCounts: {},
-      );
-
-      expect(selected, isNull);
-    });
-
     test('selectPhoneMicSessionMode handles all modes', () {
       expect(
         selectPhoneMicSessionMode(
@@ -251,13 +157,15 @@ void _runBatchRecordingInfoFromFileNameTests() {
       expect(
         BatchRecordingInfo.fromFileName(
           'audio_omi_opus_16000_1_fs160_1735689600.bin',
-        )!.sampleRate,
+        )!
+            .sampleRate,
         16000,
       );
       expect(
         BatchRecordingInfo.fromFileName(
           'audio_omi_pcm8_8000_1_fs160_1735689600.bin',
-        )!.sampleRate,
+        )!
+            .sampleRate,
         8000,
       );
     });

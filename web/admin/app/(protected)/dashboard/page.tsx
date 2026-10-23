@@ -51,7 +51,16 @@ function GrafanaFrame() {
     : 1;
   if (!embed && (isLoading || !token))
     return <p role="status">Loading dashboard…</p>;
-  if (error)
+  if (error) {
+    // The Business board needs finance:read; a member without it gets the
+    // classic analytics dashboard, which is scoped to analytics:read.
+    if ((error as { status?: number }).status === 403) {
+      return (
+        <Suspense fallback={<p role="status">Loading analytics…</p>}>
+          <ClassicDashboard />
+        </Suspense>
+      );
+    }
     return (
       <div role="alert">
         <p>Dashboard login unavailable.</p>
@@ -61,6 +70,7 @@ function GrafanaFrame() {
         <a href="/dashboard/classic">Open analytics dashboard</a>
       </div>
     );
+  }
   if (!embed?.enabled)
     return (
       <Suspense fallback={<p role="status">Loading analytics…</p>}>
