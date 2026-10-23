@@ -1,6 +1,8 @@
 # Apple Watch audio custody and recovery
 
-Status: proposed implementation for #20479; not a released or physically qualified recovery guarantee.
+Status: durable custody merged in #22059, current Home policy merged in #23288,
+and control cleanup proposed in draft #23280. Public release and physical Watch
+qualification are not established by these merge states.
 
 ## Existing behavior and incident boundary
 
@@ -184,6 +186,10 @@ proof that the corresponding public store binary has shipped.
   parts are not all attributed to this run. This is an iPhone-host result, not a
   Watch, physical Stop-button tap, microphone-indicator or transfer qualification.
   The battery adapter is a no-op; no production app/account or backend is used.
+- [x] Subsequent physical-iPhone manual Stop run reports valid stable files and
+  zero deactivation errors (result UTC: 2026-10-23T03:56:27Z). Aryan confirms:
+  "Timer stops; microphone indicator disappears." This qualifies the visible
+  control only in the iPhone QA host, not on physical watchOS.
 - [ ] Repeat affected checks and final CI after current-main integration and
   removal of the superseded Home grouping.
 - [ ] Keep the PR in draft until physical paired-device acceptance and required
