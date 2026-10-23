@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-desktop-macos-cloud-stt-language-notice.png",
+      "platform": "desktop-macos",
+      "description": "Settings > Transcription language notice for a language with no on-device model (Korean), rendered offscreen with ImageRenderer from the production CloudTranscriptionLanguageHint view",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

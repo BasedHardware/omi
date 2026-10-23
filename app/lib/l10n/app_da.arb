@@ -4449,5 +4449,19 @@
     "deviceRecently": "For nylig",
     "deviceDisconnectedFor": "Afbrudt i {duration}",
     "deviceControls": "Betjening",
-    "homeBackgroundLine": "Også: {items}"
+    "homeBackgroundLine": "Også: {items}",
+    "deviceOnboardingPressButtonTitle": "Tryk på knappen på din Omi",
+    "deviceOnboardingPressButtonSubtitle": "Ét kort tryk. Spørg derefter om hvad som helst.",
+    "deviceOnboardingAskNowTitle": "Stil dit spørgsmål",
+    "deviceOnboardingAskNowSubtitle": "Sig det højt. Omi lytter.",
+    "deviceOnboardingPressAgainHint": "Færdig? Tryk på knappen igen for at sende.",
+    "trialUpsellTitle": "Du har fået {days} dage gratis",
+    "trialUpsellBody": "{days} dage Omi Pro på os. Vi minder dig om det før betaling. Opsig når som helst.",
+    "trialUpsellClaim": "Få min prøveperiode på {days} dage",
+    "settingsUpgradeTrialSubtitle": "Start din gratis prøveperiode på {days} dage",
+    "pairingPowerOnTitle": "Tænd din Omi",
+    "pairingPowerOnSubtitle": "Tryk én gang på knappen og hold den tæt på din telefon.",
+    "walkthroughBackgroundRecordingNote": "Det var det. Omi bliver ved med at optage dine samtaler i baggrunden.",
+    "noThanks": "Nej tak",
+    "recapInTheBackground": "I baggrunden"
 }

@@ -90,6 +90,27 @@ def _joinable(row: Optional[Mapping[str, Any]]) -> bool:
     return row is not None and _live(row) and not row.get('discarded') and row.get('status') == 'completed'
 
 
+DUPLICATE_HINT_FIELDS = ('duplicate_capture_of', 'cross_device_duplicate')
+
+
+def preserve_duplicate_hint(write_data: dict, existing: Mapping[str, Any]) -> None:
+    """Keep the cross-device duplicate hint that a processor snapshot predates.
+
+    ``database.conversations.link_duplicate_capture`` is the only writer of these
+    ``external_data`` keys, and it can commit between a processor's read and its
+    merge write: from-segments re-persists its in-memory conversation right after
+    processing linked it. A merge carrying ``external_data`` without the hint
+    (``None`` for a fresh upload) would erase it, and smart merge's
+    ``user_managed`` fence with it.
+    """
+    current = existing.get('external_data')
+    if 'external_data' not in write_data or not isinstance(current, Mapping):
+        return
+    hint = {key: current[key] for key in DUPLICATE_HINT_FIELDS if current.get(key) is not None}
+    if hint:
+        write_data['external_data'] = {**(write_data.get('external_data') or {}), **hint}
+
+
 def transcript_fingerprint(row: Optional[Mapping[str, Any]]) -> Optional[str]:
     """Digest of the transcript exactly as stored (still encrypted/compressed).
 

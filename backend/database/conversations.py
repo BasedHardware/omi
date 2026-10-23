@@ -51,7 +51,7 @@ from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
-from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, transcript_fingerprint
+from .capture_groups import CAPTURE_GROUP_FIELD, leave_capture_group, preserve_duplicate_hint, transcript_fingerprint
 from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
 )
@@ -1046,6 +1046,7 @@ def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
         existing_snapshot = conversation_ref.get(transaction=transaction)
         if getattr(existing_snapshot, 'exists', False):
             existing = existing_snapshot.to_dict() or {}
+            preserve_duplicate_hint(write_data, existing)
             if existing.get('record_lane_owner'):
                 write_data['record_lane_owner'] = existing['record_lane_owner']
             else:
@@ -1171,6 +1172,7 @@ def persist_processing_result_with_lifecycle(
             return False
 
         existing = existing_snapshot.to_dict() or {}
+        preserve_duplicate_hint(write_data, existing)
         if existing.get('record_lane_owner'):
             write_data['record_lane_owner'] = existing['record_lane_owner']
         if (

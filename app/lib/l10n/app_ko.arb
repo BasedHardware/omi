@@ -4407,5 +4407,19 @@
     "deviceRecently": "최근",
     "deviceDisconnectedFor": "{duration} 동안 연결 끊김",
     "deviceControls": "제어",
-    "homeBackgroundLine": "그 외: {items}"
+    "homeBackgroundLine": "그 외: {items}",
+    "deviceOnboardingPressButtonTitle": "Omi 버튼을 누르세요",
+    "deviceOnboardingPressButtonSubtitle": "짧게 한 번 누르세요. 그다음 무엇이든 물어보세요.",
+    "deviceOnboardingAskNowTitle": "질문하세요",
+    "deviceOnboardingAskNowSubtitle": "소리 내어 말하세요. Omi가 듣고 있어요.",
+    "deviceOnboardingPressAgainHint": "다 말했나요? 버튼을 다시 눌러 보내세요.",
+    "trialUpsellTitle": "{days}일 무료로 업그레이드되었어요",
+    "trialUpsellBody": "Omi Pro {days}일 무료. 결제 전에 알려드려요. 언제든 취소할 수 있어요.",
+    "trialUpsellClaim": "{days}일 무료 체험 받기",
+    "settingsUpgradeTrialSubtitle": "{days}일 무료 체험 시작하기",
+    "pairingPowerOnTitle": "Omi 전원을 켜세요",
+    "pairingPowerOnSubtitle": "버튼을 한 번 누르고 휴대폰 가까이에 두세요.",
+    "walkthroughBackgroundRecordingNote": "끝이에요. Omi가 백그라운드에서 대화를 계속 녹음해요.",
+    "noThanks": "괜찮아요",
+    "recapInTheBackground": "배경에서"
 }

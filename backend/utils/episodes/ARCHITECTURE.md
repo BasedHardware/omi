@@ -51,16 +51,21 @@ one capture window's evidence.
      prefix comes first and the clock, state and new speech come last.
    - **Compare-and-swap store** (`database/episodes.py`): speech-derived fields are
      sealed with the user's key. A lost race retries once.
-3. After a conversation's finalization job completes,
+3. When a conversation's finalize starts, its live episode closes
+   (`service.close_on_finalize`, through `finalize.close_now`; see "Close and wrap-up").
+4. After a conversation's finalization job completes,
    `utils/conversations/finalizer.py` calls `service.on_conversation_finalized`
-   (bounded, fail-open, after `complete_finalization_fanout`):
+   (bounded, fail-open, after `complete_finalization_fanout`). The synchronous
+   `POST /v1/conversations` route runs the same hook off the request path
+   (`finalize.schedule_after_finalization`). The hook:
    - It applies trailing text the live stream never delivered (dedupe by the
-     per-conversation applied offset).
+     per-conversation applied offset), to the conversation's own episode even
+     when that one has closed.
    - It repoints a smart-merge donor to its survivor.
    - It reconciles the provisional items heard in that conversation against the
      tasks its normal processing saved: each becomes `kept` (with the task id)
-     or `dropped`.
-   - A pending "Wrap up now" for that conversation closes the episode.
+     or `dropped`. A discarded conversation's items are dropped.
+   - It closes the episode if the close at finalize start never ran.
 
 ## Provisional items (INV-TASK-2)
 
@@ -75,9 +80,22 @@ per-moment extraction. Undo marks an item `dismissed`.
 
 The close reasons are `user`, `gap`, `idle`, `hard_cap`, `source_change`,
 `calendar_boundary` and `moved_on`.
-- `POST /v1/episodes/{id}/wrap-up` with the conversation being finished waits for
-  that conversation's finalization. That is the normal processing pass, run once
-  through the client-finalize trigger. Without a conversation, it closes now.
+- Ending a conversation ends its live episode at once, and the next words open
+  a new one (`attach_conversation`); the server never creates an empty episode.
+  - A client finalize (`client_finalize`: the app's Wrap up, a pendant double-tap,
+    desktop's finalize) closes it with `user`. Both finalize routes close with the
+    request; the durable finalizer repeats the close when its job starts.
+  - The server ending an occasion conversation (`capture_end` on silence,
+    `server_recovery` after a disconnect) closes it with `gap`, unless another
+    conversation joined after it (a rollover, a second device). Desktop capture,
+    which still splits on short silences, keeps its episode until the rules above.
+  - The ended conversation is the episode's `closing_conversation_id`. Its items
+    stay provisional until its processing reconciles them, and it never reopens
+    the episode or opens or joins another: a late live moment is
+    `skipped_closed`, and a re-attach is a no-op. A second close is a no-op.
+- `POST /v1/episodes/{id}/wrap-up` closes at once (`user`), recording the
+  conversation being finished as the closing one when given. An episode an older
+  server left live with `wrap_up_requested_at` is closed on its next read.
 - A read that finds an episode idle for `CLOSE_GAP_SECONDS` closes it lazily
   (`idle`), dated when the quiet reached the gap rather than when the read
   happened. No scheduler is involved.
