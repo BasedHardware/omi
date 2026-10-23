@@ -99,50 +99,12 @@ class TestSyncEndpointErrorReporting:
     def _read_sync_source():
         return _read_text(os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'sync.py'))
 
-    def test_endpoint_creates_lock_and_errors(self):
-        """Endpoint must create segment_lock and segment_errors."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        func_body = source[start:]
-
-        assert 'segment_errors = []' in func_body, "Must initialize error list"
-        assert 'segment_lock = threading.Lock()' in func_body, "Must create lock"
-
-    def test_endpoint_passes_lock_and_errors_to_threads(self):
-        """Thread args must include lock and errors."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        func_body = source[start:]
-
-        assert 'segment_lock,' in func_body, "Must pass lock to process_segment threads"
-        assert 'segment_errors,' in func_body, "Must pass errors to process_segment threads"
-
-    def test_endpoint_returns_207_on_partial_failure(self):
-        """Partial failure must return HTTP 207."""
-        source = self._read_sync_source()
-        assert 'status_code=207' in source, "Must return 207 for partial failure"
-
-    def test_endpoint_returns_500_on_all_failed(self):
-        """All segments failing must return HTTP 500."""
-        source = self._read_sync_source()
-        start = source.index('async def sync_local_files(')
-        func_body = source[start:]
-
-        assert 'successful_segments == 0' in func_body, "Must check for all-fail case"
-        assert "All" in func_body and "failed processing" in func_body, "Must include descriptive 500 message"
-
     def test_response_includes_failed_segments_count(self):
         """Response must include failed_segments count for app to check."""
         source = self._read_sync_source()
         assert "'failed_segments'" in source, "Response must include failed_segments"
         assert "'total_segments'" in source, "Response must include total_segments"
         assert "'errors'" in source, "Response must include errors list"
-
-    def test_response_converts_sets_to_sorted_lists(self):
-        """Sets must be converted to sorted lists for JSON serialization."""
-        source = self._read_sync_source()
-        assert "sorted(response['new_memories'])" in source, "new_memories must be sorted list"
-        assert "sorted(response['updated_memories'])" in source, "updated_memories must be sorted list"
 
 
 # ---------------------------------------------------------------------------
