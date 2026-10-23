@@ -108,7 +108,8 @@ def _wrap_bulk(original: Any) -> Any:
         async def async_bulk(client: Any, request: Any = None, **kwargs: Any) -> Any:
             block = barrier(request, kwargs)
             if block is not None:
-                await client.commit(request=block)
+                options = {key: kwargs[key] for key in ('retry', 'timeout', 'metadata') if key in kwargs}
+                await client.commit(request=block, **options)
             return await original(client, request=request, **kwargs)
 
         wrapped = async_bulk
@@ -118,7 +119,8 @@ def _wrap_bulk(original: Any) -> Any:
         def sync_bulk(client: Any, request: Any = None, **kwargs: Any) -> Any:
             block = barrier(request, kwargs)
             if block is not None:
-                client.commit(request=block)
+                options = {key: kwargs[key] for key in ('retry', 'timeout', 'metadata') if key in kwargs}
+                client.commit(request=block, **options)
             return original(client, request=request, **kwargs)
 
         wrapped = sync_bulk

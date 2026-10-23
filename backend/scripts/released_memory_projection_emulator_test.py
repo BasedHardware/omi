@@ -95,6 +95,7 @@ def main() -> None:
     bulk = client.bulk_writer()
     bulk.set(client.document(f'{root}/memories/bulk'), {'n': 1})
     bulk.close()
+    assert client.document(f'{root}/memories/bulk').get().exists
     assert marker.get().to_dict()['blocked'] is True
     item.set({'n': 4})
     assert marker.get().to_dict()['blocked'] is True

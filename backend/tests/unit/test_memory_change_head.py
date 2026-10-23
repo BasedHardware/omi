@@ -78,9 +78,16 @@ def test_non_atomic_bulk_blocks_reuse_before_source_writes_and_never_clears_bloc
     calls = []
     client = SimpleNamespace(commit=lambda **kwargs: calls.append(('block', kwargs)))
     wrapped = head._wrap_bulk(lambda *args, **kwargs: calls.append(('source', kwargs)))
-    wrapped(client, request={'writes': [Write(delete=f'{ROOT}/users/u/memories/a')], 'database': 'db'})
+    wrapped(
+        client,
+        request={'writes': [Write(delete=f'{ROOT}/users/u/memories/a')], 'database': 'db'},
+        metadata=(('authorization', 'synthetic'),),
+        timeout=7,
+    )
     assert [call[0] for call in calls] == ['block', 'source']
     blocked = calls[0][1]['request']['writes'][0]
+    assert calls[0][1]['metadata'] == (('authorization', 'synthetic'),)
+    assert calls[0][1]['timeout'] == 7
     assert blocked.update.fields['blocked'].boolean_value
     assert 'blocked' in blocked.update_mask.field_paths
     assert 'blocked' not in head.head_write(ROOT, 'u').update_mask.field_paths
