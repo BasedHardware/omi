@@ -96,3 +96,18 @@ Even a content-only source write invalidates its family, so transcription
 activity may reduce the unchanged share. Include these writes, storage/index
 cost, marker reads and live p95 in the loop's net ledger. Stop reader expansion
 if parity fails or net economics cannot meet the measured residual target.
+
+## Large server commits
+
+The Python SDK uses the server `Commit` API. Its old 500-write count limit was
+[removed on March 29, 2023](https://docs.cloud.google.com/firestore/docs/release-notes).
+The [10 MiB request and per-document transform limits](https://firebase.google.com/docs/firestore/quotas)
+still apply. This contract does not split a source transaction or change its
+atomicity to satisfy a legacy write-count assumption.
+
+`tests/integration/test_list_projection_emulator.py` exercises 450- and 499-source
+commits and recursive deletes for both families against a loopback-only demo
+emulator, including the expanded 901/999-write requests and unchanged SDK result
+length. Run it through `backend/test.sh` with an explicit one-file list,
+`BACKEND_PYTEST_MARK_EXPR=integration`, and
+`firebase emulators:exec --only firestore --project demo-fs-p1 --config backend/tests/integration/firebase-list-projection.json`.
