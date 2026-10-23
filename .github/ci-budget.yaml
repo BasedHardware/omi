@@ -231,13 +231,13 @@
       "display_name": "Backend unit guardrails",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 74,
+      "expected_runs_per_day": 74.1,
       "if": "needs.ci-tier.outputs.full_ci == 'true'",
       "matrix": {},
       "matrix_size": 1,
       "needs": "ci-tier",
       "owner": "CI maintainers",
-      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#21780 runs 38823920783/38827426342 hit the 10m whole-job ceiling; the second completed all 2040 assertions in 535.44s before setup/cleanup pushed it over. A bounded 15m ceiling admits the complete suite. Retain the 3m p50 improvement target and existing runner, triggers, matrix and daily forecast. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). Native audio installer path now triggers this existing workflow; budget 0.1 additional PR runs per day (one installer-maintenance PR every ten days); this leaves the existing daily cap intact.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -250,7 +250,7 @@
       "display_name": "Backend unit shard ${{ matrix.shard }}/6",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 120,
+      "expected_runs_per_day": 120.1,
       "if": null,
       "matrix": {
         "shard": [
@@ -265,20 +265,20 @@
       "matrix_size": 6,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#21237: run 38168319908 selected 1727 files; four shard contract walls were 710/472/772/651s. Six shards reduce 432 files to at most 288, forecasting about 8 minutes per runner including fixed preflight/typecheck work. The 720-second regression gate is unchanged; fanout raises aggregate forecast from 36 to 48 Linux runner-minutes per run without relaxing coverage or isolation. P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). Pin ubuntu-24.04 to the native audio snapshot suite; runner class, fanout, timeout and p50 budget are unchanged. Cached installs stay offline and cold downloads are bounded within the existing five-minute step ceiling. Native audio installer path now triggers this existing workflow; budget 0.1 additional PR runs per day (one installer-maintenance PR every ten days); this leaves the existing daily cap intact.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
         "linux": 6
       },
-      "runs_on": "ubuntu-latest"
+      "runs_on": "ubuntu-24.04"
     },
     "backend-unit-tests.yml/backend-unit-suite": {
       "budget_p50_minutes": 1,
       "display_name": "Backend unit suite",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "sampled-pr-day",
-      "expected_runs_per_day": 118,
+      "expected_runs_per_day": 118.1,
       "if": "${{ always() && !cancelled() }}",
       "matrix": {},
       "matrix_size": 1,
@@ -288,7 +288,7 @@
         "backend-unit-guardrails"
       ],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily run over the PR M forecast of 116 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). Native audio installer path now triggers this existing workflow; budget 0.1 additional PR runs per day (one installer-maintenance PR every ten days); this leaves the existing daily cap intact.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -301,13 +301,13 @@
       "display_name": "Resolve CI Tier",
       "expected_nightly_runs_per_day": 1,
       "expected_runs_class": "unsampled-pr-sentinel",
-      "expected_runs_per_day": 120,
+      "expected_runs_per_day": 120.1,
       "if": null,
       "matrix": {},
       "matrix_size": 1,
       "needs": [],
       "owner": "CI maintainers",
-      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively).",
+      "rationale": "#11183 adds the X connector deploy workflow to this backend-contract trigger; one daily label read over the PR M forecast of 118 until the next weekly audit P18 budgets one extra daily invocation at the same p50 and runner; notification/private smoke jobs are excluded (counted conservatively). Native audio installer path now triggers this existing workflow; budget 0.1 additional PR runs per day (one installer-maintenance PR every ten days); this leaves the existing daily cap intact.",
       "reusable": null,
       "runner": "linux",
       "runner_counts": {
@@ -3437,7 +3437,7 @@
     "backend-unit-tests.yml": {
       "name": "Backend Unit Tests",
       "owner": "CI maintainers",
-      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged.",
+      "rationale": "#11183 includes the manual X connector job deployment workflow in backend contract CI; one additional daily run over the PR M forecast is budgeted conservatively. The 2026-10-18 JIT retirement removes the deleted local QA harness from this workflow's path filter. P18 adds one daily reusable nightly call; PR triggers and test commands stay unchanged. Pin native audio to Noble and select installer edits; budget 0.1 extra daily PR runs for occasional installer maintenance, retaining existing p50 budgets and caps.",
       "triggers": {
         "pull_request": {
           "paths": [
@@ -3457,6 +3457,7 @@
             ".github/workflows/backend-checks.yml",
             ".github/workflows/backend-hermetic-e2e.yml",
             ".github/workflows/backend-unit-tests.yml",
+            ".github/scripts/native-audio-replay-deps.sh",
             ".github/workflows/desktop-checks.yml",
             ".github/workflows/desktop-swift-ci.yml",
             ".github/workflows/desktop_backend_auto_dev.yml",
@@ -3512,6 +3513,7 @@
             ".github/workflows/backend-checks.yml",
             ".github/workflows/backend-hermetic-e2e.yml",
             ".github/workflows/backend-unit-tests.yml",
+            ".github/scripts/native-audio-replay-deps.sh",
             ".github/workflows/desktop-checks.yml",
             ".github/workflows/desktop-swift-ci.yml",
             ".github/workflows/desktop_backend_auto_dev.yml",

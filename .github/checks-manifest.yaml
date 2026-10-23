@@ -306,6 +306,11 @@ checks:
     triggers: ["scripts/worktree_env_doctor.py", ".github/scripts/test_worktree_env_doctor.py", "scripts/pre-push", "backend/scripts/needs-typecheck.sh", ".gitignore", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "One episodes-branch push took four attempts, each failing minutes into preflight on a missing local prerequisite (app package_config.json, backend/.venv, a SwiftPM .build recording absent binary artifacts); the doctor must stay the first phase and keep its triggers in step with the hook"
+  - id: native-audio-replay-deps-tests
+    command: ["python3", ".github/scripts/test_native_audio_replay_deps.py"]
+    triggers: [".github/scripts/native-audio-replay-deps.sh", ".github/scripts/test_native_audio_replay_deps.py", ".github/workflows/backend-unit-tests.yml"]
+    lanes: ["local", "ci"]
+    reason: "Native audio dependency fetches must retry with backoff, fail after exhaustion, and keep verified warm-cache installs offline"
   - id: workflow-apt-network-bounds
     command: ["bash", "scripts/run-workflow-apt-network-bounds.sh"]
     triggers: [".github/workflows/**", ".github/actions/**", ".github/scripts/check_workflow_apt_network_bounds.py", ".github/scripts/test_check_workflow_apt_network_bounds.py", "scripts/run-workflow-apt-network-bounds.sh", ".github/checks-manifest.yaml"]
