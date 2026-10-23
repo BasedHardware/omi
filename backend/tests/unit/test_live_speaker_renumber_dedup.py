@@ -248,4 +248,3 @@ async def test_new_window_socket_axis_not_contaminated_by_session_last_end(monke
     assert len(created_sockets) == 1
     # The socket's stream axis must remain at 0.0, NOT contaminated by session.last_end (600.0)
     assert created_sockets[0].last_emitted_end == 0.0
-
