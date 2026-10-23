@@ -7,6 +7,7 @@ chain. Missing results denote retryable failures per the scheduler contract.
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait as wait_futures
 from dataclasses import dataclass
+from copy import deepcopy
 from enum import Enum
 import math
 import logging
@@ -581,7 +582,8 @@ class PipelineWorker:
             results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
             return results
 
-    def _artifact_job(self, item, payload, samples, *, silent, has_silence_disposition):
+    @staticmethod
+    def _artifact_job(item, payload, samples, *, silent, has_silence_disposition):
         diarization = payload['diarization']
         # A skipped-single turn spans the capture, including silence. Intersect
         # all turns with already-computed VAD speech before selecting evidence.
@@ -603,14 +605,15 @@ class PipelineWorker:
             ]
         return _ArtifactJob(item, payload, clips, silent, has_silence_disposition)
 
-    def _enrich_artifact(self, job):
+    @staticmethod
+    def _enrich_artifact(job, centroid_extractor):
         diarization = job.payload['diarization']
         centroids, extraction_failed = {}, False
         for speaker, clips in job.clips.items():
             vectors = []
             for samples, seconds in clips:
                 try:
-                    vectors.append((self.centroid_extractor(samples), seconds))
+                    vectors.append((centroid_extractor(samples), seconds))
                 except Exception:
                     # Embedding failure cannot discard the transcript, grant a
                     # name or expose provider messages/biometric data in logs.
@@ -646,6 +649,34 @@ class PipelineWorker:
             'embedding_revision': EMBEDDING_REVISION,
         }
 
+    @classmethod
+    def enrich_result(cls, item, payload, samples, *, centroid_extractor):
+        """Enrich explicitly verified prior inference without rerunning models.
+
+        The caller owns proof of original audio/model/source provenance. This
+        helper checks canonical capture bounds and invokes the exact serving
+        evidence hook; it never restamps the original inference as current code.
+        It returns a copy, so the archived inference artifact stays immutable.
+        """
+        from utils.batch_pipeline.contracts import projection_speech_spans
+
+        if not kill_switch('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED'):
+            return deepcopy(payload)
+        duration = len(samples) / SAMPLE_RATE
+        if (
+            not 0 < duration <= 7200
+            or abs(duration - item.duration_seconds) > 0.01
+            or abs(duration - float(payload['audio_seconds'])) > 0.01
+            or payload['diarization'].get('provenance', {}).get('model_revision') != COMMUNITY_MODEL_REVISION
+        ):
+            raise ValueError('incompatible inference enrichment input')
+        validate_words(payload['words'], duration)
+        projection_speech_spans(payload, duration)
+        enriched = deepcopy(payload)
+        job = cls._artifact_job(item, enriched, samples, silent=False, has_silence_disposition=False)
+        cls._enrich_artifact(job, centroid_extractor)
+        return enriched
+
     def _publish_artifacts(self, computed):
         """Enrich+persist leaf jobs after releasing the global model lock.
 
@@ -655,7 +686,7 @@ class PipelineWorker:
         results, pending = list(computed), []
 
         def publish(job):
-            self._enrich_artifact(job)
+            self._enrich_artifact(job, self.centroid_extractor)
             uri = self.persist(job.item, job.payload)
             if job.has_silence_disposition and not job.item.shadow:
                 try:

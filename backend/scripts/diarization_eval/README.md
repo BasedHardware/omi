@@ -143,3 +143,20 @@ real persisted production text/names/turns, and the archived reference with stri
 output leaves the task waiting, with no invented comparison. Existing judgments
 are never overwritten. Validate with decision-mill's `validate.js --labels` and
 inspect every rendered card before presenting the task.
+
+Explicit inference reuse is available with `--inference-archive <private-index>`.
+The schema-v1 index binds the frozen corpus digest and each recording's original
+source commit, ordered source hashes, exact cache settings/key, source-audio and
+PCM-crop hashes, effective provider configuration and immutable payload hash.
+Configuration reconstructed from the original launch is labelled
+`reconstructed-original-launch`, never captured evidence. Missing index entries
+run the complete current worker. Changed evidence fails closed.
+
+Reused ASR/diarization output is enriched through the same bounded centroid hook
+as serving; the original artifact is immutable. Private output retains the
+original inference receipt, current enrichment hashes and projection fingerprint
+as composed provenance, explicitly marking `full_current_worker_executed=false`.
+A separate real current-worker recording is required to qualify the changed full
+chain. Snapshot and enrollment-rich naming both use actual persisted production
+projection. The rich run is diagnostic and excludes its frozen enrollment spans;
+its persisted view is `runs-enrollment-rich.json`.

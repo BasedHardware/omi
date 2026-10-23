@@ -455,3 +455,38 @@ def test_loaded_manual_owner_receipt_decodes_actual_storage_encoding(monkeypatch
     assert manual_owner_reserved(session.loaded_naming_snapshot().manual_receipt)
     decisions = naming_decisions(evidence(), session.loaded_naming_snapshot(), owner_id='owner', privacy_generation=0)
     assert decisions['a'].person_id is None
+
+
+def test_explicit_archive_enrichment_uses_serving_hook_and_preserves_original():
+    from copy import deepcopy
+
+    instance, saved, _ = worker()
+    samples = np.zeros(40 * RATE, dtype=np.float32)
+    original = {
+        'audio_seconds': 40,
+        'speech_seconds': 40,
+        'speech_spans': [{'start': 0, 'end': 40}],
+        'words': [{'word': 'synthetic', 'timestamp': [1, 2]}],
+        'diarization': {
+            'turns': [{'speaker': 'a', 'start': 0, 'end': 40}],
+            'provenance': {'model_revision': COMMUNITY_MODEL_REVISION},
+        },
+    }
+    before = deepcopy(original)
+    enriched = PipelineWorker.enrich_result(item(), original, samples, centroid_extractor=lambda _: [1, 0])
+    assert original == before
+    assert enriched['diarization']['centroids']['a']['evidence_seconds'] <= 30
+    assert enriched['words'] == original['words']
+    original['diarization']['provenance']['model_revision'] = 'wrong'
+    with pytest.raises(ValueError, match='incompatible inference'):
+        PipelineWorker.enrich_result(item(), original, samples, centroid_extractor=lambda _: [1, 0])
+
+
+def test_explicit_enrichment_obeys_live_kill_switch(monkeypatch):
+    monkeypatch.setenv('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', 'false')
+    original = {'synthetic': 'unchanged'}
+
+    def forbidden(_):
+        raise AssertionError('disabled extraction must not run')
+
+    assert PipelineWorker.enrich_result(item(), original, np.zeros(RATE), centroid_extractor=forbidden) == original

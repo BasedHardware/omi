@@ -33,6 +33,7 @@ from scripts.diarization_eval.local_artifacts import (
 from scripts.diarization_eval.run_reference import ENGINES, artifact_key, fingerprint, private_logs
 from scripts.diarization_eval.prep_speaker_task import private_dir
 from scripts.diarization_eval.enrollment import build_gallery
+from scripts.diarization_eval.inference_archive import load_inference
 from utils.batch_pipeline.contracts import Priority, ProjectionBinding, WorkItem
 from utils.batch_pipeline.audio import with_context
 from utils.conversations.final_pass_assignment import name_centroids
@@ -163,7 +164,14 @@ def reference_text(path, recording, wav, engine):
 
 
 def evaluate(
-    manifest_path, *, device='cpu', dtype='float32', run_name='pr1', reference_files=None, projection_python=None
+    manifest_path,
+    *,
+    device='cpu',
+    dtype='float32',
+    run_name='pr1',
+    reference_files=None,
+    projection_python=None,
+    inference_archive=None,
 ):
     manifest_path = Path(manifest_path)
     private_dir(manifest_path.parent)
@@ -202,6 +210,7 @@ def evaluate(
         *[p for p in sorted((ROOT / 'utils/batch_pipeline').glob('*.py')) if not p.name.startswith('projection')],
         ROOT / 'utils/stt/voice_centroids.py',
         ROOT / 'diarizer/embedding.py',
+        Path(__file__).with_name('inference_archive.py'),
         *sorted((ROOT / 'config').glob('batch_pipeline*.py')),
     ]
     projection_sources = [
@@ -216,6 +225,7 @@ def evaluate(
     from config.policy.kill_switches import kill_switch
 
     settings['local_quality_enabled'] = kill_switch('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED')
+    settings['inference_archive_sha256'] = file_digest(inference_archive) if inference_archive is not None else None
     scores, recordings, failures, rich_scores, rich_recordings = [], [], 0, [], []
     worker, model_failed = None, False
     for index, recording in enumerate(manifest['recordings']):
@@ -237,7 +247,45 @@ def evaluate(
             with wave.open(str(wav), 'rb') as audio:
                 captured_seconds = audio.getnframes() / audio.getframerate()
             item = WorkItem(key, 'local-evaluation', 1_700_000_000.0, str(wav), captured_seconds, Priority.DEEP)
-            if not cached.exists():
+            archived = (
+                load_inference(
+                    inference_archive,
+                    corpus_sha256=manifest_hash,
+                    recording=recording,
+                    wav=wav,
+                    current_settings=settings,
+                )
+                if inference_archive is not None and not cached.exists()
+                else None
+            )
+            if archived is not None:
+                import numpy as np
+                from diarizer.batch_pipeline import PipelineWorker
+                from diarizer.batch_pipeline_models import LocalCentroidEmbedding
+
+                original_payload, original_receipt = archived
+                # The archive validator proved the original pin; do not alter
+                # its immutable file, and retain the full original receipt.
+                original_payload.setdefault('diarization', {}).setdefault('provenance', {})['model_revision'] = (
+                    settings['model_revisions']['community_1']
+                )
+                with wave.open(str(wav), 'rb') as audio:
+                    pcm = np.frombuffer(audio.readframes(audio.getnframes()), dtype='<i2').astype(np.float32) / 32768
+                payload = (
+                    PipelineWorker.enrich_result(
+                        item, original_payload, pcm, centroid_extractor=LocalCentroidEmbedding(device)
+                    )
+                    if settings['local_quality_enabled']
+                    else original_payload
+                )
+                payload['local_composed_provenance'] = {
+                    'original_inference': original_receipt,
+                    'current_enrichment_sources': {str(p.relative_to(ROOT)): file_digest(p) for p in sources},
+                    'current_enrichment_enabled': settings['local_quality_enabled'],
+                    'full_current_worker_executed': False,
+                }
+                private_json(cached, payload)
+            elif not cached.exists():
                 if worker is None:
                     if model_failed:
                         raise RuntimeError('models_unavailable')
@@ -320,6 +368,14 @@ def evaluate(
                     'elapsed_seconds': elapsed,
                     'rtf': elapsed / recording['dur'],
                     'decoded_audio_seconds': captured_seconds,
+                    'inference_execution': (
+                        'verified_archive_plus_current_enrichment'
+                        if payload.get('local_composed_provenance')
+                        else 'full_worker'
+                    ),
+                    'original_config_evidence': (payload.get('local_composed_provenance') or {})
+                    .get('original_inference', {})
+                    .get('provider_config_evidence', 'captured_current'),
                     'declared_crop_seconds': recording['dur'],
                 }
             )
@@ -379,6 +435,7 @@ def evaluate(
                         'gallery_fingerprint': fingerprint(gallery),
                     },
                     'cache_key': key,
+                    'composed_provenance': payload.get('local_composed_provenance'),
                 }
             )
         except Exception as error:
@@ -427,6 +484,7 @@ def main():
     parser.add_argument('--dtype', choices=['float32', 'bfloat16'], default='float32')
     parser.add_argument('--run-name', default='pr1')
     parser.add_argument('--projection-python', type=Path, default=ROOT / '.venv' / 'bin' / 'python')
+    parser.add_argument('--inference-archive', type=Path, help='Explicit immutable private inference archive receipt')
     parser.add_argument(
         '--reference-files', type=Path, help='Private JSON mapping recording IDs to model-reference files'
     )
@@ -446,6 +504,7 @@ def main():
                 run_name=args.run_name,
                 reference_files=json.loads(args.reference_files.read_text()) if args.reference_files else None,
                 projection_python=args.projection_python,
+                inference_archive=args.inference_archive,
             )
         except Exception as error:
             traceback.print_exc()
