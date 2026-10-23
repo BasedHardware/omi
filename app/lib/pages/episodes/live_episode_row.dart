@@ -8,6 +8,8 @@ import 'package:omi/pages/episodes/live_episode_clock.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -26,17 +28,21 @@ class LiveEpisodeRow extends StatefulWidget {
 
 class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
   EpisodeProvider? _episodes;
-  int? _speakersVersion;
-  int _speakers = 0;
+  int? _peopleKey;
+  int _people = 0;
 
-  /// Distinct voices heard so far, recounted only when the transcript changes (the row itself
-  /// rebuilds every second for its clock).
-  int _speakerCount(CaptureProvider capture) {
-    if (_speakersVersion != capture.segmentsPhotosVersion) {
-      _speakersVersion = capture.segmentsPhotosVersion;
-      _speakers = {for (final s in capture.segments) s.isUser ? -1 : s.speakerId}.length;
+  /// How many people the transcript names: the owner plus speakers resolved to the user's people,
+  /// as the live page's header names them. Raw diarization ids are not people (a long session
+  /// hands out hundreds), so unresolved voices never count. Recounted only when the transcript or
+  /// the people list changes; the row itself rebuilds every second for its clock.
+  int _peopleCount(CaptureProvider capture) {
+    final people = context.read<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
+    final key = Object.hash(capture.segmentsPhotosVersion, identityHashCode(people));
+    if (_peopleKey != key) {
+      _peopleKey = key;
+      _people = EpisodePresentation.participants(capture.segments, people, context.l10n).length;
     }
-    return _speakers;
+    return _people;
   }
 
   @override
@@ -84,12 +90,12 @@ class _LiveEpisodeRowState extends State<LiveEpisodeRow> {
     final named = (episode?.title ?? '').trim();
     final title = named.isEmpty ? l10n.episodeListeningNow : named;
     final topics = named.isEmpty ? EpisodePresentation.topics(episode) : '';
-    final speakers = _speakerCount(capture);
+    final peopleNamed = _peopleCount(capture);
     // Paused (or waiting) shows no clock: a time that keeps counting while nothing listens misleads.
     final status = listening ? l10n.episodeLiveFor(elapsed) : captureStateLabel(l10n, state);
     final rest = [
       status,
-      if (speakers >= 2) l10n.peopleCount(speakers),
+      if (peopleNamed >= 2) l10n.peopleCount(peopleNamed),
       if (topics.isNotEmpty) topics,
     ].join(' · ');
     void open() {

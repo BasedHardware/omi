@@ -440,6 +440,30 @@ void main() {
       expect(find.textContaining('Live · 3m', findRichText: true), findsOneWidget);
       await _unmount(tester);
     });
+    testWidgets('unnamed voices are never counted as people, however many diarization ids appear', (tester) async {
+      final capture = _LiveCapture();
+      addTearDown(capture.dispose);
+      capture.segments = [
+        _segment('me', 'Hello there', 0),
+        for (var i = 0; i < 40; i++)
+          TranscriptSegment(
+            id: 'v$i',
+            text: 'Voice $i',
+            speaker: 'SPEAKER_${i + 1}',
+            isUser: false,
+            personId: null,
+            translations: [],
+            start: 30.0 + i,
+            end: 31.0 + i,
+          ),
+      ];
+      final episodes = _episodes(live: _liveEpisode());
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      expect(find.textContaining('people', findRichText: true), findsNothing);
+      await _unmount(tester);
+    });
+
     testWidgets('shows the live episode as a quiet outlined row: its topic as title, Live and length', (tester) async {
       final capture = _LiveCapture();
       addTearDown(capture.dispose);
