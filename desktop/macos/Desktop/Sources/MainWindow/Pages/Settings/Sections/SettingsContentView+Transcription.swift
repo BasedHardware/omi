@@ -166,16 +166,8 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
           }
 
-          if AppState.isAppleSilicon && !selectedLanguageIsCoveredOnDevice {
-            HStack(spacing: OmiSpacing.sm) {
-              Image(systemName: "cloud")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-
-              Text("This language isn't available on-device, so Omi transcribes meetings in the cloud.")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-            }
+          if CloudTranscriptionLanguageHint.isShown(for: selectedLanguage, isAppleSilicon: AppState.isAppleSilicon) {
+            CloudTranscriptionLanguageHint()
           }
         }
       }
@@ -380,11 +372,11 @@ extension SettingsContentView {
   }
 
   /// Mirrors `AssistantSettings.transcriptionLanguageSelection` from this pane's live state.
-  var selectedLanguageIsCoveredOnDevice: Bool {
+  var selectedLanguage: STTLanguageCapability.Selection {
     STTLanguageCapability.Selection(
       effective: autoDetectIsActive ? STTLanguageCapability.autoDetect : transcriptionLanguage,
       primary: transcriptionLanguage
-    ).isCoveredOnDevice
+    )
   }
 
   /// Persists a Single-Language selection to the account in the one order that survives a reload.
@@ -702,5 +694,25 @@ private struct VoiceAssistantLanguagesCard: View {
     selection = AssistantSettings.shared.voiceLanguages
     // The voiceLanguages setter posts .voiceLanguagesDidChange; the hub controller
     // observes it to prewarm the LID model and re-warm the session's instructions.
+  }
+}
+
+/// One-line notice that meetings in the selected language use cloud STT, because no on-device
+/// Parakeet model covers it (`STTLanguageCapability`). Intel Macs are always cloud, so no notice.
+struct CloudTranscriptionLanguageHint: View {
+  static func isShown(for language: STTLanguageCapability.Selection, isAppleSilicon: Bool) -> Bool {
+    isAppleSilicon && !language.isCoveredOnDevice
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Image(systemName: "cloud")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+
+      Text("This language isn't available on-device, so Omi transcribes meetings in the cloud.")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+    }
   }
 }

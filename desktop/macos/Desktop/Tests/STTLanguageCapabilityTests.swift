@@ -14,7 +14,7 @@ final class STTLanguageCapabilityTests: XCTestCase {
 
   private func resolve(
     _ language: STTLanguageCapability.Selection,
-    source: AudioSource = .microphone,
+    source: Omi_Computer.AudioSource = .microphone,
     appleSilicon: Bool = true,
     preferLocalOnBasic: Bool = false
   ) -> STTSessionState.ResolvedMode {
@@ -134,5 +134,15 @@ final class STTLanguageCapabilityTests: XCTestCase {
       session.resolveMode(
         audioSource: .microphone, isAppleSilicon: true, debugForceCloud: true, language: single("ko")),
       .cloud)
+  }
+
+  // MARK: - Settings notice
+
+  func testCloudNoticeShowsOnlyForUncoveredLanguagesOnAppleSilicon() {
+    XCTAssertTrue(CloudTranscriptionLanguageHint.isShown(for: single("ko"), isAppleSilicon: true))
+    XCTAssertTrue(CloudTranscriptionLanguageHint.isShown(for: autoDetect(primary: "ja"), isAppleSilicon: true))
+    XCTAssertFalse(CloudTranscriptionLanguageHint.isShown(for: single("ja"), isAppleSilicon: true))
+    XCTAssertFalse(CloudTranscriptionLanguageHint.isShown(for: single("en"), isAppleSilicon: true))
+    XCTAssertFalse(CloudTranscriptionLanguageHint.isShown(for: single("ko"), isAppleSilicon: false))
   }
 }
