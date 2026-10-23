@@ -283,6 +283,24 @@ def test_stream_partial_prefix_retains_existing_budget_semantics(store, monkeypa
     assert not projection._entries
 
 
+@pytest.mark.parametrize('warm', [False, True])
+def test_last_read_preserves_mcp_source_prefix_instead_of_spending_it_on_heads(store, monkeypatch, warm):
+    monkeypatch.setenv('OMI_LIST_VERSION_EPOCH', 'p1-coverage')
+    store.token = 'a' * 32
+    store.query = store.client.collection('users/u/conversations').limit(100)
+    store.rows = {f'users/u/conversations/{i}': {'n': i} for i in range(3)}
+    if warm:
+        list(projection.projected_stream_iter(store.query, surface='mcp_cards'))
+    before = store.heads
+    budget = ListReadBudget(deadline_monotonic=24, max_documents=1, clock=lambda: 0)
+    actual = []
+    with pytest.raises(ListReadBudgetExhausted):
+        for row in projection.projected_stream_iter(store.query, budget, surface='mcp_cards'):
+            actual.append(row.to_dict())
+    assert actual == [{'n': 0}]
+    assert store.heads == before
+
+
 def test_sync_scrape_keeps_projection_and_existing_billing_authority_counters():
     config = yaml.safe_load((Path(__file__).resolve().parents[2] / 'deploy/cloud_run_gmp_sync.yaml').read_text())
     filters = config['spec']['endpoints'][0]['metricRelabeling']

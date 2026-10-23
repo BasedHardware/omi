@@ -16,7 +16,6 @@ import time
 from collections import OrderedDict
 from typing import Any
 
-from google.cloud.firestore_v1.base_document import DocumentSnapshot
 from prometheus_client import Counter
 
 from database.firestore_read_origin import current_read_origin, read_origin
@@ -96,6 +95,8 @@ def _pack(snapshots: list[Any]) -> list[dict[str, Any]]:
 
 
 def _unpack(client: Any, records: Any) -> list[Any]:
+    from google.cloud.firestore_v1.base_document import DocumentSnapshot
+
     return [
         DocumentSnapshot(
             reference=client.document(row['path']),
@@ -137,7 +138,8 @@ def projected_stream_list(query: Any, budget: Any = None, *, surface: str, _sour
     if surface not in SURFACES:
         raise ValueError('unregistered released memory projection surface')
     metric = EVENTS.labels(surface=surface, outcome='bypass', origin=current_read_origin())
-    if not enabled():
+    # Do not spend the last source-row allowance on an incomplete head pair.
+    if not enabled() or (budget is not None and budget.remaining_documents < 2):
         metric.inc()
         return source(query, budget)
     try:
