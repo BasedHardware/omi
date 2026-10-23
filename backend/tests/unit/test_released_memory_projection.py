@@ -1,10 +1,13 @@
 """Count billed documents and prove exact raw snapshot parity across mutations."""
 
 import copy
+import re
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from google.auth.credentials import AnonymousCredentials
 from google.cloud import firestore
 from google.cloud.firestore_v1.document import DocumentReference, DocumentSnapshot
@@ -235,3 +238,15 @@ def test_stream_partial_prefix_retains_existing_budget_semantics(store, monkeypa
             actual.append(row.to_dict())
     assert actual == [{'n': 0}, {'n': 1}, {'n': 2}]
     assert not projection._entries
+
+
+def test_sync_scrape_keeps_projection_and_existing_billing_authority_counters():
+    config = yaml.safe_load((Path(__file__).resolve().parents[2] / 'deploy/cloud_run_gmp_sync.yaml').read_text())
+    filters = config['spec']['endpoints'][0]['metricRelabeling']
+    for name in (
+        'omi_memory_released_projection_total',
+        'omi_firestore_billed_reads_by_caller_total',
+        'omi_firestore_billed_reads_by_origin_total',
+        'omi_fsr_leader_lease_total',
+    ):
+        assert any(rule['action'] == 'keep' and re.fullmatch(rule['regex'], name) for rule in filters)
