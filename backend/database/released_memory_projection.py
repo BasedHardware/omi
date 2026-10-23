@@ -62,7 +62,10 @@ def _head(client: Any, uid: str, budget: Any, *, conversations: bool = False) ->
         else f'users/{uid}/memory_state/{HEAD_DOCUMENT}'
     )
     with read_origin('job:released_memory_projection'):
-        snap = budgeted_document_get(client.document(path), budget)
+        reference = client.document(path)
+        snap = (
+            budgeted_document_get(reference, budget) if budget is not None else reference.get(timeout=1.0, retry=None)
+        )
     if not getattr(snap, 'exists', False) and budget is not None:
         budget.charge(1)  # Missing head reads are billed too.
     data = snap.to_dict() if getattr(snap, 'exists', False) else {}
@@ -271,7 +274,7 @@ def _source_iter_read(query: Any, budget: Any, *, offset_reads: int | None = Non
         for snapshot in budgeted_stream_iter(query, budget):
             snapshots.append(snapshot)
     except ListReadBudgetExhausted as exc:
-        exc.partial_snapshots = snapshots
+        setattr(exc, 'partial_snapshots', snapshots)
         raise
     return snapshots
 

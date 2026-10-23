@@ -50,6 +50,7 @@ def augment_commit(request: Any) -> tuple[CommitRequest, int]:
 def _wrap_commit(original: Any) -> Any:
     if getattr(original, '_omi_memory_change_head', False):
         return original
+    wrapped: Any
 
     def prepare(request: Any, kwargs: dict[str, Any]) -> tuple[Any, int]:
         # Preserve GAPIC's request-versus-flattened-arguments validation.
@@ -81,13 +82,14 @@ def _wrap_commit(original: Any) -> Any:
             return response(original(client, request=prepared, **kwargs), count)
 
         wrapped = sync_commit
-    wrapped._omi_memory_change_head = True
+    setattr(wrapped, '_omi_memory_change_head', True)
     return wrapped
 
 
 def _wrap_bulk(original: Any) -> Any:
     if getattr(original, '_omi_memory_change_head', False):
         return original
+    wrapped: Any
 
     def barrier(request: Any, kwargs: dict[str, Any]) -> dict[str, Any] | None:
         writes = request.get('writes', []) if isinstance(request, dict) else getattr(request, 'writes', [])
@@ -120,11 +122,11 @@ def _wrap_bulk(original: Any) -> Any:
             return original(client, request=request, **kwargs)
 
         wrapped = sync_bulk
-    wrapped._omi_memory_change_head = True
+    setattr(wrapped, '_omi_memory_change_head', True)
     return wrapped
 
 
 def install_write_heads() -> None:
     for cls in (FirestoreClient, FirestoreAsyncClient):
-        cls.commit = _wrap_commit(cls.commit)
-        cls.batch_write = _wrap_bulk(cls.batch_write)
+        setattr(cls, 'commit', _wrap_commit(cls.commit))
+        setattr(cls, 'batch_write', _wrap_bulk(cls.batch_write))
