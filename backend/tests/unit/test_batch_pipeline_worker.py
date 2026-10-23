@@ -13,6 +13,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
+from config import stt_cap_dispatch as cap_policy
 from config.batch_pipeline import worker_silence_disposition_enabled
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer import batch_pipeline, batch_pipeline_models
@@ -789,12 +790,18 @@ def test_worker_missing_authority_does_not_spend_at_cap(monkeypatch):
     assert not words.calls and not saved
 
 
+@pytest.mark.parametrize('scope', ['legacy', 'offline'])
 @pytest.mark.parametrize('enforce', [False, True])
 @pytest.mark.parametrize('recovery_allowed', [False, True])
-def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, enforce, recovery_allowed):
+def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, scope, enforce, recovery_allowed):
     from utils.batch_pipeline.contracts import HeldWork
 
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce if scope == 'legacy' else False))
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', str(enforce if scope == 'offline' else False))
+    if scope == 'offline':
+        # Exercise the new boundary with both legacy selection fences closed.
+        monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'off')
+        monkeypatch.setattr(cap_policy, '_BATCH_LANE_READY', False)
     calls, checks = [], []
 
     class Model:
