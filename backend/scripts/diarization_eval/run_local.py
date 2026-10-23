@@ -25,6 +25,7 @@ from scripts.diarization_eval.local_artifacts import (
     Artifacts,
     cache_key,
     file_digest,
+    frozen_naming_snapshot,
     private_json,
     project,
     project_external,
@@ -196,10 +197,24 @@ def evaluate(
     }
     sources = [
         *sorted((ROOT / 'diarizer').glob('batch_pipeline*.py')),
-        *sorted((ROOT / 'utils/batch_pipeline').glob('*.py')),
+        *[p for p in sorted((ROOT / 'utils/batch_pipeline').glob('*.py')) if not p.name.startswith('projection')],
+        ROOT / 'utils/stt/voice_centroids.py',
+        ROOT / 'diarizer/embedding.py',
         *sorted((ROOT / 'config').glob('batch_pipeline*.py')),
     ]
-    scores, recordings, failures, rich_scores = [], [], 0, []
+    projection_sources = [
+        *sorted((ROOT / 'utils/batch_pipeline').glob('projection*.py')),
+        ROOT / 'utils/stt/batch_naming.py',
+        ROOT / 'utils/conversations/final_pass_assignment.py',
+        ROOT / 'utils/stt/speaker_identity.py',
+        ROOT / 'utils/sync/assignment.py',
+        Path(__file__).with_name('local_artifacts.py'),
+    ]
+    projection_fingerprint = fingerprint({str(p.relative_to(ROOT)): file_digest(p) for p in projection_sources})
+    from config.policy.kill_switches import kill_switch
+
+    settings['local_quality_enabled'] = kill_switch('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED')
+    scores, recordings, failures, rich_scores, rich_recordings = [], [], 0, [], []
     worker, model_failed = None, False
     for index, recording in enumerate(manifest['recordings']):
         began = time.monotonic()
@@ -246,8 +261,7 @@ def evaluate(
                 payload = json.loads(cached.read_text())
             diarization = payload['diarization']
             compatible = diarization.get('embedding_space') == EMBEDDING_SPACE
-            # PR1 intentionally reports today's absence of compatible evidence.
-            # This call is diagnostic; only production projection may publish it.
+            # This diagnostic never publishes labels; projection owns naming authority.
             decisions = name_centroids(diarization.get('centroids', {}) if compatible else {}, gallery)
             binding = ProjectionBinding(
                 'local-evaluation',
@@ -257,12 +271,22 @@ def evaluate(
                 target_conversation_id='local-conversation',
                 record_origin=True,
             )
-            persisted = (
-                project_external(projection_python, artifacts, item, binding, str(cached))
-                if projection_python is not None
-                and Path(projection_python).absolute() != Path(sys.executable).absolute()
-                else project(artifacts, item, binding, str(cached))
-            )
+
+            def persist_projection(gallery_snapshot, destination):
+                adapter = Artifacts(destination)
+                naming_snapshot = frozen_naming_snapshot(
+                    gallery_snapshot, owner_id=binding.owner_id, privacy_generation=binding.privacy_generation
+                )
+                if (
+                    projection_python is not None
+                    and Path(projection_python).absolute() != Path(sys.executable).absolute()
+                ):
+                    return project_external(
+                        projection_python, adapter, item, binding, str(cached), naming_snapshot=naming_snapshot
+                    )
+                return project(adapter, item, binding, str(cached), naming_snapshot=naming_snapshot)
+
+            persisted = persist_projection(gallery, root / 'snapshot')
             for turn in persisted:
                 if turn.get('is_user'):
                     turn['display_name'] = 'You'
@@ -306,10 +330,25 @@ def evaluate(
                     rich_decisions = name_centroids(
                         diarization.get('centroids', {}) if compatible else {}, rich['gallery']
                     )
-                    # PR1 has no production batch naming seam: its persisted
-                    # output stays anonymous even with richer enrollment.
+                    rich_persisted = persist_projection(rich['gallery'], root / 'enrollment-rich')
+                    for turn in rich_persisted:
+                        if turn.get('is_user'):
+                            turn['display_name'] = 'You'
+                        elif turn.get('person_id') in rich['names']:
+                            turn['display_name'] = rich['names'][turn['person_id']]
+                    rich_recordings.append(
+                        {
+                            'id': recording['id'],
+                            'status': 'ok',
+                            'clock': 'crop',
+                            'turns': rich_persisted,
+                            'diagnostic_only': True,
+                            'projection_fingerprint': projection_fingerprint,
+                            'gallery_fingerprint': fingerprint(rich['gallery']),
+                        }
+                    )
                     diagnostic = score_recording(
-                        truth, persisted, rich['identity_table'], excluded_spans=rich['excluded_spans']
+                        truth, rich_persisted, rich['identity_table'], excluded_spans=rich['excluded_spans']
                     )
                     diagnostic.update(
                         diagnostic_only=True,
@@ -331,7 +370,12 @@ def evaluate(
                     'status': 'ok',
                     'clock': 'crop',
                     'turns': persisted,
-                    'provenance': {'production_path': True, **settings},
+                    'provenance': {
+                        'production_path': True,
+                        **settings,
+                        'projection_fingerprint': projection_fingerprint,
+                        'gallery_fingerprint': fingerprint(gallery),
+                    },
                     'cache_key': key,
                 }
             )
@@ -369,6 +413,7 @@ def evaluate(
         if report['pooled'] is not None:
             report['pooled']['engineering_gate'] = 'BLOCKED'
     private_json(root / 'runs.json', {'recordings': recordings})
+    private_json(root / 'runs-enrollment-rich.json', {'recordings': rich_recordings, 'diagnostic_only': True})
     private_json(root / 'scorecard.json', report)
     return report
 

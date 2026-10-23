@@ -220,3 +220,51 @@ def test_private_artifact_root_rejects_git_checkout(tmp_path):
     (tmp_path / '.git').mkdir()
     with pytest.raises(ValueError, match='outside a Git checkout'):
         Artifacts(tmp_path / 'output')
+
+
+@pytest.mark.parametrize('person', ['user', 'enrolled'])
+def test_frozen_snapshot_reaches_real_persisted_projection_without_network(tmp_path, monkeypatch, no_network, person):
+    from utils.stt.voice_centroids import COMMUNITY_MODEL_REVISION, EMBEDDING_MODEL, EMBEDDING_REVISION, EMBEDDING_SPACE
+
+    monkeypatch.setenv('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', 'true')
+    artifacts = local_artifacts.Artifacts(tmp_path)
+    item = WorkItem('unit', 'synthetic-owner', 1700000000, 'unused', 8, Priority.DEEP)
+    binding = ProjectionBinding('synthetic-owner', 'job', 'content', ('unit',), record_origin=True)
+    data = payload()
+    data['diarization'].update(
+        centroids={'raw-voice': {'embedding': [1, 0], 'evidence_seconds': 8}},
+        embedding_space=EMBEDDING_SPACE,
+        provenance={
+            'model_revision': COMMUNITY_MODEL_REVISION,
+            'embedding_model': EMBEDDING_MODEL,
+            'embedding_revision': EMBEDDING_REVISION,
+        },
+    )
+    uri = artifacts.persist_result(item, data)
+    snapshot = local_artifacts.frozen_naming_snapshot({person: [1, 0]}, owner_id='synthetic-owner')
+    turns = local_artifacts.project(artifacts, item, binding, uri, naming_snapshot=snapshot)
+    assert [(s['is_user'], s['person_id']) for s in turns] == [(person == 'user', None if person == 'user' else person)]
+    assert json.loads((tmp_path / 'projection/unit/part-0.json').read_text())['transcript_segments'] == turns
+
+
+def test_external_projection_serializes_frozen_snapshot_privately(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    artifacts = local_artifacts.Artifacts(tmp_path)
+    item = WorkItem('unit', 'synthetic-owner', 1700000000, 'unused', 8, Priority.DEEP)
+    binding = ProjectionBinding('synthetic-owner', 'job', 'content', ('unit',))
+    snapshot = local_artifacts.frozen_naming_snapshot({'user': [1, 0]}, owner_id='synthetic-owner')
+
+    def run(command, **kwargs):
+        request = json.loads((tmp_path / 'projection-request.json').read_text())
+        assert request['naming_snapshot']['owner_profile']['speaker_embedding'] == [1, 0]
+        assert 'validate' not in request['naming_snapshot']
+        assert (tmp_path / 'projection-request.json').stat().st_mode & 0o777 == 0o600
+        assert not any('speaker_embedding' in str(arg) for arg in command)
+        local_artifacts.private_json(tmp_path / 'projection-response.json', [])
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(local_artifacts.subprocess, 'run', run)
+    assert (
+        local_artifacts.project_external('python', artifacts, item, binding, 'unused', naming_snapshot=snapshot) == []
+    )

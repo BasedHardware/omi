@@ -5528,9 +5528,11 @@ ramp HOLD, never evidence of healthy exposure.
 When enabled, successful batch pyannote turns persist `final:batch:<unit>` speaker
 scopes, shared across that unit's projection parts. These scopes survive rollback;
 enrichment skips conversation-wide AHC when any such segment is present, including
-mixed live/WAL conversations. There are no enrollment-compatible worker centroids:
-identities stay anonymous, owner-safe, and gaps carry explicit `batch_abstention`.
-Existing manual receipts still apply; text, translations and segment IDs are retained.
+mixed live/WAL conversations in the legacy evidence mode. The default-on local
+quality path now emits compatible centroids and names from already-loaded
+enrollment snapshots (see Batch local quality naming and faithful turns below).
+Without compatible evidence, identities stay anonymous and gaps carry explicit
+`batch_abstention`. Existing manual receipts still apply.
 Recovery output keeps legacy scopes and never claims pyannote authority.
 
 `BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED=false` is the default. When enabled,

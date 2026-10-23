@@ -108,7 +108,35 @@ def filesystem_assignment(owner_id, incoming, *, before_assign, validate_plan, a
     return incoming, True, incoming['transcript_segments']
 
 
-def project(artifacts, item, binding, uri, *, policy=None):
+def frozen_naming_snapshot(gallery, *, owner_id='local-evaluation', privacy_generation=0):
+    """Adapt a locally authorized, frozen gallery; never acquire enrollment.
+
+    Gallery entries were already filtered from the supplied snapshot or built
+    from predeclared held-out spans. The sample marker represents that evidence,
+    not an enrollment write or a claim about production entitlement.
+    """
+    from utils.stt.batch_naming import NamingSnapshot
+
+    return NamingSnapshot(
+        owner_id=owner_id,
+        privacy_generation=privacy_generation,
+        owner_profile={'speaker_embedding': gallery.get('user')},
+        people=tuple(
+            {
+                'id': key,
+                'speaker_embedding': vector,
+                'speech_samples': ['frozen-local-evidence'],
+                'speech_samples_version': 3,
+            }
+            for key, vector in gallery.items()
+            if key != 'user'
+        ),
+        named_allowed=True,
+        validate=lambda *_: True,  # Filesystem snapshots are immutable for this run.
+    )
+
+
+def project(artifacts, item, binding, uri, *, policy=None, naming_snapshot=None):
     from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
     root = artifacts.root / 'projection' / item.segment_id
@@ -119,6 +147,7 @@ def project(artifacts, item, binding, uri, *, policy=None):
         artifacts.load_result,
         projection_store=store,
         assign_conversation=partial(filesystem_assignment, allocator=ConversationSpeakerIdAllocator()),
+        loaded_naming_snapshot=(lambda *_: naming_snapshot) if naming_snapshot is not None else None,
     )
     projector.assign_parts(
         item,
@@ -135,13 +164,33 @@ def project(artifacts, item, binding, uri, *, policy=None):
     return turns
 
 
-def project_external(python, artifacts, item, binding, uri):
+def project_external(python, artifacts, item, binding, uri, *, naming_snapshot=None):
     """Keep the model runtime separate from the pinned backend projection env."""
     request = artifacts.root / 'projection-request.json'
     response = artifacts.root / 'projection-response.json'
     encoded = asdict(item)
     encoded['priority'] = item.priority.value
-    private_json(request, {'root': str(artifacts.root), 'item': encoded, 'binding': asdict(binding), 'uri': uri})
+    snapshot_data = None
+    if naming_snapshot is not None:
+        snapshot_data = {
+            'owner_id': naming_snapshot.owner_id,
+            'privacy_generation': naming_snapshot.privacy_generation,
+            'owner_profile': dict(naming_snapshot.owner_profile),
+            'people': naming_snapshot.people,
+            'named_allowed': naming_snapshot.named_allowed,
+            'embedding_space': naming_snapshot.embedding_space,
+            'manual_receipt': dict(naming_snapshot.manual_receipt),
+        }
+    private_json(
+        request,
+        {
+            'root': str(artifacts.root),
+            'item': encoded,
+            'binding': asdict(binding),
+            'uri': uri,
+            'naming_snapshot': snapshot_data,
+        },
+    )
     completed = subprocess.run(
         [str(python), str(Path(__file__).resolve()), '--request', str(request), '--response', str(response)],
         capture_output=True,
@@ -162,8 +211,19 @@ def main():
     os.environ['ENCRYPTION_SECRET'] = secrets.token_hex(32)
     request = json.loads(args.request.read_text())
     request['binding']['segment_ids'] = tuple(request['binding']['segment_ids'])
+    snapshot = None
+    if request.get('naming_snapshot') is not None:
+        from utils.stt.batch_naming import NamingSnapshot
+
+        data = request['naming_snapshot']
+        data['people'] = tuple(data['people'])
+        snapshot = NamingSnapshot(**data, validate=lambda *_: True)
     turns = project(
-        Artifacts(request['root']), WorkItem(**request['item']), ProjectionBinding(**request['binding']), request['uri']
+        Artifacts(request['root']),
+        WorkItem(**request['item']),
+        ProjectionBinding(**request['binding']),
+        request['uri'],
+        naming_snapshot=snapshot,
     )
     private_json(args.response, turns)
 
