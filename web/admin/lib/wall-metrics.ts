@@ -26,11 +26,13 @@ import { WallSourceError, wallFailure } from "./wall-source-error";
 import { fetchShopifyWeek } from "./wall-shopify";
 import {
   fetchFinopsHistory,
+  fetchInfraHistory,
   fetchModulateModelled,
   fetchPlanCostHistory,
   fetchStripeFeeHistory,
   fetchVendorBalanceHistory,
   FinopsHistory,
+  InfraHistory,
   ModulateModelledDay,
   PlanCostHistory,
   StripeFeeHistory,
@@ -41,6 +43,8 @@ import {
   allInCost,
   estimateStatus,
   FEES_UNAVAILABLE_REASON,
+  INFRA_AS_OF,
+  INFRA_MONTHLY_USD,
   MODULATE_UNAVAILABLE_REASON,
   modulateReconciliation,
   SAAS_AS_OF,
@@ -166,6 +170,8 @@ export interface WallSources {
     price: number | null;
     priceAsOf: string | null;
   }>;
+  /** Mercury non-GCP infra run rate; throws while that table is dark. */
+  infra?: (today: string) => Promise<InfraHistory>;
   stripe: () => Promise<{
     usd: number;
     byPlan?: Record<string, number>;
@@ -199,6 +205,7 @@ export const defaultWallSources: WallSources = {
   fees: fetchStripeFeeHistory,
   vendorBalance: fetchVendorBalanceHistory,
   modulate: fetchModulateModelled,
+  infra: fetchInfraHistory,
   stripe: async () => {
     const { getOptionalStripeRead } = await import("./stripe");
     const { fetchWallSubscriptionBook, wallSubscriptionBook } = await import(
@@ -758,12 +765,14 @@ export async function computeWall(
           const feesSource = sources.fees;
           const vendorBalanceSource = sources.vendorBalance;
           const modulateSource = sources.modulate;
+          const infraSource = sources.infra;
           const [
             billResult,
             planCostResult,
             feesResult,
             vendorBalanceResult,
             modulateResult,
+            infraResult,
           ] = await Promise.allSettled([
             Promise.resolve().then(() => sources.billing()),
             planCostSource
@@ -777,6 +786,9 @@ export async function computeWall(
               : Promise.resolve(null),
             modulateSource
               ? Promise.resolve().then(() => modulateSource(isoDay(now)))
+              : Promise.resolve(null),
+            infraSource
+              ? Promise.resolve().then(() => infraSource(isoDay(now)))
               : Promise.resolve(null),
           ]);
           if (billResult.status === "rejected") throw billResult.reason;
@@ -797,6 +809,14 @@ export async function computeWall(
             modulateResult.status === "rejected"
               ? MODULATE_UNAVAILABLE_REASON
               : null;
+          // The infra run-rate table is dark until the first Mercury load
+          // after it ships: a labelled missing line, same contract as fees.
+          const infraUnavailable =
+            infraResult.status === "rejected"
+              ? "Infra (non-GCP) run rate unavailable (mercury_infra_non_gcp_daily dark)"
+              : null;
+          const infra =
+            infraResult.status === "fulfilled" ? infraResult.value : null;
           const vendorBalance =
             vendorBalanceResult.status === "fulfilled"
               ? vendorBalanceResult.value
@@ -814,13 +834,16 @@ export async function computeWall(
           // All-in: GCP net of CUD minus one-time incidents, plus OpenAI, the
           // Anthropic API leg only when it reports spend, measured STT vendor
           // lines (Soniox balance deltas + Modulate modelled volume), Mercury
-          // SaaS, and measured Stripe fees.
+          // SaaS, the Mercury non-GCP infra run rate, and measured Stripe fees.
           const vendor = {
             sttMeasured: planCost?.sttMeasured,
             sonioxBalance: sonioxBalanceInputs(vendorBalance, cutoff),
             modulateModelled: modulate ?? undefined,
             sttCash: planCost?.sttCash,
             saasMeasured: planCost?.saasMeasured,
+            infraMeasured: infra?.infraMeasured,
+            infraAnnualPartial: infra?.infraAnnualPartial,
+            infraStripeFeesCash: infra?.infraStripeFeesCash,
             stripeFees:
               feesResult.status === "fulfilled"
                 ? feesResult.value?.fees
@@ -851,6 +874,7 @@ export async function computeWall(
           const missingLines = [...cost.missing];
           if (sonioxUnavailable) missingLines.push("Soniox measured STT");
           if (modulateUnavailable) missingLines.push("Modulate modelled STT");
+          if (infraUnavailable) missingLines.push(infraUnavailable);
           // Soniox: the balance-delta day-rate while the snapshot series covers
           // the day; a covered-but-unpublished row is a disclosed gap, never a
           // reset; beyond the last covered day the dated constant returns with
@@ -969,6 +993,50 @@ export async function computeWall(
                   ? "Mercury feed unavailable"
                   : "no complete fresh Mercury row"
               })`;
+          // Infra (non-GCP): Modal/AWS/Runpod-class cash. GCP (billing
+          // export), STT vendors and measured Stripe fees are their own lines
+          // and never enter here. A partial run rate is a floor (annual bills
+          // before the ledger start are invisible to it), so the dated
+          // constant wins while it is higher — labelled, still partial — and
+          // the constant's age then counts against the line again.
+          const infraPartialNote =
+            last.infraPartial === "history_under_12_months"
+              ? " (partial: infra ledger history under 12 months; one-off vendors amortized ÷12, estimated)"
+              : last.infraPartial
+              ? ` (partial: ${last.infraPartial})`
+              : "";
+          // Mercury stripe_fees cash rejoins infra only when the measured fee
+          // line has no value for the day: never on both lines, never on neither.
+          const infraFeesNote = last.infraFeesCash
+            ? ` + Mercury stripe_fees cash $${last.infraFeesCash.toFixed(
+                2
+              )}/day counted here (measured Stripe fee line unavailable for the day)`
+            : "";
+          const infraEstimate = estimateStatus(now, {
+            Infra: last.infraMeasured && !last.infraFloored,
+          }).find((e) => e.line === "Infra")!;
+          const infraBaseUsd = last.infra - last.infraFeesCash;
+          const infraLine = !last.infraMeasured
+            ? staleEstimate(
+                infraEstimate,
+                `Infra (non-GCP) fixed $${INFRA_MONTHLY_USD}/mo estimate as of ${INFRA_AS_OF} (${
+                  infraUnavailable
+                    ? "Mercury infra run-rate table unavailable"
+                    : "no complete fresh Mercury infra row"
+                })`
+              )
+            : last.infraFloored
+            ? staleEstimate(
+                infraEstimate,
+                `Infra (non-GCP) $${infraBaseUsd.toFixed(
+                  2
+                )}/day: dated $${INFRA_MONTHLY_USD}/mo fallback as of ${INFRA_AS_OF} floors the partial Mercury run rate $${(
+                  last.infraMeasuredUsd ?? 0
+                ).toFixed(2)}/day${infraPartialNote}${infraFeesNote}`
+              )
+            : `measured Infra non-GCP (Mercury) $${infraBaseUsd.toFixed(
+                2
+              )}/day${infraPartialNote}${infraFeesNote}`;
           // Foreign-currency fee rows sit in a non-USD balance and carry no
           // conversion data: counted here so the USD figure is labelled partial
           // instead of silently complete.
@@ -987,14 +1055,18 @@ export async function computeWall(
                     ? ` (partial: ${feesForeign} foreign-currency fee rows in the 30d window counted, not converted)`
                     : ""
                 }`
-              : `Stripe fees UNAVAILABLE (finops key lacks balance-transaction read scope)`;
+              : `Stripe fees UNAVAILABLE (finops key lacks balance-transaction read scope)${
+                  last.infraFeesCash
+                    ? "; Mercury stripe_fees cash counted on the infra line"
+                    : ""
+                }`;
           const anthropicLine =
             last.anthropic != null && last.anthropic > 0
               ? ` + Anthropic $${last.anthropic.toFixed(2)}`
               : last.anthropic != null
               ? " + Anthropic $0 API (team seats are SaaS cash)"
               : " + Anthropic API leg not configured (team seats are SaaS cash)";
-          const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI${anthropicLine} + ${sttLine} + ${saasLine} + ${feesLine}${
+          const lines = `All-in: GCP net of committed-use credits, one-time incidents excluded, + OpenAI${anthropicLine} + ${sttLine} + ${saasLine} + ${infraLine} + ${feesLine}${
             missingLines.length ? `; missing: ${missingLines.join(", ")}` : ""
           }`;
           const m = metrics["cost.net_day"];

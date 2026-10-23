@@ -40,11 +40,14 @@ import { aggregatePeriod, Metric, MetricId, WallPayload } from "./wall-metrics";
 import { fetchShopifyWeek } from "./wall-shopify";
 import {
   fetchFinopsHistory,
+  fetchInfraHistory,
   fetchModulateModelled,
   fetchPlanCostHistory,
   fetchStripeFeeHistory,
   fetchVendorBalanceHistory,
   FinopsHistory,
+  HEALTH_COST_DAYS,
+  InfraHistory,
   ModulateModelledDay,
   PlanCostHistory,
   StripeFeeHistory,
@@ -55,6 +58,7 @@ import { COLD_STORE_WAIT, wallRefreshSettled } from "./wall-cache";
 import {
   allInCost,
   CostDay,
+  EstimateStatus,
   estimateStatus,
   FEES_UNAVAILABLE_REASON,
   sonioxBalanceInputs,
@@ -160,6 +164,8 @@ export interface SeriesSources {
     price: number | null;
     priceAsOf: string | null;
   }>;
+  /** Mercury non-GCP infra run rate; throws while that table is dark. */
+  infra?: (today: string) => Promise<InfraHistory>;
   /** Shared cross-instance state; process memory when absent (tests). */
   store?: SeriesStore;
   /** Lease holder id; one per process by default. */
@@ -181,6 +187,7 @@ export const defaultSeriesSources: SeriesSources = {
   fees: fetchStripeFeeHistory,
   vendorBalance: fetchVendorBalanceHistory,
   modulate: fetchModulateModelled,
+  infra: fetchInfraHistory,
   // Writes only on Cloud Run, like the snapshot (`wallSnapshotStore`).
   store: process.env.K_REVISION
     ? firestoreSeriesStore
@@ -213,6 +220,8 @@ export interface Legs {
     price: number | null;
     priceAsOf: string | null;
   };
+  /** Mercury non-GCP infra run rate (missing = the leg is unavailable). */
+  infra?: InfraHistory;
   billing?: Billing;
   shopify?: {
     date: string;
@@ -237,6 +246,7 @@ const LEGS_FOR: Record<SeriesName, LegName[]> = {
     "fees",
     "vendorBalance",
     "modulate",
+    "infra",
   ],
 };
 
@@ -386,6 +396,10 @@ export function legJobs(
       sources.modulate
         ? sources.modulate(isoDay(now))
         : Promise.reject(new Error("Modulate modelled source unavailable")),
+    infra: () =>
+      sources.infra
+        ? sources.infra(isoDay(now))
+        : Promise.reject(new Error("Infra run-rate source unavailable")),
     billing: async () => {
       const bill = await sources.billing();
       if (!bill || bill.summary.costSource !== "billing")
@@ -770,6 +784,9 @@ export function healthFrames(
     modulateModelled: legs.modulate ?? undefined,
     sttCash: legs.planCost?.sttCash,
     saasMeasured: legs.planCost?.saasMeasured,
+    infraMeasured: legs.infra?.infraMeasured,
+    infraAnnualPartial: legs.infra?.infraAnnualPartial,
+    infraStripeFeesCash: legs.infra?.infraStripeFeesCash,
     stripeFees: legs.fees?.fees,
   };
   const allIn = allInCost(
@@ -780,12 +797,14 @@ export function healthFrames(
   );
   const latestCostDay = allIn.daily.find((d) => d.date === cutoff);
   // A Soniox series that stopped covering the cutoff day puts the dated
-  // constant back in use: stale now, not once the constant ages out.
+  // constant back in use: stale now, not once the constant ages out. An infra
+  // day the dated constant floors is likewise priced by that constant.
   const estimates = estimateStatus(
     now,
     {
       STT: latestCostDay?.sttMeasured,
       SaaS: latestCostDay?.saasMeasured,
+      Infra: latestCostDay?.infraMeasured && !latestCostDay.infraFloored,
     },
     {
       STT:
@@ -805,7 +824,10 @@ export function healthFrames(
     Object.keys(legs.fees?.fees || {})
       .sort()
       .at(-1) ?? null;
-  const cost = days.slice(-60).map((d) => {
+  // The fee/infra history reads cover every frame this renders (their shared
+  // window constant), so a fee-dark day keeps its Mercury stripe_fees cash
+  // however old it is.
+  const cost = days.slice(-HEALTH_COST_DAYS).map((d) => {
     const book = finopsMrr(legs.finops, new Date(ts(d.date)));
     return {
       date: ts(d.date),
@@ -833,13 +855,24 @@ export function healthFrames(
       saasSource: d.saasMeasured ? "measured" : "estimate",
       saasEstimateUsd: d.saasMeasured ? null : d.saas,
       saasMeasuredUsd: d.saasMeasured ? d.saas : null,
+      // The infra base is measured only when the producer's run rate stands
+      // on its own; a partial run rate the dated constant floors is priced by
+      // that constant. Mercury stripe_fees cash counted here (fee line dark
+      // for the day) rides in its own field so neither series absorbs it.
+      infra: d.infra,
+      infraSource: d.infraMeasured && !d.infraFloored ? "measured" : "estimate",
+      infraEstimateUsd:
+        d.infraMeasured && !d.infraFloored ? null : d.infra - d.infraFeesCash,
+      infraMeasuredUsd:
+        d.infraMeasured && !d.infraFloored ? d.infra - d.infraFeesCash : null,
+      infraFeesCashUsd: d.infraFeesCash || null,
       estimateStale,
       fees: d.fees,
       feesUnavailable: d.fees == null ? 1 : 0,
       oneTimeExcluded: d.oneTime || null,
       // The snapshot uses estimates; measured vendor lines own the all-in total.
       total:
-        d.sttMeasured || d.saasMeasured
+        d.sttMeasured || d.saasMeasured || d.infraMeasured
           ? d.total
           : snapshotTotals.get(d.date) ?? d.total,
       revenuePerDay: book == null ? null : book / DAYS_PER_MONTH,
@@ -972,22 +1005,34 @@ const shortDay = (day: string) =>
   });
 
 /** The margin chart's freshness line: its own data-through day (it lags the
- * rest of the wall) and how its STT and SaaS lines were priced. */
+ * rest of the wall) and how its STT, SaaS and Infra lines were priced. */
 function marginStatus(rows: Row[], days: CostDay[], now: Date) {
   const through = rows.length ? String(rows.at(-1)!.date).slice(0, 10) : null;
   const day = through ? days.find((d) => d.date === through) : undefined;
+  // A floored infra day is priced by the dated constant, so that line shows
+  // its estimate (and the constant's age) rather than a measured label.
+  const infraOwnsItsPrice = day?.infraMeasured && !day.infraFloored;
+  const measuredByLine: Record<EstimateStatus["line"], boolean | undefined> = {
+    STT: day?.sttMeasured,
+    SaaS: day?.saasMeasured,
+    Infra: infraOwnsItsPrice,
+  };
   const estimates = estimateStatus(now, {
     STT: day?.sttMeasured,
     SaaS: day?.saasMeasured,
+    Infra: infraOwnsItsPrice,
   });
-  const shown = estimates.filter(
-    (e) => !day?.[e.line === "STT" ? "sttMeasured" : "saasMeasured"]
-  );
+  const shown = estimates.filter((e) => !measuredByLine[e.line]);
   const asOf = shown.map((e) => e.asOf).sort()[0];
   const stale = shown.some((e) => e.stale);
   const labels = [
     day?.sttMeasured ? "STT measured" : "STT estimate",
     day?.saasMeasured ? "measured SaaS (Mercury)" : "SaaS estimate",
+    infraOwnsItsPrice
+      ? "measured Infra non-GCP (Mercury)"
+      : day?.infraMeasured
+      ? "Infra non-GCP estimate (floors partial Mercury run rate)"
+      : "Infra non-GCP estimate",
   ];
   const dated = asOf ? ` as of ${shortDay(asOf)}` : "";
   return [
