@@ -134,6 +134,9 @@ def search_files_tool(
     Returns:
         Answer based on the file contents
     """
+    if not isinstance(question, str) or not question.strip():
+        return "Error: Please provide a question to search the files."
+
     # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
@@ -145,16 +148,35 @@ def search_files_tool(
         logger.info(f"❌ search_files_tool - config is None")
         return "Error: Configuration not available"
 
+    if not isinstance(cfg, dict):
+        logger.error("❌ search_files_tool - config is not a dict")
+        return "Error: Configuration error"
+
     try:
-        configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
-        chat_session_id = configurable.get('chat_session_id')
+        raw_configurable = cfg.get('configurable')
+        if isinstance(raw_configurable, dict):
+            configurable = raw_configurable
+            uid = configurable.get('user_id') or configurable.get('uid')
+            chat_session_id = configurable.get('chat_session_id')
+        else:
+            uid = None
+            chat_session_id = None
+        if not uid:
+            uid = cfg.get('user_id') or cfg.get('uid')
+        if not chat_session_id:
+            chat_session_id = cfg.get('chat_session_id')
     except (KeyError, TypeError, AttributeError) as e:
         logger.error("❌ search_files_tool - error accessing config: %s", type(e).__name__)
         return "Error: Configuration error"
 
+    if not uid and not chat_session_id:
+        return "Error: Configuration error"
+
     if not chat_session_id:
         return "No active chat session. Files are not available."
+
+    if not uid:
+        return "Error: User ID not found in configuration"
 
     try:
         # Get session data
@@ -166,11 +188,21 @@ def search_files_tool(
         chat_session = ChatSession(**session_data)
 
         # Determine which files to search
-        if file_ids and len(file_ids) > 0:
+        sanitized_file_ids: Optional[List[str]] = None
+        if file_ids is not None:
+            if isinstance(file_ids, str):
+                s = file_ids.strip()
+                sanitized_file_ids = [s] if s else []
+            elif isinstance(file_ids, (list, tuple, set)):
+                sanitized_file_ids = [str(fid).strip() for fid in file_ids if fid and str(fid).strip()]
+            else:
+                sanitized_file_ids = []
+
+        if sanitized_file_ids and len(sanitized_file_ids) > 0:
             # Use specified files
             # Validate that these files belong to the session
             session_file_ids = set(chat_session.file_ids or [])
-            file_ids_to_search = [fid for fid in file_ids if fid in session_file_ids]
+            file_ids_to_search = [fid for fid in sanitized_file_ids if fid in session_file_ids]
 
             if not file_ids_to_search:
                 return "The specified files are not available in this chat session."
@@ -185,8 +217,25 @@ def search_files_tool(
         fc_tool = FileChatTool(uid, chat_session_id)
         video_window = None
         if start_seconds is not None or end_seconds is not None:
-            start = max(0.0, float(start_seconds if start_seconds is not None else max(0.0, (end_seconds or 0) - 5)))
-            end = max(start, float(end_seconds if end_seconds is not None else start + 5))
+            raw_start: Optional[float] = None
+            raw_end: Optional[float] = None
+            if start_seconds is not None:
+                if isinstance(start_seconds, bool):
+                    raise ValueError("start_seconds cannot be boolean")
+                try:
+                    raw_start = float(start_seconds)
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid start_seconds: {start_seconds}")
+            if end_seconds is not None:
+                if isinstance(end_seconds, bool):
+                    raise ValueError("end_seconds cannot be boolean")
+                try:
+                    raw_end = float(end_seconds)
+                except (ValueError, TypeError):
+                    raise ValueError(f"Invalid end_seconds: {end_seconds}")
+
+            start = max(0.0, raw_start if raw_start is not None else max(0.0, (raw_end or 0.0) - 5.0))
+            end = max(start, raw_end if raw_end is not None else start + 5.0)
             video_window = (start, end)
         answer = fc_tool.process_chat_with_file(question, file_ids_to_search, video_window)
 

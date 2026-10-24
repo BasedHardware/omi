@@ -515,6 +515,18 @@ async def get_calendar_events_tool(
             return "Google Calendar access token not found."
         clock = clock_for_config(config, uid)
 
+        if max_results is None or isinstance(max_results, bool):
+            max_results = 10
+        elif isinstance(max_results, str):
+            try:
+                max_results = int(max_results.strip())
+            except (ValueError, TypeError):
+                max_results = 10
+        elif not isinstance(max_results, int):
+            max_results = 10
+        if max_results <= 0:
+            max_results = 10
+
         max_results = ensure_capped(max_results, 50, "⚠️ get_calendar_events_tool - max_results capped from {} to {}")
 
         # Parse dates if provided
@@ -825,22 +837,31 @@ async def create_calendar_event_tool(
             return "Google Calendar access token not found."
         clock = clock_for_config(config, uid)
 
+        if not title or not isinstance(title, str) or not title.strip():
+            return "Error: Please specify a title for the event."
+
         # Parse start and end times
+        if not start_time or not isinstance(start_time, str):
+            return f"Error: start_time must be a valid ISO string with timezone: {start_time!r}"
+
         try:
-            start_dt = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+            start_dt = datetime.fromisoformat(start_time.strip().replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
                 return f"Error: start_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:00:00-08:00'): {start_time}"
             logger.info("Parsed calendar start_time")
-        except ValueError as e:
-            return f"Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_time} - {str(e)}"
+        except (ValueError, TypeError, AttributeError):
+            return f"Error: Invalid start_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {start_time}"
+
+        if not end_time or not isinstance(end_time, str):
+            return f"Error: end_time must be a valid ISO string with timezone: {end_time!r}"
 
         try:
-            end_dt = datetime.fromisoformat(end_time.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(end_time.strip().replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_time must include timezone in format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T15:00:00-08:00'): {end_time}"
             logger.info("Parsed calendar end_time")
-        except ValueError as e:
-            return f"Error: Invalid end_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_time} - {str(e)}"
+        except (ValueError, TypeError, AttributeError):
+            return f"Error: Invalid end_time format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM: {end_time}"
 
         # Validate that end_time is after start_time
         if end_dt <= start_dt:
@@ -1093,7 +1114,8 @@ async def delete_calendar_event_tool(
             # Filter events by title if provided
             matching_events: List[Dict[str, Any]] = events
             if event_title:
-                matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                event_title_str = str(event_title).lower()
+                matching_events = [e for e in events if event_title_str in (e.get('summary') or '').lower()]
 
             if not matching_events:
                 date_info = ""
@@ -1155,7 +1177,8 @@ async def delete_calendar_event_tool(
 
                         matching_events = events
                         if event_title:
-                            matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                            event_title_str = str(event_title).lower()
+                            matching_events = [e for e in events if event_title_str in (e.get('summary') or '').lower()]
 
                         if not matching_events:
                             return f"No calendar events found matching '{event_title}'{date_info_retry}."
@@ -1300,7 +1323,8 @@ async def update_calendar_event_tool(
                     return f"No calendar events found matching '{event_title}'."
 
                 # Filter events by title if provided
-                matching_events = [e for e in events if event_title.lower() in e.get('summary', '').lower()]
+                event_title_str = str(event_title).lower()
+                matching_events = [e for e in events if event_title_str in (e.get('summary') or '').lower()]
 
                 if not matching_events:
                     return f"No calendar events found matching '{event_title}'."
