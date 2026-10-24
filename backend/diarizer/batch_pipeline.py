@@ -46,6 +46,7 @@ from utils.batch_pipeline.diarization_gate import (
 from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, record_decision
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.language_metrics import record_route
+from utils.batch_pipeline.stage_timings import StageTimings
 from utils.observability.fallback import record_fallback
 
 SAMPLE_RATE = 16000
@@ -340,6 +341,7 @@ class PipelineWorker:
         flight_models=None,
         stream_of: Callable | None = None,
         language_of: Callable | None = None,
+        timings: StageTimings | None = None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -354,6 +356,7 @@ class PipelineWorker:
         self.flight: Any = flight_models if self.config.diarizer == 'pyannote' else None
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
         self._unavailable = False
+        self.timings = timings or StageTimings()
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
         # Same-owner predecessor tails for units whose speech starts at sample 0.
         # Capture stream of a decoded unit (see batch_pipeline_context.capture_stream).
@@ -383,7 +386,9 @@ class PipelineWorker:
         if self.flight is None or not decoded:
             return [None] * len(decoded)
         try:
-            features = list(self.flight.segment([samples for _, samples in decoded]))
+            features = list(
+                self.timings.call('flight_segment', self.flight.segment, [samples for _, samples in decoded])
+            )
             if len(features) != len(decoded):
                 raise ValueError('flight segmentation cardinality mismatch')
             return features
@@ -399,7 +404,13 @@ class PipelineWorker:
         if self.flight is None or not pending or diarize_speech_only_enabled():
             return {}
         try:
-            outcomes = list(self.flight.diarize_many([(s['samples'], s.get('flight_features')) for s in pending]))
+            outcomes = list(
+                self.timings.call(
+                    'flight_diarize',
+                    self.flight.diarize_many,
+                    [(s['samples'], s.get('flight_features')) for s in pending],
+                )
+            )
             if len(outcomes) != len(pending):
                 raise ValueError('flight diarization cardinality mismatch')
             return {s['item'].segment_id: outcome for s, outcome in zip(pending, outcomes)}
@@ -608,7 +619,13 @@ class PipelineWorker:
                         logger.warning('batch_failure_callback_failed exception_type=%s', type(callback_error).__name__)
 
         prefetch = (
-            _DecodePrefetch(self._io, self.decode, items, self.io_concurrency, PREFETCH_AHEAD_SECONDS)
+            _DecodePrefetch(
+                self._io,
+                lambda item: self.timings.call('fetch_decode', self.decode, item),
+                items,
+                self.io_concurrency,
+                PREFETCH_AHEAD_SECONDS,
+            )
             if self._io is not None
             else None
         )
@@ -631,7 +648,11 @@ class PipelineWorker:
                 for index, item in enumerate(items):
                     self.counts['items'] += 1
                     try:
-                        samples = prefetch.take(index) if prefetch is not None else self.decode(item)
+                        samples = (
+                            prefetch.take(index)
+                            if prefetch is not None
+                            else self.timings.call('fetch_decode', self.decode, item)
+                        )
                         shapes[item.segment_id]['samples'] = len(samples)
                         duration = len(samples) / SAMPLE_RATE
                         if (
@@ -659,7 +680,9 @@ class PipelineWorker:
                     silence = None
                     try:
                         spans = list(
-                            self.vad(samples) if features is None else self.flight.vad_spans(samples, features)
+                            self.timings.call('vad', self.vad, samples)
+                            if features is None
+                            else self.timings.call('vad', self.flight.vad_spans, samples, features)
                         )
                     except BatchValidationError as error:
                         if error.reason != 'vad_bounds' or not worker_validation_disposition_enabled():
@@ -675,7 +698,9 @@ class PipelineWorker:
                             raise
                         spans = []
                     shapes[item.segment_id]['vad_spans'] = len(spans)
-                    clips = list(speech_windows(item, samples, spans, self.config))
+                    clips = self.timings.call(
+                        'windows', lambda: list(speech_windows(item, samples, spans, self.config))
+                    )
                     shapes[item.segment_id]['windows'] = len(clips)
                     speech_spans = vad_speech_spans(spans, len(samples))
                     state = {
@@ -779,7 +804,7 @@ class PipelineWorker:
                 if not batch:
                     continue
                 try:
-                    hypotheses = self.words.transcribe_batch([w.samples for w in batch])
+                    hypotheses = self.timings.call('asr', self.words.transcribe_batch, [w.samples for w in batch])
                     for window in batch:
                         if not states[window.segment_id]['item'].shadow and cap_dispatch_enabled(
                             states[window.segment_id]['item'].owner_id, 'batch'
@@ -849,7 +874,9 @@ class PipelineWorker:
                             )
                         else:
                             if not item.shadow and cap_dispatch_enabled(item.owner_id, 'batch'):
-                                recovered = self.recover_words(
+                                recovered = self.timings.call(
+                                    'asr_recovery',
+                                    self.recover_words,
                                     state['samples'],
                                     self.config.max_padded_seconds,
                                     before_dispatch=lambda: item.segment_id in allowed({item.segment_id}),
@@ -868,7 +895,9 @@ class PipelineWorker:
                                     results.append(HeldWork(item.segment_id))
                                     continue
                             else:
-                                recovered = self.recover_words(state['samples'], self.config.max_padded_seconds)
+                                recovered = self.timings.call(
+                                    'asr_recovery', self.recover_words, state['samples'], self.config.max_padded_seconds
+                                )
                             if recovered is None or not fits_retry:
                                 words = []
                                 state['padded_retry'] = 'skipped_oversize'
@@ -966,7 +995,9 @@ class PipelineWorker:
                         if isinstance(diarization, BaseException):
                             raise diarization
                         if diarization is None:
-                            diarization = self._diarize_unit(state['samples'], evidence, words)
+                            diarization = self.timings.call(
+                                'diarize', self._diarize_unit, state['samples'], evidence, words
+                            )
                     payload = {
                         'words': words,
                         'diarization': diarization,
@@ -992,13 +1023,13 @@ class PipelineWorker:
                             (
                                 len(results) - 1,
                                 item,
-                                self._io.submit(self.persist, item, payload),
+                                self._io.submit(self.timings.call, 'persist', self.persist, item, payload),
                                 state['silence'],
                                 silence is not None,
                             )
                         )
                         continue
-                    uri = self.persist(item, payload)
+                    uri = self.timings.call('persist', self.persist, item, payload)
                     results.append(WorkResult(item.segment_id, uri, 'silence' if state['silence'] else 'success'))
                     if silence is not None:
                         silence_records.append(item.segment_id)

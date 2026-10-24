@@ -226,6 +226,54 @@ labels. Autoscale on ready-age with fresh/recent/deep targets 30/300/3600 second
 reject stale samples. B's dedicated chart documents the external-metric HPA.
 CPU is not the scale signal; non-preemptible batch latency still needs bounds.
 
+## Stage profiling (metrics-only)
+
+`BATCH_PIPELINE_STAGE_PROFILING_ENABLED` gates the dedicated runtime's
+`omi_batch_pipeline_stage_seconds{stage=...}` wall-clock histogram. Default on
+only when `OMI_ENV_STAGE=dev`; prod and an unset stage stay off, and an explicit
+`true`/`false` (1/0, on/off, yes/no; malformed values fall back to the stage
+default) overrides, so local/offline can opt in. The histogram is created once
+at worker startup on the worker's own explicit `CollectorRegistry` — the same
+`/metrics` endpoint as the queue gauges — and a disabled or unwired
+`StageTimings` instance is a pure pass-through: no runtime behavior, precision,
+or concurrency change, and no scrape difference outside dev.
+
+Pump-side stages: `pump_cycle` (one full maintain+flight pass), `maintenance`
+(expired-lease recovery, result_ready sweep, hold pages, leader lease),
+`pull` (the claim transaction), `admission` (compute-admission authorization),
+`renew` (lease heartbeat rechecks), `publication` (every lease-fenced scheduler
+transition: defer/fail/complete/release), `ordered_merge` (per-owner commits),
+`projection` (pending projection and on-committed callbacks), and
+`worker_flight` (executor wait plus the whole GPU chain, including its CUDA
+quiescence `cuda_sync` and, with pipeline depth >1, GPU chain-lock wait).
+Worker-chain leaves: `fetch_decode` (download+decrypt+decode of one unit),
+`vad`, `windows` (speech window assembly), `asr` (batched `transcribe_batch`),
+`asr_recovery` (the padded retry, including cap-dispatch callbacks),
+`flight_segment`/`flight_diarize` (packed pyannote segmentation and packed
+embedding+clustering passes), `diarize` (serial per-unit diarization including
+speech compaction), `persist` (encrypt+upload), `cuda_sync` (the pre-existing
+final synchronize; profiling adds no new GPU synchronization).
+
+Timings include failed operations and executor wait; a prefetched fetch/decode
+and a submitted persist are measured where they execute (background IO threads),
+not at the later consuming wait. `pump_cycle` contains the whole pass and
+`worker_flight` contains the worker leaves and CUDA synchronization: never add
+parent and child sums. `asr`, `asr_recovery` and the packed flight stages are
+batched across windows/units of several leased jobs, so one observation is not
+one lease: divide a stage's `_sum` rate by the worker-scoped leased-event rate
+(`omi_batch_pipeline_events_total{event="leased"}`) for an amortized
+seconds-per-leased-job view, and use `_count` for per-call means. Model leaves
+measure host-observed wall time, not isolated CUDA kernel occupancy. Speaker
+embedding executes inside pyannote and is not separately timed: the serial
+`diarize` and packed `flight_diarize` adapter seams include embedding plus
+clustering, and splitting them would mean timing inside the model orchestration.
+Unattributed worker time includes validation, packing, policy callbacks, the
+live-reuse lookup, silence inspection and left-context assembly. Optional or
+skipped stages (silence units, packed-flight fallbacks, recovery paths not
+taken) emit no samples. No owner, segment, URI, or exception labels exist, and
+a telemetry failure (clock or observe) is swallowed: it can never invalidate
+compute or a durable transition.
+
 ## Flags, rollout and rollback
 
 Admission requires `BATCH_PIPELINE_ENABLED=true` plus explicit UID allowlist or
