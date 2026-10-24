@@ -16,7 +16,6 @@ import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -33,7 +32,7 @@ class ConversationCaptureWidget extends StatefulWidget {
   final bool showsCall;
 
   /// Episodes on: a streaming capture is the live episode row in Today, so this card stays for the
-  /// states that are not an episode (a call, Transcribe Later, a dropped pendant).
+  /// states that are not an episode (a call or Transcribe Later).
   final bool deferStreamingToEpisode;
 
   @override
@@ -43,13 +42,6 @@ class ConversationCaptureWidget extends StatefulWidget {
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   Timer? _offlineTicker;
   int _offlineTick = 0;
-
-  /// The pendant capture this card last showed, kept so a pendant that drops mid-capture shows as
-  /// Disconnected instead of the card vanishing. The controller forgets the device on disconnect
-  /// (`liveCaptureSource` goes null, just as when nothing ever recorded), so "was capturing" is
-  /// remembered here: set while a realtime pendant capture is live, cleared when the pendant
-  /// reconnects, is unpaired, or another source (the phone) takes over.
-  String? _droppedSource;
 
   @override
   void initState() {
@@ -125,17 +117,12 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
     return Consumer<CaptureProvider>(
       builder: (context, provider, child) {
-        // The card means "what's recording now": hidden when nothing is (a connected pendant
-        // that is not capturing, or a stopped phone). Transcribe Later keeps its own card.
+        // The card means "what's recording now": hidden when nothing is (a connected pendant that
+        // is not capturing, a stopped phone, or a pendant that dropped mid-capture — the header
+        // chip already says Disconnected / Connecting… for that, and the drop needs no action, so
+        // a row here would only repeat the chip). Transcribe Later keeps its own card.
         final batch = provider.isPhoneMicBatchRecording ||
             (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice);
-        final (pendantConnected, pendantPaired, pendantConnecting) = context.select<DeviceProvider, (bool, bool, bool)>(
-          (d) => (d.connectedDevice != null, d.pairedDevice?.id.isNotEmpty ?? false, d.isConnecting),
-        );
-        final pendantDropped = _trackPendantDrop(provider, connected: pendantConnected, paired: pendantPaired);
-        if (pendantDropped) {
-          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting), decorated: false);
-        }
         final phoneLive = provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.initialising ||
             provider.recordingState == RecordingState.interrupted ||
@@ -210,36 +197,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             decorated ? BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)) : null,
         child: child,
       );
-
-  /// Updates the remembered pendant capture and says whether it dropped: no source is live, the
-  /// pendant it came from is still paired but not connected. See [_droppedSource].
-  bool _trackPendantDrop(CaptureProvider provider, {required bool connected, required bool paired}) {
-    final source = provider.liveCaptureSource;
-    if (source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled) {
-      _droppedSource = source;
-      return false;
-    }
-    if (source != null || connected || !paired) {
-      _droppedSource = null;
-      return false;
-    }
-    if (_droppedSource == null) return false;
-    return true;
-  }
-
-  Widget _buildPendantDroppedUI(CaptureProvider provider, {required bool reconnecting}) {
-    final l10n = context.l10n;
-    return LiveCaptureCard(
-      source: _droppedSource!,
-      status: l10n.disconnected,
-      // Reconnecting is its own state; a drop that is not reconnecting yet still says what
-      // happens next inline, instead of a bare "Disconnected" with the why only in the sheet.
-      detail: reconnecting ? l10n.reconnecting : l10n.capturePendantDisconnectedShort,
-      explanation: l10n.capturePendantDisconnectedDetail,
-      compact: true,
-      lastLine: provider.segments.lastOrNull?.text,
-    );
-  }
 
   Future<void> _togglePause(CaptureProvider provider) async {
     final phone = provider.liveCaptureSource == 'phone';

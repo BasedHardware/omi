@@ -8,7 +8,7 @@ from utils.generated_compute import generated_compute_allowed, generated_compute
 
 from collections import Counter
 from datetime import datetime, timezone, date
-from typing import List, Dict, Any, Optional, Set, cast
+from typing import List, Dict, Any, Set, cast
 
 import database.wrapped as wrapped_db
 import database.conversations as conversations_db
@@ -99,11 +99,10 @@ def _compute_conversation_duration(conv: Conversation) -> float:
     """Compute conversation duration in seconds."""
     # Try to get duration from transcript segments
     if conv.transcript_segments:
-        # Legacy/unvalidated conversation data can carry segments without an end
-        # timestamp, so the None filter below is real at runtime even though
-        # TranscriptSegment.end is annotated float.
-        ends = cast(List[Optional[float]], [seg.end for seg in conv.transcript_segments])
-        max_end = max((end for end in ends if end is not None), default=0)
+        max_end = max(
+            (seg.end for seg in conv.transcript_segments if seg.end is not None),  # type: ignore[reportUnnecessaryComparison]  # defensive: legacy rows may predate the required-float validation
+            default=0,
+        )
         if max_end > 0:
             return max_end
 

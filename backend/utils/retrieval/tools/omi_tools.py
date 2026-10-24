@@ -22,8 +22,8 @@ except ModuleNotFoundError:
     )
     assert _rb_spec is not None and _rb_spec.loader is not None
     _rb_mod = _importlib_util.module_from_spec(_rb_spec)
-    # Register before exec, matching the load_module_fresh recipe.
-    # The loaded module's own fallback resolves dataclass annotations via sys.modules.
+    # Register before exec (the load_module_fresh recipe): the loaded module's
+    # own fallback import resolves dataclass annotations via sys.modules.
     _sys.modules["utils.retrieval.tools.result_bounds"] = _rb_mod
     _rb_spec.loader.exec_module(_rb_mod)
     bounded_result = _rb_mod.bounded_result
@@ -65,7 +65,7 @@ def get_omi_product_info_tool(query: Optional[str] = None) -> str:
         query="How do I update the firmware on my Omi device?"
         Returns documentation about firmware updates and device management
     """
-    if not isinstance(query, str) or not query.strip():
+    if query is None or not isinstance(query, str) or not query.strip():  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard: the LLM tool boundary may pass junk despite the annotation
         return "Error: Please provide a non-empty question or query about the Omi/Friend product."
 
     # Fetch the product docs. A network or GitHub API failure must not break the chat turn, so fail
