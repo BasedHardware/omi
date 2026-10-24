@@ -195,7 +195,7 @@ def _decision_chain(arms: Sequence[DecisionArm]) -> RelevanceDecision:
     raise AssertionError('Relevance chain must end in a total deterministic arm')
 
 
-def find_neighbor(
+def backend/utils/conversations/relevance.py(
     rows: Iterable[Mapping[str, Any]],
     *,
     conversation_id: Optional[str],
