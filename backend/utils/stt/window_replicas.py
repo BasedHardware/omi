@@ -36,9 +36,27 @@ def parse_window_response(
     return [normalize(segment) for segment in parse_tdt_segments(data, duration)]
 
 
-def service_snapshot_allows(pressure: Any, circuit_state: str, replicas: WindowReplicas) -> bool:
+def raise_if_non_replica_error(error: Exception, fail: Callable[..., None]) -> None:
+    """Account/rate/input refusals cannot be retried on another GPU."""
+    status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
+    if status is None or status >= 500:
+        return
+    reason = {
+        401: 'provider_auth_rejected',
+        403: 'provider_auth_rejected',
+        402: 'provider_budget_exhausted',
+        429: 'provider_rate_limited',
+    }.get(status, 'provider_5xx')
+    WINDOW_REPLICA_ATTEMPTS.labels(outcome=reason).inc()
+    fail(reason)
+    raise error
+
+
+def service_snapshot_allows(
+    pressure: Any, circuit_state: str, replicas: WindowReplicas, *, attempted: bool = False
+) -> bool:
     """Use the admission owner's own fresh/grace math; never invent headroom."""
-    if circuit_state != 'closed' or not replicas.service_available():
+    if attempted or circuit_state != 'closed' or not replicas.service_available():
         return False
     if pressure.ready_replicas():
         return False  # never use the VIP to bypass quarantined known pods
@@ -100,19 +118,37 @@ class QueueTimeout(TimeoutError):
     """Deadline expired while waiting for the listener's STT semaphore."""
 
 
+@dataclass
+class PostAttempt:
+    started: bool = False
+
+    def cancelled(self, *, deadline_expired: bool) -> bool | None:
+        if not self.started:
+            return None
+        failed = True if deadline_expired else None
+        WINDOW_REPLICA_ATTEMPTS.labels(outcome='timeout' if failed else 'cancelled').inc()
+        return failed
+
+
 async def post_window(
-    wav: bytes, *, url: str, budget: float, get_client: Callable[[], Any], get_semaphore: Callable[[], Any]
+    wav: bytes,
+    *,
+    url: str,
+    budget: float,
+    get_client: Callable[[], Any],
+    get_semaphore: Callable[[], Any],
+    attempt: PostAttempt | None = None,
 ) -> httpx.Response:
     """One HTTP attempt; semaphore time consumes the same advertised budget."""
-    acquired = False
+    attempt = attempt if attempt is not None else PostAttempt()
     try:
         async with asyncio.timeout(budget) as deadline:
             async with get_semaphore():
-                acquired = True
                 remaining = max(0.0, (deadline.when() or 0) - asyncio.get_running_loop().time())
                 remaining = math.floor(remaining * 1000) / 1000
                 if remaining <= 0:
-                    raise TimeoutError('post budget exhausted at semaphore admission')
+                    raise QueueTimeout('post budget exhausted at semaphore admission')
+                attempt.started = True
                 return await get_client().post(
                     url,
                     files={'file': ('audio.wav', wav, 'audio/wav')},
@@ -122,7 +158,7 @@ async def post_window(
                     },
                 )
     except (TimeoutError, httpx.TimeoutException):
-        if not acquired:
+        if not attempt.started:
             raise QueueTimeout() from None
         raise
 
@@ -158,22 +194,33 @@ class WindowReplicas:
         # Different listener processes must not all start on the first DNS IP.
         self._cursor = random.randrange(self.MAX_REPLICAS)
 
-    def claim(self, ready: tuple[str, ...], *, exclude: frozenset[str] = frozenset()) -> ReplicaAdmission | None:
+    def claim(
+        self,
+        ready: tuple[str, ...],
+        *,
+        exclude: frozenset[str] = frozenset(),
+        discovered: tuple[str, ...] | None = None,
+    ) -> ReplicaAdmission | None:
         candidates = sorted(set(ready))[: self.MAX_REPLICAS]
         if not candidates:
             return None  # missing discovery cannot erase known quarantines
-        live = set(candidates)
-        # Removed/recreated pods cannot leave permanent state or grow the map.
-        self._states = {ip: state for ip, state in self._states.items() if ip in live}
+        live = set(candidates if discovered is None else sorted(set(discovered))[: self.MAX_REPLICAS])
+        # Only authoritative DNS departures erase quarantine. A stale pressure
+        # sample merely removes a routing candidate; it is not pod removal.
+        if live:
+            self._states = {ip: state for ip, state in self._states.items() if ip in live}
         for ip in candidates:
-            self._states.setdefault(ip, _State())
+            if len(self._states) < self.MAX_REPLICAS:
+                self._states.setdefault(ip, _State())
         start = self._cursor % len(candidates)
         self._cursor += 1
         now = self._clock()
         for ip in candidates[start:] + candidates[:start]:
             if ip in exclude:
                 continue
-            state = self._states.setdefault(ip, _State())
+            state = self._states.get(ip)
+            if state is None:
+                continue  # fail closed when unknown membership fills the bound
             if state.probing or state.until > now:
                 continue
             # Exactly one half-open POST per listener/replica pair. Closed
@@ -182,6 +229,18 @@ class WindowReplicas:
                 state.probing = True
             return ReplicaAdmission(ip, state, state.generation)
         return None
+
+    def has_candidate(self, ready: tuple[str, ...], *, exclude: frozenset[str]) -> bool:
+        now = self._clock()
+        return any(
+            ip not in exclude and (state is None or not state.probing and state.until <= now)
+            for ip in ready[: self.MAX_REPLICAS]
+            for state in (self._states.get(ip),)
+        )
+
+    def attempt_budget(self, remaining: float, ready: tuple[str, ...], exclude: set[str], retry: bool) -> float:
+        divisor = 2 if retry and self.has_candidate(ready, exclude=frozenset(exclude)) else 1
+        return max(0.001, remaining / divisor)
 
     def service_available(self) -> bool:
         """Missing discovery may use the VIP only with some known closed pod.

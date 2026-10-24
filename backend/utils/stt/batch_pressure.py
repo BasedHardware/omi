@@ -162,6 +162,11 @@ class BatchPressure:
 
     def ready_replicas(self) -> tuple[str, ...]:
         """Fresh, DNS-ready identities for live-window direct pod routing."""
+        fresh = self._fresh(time.monotonic())
+        return tuple(ip for ip in self.discovered_replicas() if ip in fresh)
+
+    def discovered_replicas(self) -> tuple[str, ...]:
+        """Fresh DNS membership, independent of individual pressure samples."""
         now = time.monotonic()
         if (
             not getattr(self, '_discovery_available', True)
@@ -169,8 +174,7 @@ class BatchPressure:
             or now - self._observed_at > self.STALE_SECONDS
         ):
             return ()
-        fresh = self._fresh(now)
-        return tuple(ip for ip in self._ready if ip in fresh)
+        return self._ready
 
     async def _fetch(self, ip: str, client: httpx.AsyncClient) -> ReplicaPressure:
         response = await asyncio.wait_for(

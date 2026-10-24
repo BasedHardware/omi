@@ -372,12 +372,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._beyond_window_repost: int | None = None
         self._agc_peak = 0.0
         self._agc_last_gain = 1.0
-        # Direct pod discovery belongs only to the configured internal HTTP
-        # service. A registry override/TLS endpoint retains its own old circuit.
+        # Only the internal HTTP family uses direct GPU identities.
         self.replica_scoped = window_replica_recovery_enabled() and can_route_replicas(
             api_url, os.getenv('HOSTED_PARAKEET_API_URL'), batch_pressure.ready_replicas()
         )
         self._empty_replica_retry_used = False
+        self._replica_attempted = False
 
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         self._health_success, self._health_close = on_success, on_close
@@ -1212,11 +1212,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             return self._last_speaker
 
     async def _post_window(
-        self, pcm: bytes, *, url: str | None = None, timeout_seconds: float | None = None
+        self,
+        pcm: bytes,
+        *,
+        url: str | None = None,
+        timeout_seconds: float | None = None,
+        attempt: replica_http.PostAttempt | None = None,
     ) -> httpx.Response:
-        # Snapshot the uniform scale before the first await so a later send
-        # cannot change this POST's envelope. Overlapping later POSTs may use a
-        # lower gain if the session peak grew; each POST stays internally flat.
+        # Snapshot one flat gain per POST before the first await.
         wav = _pcm16_to_wav_bytes(self._normalize_posted_pcm(pcm), self._sample_rate)
         return await post_window(
             wav,
@@ -1224,14 +1227,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             budget=self._post_timeout if timeout_seconds is None else timeout_seconds,
             get_client=get_stt_client,
             get_semaphore=get_stt_semaphore,
+            attempt=attempt,
         )
 
     async def _post_replicas(self, pcm: bytes, dur: float) -> list[RawSegment]:
-        """At most two pods inside one original POST budget and first-text timer.
-
-        Empty is valid model output, never outage evidence. Retry it once per
-        empty episode on a *different* pod, without advancing any audio anchor.
-        Another empty stays visible to the existing rescue/deadline machinery.
+        """Two distinct pods share the original POST/first-text budget.
+        One retry per empty episode preserves anchors; silence is not outage.
         """
         excluded: set[str] = set()
         retry_reason: str | None = None
@@ -1242,10 +1243,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 budget = min(budget, max(0.001, self._first_text_timer.when() - asyncio.get_running_loop().time()))
             async with asyncio.timeout(budget) as deadline:
                 for attempt in range(2):
-                    replica = window_replicas.claim(batch_pressure.ready_replicas(), exclude=frozenset(excluded))
+                    ready = batch_pressure.ready_replicas()
+                    replica = window_replicas.claim(
+                        ready, exclude=frozenset(excluded), discovered=batch_pressure.discovered_replicas()
+                    )
                     if replica is None:
                         if not attempt and replica_http.service_snapshot_allows(
-                            batch_pressure, st.parakeet_family_circuit_state(), window_replicas
+                            batch_pressure,
+                            st.parakeet_family_circuit_state(),
+                            window_replicas,
+                            attempted=self._replica_attempted,
                         ):
                             return await replica_http.post_service_window(
                                 self._post_window, self.fail, self._without_loops, pcm, dur
@@ -1257,18 +1264,18 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                         self.fail('capacity_full', capacity_subtype='admission')
                         raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
                     excluded.add(replica.ip)
+                    self._replica_attempted = True
                     failed: bool | None = None
                     segments: list[RawSegment] = []
+                    post_attempt = replica_http.PostAttempt()
                     try:
                         remaining = (deadline.when() or 0) - asyncio.get_running_loop().time()
-                        # Reserve time for the other pod, even when the first
-                        # accepts a connection and hangs. The queue header is
-                        # reduced to this same attempt budget at the HTTP seam.
-                        budget = max(0.001, remaining / (2 - attempt))
-                        response = await self._post_window(pcm, url=replica.url(self._url), timeout_seconds=budget)
+                        budget = window_replicas.attempt_budget(remaining, ready, excluded, not attempt)
+                        response = await self._post_window(
+                            pcm, url=replica.url(self._url), timeout_seconds=budget, attempt=post_attempt
+                        )
                         if response.status_code == 503 and response.headers.get('X-Omi-STT-Error') == 'queue_timeout':
-                            # Capacity is not a broken GPU. Preserve the typed
-                            # refusal; do not double-load a pressured fleet.
+                            # Preserve capacity refusal without retrying or quarantining.
                             WINDOW_REPLICA_ATTEMPTS.labels(outcome='queue_timeout').inc()
                             self.fail('capacity_full', capacity_subtype='queue_timeout')
                             response.raise_for_status()
@@ -1277,6 +1284,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                         failed = False  # a valid HTTP/model response proves service health
                         WINDOW_REPLICA_ATTEMPTS.labels(outcome='text' if segments else 'empty').inc()
                     except asyncio.CancelledError:
+                        failed = post_attempt.cancelled(deadline_expired=deadline.expired())
                         raise
                     except (QueueTimeout, httpx.PoolTimeout):
                         # Local semaphore pressure says nothing about this GPU.
@@ -1284,18 +1292,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     except Exception as error:
                         if self._dead:
                             raise
-                        status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
-                        # Auth, quota, 429 and bad input are not pod-local errors.
-                        if status is not None and status < 500:
-                            reason = {
-                                401: 'provider_auth_rejected',
-                                403: 'provider_auth_rejected',
-                                402: 'provider_budget_exhausted',
-                                429: 'provider_rate_limited',
-                            }.get(status, 'provider_5xx')
-                            WINDOW_REPLICA_ATTEMPTS.labels(outcome=reason).inc()
-                            self.fail(reason)
-                            raise
+                        replica_http.raise_if_non_replica_error(error, self.fail)
                         failed = True
                         retry_reason = (
                             'timeout' if isinstance(error, (TimeoutError, httpx.TimeoutException)) else 'provider_5xx'
