@@ -31,7 +31,7 @@ from PIL import Image
 from database.screen_frames import get_conversation_screen_frames, own_frames
 from database.users import get_meeting_note_screenshots_enabled
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-from utils.conversations.meeting_context import is_ai_agent_tile_name
+from utils.conversations.meeting_context import is_ai_agent_tile_name, strip_leading_tile_glyphs
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.other.storage import configured_screen_frames_bucket, download_screen_frame_bytes
@@ -60,10 +60,38 @@ class ScreenFrameEvidence:
     summary: str
 
 
+_UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+
+
 def _as_utc(value: Any) -> Optional[datetime]:
-    if not isinstance(value, datetime):
-        return None
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        try:
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        normalized = raw[:-1] + '+00:00' if raw.endswith('Z') else raw
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    return None
+
+
+def _safe_banner_suitability(value: Any) -> float:
+    if isinstance(value, bool) or value is None:
+        return 0.0
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return parsed if parsed == parsed else 0.0
 
 
 def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tuple[ScreenFrameEvidence, ...]:
@@ -84,6 +112,8 @@ def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tupl
         return ()
     evidence: list[ScreenFrameEvidence] = []
     for doc in docs:
+        if not isinstance(doc, dict):
+            continue
         captured_at = _as_utc(doc.get('captured_at'))
         frame_id = doc.get('id')
         if captured_at is None or not isinstance(frame_id, str) or not frame_id:
@@ -96,18 +126,21 @@ def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tupl
                 frame_id=frame_id,
                 captured_at=captured_at,
                 role=str(doc.get('role') or 'strip'),
-                banner_suitability=float(doc.get('banner_suitability') or 0.0),
+                banner_suitability=_safe_banner_suitability(doc.get('banner_suitability')),
                 names=names,
                 summary=summary.strip() if isinstance(summary, str) else '',
             )
         )
-    evidence.sort(key=lambda item: item.captured_at)
+    evidence.sort(key=lambda item: (_as_utc(item.captured_at) or _UTC_MIN, item.frame_id))
     return tuple(evidence)
 
 
 def _clean_name(raw: str, *, agents: bool = False) -> Optional[str]:
     """A human tile name, or with ``agents`` an AI-agent tile the roster also classifies as one."""
-    name = ' '.join(_NAME_DECORATION.sub('', raw).split()).strip(' •|*·-—')
+    # Tile-name OCR here comes from the same call UI as the OCR rows: the
+    # speaking-indicator glyph strip applies, or one screenshot's "IllNik
+    # Shevchenko" enters the roster beside the recovered "Nik Shevchenko".
+    name = ' '.join(_NAME_DECORATION.sub('', strip_leading_tile_glyphs(raw)).split()).strip(' •|*·-—')
     tokens = name.split()
     if not 1 <= len(tokens) <= 5 or len(name) > 60 or '@' in name or any(ch.isdigit() for ch in name):
         return None
@@ -209,23 +242,27 @@ def with_screen_frame_participants(
         return context
     if context is not None:
         return context.model_copy(update={'participants': participants})
-    if started_at is None:
+    start_time = _as_utc(started_at)
+    if start_time is None:
         return None
     return CalendarMeetingContext(
         calendar_event_id='screen-frames',
         title='Video meeting',
         participants=participants,
-        start_time=started_at,
+        start_time=start_time,
         duration_minutes=max(1, duration_minutes),
         calendar_source='screen_activity',
     )
 
 
 def _offset_label(captured_at: datetime, started_at: Optional[datetime]) -> str:
+    captured = _as_utc(captured_at)
+    if captured is None:
+        return '+00:00'
     start = _as_utc(started_at)
     if start is None:
-        return captured_at.strftime('%H:%M')
-    seconds = max(0, int((captured_at - start).total_seconds()))
+        return captured.strftime('%H:%M')
+    seconds = max(0, int((captured - start).total_seconds()))
     return f'+{seconds // 60:02d}:{seconds % 60:02d}'
 
 
@@ -254,7 +291,7 @@ def _select_for_images(evidence: Sequence[ScreenFrameEvidence]) -> list[ScreenFr
     chosen = [rest[int(index * step)] for index in range(slots)]
     if banner:
         chosen.append(banner)
-    return sorted(chosen, key=lambda item: item.captured_at)
+    return sorted(chosen, key=lambda item: (_as_utc(item.captured_at) or _UTC_MIN, item.frame_id))
 
 
 def _downscale_jpeg(raw: bytes) -> bytes:
