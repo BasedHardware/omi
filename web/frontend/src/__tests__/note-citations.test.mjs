@@ -32,3 +32,14 @@ test('a long unclosed backtick run stays text and code spans stay protected', ()
     '```\n[s01234]\n```\nFact.',
   );
 });
+
+test('thousands of protected units restore exactly, including code nested in a link', () => {
+  // Keys used to grow with the unit count and restore once per unit: quadratic.
+  const many = Array.from({ length: 3000 }, (_, i) => `\`c${i}\` [s01234]`).join(' ');
+  const kept = Array.from({ length: 3000 }, (_, i) => `\`c${i}\``).join(' ');
+  assert.equal(repairNoteCitations(many, ['s01234']).text, kept);
+  assert.deepEqual(repairNoteCitations('See [`x`](https://e.com) [s01234].', ['s01234']), {
+    text: 'See [`x`](https://e.com).',
+    sourceIDs: ['s01234'],
+  });
+});

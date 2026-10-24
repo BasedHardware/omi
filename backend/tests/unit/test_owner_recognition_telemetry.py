@@ -594,7 +594,7 @@ def _wire_sync_store(monkeypatch, store):
         return pipeline.conversations_db.prepare_conversation_for_read(deepcopy(plain), uid)
 
     monkeypatch.setattr(pipeline.conversations_db, 'get_conversation', _get)
-    monkeypatch.setattr(pipeline.lifecycle_service, 'discard_by_relevance', lambda *args, **kwargs: True)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'rule_discard_outcome', lambda *args, **kwargs: 'discarded')
     return lifecycle, pipeline
 
 
@@ -756,7 +756,6 @@ def _stub_completed_reprocess(monkeypatch):
     monkeypatch.setattr(module, '_save_action_items', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'submit_with_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(module, 'record_usage', lambda *args, **kwargs: None)
-    monkeypatch.setattr(module, 'conversation_apps_opt_in_only', lambda: False)
     monkeypatch.setattr(module.conversations_db, 'update_conversation', MagicMock())
 
 

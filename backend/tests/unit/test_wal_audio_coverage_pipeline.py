@@ -4,6 +4,7 @@ Uses the shared sync_v2 coordinator harness (all heavy deps stubbed) plus real
 labeled PCM WAV files so the trimmed bytes reaching VAD can be asserted.
 """
 
+import gc
 import logging
 import os
 import sys
@@ -37,6 +38,10 @@ WAV_STEM = 'audio_pcm16_1760000000'
 @pytest.fixture
 def coordinator():
     module, stubs = sync_v2_harness.TestAsyncCoordinatorBehavioral._load_sync_module()
+    # Match the shared harness's fenced_worker_module fixture: retire prior
+    # cyclic mock graphs during setup, rather than charging their collection
+    # to an unrelated coordinator call later in this file.
+    gc.collect()
     try:
         yield module, stubs
     finally:
@@ -143,7 +148,7 @@ def _wire(pipeline, monkeypatch, tmp_path, *, lineage_rows, frame_values=range(1
 
 
 def _coverage_env(monkeypatch, coverage_flag=None):
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     for name in (
         'SYNC_WAL_AUDIO_COVERAGE_ENABLED',
         'SYNC_LINEAGE_RESOLVE_ENABLED',
@@ -540,6 +545,16 @@ async def test_half_boundary_proof_rounds_inward(coordinator, monkeypatch, tmp_p
     assert payloads[1] == b''.join(_frame_bytes(v, FRAME_SAMPLES) for v in (6, 7, 8, 9))
 
 
+@pytest.fixture
+def mismatched_committed_attempt(coordinator, monkeypatch, tmp_path, mutate):
+    module, stubs = coordinator
+    _coverage_env(monkeypatch)
+    env = _committed_envelope(range(7))
+    mutate(env)
+    state = _wire(stubs['pipeline'], monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
+    return module, stubs, state
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'mutate',
@@ -553,13 +568,8 @@ async def test_half_boundary_proof_rounds_inward(coordinator, monkeypatch, tmp_p
         lambda e: e.update(proof='receipt_v1'),
     ],
 )
-async def test_mismatched_committed_evidence_keeps_original(coordinator, monkeypatch, tmp_path, mutate):
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    env = _committed_envelope(range(7))
-    mutate(env)
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1, capture_evidence=env)])
+async def test_mismatched_committed_evidence_keeps_original(mismatched_committed_attempt, tmp_path):
+    module, stubs, state = mismatched_committed_attempt
     await _run_batch(module, stubs, tmp_path)
     assert len(state.vad_seen) == 1
     original = state.vad_seen[0]
@@ -1057,7 +1067,7 @@ def test_saved_transcript_proof_live_words_once_then_new(real_pipeline, monkeypa
     pipeline = real_pipeline
     monkeypatch.delenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, raising=False)
     monkeypatch.setenv(SYNC_LINEAGE_LIVE_DEDUPE_ENV, 'true')
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     monkeypatch.delenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', raising=False)
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
@@ -1122,7 +1132,7 @@ def test_saved_transcript_proof_live_words_once_then_new(real_pipeline, monkeypa
     monkeypatch.setattr(pipeline, 'postprocess_words', lambda words, offset: _segments_from_bytes(derivative, word))
     monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', lambda *args, **kwargs: None)
     monkeypatch.setattr(pipeline.conversations_db, 'get_manual_speaker_receipt', lambda *args: {})
-    monkeypatch.setattr(pipeline, 'capture_evidence_dark_write_enabled', lambda: False)
+
     monkeypatch.setattr(
         lifecycle,
         'ingest_sync_conversation',
@@ -1301,7 +1311,7 @@ def test_receipt_only_saved_transcript_contains_new_word(real_pipeline, monkeypa
     )
     monkeypatch.setattr(pipeline, 'identify_speakers_for_segments', lambda *args, **kwargs: None)
     monkeypatch.setattr(pipeline.conversations_db, 'get_manual_speaker_receipt', lambda *args: {})
-    monkeypatch.setattr(pipeline, 'capture_evidence_dark_write_enabled', lambda: False)
+
     monkeypatch.setattr(
         lifecycle,
         'ingest_sync_conversation',
@@ -1334,7 +1344,7 @@ def test_receipt_only_full_coverage_preserves_the_wal_untouched(real_pipeline, m
     from utils.sync import recording_lineage
 
     pipeline = real_pipeline
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'true')
+
     monkeypatch.delenv('SYNC_WAL_AUDIO_COVERAGE_ENABLED', raising=False)
     monkeypatch.delenv('SYNC_LINEAGE_RESOLVE_ENABLED', raising=False)
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_UID_ALLOWLIST', '')  # Explicit legacy global policy.
@@ -1389,7 +1399,7 @@ def s1_routing(coordinator, monkeypatch, tmp_path, lineage_switch):
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     monkeypatch.setenv('SYNC_LINEAGE_RESOLVE_ENABLED', lineage_switch)
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
     spies = _s1_spies(pipeline, monkeypatch)
@@ -1443,7 +1453,7 @@ async def test_s1_valid_claims_bind_each_segment_to_planned_target(coordinator, 
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)], frame_values=range(2))
     resolver_calls = []
     monkeypatch.setattr(
@@ -1475,24 +1485,6 @@ async def test_s1_valid_claims_bind_each_segment_to_planned_target(coordinator, 
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('flag', ['off', 'disabled-typo'])
-async def test_s1_gate_off_resumes_ungated_lineage(coordinator, monkeypatch, tmp_path, flag):
-    """An explicit non-on token — including an unrecognized typo — disables the
-    gate and restores the prior ungated lineage path even without claims."""
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    monkeypatch.setenv('SYNC_LINEAGE_S1_REQUIRED', flag)
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
-    spies = _s1_spies(pipeline, monkeypatch)
-    await _run_batch(module, stubs, tmp_path, claims=None)
-    assert spies.resolver_calls == []
-    assert len(spies.plan_calls) == 1
-    assert len(state.processed) == 1
-    assert state.outcomes[-1].value == 'success'
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'env',
     [
@@ -1507,7 +1499,7 @@ async def test_s1_gate_never_widens_cohort_or_bypasses_master(coordinator, monke
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
@@ -1537,7 +1529,7 @@ async def test_s1_malformed_or_incomplete_claims_never_bind(coordinator, monkeyp
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
     spies = _s1_spies(pipeline, monkeypatch)
     await _run_batch(module, stubs, tmp_path, claims={BIN_NAME: claim})
@@ -1557,7 +1549,6 @@ async def test_s1_no_claims_saves_rows_identically_to_feature_off(real_pipeline,
     feature switched off."""
     pipeline = real_pipeline
     _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
 
     def word(value):
         return f'word-{value}'
@@ -1606,13 +1597,12 @@ async def test_s1_no_claims_saves_rows_identically_to_feature_off(real_pipeline,
     assert state.outcomes[-1].value == 'success'
 
 
-def test_s1_oversize_claim_set_returns_false_before_serialization(monkeypatch):
-    """Oversize claim sets are rejected by bound before the bounded JSON
-    serializer is ever invoked."""
+def test_s1_oversize_claim_set_returns_false_before_schema_validation(monkeypatch):
+    """Oversize claim sets are rejected before constructing schema-validator input."""
     _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
-    dump_calls = []
-    monkeypatch.setattr(recording_lineage.json, 'dumps', lambda *a, **k: dump_calls.append(a) or '{}')
+
+    calls = []
+    monkeypatch.setattr(recording_lineage, 'validate_sync_file_claims', lambda *a, **k: calls.append(a) or {})
     oversize = {f'f{i}.bin': _claim() for i in range(21)}
     assert not recording_lineage.lineage_resolution_requested(
         'u',
@@ -1622,7 +1612,7 @@ def test_s1_oversize_claim_set_returns_false_before_serialization(monkeypatch):
         capture_evidence_claims=oversize,
         filenames=list(oversize),
     )
-    assert dump_calls == []
+    assert calls == []
     assert not recording_lineage.lineage_resolution_requested(
         'u',
         ORIGIN,
@@ -1631,25 +1621,7 @@ def test_s1_oversize_claim_set_returns_false_before_serialization(monkeypatch):
         capture_evidence_claims={BIN_NAME: _claim()},
         filenames=[f'f{i}.bin' for i in range(21)],
     )
-    assert dump_calls == []
-
-
-@pytest.mark.asyncio
-async def test_s1_valid_claims_without_dark_write_take_whole_batch(coordinator, monkeypatch, tmp_path):
-    """Even a complete valid claim set cannot admit per-segment binding while
-    S1 capture admission (CAPTURE_EVIDENCE_V1_DARK_WRITE) is off."""
-    module, stubs = coordinator
-    pipeline = stubs['pipeline']
-    _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
-    monkeypatch.setenv('CAPTURE_EVIDENCE_V1_DARK_WRITE', 'false')
-    state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
-    spies = _s1_spies(pipeline, monkeypatch)
-    await _run_batch(module, stubs, tmp_path)
-    assert spies.plan_calls == []
-    assert spies.resolver_calls == [_WHOLE_BATCH_ARGS]
-    assert len(state.processed) == 1
-    assert state.outcomes[-1].value == 'success'
+    assert calls == []
 
 
 @pytest.mark.asyncio
@@ -1659,7 +1631,7 @@ async def test_s1_declared_prefix_claim_still_binds_per_segment(coordinator, mon
     module, stubs = coordinator
     pipeline = stubs['pipeline']
     _coverage_env(monkeypatch)
-    monkeypatch.delenv('SYNC_LINEAGE_S1_REQUIRED', raising=False)
+
     state = _wire(pipeline, monkeypatch, tmp_path, lineage_rows=[generation(1)])
     spies = _s1_spies(pipeline, monkeypatch)
     await _run_batch(module, stubs, tmp_path, claims={BIN_NAME: _claim(frame_count=12)})

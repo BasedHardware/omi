@@ -15,14 +15,15 @@ import wave
 from uuid import uuid4
 from typing import Any
 from models.conversation_enums import ConversationSource
-from utils.observability.stt_cap_dispatch import record_audio
+from utils.observability.held_content import record_capture
+from utils.observability.stt_cap_dispatch import record_audio, record_allowance_decision, DispatchPath
 from utils.stt_cap_dispatch import funded_allowance
 
 from google.cloud import firestore
 from google.api_core.exceptions import AlreadyExists, PreconditionFailed
 from database import redis_db
 from database.fsr_read_cache import forget_request_reads, memo
-from config.stt_cap_dispatch import execution_admission_enabled as enabled
+from config.stt_cap_dispatch import offline_admission_enabled as enabled
 from utils.sync.files import get_timestamp_from_path
 from utils.executors import db_executor, storage_executor, run_blocking
 from database._client import get_data_plane_firestore_client as get_firestore_client
@@ -86,7 +87,16 @@ def _exists(uid: str, identity: str) -> bool:
         return bool(holds(uid).document(identity).get().exists)
 
 
-def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, immutable: bool = False) -> dict:
+def upload_held_audio(
+    uid: str,
+    path: str,
+    identity: str,
+    metadata: dict,
+    *,
+    immutable: bool = False,
+    live_size_limit: int | None = None,
+    rpc_timeout: float = 10.0,
+) -> dict:
     codec = metadata.get('audio_codec')
     extension = 'opus' if codec == 'ogg_opus' else 'wav'
     blob_path = f'chunks/{uid}/cap-held/{identity}.{extension}.enc'
@@ -100,12 +110,19 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, imm
                     encrypted.write(encrypt_audio_chunk(chunk, uid))
             encrypted_size = encrypted.tell()
             encrypted.seek(0)
+            capture = ''
+            if live_size_limit is not None:
+                if not immutable or codec != 'ogg_opus' or not 32 < encrypted_size <= live_size_limit + 32:
+                    raise ValueError('invalid immutable live source')
+                # Opaque provenance survives re-encoding and encryption randomness.
+                capture = hashlib.sha256(json.dumps(metadata, sort_keys=True).encode()).hexdigest()
+                blob.metadata = {'omi_live_capture': capture, 'omi_live_bytes': str(encrypted_size - 32)}
             try:
                 blob.upload_from_file(
                     encrypted,
                     content_type='application/octet-stream',
                     **({'if_generation_match': 0} if immutable else {}),
-                    **({'timeout': 10, 'retry': None, 'size': encrypted_size} if codec == 'ogg_opus' else {}),
+                    **({'timeout': rpc_timeout, 'retry': None, 'size': encrypted_size} if codec == 'ogg_opus' else {}),
                 )
             except PreconditionFailed:
                 if not immutable:
@@ -113,9 +130,23 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, imm
                 # The immutable capture identity names the same plaintext;
                 # preserve the first authenticated object across upload retries.
                 if codec == 'ogg_opus':
-                    blob.reload(timeout=10, retry=None)  # Retry-only generation provenance.
+                    blob.reload(timeout=rpc_timeout, retry=None)  # Retry-only generation provenance.
+                    if live_size_limit is not None:
+                        stored_metadata = blob.metadata or {}
+                        try:
+                            stored_bytes = int(stored_metadata.get('omi_live_bytes', '0'))
+                        except (TypeError, ValueError):
+                            raise ValueError('invalid stored live source size') from None
+                        if (
+                            stored_metadata.get('omi_live_capture') != capture
+                            or not 0 < stored_bytes <= live_size_limit
+                            or blob.size != stored_bytes + 32
+                            or not blob.generation
+                        ):
+                            raise ValueError('stored live source provenance mismatch')
+                        encrypted_size = blob.size
         encoded_metadata = encrypt(json.dumps(metadata), uid)
-        fields = {'audio_path': blob_path, 'metadata': encoded_metadata}
+        fields: dict[str, Any] = {'audio_path': blob_path, 'metadata': encoded_metadata}
         if codec == 'ogg_opus':
             fields.update(
                 audio_codec=codec,
@@ -123,6 +154,10 @@ def upload_held_audio(uid: str, path: str, identity: str, metadata: dict, *, imm
                 source_frames=metadata['source_frames'],
                 audio_generation=blob.generation,
             )
+        if live_size_limit is not None:
+            if not blob.generation:
+                raise ValueError('immutable live source generation unavailable')
+            fields['audio_size'] = encrypted_size
         if len(encoded_metadata.encode()) > 512 * 1024:
             metadata_digest = hashlib.sha256(encoded_metadata.encode()).hexdigest()
             metadata_path = f'chunks/{uid}/cap-held/{identity}.{metadata_digest}.metadata.enc'
@@ -159,11 +194,9 @@ def hold_manifest(fields: dict, seconds: float, now: float, started_at: int | No
 
 def summary_after(current: dict | None, delta_seconds: float, delta_count: int) -> dict:
     data = current or {}
-    return {
-        'version': 2,
-        'seconds': max(0, float(data.get('seconds') or 0) + delta_seconds),
-        'count': max(0, int(data.get('count') or 0) + int(delta_count)),
-    }
+    count = max(0, int(data.get('count') or 0) + int(delta_count))
+    seconds = max(0, float(data.get('seconds') or 0) + delta_seconds) if count else 0.0
+    return {'version': 2, 'seconds': seconds, 'count': count}
 
 
 def remaining_seconds(row: dict) -> float:
@@ -351,7 +384,11 @@ def hold_segment(uid: str, path: str, metadata: dict[str, Any], *, receipt: dict
     if not _exists(uid, identity):
         fields = upload_held_audio(uid, path, identity, metadata)
         created = _publish(uid, identity, seconds, fields, hold_started_at(metadata))
-    return _finish(identity, seconds, funded_allowance(uid).reason, receipt, created)
+        if not created and not _exists(uid, identity):
+            record_capture('ack_without_authority')
+    return _finish(
+        identity, seconds, funded_allowance(uid, lane=metadata.get('origin', 'sync')).reason, receipt, created
+    )
 
 
 async def _hold_capture(uid: str, path: str, metadata: dict, reason: str, receipt: dict) -> None:
@@ -361,6 +398,8 @@ async def _hold_capture(uid: str, path: str, metadata: dict, reason: str, receip
     if not await run_blocking(db_executor, _exists, uid, identity):
         fields = await run_blocking(storage_executor, upload_held_audio, uid, path, identity, metadata)
         created = await run_blocking(db_executor, _publish, uid, identity, seconds, fields, hold_started_at(metadata))
+        if not created and not await run_blocking(db_executor, _exists, uid, identity):
+            record_capture('ack_without_authority')
     _finish(identity, seconds, reason, receipt, created)
 
 
@@ -373,8 +412,9 @@ def claim(uid: str, ref: Any, now: float) -> dict[str, Any] | None:
         row = snapshot.to_dict() if snapshot.exists else None
         if (
             not row
-            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing'}
+            or row.get('state') in {'completed', 'retained', 'purged', 'staging', 'sealing', 'superseded'}
             or row.get('lease_until', 0) > now
+            or row.get('next_attempt_at', 0) > now
         ):
             return None
         token = uuid4().hex
@@ -455,6 +495,7 @@ def read_audio(uid: str, row: dict[str, Any], path: str) -> None:
                         params = current
                         output.setparams((*current, 0, 'NONE', 'not compressed'))
                     elif current != params:
+                        record_capture('frame_mismatch')
                         raise ValueError('live hold part codec mismatch')
                     while pcm := audio.readframes(AUDIO_CHUNK_BYTES // 2):
                         output.writeframesraw(pcm)
@@ -475,11 +516,13 @@ def _read_source_slice(uid: str, row: dict[str, Any], path: str) -> None:
     with wave.open(source, 'rb') as audio, wave.open(path, 'wb') as output:
         first, frames = selection['start'], selection['frames']
         if first < 0 or frames <= 0 or first + frames > audio.getnframes():
+            record_capture('frame_mismatch')
             raise ValueError('held source slice exceeds source')
         output.setparams(audio.getparams())
         audio.setpos(first)
         output.writeframes(audio.readframes(frames))
     if pcm_description(path)[2] != selection['sha256']:
+        record_capture('byte_mismatch')
         Path(path).unlink(missing_ok=True)
         raise ValueError('held source decode changed since frozen plan')
 
@@ -507,7 +550,11 @@ def release(uid: str, ref: Any, token: str) -> None:
                 {
                     'lease_until': 0,
                     'lease_token': '',
-                    'next_attempt_at': RETAINED_NEXT_ATTEMPT_AT if row.get('state') == 'retained' else time.time(),
+                    'next_attempt_at': (
+                        RETAINED_NEXT_ATTEMPT_AT
+                        if row.get('state') == 'retained'
+                        else max(row.get('next_attempt_at', 0), time.time())
+                    ),
                 },
             )
 
@@ -522,13 +569,14 @@ async def hold_capture_if_exhausted(
     receipts: dict | None = None,
     source_frame_maps: dict | None = None,
     admission: dict | None = None,
+    dispatch_path: DispatchPath = DispatchPath.SYNC_V1,
     **context: Any,
 ) -> bool:
     # Shared by v1 intake and v2 execution, before VAD can discard silence.
     if not paths or not enabled(uid, 'sync'):
         return False
-    allowance = await run_blocking(db_executor, funded_allowance, uid)
-    if allowance.managed:
+    allowance = await run_blocking(db_executor, funded_allowance, uid, lane='sync')
+    if record_allowance_decision(dispatch_path, allowance):
         return False
     if admission is not None:
         admission['reason'] = allowance.reason

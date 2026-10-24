@@ -54,7 +54,15 @@ extension APIClient {
     let body = UpdateRequest(singleLanguageMode: singleLanguageMode, vocabulary: vocabulary)
     struct StatusResponse: Decodable { let status: String }
     let _: StatusResponse = try await patch("v1/users/transcription-preferences", body: body)
-    return try await getTranscriptionPreferences()
+    // The PATCH above already succeeded, so the account has stored this change. A failed
+    // follow-up read (offline, a transient server error) must not make the caller treat the
+    // save itself as failed and roll it back — fall back to what was just confirmed saved.
+    do {
+      return try await getTranscriptionPreferences()
+    } catch {
+      return TranscriptionPreferences(
+        singleLanguageMode: singleLanguageMode ?? false, vocabulary: vocabulary ?? [])
+    }
   }
 
   /// Fetches user language preference
@@ -335,6 +343,11 @@ struct TranscriptionPreferences: Codable {
   enum CodingKeys: String, CodingKey {
     case singleLanguageMode = "single_language_mode"
     case vocabulary
+  }
+
+  init(singleLanguageMode: Bool, vocabulary: [String]) {
+    self.singleLanguageMode = singleLanguageMode
+    self.vocabulary = vocabulary
   }
 
   init(from decoder: Decoder) throws {

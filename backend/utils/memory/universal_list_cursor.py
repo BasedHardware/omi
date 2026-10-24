@@ -46,6 +46,7 @@ class StreamKeyset:
 
     updated_at_us: int
     memory_id: str
+    index_window_cursor: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -115,7 +116,10 @@ def _signature(payload_segment: str, secret: bytes) -> str:
 def _keyset_payload(keyset: Optional[StreamKeyset]) -> Optional[dict[str, Any]]:
     if keyset is None:
         return None
-    return {'updated_at_us': keyset.updated_at_us, 'memory_id': keyset.memory_id}
+    payload = {'updated_at_us': keyset.updated_at_us, 'memory_id': keyset.memory_id}
+    if keyset.index_window_cursor is not None:
+        payload['index_window_cursor'] = keyset.index_window_cursor
+    return payload
 
 
 def _parse_keyset(payload: Any) -> Optional[StreamKeyset]:
@@ -130,7 +134,10 @@ def _parse_keyset(payload: Any) -> Optional[StreamKeyset]:
         raise UniversalListCursorError('malformed_cursor')
     if not isinstance(memory_id, str) or not memory_id.strip():
         raise UniversalListCursorError('malformed_cursor')
-    return StreamKeyset(updated_at_us=updated_at_us, memory_id=memory_id)
+    window_cursor = data.get('index_window_cursor')
+    if window_cursor is not None and (not isinstance(window_cursor, str) or len(window_cursor) > 4096):
+        raise UniversalListCursorError('malformed_cursor')
+    return StreamKeyset(updated_at_us=updated_at_us, memory_id=memory_id, index_window_cursor=window_cursor)
 
 
 def encode_universal_list_cursor(

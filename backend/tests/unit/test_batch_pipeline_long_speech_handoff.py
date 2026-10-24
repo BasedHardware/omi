@@ -14,6 +14,7 @@ import pytest
 
 from diarizer.batch_pipeline import PipelineWorker
 from diarizer.batch_pipeline_models import ParakeetWords, StagedAudio, stt_language
+from utils.batch_pipeline import intake  # module level: its import cost stays outside the fast-unit call budget
 from utils.batch_pipeline.audio import audio_unit, with_context
 from utils.batch_pipeline.contracts import Priority, RecoveryWork, ValidationFailureWork, WorkItem
 from utils.batch_pipeline.pump import Pump
@@ -24,6 +25,8 @@ from tests.unit.test_batch_pipeline_scheduler import MemoryStore
 
 @pytest.fixture(autouse=True)
 def _recovery_route(monkeypatch):
+    # Rollback must still retain unsafe admitted audio before a model call.
+    monkeypatch.setenv('STT_PRERECORDED_LANGUAGE_GUARD_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true')
     monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
@@ -60,24 +63,22 @@ def worker(language, *, speech_seconds=None, recover=None):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('language', ['vi', 'ja', 'multi', ''])
-async def test_unsupported_or_unknown_language_skips_the_padded_retry(language, caplog):
+async def test_unsupported_or_unknown_language_is_held_before_either_attempt_even_on_rollback(language, caplog):
     built, model, failures, saved = worker(language)
     store = MemoryStore()
     queue = Scheduler(store)
     queue.enqueue(item('a'), time.time())
     with caplog.at_level(logging.INFO):
         await Pump(queue, built).run_once()
-    assert model.transcribe.call_count == 1  # first pass only, no padded retry
+    assert model.transcribe.call_count == 0
     assert not saved and failures == [('a', 'BatchValidationError')]
-    assert 'event=batch_asr_recovery segment_id=a reason=empty_asr' in caplog.text
-    assert 'outcome=skipped_long_speech' in caplog.text
+    assert 'language_class=' in caplog.text and 'route=blocked' in caplog.text
     job = store.rows['jobs', 'a']
     assert job['state'] == 'quarantined' and job['recovery_state'] == 'held'
-    assert job['worker_empty_evidence'] == {'padded_retry': 'skipped_long_speech', 'version': 1}
-    # Skipped, never attested empty: terminal-empty disposition still requires a real retry.
-    assert padded_skipped(job) and not padded_empty(job)
+    assert 'worker_empty_evidence' not in job
+    assert not padded_skipped(job) and not padded_empty(job)
     direct = worker(language)[0].process_batch([item('b')])
-    assert direct == [RecoveryWork('b', padded_retry='skipped_long_speech')]
+    assert direct == [ValidationFailureWork('b', 'vad_windows', 'unsupported_language')]
 
 
 @pytest.mark.parametrize(
@@ -85,9 +86,6 @@ async def test_unsupported_or_unknown_language_skips_the_padded_retry(language, 
     [
         ('en', None, {}),  # Parakeet language: the retry may recover it
         ('de', None, {}),
-        (None, None, {}),  # intake recorded no language (older staged audio, record lane)
-        ('vi', 4.9, {}),  # too little speech to be confident it is speech
-        ('vi', None, {'BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED': 'false'}),  # kill switch
     ],
 )
 def test_retry_still_runs_otherwise(monkeypatch, language, speech_seconds, env):
@@ -103,7 +101,7 @@ def test_no_recovery_route_keeps_the_retry(monkeypatch):
     # Without the RecoveryWork handoff the retry is the only remaining attempt.
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'false')
-    built, model, _, _ = worker('vi')
+    built, model, _, _ = worker('en')
     results = built.process_batch([item('a')])
     assert model.transcribe.call_count == 2
     assert results == [ValidationFailureWork('a', 'assemble_words', 'empty_asr')]
@@ -143,7 +141,6 @@ def test_staged_audio_reads_the_intake_language():
 @pytest.mark.asyncio
 @pytest.mark.parametrize('user_language,expected', [('vi', 'vi'), ('pt-BR', 'pt'), (None, '')])
 async def test_intake_freezes_the_resolved_stt_language(monkeypatch, user_language, expected):
-    from utils.batch_pipeline import intake
     from utils.batch_pipeline.artifacts import ProtectionContext
     from utils.batch_pipeline.audio import read_context
 
@@ -155,6 +152,7 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, user_langua
 
     def authorize(store_, seed, snapshots):
         snapshots['user'] = {'language': user_language} if user_language else {}
+        snapshots['user']['transcription_preferences'] = {'single_language_mode': True}
         return ProtectionContext('standard', 0)
 
     def stage_audio(work, body):
@@ -173,7 +171,10 @@ async def test_intake_freezes_the_resolved_stt_language(monkeypatch, user_langua
 
     monkeypatch.setattr(intake, 'decode_units', decode_units)
     monkeypatch.setattr(intake, 'artifacts_for', lambda store_: SimpleNamespace(stage_audio=stage_audio))
-    policy = SimpleNamespace(live_record_enabled=False)
+    from config.policy import BatchUnitPolicy
+
+    # Integration: intake records the route with dataclasses.replace (contract (c)), so a real policy.
+    policy = BatchUnitPolicy(batch_enabled=True, live_record_enabled=False)
     try:
         await intake.accept_upload(
             uid='synthetic-owner',

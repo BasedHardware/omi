@@ -155,7 +155,7 @@ async def test_repeated_rejections_open_the_deepgram_circuit():
 
     assert socket is fallback_socket
     assert service == STTService.modulate
-    circuit.record_failure.assert_called_once_with()
+    circuit.record_failure.assert_called_once_with(error_class='config_incomplete')
     record.assert_called_once_with(
         component='stt_selection',
         from_mode='deepgram',

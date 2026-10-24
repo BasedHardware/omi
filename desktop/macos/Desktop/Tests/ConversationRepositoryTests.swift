@@ -695,6 +695,50 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(repository.count, 0)
   }
 
+  func testDeletingALoadedRowKeepsLoadMoreAlignedWithTheServerPage() async throws {
+    // Regression: the server pages conversations by offset, so deleting a
+    // loaded row shifts every older row up one slot. Without lowering
+    // nextPageOffset alongside count, loadMore() re-requests one row too
+    // late and skips the row that moved into the loaded window.
+    let firstPage = (0..<50).map { index in
+      makeConversation(id: "conversation-\(index)", title: "Conversation \(index)", revision: 100 - Double(index))
+    }
+    let skippedIfBuggy = makeConversation(id: "fifty-first", title: "Should not be skipped", revision: 1)
+    let remote = FakeConversationRemote(
+      listResult: .success(firstPage), countResult: .success(51), deleteResult: .success(()))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: .all, includeCache: false)
+    XCTAssertTrue(repository.hasMore)
+
+    try await repository.delete(id: firstPage[0].id)
+
+    remote.listResult = .success([skippedIfBuggy])
+    await repository.loadMore()
+
+    XCTAssertEqual(remote.listRequests.last?.offset, 49, "a loaded-row delete must shift the next offset back by one")
+    XCTAssertTrue(repository.conversations.contains { $0.id == skippedIfBuggy.id })
+  }
+
+  func testUnstarringUnderTheStarredFilterKeepsLoadMoreAlignedWithTheServerPage() async throws {
+    let starred = makeConversation(starred: true, revision: 1)
+    let canonical = makeConversation(starred: false, revision: 2)
+    let skippedIfBuggy = makeConversation(id: "skipped", title: "Should not be skipped", starred: true, revision: 3)
+    let remote = FakeConversationRemote(
+      listResult: .success([starred]), countResult: .success(2), starResult: .success(canonical))
+    let repository = ConversationRepository(remote: remote, local: FakeConversationLocal())
+    await repository.load(query: ConversationListQuery(starredOnly: true, date: nil, folderId: nil))
+    XCTAssertTrue(repository.hasMore)
+
+    try await repository.setStarred(id: starred.id, starred: false)
+    XCTAssertTrue(repository.conversations.isEmpty, "precondition: the unstarred row left the Starred filter")
+
+    remote.listResult = .success([skippedIfBuggy])
+    await repository.loadMore()
+
+    XCTAssertEqual(remote.listRequests.last?.offset, 0, "unstarring the only loaded row must not skip ahead")
+    XCTAssertTrue(repository.conversations.contains { $0.id == skippedIfBuggy.id })
+  }
+
   func testDeleteFailureKeepsVisibleAndCachedStateIntact() async {
     let conversation = makeConversation(revision: 1)
     let remote = FakeConversationRemote(

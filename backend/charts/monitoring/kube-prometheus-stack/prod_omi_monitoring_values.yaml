@@ -289,7 +289,9 @@ prometheus:
     resources:
       requests:
         cpu: "1"
-        memory: 2G
+        # 2026-10-21: request matches steady-state use (5.4-7.8Gi) so the
+        # scheduler accounts for it; both e2-highmem-4 monitoring nodes fit it.
+        memory: 8Gi
       limits:
         # 2026-10-14 review: keep "2". Prometheus load is sustained, not
         # bursty - 1.5-2.2 cores across 14h with the node pinned near its
@@ -302,11 +304,18 @@ prometheus:
         # starvation is fixed with requests (Grafana/operator below, adapter
         # and Loki read path in their values files) plus the 4-vCPU pool
         # resize runbook in the monitoring README - not by shrinking this.
-        cpu: "2"
+        # 2026-10-21: raised to "3". At 2.25M head series replica 0 ran at
+        # 1.73 cores and rules with 6h-7d ranges hit Grafana's 30s evaluation
+        # limit (omi-stt-fallback-leg-dead, omi-slo-chat-warning,
+        # omi-slo-live-warning). The pool is now e2-highmem-4 (3920m allocatable).
+        cpu: "3"
         # 2026-09-28: Prometheus restored 2.56M head series from 24 WAL segments,
         # then OOM-killed shortly after replay completed at the 4Gi limit. The
         # request stays 2G because the monitoring node's requests are ~94% committed.
-        memory: 8Gi
+        # 2026-10-21: head series reached 2.25M (Cloud Run bridge 835k,
+        # backend-sync 456k) with RSS at 7.8Gi of 8Gi, the same edge as 09-28.
+        # 14Gi leaves WAL-replay headroom on the 28.9Gi e2-highmem-4 nodes.
+        memory: 14Gi
     storageSpec:
     # Using PersistentVolumeClaim
       volumeClaimTemplate:

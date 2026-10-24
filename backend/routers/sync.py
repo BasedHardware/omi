@@ -1,5 +1,6 @@
 from database import sync_redrive
-from utils.sync import minimal_redrive, redrive_policy
+from utils.sync import minimal_redrive, redrive_policy, playback_build
+from utils.capture.coverage_endpoint import router as coverage_router
 from utils.observability.sync_phases import sync_attempt, set_sync_metrics_lane
 import asyncio
 import json
@@ -20,6 +21,8 @@ from pydantic import BaseModel
 from config.summary_guarantee import repair_enabled as summary_repair_enabled
 from services import summary_debt_repair
 from config.policy import resolve_batch_policy
+from config.policy.ramp import audio_span
+from database.batch_ramp import ramp_admission_policy
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from utils.batch_pipeline.intake import (
     accept_upload as accept_batch_upload,
@@ -73,7 +76,7 @@ from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
-from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.sync.cap_hold import hold_capture_if_exhausted
 from utils.sync.admission_responses import sync_content_in_progress_response, sync_finalization_retrying
 from utils.analytics import record_sync_v1_usage as record_usage
@@ -87,7 +90,6 @@ from utils.other.storage import (
     mark_playback_unavailable,
     compute_audio_files_fingerprint,
     get_conversation_playback_signed_url,
-    upload_conversation_playback_artifact,
     mark_conversation_playback_unavailable,
 )
 from utils.byok import has_byok_keys
@@ -138,7 +140,12 @@ from utils.sync.poll_limit import SYNC_POLL_WINDOW_SECONDS, admit_sync_job_poll,
 from utils.sync.retired_handle_ack import acknowledge_retired_handle
 from config.repeat_work import playback_on_demand
 from contextlib import nullcontext
-from utils.sync.repeat_work_metrics import PLAYBACK_BUILD_SECONDS, PLAYBACK_BUILDS, record_playback_ready
+from utils.sync.repeat_work_metrics import (
+    PLAYBACK_WRITES,
+    PLAYBACK_BUILD_SECONDS,
+    PLAYBACK_BUILDS,
+    record_playback_ready,
+)
 from utils.product_metrics import record_product_event, sanitize_app_build
 from utils.journey_metrics_contract import resolve_client_kind
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
@@ -149,9 +156,8 @@ from utils.subscription import (
 )
 from utils.sync import playback as sync_playback
 from utils.sync.input_limits import BackfillInputLimitExceeded, BackfillStoragePressure, validate_backfill_uploads
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from config.rollout_cohorts import warm_rollout_cohorts
-from utils.capture_evidence import parse_sync_file_claims
+from utils.sync.recording_lineage import parse_s1_upload_claims
 from utils.sync.files import (
     decode_files_to_wav,
     detect_source_from_filenames,
@@ -199,6 +205,7 @@ from utils.sync.backfill import (
 )
 from utils.batch_pipeline.live_upload import RecordUploadRoute, registered_record_response
 from utils.sync.content_id import compute_sync_content_id
+from utils.sync.failure_reason import stamped_failure_kwargs
 from utils.sync.capture_manifest import (
     claim_conversation_manifest,
     issue_capture_manifest,
@@ -206,7 +213,7 @@ from utils.sync.capture_manifest import (
     verify_capture_manifest,
 )
 from utils.sync.lanes import CaptureTimeTrust, SyncLane, classify_sync_lane
-from utils.sync import backfill_cutover, legacy_fresh, stage as sync_stage, uid_sequencer
+from utils.sync import backfill_cutover, legacy_dark, legacy_fresh, stage as sync_stage, uid_sequencer
 from config.sync_owner_concurrency import preparation_width
 from utils.sync.owner_prefetch import warm_owner
 from utils.sync.provenance import capture_matches_server_conversation as _capture_matches_server_conversation
@@ -220,7 +227,19 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
+
+async def _offer_shadow_upload(**kwargs) -> None:
+    # The shadow is best effort: its import or handoff must never fail a legacy upload.
+    try:
+        from utils.batch_pipeline.shadow_intake import offer_upload
+
+        await offer_upload(**kwargs)
+    except Exception as error:
+        logger.info('event=batch_shadow_intake outcome=error exception_type=%s', type(error).__name__)
+
+
 router = APIRouter(route_class=MultipartMaxPartSizeRoute, dependencies=[Depends(sync_stage.require_http_stage)])
+router.include_router(coverage_router)
 
 
 @router.post('/v2/sync-capture-manifest', response_model=SyncCaptureManifestResponse)
@@ -670,6 +689,19 @@ async def sync_local_files(
                     'device_model': request.headers.get('x-omi-device-model'),
                 },
             )
+            await _offer_shadow_upload(
+                uid=uid,
+                content_id=None,
+                paths=paths,
+                lane=lane_decision.lane.value,
+                age=lane_decision.maximum_age_seconds,
+                conversation_id=conversation_id,
+                source=source.value,
+                device_id=client_device_context.client_device_id,
+                byok=has_byok_keys(),
+                policy=resolve_batch_policy(uid),
+                should_lock=should_lock,
+            )
             wav_paths = await run_blocking(sync_executor, decode_files_to_wav, paths)
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
@@ -1020,9 +1052,7 @@ async def sync_local_files_v2(
     geolocation = geolocation_from_private_header(x_omi_conversation_geolocation)
 
     filenames = [f.filename or '' for f in files]
-    capture_claims = (
-        parse_sync_file_claims(x_omi_capture_evidence, filenames) if capture_evidence_dark_write_enabled() else {}
-    )
+    capture_claims = parse_s1_upload_claims(x_omi_capture_evidence, filenames)
     manifest_claims = verify_capture_manifest(
         x_omi_sync_capture_manifest,
         uid,
@@ -1040,12 +1070,19 @@ async def sync_local_files_v2(
         client_device_context.client_device_id,
         snapshot_out=record_snapshot,
     )
+    # Off the event loop, a cold process gives its first ramp read a bounded wait, so a
+    # fresh instance cannot admit legacy work on the 'on' default after the ramp went
+    # draining/dark (M3 review; batch intake reads the mode the same way).
+    legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
+    legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
+    legacy_mode_read_at = time.monotonic()
     lane_decision = classify_sync_lane(
         filenames,
         client_device_id=client_device_context.client_device_id if has_server_capture_proof else None,
-        allow_legacy_fresh=legacy_fresh.enabled_for(uid),
+        # Legacy-dark: the legacy fresh budget is never consulted outside ``on``.
+        allow_legacy_fresh=legacy_allowed and legacy_fresh.enabled_for(uid),
     )
-    if lane_decision.reason == 'recent_legacy_capture':
+    if legacy_allowed and lane_decision.reason == 'recent_legacy_capture':
         lane_decision = await run_blocking(db_executor, legacy_fresh.admit, uid, lane_decision, [f.size for f in files])
     # Fresh is optional for LEGACY uploads: a live-only refusal must preserve
     # their existing backfill acceptance. Resolve before recording the final lane.
@@ -1189,7 +1226,18 @@ async def sync_local_files_v2(
 
         content_id = await run_blocking(sync_executor, compute_sync_content_id, uid, paths)
 
-        batch_policy = resolve_batch_policy(uid)
+        candidate_policy = resolve_batch_policy(uid)
+        batch_policy = await run_blocking(
+            db_executor,
+            ramp_admission_policy,
+            uid,
+            candidate_policy,
+            content_id=content_id,
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            incoming_audio_seconds=audio_span(
+                {'audio_start_seconds': audio_start_seconds, 'audio_end_seconds': audio_end_seconds}
+            ),
+        )
         record_response = await registered_record_response(
             uid=uid,
             conversation_id=conversation_id if isinstance(conversation_id, str) else None,
@@ -1201,16 +1249,26 @@ async def sync_local_files_v2(
             recording_session_id=recording_session_id,
             policy=batch_policy,
             loaded_conversation=record_snapshot if record_snapshot.get('record_lane_owner') else None,
+            # A legacy_final_pass_v1 owner is re-homed to batch once legacy is
+            # draining/dark (final_pass_rehome); the route answers BATCH then.
+            legacy_mode=legacy_mode,
         )
         if isinstance(record_response, JSONResponse):
             return record_response
 
+        batch_attempted = False
+        if record_response is RecordUploadRoute.BATCH:
+            # This conversation already has a durable batch-sync owner. New
+            # owner-load narrowing cannot transfer its later WAL to legacy.
+            batch_policy = replace(candidate_policy, batch_enabled=True)
+
         if record_response is RecordUploadRoute.BATCH or (
-            record_response is not RecordUploadRoute.LEGACY and batch_policy.batch_enabled
+            record_response is not RecordUploadRoute.LEGACY and candidate_policy.batch_enabled
         ):
             # Route ownership is durable before any acceptance; neither errors
             # nor rollback may start a legacy twin or release this batch claim.
             sequencer_registration_started = True
+            batch_attempted = True
             batch_response = await accept_batch_upload(
                 uid=uid,
                 job_id=job_id,
@@ -1241,6 +1299,42 @@ async def sync_local_files_v2(
             if batch_response is not None:
                 return batch_response
             sequencer_registration_started = False
+
+        if legacy_allowed and time.monotonic() - legacy_mode_read_at > legacy_dark.ADMISSION_REVALIDATE_SECONDS:
+            # A legacy job is created only on a young mode read: a request that read 'on'
+            # and then stalled (a long batch decode, a slow fallback) must not carry it past
+            # a draining re-home of the same conversation (final_pass_rehome's flip grace).
+            legacy_mode = await run_blocking(db_executor, legacy_dark.current_mode)
+            legacy_allowed = legacy_dark.legacy_admission_allowed(legacy_mode)
+
+        if not legacy_allowed:
+            # Legacy-dark (contract (h)): never create a legacy job. Content legacy
+            # already owns is answered by the fence; anything else keeps its audio.
+            ledger_row = await run_blocking(db_executor, legacy_dark.read_ledger_row, uid, content_id)
+            owner_job_present = await run_blocking(db_executor, legacy_dark.legacy_owner_job_present, ledger_row)
+            decision = legacy_dark.fence_decision(ledger_row, legacy_mode, owner_job_present=owner_job_present)
+            if record_response is RecordUploadRoute.LEGACY and decision.action is not legacy_dark.FenceAction.ACK:
+                # The conversation's durable legacy_final_pass_v1 owner holds this recording
+                # (h, invariant 4), even with no content-ledger row: acknowledge it as batch
+                # intake does, never a 409 retry loop and never a new legacy job (M3 review).
+                decision = legacy_dark.FenceDecision(
+                    legacy_dark.FenceAction.ACK,
+                    legacy_dark.LegacyDarkReason.LEGACY_ACTIVE,
+                    legacy_dark.LegacyOwnership.ACTIVE,
+                )
+            await run_blocking(sync_executor, _cleanup_files, paths)
+            await run_blocking(sync_executor, shutil.rmtree, job_dir, True)
+            return (
+                legacy_dark.fence_response(decision, total_files=len(files), lane=lane_decision.lane.value)
+                or legacy_dark.admission_refused_response()
+            )
+        if record_response is RecordUploadRoute.LEGACY:
+            admission_reason = legacy_dark.LegacyAdmissionReason.LEGACY_RECORD_OWNER
+        elif batch_attempted:
+            admission_reason = legacy_dark.LegacyAdmissionReason.INTAKE_FALLBACK
+        else:
+            admission_reason = legacy_dark.LegacyAdmissionReason.BATCH_NOT_ENABLED
+        legacy_dark.record_legacy_admission(admission_reason, legacy_mode)
 
         # Create Redis job — total_segments=0 until VAD completes in background
         await run_blocking(
@@ -1340,6 +1434,19 @@ async def sync_local_files_v2(
             pass
 
         # Transfer ownership of raw paths to the background task
+        await _offer_shadow_upload(
+            uid=uid,
+            content_id=content_id,
+            paths=paths,
+            lane=lane_decision.lane.value,
+            age=lane_decision.maximum_age_seconds,
+            conversation_id=conversation_id if isinstance(conversation_id, str) else None,
+            source=source.value,
+            device_id=client_device_context.client_device_id,
+            byok=byok_enabled,
+            policy=batch_policy,
+            should_lock=should_lock,
+        )
         owned_paths = list(paths)
         paths = []  # Prevent finally cleanup of files now owned by bg task
 
@@ -1437,7 +1544,11 @@ async def sync_local_files_v2(
                     SyncLedgerFenceMode.ACTIVE.value if ledger_fence_active else SyncLedgerFenceMode.LEGACY.value
                 ),
             }
-            if lane_decision.lane == SyncLane.BACKFILL and uid_sequencer.enabled():
+            if (
+                lane_decision.lane == SyncLane.BACKFILL
+                and uid_sequencer.enabled()
+                and legacy_dark.sequencer_registration_allowed(legacy_mode)
+            ):
                 # The Firestore record, not a Cloud Task acknowledgement, is
                 # the durable 202 boundary. Waiting jobs hold no HTTP worker.
                 # An ambiguous Firestore acknowledgement may already have
@@ -1756,7 +1867,6 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
     if job and job['uid'] != uid:
         raise HTTPException(status_code=403, detail="Not authorized to view this sync job")
     # A read can reconcile a proven content completion without rewriting Redis,
-    # binding a run lease or competing with the worker's terminal authority.
     from utils.sync.completed_status import get_completed_legacy_status
 
     try:
@@ -1953,7 +2063,13 @@ async def _maintain_uid_sequencer_lease(
 @router.post('/v2/sync-backfill-sequencer/sweep', include_in_schema=False)
 @read_origin('job:sync_backfill_sequencer')
 async def sweep_sync_backfill_sequencer(_retry_count: int = Depends(verify_cloud_tasks_oidc)):
-    outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    # Legacy-dark: ``dark`` stops claiming/dispatching only. Enrichment repair and
+    # summary-debt repair below keep running until C4 moves them (lead ruling 10-19).
+    if legacy_dark.sequencer_dispatch_allowed():
+        outcomes = await run_blocking(db_executor, uid_sequencer.sweep)
+    else:
+        legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_DARK)
+        outcomes = {'legacy_dark': 1}
     from utils.sync import reprocess
 
     if reprocess.owns_runtime():
@@ -1984,6 +2100,8 @@ async def wake_sync_backfill_uid(request: Request, _retry_count: int = Depends(v
     uid = payload.get('uid') if isinstance(payload, dict) else None
     if not isinstance(uid, str) or not uid:
         return JSONResponse(status_code=400, content={'status': 'invalid_uid'})
+    if not legacy_dark.sequencer_dispatch_allowed():
+        return legacy_dark.sequencer_dark_response()
     try:
         dispatched = await run_blocking(db_executor, uid_sequencer.kick, uid)
     except Exception as error:
@@ -2057,6 +2175,42 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             and payload.get('lane') == SyncLane.BACKFILL.value
             and uid_sequencer.production_stage()
             and uid_sequencer.enabled()
+            and not legacy_dark.sequencer_registration_allowed()
+            and isinstance(payload.get('uid'), str)
+            and isinstance(payload.get('job_id'), str)
+        ):
+            # Legacy-dark (draining/dark): an epoch-less backfill delivery can no
+            # longer migrate into the sequencer, so it must not start a second
+            # transcriber for a uid whose sequencer owner is live (M1 review L10-1).
+            try:
+                async with asyncio.timeout_at(route_deadline):
+                    registered = await run_blocking(
+                        db_executor, sync_backfill_sequencer.is_registered, payload['uid'], payload['job_id']
+                    )
+                    owner = (
+                        {}
+                        if registered
+                        else await run_blocking(db_executor, sync_backfill_sequencer.get_owner, payload['uid'])
+                    )
+            except TimeoutError:
+                logger.warning('event=sync_transcription_job outcome=handler_preamble_expired phase=dark_owner_probe')
+                return _budget_deferral_fallback('preamble_timeout', 'degraded')
+            if registered and legacy_dark.sequencer_dispatch_allowed():
+                # The draining sweep dispatches this job; acking keeps it the only dispatcher.
+                legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_OWNS_JOB)
+                return JSONResponse(status_code=200, content={'status': 'sequenced_legacy_job'})
+            active_job_id = owner.get('active_job_id')
+            if isinstance(active_job_id, str) and active_job_id and active_job_id != payload['job_id']:
+                # Never 503/429 from a task target (contract d): the queue retries
+                # until the live owner finishes, the client keeps its audio.
+                legacy_dark.record_dark_ack(legacy_dark.LegacyDarkReason.SEQUENCER_OWNER_ACTIVE)
+                return JSONResponse(status_code=409, content={'status': 'locked', 'reason': 'sequencer_owner_active'})
+        if (
+            isinstance(payload, dict)
+            and payload.get('lane') == SyncLane.BACKFILL.value
+            and uid_sequencer.production_stage()
+            and uid_sequencer.enabled()
+            and legacy_dark.sequencer_registration_allowed()
             and isinstance(payload.get('uid'), str)
             and isinstance(payload.get('job_id'), str)
         ):
@@ -3144,7 +3298,6 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
         ):
             # Pure future downloads share this instance with a possible next
             # task. They hold no Cloud Tasks slot, job lock, ledger claim, or
-            # conversation authority. A cross-instance delivery simply misses.
             start_background_task(
                 run_blocking(storage_executor, warm_owner, uid, job_id, sequencer_epoch),
                 name='sync:owner-prefetch',
@@ -3304,6 +3457,7 @@ async def _run_sync_job_attempt(request: Request, task_retry_count: int, attempt
                     model=sync_model,
                     lane=sync_lane,
                     run_lock_token=lock_token if ledger_fence_active else None,
+                    **stamped_failure_kwargs(e),  # internal cause, not upstream_error
                 )
                 await _delete_staged_blobs_async(blob_paths)
                 if sync_lane == SyncLane.BACKFILL.value:
@@ -3514,12 +3668,17 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
         if not conversation or conversation.get('deleted', False):
             return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'deleted_conversation'})
 
+        if conversation.get('audio_files') and not any(
+            af.get('id') == audio_file_id for af in conversation['audio_files']
+        ):
+            PLAYBACK_WRITES.labels('skipped').inc()
+            return JSONResponse(status_code=200, content={'status': 'superseded'})
+
         existing = await run_blocking(
             storage_executor, get_playback_artifact_signed_url, uid, conversation_id, audio_file_id
         )
         if existing:
-            if playback_on_demand():
-                PLAYBACK_BUILDS.labels('file', 'reused').inc()
+            PLAYBACK_WRITES.labels('cache_hit').inc()
             return JSONResponse(status_code=200, content={'status': 'exists'})
 
         try:
@@ -3530,7 +3689,11 @@ async def run_audio_merge_job(request: Request, task_retry_count: int = Depends(
                     uid,
                     conversation_id,
                     timestamps,
-                    **({'source_fingerprint': payload.get('source_fingerprint')} if payload.get('on_demand') else {}),
+                    **(
+                        {'source_fingerprint': payload.get('source_fingerprint')}
+                        if payload.get('source_fingerprint')
+                        else {}
+                    ),
                 )
         except FileNotFoundError:
             logger.warning(f'audio_merge: chunks missing conv={conversation_id} file={audio_file_id}, dropping')
@@ -3671,20 +3834,30 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
         else:
             fingerprint = compute_audio_files_fingerprint(audio_files)
         if payload_fingerprint and payload_fingerprint != fingerprint:
+            PLAYBACK_WRITES.labels('skipped').inc()
             return JSONResponse(status_code=200, content={'status': 'superseded'})
 
+        artifact_fingerprint = compute_audio_files_fingerprint(
+            audio_files, origin=conversation.get('started_at') or conversation.get('created_at'), source_identity=True
+        )
         stamp = conversation.get('conversation_audio') or {}
-        if stamp.get('audio_files_fingerprint') == fingerprint:
+        if stamp.get('audio_files_fingerprint') in (fingerprint, artifact_fingerprint) and (
+            not conversation.get('conversation_audio_artifact_fingerprint')
+            or conversation['conversation_audio_artifact_fingerprint'] == artifact_fingerprint
+        ):
             existing = await run_blocking(
                 storage_executor,
                 get_conversation_playback_signed_url,
                 uid,
                 conversation_id,
-                **({'fingerprint': fingerprint} if demand else {}),
+                **(
+                    {'fingerprint': conversation.get('conversation_audio_artifact_fingerprint') or fingerprint}
+                    if demand or conversation.get('conversation_audio_artifact_fingerprint')
+                    else {}
+                ),
             )
             if existing:
-                if demand:
-                    PLAYBACK_BUILDS.labels('conversation', 'reused').inc()
+                PLAYBACK_WRITES.labels('cache_hit').inc()
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
         started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
@@ -3696,14 +3869,15 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
 
         try:
             with PLAYBACK_BUILD_SECONDS.labels('conversation').time() if demand else nullcontext():
-                mp3_data, spans = await run_blocking(
+                mp3_size, spans = await run_blocking(
                     sync_executor,
-                    sync_playback.build_conversation_playback_artifact,
+                    playback_build.ensure_conversation_artifact,
                     uid,
                     conversation_id,
                     audio_files,
                     started_at_ts,
-                    **({'strict_sources': True} if demand else {}),
+                    artifact_fingerprint,
+                    strict_sources=demand,
                 )
         except FileNotFoundError:
             logger.warning(f'audio_merge: conversation chunks missing conv={conversation_id}, dropping')
@@ -3748,51 +3922,6 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             )
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
-        try:
-            await run_blocking(
-                storage_executor,
-                upload_conversation_playback_artifact,
-                uid,
-                conversation_id,
-                mp3_data,
-                **({'fingerprint': fingerprint} if demand else {}),
-            )
-        except Exception as e:
-            if isinstance(e, DestructiveOperationInProgress):
-                deferred = await _defer_merge_for_destructive_operation(payload)
-                if deferred is not None:
-                    return deferred
-            # Same contract as the build: a destructive-operation fence on the
-            # upload must retry (or mark unavailable on the final attempt)
-            # instead of escaping as an unhandled legal_holds traceback. The
-            # marker write is fenced too, so a second fence is logged and the
-            # task still completes as failed_final.
-            max_attempts = get_sync_tasks_max_attempts()
-            if task_retry_count >= max_attempts - 1:
-                logger.error(f'audio_merge_failed_final conversation artifact conv={conversation_id}: {e}')
-                try:
-                    await run_blocking(
-                        storage_executor,
-                        mark_conversation_playback_unavailable,
-                        uid,
-                        conversation_id,
-                        fingerprint,
-                        'merge_failed',
-                    )
-                except DestructiveOperationInProgress:
-                    logger.info(
-                        f'audio_merge: unavailable marker deferred reason=destructive_operation conv={conversation_id}'
-                    )
-                return JSONResponse(status_code=200, content={'status': 'failed_final'})
-            logger.warning(
-                f'audio_merge: conversation attempt {task_retry_count + 1} failed conv={conversation_id}, will retry: {e}'
-            )
-            return JSONResponse(status_code=500, content={'status': 'retry'})
-        if demand:
-            PLAYBACK_BUILDS.labels('conversation', 'built').inc()
-        mp3_size = len(mp3_data)
-        del mp3_data
-
         captured_duration = round(sum(s['len'] for s in spans), 3)
         wall_duration = round(spans[-1]['wall_offset'] + spans[-1]['len'], 3)
         await run_blocking(
@@ -3801,14 +3930,15 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             uid,
             conversation_id,
             {
+                'conversation_audio_artifact_fingerprint': artifact_fingerprint,
                 'conversation_audio': {
-                    'audio_files_fingerprint': fingerprint,
+                    'audio_files_fingerprint': artifact_fingerprint,
                     'duration': wall_duration,
                     'captured_duration': captured_duration,
                     'spans': spans,
                     'content_type': 'audio/mpeg',
                     'built_at': datetime.now(timezone.utc),
-                }
+                },
             },
         )
         if demand:

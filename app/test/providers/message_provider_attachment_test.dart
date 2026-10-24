@@ -53,4 +53,49 @@ void main() {
     expect(provider.selectedFiles, isEmpty);
     expect(provider.uploadedFiles.length, 1);
   });
+
+  // Regression: a sent video showed a gray square because its clip path became the
+  // bubble's image thumbnail. It now shows the sampled poster frame, and pairs each
+  // upload with its own source even when uploads finish out of order.
+  test('a sent video previews its poster frame, never the clip', () async {
+    final clip = File('/tmp/run.mov');
+    final photo = File('/tmp/photo.jpg');
+    final video = MessageFile('', 'https://cdn/sheet.jpg', 'run.jpg', 'image/jpeg', 'vid-1', DateTime(2026), null,
+        videoDurationSeconds: 12.4, localPreviewPath: '/tmp/omi-chat-video-posters/vid-1.jpg');
+    final image = MessageFile('', null, 'photo.jpg', 'image/jpeg', 'img-1', DateTime(2026), null);
+    final provider = MessageProvider(
+      filesUploader: (files, {appId}) async => [for (final f in files) identical(f, clip) ? video : image],
+    );
+    provider.selectedFiles.addAll([clip, photo]);
+    provider.selectedFileTypes.addAll(['video', 'image']);
+    // The photo finishes uploading before the video.
+    await provider.uploadFiles([photo], null);
+    await provider.uploadFiles([clip], null);
+
+    expect(provider.videoPosterFor(clip)?.path, '/tmp/omi-chat-video-posters/vid-1.jpg');
+
+    provider.addMessageLocally('What do you see here?');
+
+    final files = provider.messages.last.files;
+    final sentVideo = files.firstWhere((f) => f.id == 'vid-1');
+    final sentPhoto = files.firstWhere((f) => f.id == 'img-1');
+    expect(sentVideo.mimeTypeToFileType(), 'video');
+    expect(sentVideo.thumbnail, '/tmp/omi-chat-video-posters/vid-1.jpg');
+    expect(sentPhoto.thumbnail, '/tmp/photo.jpg');
+  });
+
+  test('a video row from the server is typed as video and keeps its length', () {
+    final file = MessageFile.fromJson({
+      'id': 'vid-2',
+      'name': 'clip.jpg',
+      'mime_type': 'image/jpeg',
+      'openai_file_id': 'oai',
+      'created_at': '2026-10-22T00:00:00Z',
+      'video': {'duration_seconds': 7.5},
+    });
+
+    expect(file.isVideo, isTrue);
+    expect(file.mimeTypeToFileType(), 'video');
+    expect(MessageFile.fromJson(file.toJson()).videoDurationSeconds, 7.5);
+  });
 }

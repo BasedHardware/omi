@@ -14,6 +14,8 @@ import soundfile as sf
 from omegaconf import OmegaConf, open_dict
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
 
+import language_gate
+
 try:
     import nemo.collections.asr as _nemo_asr  # type: ignore[reportMissingImports]  # nemo_toolkit not installed in dev venv
 except ImportError:
@@ -80,6 +82,7 @@ class AudioDurationExceededError(Exception):
 class WorkType(Enum):
     BATCH_TRANSCRIBE = "batch_transcribe"
     EMBEDDING = "embedding"
+    LANGUAGE_ID = "language_id"
     SHUTDOWN = "shutdown"
 
 
@@ -99,9 +102,12 @@ class WorkItem:
 class GPUWorker:
     def __init__(self, on_fatal_cuda_error: Optional[Callable[[str], None]] = None) -> None:
         self._queue: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
+        # Language ID is milliseconds of GPU; it must not wait behind a queued transcription batch.
+        self._priority: queue.Queue[WorkItem] = queue.Queue(maxsize=_MAX_GPU_QUEUE)
         self._thread: Optional[threading.Thread] = None
         self._model: Any = None
         self._embedding_model: Any = None
+        self._language_id: Any = None
         self._poll_timeout: float = float(os.getenv("PARAKEET_GPU_POLL_TIMEOUT", "0.05"))
         self._gc_interval: int = int(os.getenv("PARAKEET_GC_INTERVAL", "50"))
         self._gc_counter: int = 0
@@ -129,6 +135,10 @@ class GPUWorker:
         with self._state_lock:
             fatal_cuda_reason = self._fatal_cuda_reason
         return self._ready.is_set() and self._load_error is None and fatal_cuda_reason is None
+
+    @property
+    def language_id_model(self) -> Optional[str]:
+        return None if self._language_id is None else cast(str, self._language_id.model_key)
 
     @property
     def fatal_cuda_reason(self) -> Optional[str]:
@@ -257,6 +267,24 @@ class GPUWorker:
             raise item.sync_error
         return item.sync_result
 
+    def submit_language_sync(self, samples: Any, timeout: float = 30.0) -> Dict[str, float]:
+        if not self.is_ready or self._language_id is None:
+            raise RuntimeError("Language gate not ready")
+        with self._submit_lock:
+            if not self._running:
+                raise RuntimeError("GPU worker shutting down")
+            evt = threading.Event()
+            item = WorkItem(WorkType.LANGUAGE_ID, samples, sync_event=evt)
+            try:
+                self._priority.put_nowait(item)
+            except queue.Full:
+                raise RuntimeError("GPU queue full")
+        if not evt.wait(timeout=timeout):
+            raise TimeoutError("GPU language ID timed out")
+        if item.sync_error is not None:
+            raise item.sync_error
+        return cast(Dict[str, float], item.sync_result)
+
     def _maybe_gc(self) -> None:
         gc.collect(0)
         self._gc_counter += 1
@@ -280,9 +308,12 @@ class GPUWorker:
 
         while self._running:
             try:
-                item = self._queue.get(timeout=self._poll_timeout)
+                item = self._priority.get_nowait()
             except queue.Empty:
-                continue
+                try:
+                    item = self._queue.get(timeout=self._poll_timeout)
+                except queue.Empty:
+                    continue
 
             if item.work_type == WorkType.SHUTDOWN:
                 break
@@ -292,6 +323,8 @@ class GPUWorker:
                 t_infer = time.monotonic()
                 if item.work_type == WorkType.EMBEDDING:
                     result: Any = self._compute_embedding(item.payload)
+                elif item.work_type == WorkType.LANGUAGE_ID:
+                    result = self._language_id.probabilities(item.payload)
                 else:
                     result = self._batch_transcribe(item.payload)
                 item.inference_seconds = time.monotonic() - t_infer
@@ -399,6 +432,8 @@ class GPUWorker:
         _torch.cuda.empty_cache()
 
         self._load_embedding_model()
+        # Before the VRAM baseline so batch budgeting accounts for the gate's weights.
+        self._load_language_id()
 
         if _torch.cuda.is_available():
             device = os.getenv("PARAKEET_DEVICE", "cuda:0")
@@ -411,6 +446,16 @@ class GPUWorker:
                 f"{self._vram_total_mb:.0f}MiB total ({free_bytes / (1024 * 1024):.0f}MiB free)"
             )
         logger.info("Batch model loaded and ready")
+
+    def _load_language_id(self) -> None:
+        """A gate that fails to load leaves transcription serving; callers fall back to their vendor path."""
+        try:
+            self._language_id = language_gate.load(os.getenv("PARAKEET_DEVICE", "cuda:0"))
+        except Exception as e:
+            if self.report_inference_error(e):
+                raise
+            self._language_id = None
+            logger.error("Language gate model failed to load (exception_type=%s)", type(e).__name__)
 
     def _load_embedding_model(self) -> None:
         if PyannoteModel is None:
@@ -556,14 +601,15 @@ class GPUWorker:
         return out
 
     def _drain_queue(self, error: Optional[Exception] = None) -> None:
-        while not self._queue.empty():
-            try:
-                item = self._queue.get_nowait()
-                if item.work_type != WorkType.SHUTDOWN:
-                    err = error or RuntimeError("GPU worker shutting down")
-                    self._deliver_error(item, err)
-            except queue.Empty:
-                break
+        for pending in (self._priority, self._queue):
+            while not pending.empty():
+                try:
+                    item = pending.get_nowait()
+                    if item.work_type != WorkType.SHUTDOWN:
+                        err = error or RuntimeError("GPU worker shutting down")
+                        self._deliver_error(item, err)
+                except queue.Empty:
+                    break
 
 
 def _safe_set_result(future: asyncio.Future[Any], result: Any) -> None:

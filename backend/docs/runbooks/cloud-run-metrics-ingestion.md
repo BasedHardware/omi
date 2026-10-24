@@ -61,7 +61,17 @@ configuration. Their collectors use **0.08 vCPU / 128Mi**,
 scrape every **60s**, and keep the existing sync exporter families plus direct
 sentinel consumers: `omi_batch_pipeline_*`, `omi_accept_to_summary_seconds*`,
 `omi_summary_terminal_total`, `omi_summary_debt_*`, and
-`omi_live_session_transcript_outcome_total`. Sync/summary/storage fallback series
+`omi_live_session_transcript_outcome_total`, plus the Firestore reads loop's
+`omi_firestore_billed_reads_by_{caller,origin}_total`,
+`omi_firestore_caller_label_overflow_total` and `omi_fsr_leader_lease_total`
+(about 270 series per instance on 2026-10-18). Since #23388 the fleet also keeps
+that fix's cap-enforcement watch counters
+`omi_stt_cap_dispatch_decisions_total{path,outcome,reason}` and
+`omi_stt_cap_provider_audio_seconds_total{path,outcome,provider,allowance}`
+(`backend/docs/stt-cap-dispatch.md`): every label is a closed enum, outcome is a
+function of reason, and only the `sync` lane meters audio seconds on this fleet,
+so they add at most ~70 series per instance (label-product bound 160 + 90),
+realistically 20–30. Sync/summary/storage fallback series
 remain; eagerly initialized live-STT fallback components are dropped. Backend,
 desktop, listen, and jobs retain their existing allocation/configuration.
 

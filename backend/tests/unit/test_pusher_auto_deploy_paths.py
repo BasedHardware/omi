@@ -24,7 +24,10 @@ def test_pusher_auto_deploy_tracks_its_shared_lifecycle_and_observability_import
         'backend/utils/**',
         'backend/testing/parity_pack_v0/**',
         'backend/pusher/**',
+        'backend/omi_logging.py',
         'backend/charts/pusher/**',
+        # Plan B B3: a qualification may deploy the backend-pusher role image.
+        'backend/Dockerfile.roles',
         '.dockerignore',
         'backend/scripts/verify_pusher_source_closure.py',
         'backend/scripts/verify_pusher_live_deployment_gate.py',

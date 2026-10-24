@@ -98,14 +98,30 @@ inputs:
     description: 'Telegram chat ID for production deployment notifications'
     required: false
     default: ''
+  service_images:
+    description: >-
+      Plan B B2 role-image opt-in (manual profile only). Empty ships every service
+      today's image. Otherwise space- or comma-separated service=gcr.io/<project>/<role
+      image>@sha256:<digest> pairs for backend, backend-sync, backend-sync-backfill,
+      backend-integration, backend-listen (deploy_targets=all) and llm-gateway
+      (deploy_gateway=true); each digest must carry the admitted SHA's revision label.
+      See backend/docs/runbooks/role-image-cutover.md.
+    required: false
+    default: ''
 
 runs:
   using: composite
   steps:
     - name: Validate deploy profile boundary
       shell: bash
+      env:
+        SERVICE_IMAGES: ${{ inputs.service_images }}
       run: |
         set -euo pipefail
+        if [[ -n "${SERVICE_IMAGES//[[:space:],]/}" && "${{ inputs.deploy_profile }}" != "manual" ]]; then
+          echo "service_images (role-image opt-in) is accepted only on the manual profile" >&2
+          exit 1
+        fi
         if [[ "${{ inputs.deploy_profile }}" == "manual" ]]; then
           bash "$GITHUB_WORKSPACE/.github/scripts/validate-backend-deploy-inputs.sh" \
             manual "${{ inputs.environment }}" "${{ inputs.deploy_targets }}" "${{ inputs.deploy_gateway }}"
@@ -242,6 +258,27 @@ runs:
         SHORT_SHA="$(git rev-parse --short=7 HEAD)"
         echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
         echo "revision_suffix=${SHORT_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+    # Plan B B2: each service ships today's image unless service_images moves it onto
+    # its role image by digest. Validated (registry, role, revision label) before any
+    # mutation; the outputs feed every deploy and release-vector step below.
+    - name: Resolve per-service images
+      id: service-images
+      shell: bash
+      env:
+        SERVICE_IMAGES: ${{ inputs.service_images }}
+        SHORT_SHA: ${{ steps.image-tag.outputs.short_sha }}
+      run: |
+        set -euo pipefail
+        python3 "$DEPLOY_CONTROL_SCRIPTS/resolve_service_images.py" \
+          --service-images "$SERVICE_IMAGES" \
+          --project "${{ inputs.project_id }}" \
+          --short-sha "$SHORT_SHA" \
+          --admitted-sha "${{ inputs.admitted_sha }}" \
+          --deploy-targets "${{ inputs.deploy_targets }}" \
+          --deploy-gateway "${{ inputs.deploy_gateway }}" \
+          --base-service "${{ inputs.service }}" \
+          --github-output "$GITHUB_OUTPUT"
 
     - name: Install Python deps for deploy scripts
       shell: bash
@@ -413,12 +450,26 @@ runs:
         GCP_PROJECT_ID: ${{ inputs.project_id }}
         GKE_CLUSTER: ${{ env.GKE_CLUSTER }}
         REGION: ${{ inputs.region }}
+        IMAGE_REPOSITORY: ${{ steps.service-images.outputs.llm_gateway_repository }}
+        IMAGE_DIGEST: ${{ steps.service-images.outputs.llm_gateway_digest }}
       run: |
         test -n "$LLM_GATEWAY_GSA"
         python3 "$DEPLOY_CONTROL_SCRIPTS/validate-llm-gateway-env.py" \
           backend/charts/backend-listen/${{ inputs.runtime_env }}_omi_backend_listen_values.yaml \
           backend/charts/llm-gateway/${{ inputs.runtime_env }}_omi_llm_gateway_values.yaml
         IMAGE_TAG="${{ steps.image-tag.outputs.short_sha }}" "$DEPLOY_CONTROL_SCRIPTS/deploy-llm-gateway.sh"
+        if [[ -n "$IMAGE_DIGEST" ]]; then
+          # Role-image opt-in: the gateway is outside the release vector, so prove the
+          # rolled-out Deployment runs exactly the requested digest.
+          expected="${IMAGE_REPOSITORY}@${IMAGE_DIGEST}"
+          actual="$(kubectl -n "${ENVIRONMENT}-omi-backend" get deployment "${ENVIRONMENT}-omi-llm-gateway" \
+            -o jsonpath='{.spec.template.spec.containers[0].image}')"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "ERROR: llm-gateway template image is '$actual', not the opted-in $expected" >&2
+            exit 1
+          fi
+          echo "llm-gateway runs role image $expected"
+        fi
 
     - name: Verify combined LLM gateway serving data plane
       id: combined-gateway-serving
@@ -637,7 +688,7 @@ runs:
         service: ${{ inputs.service }}
         region: ${{ inputs.region }}
         project_id: ${{ inputs.project_id }}
-        image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
+        image: ${{ steps.service-images.outputs.backend }}
         no_traffic: true
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
@@ -713,7 +764,7 @@ runs:
         project_id: ${{ inputs.project_id }}
         region: ${{ inputs.region }}
         service: ${{ inputs.service }}
-        image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
+        image: ${{ steps.service-images.outputs.backend_sync_backfill }}
         revision_suffix: ${{ steps.image-tag.outputs.revision_suffix }}
         cloud_run_flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}
         identity_flags: ${{ steps.runtime-env.outputs.backend_sync_backfill_identity_flags }}
@@ -765,7 +816,7 @@ runs:
         service: ${{ inputs.service }}-sync
         region: ${{ inputs.region }}
         project_id: ${{ inputs.project_id }}
-        image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
+        image: ${{ steps.service-images.outputs.backend_sync }}
         no_traffic: true
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
@@ -874,7 +925,7 @@ runs:
         service: ${{ inputs.service }}-integration
         region: ${{ inputs.region }}
         project_id: ${{ inputs.project_id }}
-        image: gcr.io/${{ inputs.project_id }}/${{ inputs.service }}:${{ steps.image-tag.outputs.short_sha }}
+        image: ${{ steps.service-images.outputs.backend_integration }}
         no_traffic: true
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
@@ -1066,6 +1117,7 @@ runs:
           --cloud-run-only \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+          ${{ steps.service-images.outputs.release_vector_args }} \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \
@@ -1147,7 +1199,8 @@ runs:
       run: |
         helm -n ${{ inputs.runtime_env }}-omi-backend upgrade --install ${{ inputs.runtime_env }}-omi-backend-listen ./backend/charts/backend-listen \
           -f ./backend/charts/backend-listen/${{ inputs.runtime_env }}_omi_backend_listen_values.yaml \
-          --set image.repository=gcr.io/${{ inputs.project_id }}/${{ inputs.service }} \
+          --set image.repository=${{ steps.service-images.outputs.backend_listen_repository }} \
+          ${{ steps.service-images.outputs.backend_listen_digest_args }} \
           --set gcpProjectId=${{ inputs.project_id }} \
           --set runtimeGcpProjectId=${{ inputs.runtime_gcp_project_id }} \
           --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
@@ -1165,6 +1218,7 @@ runs:
           --candidate \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+          ${{ steps.service-images.outputs.release_vector_args }} \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \
@@ -1213,6 +1267,7 @@ runs:
         python3 "$DEPLOY_CONTROL_SCRIPTS/verify_backend_release_vector.py" \
           --commit-sha "${{ inputs.admitted_sha }}" \
           --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+          ${{ steps.service-images.outputs.release_vector_args }} \
           --deploy-run-id "${{ github.run_id }}" \
           --deploy-run-attempt "${{ github.run_attempt }}" \
           --project "${{ inputs.project_id }}" \

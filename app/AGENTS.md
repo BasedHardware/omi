@@ -14,7 +14,7 @@ UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 `pubspec.yaml` (`1.0.543+992`) is the local placeholder. Store binaries ignore it: Codemagic sets `BUILD_NAME` from the latest store version and `BUILD_NUMBER` to max(store)+1 (pubspec seeds only with no store history). Analytics/Crashlytics `build_number` is `OMI_BUILD_NUMBER`. Authoritative: stores = Codemagic; local/dev = pubspec; analytics = `OMI_BUILD_NUMBER`.
 
 ### Release
-Daily train (`scripts/mobile_daily_train.py`, 14:00 UTC): newest TestFlight build → App Review (MANUAL release), newest Play build → production draft; a human releases. `--dry-run` = plan only. Contract: `.github/agent-docs/mobile-release-process.md`.
+GREEN gate (13:15 UTC) → train: iOS phased 100% after 12h; Android 1%→10%→50%→100%; rollout-advance every 4h on a ≤26h GREEN receipt. **Never withdraw an iOS version Apple has to ship a newer one.** `.github/agent-docs/mobile-release-process.md`.
 
 ### Generated Files (never edit)
 envied, json_serializable, pigeon (`lib/pigeon_interfaces.dart` → `lib/gen/` + iOS/Android stubs), and flutter_gen: `flutter pub run build_runner build`. ARB → `flutter gen-l10n` (`lib/l10n/app_localizations*.dart`). Never edit `*.g.dart` / `*.gen.dart`.
@@ -101,13 +101,13 @@ make mobile-verify ARGS="fast --all"                   # full hermetic journey s
 
 Native: `ruby ios/test/batch_audio_energy_test.rb`; [phone/BLE replay](../scripts/dev-harness/IPHONE_HARNESS.md).
 
-CI runs `flutter test`, `analyze_ratchet.sh` (new info/warnings above `app/analysis_baseline.json` fail; baselines via `--update-baseline`), and the `journeys-hermetic` lane on app/journey inputs.
+Before shipping UI changes, run `bash app/tool/perf_gate.sh`. Red means regression or missing evidence: fix the cause, never raise budgets. [Perf guide](integration_test/perf/README.md).
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
 - Capture seams/ownership: [C1 contract](lib/services/capture/OWNERSHIP.md); inject fakes.
 - HTTP result/consumer migration: [C3 contract](lib/backend/http/API_RESULTS.md).
-- Test state machine logic via minimal abstractions mirroring production flow
+- Mind Map identity: [contract](docs/memory-graph-identity.md).
 - Everything under `test/` must be hermetic — no network, live backends, or real devices — because `bash test.sh` (the CI suite) runs all of it.
 - Chat transcript layout: pumping only `AIMessage` in a `SingleChildScrollView` misses scroll-extent bugs; chat list changes must keep `test/widgets/chat_scroll_layout_test.dart` green (ListView drag + citation/markdown sizes) — it is the Mobile App Checks contract for this class.
 - Tests needing a live service/device/real API go under `integration_test/` (plain `test.sh` skips them); the hermetic seeded journeys there run in CI via `mobile-verify fast --all` with loopback fixtures only. Local-backend tests set `OMI_APP_TEST_API_BASE_URL=http://127.0.0.1:<port>/`.

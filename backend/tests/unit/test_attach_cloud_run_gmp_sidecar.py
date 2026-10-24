@@ -1379,6 +1379,15 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
     for name in (
         'omi_batch_pipeline_events_total',
         'omi_batch_pipeline_oldest_age_seconds',
+        'omi_batch_ramp_heavy_owner_excluded_total',
+        # Shadow admission/CPU recovery outcomes must survive the same filter
+        # as the GPU metrics; otherwise gate readouts lose paid/failed units.
+        'omi_batch_shadow_outcome_total',
+        'omi_batch_shadow_speech_seconds_total',
+        'omi_batch_shadow_speech_loss_seconds_total',
+        'omi_batch_shadow_gpu_seconds_total',
+        'omi_batch_shadow_paid_calls_total',
+        'omi_batch_shadow_paid_audio_seconds_total',
         'omi_accept_to_summary_seconds_bucket',
         'omi_accept_to_summary_seconds_count',
         'omi_accept_to_summary_seconds_sum',
@@ -1388,6 +1397,32 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_summary_debt_sample_timestamp_seconds',
         'omi_live_session_transcript_outcome_total',
         'omi_firestore_documents_per_operation_bucket',
+        # Cost lever G1: Parakeet pool request time by caller.
+        'omi_parakeet_request_seconds_bucket',
+        'omi_parakeet_request_seconds_sum',
+        'omi_parakeet_request_seconds_count',
+        # Firestore reads loop: caller/origin attribution and the singleton_loops lease gate.
+        'omi_firestore_billed_reads_by_caller_total',
+        'omi_firestore_billed_reads_by_origin_total',
+        'omi_firestore_caller_label_overflow_total',
+        'omi_fsr_leader_lease_total',
+        # Legacy dark: drain_census and the soak gates (contract (h)).
+        'omi_legacy_sync_mode',
+        'omi_legacy_sync_admissions_total',
+        'omi_legacy_dark_ack_total',
+        'omi_legacy_sync_mode_read_total',
+        # A2 job-store shadow: lane 12 parity_read.sh (the A2 sample gate).
+        'omi_jobstore_shadow_parity_total',
+        # Held-audio recovery gates: narrowing state, cohort resolution and pacing decisions.
+        'omi_stt_cap_recovery_cohort_narrowed',
+        'omi_stt_cap_cohort_source',
+        'omi_stt_cap_cohort_percent',
+        'omi_held_recovery_pacing_intents_total',
+        'omi_held_recovery_pacing_audio_seconds_total',
+        # #23388 cap enforcement: the watch readout for finite allowances
+        # (stt-cap-dispatch.md) — decisions and metered provider audio.
+        'omi_stt_cap_dispatch_decisions_total',
+        'omi_stt_cap_provider_audio_seconds_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):

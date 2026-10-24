@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-ios-embed-after-thin-binary-cycle",
+  "violated_contract": "Every iPhone app target must run its Embed Frameworks copy phase before Flutter's Thin Binary script. Thin Binary consumes the processed Info.plist, and embedding a framework after it makes the framework copy depend on Thin Binary, so Xcode stops with \"Cycle inside <target>\". RunnerRayBanDat ran Thin Binary first; once it embedded OnDeviceParakeet.framework, every Ray-Ban DAT simulator build on main failed while the default Runner target, which already used the safe order, kept building.",
+  "canonical_prevention": "Keep Embed Frameworks ahead of Thin Binary in both Runner and RunnerRayBanDat, and assert that order for every iPhone target in the Xcode graph contract test, so adding a target or an embedded framework cannot reintroduce the cycle unnoticed.",
+  "canonical_prevention_artifact": [
+    "app/ios/test/rayban_dat_xcode_graph_test.rb"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/ios/Runner.xcodeproj/project.pbxproj",
+    "app/ios/test/rayban_dat_xcode_graph_test.rb",
+    "app/scripts/rayban_dat.sh"
+  ],
+  "status": "open"
+}

@@ -4457,6 +4457,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get continueText => 'Συνέχεια';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Έχετε ήδη συνδρομή. Διαχειριστείτε την τρέχουσα συνδρομή σας αντί να ξεκινήσετε μια νέα.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Επανεγγραφείτε πρώτα για να αλλάξετε πρόγραμμα.';
 
   @override
@@ -13480,9 +13484,6 @@ class AppLocalizationsEl extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'Συνέχιση με το δωρεάν πρόγραμμα';
-
-  @override
   String get paywallTrialCancelNote => 'Ακύρωση ανά πάσα στιγμή. Χωρίς χρεώσεις, χωρίς ποινές.';
 
   @override
@@ -14478,4 +14479,176 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Το Omi συνεχίζει την εγγραφή';
+
+  @override
+  String get episodeNow => 'Τώρα';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'Ζωντανά · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count στιγμές',
+      one: '1 στιγμή',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'Στιγμές';
+
+  @override
+  String get episodeSoFar => 'Μέχρι τώρα';
+
+  @override
+  String get episodeUpdatedJustNow => 'Ενημερώθηκε μόλις τώρα · πλήρεις σημειώσεις στο τέλος';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return 'Ενημερώθηκε πριν από $minutes λεπ. · πλήρεις σημειώσεις στο τέλος';
+  }
+
+  @override
+  String get episodeNotesSoon => 'Οι σημειώσεις εμφανίζονται μετά τα πρώτα λεπτά συζήτησης.';
+
+  @override
+  String get episodeOpenAll => 'Άνοιγμα όλων';
+
+  @override
+  String get episodeWrapUpNow => 'Ολοκλήρωση τώρα';
+
+  @override
+  String get episodeWrapsUpHint => 'Το Omi το ολοκληρώνει όταν προχωρήσεις';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'Εντοπίστηκε εργασία: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'Εντοπίστηκε υπενθύμιση: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'Η εργασία αποθηκεύτηκε: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'προστίθενται $duration από το Omi σου';
+  }
+
+  @override
+  String get episodeListeningNow => 'Ακούει τώρα';
+
+  @override
+  String get deviceHeardToday => 'Ακούστηκαν σήμερα';
+
+  @override
+  String get deviceToSync => 'για συγχρονισμό';
+
+  @override
+  String get deviceRightNow => 'Αυτή τη στιγμή';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'Ζωντανό επεισόδιο · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'Συγχρονισμός εκκρεμοτήτων';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done από $total λεπ.';
+  }
+
+  @override
+  String get deviceRecently => 'Πρόσφατα';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return 'Αποσυνδεδεμένο για $duration';
+  }
+
+  @override
+  String get deviceControls => 'Χειριστήρια';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'Επίσης: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'Πάτησε το κουμπί στο Omi';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'Ένα σύντομο πάτημα. Μετά ρώτα ό,τι θέλεις.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'Κάνε την ερώτησή σου';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'Πες το δυνατά. Το Omi ακούει.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'Τελείωσες; Πάτησε ξανά το κουμπί για αποστολή.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'Αναβαθμίστηκες σε $days ημέρες δωρεάν';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days ημέρες Omi Pro κερασμένες. Θα σε ειδοποιήσουμε πριν από κάθε χρέωση. Ακύρωση ανά πάσα στιγμή.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return 'Θέλω τη δοκιμή $days ημερών';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return 'Ξεκίνα τη δωρεάν δοκιμή $days ημερών';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'Άναψε το Omi σου';
+
+  @override
+  String get pairingPowerOnSubtitle => 'Πάτησε μία φορά το κουμπί και κράτα το κοντά στο κινητό.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'Αυτό ήταν. Το Omi θα συνεχίσει να ηχογραφεί τις συζητήσεις σου στο παρασκήνιο.';
+
+  @override
+  String get noThanks => 'Όχι, ευχαριστώ';
+
+  @override
+  String get recapInTheBackground => 'Στο παρασκήνιο';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Μείνε με $percent% έκπτωση';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Μείνε και πλήρωνε $price τον μήνα για τους επόμενους $months μήνες.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Έγινε. $percent% έκπτωση για τους επόμενους $months μήνες.';
+  }
 }

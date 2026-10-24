@@ -41,6 +41,7 @@ from utils.app_integrations import (
     trigger_realtime_audio_bytes,
 )
 from utils.executors import db_executor, storage_executor, run_blocking, start_background_task
+from utils.episodes.live import on_session_end as flush_episode_moment
 from utils.async_tasks import (
     supervise_tasks,
     drain_tasks,
@@ -52,8 +53,7 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.cloud_tasks import is_audio_merge_dispatch_enabled
-from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
+from utils.other.storage import upload_audio_chunks_batch
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
     OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL,
@@ -383,22 +383,6 @@ async def _websocket_util_trigger(
                             schedule_person_voice_learning_retry(uid, conv_id)
                             if len(identity_refreshed) < 128:
                                 identity_refreshed.add(conv_id)
-                            # Rebuild the conversation playback artifact if a stamped one
-                            # went stale. No stamp (the live-conversation common case) → no-op.
-                            if is_audio_merge_dispatch_enabled():
-                                stamp = await run_blocking(
-                                    storage_executor, conversations_db.get_conversation_audio_stamp, uid, conv_id
-                                )
-                                if stamp:
-                                    await run_blocking(
-                                        storage_executor,
-                                        maybe_invalidate_conversation_playback,
-                                        uid,
-                                        conv_id,
-                                        {'conversation_audio': stamp},
-                                        files_payload,
-                                        'pusher_flush',
-                                    )
                         else:
                             deleted_conversations.add(conv_id)
                             logger.info(f"Conversation gone, stopped private cloud sync {uid} {conv_id}")
@@ -524,7 +508,17 @@ async def _websocket_util_trigger(
                 owned_close = conv_id in record_close_requests and (
                     live_record_admission_enabled() or conv_id in record_owners
                 )
-                if is_shutdown or is_size_ready or is_age_ready or owned_close:
+                # Leave one uploader tick for the boundary frame/close message
+                # to join a size-ready batch. Otherwise a scheduler tick between
+                # the full run and its final frame creates a second tiny object.
+                # Real discontinuities still close into ready_batches, and age,
+                # recording close and disconnect always flush immediately.
+                if is_size_ready and 'size_ready_at' not in batch:
+                    batch['size_ready_at'] = now
+                size_grace_elapsed = (
+                    is_size_ready and now - batch['size_ready_at'] >= PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL
+                )
+                if is_shutdown or size_grace_elapsed or is_age_ready or owned_close:
                     conv_ids_to_flush.append(conv_id)
 
             for conv_id in conv_ids_to_flush:
@@ -643,6 +637,9 @@ async def _websocket_util_trigger(
                     logger.error(f"Error processing audio bytes: {e} {uid}")
                 finally:
                     audio_budget.release(len(item['data']))
+
+    # The conversation this session last streamed, for the episode moment flush at teardown.
+    episode_session: Dict[str, Optional[str]] = {'conversation_id': None}
 
     async def receive_tasks() -> None:
         nonlocal websocket_active
@@ -791,6 +788,7 @@ async def _websocket_util_trigger(
                         if private_cloud_sync_enabled and len(record_close_requests) < 128:
                             record_close_requests.add(current_conversation_id)
                     current_conversation_id = new_conversation_id
+                    episode_session['conversation_id'] = new_conversation_id
                     # A conversation boundary ends the current v2 run: the
                     # next audio starts a fresh continuity window.
                     audio_timeline_last_end = None
@@ -1109,6 +1107,8 @@ async def _websocket_util_trigger(
         await drain_tasks(all_to_cancel, timeout=5.0, label="pusher_cleanup", cancel=True)
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
+        # Live episode moments buffer in this process; a pod move or reconnect must not strand them.
+        await flush_episode_moment(uid, episode_session['conversation_id'])
 
         journey_attempt.finish(pusher_session_outcome(websocket_close_code, application_failed=application_failed))
 

@@ -58,14 +58,16 @@ SPEAKER_BROWSE_BATCH = 50
 PEOPLE_STATS_BATCH = 100
 
 # Fields the People-stats scan reads: visibility predicates (discarded,
-# deleted), the lock gate, both transcript encodings plus their protection
-# level, and the manual speaker-assignment receipt that rewrites person labels
-# at read time. Anything else (title, structured) never reaches the aggregator.
+# deleted, dream_duplicate_of), the lock gate, both transcript encodings plus
+# their protection level, and the manual speaker-assignment receipt that
+# rewrites person labels at read time. Anything else (title, structured) never
+# reaches the aggregator.
 PEOPLE_STATS_FIELD_PATHS = (
     'id',
     'is_locked',
     'discarded',
     'deleted',
+    'dream_duplicate_of',
     'started_at',
     'created_at',
     'transcript_segments',

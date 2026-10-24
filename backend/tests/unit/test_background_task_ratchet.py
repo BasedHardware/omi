@@ -70,6 +70,7 @@ if __package__ in (None, ''):  # ``python tests/unit/test_background_task_ratche
 
 from tests.support.background_task_ratchet_scope import (  # noqa: E402
     BACKEND_DIR,
+    EXTRA_MODULES,
     ROOT_MODULES,
     ratchet_selection_prefixes,
     scoped_modules,
@@ -290,6 +291,7 @@ def scanned():
 def test_scope_includes_handler_routers_and_owned_packages(scanned):
     modules = {path.relative_to(BACKEND_DIR).as_posix() for path in scanned[0]}
     assert set(ROOT_MODULES) <= modules
+    assert set(EXTRA_MODULES) <= modules
     assert 'utils/batch_pipeline/quarantine_recovery.py' in modules
     assert 'utils/sync/pipeline.py' in modules
     assert 'utils/executors.py' in modules

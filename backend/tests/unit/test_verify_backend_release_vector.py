@@ -739,6 +739,47 @@ def test_evaluate_accepts_matching_deployed_composition() -> None:
     assert verifier.evaluate(expectation, _documents(expectation)) == []
 
 
+def test_role_image_opt_in_expects_each_moved_service_at_its_digest() -> None:
+    api = 'gcr.io/based-hardware-dev/backend-api@sha256:' + 'c' * 64
+    listen = 'gcr.io/based-hardware-dev/backend-realtime@sha256:' + 'd' * 64
+    expectation = verifier.build_expectation(
+        commit_sha='abcdef1234567890',
+        deploy_run_id='12345',
+        deploy_run_attempt='1',
+        project='based-hardware-dev',
+        region='us-central1',
+        environment='dev',
+        service_images={'backend': api, 'backend-listen': listen},
+    )
+    documents = _documents(expectation)
+    # Today's image on a moved service is a stale composition, not a pass.
+    assert verifier.evaluate(expectation, documents) == [
+        f'cloud_run/backend: template image is not {api}',
+        f'gke/deployment: template image is not {listen}',
+    ]
+    documents['cloud_run/backend']['spec']['template']['spec']['containers'][0]['image'] = api
+    documents['gke/deployment']['spec']['template']['spec']['containers'][0]['image'] = listen
+    assert verifier.evaluate(expectation, documents) == []
+    report = verifier.evidence(expectation, documents, [])
+    assert report['release_vector']['service_images'] == {'backend': api, 'backend-listen': listen}
+    assert report['release_vector']['backend_listen']['image'] == listen
+
+
+def test_role_image_opt_in_rejects_unknown_services_and_tags() -> None:
+    kwargs = dict(
+        commit_sha='abcdef1234567890',
+        deploy_run_id='12345',
+        deploy_run_attempt='1',
+        project='based-hardware-dev',
+        region='us-central1',
+        environment='dev',
+    )
+    with pytest.raises(ValueError, match='unknown services'):
+        verifier.build_expectation(**kwargs, service_images={'pusher': 'x@sha256:' + 'c' * 64})
+    with pytest.raises(ValueError, match='digest references'):
+        verifier.build_expectation(**kwargs, service_images={'backend': 'gcr.io/p/backend-api:abcdef1'})
+
+
 def test_evaluate_fails_closed_when_a_stale_revision_is_serving() -> None:
     expectation = _expectation()
     documents = _documents(expectation)
@@ -928,7 +969,7 @@ def test_retry_derives_a_new_vector_and_accepts_only_the_converged_attempt() -> 
     assert verifier.evaluate(retry, _documents(retry)) == []
 
 
-def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence() -> None:
+def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(tmp_path) -> None:
     """Regression for the missing positional ``errors`` argument.
 
     ``main()`` builds ``errors`` via ``evaluate()`` and then renders
@@ -938,16 +979,13 @@ def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence(
     positional argument: 'errors'`` before writing any evidence. Both edited
     deploy workflows hit this path.
     """
-    import tempfile
-
     expectation = _expectation()
     documents = _documents(expectation)
 
     monkeypatch_collect = pytest.MonkeyPatch()
     monkeypatch_collect.setattr(verifier, 'collect_documents', lambda commands: documents)
 
-    with tempfile.NamedTemporaryFile('r+', suffix='.json', delete=False) as handle:
-        evidence_path = Path(handle.name)
+    evidence_path = tmp_path / 'evidence.json'
 
     argv = [
         'verify_backend_release_vector.py',

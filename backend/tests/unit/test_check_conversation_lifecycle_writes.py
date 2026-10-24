@@ -114,3 +114,13 @@ def test_transcript_inventory_requires_overlay_on_both_processors():
             '    _reapply_current_manual_assignments(uid, conversation_data, current)\n    transaction.set',
         )
         assert not violations(guarded, 'backend/database/conversations.py')
+
+
+def test_stuck_noise_storage_is_callable_only_through_lifecycle():
+    for method in ('close_noise', 'restore_noise'):
+        source = f'stuck_backfill_db.{method}(uid, conversation_id)\n'
+        assert violations(source, 'backend/utils/conversations/lifecycle.py') == []
+        assert 'direct lifecycle database call' in violations(source, 'backend/services/operator.py')[0]
+    raw = "ref = user.collection('conversations').document(cid)\ntransaction.update(ref, {'status': 'completed'})\n"
+    assert violations(raw, 'backend/database/stuck_backfill.py') == []
+    assert violations(raw, 'backend/database/other_backfill.py')

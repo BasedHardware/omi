@@ -1731,6 +1731,7 @@ def resolve_transcription_allowance(
     byok_active: Any = _UNRESOLVED,
     omi_funded: bool = False,
     usage_cache: Any = None,
+    provision_subscription: bool = True,
 ) -> TranscriptionAllowance:
     """Resolve the managed-transcription allowance for one uid, once. Never raises.
 
@@ -1744,6 +1745,9 @@ def resolve_transcription_allowance(
     monthly usage and the BYOK enrolment pass them in, so the startup snapshot
     and this answer come from the same reads. (The trial paywall keeps its own
     cached reads; they are not shared.)
+
+    Spend admission passes ``provision_subscription=False``: checking an
+    allowance must not create a subscription or restore an erased user root.
 
     Order: reviewer → paywall → BYOK → plan → unlimited → remaining. A
     subscription the lookup calls invalid (an inactive basic account) has no
@@ -1765,6 +1769,8 @@ def resolve_transcription_allowance(
         # and only a validated key on this request (not a stored fingerprint)
         # exempts.
         paywall_kwargs = {'byok_exempt': False} if omi_funded else {}
+        if not provision_subscription:
+            paywall_kwargs['provision'] = False
         if is_trial_paywalled(uid, source, required_byok_provider='deepgram', strict=True, **paywall_kwargs):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_BLOCKED, 0, 'trial_paywalled')
         # Require the Deepgram header on this request so a user cannot activate
@@ -1776,7 +1782,8 @@ def resolve_transcription_allowance(
         if byok_active and get_byok_key('deepgram'):
             return TranscriptionAllowance(TRANSCRIPTION_MODE_MANAGED, None, 'byok', limit_seconds=None)
         if subscription is _UNRESOLVED:
-            subscription = users_db.get_user_valid_subscription(uid)
+            subscription_kwargs = {} if provision_subscription else {'provision': False}
+            subscription = users_db.get_user_valid_subscription(uid, **subscription_kwargs)
         if not subscription:
             return _closed('subscription_inactive')
         budget_kwargs = {'session_cache': usage_cache} if usage_cache is not None else {}

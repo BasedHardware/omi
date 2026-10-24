@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 import os
+from copy import deepcopy
 from contextvars import ContextVar
 from datetime import datetime
 from typing import Any, Mapping, cast
@@ -194,9 +195,44 @@ def merge_result(existing: Row, write: Row, uid: str, *, now: float | None = Non
         write['summary_first_pending_at'] = accepted
     rich = bool(write.get('summary_output_present'))
     discarded = bool(write.get('discarded'))
-    if not rich and not discarded:
+    # The fence guards an open first-summary obligation only. Rows outside the
+    # server-minimum protocol, already-enriched rows, and rows whose empty
+    # budget is exhausted have no caller that catches this exception — the
+    # sync outbox alone records empty-output strikes — so raising there
+    # strands the completed write instead of retaining recoverable debt.
+    obligation_open = (
+        write.get('summary_title_provenance') == 'server_minimum'
+        and not write.get('summary_completed_at')
+        and existing.get('summary_blocked_reason') != 'empty_output_exhausted'
+    )
+    if not rich and not discarded and obligation_open:
         raise SummaryOutputUnavailable('kept first-summary output is empty')
     if existing.get('summary_completed_at'):
+        # An enriched row already holds a usable summary. The old fence refused
+        # the whole write to protect it, which stranded completed results in
+        # every lane without an outbox. Commit instead, but never let an empty
+        # reprocess overwrite the banked summary: re-apply its content and
+        # receipts onto this write so `merge=True` restores what the empty
+        # structured payload would otherwise clobber.
+        if not rich and not discarded:
+            banked = existing.get('structured')
+            if banked:
+                # The caller re-applies manual edits onto the write before this
+                # merge; restoring the banked content must not bury them.
+                from database.conversations import effective_user_title
+
+                restored = deepcopy(banked)
+                user_title = effective_user_title(existing.get('user_title'))
+                if user_title is not None:
+                    restored['title'] = user_title
+                if existing.get('user_overview'):
+                    restored['overview'] = existing['user_overview']
+                write['structured'] = restored
+            write['summary_output_present'] = bool(banked)
+            write['summary_title_provenance'] = existing.get('summary_title_provenance') or 'generated'
+            write['summary_completed_at'] = existing['summary_completed_at']
+            write['summary_discard_receipted'] = existing.get('summary_discard_receipted', False)
+            write['summary_processing_lease_until'] = 0
         return None
     if discarded and existing.get('summary_discard_receipted'):
         return None

@@ -33,10 +33,14 @@ export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
 # immune: contention stall cycles are charged to the process, so identical work measured
 # ~2x higher with the machine saturated (0.03s -> 0.06s on an 8-core host). At the former
 # 0.12s budget -- only 1.2x the target -- a busy runner failed a shifting set of files
-# that all passed in isolation. CI already carries a 1.0-second ceiling for the same
-# reason; this is the local lane's equivalent headroom.
+# that all passed in isolation. CI carries a 1.0-second ceiling for the same reason, and
+# the local lane now uses the same one: a laptop shared with builds and other agents is
+# at least as loaded as a runner, and the former 0.30s local budget failed pushes on
+# tests that passed alone and passed CI (2026-10-20, twice in one sync push). A
+# stricter local gate than CI only blocks pushes CI would accept; the warn target still
+# reports anything over 0.1s.
 export BACKEND_FAST_UNIT_WARN_SECONDS="${BACKEND_FAST_UNIT_WARN_SECONDS:-0.1}"
-export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.30}"
+export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-1.0}"
 
 # The file-isolated runner already parallelizes pytest processes. Letting each process
 # start a native BLAS/OpenMP pool oversubscribes the machine and makes process CPU time
@@ -49,7 +53,11 @@ export VECLIB_MAXIMUM_THREADS="${VECLIB_MAXIMUM_THREADS:-1}"
 export NUMEXPR_NUM_THREADS="${NUMEXPR_NUM_THREADS:-1}"
 export BLIS_NUM_THREADS="${BLIS_NUM_THREADS:-1}"
 
-pytest_args=(-v)
+# LangSmith's pytest integration is for live evaluation/upload, which this
+# hermetic suite does not use. Local startup measurements saved ~0.17s per
+# process before collection; file isolation pays this cost hundreds of times.
+# Keep the other plugins active.
+pytest_args=(-p no:langsmith_plugin -v)
 
 marker_expr="${BACKEND_PYTEST_MARK_EXPR:-not integration and not slow}"
 if [[ -n "$marker_expr" ]]; then

@@ -188,6 +188,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.direct_pusher_bindings(deployment) == expected
     assert {name: preflight.literal_pusher_values(deployment)[name] for name in literals} == literals
     assert literals == {
+        "LISTEN_QUIET_FINALIZATION_ENABLED": "true",
         "STT_CAP_DISPATCH_ENFORCEMENT": "false",
         "STT_CAP_DISPATCH_COHORT": "",
         "STT_CAP_DISPATCH_LANES": "live",
@@ -207,37 +208,36 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "REPEAT_WORK_REVISION_ENABLED": "false",
         "REPEAT_WORK_LLM_VERSION": "2026-10-16-v1",
         "SYNC_POLL_BACKOFF_ENABLED": "false",
-        "AUDIO_ARCHIVE_LIVE_ENABLED": "false",
-        "AUDIO_ARCHIVE_READ_ENABLED": "false",
+        "AUDIO_ARCHIVE_LIVE_ENABLED": "true",
+        "AUDIO_ARCHIVE_READ_ENABLED": "true",
         "AUDIO_ARCHIVE_STOP_PCM_ENABLED": "false",
         "AUDIO_ARCHIVE_SYNC_ENABLED": "false",
         "AUDIO_ARCHIVE_REGIONAL_CACHE_ENABLED": "false",
         "AUDIO_ARCHIVE_COALESCE_ENABLED": "true",
         "AUDIO_ARCHIVE_SEPARATE_MERGE_ENABLED": "false",
         "AUDIO_ARCHIVE_PERCENT": "0",
+        "AUDIO_ARCHIVE_STOP_PCM_PERCENT": "0",
         "AUDIO_ARCHIVE_UID_ALLOWLIST": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
         "BUCKET_AUDIO_DERIVED": "",
         "AUDIO_MERGE_WORKER_URL": "",
         "ACTION_ITEM_REFRESH_PRESERVE_ENABLED": "true",
-        "AUDIO_TIMELINE_SPANS": "false",
         "BUCKET_SCREEN_FRAMES": "based-hardware-prod-screen-frames",
-        "CAPTURE_EVIDENCE_V1_DARK_WRITE": "true",
         "CONVERSATION_RELEVANCE_JEV_PERCENT": "0",
         "DREAM_AGENT_ELIGIBILITY": "allowlist",
         "DREAM_AGENT_UID_ALLOWLIST": "",
         "DREAM_ON_DEMAND_ENABLED": "true",
         "CONVERSATION_SMART_MERGE_FLATTEN_ENABLED": "true",
         "OMI_SHAPED_AGENT_MODE": "on",
-        "LISTEN_COMMITTED_CAPTURE_COVERAGE_ENABLED": "true",
         "CAPTURE_GROUP_CONTAINMENT_MODE": "shadow",
         "CLIENT_SUMMARIES_AT_CAP_ENABLED": "true",
-        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"backfill_task_reads":5,"candidates_page":100,"deletion_marker_cache":100,"historical_scan_memo":5,"ledger_purge_coalesce":5,"people_scan_dedupe":0,"queue_age_sample_budget":5,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":0,"subscription_cache":100,"usage_month_cache":5}',
+        "FIRESTORE_READ_LEVERS": '{"action_items_page":100,"backfill_task_reads":100,"candidates_page":100,"canonical_statuses_dedupe":100,"deletion_marker_cache":100,"historical_scan_memo":100,"ledger_purge_coalesce":100,"mcp_conversation_cards_cache":100,"memory_list_index_window":25,"people_scan_dedupe":0,"queue_age_sample_budget":0,"request_read_dedupe":100,"serving_config_cache":100,"singleton_loops":100,"subscription_cache":100,"usage_month_cache":100}',
         "FSR_QUEUE_AGE_PUBLISHER": "0",
         "FSR_QUEUE_AGE_LEASE_SECONDS": "120",
         "FSR_LEADER_LEASE_TTL_SECONDS": "0",
         "DELETION_WIPE_RECONCILE_INTERVAL_SECONDS": "300",
         "FSR_DELETION_NEGATIVE_TTL_SECONDS": "30",
         "FSR_USAGE_MONTH_TTL_SECONDS": "60",
+        "FSR_USAGE_MONTH_TOTAL_EPOCH": "v1",
         "FSR_SUBSCRIPTION_TTL_SECONDS": "60",
         "FSR_SERVING_CONFIG_TTL_SECONDS": "60",
         "ACTION_ITEMS_PAGE_CACHE_TTL_SECONDS": "30",
@@ -254,7 +254,6 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "SONIOX_CAPTURE_AXIS_DIAGNOSTICS": "false",
         "SONIOX_WIRE_LEDGER": "false",
         "SONIOX_ORDERED_FINALIZE": "false",
-        "LIVE_SPEAKER_SPAN_RESOLUTION": "false",
         "MEETING_NOTES_EVIDENCE_WAIT_SECONDS": "25",
         "MEMORY_ENABLED": "on",
         "OMI_CUSTOMER_DATA_PROJECT": "based-hardware",
@@ -316,7 +315,8 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
     bindings = preflight.direct_pusher_bindings(deployment)
     literals = preflight.literal_pusher_values(deployment)
 
-    assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    # Deepgram retired 2026-08-27: the cloud credential binding is gone too.
+    assert "DEEPGRAM_API_KEY" not in bindings
     assert literals["SPEAKER_MATCH_SCORES_ENABLED"] == "true"
     assert literals["CONVERSATION_RELEVANCE_JEV_PERCENT"] == "100"
     for retired in (
@@ -332,10 +332,10 @@ def test_prod_pusher_retires_self_hosted_deepgram_without_changing_cloud_policy(
         "MEMORY_OWNER_JEV_SHADOW_DAILY_CAP",
         "DESKTOP_PENDANT_CALL_LINK_MODE",
         "DESKTOP_PENDANT_CALL_LINK_PERCENT",
+        "DEEPGRAM_SELF_HOSTED_ENABLED",
+        "DEEPGRAM_SELF_HOSTED_URL",
     ):
         assert retired not in literals
-    assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "false"
-    assert "DEEPGRAM_SELF_HOSTED_URL" not in literals
     assert literals["STT_SERVICE_MODELS"] == "modulate-velma-2,soniox,parakeet"
 
 

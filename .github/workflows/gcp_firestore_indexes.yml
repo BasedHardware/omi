@@ -13,6 +13,12 @@ on:
       - 'firestore.indexes.json'
       - 'backend/scripts/reconcile_firestore_field_exemptions.py'
       - '.github/workflows/gcp_firestore_indexes.yml'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+    paths:
+      - 'backend/database/firestore_index_registry.py'
+      - 'firestore.indexes.json'
   workflow_dispatch:
     inputs:
       environment:
@@ -46,7 +52,151 @@ concurrency:
   group: firestore-schema-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'prod' }}
   cancel-in-progress: false
 
+env:
+  # Abort a git HTTP transfer that stays under 1 KB/s for 60 s, so actions/checkout
+  # retries instead of hanging 7-10 min until the TCP reset (#22890).
+  GIT_HTTP_LOW_SPEED_LIMIT: "1000"
+  GIT_HTTP_LOW_SPEED_TIME: "60"
+
 jobs:
+  plan_pr_indexes:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      eligible: ${{ steps.plan.outputs.eligible }}
+      main_sha: ${{ steps.plan.outputs.main_sha }}
+    steps:
+      - name: Checkout trusted main controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Plan additions against current main without cloud credentials
+        id: plan
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin refs/heads/main "$HEAD_SHA"
+          # Resolve main explicitly: FETCH_HEAD also contains the PR head.
+          git fetch --no-tags origin refs/heads/main
+          main_sha="$(git rev-parse FETCH_HEAD)"
+          git show "$main_sha:firestore.indexes.json" > "$RUNNER_TEMP/base-indexes.json"
+          git show "$HEAD_SHA:firestore.indexes.json" > "$RUNNER_TEMP/pr-indexes.json"
+          echo "main_sha=$main_sha" >> "$GITHUB_OUTPUT"
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --manifest "$RUNNER_TEMP/pr-indexes.json" \
+            --add-only-base "$RUNNER_TEMP/base-indexes.json" \
+            --plan-additions | tee "$RUNNER_TEMP/index-plan.txt"
+          sed -n '/^eligible=/p' "$RUNNER_TEMP/index-plan.txt" >> "$GITHUB_OUTPUT"
+
+  prebuild_pr_development_indexes:
+    needs: plan_pr_indexes
+    if: needs.plan_pr_indexes.outputs.eligible == 'true'
+    environment: development
+    concurrency:
+      group: firestore-schema-development
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted main controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Read pinned declarations as data
+        env:
+          MAIN_SHA: ${{ needs.plan_pr_indexes.outputs.main_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$MAIN_SHA" "$HEAD_SHA"
+          git show "$MAIN_SHA:firestore.indexes.json" > "$RUNNER_TEMP/base-indexes.json"
+          git show "$HEAD_SHA:firestore.indexes.json" > "$RUNNER_TEMP/pr-indexes.json"
+      # Recheck the diff before auth; never import or run candidate PR code.
+      - name: Validate add-only declarations
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --manifest "$RUNNER_TEMP/pr-indexes.json" \
+            --add-only-base "$RUNNER_TEMP/base-indexes.json" \
+            --plan-additions | tee "$RUNNER_TEMP/index-plan.txt"
+          grep -qx 'eligible=true' "$RUNNER_TEMP/index-plan.txt"
+      - name: Google Auth for approved PR index prebuild
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Start additive PR index builds
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --manifest "$RUNNER_TEMP/pr-indexes.json" \
+            --add-only-base "$RUNNER_TEMP/base-indexes.json" \
+            --provision-missing \
+            --start-only
+
+  prebuild_pr_prod_indexes:
+    needs: plan_pr_indexes
+    if: needs.plan_pr_indexes.outputs.eligible == 'true'
+    environment: prod
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout trusted main controls
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Read pinned declarations as data
+        env:
+          MAIN_SHA: ${{ needs.plan_pr_indexes.outputs.main_sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$MAIN_SHA" "$HEAD_SHA"
+          git show "$MAIN_SHA:firestore.indexes.json" > "$RUNNER_TEMP/base-indexes.json"
+          git show "$HEAD_SHA:firestore.indexes.json" > "$RUNNER_TEMP/pr-indexes.json"
+      # Recheck the diff before auth; never import or run candidate PR code.
+      - name: Validate add-only declarations
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --manifest "$RUNNER_TEMP/pr-indexes.json" \
+            --add-only-base "$RUNNER_TEMP/base-indexes.json" \
+            --plan-additions | tee "$RUNNER_TEMP/index-plan.txt"
+          grep -qx 'eligible=true' "$RUNNER_TEMP/index-plan.txt"
+      - name: Google Auth for approved PR index prebuild
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-schema-prod@based-hardware.iam.gserviceaccount.com
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+      - name: Start additive PR index builds
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --manifest "$RUNNER_TEMP/pr-indexes.json" \
+            --add-only-base "$RUNNER_TEMP/base-indexes.json" \
+            --provision-missing \
+            --start-only
+
   reconcile_composite_indexes:
     # This is the explicit, human-approved writer. Backend deploy workflows
     # remain read-only and can only gate on the serving schema.

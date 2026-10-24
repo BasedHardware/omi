@@ -1,4 +1,11 @@
 from models.developer_transcript import SimpleTranscriptSegment
+from routers import developer_segments
+from routers.developer_segments_models import (
+    CreateConversationFromTranscriptRequest,
+    DevTranscriptSegment,
+    CaptureEvidenceLineage,
+    CaptureEvidenceLineageUnit,
+)
 import json
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -19,6 +26,7 @@ import database.daily_summaries as daily_summaries_db
 from database._client import db
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
+from utils.list_version_check import ListVersionCheck
 
 from models.calendar_context import DevCalendarMeetingContext
 from models.folder import Folder
@@ -31,7 +39,6 @@ from models.memories import MemoryCategory, Memory, MemoryDB
 from utils.free_tier_processing_policy import client_summaries_at_cap_enabled
 from models.client_processing import ClientProcessing
 from config.action_item_reminder_triggers import action_item_write_affects_reminder
-from config.capture_evidence import capture_evidence_dark_write_enabled
 from utils.capture_evidence import MAX_ENVELOPE_BYTES
 from utils.metrics import OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL
 from models.conversation import (
@@ -853,9 +860,16 @@ def get_action_items(
     # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
     offset, limit = external_lists.clamp_list_page(offset, limit, 1000)
     observe_action_items_page(limit, offset)
+    version_check = ListVersionCheck.start(request, uid, 'action_items')
+    if version_check.not_modified is not None:
+        return version_check.not_modified
     with read_component(ReadComponent.OTHER):
         budget = list_read_budget_for_request(request, route='developer-action-items', owner_uid=uid, context=auth)
-        cached = external_lists.cached_external_list(request, response, auth, locals())
+        cached = (
+            external_lists.cached_external_list(request, response, auth, locals())
+            if not (version_check.active and 'lp1-' in request.headers.get('if-none-match', ''))
+            else None
+        )
         observe_action_items_shape(
             conversation_id is not None, start_date is not None or end_date is not None, completed, cached is not None
         )
@@ -876,6 +890,7 @@ def get_action_items(
     valid_action_items = external_lists.validate_developer_action_items(action_items, ActionItemResponse, uid, logger)
     observe_action_items_rows('returned', len(valid_action_items))
     finish_list_budget(response, budget)
+    version_check.finish(response, truncated=budget.truncated)
     return valid_action_items
 
 
@@ -1154,6 +1169,13 @@ class CreateConversationRequest(BaseModel):
     language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
     geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
 
+    @field_validator('started_at', 'finished_at')
+    @classmethod
+    def read_naive_timestamp_as_utc(cls, value: Optional[datetime]) -> Optional[datetime]:
+        # Naive next to aware made the handler's finished_at < started_at comparison a TypeError (500).
+        # Two naive values were always accepted here, so read them as UTC instead of the from-segments 422.
+        return value.replace(tzinfo=timezone.utc) if value is not None and value.tzinfo is None else value
+
 
 class ConversationResponse(BaseModel):
     model_config = ConfigDict(title='ConversationCreateResponse')
@@ -1184,116 +1206,6 @@ class UpdateConversationRequest(BaseModel):
     @classmethod
     def title_cannot_be_blank(cls, value: Optional[str]) -> Optional[str]:
         return _optional_patch_text(value, 'title')
-
-
-class DevTranscriptSegment(BaseModel):
-    stt_provider: Optional[str] = Field(default=None, max_length=120)
-    model_config = ConfigDict(title='CreateConversationTranscriptSegment')
-
-    text: str = Field(description="The text spoken in this segment")
-    speaker: Optional[str] = Field(
-        default='SPEAKER_00', description="Speaker identifier (e.g., 'SPEAKER_00', 'SPEAKER_01')"
-    )
-    speaker_id: Optional[int] = Field(default=None, description="Numeric speaker ID")
-    is_user: bool = Field(default=False, description="Whether this segment is from the user")
-    person_id: Optional[str] = Field(default=None, description="ID of person speaking (if known)")
-    start: float = Field(description="Start time in seconds (e.g., 0.0, 1.5, 60.2)")
-    end: float = Field(description="End time in seconds (e.g., 1.5, 3.0, 65.8)")
-
-
-class CaptureEvidenceLineageUnit(BaseModel):
-    id: str = Field(min_length=1, max_length=64)
-    start_ms: int = Field(ge=0)
-    end_ms: int = Field(gt=0)
-
-
-class CaptureEvidenceLineage(BaseModel):
-    version: Literal[1] = 1
-    capability: Literal['stable_artifact']
-    capture_root: str = Field(min_length=1, max_length=200)
-    clock_domain: Literal['desktop_session_ms']
-    lineage: Literal['complete', 'incomplete']
-    units: List[CaptureEvidenceLineageUnit] = Field(max_length=64)
-
-
-class CreateConversationFromTranscriptRequest(BaseModel):
-    model_config = ConfigDict(title='CreateConversationFromTranscriptRequest')
-
-    transcript_segments: List[DevTranscriptSegment] = Field(
-        description="List of transcript segments with speaker and timing info", min_length=1, max_length=500
-    )
-    client_processing: Optional[Any] = Field(
-        default=None,
-        description=(
-            "Untrusted client-authored display projection. Accepted as a raw payload "
-            "and validated in the handler: a malformed projection is dropped and the "
-            "conversation still lands. Display only — never an input to intelligence."
-        ),
-    )
-    capture_evidence: Optional[CaptureEvidenceLineage] = None
-    client_session_id: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices('client_session_id', 'client_conversation_id', 'session_id', 'client_id'),
-        min_length=1,
-        max_length=200,
-        description="Stable client-generated session ID. When provided, retries return the same conversation ID.",
-    )
-    source: Optional[ConversationSource] = Field(
-        default=ConversationSource.phone,
-        description="Source of the conversation (e.g., omi, friend, openglass, phone, external_integration)",
-    )
-    started_at: Optional[datetime] = Field(default=None, description="When conversation started (defaults to now)")
-    finished_at: Optional[datetime] = Field(
-        default=None, description="When conversation finished (calculated from segments duration if not provided)"
-    )
-    language: Optional[str] = Field(default='en', description="Language code (ISO 639-1, e.g., 'en', 'es', 'fr')")
-    geolocation: Optional[GeolocationInput] = Field(default=None, description="Geolocation where conversation occurred")
-    client_device_id: Optional[str] = Field(default=None, description="Capture device id ({platform}_{hash})")
-    client_platform: Optional[str] = Field(default=None, description="Client platform (ios/android/macos)")
-    conversation_role: Literal['ambient', 'meeting'] = 'ambient'
-    folder_id: Optional[str] = Field(
-        default=None,
-        min_length=1,
-        max_length=200,
-        description="ID of one of your folders (GET /v1/dev/user/folders). Files the conversation there instead of "
-        "letting AI pick a folder.",
-    )
-    calendar_meeting_context: Optional[DevCalendarMeetingContext] = Field(
-        default=None,
-        description="Calendar meeting this conversation belongs to. Used as context for the summary and to identify "
-        "participants, like the meetings Omi reads from a connected calendar.",
-    )
-    # Optional for backwards compatibility. When supplied, rotation fragments
-    # are persisted but do not create a notes-ready receipt.
-    # Plain string, not a Literal: this is opaque client-versioned metadata
-    # (only 'max_duration_rotation' is ever compared downstream), and a closed
-    # enum here previously fell out of sync with the desktop client's finalization
-    # reasons, causing every upload carrying a newer reason to fail with a 422.
-    conversation_finalization_reason: Optional[str] = None
-
-    @field_validator('client_session_id')
-    @classmethod
-    def normalize_client_session_id(cls, value: Optional[str]) -> Optional[str]:
-        if value is None:
-            return None
-        value = value.strip()
-        if not value:
-            raise ValueError('client_session_id cannot be empty')
-        return value
-
-    @field_validator('started_at', 'finished_at')
-    @classmethod
-    def require_timezone_offset(cls, value: Optional[datetime]) -> Optional[datetime]:
-        """Reject offset-naive timestamps with a 422 instead of a 500.
-
-        A naive ``finished_at`` against the tz-aware ``started_at`` default (or
-        the reverse) makes the handler's ``finished_at <= started_at`` check
-        raise TypeError — an uncaught 500 on a malformed body. Both from-segments
-        routes (developer and first-party) share this model, so both get the 422.
-        """
-        if value is not None and value.tzinfo is None:
-            raise ValueError('must include a timezone offset (e.g. 2026-09-11T12:00:00Z)')
-        return value
 
 
 class DeveloperFolder(BaseModel):
@@ -1813,7 +1725,7 @@ def get_conversation_endpoint(
             check_conversation_transcript_read_limit(auth, request=request)
 
         conversation = conversations_db.get_conversation(uid, conversation_id)
-        if not conversation:
+        if not conversation or conversation.get('deleted', False):
             status = 404
             returned_count = 0
             raise HTTPException(status_code=404, detail="Conversation ID not found or unknown conversation sub-route")
@@ -2033,7 +1945,93 @@ def _bind_late_client_projection(
     return updated
 
 
+def _apply_late_from_segments_context(
+    uid: str,
+    existing_conversation: dict,
+    request: CreateConversationFromTranscriptRequest,
+) -> dict:
+    """Idempotency hit: bind a folder or calendar context the retry carries.
+
+    The first attempt's 200 can be lost to a timeout while the row still lands,
+    and the client re-sends the same ``client_session_id`` with the folder and
+    calendar context it built. Returning early from the idempotency branch used
+    to throw both away, leaving the conversation in the AI-assigned folder with
+    no meeting block on its summary.
+    """
+    conversation_id = existing_conversation.get('id')
+    if not conversation_id:
+        return existing_conversation
+
+    updates: dict[str, Any] = {}
+
+    previous_folder = existing_conversation.get('folder_id')
+    folder_id = getattr(request, 'folder_id', None)
+    if folder_id is not None and folder_id != previous_folder:
+        # The first attempt rejects an unknown folder with 422; a folder deleted
+        # between attempts must not come back as a dangling reference here.
+        if folders_db.get_folder(uid, folder_id):
+            updates['folder_id'] = folder_id
+        else:
+            logger.warning(
+                'from-segments retry names a folder that no longer exists uid=%s folder_id=%s; keeping the stored folder',
+                uid,
+                folder_id,
+            )
+
+    calendar_context = request.calendar_meeting_context.to_context() if request.calendar_meeting_context else None
+    external_data = dict(existing_conversation.get('external_data') or {})
+    stored_calendar_context = None
+    if calendar_context is not None and 'calendar_meeting_context' not in external_data:
+        # Dotted path, so a concurrent writer's other external_data keys survive.
+        stored_calendar_context = calendar_context.to_storage_dict()
+        updates['external_data.calendar_meeting_context'] = stored_calendar_context
+
+    if not updates or not conversations_db.update_conversation(uid, conversation_id, updates):
+        return existing_conversation
+
+    if 'folder_id' in updates:
+        # A preset folder skips AI folder assignment, and with it the count
+        # refresh that assignment does. Both folders can be affected.
+        for affected_folder in {previous_folder, folder_id}:
+            if not affected_folder:
+                continue
+            try:
+                folders_db.update_folder_conversation_count(uid, affected_folder)
+            except Exception:
+                logger.exception(
+                    'from-segments late folder count refresh failed uid=%s folder_id=%s',
+                    uid,
+                    affected_folder,
+                )
+
+    updated = dict(existing_conversation)
+    if 'folder_id' in updates:
+        updated['folder_id'] = updates['folder_id']
+    if stored_calendar_context is not None:
+        updated['external_data'] = {**external_data, 'calendar_meeting_context': stored_calendar_context}
+    return updated
+
+
 def _create_conversation_from_segments(
+    uid: str, request: CreateConversationFromTranscriptRequest, **kwargs
+) -> ConversationResponse:
+    if request.chunk_index is not None:
+        conversation_id = _from_segments_conversation_id(uid, request.client_session_id)
+        if conversation_tombstones.is_deleted(uid, conversation_id) or conversation_tombstones.is_deleted(
+            uid, request.client_session_id
+        ):
+            return ConversationResponse(id=conversation_id, status='deleted', discarded=True)
+        return developer_segments.continuation(
+            uid,
+            request,
+            conversation_id,
+            lambda assembled: _ingest_conversation_from_segments(uid, assembled, **kwargs),
+            ConversationResponse,
+        )
+    return _ingest_conversation_from_segments(uid, request, **kwargs)
+
+
+def _ingest_conversation_from_segments(
     uid: str,
     request: CreateConversationFromTranscriptRequest,
     *,
@@ -2048,8 +2046,12 @@ def _create_conversation_from_segments(
     if not request.transcript_segments or len(request.transcript_segments) == 0:
         raise HTTPException(status_code=422, detail="transcript_segments cannot be empty")
 
-    if len(request.transcript_segments) > 500:
+    if request.chunk_count is None and len(request.transcript_segments) > 500:
         raise HTTPException(status_code=422, detail="Maximum 500 transcript segments allowed")
+
+    request, covered_response = developer_segments.admit_segments(uid, request, ConversationResponse)
+    if covered_response is not None:
+        return covered_response
 
     # Validate segments
     for idx, segment in enumerate(request.transcript_segments):
@@ -2141,6 +2143,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
+                existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
                 receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
@@ -2160,8 +2163,7 @@ def _create_conversation_from_segments(
     # validated metadata payload enters the existing conversation write.
     capture_evidence = None
     evidence_status = 'missing'
-    evidence_enabled = capture_evidence_dark_write_enabled()
-    if evidence_enabled and request.capture_evidence is not None:
+    if request.capture_evidence is not None:
         candidate = request.capture_evidence.model_dump()
         if (
             candidate['capture_root'] != request.client_session_id
@@ -2174,7 +2176,7 @@ def _create_conversation_from_segments(
         else:
             capture_evidence = candidate
             evidence_status = 'lineage' if candidate['lineage'] == 'complete' else 'incomplete'
-    if evidence_enabled and capture_evidence is None:
+    if capture_evidence is None:
         capture_evidence = {
             'version': 1,
             'capability': 'unknown',
@@ -2182,8 +2184,7 @@ def _create_conversation_from_segments(
             'origin': 'from_segments',
             'reason': evidence_status,
         }
-    if evidence_enabled:
-        OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
+    OMI_CAPTURE_EVIDENCE_ENVELOPES_TOTAL.labels(path='from_segments', status=evidence_status).inc()
 
     # Create conversation object with transcript segments
     if conversation_id:
@@ -2233,6 +2234,7 @@ def _create_conversation_from_segments(
                     conversation_id,
                 )
                 existing_conversation = _bind_late_client_projection(uid, existing_conversation, request)
+                existing_conversation = _apply_late_from_segments_context(uid, existing_conversation, request)
                 receipt = record_finalized_meeting_receipt(uid, existing_conversation)
                 if receipt is not None:
                     existing_conversation['meeting_treatment_eligible'] = bool(
@@ -2477,17 +2479,29 @@ def delete_conversation_endpoint(
     - **conversation_id**: The ID of the conversation to delete
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
 
     # Lazy: keep developer routes off the merge/memory import graph so stubbed
     # ``utils.memory.*`` tests can load this module without a complete retraction_scope.
-    from utils.conversations.merge_conversations import delete_conversation_with_sync_sources
+    from services.conversation_frame_evidence import delete_conversation_and_frame_evidence
+    from utils.other.storage import delete_owner_prompt_embedding_cache
+    from utils.screen_frames.store import delete_conversation_screen_frames
 
     conversation_tombstones.record_deletion(uid, conversation_id)
-    delete_conversation_with_sync_sources(uid, conversation_id)
+    # Prompt vectors are derived evidence even when primary audio is retained.
+    delete_owner_prompt_embedding_cache(uid, conversation_id)
+    # Must run before delete_conversation_and_frame_evidence purges the parent doc
+    # below: Firestore does not cascade subcollection deletes, and the GCS objects
+    # have no other cleanup path once the parent doc is gone.
+    delete_conversation_screen_frames(uid, conversation_id)
+    # Deletes the conversation doc itself (and any sync-merge sources) as its
+    # default deleter, alongside photo/frame-request GCS evidence.
+    delete_conversation_and_frame_evidence(uid, conversation_id)
+    vector_db.delete_vector(uid, conversation_id)
+    vector_db.delete_transcript_chunk_vectors(uid, conversation_id)
     return {"success": True}
 
 
@@ -2510,7 +2524,7 @@ def update_conversation_endpoint(
     - **discarded**: Whether the conversation is discarded (optional)
     """
     conversation = conversations_db.get_conversation(uid, conversation_id)
-    if not conversation:
+    if not conversation or conversation.get('deleted', False):
         raise HTTPException(status_code=404, detail="Conversation not found")
     if conversation.get('is_locked', False):
         raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")

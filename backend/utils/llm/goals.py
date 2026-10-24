@@ -131,6 +131,16 @@ def _safe_optional_float(val: Any) -> Optional[float]:
         return None
 
 
+def _safe_float_field(value: Any, default: float) -> float:
+    """Coerce an individual suggestion numeric field to float, falling back per-field."""
+    if value is None or isinstance(value, bool):
+        return float(default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 safe_float = _safe_float
 safe_optional_float = _safe_optional_float
 
@@ -143,8 +153,13 @@ def suggest_goal(uid: str) -> Dict[str, Any]:
         # Get user's memories for context
         memories = [m.dict() for m in MemoryService(db_client=firestore_db).read(uid, limit=100, offset=0)]
 
-        if not memories:
-            # Default suggestion when no memories
+        # Prepare memory context for AI — exclude locked memories
+        memory_texts = [
+            cast(str, m.get('content', '')) for m in memories[:50] if m.get('content') and not m.get('is_locked')
+        ]
+
+        if not memories or not memory_texts:
+            # Default suggestion when no unlocked memories are available
             return sanitize_goal_suggestion({
                 'suggested_title': 'Learn something new every day',
                 'suggested_type': 'scale',
@@ -154,10 +169,6 @@ def suggest_goal(uid: str) -> Dict[str, Any]:
                 'reasoning': 'Start tracking your daily learning progress!',
             })
 
-        # Prepare memory context for AI — exclude locked memories
-        memory_texts = [
-            cast(str, m.get('content', '')) for m in memories[:50] if m.get('content') and not m.get('is_locked')
-        ]
         memory_context = '\n'.join(memory_texts[:20])  # Limit context size
 
         prompt = f"""Based on the user's memories and interests, suggest ONE meaningful personal goal they could track.
@@ -190,6 +201,17 @@ Make the goal specific, measurable, and relevant to their interests."""
         if json_match:
             try:
                 suggestion = json.loads(json_match.group())
+                suggestion['suggested_target'] = _safe_float_field(suggestion.get('suggested_target'), 10.0)
+                suggestion['suggested_min'] = _safe_float_field(suggestion.get('suggested_min'), 0.0)
+                suggestion['suggested_max'] = _safe_float_field(
+                    suggestion.get('suggested_max'), suggestion['suggested_target']
+                )
+                if not suggestion.get('suggested_title'):
+                    suggestion['suggested_title'] = 'Track your daily progress'
+                if suggestion.get('suggested_type') not in ('boolean', 'scale', 'numeric'):
+                    suggestion['suggested_type'] = 'scale'
+                if not suggestion.get('reasoning'):
+                    suggestion['reasoning'] = 'A simple goal to get you started!'
                 return sanitize_goal_suggestion(suggestion)
             except Exception:
                 pass

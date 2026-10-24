@@ -83,6 +83,169 @@ def to_datetime(value: Any) -> Optional[datetime]:
     return None
 
 
+# ---------------------------------------------------------------------------
+# Tool time arguments and context windows (agent tool design rules 1 and 2)
+# ---------------------------------------------------------------------------
+
+TIME_FORMAT_HINT = (
+    'Use an ISO 8601 time such as 2026-10-21T17:00:00Z or 2026-10-21; '
+    'an offset such as -07:00 is converted, and a time without an offset is read as UTC'
+)
+_LOCAL_TIME_FORMAT_HINT = (
+    'Use an ISO 8601 time such as 2026-10-21T10:00:00-07:00 or 2026-10-21; '
+    "an offset is converted, and a time without an offset is read in the user's timezone"
+)
+_EARLIEST_TOOL_TIME = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_LATEST_TOOL_TIME = datetime(2100, 1, 1, tzinfo=timezone.utc)
+
+
+class ToolTimeError(ValueError):
+    """A model-supplied time that cannot be read. The message names the field and the expected format."""
+
+    def __init__(self, field: str, value: Any, *, naive_tz: tzinfo = timezone.utc):
+        self.field = field
+        shown = repr(value)
+        shown = shown if len(shown) <= 60 else shown[:57] + '...'
+        hint = TIME_FORMAT_HINT if naive_tz is timezone.utc else _LOCAL_TIME_FORMAT_HINT
+        super().__init__(f'{field} {shown} is not a time. {hint}.')
+
+
+def utc_z(value: Any) -> Optional[str]:
+    """``2026-10-21T17:00:00Z``: the one way an agent harness shows an instant to a model."""
+    dt = to_datetime(value)
+    if dt is None:
+        return None
+    dt = dt.astimezone(timezone.utc)
+    spec = 'seconds' if not dt.microsecond else 'milliseconds'
+    return dt.isoformat(timespec=spec).replace('+00:00', 'Z')
+
+
+def parse_tool_time(value: Any, *, field: str = 'time', naive_tz: tzinfo = timezone.utc) -> Optional[datetime]:
+    """Read a model-supplied time argument leniently, or raise :class:`ToolTimeError`.
+
+    Missing values (``None`` or blank) return ``None`` so the caller can apply its context window.
+    Offsets are converted to UTC; ``Z`` is UTC; a naive time or bare date is read in ``naive_tz``
+    (UTC by default: the zone an agent harness shows its times in). Unix seconds or milliseconds
+    are accepted. Anything else, or an instant outside 1970-2100, is an error rather than a
+    silently wrong window.
+    """
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    parsed: Optional[datetime] = None
+    if isinstance(value, datetime):
+        parsed = value if value.tzinfo is not None else value.replace(tzinfo=naive_tz)
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
+        seconds = value / 1000 if abs(value) >= 1e11 else value
+        try:
+            parsed = datetime.fromtimestamp(seconds, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            parsed = None
+    elif isinstance(value, str):
+        text = value.strip()
+        if text[-1:] in ('Z', 'z'):
+            text = text[:-1] + '+00:00'
+        if text.upper().endswith(' UTC'):
+            text = text[:-4] + '+00:00'
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            parsed = None
+        if parsed is not None and parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=naive_tz)
+    if parsed is None:
+        raise ToolTimeError(field, value, naive_tz=naive_tz)
+    parsed = parsed.astimezone(timezone.utc)
+    if not _EARLIEST_TOOL_TIME <= parsed < _LATEST_TOOL_TIME:
+        raise ToolTimeError(field, value, naive_tz=naive_tz)
+    return parsed
+
+
+@dataclass(frozen=True)
+class ContextWindow:
+    """The time span an agent run is about: one conversation for notes, a day for Dream, chat or a recap.
+
+    Tools that take a time range default to it, so a model never has to restate the window and
+    cannot miss it by writing the wrong clock or offset.
+    """
+
+    start: datetime
+    end: datetime
+    label: str = 'context'
+
+    def __post_init__(self):
+        start = parse_tool_time(self.start, field='window start')
+        end = parse_tool_time(self.end, field='window end')
+        if start is None or end is None:
+            raise ValueError('A context window needs a start and an end')
+        if end < start:
+            start, end = end, start
+        object.__setattr__(self, 'start', start)
+        object.__setattr__(self, 'end', end)
+
+    @classmethod
+    def trailing_day(cls, now: Optional[datetime] = None, *, label: str = 'last 24 hours') -> 'ContextWindow':
+        end = to_datetime(now) or datetime.now(timezone.utc)
+        return cls(end - timedelta(days=1), end, label)
+
+    @classmethod
+    def from_bounds(
+        cls,
+        start: Any = None,
+        end: Any = None,
+        *,
+        now: Optional[datetime] = None,
+        label: str = 'context',
+        naive_tz: tzinfo = timezone.utc,
+    ) -> 'ContextWindow':
+        """A window from optional bounds (a client-supplied scope); a missing side spans one day."""
+        lo = parse_tool_time(start, field='scope start', naive_tz=naive_tz)
+        hi = parse_tool_time(end, field='scope end', naive_tz=naive_tz)
+        if hi is None:
+            hi = lo + timedelta(days=1) if lo is not None else (to_datetime(now) or datetime.now(timezone.utc))
+        if lo is None:
+            lo = hi - timedelta(days=1)
+        return cls(lo, hi, label)
+
+    @property
+    def span(self) -> timedelta:
+        return self.end - self.start
+
+    def resolve(
+        self,
+        start: Any = None,
+        end: Any = None,
+        *,
+        max_span: Optional[timedelta] = None,
+        naive_tz: tzinfo = timezone.utc,
+        start_field: str = 'start',
+        end_field: str = 'end',
+    ) -> tuple[datetime, datetime]:
+        """The range a tool should read: explicit bounds win, missing ones come from this window.
+
+        A single explicit bound outside the window keeps the window's span next to it. Reversed
+        explicit bounds are swapped; ``max_span`` caps the result from its start.
+        """
+        lo = parse_tool_time(start, field=start_field, naive_tz=naive_tz)
+        hi = parse_tool_time(end, field=end_field, naive_tz=naive_tz)
+        span = self.span or timedelta(hours=1)
+        if lo is None and hi is None:
+            lo, hi = self.start, self.end
+        elif lo is None:
+            assert hi is not None
+            lo = self.start if self.start <= hi else hi - span
+        elif hi is None:
+            hi = self.end if self.end >= lo else lo + span
+        if hi < lo:
+            lo, hi = hi, lo
+        if max_span is not None and hi - lo > max_span:
+            hi = lo + max_span
+        return lo, hi
+
+    def describe(self) -> dict[str, Any]:
+        """Model-facing form: both bounds in UTC ending in ``Z``."""
+        return {'start': utc_z(self.start), 'end': utc_z(self.end), 'label': self.label}
+
+
 def _offset_label(local: datetime) -> str:
     offset = local.utcoffset() or timedelta(0)
     total_minutes = int(offset.total_seconds() // 60)

@@ -1,5 +1,6 @@
 """Summary success is a fenced durable outcome, never upload/model success."""
 
+import importlib
 from copy import deepcopy
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -8,6 +9,14 @@ import pytest
 from config import summary_guarantee as flags
 from utils.conversations import summary_delivery as delivery
 from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
+
+
+@pytest.fixture(scope='module', autouse=True)
+def summary_database_dependency():
+    # The banked-summary branch lazily imports effective_user_title. Load the
+    # real dependency in setup so the call CPU guard measures merge logic,
+    # while import failures still fail this suite and all assertions stay real.
+    importlib.import_module('database.conversations')
 
 
 @pytest.fixture
@@ -168,10 +177,25 @@ def test_empty_model_output_retains_debt_and_prior_good_output(enabled):
     with pytest.raises(delivery.SummaryOutputUnavailable):
         delivery.merge_result(row, minimum(), 'u', now=300)
     assert row['summary_due_at'] == 220
-    # A failed model attempt never gets to overwrite a prior usable summary.
-    old = {**row, 'summary_completed_at': 150, 'summary_due_at': None, 'summary_output_present': True}
-    with pytest.raises(delivery.SummaryOutputUnavailable):
-        delivery.merge_result(old, minimum(), 'u', now=300)
+    # A failed model attempt never gets to overwrite a prior usable summary:
+    # the enriched row now commits (no lane stranding without an outbox), but
+    # the banked content and receipts are re-applied onto the write instead
+    # of letting the empty structured payload clobber them.
+    old = {
+        **row,
+        'structured': {'title': 'Kept', 'overview': 'Banked summary'},
+        'summary_completed_at': 150,
+        'summary_due_at': None,
+        'summary_output_present': True,
+    }
+    empty_write = minimum()
+    assert delivery.merge_result(old, empty_write, 'u', now=300) is None
+    banked_structured = empty_write['structured']
+    assert isinstance(banked_structured, dict)
+    assert banked_structured['overview'] == 'Banked summary'
+    assert empty_write['summary_output_present'] is True
+    assert empty_write['summary_completed_at'] == 150
+    assert empty_write['summary_due_at'] is None
 
 
 def test_lost_ack_does_not_emit_second_terminal_receipt(enabled):

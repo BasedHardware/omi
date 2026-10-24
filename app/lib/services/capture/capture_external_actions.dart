@@ -39,6 +39,10 @@ abstract interface class CaptureExternalActions {
 
   void clearEmptyRecordingExplanation();
 
+  /// The person ended the live conversation (Wrap up, a pendant double-tap, Finish). The live
+  /// episode closes and a fresh one starts counting from now (David 2026-10-23).
+  void onLiveFinalized();
+
   Future<Person?> createPerson(String name);
 
   Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId});
@@ -90,6 +94,9 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
 
   @override
   void clearEmptyRecordingExplanation() {}
+
+  @override
+  void onLiveFinalized() {}
 
   @override
   Future<Person?> createPerson(String name) async => null;

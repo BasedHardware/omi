@@ -186,7 +186,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     for attr in (
         'get_app_result',
         'should_discard_conversation',
-        'get_suggested_apps_for_conversation',
         'get_conversation_notes',
         'validate_structured_source_segment_ids',
         'generate_summary_with_prompt',
@@ -197,7 +196,7 @@ def _build_fakes() -> dict[str, ModuleType]:
 
     add('utils.llm.conversation_prompt_prefix', AutoMockModule('utils.llm.conversation_prompt_prefix'))
     gateway_error_contract = add('utils.llm.gateway_error_contract', AutoMockModule('utils.llm.gateway_error_contract'))
-    gateway_error_contract.conversation_processing_http_exception = lambda error: error
+    gateway_error_contract.conversation_processing_http_exception = lambda error, **kwargs: error
     add('utils.apps', AutoMockModule('utils.apps'))
     add('utils.analytics', AutoMockModule('utils.analytics')).record_usage = MagicMock()
     add('utils.conversations.transcript_chunks', AutoMockModule('utils.conversations.transcript_chunks'))

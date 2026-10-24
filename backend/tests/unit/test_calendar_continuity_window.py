@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from utils.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
+from models.conversation_continuity import calendar_continuity_identity, continuation_timeout, resumable_continuation
 from utils.transcribe_decisions import MAX_CONVERSATION_TIMEOUT_SECONDS
 
 

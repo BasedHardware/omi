@@ -7,8 +7,15 @@ from typing import TYPE_CHECKING, Any
 
 from google.cloud import firestore
 
-from database.batch_pipeline_privacy import assert_batch_write_allowed
-from database.batch_pipeline_projection_protocol import ProjectionBlocked, ProjectionReplay, normalized_binding
+from config.firestore_read_levers import lever_enabled
+from database.batch_pipeline_privacy import assert_batch_write_allowed, BatchPrivacyMemo
+from database.batch_pipeline_projection_protocol import (
+    ProjectionBlocked,
+    ProjectionPredecessorPending,
+    ProjectionReplay,
+    normalized_binding,
+)
+
 from database.sync_ledger import sync_content_ledger_ref, batch_projection_ledger_owner_matches, LEDGER_RETENTION_DAYS
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
@@ -63,21 +70,37 @@ class ProjectionSession:
         parts[str(self.part_index)] = receipt
         changes: dict[str, Any] = {'projection_parts': parts}
         summary = dict(self.entry.get('projection') or {})
-        if summary and all(part.get('state') == 'ready' for part in parts.values()):
+        if summary and all(part.get('state') in {'ready', 'quarantined'} for part in parts.values()):
+            if any(part.get('state') == 'quarantined' for part in parts.values()):
+                # A successful sibling's follow-up cannot acknowledge held text.
+                summary['state'] = 'quarantined'
+                changes.update(projection=summary, projection_state='quarantine_held')
+                transaction.update(self.result_ref, changes)
+                return
             summary['state'] = 'ready'
             changes.update(projection=summary, projection_state='ready')
         transaction.update(self.result_ref, changes)
 
     def guard(self, transaction, conversation_ids=()):
+        options = {}
+        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
+            options['memo'] = getattr(self, '_privacy_memo', None)
         return assert_batch_write_allowed(
             self.client,
             transaction,
             self.binding.owner_id,
             conversation_ids=conversation_ids,
             expected_generation=self.binding.privacy_generation,
+            **options,
         )
 
     def prepare(self, transaction, *, replay=True):
+        if lever_enabled('batch_privacy_memoize', self.binding.owner_id):
+            # A session may survive the pre-check and assignment retries. Only
+            # prepare and validate_plan within this attempt may share snapshots.
+            self._privacy_memo = BatchPrivacyMemo(self.client, transaction)
+        elif hasattr(self, '_privacy_memo'):
+            del self._privacy_memo
         self.job = self.store.ref('jobs', self.segment_id).get(transaction=transaction).to_dict() or {}
         self.entry = self.result_ref.get(transaction=transaction).to_dict() or {}
         owner = self.owner_ref.get(transaction=transaction).to_dict() or {}
@@ -88,7 +111,17 @@ class ProjectionSession:
             or self.segment_id not in self.binding.segment_ids
             or self.job.get('owner_id') != self.binding.owner_id
             or self.entry.get('owner_key') != owner_key(self.binding.owner_id)
-            or self.entry.get('protocol_version') != 1
+            or not (
+                self.entry.get('protocol_version') == 1
+                or self.entry.get('protocol_version') == 2
+                and self.entry.get('lineage_quarantine_version') == 1
+                and any(
+                    part.get('quarantine_version') == 1 and part.get('state') == 'quarantined'
+                    for part in (
+                        self.entry.get('projection_parts') or {'single': self.entry.get('projection') or {}}
+                    ).values()
+                )
+            )
             or self.entry.get('segment_id') != self.segment_id
             or self.entry.get('capture_at') != self.job.get('capture_at')
             or self.job.get('privacy_generation') != self.binding.privacy_generation
@@ -151,22 +184,36 @@ class ProjectionSession:
             owner.get('projection_watermark'),
         )
         if erased is None:
-            raise ProjectionBlocked('earlier committed projection must persist first')
+            raise ProjectionPredecessorPending('earlier committed projection must persist first')
         self.erased_predecessors = erased
 
     def validate_plan(self, transaction, planned):
         # encode is still in assignment's read-only planning phase.
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
 
-    def persist(self, transaction, planned=None, *, superseded=False):
+    def persist(self, transaction, planned=None, *, superseded=False, quarantined=False):
+        if quarantined and (planned is not None or superseded):
+            raise ProjectionBlocked('quarantine cannot assign content')
+        held = quarantined
         assigned, created, survivors = planned if planned is not None else ({}, False, [])
         repeat_only = assigned.get('_sync_lineage_repeat_only', False)
+        silent = (self.job.get('speech_redrive') or {}).get('silent') is True
+        if silent and assigned.get('id') and not superseded:
+            # Same assignment transaction: even a previously queued enrichment
+            # must observe the silent revision. A later normal append gets a new
+            # revision and resumes its ordinary derived effects.
+            revision = assigned.get('sync_content_revision')
+            if type(revision) is not int or revision <= 0:
+                raise ProjectionBlocked('silent redrive requires a content revision')
+            conversation = self.client.collection('users').document(self.binding.owner_id).collection('conversations')
+            transaction.update(conversation.document(assigned['id']), {'sync_silent_redrive_revision': revision})
         receipt: dict[str, Any] = {
             'state': 'ready' if superseded else 'persisted',
             'conversation_id': assigned.get('id'),
             'created': created,
             'language': assigned.get('language') or self.binding.language or 'en',
             'persisted_at': self.now,
+            **({'silent_redrive': True} if silent else {}),
             'audio_required': bool(survivors and self.binding.private_cloud_sync_enabled),
             'incoming_segment_count': self.incoming_segment_count,
             'speech_seconds': 0.0 if superseded else self.speech_seconds,
@@ -176,6 +223,15 @@ class ProjectionSession:
         }
         if superseded:
             receipt.update(disposition='superseded', superseded_speech_seconds=self.speech_seconds)
+        if quarantined:
+            receipt.update(
+                state='quarantined',
+                disposition='ambiguous_generation',
+                quarantine_version=1,
+                held_speech_seconds=self.speech_seconds,
+                speech_seconds=0.0,
+                obligation_due_at=self.entry['committed_at'] + 900,
+            )
         if self.part_index is not None:
             receipt.update(
                 part_index=self.part_index,
@@ -185,6 +241,10 @@ class ProjectionSession:
             )
             parts = {**(self.entry.get('projection_parts') or {}), str(self.part_index): receipt}
             changes: dict[str, Any] = {'projection_parts': parts, 'projection_part_count': self.part_count}
+            if quarantined:
+                # Old projector binaries require result protocol 1. Fence them
+                # before they can turn an unknown held receipt into ready.
+                changes.update(protocol_version=2, lineage_quarantine_version=1)
             if assigned.get('id'):
                 changes['conversation_ids'] = firestore.ArrayUnion([assigned['id']])
                 transaction.update(
@@ -207,12 +267,34 @@ class ProjectionSession:
             # The summary describes the whole result, not merely its last part.
             summary.pop('disposition', None)
             summary.pop('superseded_speech_seconds', None)
+            if any(part.get('state') == 'quarantined' for part in parts.values()):
+                held = True
+                summary.update(state='quarantined', disposition='ambiguous_generation', quarantine_version=1)
+                summary['speech_seconds'] = sum(part.get('speech_seconds', 0.0) for part in parts.values())
+                summary['held_speech_seconds'] = sum(part.get('held_speech_seconds', 0.0) for part in parts.values())
+                summary['obligation_due_at'] = self.entry['committed_at'] + 900
             if all(part.get('disposition') == 'superseded' for part in parts.values()):
                 summary.update(disposition='superseded', speech_seconds=0.0)
-            changes.update(projection=summary, projection_state=summary['state'])
+            changes.update(
+                projection=summary,
+                # Proven parts still owe follow-ups after async assignment or
+                # a crash. Keep the outbox discoverable until they are ready.
+                projection_state=(
+                    'quarantine_held'
+                    if held and all(part['state'] in {'ready', 'quarantined'} for part in parts.values())
+                    else 'persisted' if held else summary['state']
+                ),
+            )
             transaction.update(self.result_ref, changes)
         else:
-            transaction.update(self.result_ref, {'projection': receipt, 'projection_state': receipt['state']})
+            transaction.update(
+                self.result_ref,
+                {
+                    'projection': receipt,
+                    'projection_state': 'quarantine_held' if quarantined else receipt['state'],
+                    **({'protocol_version': 2, 'lineage_quarantine_version': 1} if quarantined else {}),
+                },
+            )
         transaction.update(self.owner_ref, {'projection_watermark': self.segment_id})
         for reference in self.erased_predecessors:
             transaction.update(
@@ -226,16 +308,25 @@ class ProjectionSession:
         transaction.update(
             self.ledger_ref,
             {
-                'processed_segment_ids': firestore.ArrayUnion([self.segment_id]),
+                ('quarantined_segment_ids' if held else 'processed_segment_ids'): firestore.ArrayUnion(
+                    [self.segment_id]
+                ),
                 'updated_at': datetime.fromtimestamp(self.now, timezone.utc),
             },
         )
         return receipt
 
-    def persist_empty(self, *, superseded=False):
+    def persist_empty(self, *, superseded=False, quarantined=False):
         @firestore.transactional
         def commit(transaction):
             self.prepare(transaction)
-            return self.persist(transaction, superseded=superseded)
+            return self.persist(transaction, superseded=superseded, quarantined=quarantined)
 
-        return self.store.run(commit, policy=self.policy)
+        try:
+            return self.store.run(commit, policy=self.policy)
+        finally:
+            # A2 shadow: persist() wrote the owner watermark and erased predecessors outside Store.run.
+            # A strict no-op unless shadow mode; re-copies current state; never raises.
+            mirror = getattr(self.store, 'mirror_assignment', None)
+            if mirror is not None:
+                mirror(self)

@@ -193,7 +193,7 @@ enum AgentErrorClassifier {
     // "invalid key", or "has been disabled" when a key is compromised. Generic
     // "forbidden"/"permission denied" are ordinary 403 authorization failures,
     // not leaks; classing them here both mislabels the user copy and gets the
-    // event dropped by SentryBeforeSendPolicy (it filters "ai service
+    // event class already classified as expected ("ai service
     // authentication error"), hiding real forbidden-class bugs from triage.
     if lower.contains("leaked") || lower.contains("invalid key") || lower.contains("has been disabled") {
       return ClassifiedAgentError(

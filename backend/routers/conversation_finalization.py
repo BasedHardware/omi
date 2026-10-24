@@ -21,6 +21,7 @@ from services.conversation_finalization import (
 from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations import quiet_finalization
 from utils.conversations.processing_trigger import trigger_for_finalization_job
 from utils.conversations.recovery import RecoveryStructureUnavailableError, recovery_minimum_terminal_enabled
 from utils.conversations.finalizer import (
@@ -29,12 +30,15 @@ from utils.conversations.finalizer import (
     finalize_persisted_conversation,
 )
 from utils.executors import db_executor, postprocess_executor, sync_executor, run_blocking
+from utils.llm.gateway_error_contract import byok_failure_class_of
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.observability.journeys import (
     record_capture_finalization_terminal,
     record_conversation_finalization_client_terminal,
 )
 from utils.observability.finalization import finalization_diagnostic_id
+from utils.observability.reasons import RetryReason
+from utils.workers.retry import retry_response
 
 logger = logging.getLogger(__name__)
 
@@ -127,14 +131,34 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=200, content={'status': status})
         except (ValueError, TypeError):
             return JSONResponse(status_code=400, content={'status': 'invalid_enrichment_task'})
-        except Exception:
-            return JSONResponse(status_code=503, content={'status': 'retry'})
+        except Exception as error:
+            # Same mapping as routers.batch_pipeline.enrichment_response: an expected retry (for example a
+            # first summary whose callback is still pending) answers 409; only an unexpected failure is 500.
+            # Never 503 (contract (d)): Cloud Tasks system-throttles the whole queue on it.
+            from routers.batch_pipeline import expected_retry_reason
+
+            reason = expected_retry_reason(error)
+            if reason is None:
+                logger.error(
+                    'event=conversation_finalization_sync_reprocess outcome=retry retry_class=unexpected '
+                    'exception_type=%s',
+                    type(error).__name__,
+                )
+                return JSONResponse(status_code=500, content={'status': 'retry'})
+            logger.warning('event=conversation_finalization_sync_reprocess outcome=retry retry_class=%s', reason)
+            return retry_response(RetryReason(reason))
     parsed = _parse_task_payload(payload)
     if parsed is None:
         logger.warning('listen finalization handler dropped invalid opaque task payload')
         return JSONResponse(status_code=200, content={'status': 'dropped', 'reason': 'invalid_payload'})
 
     job_id, dispatch_generation = parsed
+    if job_id.startswith('merge-'):
+        status = await lifecycle_service.merge_jobs.run(job_id, dispatch_generation)
+        return JSONResponse(status_code=200, content={'status': status})
+    if job_id.startswith('quiet-'):
+        status = await run_blocking(db_executor, quiet_finalization.run, job_id, dispatch_generation)
+        return JSONResponse(status_code=200, content={'status': status})
     from utils.conversations.demand_processing import admit
 
     if not await run_blocking(db_executor, admit, job_id, token=dispatch_generation):
@@ -286,9 +310,16 @@ async def run_listen_finalization_job(
                 job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, failed_attempts, 'processing_failed'
             )
             if terminal:
-                logger.error(
-                    'listen finalization final attempt failed job_hash=%s failure=processing_failed',
+                # A BYOK provider failure is the user's own account state even at
+                # dead-letter terminality; keep it out of severity>=ERROR counts.
+                byok_class = byok_failure_class_of(error)
+                log = logger.error if byok_class is None else logger.warning
+                log(
+                    'listen finalization final attempt failed job_hash=%s failure=processing_failed '
+                    'byok=%s failure_class=%s',
                     finalization_diagnostic_id(job_id),
+                    byok_class is not None,
+                    byok_class or 'none',
                 )
                 return JSONResponse(status_code=200, content={'status': 'dead_letter'})
             return JSONResponse(status_code=500, content={'status': 'retry'})

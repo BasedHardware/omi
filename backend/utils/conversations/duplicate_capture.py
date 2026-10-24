@@ -23,6 +23,9 @@ from datetime import datetime, timezone
 from typing import Any, Mapping
 
 from config.capture_shared_speech import shared_speech_mode
+from config.refactor_modes import serving_for
+from utils.capture.coverage_crossdevice import reconcile as reconcile_cross_device
+from utils.conversations.lifecycle_clocks import speech_clock, utc
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
 from database.capture_speech import get_shared_speech_snapshot
@@ -66,13 +69,19 @@ class CaptureRecord:
         return (-self.duration_seconds, self.conversation_id)
 
 
-def capture_record(record: Any) -> CaptureRecord | None:
+def capture_record(record: Any, uid: str | None = None) -> CaptureRecord | None:
     def field(name):
         return record.get(name) if isinstance(record, Mapping) else getattr(record, name, None)
 
     if field('discarded') or field('status') != 'completed':
         return None
-    start, finish = field('started_at'), field('finished_at')
+    normalize = uid is not None and serving_for('LIFECYCLE_V2_MODE', uid)
+    start = utc(field('started_at')) if normalize else field('started_at')
+    finish = (
+        speech_clock(uid, {'finished_at': field('finished_at'), 'last_speech_at': field('last_speech_at')})
+        if normalize and uid is not None
+        else field('finished_at')
+    )
     if not isinstance(start, datetime) or not isinstance(finish, datetime):
         return None
     start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
@@ -107,7 +116,7 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
     The transaction rechecks both snapshots, including discard, before writing.
     A failed optional hint must not prevent the original capture from completing.
     """
-    candidate = capture_record(conversation)
+    candidate = capture_record(conversation, uid)
     if candidate is None:
         return
     speech_mode = shared_speech_mode(uid)
@@ -121,7 +130,7 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
             _record_degraded()
         # Largest windows first, so a secondary with several matches gets the
         # most complete observed capture. Existing pointers are idempotent.
-        others = sorted(filter(None, map(capture_record, rows)), key=lambda row: row.primary_rank)
+        others = sorted(filter(None, map(lambda row: capture_record(row, uid), rows)), key=lambda row: row.primary_rank)
         matches = []
         for other in others:
             match = overlap_match(candidate, other, seconds=seconds, ratio=ratio)
@@ -140,6 +149,18 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         # Exception strings can carry request data; keep telemetry content-free.
         _record_degraded()
         return
+    if reconcile_cross_device(
+        uid,
+        candidate.conversation_id,
+        [
+            other.conversation_id
+            for other in others
+            if other.conversation_id != candidate.conversation_id
+            and min(candidate.finished_at, other.finished_at) > max(candidate.started_at, other.started_at)
+        ],
+    ):
+        return
+    # refactor: superseded by utils.capture.coverage_crossdevice when CAPTURE_COVERAGE_MODE=serve
     if speech_mode != 'on':
         _group_confirmed_captures(uid, conversation, candidate, matches[:MAX_CONTENT_CHECKS])
     if speech_mode != 'off':
@@ -244,7 +265,7 @@ def _group_with_overlap_speech(
                         if cid in fingerprints:
                             continue
                         member_row, member_fingerprint = load(cid)
-                        record = capture_record(member_row)
+                        record = capture_record(member_row, uid)
                         if record is None:
                             would_join, reason = False, 'group_unconfirmed'
                             break

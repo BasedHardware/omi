@@ -362,7 +362,9 @@ def test_sync_backfill_lifecycle_is_shared_by_manual_and_auto_dev():
     assert 'id: backfill-runtime' in action
     assert 'id: deploy-backend-sync-backfill' in action
     assert 'render_cloud_run_clone_env.py' in action
-    assert 'SYNC_TASKS_QUEUE=sync-backfill' in action
+    # B4: the worker's queues come from the ops file in prod (sync-backfill only outside prod).
+    assert 'SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}' in action
+    assert 'ops_train.py" render-env --env prod' in action
     # Dispatch concurrency must stay within max instances x concurrency: offering more
     # than the worker admits makes Cloud Run reject the surplus and Cloud Tasks
     # back it off, which previously stranded recordings for hours. A warm
@@ -1042,26 +1044,39 @@ def test_completion_transaction_accepts_success_and_expected_silence():
 
 
 def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
+    from tests.unit.fixtures.shadow_usage_firestore import Store
+
     transaction = _Transaction()
     marker_ref = _Ref({'status': 'processing'})
-    usage_ref = _Ref()
+    store = Store({'users/uid': {'synthetic': True}})
+    user_ref = store.collection('users').document('uid')
+    usage_ref = user_ref.collection('hourly_usage').document('2026-10-23-15')
+    update = {'id': '2026-10-23-15', 'transcription_seconds': firestore.Increment(5)}
 
     recorded = user_usage._update_hourly_usage_once_transaction.to_wrap(
         transaction,
         marker_ref,
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
     duplicate = user_usage._update_hourly_usage_once_transaction.to_wrap(
         _Transaction(),
         _Ref({'usage_committed_at': datetime.now(timezone.utc)}),
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
 
     assert recorded is True
-    assert len(transaction.writes) == 2
+    assert len(transaction.writes) == 3
     assert transaction.writes[0][1].get('usage_committed_at') is not None
+    assert transaction.writes[1][0] is usage_ref
+    total_ref, total_update, total_merge = transaction.writes[2]
+    assert total_ref.path == 'users/uid/monthly_usage_totals/2026-10'
+    assert total_update['totals']['transcription_seconds'] is update['transcription_seconds']
+    assert total_update['days']['23']['transcription_seconds'] is update['transcription_seconds']
+    assert total_merge is True
     assert duplicate is False
 
 
@@ -1248,8 +1263,11 @@ def test_backfill_queue_comes_from_the_manifest_not_a_literal(tmp_path, manifest
         (REPOSITORY_ROOT / '.github/actions/sync-backfill-lifecycle/action.yml').read_text(encoding='utf-8')
     )
     steps = {step.get('id'): step for step in action['runs']['steps']}
-    service_step = steps['backfill-service']['run']
-    script = service_step.split('PROJECT_NUMBER=', 1)[0] + 'echo "SYNC_BACKFILL_TASKS_QUEUE=${BACKFILL_QUEUE}"'
+    # Queues resolve once in ops-queues (B4): prod reads the ops file (fail-closed, tested in
+    # test_config_train); every other project takes the manifest's values, sync-backfill only as default.
+    queue_step = steps['ops-queues']['run']
+    assert steps['ops-queues']['env']['BACKFILL_ENV'] == '${{ inputs.backfill_env_vars }}'
+    script = queue_step.split('if [[', 1)[0] + 'echo "SYNC_BACKFILL_TASKS_QUEUE=${backfill_queue}"'
     result = subprocess.run(
         ['bash', '-c', script],
         env={**os.environ, 'BACKFILL_ENV': manifest_env},
@@ -1258,6 +1276,10 @@ def test_backfill_queue_comes_from_the_manifest_not_a_literal(tmp_path, manifest
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == f'SYNC_BACKFILL_TASKS_QUEUE={expected}'
+    assert steps['backfill-service']['env']['BACKFILL_QUEUE'] == '${{ steps.ops-queues.outputs.backfill_queue }}'
     overlay = steps['backfill-runtime']['env']['ENV_OVERLAY'].splitlines()
-    # The legacy default comes first so the manifest overlay (later lines win) overrides it.
-    assert overlay.index('SYNC_TASKS_QUEUE=sync-backfill') < overlay.index('${{ inputs.backfill_env_vars }}')
+    # The resolved worker queue comes after the manifest overlay, so no literal can override it.
+    assert overlay.index('${{ inputs.backfill_env_vars }}') < overlay.index(
+        'SYNC_TASKS_QUEUE=${{ steps.ops-queues.outputs.worker_queue }}'
+    )
+    assert 'SYNC_TASKS_QUEUE=sync-backfill' not in overlay

@@ -4458,6 +4458,10 @@ class AppLocalizationsTa extends AppLocalizations {
   String get continueText => 'தொடரவும்';
 
   @override
+  String get checkoutExistingSubscription =>
+      'உங்களிடம் ஏற்கனவே சந்தா உள்ளது. புதியதைத் தொடங்குவதற்குப் பதிலாக தற்போதைய சந்தாவை நிர்வகிக்கவும்.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.';
 
   @override
@@ -13487,9 +13491,6 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
-  String get paywallTrialSecondary => 'இலவச திட்டத்துடன் தொடரவும்';
-
-  @override
   String get paywallTrialCancelNote => 'எந்த நேரத்திலும் ரத்து செய்யவும். கட்டணங்கள் இல்லை, அபராதங்கள் இல்லை.';
 
   @override
@@ -14482,4 +14483,176 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get activityAttentionLinkStalledSubtitle => 'Omi-இல் பதிவு தொடர்கிறது';
+
+  @override
+  String get episodeNow => 'இப்போது';
+
+  @override
+  String episodeLiveFor(String duration) {
+    return 'நேரலை · $duration';
+  }
+
+  @override
+  String episodeMomentsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count தருணங்கள்',
+      one: '1 தருணம்',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get episodeMoments => 'தருணங்கள்';
+
+  @override
+  String get episodeSoFar => 'இதுவரை';
+
+  @override
+  String get episodeUpdatedJustNow => 'இப்போது புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்';
+
+  @override
+  String episodeUpdatedMinutesAgo(int minutes) {
+    return '$minutes நிமி. முன் புதுப்பிக்கப்பட்டது · முடிவில் முழு குறிப்புகள்';
+  }
+
+  @override
+  String get episodeNotesSoon => 'பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.';
+
+  @override
+  String get episodeOpenAll => 'அனைத்தையும் திற';
+
+  @override
+  String get episodeWrapUpNow => 'இப்போதே முடி';
+
+  @override
+  String get episodeWrapsUpHint => 'நீங்கள் அடுத்ததற்குச் செல்லும்போது Omi இதை முடிக்கும்';
+
+  @override
+  String episodeTaskCaptured(String text) {
+    return 'பணி கண்டறியப்பட்டது: $text';
+  }
+
+  @override
+  String episodeReminderCaptured(String text) {
+    return 'நினைவூட்டல் கண்டறியப்பட்டது: $text';
+  }
+
+  @override
+  String episodeTaskSaved(String text) {
+    return 'பணி சேமிக்கப்பட்டது: $text';
+  }
+
+  @override
+  String episodeAddingFromOmi(String duration) {
+    return 'உங்கள் Omi-இலிருந்து $duration சேர்க்கப்படுகிறது';
+  }
+
+  @override
+  String get episodeListeningNow => 'இப்போது கேட்கிறது';
+
+  @override
+  String get deviceHeardToday => 'இன்று கேட்டது';
+
+  @override
+  String get deviceToSync => 'ஒத்திசைக்க வேண்டியது';
+
+  @override
+  String get deviceRightNow => 'இந்த நேரத்தில்';
+
+  @override
+  String deviceLiveEpisode(String duration) {
+    return 'நேரலை அத்தியாயம் · $duration';
+  }
+
+  @override
+  String get deviceCatchingUp => 'பின்தங்கியதைச் சேர்க்கிறது';
+
+  @override
+  String deviceCatchingUpProgress(int done, int total) {
+    return '$done/$total நிமி.';
+  }
+
+  @override
+  String get deviceRecently => 'சமீபத்தில்';
+
+  @override
+  String deviceDisconnectedFor(String duration) {
+    return '$duration இணைப்பு துண்டிக்கப்பட்டது';
+  }
+
+  @override
+  String get deviceControls => 'கட்டுப்பாடுகள்';
+
+  @override
+  String homeBackgroundLine(String items) {
+    return 'மேலும்: $items';
+  }
+
+  @override
+  String get deviceOnboardingPressButtonTitle => 'உங்கள் Omi பொத்தானை அழுத்துங்கள்';
+
+  @override
+  String get deviceOnboardingPressButtonSubtitle => 'ஒரு சிறு அழுத்தம். பிறகு எதையும் கேளுங்கள்.';
+
+  @override
+  String get deviceOnboardingAskNowTitle => 'உங்கள் கேள்வியைக் கேளுங்கள்';
+
+  @override
+  String get deviceOnboardingAskNowSubtitle => 'சத்தமாகச் சொல்லுங்கள். Omi கேட்கிறது.';
+
+  @override
+  String get deviceOnboardingPressAgainHint => 'முடிந்ததா? அனுப்ப மீண்டும் பொத்தானை அழுத்துங்கள்.';
+
+  @override
+  String trialUpsellTitle(int days) {
+    return 'உங்களுக்கு $days நாள் இலவசம்';
+  }
+
+  @override
+  String trialUpsellBody(int days) {
+    return '$days நாள் Omi Pro எங்கள் செலவில். கட்டணத்திற்கு முன் நினைவூட்டுவோம். எப்போது வேண்டுமானாலும் ரத்து செய்யலாம்.';
+  }
+
+  @override
+  String trialUpsellClaim(int days) {
+    return '$days நாள் சோதனையைப் பெறுங்கள்';
+  }
+
+  @override
+  String settingsUpgradeTrialSubtitle(int days) {
+    return '$days நாள் இலவச சோதனையைத் தொடங்குங்கள்';
+  }
+
+  @override
+  String get pairingPowerOnTitle => 'உங்கள் Omi-ஐ ஆன் செய்யுங்கள்';
+
+  @override
+  String get pairingPowerOnSubtitle => 'பொத்தானை ஒருமுறை அழுத்தி, ஃபோனுக்கு அருகில் வைத்திருங்கள்.';
+
+  @override
+  String get walkthroughBackgroundRecordingNote =>
+      'அவ்வளவுதான். Omi பின்னணியில் உங்கள் உரையாடல்களைப் பதிவு செய்து கொண்டே இருக்கும்.';
+
+  @override
+  String get noThanks => 'வேண்டாம், நன்றி';
+
+  @override
+  String get recapInTheBackground => 'பின்னணியில்';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% தள்ளுபடியுடன் தொடருங்கள்';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'தொடருங்கள், மாதம் $price செலுத்துங்கள், அடுத்த $months மாதங்களுக்கு.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'முடிந்தது. $percent% தள்ளுபடி, அடுத்த $months மாதங்களுக்கு.';
+  }
 }

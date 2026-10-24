@@ -49,6 +49,11 @@ REPLAY_SKIPPED = Counter(
 REPLAY_CLOSED = Counter(
     'omi_stt_replay_successor_closed_total', 'Successor deaths during replay', ['source', 'successor']
 )
+TAIL_CATCHUP = Counter(
+    'omi_stt_live_tail_catchup_seconds_total',
+    'Live tail audio delivered above the endpoint sustained rate to drain a held backlog',
+    ['successor'],
+)
 RECOVERY_ATTEMPTS = Counter(
     'omi_stt_recovery_attempts_total',
     'Actual live recovery dials by dead provider family and attempted successor family',
@@ -96,6 +101,16 @@ SESSION_LOCAL_EXCLUSION_RELEASES = Counter(
     'omi_stt_session_local_exclusion_releases_total',
     'Providers re-admitted to a session after a successor was adopted; they had left only for replay overflow',
     ['provider'],
+)
+SAME_TARGET_RETRIES = Counter(
+    'omi_stt_same_target_retries_total',
+    'One jittered same-target retry after a connection-level failure (path=connect|death)',
+    ['provider', 'path', 'outcome'],
+)
+COST_ESCAPE_VOTES = Counter(
+    'omi_stt_cost_routing_escape_votes_total',
+    'Trial votes admitted from outside the re-entry cohort because no stage-100 target served the user',
+    ['target'],
 )
 WINDOW_REPLAY_CUT_REQUESTS = Counter(
     'omi_stt_window_replay_cut_requests_total', 'Coalesced requests to cut a held TDT tail under capture-ring pressure'
@@ -271,7 +286,7 @@ COST_ALL_DEGRADED = Counter(
 )
 COST_IGNORED_DEATHS = Counter(
     'omi_stt_cost_routing_ignored_deaths_total',
-    'Claimed socket deaths excluded by client departure or owner teardown',
+    'Claimed socket deaths excluded by client departure, owner teardown or pod drain',
     ['target', 'reason', 'boundary'],
 )
 COST_OBSERVATIONS = Counter(
@@ -342,6 +357,7 @@ if recovery_enabled():
             for _cohort in DEMAND_COHORTS:
                 initialize_metric(RECOVERY_ATTEMPTS, source=_source, successor=_successor, demand_cohort=_cohort)
     for _provider in PROVIDER_FAMILIES:
+        TAIL_CATCHUP.labels(successor=_provider)
         for _cohort in DEMAND_COHORTS:
             initialize_metric(LIVE_SESSION_TERMINAL_AFTER_TEXT, provider=_provider, demand_cohort=_cohort)
         for _event in ('opened', 'probe', 'skipped', 'reset', 'escape'):
@@ -355,14 +371,27 @@ class SonioxIdleMetrics(NamedTuple):
     failures: Counter
     avoided: Counter
     closes_by_trigger: Counter
+    cohort_closes: Counter
+    cohort_reopens: Counter
+    cohort_latency: Histogram
+    cohort_failures: Counter
+    cohort_avoided: Counter
+    cohort_closes_by_trigger: Counter
 
 
 _soniox_idle_metrics: SonioxIdleMetrics | None = None
 _soniox_idle_lock = threading.Lock()
 
+SONIOX_IDLE_COHORT_ARMS = ('control', 'treatment')
+
 
 def soniox_idle_metrics() -> SonioxIdleMetrics:
-    """Register only when an enabled Soniox socket is constructed; no off series."""
+    """Register only when an enabled Soniox socket is constructed; no off series.
+
+    The ``omi_soniox_idle_cohort_*`` companions carry the session's treatment
+    arm (``config.soniox_idle`` uid-hash cohort) so a percent rollout compares
+    arms without relabelling the existing unlabeled family.
+    """
     global _soniox_idle_metrics
     with _soniox_idle_lock:
         if _soniox_idle_metrics is None:
@@ -383,7 +412,46 @@ def soniox_idle_metrics() -> SonioxIdleMetrics:
                     'Planned paid transport closes by trigger (vad silence or no client frames)',
                     ['trigger'],
                 ),
+                Counter(
+                    'omi_soniox_idle_cohort_closes_total',
+                    'Planned paid transport closes by treatment arm',
+                    ['arm'],
+                ),
+                Counter(
+                    'omi_soniox_idle_cohort_reopens_total',
+                    'Speech-triggered paid transport dials by treatment arm',
+                    ['arm'],
+                ),
+                Histogram(
+                    'omi_soniox_idle_cohort_reopen_seconds',
+                    'Onset to replacement audio admission by treatment arm',
+                    ['arm'],
+                    buckets=(0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10),
+                ),
+                Counter(
+                    'omi_soniox_idle_cohort_reopen_failures_total',
+                    'Failed speech-triggered transport dials by treatment arm',
+                    ['arm'],
+                ),
+                Counter(
+                    'omi_soniox_idle_cohort_connected_seconds_avoided_total',
+                    'Estimated wall seconds with transport closed by treatment arm',
+                    ['arm'],
+                ),
+                Counter(
+                    'omi_soniox_idle_cohort_closes_by_trigger_total',
+                    'Planned paid transport closes by trigger and treatment arm',
+                    ['arm', 'trigger'],
+                ),
             )
             for _trigger in ('vad', 'no_frames'):
                 _soniox_idle_metrics.closes_by_trigger.labels(trigger=_trigger)
+                for _arm in SONIOX_IDLE_COHORT_ARMS:
+                    _soniox_idle_metrics.cohort_closes_by_trigger.labels(arm=_arm, trigger=_trigger)
+            for _arm in SONIOX_IDLE_COHORT_ARMS:
+                _soniox_idle_metrics.cohort_closes.labels(arm=_arm)
+                _soniox_idle_metrics.cohort_reopens.labels(arm=_arm)
+                _soniox_idle_metrics.cohort_latency.labels(arm=_arm)
+                _soniox_idle_metrics.cohort_failures.labels(arm=_arm)
+                _soniox_idle_metrics.cohort_avoided.labels(arm=_arm)
     return _soniox_idle_metrics

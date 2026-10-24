@@ -1,10 +1,47 @@
 # Batch intake and serving operations
 
-All switches default off. Declaring settings or deploying an empty chart does
+Global batch admission defaults off; quality and isolation kill switches can
+ship on. Declaring settings or deploying an empty chart does
 not select an upload; the lead explicitly enables the global admission flag and
 allowlist/percentage after qualification. Agent A does not deploy or apply indexes.
 
 ## Host settings and rollback
+
+### Partial-ramp owner isolation
+
+`BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS` ships on; only `off` disables
+it. At a new sync upload or recording reservation with `0 < percent < 100`,
+`config/policy/ramp.py` excludes an owner with more than 30 open items or
+more than 21,600 seconds of waiting audio. Explicit canaries follow the same
+rule. Open items are recent (six-hour) unfinished, non-quarantined batch units
+plus waiting `sync_backfill_pending` jobs and the sequencer's active legacy
+payload, deduplicated by job ID across the dispatch transition. Audio includes their known durations
+and the incoming upload's declared span. This catches both run 24's one 20-hour
+upload and run 25's 42 open units before they enter a typical-user ramp.
+Missing or invalid incoming WAL bounds are unknown audio, never zero. New
+desktop uploads without declared bounds therefore stay on legacy during a
+partial ramp. Existing batch receipt/record owners continue draining.
+
+The database reader selects metadata only, at most 512 rows per query source
+plus one active-owner metadata document. A
+saturated read, unknown waiting duration or read error keeps new work on legacy
+and emits `omi_batch_ramp_heavy_owner_excluded_total{reason}`; fixed reasons are
+`open_backlog`, `recording_hours`, `load_unavailable`. The counter counts decisions,
+not distinct owners. It has no account label. Existing batch content receipts
+and native recording owners keep their original dispatcher and continue draining;
+the exclusion must never start a legacy twin. Full rollout (`percent=100`) and
+percent-zero explicit qualification retain their existing semantics.
+
+Excluded owners continue receiving the legacy pipeline, with its existing
+sequencer, capacity and recovery gates. The lead runs their drain as a separate
+heavy-owner qualification window: report the excluded count/reasons, open count
+and audio volume; keep the existing hard cap of 60; wait for backlog to fall;
+then run the unchanged fleet gate with the retained accepted-work census and
+by-reason failure checks. No automatic widening or new redrive is granted here.
+Before a 100% step, attach that heavy-owner gate receipt separately from the
+typical-cohort receipt. Roll back new-admission isolation with `=off`; accepted
+work retains its saved policy. The workspace preflight vendors the pure source
+and verifies its bytes against the serving release before applying exclusion.
 
 On the selected always-CPU backend host, `BATCH_PIPELINE_SERVING_ENABLED=true` starts a supervised
 20-second reconciliation loop. It recovers leases/retries, drains ordered log
@@ -286,6 +323,92 @@ verification. Roll back to off to stop new dispatches; accepted normal
 projection still drains. Failed/ambiguous intents require a separately reviewed
 operator decision, never a blind reset to prepared.
 
+### Client status for held uploads
+
+The upload ledger stays `processing` while a unit is held. The status poll and a
+re-upload of the same content (`durable_status`) used to answer `failed` with
+`batch_worker_quarantined`; the phone re-uploaded, received the same answer and
+looped. Kill switch `BATCH_PIPELINE_HELD_TERMINAL_STATUS_ENABLED` (default on)
+answers instead:
+
+- `completed` with an empty result and `reason_code: batch_unit_held` when every
+  failed unit is `failed_held` with no open `speech_redrive`,
+  `terminal_disposition` or `silence_disposition` intent, and every other unit
+  is `committed`. Released apps ACK the WAL. A re-upload cannot change the
+  outcome, and the held unit's encrypted audio stays server-side for the
+  operator path above. Committed siblings are already projected; no
+  conversation ID is named. Nothing is written: the ledger, jobs and
+  retention keep their held state.
+- `processing` when such an intent is open or a sibling is still in flight.
+- Any other quarantine failure keeps `failed`/`batch_worker_quarantined`.
+
+### Held uploads complete as partial
+
+David ruled on 2026-10-20 that held uploads complete as partial on the ledger.
+Kill switch `BATCH_PIPELINE_HELD_PARTIAL_ENABLED` (default on). Every 300 s the
+serving maintenance leader scans up to 32 `held`/`failed_held` jobs
+(`Projector.sweep_held`). It completes an upload as partial once every unit
+without a projection receipt is **held with no recovery path left**:
+`failed_held`, or `held` with a recorded recovery policy that is off and no
+`recovery` intent. A unit with an open `speech_redrive`, `terminal_disposition`
+or `silence_disposition` intent still blocks it. Every other unit must have a
+`ready` projection receipt or be erased.
+
+- **Ledger.** `status: partial` with `result.outcome: partial`,
+  `failed_segments == held_segments` (the held span) and the projected
+  siblings' visible conversation IDs. These go through the same redirect and
+  privacy fences as completion. `usage_committed_seconds` records the projected
+  speech that was charged, and `usage_steps` every charge boundary
+  (`[0, s1, s2, …]`). The held span is never charged. Hourly usage commits in
+  the partial transaction. Fair use records only after the commit, and every
+  record (a scan replay, a newer partial, the ordinary upgrade) re-issues each
+  stored step under its own once-key (`<content_id>` for the first,
+  `<content_id>:<start_ms>` after). A Redis write lost after any commit
+  therefore lands once on a later attempt, as long as that attempt comes
+  within six days. `usage_step_times` records each step's commit. A step older
+  than the fair-use once-key TTL (8 days) less a 2-day margin, or with no
+  recorded time, is never re-issued: its key may have expired, and that speech
+  is outside the 7-day fair-use read anyway. Accounting returns nothing
+  while any unit can still change, so an ineligible upload is never charged.
+- **Client.** The status poll and a re-upload answer `completed` with
+  `reason_code: batch_unit_held`, the partial result, and
+  `failed_segments` set to the held count. Released apps ACK the WAL. A
+  conversation the user has since deleted answers `conversation_deleted`, as
+  it does for a completed row.
+- **Nothing else moves.** There is no provider call, and no job, intent,
+  merge-head, owner-revision or retention write. The held units' encrypted
+  audio stays for a reviewed redrive, and parked siblings keep
+  `quarantine_held`. Nothing is published to the legacy Redis job, because its
+  fence takes only all-success results.
+- **Upgrade.** A partial row stays owned by its batch job:
+  `batch_projection_ledger_owner_matches` accepts `processing` and `partial`.
+  Recovery, the operator redrive tools and the ordinary completion therefore
+  still run. When a held unit recovers, its projection completes the upload,
+  the ledger becomes `completed`, and only the remaining speech is charged
+  (hourly usage, plus fair use keyed `<content_id>:<charged_ms>`). If other
+  units are still held, the next scan rewrites the partial with the smaller
+  held span. A completed row is never re-partialed. Partial writes are
+  idempotent: a replay of the same state writes nothing.
+- **Rollback.** Setting the kill switch to false stops new partials. Existing
+  partial rows keep answering `completed` and can still upgrade.
+
+The record lane's capture listing (`list_audio_chunks(require_archive=True)`)
+raises when the raw-archive pack listing fails. It never returns only the
+legacy chunks, which would admit a recording whose later packs are silently
+missing. The admission retries in 60 s. Conversation merge uses the same mode,
+because it deletes the source audio after the copy.
+
+Completed content whose conversation the user has since deleted answers
+`completed` with an empty result and `reason_code: conversation_deleted`, on
+both the poll and the re-upload claim (a legacy receipt re-upload answers the
+synchronous all-success 200 shape). Every other privacy denial keeps its 409.
+
+A unit admitted while recovery was off records `recovery_enabled=false` and used
+to sit `held` forever. Kill switch `BATCH_PIPELINE_RECOVERY_POLICY_REFRESH_ENABLED`
+(default on) lets the sweep and dispatch re-resolve that part while the unit is
+`held` with no `recovery` intent (no paid call authorized). It adopts the fresh
+part only when it is enabled; an enabled snapshot is never re-resolved.
+
 ### Dark empty-ASR disposition
 
 `BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED=false` is the default on all roles.
@@ -406,10 +529,46 @@ pins/persists its provider before dispatch. With the flag on, positive strict
 local VAD, affirmative GPU padded-empty evidence, and a validated empty
 **multilingual** response produce `no_recoverable_speech`. Oversized and long-speech units that
 skipped the GPU padded retry still run strict VAD and multilingual recovery, but
-an empty multilingual response stays `failed_held` rather than terminal-empty.
-Timeouts, malformed responses, uncertain calls, missing evidence, and provider
-failures stay held. There are no additional calls after exhaustion and no
-paid-intent resets.
+an empty multilingual response from Modulate alone stays `failed_held` rather
+than terminal-empty. Timeouts, malformed responses, uncertain calls, missing
+evidence, and provider failures stay held. There are no paid-intent resets.
+
+**Second multilingual provider (long-speech units) — retired 2026-08-27.**
+This step used to spend exactly one more call, to cloud Deepgram nova-3 with
+language detection (`second_transcribe`), inside the same `running` intent.
+Deepgram is retired (no contract since 2026-08-27), so
+`config.stt_provider_policy.HELD_RECOVERY_SECOND_PROVIDER` is `None` and
+`second_provider_eligible` answers False for every unit: no second call is
+spent, and an empty multilingual Modulate response settles `failed_held`
+(Modulate-only recovery, the same behavior as
+`BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false`). The wiring, flag and
+metering stay so a future second batch provider can be introduced by naming it
+in the policy again. Historical behavior, kept for reference:
+
+- Deepgram returns words: the unit recovers with those words (ordinary
+  `success` result).
+- Deepgram also returns valid-empty: with the terminal-empty flag on, the unit
+  settles `no_recoverable_speech` with `recognition_evidence`
+  `{gpu_padded_retry: skipped_long_speech, multilingual_recovery: empty,
+  second_multilingual_recovery: empty}`. This is the honest outcome. No one may
+  listen to the audio, so the pipeline has to settle it on evidence: VAD saw
+  speech-like energy, and two independent multilingual ASR systems, with
+  different models and language coverage, both found no words in it. It is the
+  same quality of evidence as GPU padded-empty plus Modulate-empty. Another
+  `failed_held` would only say "unknown", and nothing would ever retry it.
+- Deepgram errors, times out, returns a malformed answer, or the allowance
+  refuses: the unit stays `failed_held` with Modulate's
+  `response_validation/empty_asr` failure, as before.
+
+A crash between the two calls leaves the intent `running`. The 900 s abandonment
+rule then settles it `failed_held` without another call. Each long-speech empty
+costs at most one extra Deepgram call of the unit's duration. Metering:
+`omi_batch_recovery_second_provider_total{provider=deepgram,outcome=words|empty|error|refused}`,
+the log `event=batch_recovery_second_provider provider=deepgram outcome=...`,
+and `omi_stt_cap_provider_audio_seconds{path=sync,outcome=accepted}` for both
+paid answers (`provider=modulate`, now also for valid-empty answers, and
+`provider=deepgram`). `BATCH_PIPELINE_SECOND_MULTILINGUAL_ENABLED=false` (kill
+switch, unset is on) restores Modulate-only recovery.
 
 This is an empty-words **terminal degradation**, distinct from silence. The
 encrypted result retains validated positive VAD and closed recognition evidence.
@@ -676,6 +835,25 @@ receipts) in chain order. It stops at the first row whose assignment does not
 advance the watermark, or after 64 rows or 30 seconds. The generic sweep runs
 afterwards as before, and any error in the wake falls back to it.
 
+`BATCH_PIPELINE_RECOVERED_MERGE_RELEASE_ENABLED` defaults to `true` (kill
+switch: `false`). The wake's merge drain releases the recovered unit at once.
+Without it, a recovered unit whose owner had an unready, earlier-captured
+head waited out the head wait from its settle time (`ready_at`) plus a
+maintenance tick. In the 2026-10-20 5% run 18, 46 of 54 wakes advanced no row
+and held recovered units took 65–86 s from settle to commit; projection then
+waited for the next 20 s sweep. The wake passes a release set: the recovered
+unit, then up to 32 of its content's other units. When strict order,
+fresh-first and the head wait commit nothing, the first row in the set that is
+still the owner's pending, ready job commits past the head wait; the commit
+transaction re-verifies the row. Only the recovered unit itself also passes
+the catch-up depth hold; its siblings keep it, so a wake cannot push a burst
+of catch-up rows past the cap ahead of a later fresh row. The
+commit body, late marking, log chain and projection order are unchanged, and
+an unready or fenced row is dropped from the set. Release commits carry
+`recovered_release: true` and log `event=batch_merge outcome=recovered_release
+source= head_state=` (closed labels only). `python -m
+testing.recovered_release_scenario` replays the run 18 shape.
+
 The walk is only a wakeup. Each row still passes the transactional predecessor,
 privacy, receipt-replay and owner-claim fences, so ordering is unchanged. For
 async projection, the persisted rows and their contents' persisted, not-ready
@@ -686,6 +864,17 @@ fence are unchanged. The successor lookup is two equality filters ordered by
 Two matches fail closed.
 
 ### Sweep owner-chain continuation and pending-only assignment page
+
+`BATCH_PIPELINE_PROJECTION_PREDECESSOR_REPLAY_ENABLED` defaults to `true`.
+When a discovered successor lacks a predecessor projection receipt, the sweep
+requests the owner's existing drain, or runs one bounded owner-chain walk when
+the drain is off. The walk starts at the projection watermark, rebuilding the
+missing predecessor before retrying successors in the same pass. This also
+works when the assignment cursor has already passed the head. `false` restores
+the previous blocked-page behavior. Binding, privacy, predecessor, replay and
+multipart fences remain authoritative; a head blocked by one of those fences
+still requires that underlying condition to be resolved. Already committed
+work does not need another GPU run.
 
 `BATCH_PIPELINE_SWEEP_OWNER_CHAIN_ENABLED` defaults to `true` (kill switch:
 `false` restores one attempt per page row). Rows from one owner's ordered chain

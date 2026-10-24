@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from utils.conversations import quiet_finalization
+
 import asyncio
 import logging
 import os
@@ -19,6 +21,9 @@ from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
 from database.live_language_profile import get_live_language_sessions
 from config.rollout_cohorts import warm_rollout_cohorts
+from config.occasion_conversations import occasion_timeout
+from utils.episodes import client_gate as episode_client_gate
+from models.capture_coverage import CaptureCommittedEvent
 from models.message_event import (
     FREEMIUM_ACTION_SETUP_ON_DEVICE_STT,
     FreemiumThresholdReachedEvent,
@@ -124,6 +129,7 @@ from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
 from utils.observability.transcription import record_listen_no_audio_teardown, record_listen_session_accepted
+from utils.product_metrics import sanitize_app_build
 
 logger = logging.getLogger(__name__)
 
@@ -196,6 +202,7 @@ class ListenSessionRuntime:
         self.private_cloud_sync_enabled = False
         self.has_speech_profile = False
         self.conversation_creation_timeout = request.conversation_timeout
+        self.occasion_mode = False
         self.lc3_frame_duration_us: Optional[int] = None
         self.task_supervisor = WebSocketTaskSupervisor(
             uid=request.uid, label='listen', gauge=BACKEND_LISTEN_ACTIVE_WS_CONNECTIONS
@@ -235,11 +242,13 @@ class ListenSessionRuntime:
     async def drain(self, tasks: List[asyncio.Task[Any]], *, timeout: float, label: str) -> None:
         await drain_tasks(tasks, timeout=timeout, label=label, cancel=False)
 
-    async def asend_event(self, event: MessageEvent) -> bool:
+    async def asend_event(self, event: MessageEvent | CaptureCommittedEvent) -> bool:
         if not self.state.active:
             return False
         try:
-            await self.request.websocket.send_json(event.to_json())
+            await self.request.websocket.send_json(
+                event.model_dump(mode='json') if isinstance(event, CaptureCommittedEvent) else event.to_json()
+            )
             return True
         except WebSocketDisconnect:
             self.state.active = False
@@ -252,7 +261,7 @@ class ListenSessionRuntime:
             logger.error('Listen event delivery failed type=%s', type(error).__name__)
         return False
 
-    def send_event(self, event: MessageEvent) -> None:
+    def send_event(self, event: MessageEvent | CaptureCommittedEvent) -> None:
         if self.state.active:
             self.spawn(self.asend_event(event), name='message_event')
 
@@ -697,6 +706,13 @@ class ListenSessionRuntime:
         self.conversation_creation_timeout = effective_conversation_timeout(
             request.conversation_timeout, self.is_multi_channel
         )
+        # Occasion conversations (Episodes M3): for the episodes beta cohort a live conversation
+        # spans the whole occasion, so lulls and reconnects inside the window continue it.
+        self.occasion_mode = not self.is_multi_channel and bool(
+            await self.persistence.call(episode_client_gate.occasion_mode, request.uid, request.source)
+        )
+        if self.occasion_mode:
+            self.conversation_creation_timeout = occasion_timeout(self.conversation_creation_timeout)
         decision = normalize_codec_frame(request.codec)
         self.request = replace(request, codec=decision.codec)
         self.lc3_frame_duration_us = decision.lc3_frame_duration_us
@@ -1156,7 +1172,11 @@ class ListenSessionRuntime:
             demand = getattr(self.receiver, 'live_demand', None)
             if demand is not None:
                 background.append(self.task_supervisor.create_lifetime_task(demand.run(), name='live_demand_routing'))
-            record_listen_session_accepted(source=self.request.source, platform=self.client_device_context.platform)
+            record_listen_session_accepted(
+                source=self.request.source,
+                platform=self.client_device_context.platform,
+                app_build=sanitize_app_build(getattr(self.client_device_context, 'app_version', None)),
+            )
             if not self.use_custom_stt:
                 self._no_audio_observation = ListenNoAudioObservation()
             await self._start_pusher()
@@ -1375,17 +1395,25 @@ class ListenSessionRuntime:
                         conversation_id,
                         read_site=FirestoreReadSite.LISTEN_RUNTIME_TEARDOWN,
                     )
+                    if conversation and conversation.get('source') in {'omi', 'phone'} and quiet_finalization.enabled():
+                        try:
+                            await self.persistence.call(
+                                quiet_finalization.arm,
+                                self.request.uid,
+                                conversation_id,
+                                self.conversation_creation_timeout,
+                                requires_byok=bool(get_byok_keys()),
+                            )
+                        except Exception as error:
+                            logger.error('Quiet disconnect check persistence failed type=%s', type(error).__name__)
                     finalization_reason = getattr(self.state, 'finalization_reason', None)
                     if conversation and finalization_reason:
-                        external_data = dict(conversation.get('external_data') or {})
-                        external_data['conversation_finalization_reason'] = finalization_reason
                         await self.persistence.call(
                             conversations_db.update_conversation,
                             self.request.uid,
                             conversation_id,
-                            {'external_data': external_data},
+                            {'external_data.conversation_finalization_reason': finalization_reason},
                         )
-                        conversation['external_data'] = external_data
                     if (
                         conversation
                         and self.state.close_code == 1000

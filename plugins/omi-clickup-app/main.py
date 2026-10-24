@@ -14,6 +14,16 @@ import asyncio
 sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
 
 from simple_storage import SimpleUserStorage, SimpleSessionStorage
+_PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+if _PLUGIN_DIR not in sys.path:
+    sys.path.insert(0, _PLUGIN_DIR)
+from clickup_settings_auth import (
+    COOKIE_MAX_AGE_SECONDS,
+    COOKIE_NAME,
+    require_settings_session,
+    session_matches,
+    session_value,
+)
 from clickup_client import ClickUpClient
 from task_detector import TaskDetector
 from omi_notifications import notify_task_created, notify_task_failed
@@ -573,8 +583,40 @@ async def auth_callback(
         if workspaces:
             team_id = workspaces[0]["id"]
             team_name = workspaces[0]["name"]
+
+        existing_user = SimpleUserStorage.get_user(uid)
+        if isinstance(existing_user, dict) and existing_user.get("access_token"):
+            stored_team_id = str(existing_user.get("team_id") or "").strip()
+            new_team_id = str(team_id or "").strip()
+            same_workspace = bool(stored_team_id) and stored_team_id == new_team_id
+            if not session_matches(request, uid) and not same_workspace:
+                if state in oauth_states:
+                    del oauth_states[state]
+                return HTMLResponse(
+                    content=f"""
+                    <html>
+                        <head>
+                            <meta name="viewport" content="width=device-width, initial-scale=1">
+                            <style>{get_mobile_css()}</style>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
+                                    <h2 style="font-size: 24px; margin-bottom: 12px;">❌ Already Connected</h2>
+                                    <p style="margin-bottom: 0;">This OMI account is already linked to a ClickUp workspace. Disconnect it from the existing session before linking a different workspace.</p>
+                                </div>
+                            </div>
+                        </body>
+                    </html>
+                    """,
+                    status_code=403,
+                )
+
+        if workspaces and team_id:
             lists = clickup_client.get_all_lists(access_token, team_id)
             members = clickup_client.get_workspace_members(access_token, team_id)
+
+        cookie_val = session_value(uid)
 
         # Save user data (default to America/Los_Angeles timezone)
         SimpleUserStorage.save_user(
@@ -596,7 +638,7 @@ async def auth_callback(
         safe_team_name = html.escape(str(team_name))
         safe_continue_url = html.escape(f"/?uid={quote(uid, safe='')}", quote=True)
 
-        return HTMLResponse(
+        response = HTMLResponse(
             content=f"""
             <html>
                 <head>
@@ -637,7 +679,18 @@ async def auth_callback(
             </html>
             """
         )
+        response.set_cookie(
+            key=COOKIE_NAME,
+            value=cookie_val,
+            max_age=COOKIE_MAX_AGE_SECONDS,
+            httponly=True,
+            samesite="lax",
+            secure=getattr(getattr(request, "url", None), "scheme", "") == "https",
+        )
+        return response
 
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"❌ Auth callback error: {type(e).__name__}", flush=True)
         safe_retry_url = html.escape(f"/auth?uid={quote(uid, safe='')}", quote=True)
@@ -675,10 +728,12 @@ async def check_setup(uid: str = Query(..., description="User ID from OMI")):
 
 @app.post("/update-list")
 async def update_list(
+    request: Request,
     uid: str = Query(...),
     list: str = Query(...)
 ):
     """Update user's selected default list."""
+    require_settings_session(request, uid)
     try:
         success = SimpleUserStorage.update_list_selection(uid, list)
         if success:
@@ -692,10 +747,12 @@ async def update_list(
 
 @app.post("/update-timezone")
 async def update_timezone(
+    request: Request,
     uid: str = Query(...),
     timezone: str = Query(...)
 ):
     """Update user's timezone preference."""
+    require_settings_session(request, uid)
     try:
         success = SimpleUserStorage.update_timezone(uid, timezone)
         if success:
@@ -708,8 +765,12 @@ async def update_timezone(
 
 
 @app.post("/refresh-lists")
-async def refresh_lists(uid: str = Query(...)):
+async def refresh_lists(
+    request: Request,
+    uid: str = Query(...)
+):
     """Refresh user's list from ClickUp."""
+    require_settings_session(request, uid)
     try:
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -744,8 +805,12 @@ async def refresh_lists(uid: str = Query(...)):
 
 
 @app.post("/logout")
-async def logout(uid: str = Query(...)):
+async def logout(
+    request: Request,
+    uid: str = Query(...)
+):
     """Logout user - clear all data and sessions."""
+    require_settings_session(request, uid)
     try:
         from simple_storage import users, sessions, save_users, save_sessions
 

@@ -35,7 +35,7 @@ def _valid_capture_root(root: object) -> bool:
     return True
 
 
-def _incoming_receipts(envelope: Any) -> list | None:
+def incoming_receipts(envelope: Any) -> list | None:
     """Return the bounded receipt list of a well-formed sync_vad envelope."""
     if not isinstance(envelope, Mapping):
         return None
@@ -51,7 +51,7 @@ def _incoming_receipts(envelope: Any) -> list | None:
     return receipts
 
 
-def _receipt_span(receipt: Any) -> tuple[dict, int, int, int] | None:
+def receipt_span(receipt: Any) -> tuple[dict, int, int, int] | None:
     """(claim, start_frame, end_frame_exclusive, end_offset) or None.
 
     The touched source-frame domain is ``[source_start_frame, source_end_frame +
@@ -109,7 +109,7 @@ def _run_covers(run: Any, claim: Mapping, frame: int) -> int | None:
     return None
 
 
-def _offsets_fit(receipt: Mapping, live_evidence: Any, claim: Mapping, end_frame: int, end_offset: int) -> bool:
+def offsets_fit(receipt: Mapping, live_evidence: Any, claim: Mapping, end_frame: int, end_offset: int) -> bool:
     """Start/end receipt offsets must fit the corresponding positive run's frame size."""
     runs = live_evidence.get('runs') if isinstance(live_evidence, Mapping) else None
     if not isinstance(runs, list):
@@ -152,7 +152,7 @@ def capture_covered_indices(
     matching evidence, conflicting live runs, partial coverage — leaves the
     segment unproven and kept by the caller's normal rules.
     """
-    receipts = _incoming_receipts(incoming_evidence)
+    receipts = incoming_receipts(incoming_evidence)
     if receipts is None or not isinstance(live_evidence, Mapping):
         return frozenset()
     if len(incoming_segments) > MAX_INCOMING_SEGMENTS:
@@ -169,14 +169,14 @@ def capture_covered_indices(
         if len(matching) != 1:
             continue
         receipt = matching[0]
-        span = _receipt_span(receipt)
+        span = receipt_span(receipt)
         if span is None:
             continue
         claim, start_frame, end_exclusive, end_offset = span
         ranges = validated_live_ranges(claim, [live_evidence])
         if ranges is None or not ranges:
             continue
-        if not _offsets_fit(receipt, live_evidence, claim, receipt['source_end_frame'], end_offset):
+        if not offsets_fit(receipt, live_evidence, claim, receipt['source_end_frame'], end_offset):
             continue
         if not _fully_covered(ranges, start_frame, end_exclusive):
             continue

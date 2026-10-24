@@ -1,0 +1,249 @@
+{
+  "entries": [
+    {
+      "path": "database/batch_pipeline_projection.py",
+      "function": "ProjectionStore._backfill_dispatch",
+      "name": "SYNC_BACKFILL_TASKS_HANDLER_URL",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "database/batch_pipeline_projection.py",
+      "function": "ProjectionStore._backfill_dispatch",
+      "name": "SYNC_BACKFILL_TASKS_OIDC_AUDIENCE",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "database/batch_pipeline_projection.py",
+      "function": "ProjectionStore._backfill_dispatch",
+      "name": "SYNC_BACKFILL_TASKS_QUEUE",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "database/batch_pipeline_projection.py",
+      "function": "ProjectionStore._backfill_dispatch",
+      "name": "SYNC_TASKS_INVOKER_SA",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "database/batch_pipeline_projection.py",
+      "function": "ProjectionStore.run",
+      "name": "SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "database/batch_pipeline_shadow_hook.py",
+      "function": "_shadow_mode",
+      "name": "BATCH_JOBSTORE_MODE",
+      "count": 1,
+      "why": "store-selection infrastructure config, read once at store construction, not per-unit policy (E1 BatchUnitPolicy covers unit policy); lead ruling 10-19"
+    },
+    {
+      "path": "database/batch_pipeline_store.py",
+      "function": "FirestoreStore._require_stage",
+      "name": "FIRESTORE_EMULATOR_HOST",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "database/batch_pipeline_store.py",
+      "function": "FirestoreStore._require_stage",
+      "name": "OMI_ENV_STAGE",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/artifacts.py",
+      "function": "ArtifactStore.fetch_audio",
+      "name": "BUCKET_AUDIO_DERIVED",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/artifacts.py",
+      "function": "ArtifactStore.fetch_audio",
+      "name": "BUCKET_PRIVATE_CLOUD_SYNC",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/compute_client.py",
+      "function": "from_env",
+      "name": "BATCH_PIPELINE_API_URL",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/compute_client.py",
+      "function": "from_env",
+      "name": "BATCH_PIPELINE_WORKER_AUDIENCE",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/compute_client.py",
+      "function": "from_env",
+      "name": "OMI_ENV_STAGE",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/compute_client.py",
+      "function": "shadow_from_env",
+      "name": "BATCH_PIPELINE_SHADOW_RECOVERY_API_URL",
+      "count": 1,
+      "why": "main batch shadow (P15) arrived via the M3 main merge; E1's config grep supersedes"
+    },
+    {
+      "path": "utils/batch_pipeline/compute_client.py",
+      "function": "shadow_from_env",
+      "name": "OMI_ENV_STAGE",
+      "count": 1,
+      "why": "main batch shadow (P15) arrived via the M3 main merge; E1's config grep supersedes"
+    },
+    {
+      "path": "utils/batch_pipeline/correctness_metrics.py",
+      "function": "enabled",
+      "name": "BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/intake.py",
+      "function": "artifacts_for",
+      "name": "BUCKET_BATCH_PIPELINE",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/intake.py",
+      "function": "artifacts_for",
+      "name": "ENCRYPTION_SECRET",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/live.py",
+      "function": "_units",
+      "name": "BUCKET_AUDIO_DERIVED",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/live.py",
+      "function": "admit_recording",
+      "name": "BUCKET_BATCH_PIPELINE",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/live.py",
+      "function": "admit_recording",
+      "name": "ENCRYPTION_SECRET",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/quarantine_recovery.py",
+      "function": "QuarantineRecovery._dispatch",
+      "name": "BATCH_PIPELINE_RECOVERY_TASKS_QUEUE",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/quarantine_recovery.py",
+      "function": "QuarantineRecovery._dispatch",
+      "name": "BATCH_PIPELINE_RECOVERY_TASK_AUDIENCE",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/quarantine_recovery.py",
+      "function": "QuarantineRecovery._dispatch",
+      "name": "SYNC_TASKS_INVOKER_SA",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/quarantine_recovery.py",
+      "function": "QuarantineRecovery._dispatch",
+      "name": "SYNC_TASKS_QUEUE",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/retention.py",
+      "function": "delete_batch_object",
+      "name": "<dynamic>",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/retention.py",
+      "function": "purge_batch_storage_owner",
+      "name": "BUCKET_BATCH_PIPELINE",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/serving.py",
+      "function": "start_serving_from_env",
+      "name": "BATCH_PIPELINE_SERVING_ENABLED",
+      "count": 1,
+      "why": "pre-existing; unreviewed"
+    },
+    {
+      "path": "utils/batch_pipeline/shadow_worker.py",
+      "function": "ShadowRunner.__init__",
+      "name": "HOSTNAME",
+      "count": 1,
+      "why": "main batch shadow (P15) arrived via the M3 main merge; E1's config grep supersedes"
+    },
+    {
+      "path": "utils/batch_pipeline/shadow_worker.py",
+      "function": "ShadowRunner.__init__",
+      "name": "POD_NAME",
+      "count": 1,
+      "why": "main batch shadow (P15) arrived via the M3 main merge; E1's config grep supersedes"
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "_dispatch_binding",
+      "name": "SYNC_TASKS_HANDLER_URL",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "_dispatch_binding",
+      "name": "SYNC_TASKS_INVOKER_SA",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "_dispatch_binding",
+      "name": "SYNC_TASKS_OIDC_AUDIENCE",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "_dispatch_binding",
+      "name": "SYNC_TASKS_QUEUE",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    },
+    {
+      "path": "utils/enrichment/outbox.py",
+      "function": "owns_runtime",
+      "name": "FIRESTORE_EMULATOR_HOST",
+      "count": 1,
+      "why": "Moved, not new: relocated by lane 9 C2 (#22431); same reads as before."
+    }
+  ]
+}
