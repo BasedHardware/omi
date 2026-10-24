@@ -368,10 +368,35 @@ _FLAG = re.compile(r'--(min-instances|max-instances|max|min|concurrency|cpu|memo
 _PROD_BRANCH = re.compile(
     r"\$\{\{\s*inputs\.(?:runtime_env == 'prod'|project_id == 'based-hardware')" r" && '([^']*)' \|\| '([^']*)'\s*\}\}"
 )
+_INPUT_REF = re.compile(r'\$\{\{\s*inputs\.(\w+)\s*\}\}')
+# Manual-workflow `with:` entries scoped by deploy environment resolve to their prod branch.
+_WORKFLOW_ENV_SCOPED = re.compile(
+    r"^\$\{\{\s*vars\.\w+\s*\|\|\s*\(github\.event\.inputs\.environment == 'prod' && '([^']*)' \|\| '([^']*)'\)\s*\}\}$"
+)
 
 
-def deploy_action_flags(paths: Iterable[Path]) -> dict[str, dict[str, str]]:
+def workflow_input_values(path: Path) -> dict[str, str]:
+    """Prod-branch values for deploy-backend-stack inputs the manual workflow scopes by deploy
+    environment (`vars.X || (environment == 'prod' && 'A' || 'B')`). A set `vars.X` overrides live;
+    the source model stays the source-declared fallback, so an override shows as drift."""
+    doc = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
+    out: dict[str, str] = {}
+    for job in (doc.get('jobs') or {}).values():
+        for step in (job or {}).get('steps') or []:
+            if not str((step or {}).get('uses', '')).endswith('/deploy-backend-stack'):
+                continue
+            for name, value in ((step or {}).get('with') or {}).items():
+                m = _WORKFLOW_ENV_SCOPED.match(str(value))
+                if m:
+                    out[str(name)] = m.group(1)
+    return out
+
+
+def deploy_action_flags(
+    paths: Iterable[Path], input_values: Mapping[str, str] | None = None
+) -> dict[str, dict[str, str]]:
     """Literal scale flags per service from the deploy-cloudrun steps of the prod deploy actions."""
+    resolved = dict(input_values or {})
     out: dict[str, dict[str, str]] = {}
     for path in paths:
         doc = yaml.safe_load(path.read_text(encoding='utf-8')) or {}
@@ -381,7 +406,9 @@ def deploy_action_flags(paths: Iterable[Path]) -> dict[str, dict[str, str]]:
             with_ = step.get('with') or {}
             service = str(with_.get('service', '')).replace('${{ inputs.service }}', 'backend')
             flags = out.setdefault(service, {})
-            for flag, value in _FLAG.findall(_PROD_BRANCH.sub(r'\1', str(with_.get('flags', '')))):
+            flag_text = _PROD_BRANCH.sub(r'\1', str(with_.get('flags', '')))
+            flag_text = _INPUT_REF.sub(lambda m: resolved.get(m.group(1), m.group(0)), flag_text)
+            for flag, value in _FLAG.findall(flag_text):
                 flags[flag] = value
     return out
 
@@ -455,8 +482,12 @@ def source_model(environment: str, root: Path = ROOT) -> dict[str, SourceService
             environment, base_path=runtime_env_dir / '_base.yaml', runtime_env_dir=runtime_env_dir
         )
         actions = root / '.github' / 'actions'
+        # The manual workflow scopes some action inputs by deploy environment; the prod model
+        # takes their prod branch (e.g. backend-sync memory) so the fallback stays drift-checked.
+        input_values = workflow_input_values(root / '.github' / 'workflows' / 'gcp_backend.yml')
         flags = deploy_action_flags(
-            [actions / 'deploy-backend-stack' / 'action.yml', actions / 'sync-backfill-lifecycle' / 'action.yml']
+            [actions / 'deploy-backend-stack' / 'action.yml', actions / 'sync-backfill-lifecycle' / 'action.yml'],
+            input_values=input_values,
         )
     ops = yaml.safe_load((backend / 'deploy' / 'ops' / f'{environment}.yaml').read_text(encoding='utf-8'))
     ops_services = {_base_name(name): cfg or {} for name, cfg in ((ops or {}).get('cloud_run') or {}).items()}

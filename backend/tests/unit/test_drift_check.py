@@ -457,6 +457,10 @@ def test_prod_source_model_reads_deploy_flags_and_the_ops_file():
     integration = model['backend-integration']
     assert integration.scale['revision_min'] == 3 and integration.scale['concurrency'] == 40
     assert integration.ops_env['SUMMARY_DEBT_REPAIR_ENABLED'] == 'true'
+    # The workflow's env-scoped backend_sync_memory fallback reaches the source model, so a
+    # future regression of the prod 4Gi right-size is drift, not silence.
+    assert model['backend-sync'].scale['memory'] == '4Gi'
+    assert model['backend-sync-backfill'].scale['memory'] == '4Gi'
     assert model['backend-sync-backfill'].ops_scale['service_max'] == {
         'owner': 'redis_guard',
         'floor': 8,

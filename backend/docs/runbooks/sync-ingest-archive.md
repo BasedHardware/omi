@@ -86,7 +86,8 @@ invoker SA and its endpoint-specific OIDC audience. Configure
 named task before the cohort ramp. Do not enable a worker without runtime-image,
 identity, index-readiness and route qualification.
 
-First deploy this SHA at the default 8Gi through GitHub Actions. For the
+First deploy this SHA at the prod default memory (4Gi since the 2026-10-24
+right-sizing; development keeps 8Gi) through GitHub Actions. For the
 separate memory trial, the lead creates a tagged **no-traffic** 6Gi revision
 from that already-built same-SHA image, routes at most 5% to it and waits ≥12h.
 Only after qualification/full promotion set GitHub environment variable
