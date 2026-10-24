@@ -9,6 +9,7 @@ import io
 from copy import deepcopy
 from contextlib import nullcontext
 import wave
+from typing import Any, Callable
 import numpy as np
 
 try:
@@ -34,6 +35,7 @@ from diarizer.batch_pipeline import (
 from diarizer.batch_pipeline_context import capture_stream
 from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
 from utils.batch_pipeline.audio import read_context
+from utils.batch_pipeline import leaf_timings
 
 
 def pin_parakeet_decoding(model):
@@ -130,13 +132,14 @@ class ParakeetWords:
 
 
 class PyannoteDiarizer:
-    def __init__(self, model):
+    def __init__(self, model, *, timings_of: Callable[[], Any] | None = None):
         self.model = model
+        self.timings_of = timings_of or (lambda: None)
 
     def __call__(self, samples):
         if torch is None:
             raise RuntimeError('pyannote adapter requires the GPU runtime with torch')
-        with torch.inference_mode():
+        with leaf_timings.active(self.timings_of()), leaf_timings.embedding_hook(self.model), torch.inference_mode():
             output = self.model({'waveform': torch.from_numpy(samples).unsqueeze(0), 'sample_rate': 16000})
         return diarization_payload(output)
 
@@ -165,13 +168,18 @@ class StagedAudio:
 
     MAX_PENDING = 256
 
-    def __init__(self, fetch_audio):
+    def __init__(self, fetch_audio, *, timings_of: Callable[[], Any] | None = None):
         self.fetch_audio = fetch_audio
+        self.timings_of = timings_of or (lambda: None)
         self._streams: OrderedDict[str, str | None] = OrderedDict()
         self._languages: OrderedDict[str, str | None] = OrderedDict()
 
     def decode(self, item):
-        body = self.fetch_audio(item)
+        with leaf_timings.active(self.timings_of()):
+            body = self.fetch_audio(item)
+            return self._decode(item, body)
+
+    def _decode(self, item, body):
         try:
             context = read_context(body)
         except Exception:
@@ -181,7 +189,7 @@ class StagedAudio:
         for pending in (self._streams, self._languages):
             while len(pending) > self.MAX_PENDING:
                 pending.popitem(last=False)
-        return decode_pcm16_wav(body)
+        return leaf_timings.call('decode', decode_pcm16_wav, body)
 
     def stream(self, item):
         stream = self._streams.pop(item.segment_id, None)
@@ -256,14 +264,20 @@ def create_local_worker(
         if config.flight_batching
         else None
     )
-    staged = StagedAudio(fetch_audio)
-    return PipelineWorker(
+    # Resolve dynamically: run_process binds its private registry after loading.
+    staged = StagedAudio(fetch_audio, timings_of=lambda: worker.timings)
+
+    def persist(item, payload):
+        with leaf_timings.active(worker.timings):
+            return persist_result(item, payload)
+
+    worker = PipelineWorker(
         decode=staged.decode,
         vad=PyannoteVAD(vad_model),
         words_providers={'parakeet': words},
         recover_words=words.recover_empty,
-        diarizers={'pyannote': PyannoteDiarizer(pyannote_model)},
-        persist=persist_result,
+        diarizers={'pyannote': PyannoteDiarizer(pyannote_model, timings_of=lambda: worker.timings)},
+        persist=persist,
         config=config,
         live_words=live_words,
         single_speaker=single_speaker,
@@ -272,3 +286,4 @@ def create_local_worker(
         stream_of=staged.stream,
         language_of=staged.language,
     )
+    return worker

@@ -165,7 +165,7 @@ spec:
               configMap:
                 name: {{ .Release.Name }}-script
 {{- end }}
-{{- if and .Values.enabled .Values.batch.cloudRunRollbackEnabled }}
+{{- if and .Values.enabled .Values.batch.enabled .Values.batch.cloudRunRollbackEnabled }}
 {{- if or (ne .Values.namespace "prod-omi-backend") (ne .Release.Namespace .Values.namespace) }}
 {{- fail "batch rollback is approved only in prod-omi-backend" }}
 {{- end }}
