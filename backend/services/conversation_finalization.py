@@ -13,7 +13,7 @@ import os
 import time
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
 from google.api_core.exceptions import InvalidArgument
@@ -58,6 +58,17 @@ REPLAY_OLDEST_OVERDUE_AGE = Gauge(
     ['queue'],
 )
 REPLAY_OUTCOMES = Counter('listen_finalization_replay_outcomes_total', 'Finalization replay outcomes', ['outcome'])
+# Closed literal labels keep aggregate outcome cardinality fixed.
+REPLAY_OUTCOME_METRICS = {
+    'requeued': REPLAY_OUTCOMES.labels(outcome='requeued'),
+    'skipped': REPLAY_OUTCOMES.labels(outcome='skipped'),
+    'enqueue_failed': REPLAY_OUTCOMES.labels(outcome='enqueue_failed'),
+    'stale': REPLAY_OUTCOMES.labels(outcome='stale'),
+    'no_progress': REPLAY_OUTCOMES.labels(outcome='no_progress'),
+    'retired': REPLAY_OUTCOMES.labels(outcome='retired'),
+    'advanced': REPLAY_OUTCOMES.labels(outcome='advanced'),
+    'error': REPLAY_OUTCOMES.labels(outcome='error'),
+}
 
 
 def _skip_capture_wedge(**_: Any) -> dict[str, int]:
@@ -237,7 +248,7 @@ def reconcile_listen_finalization_jobs(
                     submit_with_context(pool, _reconcile_quiet_candidate, candidate, firestore_client=firestore_client)
                     for candidate in quiet_candidates
                 ]
-                for future in futures:
+                for future in as_completed(futures):
                     result[future.result()] += 1
 
     for candidate in candidates:
@@ -301,7 +312,7 @@ def reconcile_listen_finalization_jobs(
                     logger.exception('listen finalization replay backoff failed')
 
     for outcome, count in result.items():
-        REPLAY_OUTCOMES.labels(outcome=outcome).inc(count)
+        REPLAY_OUTCOME_METRICS[outcome].inc(count)
     if candidates:
         logger.info('event=listen_finalization_replay result=%s', result)
 
