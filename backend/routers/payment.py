@@ -806,15 +806,25 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             modify_params = {
                 'items': [{'id': current_item_id, 'price': request.price_id}],
                 'proration_behavior': 'always_invoice',
+                'payment_behavior': 'error_if_incomplete',
                 'metadata': {'uid': uid, 'sub_type': target_plan.value},
             }
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+            updated_sub_dict = updated_sub.to_dict()
+            if updated_sub_dict.get('status') not in ('active', 'trialing') or updated_sub_dict.get('pending_update'):
+                logger.warning(
+                    f"Subscription upgrade payment incomplete for user {uid}: status={sanitize(str(updated_sub_dict.get('status')))}"
+                )
+                raise HTTPException(
+                    status_code=402,
+                    detail="Payment for the plan change could not be completed. Your current subscription remains active.",
+                )
 
             # Update our database immediately
-            new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
+            new_subscription = _build_subscription_from_stripe_object(updated_sub_dict)
             if new_subscription:
                 users_db.update_user_subscription(uid, new_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
@@ -892,6 +902,14 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     except HTTPException:
         raise
+    except stripe.error.CardError as e:
+        logger.warning(f"Stripe declined subscription change for user {uid}: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=402,
+            detail=_stripe_client_error_detail(
+                e, "Payment for the plan change was declined. Your current subscription remains active."
+            ),
+        )
     except stripe.error.InvalidRequestError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
