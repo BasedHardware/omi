@@ -1081,9 +1081,7 @@ OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
 # 'untyped' covers trips whose caller could not name a cause. Re-arming an
 # already-open breaker does not count. reason groups the bounded cause into
 # auth/quota/5xx/latency/no_text/connect, with capacity/unknown kept explicit.
-# The gauge above shows state; this
-# counter answers WHY it tripped (P34 2026-10-21: Parakeet selection breakers
-# tripped on 2-10 of 40 listen pods per 10m with the cause unlogged).
+# The gauge shows current state; this counter shows why it tripped.
 OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL = Counter(
     'omi_stt_provider_circuit_trip_total',
     'STT provider breaker transitions into open by bounded cause (serve-death or connect-failure reason)',
