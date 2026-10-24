@@ -9,14 +9,15 @@ person_id -> name map.
 from typing import Dict, Optional, Tuple
 
 from models.conversation import ConversationAnalytics, SpeakerAnalytics
+from utils.speaker_display import SpeakerLabeler, voice_key
 
 
-def _speaker_identity(seg, names: Dict[str, str]) -> Tuple[str, str, Optional[str], bool]:
+def _speaker_identity(seg, names: Dict[str, str], labeler: SpeakerLabeler) -> Tuple[str, str, Optional[str], bool]:
     """Return (grouping key, display label, person_id, is_user) for a segment.
 
     The account owner's segments group under "You"; identified people group by their
     person_id (resolved to a name); everyone else groups by the diarization speaker
-    label as "Speaker N".
+    id but is displayed with a dense per-conversation label, never the raw id.
     """
     if getattr(seg, 'is_user', False):
         return ('user', 'You', None, True)
@@ -25,9 +26,9 @@ def _speaker_identity(seg, names: Dict[str, str]) -> Tuple[str, str, Optional[st
         return (f'person:{person_id}', names.get(person_id) or 'Unknown', person_id, False)
     speaker_id = getattr(seg, 'speaker_id', None)
     if speaker_id is not None:
-        return (f'speaker:{speaker_id}', f'Speaker {speaker_id}', None, False)
+        return (f'speaker:{speaker_id}', labeler.label(voice_key(seg)), None, False)
     speaker = getattr(seg, 'speaker', None) or 'SPEAKER_00'
-    return (f'speaker:{speaker}', str(speaker), None, False)
+    return (f'speaker:{speaker}', labeler.label(('speaker', str(speaker))), None, False)
 
 
 def build_conversation_analytics(conversation, names: Dict[str, str]) -> ConversationAnalytics:
@@ -39,8 +40,9 @@ def build_conversation_analytics(conversation, names: Dict[str, str]) -> Convers
     person_ids: Dict[str, Optional[str]] = {}
     is_user_flags: Dict[str, bool] = {}
 
+    labeler = SpeakerLabeler()
     for seg in getattr(conversation, 'transcript_segments', None) or []:
-        key, label, person_id, is_user = _speaker_identity(seg, names)
+        key, label, person_id, is_user = _speaker_identity(seg, names, labeler)
         start = getattr(seg, 'start', 0) or 0
         end = getattr(seg, 'end', 0) or 0
         text = getattr(seg, 'text', '') or ''
