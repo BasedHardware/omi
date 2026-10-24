@@ -18,6 +18,7 @@ class DueQuery:
         self.store = store
         self.after = None
         self.bound = 100
+        self.orders = []
 
     def where(self, field, op, cutoff):
         assert (field, op) == ('reconcile_after_at', '<=')
@@ -25,10 +26,12 @@ class DueQuery:
         return self
 
     def order_by(self, field):
-        assert field == 'reconcile_after_at'
+        assert field in {'reconcile_after_at', '__name__'}
+        self.orders.append(field)
         return self
 
     def start_after(self, cursor):
+        assert self.orders == ['reconcile_after_at', '__name__']
         self.after = (cursor['reconcile_after_at'], cursor['__name__'].id)
         return self
 

@@ -1882,7 +1882,10 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
         client.collection(FINALIZATION_JOBS_COLLECTION)
         .where('reconcile_after_at', '<=', _now())
         .order_by('reconcile_after_at')
+        .order_by('__name__')
     )
+    # The SDK only adds implicit name ordering for snapshot cursors. With a
+    # value dict it silently drops name unless that order is explicit.
     if (
         isinstance(cursor, dict)
         and isinstance(cursor.get('reconcile_after_at'), datetime)

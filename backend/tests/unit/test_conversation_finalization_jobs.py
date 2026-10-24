@@ -1366,7 +1366,13 @@ class _BoundedReplayCollection:
 def test_replay_candidates_use_a_server_side_bounded_due_query(monkeypatch):
     collection = _BoundedReplayCollection()
     collection.refs = [_Ref('queued-job', {'status': 'queued'})]
-    collection.order_by = lambda field: collection
+    orders = []
+
+    def order_by(field):
+        orders.append(field)
+        return collection
+
+    collection.order_by = order_by
     state_ref = SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: {}))
     state_collection = SimpleNamespace(document=lambda name: state_ref)
     client = SimpleNamespace(
@@ -1378,6 +1384,7 @@ def test_replay_candidates_use_a_server_side_bounded_due_query(monkeypatch):
     candidates = jobs.get_finalization_replay_candidates(limit=1000, firestore_client=client)
     assert collection.where_calls == [('reconcile_after_at', '<=')]
     assert collection.limit_value == 1000
+    assert orders == ['reconcile_after_at', '__name__']
     assert candidates == [{'status': 'queued', 'job_id': 'queued-job'}]
 
 
