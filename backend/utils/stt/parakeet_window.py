@@ -25,6 +25,7 @@ from utils.stt.window_replicas import QueueTimeout, can_route_replicas, post_win
 from utils.stt import window_replicas as replica_http
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
+from utils.observability.reasons import LiveSttReason, ReasonFamily, reason_label
 from utils.stt import streaming as st
 from utils.stt.live_reason import LOCAL_DELIVERY_REPLAY_SEND_STALLED
 from utils.observability.demand_cohort import record_metric
@@ -1235,7 +1236,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         One retry per empty episode preserves anchors; silence is not outage.
         """
         excluded: set[str] = set()
-        retry_reason: str | None = None
+        retry_reason: LiveSttReason | None = None
         last_error: Exception | None = None
         try:
             budget = self._post_timeout
@@ -1296,10 +1297,11 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                             raise
                         replica_http.raise_if_non_replica_error(error, self.fail)
                         failed = True
-                        retry_reason = (
-                            'timeout' if isinstance(error, (TimeoutError, httpx.TimeoutException)) else 'provider_5xx'
-                        )
-                        WINDOW_REPLICA_ATTEMPTS.labels(outcome=retry_reason).inc()
+                        timed_out = isinstance(error, (TimeoutError, httpx.TimeoutException))
+                        retry_reason = LiveSttReason.TIMEOUT if timed_out else LiveSttReason.PROVIDER_5XX
+                        WINDOW_REPLICA_ATTEMPTS.labels(
+                            outcome=reason_label(ReasonFamily.LIVE_STT, retry_reason, LiveSttReason)
+                        ).inc()
                         last_error = error
                         if attempt:
                             raise
@@ -1320,7 +1322,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     if attempt or self._empty_replica_retry_used:
                         return []
                     self._empty_replica_retry_used = True
-                    retry_reason = 'empty_streak'
+                    retry_reason = LiveSttReason.EMPTY_STREAK
         except QueueTimeout:
             self.fail('timeout')
             raise

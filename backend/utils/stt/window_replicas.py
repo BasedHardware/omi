@@ -21,6 +21,7 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 
 from utils.observability.fallback import record_fallback
+from utils.observability.reasons import LiveSttReason, ReasonFamily, ServiceWindowOutcome, reason_label
 from utils.stt.live_metrics import WINDOW_REPLICA_ATTEMPTS
 from utils.stt.window_anchor import RawSegment, parse_tdt_segments
 
@@ -47,7 +48,7 @@ def raise_if_non_replica_error(error: Exception, fail: Callable[..., None]) -> N
         402: 'provider_budget_exhausted',
         429: 'provider_rate_limited',
     }.get(status, 'provider_5xx')
-    WINDOW_REPLICA_ATTEMPTS.labels(outcome=reason).inc()
+    WINDOW_REPLICA_ATTEMPTS.labels(outcome=reason_label(ReasonFamily.LIVE_STT, reason, LiveSttReason)).inc()
     fail(reason)
     raise error
 
@@ -75,11 +76,11 @@ async def post_service_window(
     duration: float,
 ) -> list[RawSegment]:
     """One VIP POST during admitted pressure grace; no unknown-pod quarantine."""
-    outcome = 'service_error'
+    outcome = ServiceWindowOutcome.ERROR
     try:
         response = await post(pcm)
         if response.status_code == 503 and response.headers.get('X-Omi-STT-Error') == 'queue_timeout':
-            outcome = 'service_queue_timeout'
+            outcome = ServiceWindowOutcome.QUEUE_TIMEOUT
             fail('capacity_full', capacity_subtype='queue_timeout')
         elif response.status_code in (401, 403, 402, 429):
             fail(
@@ -92,7 +93,7 @@ async def post_service_window(
             )
         response.raise_for_status()
         segments = parse_window_response(response, duration, normalize)
-        outcome = 'service_text' if segments else 'service_empty'
+        outcome = ServiceWindowOutcome.TEXT if segments else ServiceWindowOutcome.EMPTY
         record_fallback(
             component='stt_selection',
             from_mode='parakeet',
@@ -102,10 +103,10 @@ async def post_service_window(
         )
         return segments
     except asyncio.CancelledError:
-        outcome = 'service_cancelled'
+        outcome = ServiceWindowOutcome.CANCELLED
         raise
     finally:
-        WINDOW_REPLICA_ATTEMPTS.labels(outcome=outcome).inc()
+        WINDOW_REPLICA_ATTEMPTS.labels(outcome=reason_label(ReasonFamily.LIVE_STT, outcome, ServiceWindowOutcome)).inc()
 
 
 def can_route_replicas(api_url: str, family_url: str | None, ready: tuple[str, ...]) -> bool:
