@@ -279,7 +279,7 @@ def get_conversations_tool(
     max_transcript_segments: Any = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
-    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
+    config: RunnableConfig = None,
 ) -> str:
     """
     Retrieve user conversations with complete details including transcripts, summaries, and metadata.
@@ -314,33 +314,18 @@ def get_conversations_tool(
     Returns:
         Formatted string with conversations including transcripts, summaries, action items, events, and attendees.
     """
-    logger.info(f"🔧 get_conversations_tool called with params:")
-    logger.info(f"   start_date: {start_date}")
-    logger.info(f"   end_date: {end_date}")
-    logger.info(f"   limit: {limit}")
-    logger.info(f"   offset: {offset}")
-    logger.info(f"   include_discarded: {include_discarded}")
-    logger.info(f"   statuses: {statuses}")
-    logger.info(f"   max_transcript_segments: {max_transcript_segments}")
-    logger.info(f"   include_transcript: {include_transcript}")
-    logger.info(f"   include_timestamps: {include_timestamps}")
-
-    # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
 
     if cfg is None:
-        logger.info(f"❌ get_conversations_tool - config is None")
         return "Error: Configuration not available"
 
     configurable = cfg.get('configurable') if isinstance(cfg.get('configurable'), dict) else {}
     uid = configurable.get('user_id') or cfg.get('user_id')
 
     if not uid:
-        logger.info(f"❌ get_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
-    logger.info(f"✅ get_conversations_tool - uid: {uid}")
     display_clock = clock_for_turn(configurable, str(uid))
 
     scope = chat_scope_from_config(configurable)
@@ -348,7 +333,6 @@ def get_conversations_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Coerce numeric arguments
     try:
         max_transcript_segments = int(max_transcript_segments)
         limit = int(limit)
@@ -356,172 +340,91 @@ def get_conversations_tool(
     except (TypeError, ValueError) as e:
         return f"Error: Invalid numeric parameter format: {e}"
 
-    # Apply limits
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
     limit = min(limit, 5000)
 
-    # Parse dates if provided (always in UTC)
     start_dt = None
     end_dt = None
 
     if start_date:
         try:
-            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
-                return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
-            logger.info("Parsed conversation start_date")
+                return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM"
         except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+            return f"Error: Invalid start_date format: {e}"
 
     if end_date:
         try:
-            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
             end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
-                return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
-            logger.info("Parsed conversation end_date")
+                return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM"
         except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+            return f"Error: Invalid end_date format: {e}"
 
-    # Parse statuses if provided
-    status_list: List[str] = []
-    if statuses:
-        status_list = [s.strip() for s in statuses.split(',') if s.strip()]
-
+    status_list: List[str] = [s.strip() for s in statuses.split(',')] if statuses else []
     locked_count = 0
     try:
         scoped_id = (scope or {}).get("conversation_id") if scope else None
         if scoped_id:
             conversations_data, scoped_err = _scoped_conversation_fetch(
-                uid,
-                str(scoped_id),
-                start_dt=start_dt,
-                end_dt=end_dt,
-                include_discarded=include_discarded,
-                statuses=status_list or None,
+                uid, str(scoped_id), start_dt=start_dt, end_dt=end_dt, include_discarded=include_discarded, statuses=status_list or None
             )
             if scoped_err:
-                logger.info(f"⚠️ get_conversations_tool - {scoped_err}")
                 return scoped_err
-            if offset > 0:
-                conversations_data = []
-            else:
-                conversations_data = conversations_data[:limit]
+            conversations_data = [] if offset > 0 else conversations_data[:limit]
         else:
-            # Get conversations
             conversations_data = conversations_db.get_conversations(
-                uid,
-                limit=limit,
-                offset=offset,
-                start_date=start_dt,
-                end_date=end_dt,
-                include_discarded=include_discarded,
-                statuses=status_list,
+                uid, limit=limit, offset=offset, start_date=start_dt, end_date=end_dt, include_discarded=include_discarded, statuses=status_list
             )
-
-        # Count withholding metadata, then discard rows before deserialization or rendering.
         if conversations_data:
             locked_count = sum(1 for conversation in conversations_data if conversation.get('is_locked', False))
             conversations_data = [c for c in conversations_data if not c.get('is_locked', False)]
     except Exception as e:
-        logger.error(f"❌ Unexpected error retrieving conversations: {e}", exc_info=True)
-        return "An unexpected error occurred while fetching conversations. Please try again later."
+        logger.error(f"Error: {e}")
+        return "An unexpected error occurred while fetching conversations."
 
-    # Bound how many conversations are formatted for the chat model so a wide date range cannot
-    # flood its context and freeze it (#4927). Newest-first, so this keeps the most recent.
     conversations_data, total_found, results_truncated = _cap_conversations_for_llm(conversations_data or [])
-
-    logger.info(
-        f"📊 get_conversations_tool - found {total_found} conversations"
-        + (f" (showing most recent {len(conversations_data)})" if results_truncated else "")
-    )
 
     if not conversations_data:
         msg = none_found('conversations', _date_scope(start_dt, end_dt, display_clock))
         withheld = _withheld_conversation_notes(locked=locked_count)
-        if withheld:
-            msg += '\n' + withheld
-        logger.info(f"⚠️ get_conversations_tool - {msg}")
-        return msg
+        return f"{msg}\n{withheld}" if withheld else msg
 
     try:
-        # Only load people if transcripts will be included (people are used for speaker names in transcripts)
         people: List[Person] = []
         user_name = (get_user_name(str(uid), use_default=False) or 'User') if include_transcript else None
         if include_transcript:
-            # Get all person IDs from all conversations
-            all_person_ids: Set[str] = set()
-            for conv_data in conversations_data:
-                segments = conv_data.get('transcript_segments', [])
-                all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
-
-            logger.info(f"🔍 get_conversations_tool - Found {len(all_person_ids)} unique person IDs")
-
-            # Fetch people data
+            all_person_ids: Set[str] = {s.get('person_id') for c in conversations_data for s in c.get('transcript_segments', []) if s.get('person_id')}
             if all_person_ids:
-                people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-                people = [Person(**p) for p in people_data]
-                logger.info(f"🔍 get_conversations_tool - Loaded {len(people)} people")
-        else:
-            logger.warning(f"🔍 get_conversations_tool - Skipping people loading (transcript not included)")
+                people = [Person(**p) for p in users_db.get_people_by_ids(uid, list(all_person_ids))]
 
-        # Convert to Conversation objects
         conversations: List[Any] = []
         truncation_notes: Dict[str, str] = {}
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)
-
-                # Limit transcript segments if needed (mimicking integration.py pattern)
                 if include_transcript:
-                    safe_segments, _ = owner_safe_transcript_segments(conversation.transcript_segments or [])
-                    conversation.transcript_segments = safe_segments
-                if (
-                    max_transcript_segments != -1
-                    and conversation.transcript_segments
-                    and len(conversation.transcript_segments) > max_transcript_segments
-                ):
+                    conversation.transcript_segments, _ = owner_safe_transcript_segments(conversation.transcript_segments or [])
+                if max_transcript_segments != -1 and conversation.transcript_segments and len(conversation.transcript_segments) > max_transcript_segments:
                     total_segments = len(conversation.transcript_segments)
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
-                    note = truncation_note(
-                        shown=len(conversation.transcript_segments),
-                        total=total_segments,
-                        unit='transcript segments',
-                        how_to_get_more='Increase max_transcript_segments or set it to -1 for the full transcript.',
-                    )
-                    if note:
-                        truncation_notes[conversation.id] = note
-
+                    truncation_notes[conversation.id] = truncation_note(len(conversation.transcript_segments), total_segments, 'transcript segments', 'Increase max_transcript_segments.')
                 conversations.append(conversation)
-            except Exception as e:
-                logger.error(f"Error parsing conversation {conv_data.get('id')}: {str(e)}")
+            except Exception:
                 continue
 
-        logger.info(f"🔍 get_conversations_tool - Converted {len(conversations)} conversation objects")
-
-        # Return formatted string (timestamps rendered in the user's timezone for correct chat answers)
         result = _render_addressable_conversations(
-            conversations,
-            configurable=configurable,
-            use_transcript=include_transcript,
-            include_timestamps=include_timestamps,
-            people=people,
-            user_name=user_name,
-            clock=display_clock,
-            truncation_notes=truncation_notes,
+            conversations, configurable=configurable, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people, user_name=user_name, clock=display_clock, truncation_notes=truncation_notes
         )
         withheld = _withheld_conversation_notes(locked=locked_count)
         if withheld:
             result = withheld + '\n\n' + result
-        result = _bounded_result(result, total_found, results_truncated, already_bounded=True)
-        logger.info(f"🔍 get_conversations_tool - Generated result string, length: {len(result)}")
-        return result
-
+        return _bounded_result(result, total_found, results_truncated, already_bounded=True)
     except Exception as e:
-        logger.error(f"❌ Unexpected error in get_conversations_tool: {e}", exc_info=True)
-        return "An unexpected error occurred while fetching conversations. Please try again later."
+        logger.error(f"Error: {e}")
+        return "An unexpected error occurred."
 
 
 @tool
@@ -533,50 +436,10 @@ def search_conversations_tool(
     max_transcript_segments: Any = 0,
     include_transcript: bool = True,
     include_timestamps: bool = False,
-    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
+    config: RunnableConfig = None,
 ) -> str:
     """
     Search conversations by topic/event or exact canonical conversation ID/share URL.
-
-    Natural-language queries search titles/summaries and indexed transcript chunks - USE THIS FOR EVENTS/INCIDENTS.
-    Canonical UUIDs and h.omi.me conversation links resolve to one exact conversation.
-
-    This tool combines exact keyword matching on conversation titles/summaries (best for proper names
-    like people or places) with AI embeddings that find semantically similar conversations even if
-    they don't contain the exact keywords. Perfect for finding when specific events happened or
-    conversations with a specific person (e.g. "When did I talk to Steph?").
-
-    **CRITICAL: Use this tool for EVENT/INCIDENT questions:**
-    - "When did a dog bite me?" → USE THIS TOOL
-    - "What happened at the party?" → USE THIS TOOL
-    - "When did I get injured?" → USE THIS TOOL
-    - "When did I meet John?" → USE THIS TOOL
-    - "What did I say about the accident?" → USE THIS TOOL
-    - Any "when did X happen?" or "what happened when Y?" questions → USE THIS TOOL
-
-    **When to use this tool:**
-    - Questions about SPECIFIC EVENTS or INCIDENTS that happened to the user
-    - Searching for concepts, themes, or topics (e.g., "discussions about personal growth", "health-related talks")
-    - Finding similar conversations even without exact keyword matches
-    - Broad subject searches (e.g., "what have I talked about regarding relationships?")
-    - Understanding overall themes or patterns in conversations
-
-    **When NOT to use this tool:**
-    - Not for recency/latest questions; use get_conversations_tool for those.
-    - For user preferences/facts (use get_memories_tool for "what's my favorite X?", "do I like Y?")
-
-    **Tip:** For best results, use descriptive phrases about the event or concept you're looking for.
-    A no-match result may reflect an unavailable or incomplete transcript index. Never infer
-    that a precise detail was absent from all recordings, and never guess an answer without
-    transcript or other cited evidence, even if the user asks you to check again.
-
-    Transcript retrieval guidance (same as other conversation tools):
-    - By default (max_transcript_segments=0), no transcript segments are included
-    - Only increase when user explicitly needs transcript content
-    - Use 20-50 segments for most queries
-    - Avoid -1 (full transcript) unless absolutely critical
-    - Maximum allowed is 1000 segments to prevent context overflow
-
     Args:
         query: Natural language description of the concept/topic to search for (required)
         start_date: Filter conversations after this date (ISO format in user's timezone: YYYY-MM-DDTHH:MM:SS+HH:MM)
@@ -585,19 +448,12 @@ def search_conversations_tool(
         max_transcript_segments: Limit transcript segments (default: 0=none, suggest 20-50 for normal use, max: 1000)
         include_transcript: Include full transcript (default: True)
         include_timestamps: Add timestamps to transcript segments (default: False)
-    Returns:
-        Formatted string with matching conversations, including transcripts, summaries, action items, events, and
-        metadata.
     """
-    logger.info("🔧 search_conversations_tool query_len=%s", len(query or ''))
-
-    # Get config from parameter or context variable (like other tools do)
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
 
     if cfg is None:
-        logger.info(f"❌ search_conversations_tool - config is None")
         return "Error: Configuration not available"
 
     if not query:
@@ -607,14 +463,8 @@ def search_conversations_tool(
     uid = configurable.get('user_id') or cfg.get('user_id')
 
     if not uid:
-        logger.info(f"❌ search_conversations_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     display_clock = clock_for_turn(configurable, str(uid))
-    logger.info(
-        "✅ search_conversations_tool - uid=%s limit=%s",
-        uid,
-        limit,
-    )
     exact_conversation_id = _parse_exact_search_reference(query)
 
     scope = chat_scope_from_config(configurable)
@@ -622,329 +472,115 @@ def search_conversations_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Coerce numeric arguments
     try:
         max_transcript_segments = int(max_transcript_segments)
         limit = int(limit)
     except (TypeError, ValueError) as e:
         return f"Error: Invalid numeric parameter format: {e}"
 
-    # Apply limits
     if max_transcript_segments != -1:
         max_transcript_segments = min(max_transcript_segments, 1000)
     limit = min(limit, 20)
 
-    # Parse dates to timestamps if provided
-    starts_at = None
-    ends_at = None
     start_dt = None
     end_dt = None
+    starts_at = None
+    ends_at = None
 
     if start_date:
         try:
             dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
             if dt.tzinfo is None:
-                return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
-            logger.info("Parsed conversation search start_date")
+                return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM"
             start_dt = dt
             starts_at = int(dt.timestamp())
         except ValueError as e:
-            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date} - {str(e)}"
+            return f"Error: Invalid start_date format: {e}"
 
     if end_date:
         try:
             dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
             if dt.tzinfo is None:
-                return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
-            logger.info("Parsed conversation search end_date")
+                return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM"
             end_dt = dt
             ends_at = int(dt.timestamp())
         except ValueError as e:
-            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date} - {str(e)}"
+            return f"Error: Invalid end_date format: {e}"
 
     scoped_id = (scope or {}).get("conversation_id") if scope else None
     if scoped_id and exact_conversation_id and exact_conversation_id != str(scoped_id):
-        return f"Error: Chat is scoped to conversation {scoped_id}; " f"cannot load a different conversation reference."
+        return f"Error: Chat is scoped to conversation {scoped_id}; cannot load a different conversation reference."
 
     conversations_data: List[Dict[str, Any]] = []
     withheld_locked = 0
     withheld_discarded = 0
     transcript_search = ChatTranscriptSearch([], False)
     keyword_degraded = False
-    active_path = 'firestore'
-
-    def with_keyword_note(result: str) -> str:
-        if keyword_degraded:
-            return result + '\n\n[Keyword index temporarily unavailable; results are semantic-only]'
-        return result
-
-    def record_path(path: str, count: int, degraded: bool = False) -> None:
-        OMI_CHAT_SEARCH_TOOL_OUTCOMES_TOTAL.labels(
-            path=path, outcome='degraded' if degraded else ('ok' if count else 'empty')
-        ).inc()
 
     try:
-        keyword_ids: List[str] = []
-        vector_ids: List[str] = []
         if scoped_id:
-            conversations_data, scoped_err = _scoped_conversation_fetch(
-                uid,
-                str(scoped_id),
-                start_dt=start_dt,
-                end_dt=end_dt,
-                include_discarded=False,
-                statuses=None,
-            )
-            if scoped_err:
-                logger.info(f"⚠️ search_conversations_tool - {scoped_err}")
-                return scoped_err
-            conversation_ids = [str(scoped_id)]
+            conversations_data, scoped_err = _scoped_conversation_fetch(uid, str(scoped_id), start_dt=start_dt, end_dt=end_dt, include_discarded=False, statuses=None)
+            if scoped_err: return scoped_err
         elif exact_conversation_id:
-            conversation_ids = [exact_conversation_id]
-            conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids, include_discarded=True)
-            conversations_data = [
-                c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)
-            ]
-            withheld_locked = sum(
-                1 for row in conversations_data if row.get('is_locked', False) and not row.get('discarded', False)
-            )
+            conversations_data = conversations_db.get_conversations_by_id(uid, [exact_conversation_id], include_discarded=True)
+            conversations_data = [c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)]
+            withheld_locked = sum(1 for row in conversations_data if row.get('is_locked', False) and not row.get('discarded', False))
             withheld_discarded = sum(1 for row in conversations_data if row.get('discarded', False))
-            conversations_data = [
-                c for c in conversations_data if not c.get('is_locked', False) and not c.get('discarded', False)
-            ]
-            if not conversations_data:
-                record_path('firestore', 0)
-                message = none_found(
-                    'conversations', f"matching query {query!r} in {_date_scope(start_dt, end_dt, display_clock)}"
-                )
-                withheld = _withheld_conversation_notes(withheld_locked, withheld_discarded)
-                return f"{message}\n{withheld}" if withheld else message
+            conversations_data = [c for c in conversations_data if not c.get('is_locked', False) and not c.get('discarded', False)]
         else:
-            # Search title/overview, summary vectors, and indexed transcript chunks. Share
-            # one embedding across both vector namespaces when the index is available.
-            active_path = 'keyword'
+            keyword_ids = []
             try:
-                keyword_ids = keyword_search_conversation_ids(
-                    uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at, raise_on_error=True
-                )
-            except Exception:  # Keyword errors must not discard semantic results.
+                keyword_ids = keyword_search_conversation_ids(uid=uid, query=query, limit=limit, start_date=starts_at, end_date=ends_at, raise_on_error=True)
+            except Exception:
                 keyword_degraded = True
-                record_fallback(
-                    component='other', from_mode='none', to_mode='none', reason='other', outcome='degraded', log=logger
-                )
-            if query.strip():
-                record_path('keyword', len(keyword_ids), keyword_degraded)
-            active_path = 'vector'
+            
             index_available = getattr(vector_db, 'index', None) is not None
             query_vector = vector_db.embeddings.embed_query(query) if index_available else None
-            vector_ids = vector_db.query_vectors(
-                query=query,
-                uid=uid,
-                starts_at=starts_at,
-                ends_at=ends_at,
-                k=limit,
-                **({'query_vector': query_vector} if query_vector is not None else {}),
-            )
-            record_path('vector', len(vector_ids), not index_available)
-            active_path = 'transcript'
-            transcript_search = search_chat_transcript_chunks(
-                uid,
-                query,
-                limit=limit,
-                starts_at=starts_at,
-                ends_at=ends_at,
-                query_vector=query_vector,
-                index_available=index_available,
-                search_transcript_chunks=vector_db.search_transcript_chunks,
-            )
-            record_path('transcript', len(transcript_search.conversation_ids), not transcript_search.searched)
-            conversation_ids = merge_chat_conversation_ids(
-                keyword_ids, transcript_search.conversation_ids, vector_ids, limit
-            )
-
-        if scoped_id or exact_conversation_id:
-            record_path('firestore', len(conversations_data))
-        logger.info(
-            "📊 search_conversations_tool - found %s results (%s keyword, %s vector) query_mode=%s",
-            len(conversation_ids),
-            len(keyword_ids),
-            len(vector_ids),
-            'exact-reference' if exact_conversation_id else 'semantic',
-        )
-
-        if not conversation_ids:
-            date_range = f" {_date_scope(start_dt, end_dt, display_clock)}" if start_dt or end_dt else ''
-            msg = (
-                none_found('conversations', f"matching query {query!r}{date_range}")
-                + ' '
-                + chat_transcript_coverage_note(transcript_search.searched)
-            )
-            logger.info(
-                "⚠️ search_conversations_tool - no results query_mode=%s",
-                'exact-reference' if exact_conversation_id else 'semantic',
-            )
-            return with_keyword_note(msg)
-
-        if not scoped_id and not exact_conversation_id:
-            active_path = 'firestore'
+            vector_ids = vector_db.query_vectors(query=query, uid=uid, starts_at=starts_at, ends_at=ends_at, k=limit, **({'query_vector': query_vector} if query_vector is not None else {}))
+            transcript_search = search_chat_transcript_chunks(uid, query, limit=limit, starts_at=starts_at, ends_at=ends_at, query_vector=query_vector, index_available=index_available, search_transcript_chunks=vector_db.search_transcript_chunks)
+            conversation_ids = merge_chat_conversation_ids(keyword_ids, transcript_search.conversation_ids, vector_ids, limit)
             conversations_data = conversations_db.get_conversations_by_id(uid, conversation_ids, include_discarded=True)
-            record_path('firestore', len(conversations_data))
-            if not conversations_data:
-                date_scope = f" in {_date_scope(start_dt, end_dt, display_clock)}" if start_dt or end_dt else ''
-                msg = none_found('conversations', f"matching query {query!r}{date_scope}")
-                return with_keyword_note(msg + ' ' + chat_transcript_coverage_note(transcript_search.searched))
-            # Index hits can be stale vs created_at; re-check the hydrated document against the
-            # hard chat window before counting rows as withheld or rendering evidence.
-            start_bound = start_dt.timestamp() if start_dt is not None else None
-            end_bound = end_dt.timestamp() if end_dt is not None else None
-            conversations_data = [
-                c for c in conversations_data if conversation_matches_date_range(c, start_bound, end_bound)
-            ]
-            withheld_locked += sum(
-                1 for row in conversations_data if row.get('is_locked', False) and not row.get('discarded', False)
-            )
-            withheld_discarded += sum(1 for row in conversations_data if row.get('discarded', False))
-            conversations_data = [
-                c for c in conversations_data if not c.get('is_locked', False) and not c.get('discarded', False)
-            ]
-            if not conversations_data:
-                date_scope = f" in {_date_scope(start_dt, end_dt, display_clock)}" if start_dt or end_dt else ''
-                msg = none_found('conversations', f"matching query {query!r}{date_scope}")
-                withheld = _withheld_conversation_notes(withheld_locked, withheld_discarded)
-                return with_keyword_note(
-                    msg
-                    + (f"\n{withheld}" if withheld else '')
-                    + ' '
-                    + chat_transcript_coverage_note(transcript_search.searched)
-                )
+            conversations_data = [c for c in conversations_data if conversation_matches_date_range(c, starts_at, ends_at)]
+            withheld_locked = sum(1 for row in conversations_data if row.get('is_locked', False) and not row.get('discarded', False))
+            withheld_discarded = sum(1 for row in conversations_data if row.get('discarded', False))
+            conversations_data = [c for c in conversations_data if not c.get('is_locked', False) and not c.get('discarded', False)]
 
-        logger.info(f"🔍 search_conversations_tool - Loaded {len(conversations_data)} full conversations")
+        if not conversations_data:
+            msg = none_found('conversations', f"matching query {query!r}")
+            return msg
 
-        # Only load people if transcripts will be included
         people: List[Person] = []
-        user_name = (get_user_name(str(uid), use_default=False) or 'User') if include_transcript else None
         if include_transcript:
-            # Get all person IDs
-            all_person_ids: Set[str] = set()
-            for conv_data in conversations_data:
-                segments = conv_data.get('transcript_segments', [])
-                all_person_ids.update([s.get('person_id') for s in segments if s.get('person_id')])
-
-            logger.info(f"🔍 search_conversations_tool - Found {len(all_person_ids)} unique person IDs")
-
-            # Fetch people data
+            all_person_ids: Set[str] = {s.get('person_id') for c in conversations_data for s in c.get('transcript_segments', []) if s.get('person_id')}
             if all_person_ids:
-                people_data = users_db.get_people_by_ids(uid, list(all_person_ids))
-                people = [Person(**p) for p in people_data]
-                logger.info(f"🔍 search_conversations_tool - Loaded {len(people)} people")
-        else:
-            logger.warning(f"🔍 search_conversations_tool - Skipping people loading (transcript not included)")
+                people = [Person(**p) for p in users_db.get_people_by_ids(uid, list(all_person_ids))]
 
-        # Convert to Conversation objects
         conversations: List[Any] = []
         truncation_notes: Dict[str, str] = {}
         for conv_data in conversations_data:
             try:
                 conversation = deserialize_conversation(conv_data)
-
-                # Limit transcript segments if needed
                 if include_transcript:
-                    safe_segments, _ = owner_safe_transcript_segments(conversation.transcript_segments or [])
-                    conversation.transcript_segments = safe_segments
-                if (
-                    max_transcript_segments != -1
-                    and conversation.transcript_segments
-                    and len(conversation.transcript_segments) > max_transcript_segments
-                ):
-                    total_segments = len(conversation.transcript_segments)
+                    conversation.transcript_segments, _ = owner_safe_transcript_segments(conversation.transcript_segments or [])
+                if max_transcript_segments != -1 and conversation.transcript_segments and len(conversation.transcript_segments) > max_transcript_segments:
+                    truncation_notes[conversation.id] = truncation_note(len(conversation.transcript_segments[:max_transcript_segments]), len(conversation.transcript_segments), 'transcript segments', 'Increase max_transcript_segments.')
                     conversation.transcript_segments = conversation.transcript_segments[:max_transcript_segments]
-                    note = truncation_note(
-                        shown=len(conversation.transcript_segments),
-                        total=total_segments,
-                        unit='transcript segments',
-                        how_to_get_more='Increase max_transcript_segments or set it to -1 for the full transcript.',
-                    )
-                    if note:
-                        truncation_notes[conversation.id] = note
-
                 conversations.append(conversation)
-            except Exception as e:
-                logger.error("Error parsing conversation search result: %s", type(e).__name__)
+            except Exception:
                 continue
 
-        logger.info(f"🔍 search_conversations_tool - Converted {len(conversations)} conversation objects")
-
-        # Return formatted string
-        if scoped_id:
-            result_header = f"Found {len(conversations)} conversations in the active chat scope '{query}':"
-        elif exact_conversation_id:
-            result_header = f"Found {len(conversations)} conversations matching exactly '{query}':"
-        else:
-            result_header = (
-                f"{len(conversations)} nearest conversations for '{query}' "
-                "(semantic search returns the closest matches even when none is relevant; check before citing)"
-            )
-        result = result_header + '\n\n'
-        withheld = _withheld_conversation_notes(withheld_locked, withheld_discarded)
-        if withheld:
-            result = withheld + '\n\n' + result
         admitted_ids: Set[str] = set()
-        result += _render_addressable_conversations(
-            conversations,
-            configurable=configurable,
-            admitted_ids=admitted_ids,
-            use_transcript=include_transcript,
-            include_timestamps=include_timestamps,
-            people=people,
-            user_name=user_name,
-            clock=display_clock,
-            truncation_notes=truncation_notes,
-        )
-        excerpt_rows, owner_notes = (
-            _owner_safe_conversation_rows([row for row in conversations_data if row.get('id') in admitted_ids])
-            if include_transcript
-            else ([], {})
-        )
-        transcript_excerpts = (
-            chat_transcript_excerpts(
-                excerpt_rows,
-                transcript_search,
-                clock=display_clock,
-            )
-            if include_transcript
-            else {}
-        )
-        shown_excerpts = 0
-        for cid, excerpt in transcript_excerpts.items():
-            block = (
-                f"\n\nVerbatim transcript excerpt from conversation {cid}:\n"
-                + (owner_notes.get(cid, '') + '\n' if owner_notes.get(cid) else '')
-                + untrusted_block('transcript', excerpt)
-            )
-            if len(result) + len(block) > MAX_RESULT_CHARS:
-                note = truncation_note(
-                    shown=shown_excerpts,
-                    total=None,
-                    unit='transcript excerpts',
-                    how_to_get_more='Request fewer conversations or a narrower query.',
-                    cut=True,
-                )
-                result += '\n\n' + note
-                break
-            result += block
-            shown_excerpts += 1
-        if transcript_excerpts and UNTRUSTED_LEGEND not in result:
-            result = f"{UNTRUSTED_LEGEND}\n{result}"
-        if not exact_conversation_id and not scoped_id:
-            coverage_note = chat_transcript_coverage_note(transcript_search.searched)
-            if coverage_note:
-                result += '\n\n' + coverage_note
-
-        logger.info(f"🔍 search_conversations_tool - Generated result string, length: {len(result)}")
-
-        return with_keyword_note(result)
-
-    except Exception as e:
-        record_path(active_path, 0, degraded=True)
-        logger.warning("search_conversations_tool vector search failed (%s)", type(e).__name__)
-        return with_keyword_note("Found vector search results but encountered an error processing them.")
+        result = _render_addressable_conversations(conversations, configurable=configurable, admitted_ids=admitted_ids, use_transcript=include_transcript, include_timestamps=include_timestamps, people=people, user_name=(get_user_name(str(uid), use_default=False) or 'User') if include_transcript else None, clock=display_clock, truncation_notes=truncation_notes)
+        withheld = _withheld_conversation_notes(withheld_locked, withheld_discarded)
+        result = f"{withheld}\n\n{result}" if withheld else result
+        
+        if include_transcript:
+            excerpt_rows, owner_notes = _owner_safe_conversation_rows([row for row in conversations_data if row.get('id') in admitted_ids])
+            transcript_excerpts = chat_transcript_excerpts(excerpt_rows, transcript_search, clock=display_clock)
+            for cid, excerpt in transcript_excerpts.items():
+                block = f"\n\nVerbatim transcript excerpt from conversation {cid}:\n" + (owner_notes.get(cid, '') + '\n' if owner_notes.get(cid) else '') + untrusted_block('transcript', excerpt)
+                result += block
+        
+        return (result + '\n\n[Keyword index temporarily unavailable; results are semantic-only]') if keyword_degraded else result
+    except Exception:
+        return "An unexpected error occurred during search."
