@@ -54,13 +54,15 @@ def create_staged_task(uid: str, description: str, **kwargs) -> dict:
     """
     col = _user_col(uid, 'staged_tasks')
 
-    # Deduplicate
+    # Deduplicate against active (uncompleted) staged tasks
     desc_norm = action_items_db._normalize_description(description)
     for doc in col.stream():
-        if action_items_db._normalize_description(doc.to_dict().get('description', '')) == desc_norm:
-            existing = doc.to_dict()
-            existing['id'] = doc.id
-            return existing
+        data = doc.to_dict() or {}
+        if data.get('completed'):
+            continue
+        if action_items_db._normalize_description(data.get('description', '')) == desc_norm:
+            data['id'] = doc.id
+            return data
 
     task_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -68,10 +70,11 @@ def create_staged_task(uid: str, description: str, **kwargs) -> dict:
         'id': task_id,
         'description': description,
         'completed': False,
+        'relevance_score': kwargs.get('relevance_score', 0) if kwargs.get('relevance_score') is not None else 0,
         'created_at': now,
         'updated_at': now,
     }
-    for field in ('due_at', 'source', 'priority', 'metadata', 'category', 'relevance_score'):
+    for field in ('due_at', 'source', 'priority', 'metadata', 'category'):
         if field in kwargs and kwargs[field] is not None:
             doc[field] = kwargs[field]
 
