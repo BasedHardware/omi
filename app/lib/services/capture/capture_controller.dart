@@ -2420,6 +2420,9 @@ class CaptureController extends ChangeNotifier
     }
     if (foregroundAudioReady) {
       await _preferences.saveBool('nativeBleForegroundReady', true);
+    } else {
+      Logger.debug('[Capture] foreground audio stream failed to initialize for $deviceId');
+      return;
     }
 
     // Update state (limitless is excluded: the pendant records on-device, so the
