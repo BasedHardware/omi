@@ -250,15 +250,16 @@ def ensure_quiet_check_progress(job_id: str, *, firestore_client: Any = None) ->
         updates: dict[str, Any] = {'updated_at': now}
         generation = job.get('dispatch_generation')
         parsed_generation = 0
-        try:
-            parsed_generation = int(generation)
-            valid_generation = (
-                not isinstance(generation, bool)
-                and parsed_generation >= 1
-                and str(generation) in {str(parsed_generation), str(float(parsed_generation))}
-            )
-        except (TypeError, ValueError, OverflowError):
-            valid_generation = False
+        valid_generation = False
+        if isinstance(generation, (int, float, str)) and not isinstance(generation, bool):
+            try:
+                parsed_generation = int(generation)
+                valid_generation = parsed_generation >= 1 and str(generation) in {
+                    str(parsed_generation),
+                    str(float(parsed_generation)),
+                }
+            except (TypeError, ValueError, OverflowError):
+                pass
         if (
             job.get('status') != QUIET_CHECK_STATUS
             or not valid_generation
