@@ -32,6 +32,7 @@ final class MeetingDetector {
   private var pendingOnSince: Date?
   private var confirmedSince: Date?
   private var noticeRequested = false
+  private var noticePresented = false
   private let confirmationPeriod: TimeInterval
   private let noticeDelay: TimeInterval
   private let onConfirmedChange: (Bool) -> Void
@@ -333,6 +334,7 @@ final class MeetingDetector {
           lastMeetingEndedAt = nil
           adoptConfirmedCall(callIDs, calendarEventIDs: calendarEventIDs)
           confirmedSince = now()
+          noticePresented = false
           pendingOnSince = nil
           if let latestEvidence { onConfirmedEvidence(latestEvidence) }
           onConfirmedChange(true)
@@ -348,6 +350,7 @@ final class MeetingDetector {
         hasPendingCallChange = true
         confirmedSince = now()
         noticeRequested = false
+        noticePresented = false
         onCallChanged()
       }
       deliverNoteTakingNoticeIfReady()
@@ -380,8 +383,13 @@ final class MeetingDetector {
     isMeetingActive = active
     if !active {
       pendingOnSince = nil
-      confirmedSince = nil
-      noticeRequested = false
+      // A committed notice remains owed while this confirmed session can resume.
+      // Already delivered notices stay disarmed, and inactive capture cannot present one.
+      if !isMeetingConfirmed {
+        confirmedSince = nil
+        noticeRequested = false
+        noticePresented = false
+      }
       callTracker.reset()
       hasPendingCallChange = false
     }
@@ -405,6 +413,9 @@ final class MeetingDetector {
     resumeOffAt = nil
     lastMeetingEndedAt = offAt
     isMeetingConfirmed = false
+    confirmedSince = nil
+    noticeRequested = false
+    noticePresented = false
     confirmedApps = []
     confirmedCallIDs = []
     confirmedCalendarIDs = []
@@ -413,19 +424,20 @@ final class MeetingDetector {
     onConfirmedChange(false)
   }
 
-  /// Called only after a successful rotation into the meeting role. A slow rotation
-  /// may finish after the meeting ended, so never arm a card for an inactive call.
+  /// Called only after a successful rotation. A late commit can owe a notice during
+  /// a resume hold, but retired meetings cannot arm one and inactive capture cannot show it.
   func requestNoteTakingNotice() {
-    guard isMeetingConfirmed, isMeetingActive else { return }
+    guard isMeetingConfirmed, !noticePresented, isMeetingActive || resumeOffAt != nil else { return }
     noticeRequested = true
     deliverNoteTakingNoticeIfReady()
   }
 
   private func deliverNoteTakingNoticeIfReady() {
-    guard noticeRequested, isMeetingConfirmed, isMeetingActive, pendingOffDeadline == nil,
+    guard noticeRequested, !noticePresented, isMeetingConfirmed, isMeetingActive, pendingOffDeadline == nil,
       let since = confirmedSince, now().timeIntervalSince(since) >= noticeDelay
     else { return }
     noticeRequested = false
+    noticePresented = true
     onNoteTakingNoticeReady()
   }
 

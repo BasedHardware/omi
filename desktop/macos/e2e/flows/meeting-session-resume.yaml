@@ -8,6 +8,7 @@ covers:
   - desktop/macos/Desktop/Sources/Audio/MeetingCallObservation.swift
   - desktop/macos/Desktop/Sources/Audio/CaptureAudioTimeline.swift
   - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
+  - desktop/macos/Desktop/Sources/TranscriptionService.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+MeetingBoundaries.swift
   - desktop/macos/Desktop/Sources/AppState/MeetingConversationBoundaryPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/MeetingSessionResumePolicy.swift
@@ -41,3 +42,6 @@ steps:
   - id: S8
     name: Preserve distinct-call boundaries and document the receipt
     do: "Re-establish an active synthetic event and a confirmed test call. During its resume hold, detect a different native call app with a different calendar event and verify a fresh meeting boundary after confirmation. Repeat the Zoom microphone-release generation case without a matching event to ensure it remains a new call. Record the exact source revision, named bundle, test profile, local endpoints, log/session evidence and pass/fail for every step. This manual receipt is separate from the fake-clock XCTest results; an unexecuted flow must remain explicitly unverified."
+  - id: S9
+    name: Verify final draining, pending notices and the cloud lifetime
+    do: "In the isolated local-ASR profile, resume with fixture speech buffered on both sides of the gap, then immediately stop or rotate: both phrases must persist before retirement, including when the earlier decoder result is filtered out. Induce a gap before the delayed notice appears: the committed notice must appear once on resume and never repeat if it was already shown. With an isolated loopback-only listen backend and synthetic STT provider, repeat the 150-second gap using cloud STT without a calendar event: the meeting socket must send conversation_timeout=-1 (the existing four-hour safety cap), retain one backend conversation, and finalize on normal client close. Ambient sockets must retain their default timeout. Never route this variant to production services or real user data."

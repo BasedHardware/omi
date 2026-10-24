@@ -17,7 +17,7 @@ final class MeetingSessionResumeTests: XCTestCase {
       defaultInputDeviceID: 1, browserWindows: [])
   }
 
-  private func detector() -> MeetingDetector {
+  private func detector(notice: @escaping () -> Void = {}) -> MeetingDetector {
     let name = "MeetingSessionResumeTests.\(UUID().uuidString)"
     guard let defaults = UserDefaults(suiteName: name) else {
       preconditionFailure("Could not create isolated meeting test defaults")
@@ -31,7 +31,7 @@ final class MeetingSessionResumeTests: XCTestCase {
           transitions.append(transition)
           role = transition.nextRole
         }
-      }, onConfirmedEvidence: { _ in }, onAudioSummaries: { _ in })
+      }, onNoteTakingNoticeReady: notice, onConfirmedEvidence: { _ in }, onAudioSummaries: { _ in })
   }
 
   private func confirm(_ detector: MeetingDetector, events: Set<String> = []) {
@@ -66,6 +66,67 @@ final class MeetingSessionResumeTests: XCTestCase {
     XCTAssertEqual(role, .meeting)
     XCTAssertEqual(transitions.map(\.nextRole), [.meeting], "one meeting session and no ambient fragment")
     XCTAssertEqual(captureEdges, [true, false, true])
+  }
+
+  func testResumePresentsAnUndeliveredCommittedNoticeOnce() {
+    var notices = 0
+    let detector = detector(notice: { notices += 1 })
+    confirm(detector)
+    detector.requestNoteTakingNotice()
+    now += 20
+    _ = loseEvidence(detector)
+    XCTAssertEqual(notices, 0)
+    now += 150
+    detector.applySnapshot(shot())
+    XCTAssertEqual(notices, 1)
+    now += 35
+    detector.applySnapshot(shot())
+    XCTAssertEqual(notices, 1)
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting])
+  }
+
+  func testResumeDoesNotDuplicateAnAlreadyPresentedNotice() {
+    var notices = 0
+    let detector = detector(notice: { notices += 1 })
+    confirm(detector)
+    detector.requestNoteTakingNotice()
+    now += 35
+    detector.applySnapshot(shot())
+    XCTAssertEqual(notices, 1)
+    _ = loseEvidence(detector)
+    detector.requestNoteTakingNotice()  // duplicate late boundary completion during the hold
+    now += 150
+    detector.applySnapshot(shot())
+    detector.requestNoteTakingNotice()
+    XCTAssertEqual(notices, 1)
+  }
+
+  func testBoundaryCommitDuringHoldQueuesTheNoticeUntilCaptureResumes() {
+    var notices = 0
+    let detector = detector(notice: { notices += 1 })
+    confirm(detector)
+    _ = loseEvidence(detector)
+    now += 150
+    detector.requestNoteTakingNotice()
+    XCTAssertEqual(notices, 0, "closed capture must not claim it is taking notes")
+    detector.applySnapshot(shot())
+    XCTAssertEqual(notices, 1)
+  }
+
+  func testExpiredUndeliveredNoticeDoesNotLeakIntoANewCall() {
+    var notices = 0
+    let detector = detector(notice: { notices += 1 })
+    confirm(detector)
+    detector.requestNoteTakingNotice()
+    _ = loseEvidence(detector)
+    now += MeetingDetectionTiming.resumeWindow
+    detector.applyDetected(false)
+    confirm(detector)
+    now += 35
+    detector.applySnapshot(shot())
+    XCTAssertEqual(notices, 0, "a new session still needs its own committed notice request")
+    detector.requestNoteTakingNotice()
+    XCTAssertEqual(notices, 1)
   }
 
   func testExpiryEndsExactlyOnceAtOriginalOffEdgeAndNextCallConfirmsNormally() {
