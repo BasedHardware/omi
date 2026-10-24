@@ -14445,8 +14445,11 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending parça bekliyor';
+    return 'Bekleyen parçalar: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Önceki Bölümü Aç';
 
   @override
   String get episodeNotesSoon => 'Notlar konuşmanın ilk birkaç dakikasından sonra görünür.';

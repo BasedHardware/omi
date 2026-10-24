@@ -14427,8 +14427,11 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending قطعه در انتظار';
+    return 'قطعه‌های در انتظار: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'باز کردن قسمت قبلی';
 
   @override
   String get episodeNotesSoon => 'یادداشت‌ها پس از چند دقیقهٔ اول گفت‌وگو نمایش داده می‌شوند.';

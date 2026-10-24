@@ -14479,8 +14479,11 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending ತುಣುಕುಗಳು ಬಾಕಿ';
+    return 'ಬಾಕಿ ಇರುವ ತುಣುಕುಗಳು: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'ಹಿಂದಿನ ಸಂಚಿಕೆಯನ್ನು ತೆರೆಯಿರಿ';
 
   @override
   String get episodeNotesSoon => 'ಮಾತಿನ ಮೊದಲ ಕೆಲವು ನಿಮಿಷಗಳ ನಂತರ ಟಿಪ್ಪಣಿಗಳು ಕಾಣಿಸುತ್ತವೆ.';

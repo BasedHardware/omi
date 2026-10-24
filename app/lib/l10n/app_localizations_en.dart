@@ -14421,6 +14421,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get episodeOpenPrevious => 'Open Previous Episode';
+
+  @override
   String get episodeNotesSoon => 'Running notes appear after the first few minutes of talk.';
 
   @override

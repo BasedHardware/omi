@@ -14351,8 +14351,11 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending مقاطع قيد الانتظار';
+    return 'مقاطع قيد الانتظار: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'افتح الحلقة السابقة';
 
   @override
   String get episodeNotesSoon => 'تظهر الملاحظات بعد الدقائق الأولى من الحديث.';

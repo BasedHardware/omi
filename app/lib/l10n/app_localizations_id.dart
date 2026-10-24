@@ -14446,8 +14446,11 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending bagian tertunda';
+    return 'Bagian tertunda: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Buka Episode Sebelumnya';
 
   @override
   String get episodeNotesSoon => 'Catatan muncul setelah beberapa menit pertama percakapan.';

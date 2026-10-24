@@ -14425,8 +14425,11 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending lõiku ootel';
+    return 'Ootel lõigud: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Ava eelmine episood';
 
   @override
   String get episodeNotesSoon => 'Märkmed ilmuvad pärast esimesi vestlusminuteid.';

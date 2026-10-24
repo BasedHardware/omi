@@ -17575,6 +17575,7 @@
             }
         }
     },
+    "episodeOpenPrevious": "Open Previous Episode",
     "episodeNotesSoon": "Running notes appear after the first few minutes of talk.",
     "@episodeNotesSoon": {
         "description": "Shown in the running notes card before the first notes exist."

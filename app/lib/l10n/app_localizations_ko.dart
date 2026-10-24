@@ -14233,8 +14233,11 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending개 청크 대기 중';
+    return '대기 중인 청크: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => '이전 에피소드 열기';
 
   @override
   String get episodeNotesSoon => '대화가 몇 분 지나면 노트가 나타납니다.';

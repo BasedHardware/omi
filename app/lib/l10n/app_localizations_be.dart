@@ -14471,6 +14471,9 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get episodeOpenPrevious => 'Адкрыць папярэдні эпізод';
+
+  @override
   String get episodeNotesSoon => 'Нататкі з’явяцца пасля першых хвілін размовы.';
 
   @override

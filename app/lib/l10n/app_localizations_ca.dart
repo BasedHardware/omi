@@ -14506,8 +14506,11 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending fragments pendents';
+    return 'Fragments pendents: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Obre l’episodi anterior';
 
   @override
   String get episodeNotesSoon => 'Les notes apareixen després dels primers minuts de conversa.';

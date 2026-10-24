@@ -14546,8 +14546,11 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending chunk na nakabinbin';
+    return 'Mga nakabinbing chunk: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Buksan ang Nakaraang Episode';
 
   @override
   String get episodeNotesSoon => 'Lalabas ang mga tala pagkatapos ng unang ilang minuto ng usapan.';

@@ -361,6 +361,7 @@ void main() {
       await tester.pump();
       expect(episodes.live, isNull);
       expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      expect(find.text('Open Previous Episode: Lunch plans with Maya'), findsOneWidget);
       expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 10m 0s');
       await tester.tap(find.byKey(const Key('previous_episode_link')));
       await tester.pump();

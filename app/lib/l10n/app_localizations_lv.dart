@@ -14464,8 +14464,11 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return 'Gaida $pending fragmenti';
+    return 'Gaidošie fragmenti: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Atvērt iepriekšējo epizodi';
 
   @override
   String get episodeNotesSoon => 'Piezīmes parādās pēc pirmajām sarunas minūtēm.';

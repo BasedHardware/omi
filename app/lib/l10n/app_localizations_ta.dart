@@ -14531,8 +14531,11 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending துண்டுகள் நிலுவையில்';
+    return 'நிலுவையில் உள்ள துண்டுகள்: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'முந்தைய பகுதியைத் திறக்கவும்';
 
   @override
   String get episodeNotesSoon => 'பேச்சின் முதல் சில நிமிடங்களுக்குப் பிறகு குறிப்புகள் தோன்றும்.';

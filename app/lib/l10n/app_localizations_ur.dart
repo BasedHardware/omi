@@ -14445,8 +14445,11 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending حصے زیرِ التوا';
+    return 'زیرِ التوا حصے: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'پچھلی قسط کھولیں';
 
   @override
   String get episodeNotesSoon => 'گفتگو کے پہلے چند منٹ بعد نوٹس ظاہر ہوں گے۔';

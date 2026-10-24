@@ -14497,8 +14497,11 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending делови чекаат';
+    return 'Делови на чекање: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Отвори ја претходната епизода';
 
   @override
   String get episodeNotesSoon => 'Белешките се појавуваат по првите минути разговор.';

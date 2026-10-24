@@ -4394,6 +4394,7 @@
     "episodeCaptureFor": "Nahrávání · {duration}",
     "episodePrevious": "Předchozí epizoda",
     "captureChunksPending": "Čekající části: {pending}",
+    "episodeOpenPrevious": "Otevřít předchozí epizodu",
     "episodeNotesSoon": "Poznámky se objeví po prvních minutách hovoru.",
     "episodeOpenAll": "Otevřít vše",
     "episodeWrapUpNow": "Uzavřít teď",

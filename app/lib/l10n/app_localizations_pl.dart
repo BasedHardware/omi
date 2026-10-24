@@ -14479,6 +14479,9 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get episodeOpenPrevious => 'Otwórz poprzedni odcinek';
+
+  @override
   String get episodeNotesSoon => 'Notatki pojawią się po pierwszych minutach rozmowy.';
 
   @override

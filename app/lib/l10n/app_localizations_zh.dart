@@ -14207,8 +14207,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending 个音频块待处理';
+    return '待处理音频块: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => '打开上一段记录';
 
   @override
   String get episodeNotesSoon => '交谈几分钟后会显示笔记。';

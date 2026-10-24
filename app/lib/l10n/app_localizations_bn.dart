@@ -14428,8 +14428,11 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pendingটি খণ্ড অপেক্ষায়';
+    return 'অপেক্ষমাণ খণ্ড: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'আগের পর্ব খুলুন';
 
   @override
   String get episodeNotesSoon => 'কথার প্রথম কয়েক মিনিট পরে নোট দেখা যাবে।';

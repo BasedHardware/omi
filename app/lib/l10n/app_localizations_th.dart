@@ -14360,8 +14360,11 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return 'รอดำเนินการ $pending ช่วงเสียง';
+    return 'ช่วงเสียงที่รอดำเนินการ: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'เปิดตอนก่อนหน้า';
 
   @override
   String get episodeNotesSoon => 'บันทึกจะแสดงหลังจากพูดคุยไปสองสามนาทีแรก';

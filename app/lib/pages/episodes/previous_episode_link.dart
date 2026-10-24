@@ -58,7 +58,7 @@ class _PreviousEpisodeLinkState extends State<PreviousEpisodeLink> {
       child: OmiButton.tertiary(
         key: const Key('previous_episode_link'),
         label:
-            '${context.l10n.episodePrevious}: ${episode.title.trim().isEmpty ? context.l10n.conversationTab : episode.title}',
+            '${context.l10n.episodeOpenPrevious}: ${episode.title.trim().isEmpty ? context.l10n.conversationTab : episode.title}',
         onPressed: () =>
             routeToPage(context, PreviousEpisodePage(episode: episode, onOpenConversation: widget.onOpenConversation)),
       ),

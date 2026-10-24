@@ -11820,6 +11820,7 @@
     "episodeCaptureFor": "Запіс · {duration}",
     "episodePrevious": "Папярэдні эпізод",
     "captureChunksPending": "Чакаюць фрагменты: {pending}",
+    "episodeOpenPrevious": "Адкрыць папярэдні эпізод",
     "episodeNotesSoon": "Нататкі з’явяцца пасля першых хвілін размовы.",
     "episodeOpenAll": "Адкрыць усё",
     "episodeWrapUpNow": "Завяршыць зараз",

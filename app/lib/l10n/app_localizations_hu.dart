@@ -14490,8 +14490,11 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending rész várakozik';
+    return 'Várakozó részek: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Előző epizód megnyitása';
 
   @override
   String get episodeNotesSoon => 'A jegyzetek a beszélgetés első perceit követően jelennek meg.';

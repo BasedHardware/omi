@@ -11820,6 +11820,7 @@
     "episodeCaptureFor": "Snemanje · {duration}",
     "episodePrevious": "Prejšnja epizoda",
     "captureChunksPending": "Čakajoči deli: {pending}",
+    "episodeOpenPrevious": "Odpri prejšnjo epizodo",
     "episodeNotesSoon": "Zapiski se prikažejo po prvih minutah pogovora.",
     "episodeOpenAll": "Odpri vse",
     "episodeWrapUpNow": "Zaključi zdaj",

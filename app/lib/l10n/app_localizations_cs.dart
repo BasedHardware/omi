@@ -14435,6 +14435,9 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get episodeOpenPrevious => 'Otevřít předchozí epizodu';
+
+  @override
   String get episodeNotesSoon => 'Poznámky se objeví po prvních minutách hovoru.';
 
   @override

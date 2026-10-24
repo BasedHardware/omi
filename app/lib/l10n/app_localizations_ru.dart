@@ -14481,8 +14481,11 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return 'Ожидают фрагменты: $pending';
+    return 'Ожидающие фрагменты: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Открыть предыдущий эпизод';
 
   @override
   String get episodeNotesSoon => 'Заметки появятся после первых минут разговора.';

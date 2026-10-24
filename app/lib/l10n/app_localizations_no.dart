@@ -14436,8 +14436,11 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending deler venter';
+    return 'Ventende deler: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Åpne forrige episode';
 
   @override
   String get episodeNotesSoon => 'Notatene vises etter de første minuttene av samtalen.';

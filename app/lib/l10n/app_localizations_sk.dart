@@ -14431,6 +14431,9 @@ class AppLocalizationsSk extends AppLocalizations {
   }
 
   @override
+  String get episodeOpenPrevious => 'Otvoriť predchádzajúcu epizódu';
+
+  @override
   String get episodeNotesSoon => 'Poznámky sa zobrazia po prvých minútach rozhovoru.';
 
   @override

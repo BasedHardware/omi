@@ -14432,8 +14432,11 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending đoạn đang chờ';
+    return 'Đoạn đang chờ: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Mở phiên trước';
 
   @override
   String get episodeNotesSoon => 'Ghi chú xuất hiện sau vài phút đầu trò chuyện.';

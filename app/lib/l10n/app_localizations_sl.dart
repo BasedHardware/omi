@@ -14464,6 +14464,9 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get episodeOpenPrevious => 'Odpri prejšnjo epizodo';
+
+  @override
   String get episodeNotesSoon => 'Zapiski se prikažejo po prvih minutah pogovora.';
 
   @override

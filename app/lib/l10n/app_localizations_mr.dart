@@ -14443,8 +14443,11 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending भाग प्रलंबित';
+    return 'प्रलंबित भाग: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'मागील भाग उघडा';
 
   @override
   String get episodeNotesSoon => 'बोलण्याच्या पहिल्या काही मिनिटांनंतर नोट्स दिसतील.';

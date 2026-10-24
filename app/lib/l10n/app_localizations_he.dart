@@ -14329,8 +14329,11 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending מקטעים ממתינים';
+    return 'מקטעים ממתינים: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'פתח את הפרק הקודם';
 
   @override
   String get episodeNotesSoon => 'ההערות יופיעו אחרי הדקות הראשונות של השיחה.';

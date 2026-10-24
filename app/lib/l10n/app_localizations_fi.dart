@@ -14437,8 +14437,11 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending osaa odottaa';
+    return 'Odottavat osat: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Avaa edellinen jakso';
 
   @override
   String get episodeNotesSoon => 'Muistiinpanot näkyvät ensimmäisten puheminuuttien jälkeen.';

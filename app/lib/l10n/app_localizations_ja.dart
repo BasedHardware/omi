@@ -14227,8 +14227,11 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending件の音声チャンクが保留中';
+    return '保留中の音声チャンク: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => '前のエピソードを開く';
 
   @override
   String get episodeNotesSoon => '会話が数分続くとメモが表示されます。';

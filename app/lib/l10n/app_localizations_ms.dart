@@ -14468,8 +14468,11 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending cebisan tertunda';
+    return 'Cebisan tertunda: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Buka Episod Sebelumnya';
 
   @override
   String get episodeNotesSoon => 'Nota muncul selepas beberapa minit pertama perbualan.';

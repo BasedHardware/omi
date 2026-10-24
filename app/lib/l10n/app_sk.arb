@@ -4394,6 +4394,7 @@
     "episodeCaptureFor": "Nahrávanie · {duration}",
     "episodePrevious": "Predchádzajúca epizóda",
     "captureChunksPending": "Čakajúce časti: {pending}",
+    "episodeOpenPrevious": "Otvoriť predchádzajúcu epizódu",
     "episodeNotesSoon": "Poznámky sa zobrazia po prvých minútach rozhovoru.",
     "episodeOpenAll": "Otvoriť všetko",
     "episodeWrapUpNow": "Uzavrieť teraz",

@@ -14491,8 +14491,11 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending భాగాలు పెండింగ్‌లో ఉన్నాయి';
+    return 'పెండింగ్‌లో ఉన్న భాగాలు: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'మునుపటి ఎపిసోడ్‌ను తెరవండి';
 
   @override
   String get episodeNotesSoon => 'మాటల మొదటి కొన్ని నిమిషాల తర్వాత నోట్స్ కనిపిస్తాయి.';

@@ -4429,6 +4429,7 @@
     "episodeCaptureFor": "Nagrywanie · {duration}",
     "episodePrevious": "Poprzedni odcinek",
     "captureChunksPending": "Oczekujące fragmenty: {pending}",
+    "episodeOpenPrevious": "Otwórz poprzedni odcinek",
     "episodeNotesSoon": "Notatki pojawią się po pierwszych minutach rozmowy.",
     "episodeOpenAll": "Otwórz wszystko",
     "episodeWrapUpNow": "Zakończ teraz",

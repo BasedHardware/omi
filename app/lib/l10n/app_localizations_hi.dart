@@ -14416,8 +14416,11 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending खंड लंबित';
+    return 'लंबित खंड: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'पिछला एपिसोड खोलें';
 
   @override
   String get episodeNotesSoon => 'बातचीत के पहले कुछ मिनटों के बाद नोट्स दिखेंगे।';

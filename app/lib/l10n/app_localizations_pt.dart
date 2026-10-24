@@ -14460,8 +14460,11 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending fragmentos pendentes';
+    return 'Fragmentos pendentes: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Abrir episódio anterior';
 
   @override
   String get episodeNotesSoon => 'As notas aparecem após os primeiros minutos de conversa.';

@@ -25551,6 +25551,12 @@ abstract class AppLocalizations {
   /// **'Chunks pending: {pending}'**
   String captureChunksPending(int pending);
 
+  /// No description provided for @episodeOpenPrevious.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Previous Episode'**
+  String get episodeOpenPrevious;
+
   /// Shown in the running notes card before the first notes exist.
   ///
   /// In en, this message translates to:

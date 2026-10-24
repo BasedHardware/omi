@@ -14527,8 +14527,11 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String captureChunksPending(int pending) {
-    return '$pending τμήματα σε εκκρεμότητα';
+    return 'Τμήματα σε εκκρεμότητα: $pending';
   }
+
+  @override
+  String get episodeOpenPrevious => 'Άνοιγμα προηγούμενου επεισοδίου';
 
   @override
   String get episodeNotesSoon => 'Οι σημειώσεις εμφανίζονται μετά τα πρώτα λεπτά συζήτησης.';
