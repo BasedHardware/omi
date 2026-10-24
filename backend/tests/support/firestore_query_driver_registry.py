@@ -2830,7 +2830,7 @@ _add(
     DriverEntry(
         'database.workstreams.list_workstream_events',
         base={'uid': UID, 'workstream_id': 'ws-1'},
-        domains={'after_sequence': [0, 5]},
+        domains={'after_sequence': [0, 5], 'descending': [False, True]},
         neutrals={'limit': _LIMIT},
     )
 )
