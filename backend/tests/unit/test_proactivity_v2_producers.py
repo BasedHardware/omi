@@ -838,3 +838,73 @@ def test_v2_listen_wakeup_uses_isolated_redis(monkeypatch):
         'uid': 'synthetic',
         'notification_type': 'proactivity_v2',
     }
+
+
+
+@pytest.mark.asyncio
+async def test_mentor_episode_1_reads_live_episode_state_instead_of_buffered_transcript(lane, monkeypatch):
+    from config.mentor_v2 import mentor_prompts
+    from utils.episodes import service as episode_service
+
+    prompts = mentor_prompts('episode-1')
+    config = lane.config.model_copy(update={'prompt_version': 'episode-1'})
+    monkeypatch.setattr(producers, 'mentor_config', lambda: (config, prompts))
+    compact_state = json.dumps(
+        {
+            'topic': 'Budget review',
+            'bullets': ['Agree on Friday deadline'],
+            'people': ['Alex'],
+            'open_questions': [],
+            'items': [],
+        },
+        separators=(',', ':'),
+    )
+    monkeypatch.setattr(episode_service, 'mentor_episode_state', lambda uid: compact_state)
+    monkeypatch.setattr(integration, 'get_prompt_memories', lambda uid: ('User', '- Known fact'))
+    monkeypatch.setattr(integration, 'get_user_goals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(integration, 'get_app_messages', lambda *args, **kwargs: [])
+    monkeypatch.setattr(integration, 'current_date_for_uid', lambda uid: '2026-10-05')
+    monkeypatch.setattr(integration, 'get_user_language_preference', lambda uid: 'en')
+    monkeypatch.setattr(integration.conversations_db, 'get_conversations', lambda *args, **kwargs: [])
+    monkeypatch.setattr(integration, 'deserialize_conversations', lambda rows: rows)
+
+    context = producers.mentor_context('u', 3, 0.78)
+    assert context['episode_state'] == compact_state
+
+    buffered = [{'text': 'BUFFERED_TRANSCRIPT_LINE_DO_NOT_READ', 'is_user': True, 'timestamp': 1}]
+    assert await producers.produce_mentor('u', 'c', buffered, context)
+    for step in ('gate', 'generate', 'critic'):
+        call = next(c for c in lane.model.call_args_list if c.kwargs['step'] == step)
+        prompt = call.kwargs['request']['messages'][0]['content']
+        assert compact_state in prompt
+        assert 'BUFFERED_TRANSCRIPT_LINE_DO_NOT_READ' not in prompt
+
+
+@pytest.mark.asyncio
+async def test_mentor_episode_1_falls_back_to_buffered_transcript_when_episode_state_none(lane, monkeypatch):
+    from config.mentor_v2 import mentor_prompts
+    from utils.episodes import service as episode_service
+
+    prompts = mentor_prompts('episode-1')
+    config = lane.config.model_copy(update={'prompt_version': 'episode-1'})
+    monkeypatch.setattr(producers, 'mentor_config', lambda: (config, prompts))
+    monkeypatch.setattr(episode_service, 'mentor_episode_state', lambda uid: None)
+
+    buffered = [{'text': 'Buffered transcript fallback line', 'is_user': True, 'timestamp': 1}]
+    assert await producers.produce_mentor('u', 'c', buffered, lane.context)
+    for step in ('gate', 'generate', 'critic'):
+        call = next(c for c in lane.model.call_args_list if c.kwargs['step'] == step)
+        prompt = call.kwargs['request']['messages'][0]['content']
+        assert '[User]: Buffered transcript fallback line' in prompt
+
+
+@pytest.mark.asyncio
+async def test_mentor_legacy_1_does_not_read_episode_state(lane, monkeypatch):
+    from utils.episodes import service as episode_service
+
+    monkeypatch.setattr(
+        episode_service,
+        'mentor_episode_state',
+        lambda uid: (_ for _ in ()).throw(AssertionError('legacy-1 must not read episode state')),
+    )
+    assert await mentor(lane)

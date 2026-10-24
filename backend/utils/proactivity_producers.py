@@ -147,7 +147,7 @@ def _fit_context(
         original = fields[name]
         if not isinstance(original, (str, list, ContextItems)):
             continue
-        keep_tail = name in {'current_conversation', 'recent_conversation'}
+        keep_tail = name in {'current_conversation', 'recent_conversation', 'episode_state'}
         values = original.values if isinstance(original, ContextItems) else original
         if isinstance(values, str):
             values = [values]
@@ -201,6 +201,7 @@ MENTOR_CONTEXT_TRIM_ORDER = (
     'goals_text',
     'gate_reasoning',
     'draft_reasoning',
+    'episode_state',
     'current_conversation',
 )
 
@@ -310,9 +311,23 @@ async def produce_mentor(uid: str, conversation_id: str, messages: list[dict], c
             },
         )
         fields = dict(context)
-        fields['current_conversation'] = ContextItems(
-            messages, lambda selected: legacy.format_current_conversation(selected, context['user_name'])
+        if 'episode_state' in fields:
+            episode_state = fields.pop('episode_state')
+        elif config.prompt_version == 'episode-1':
+            from utils.episodes import service as episode_service
+
+            episode_state = await run_blocking(db_executor, episode_service.mentor_episode_state, uid)
+        else:
+            episode_state = None
+        conversation = (
+            episode_state
+            if config.prompt_version == 'episode-1' and episode_state
+            else ContextItems(
+                messages, lambda selected: legacy.format_current_conversation(selected, context['user_name'])
+            )
         )
+        fields['current_conversation'] = conversation
+        fields['episode_state'] = conversation
         fields['goals_text'] = ContextItems(fields.pop('goals'), legacy.format_goals)
         fields['recent_notifications'] = ContextItems(
             fields['recent_notifications'], legacy.format_recent_notifications
@@ -579,12 +594,8 @@ def mentor_context(uid: str, frequency: int, threshold: float) -> dict:
         integration.conversations_to_string([conversation]).replace('Conversation #1\n', f'Conversation #{i + 1}\n', 1)
         for i, conversation in enumerate(integration.deserialize_conversations(visible))
     ]
-    # TODO(#22870): mentor re-reads the whole buffered transcript on every
-    # evaluation. utils.episodes.service.mentor_episode_state(uid) returns the
-    # compact live-episode state (a few hundred tokens); a mentor prompt version
-    # that reads it instead belongs behind the existing mentor gates once it is
-    # evaluated. Not read here yet, so mentor prompts, reads and cost are unchanged.
-    return dict(
+    config, _ = mentor_config()
+    context = dict(
         user_name=user_name,
         user_facts=facts,
         goals=goals,
@@ -595,6 +606,11 @@ def mentor_context(uid: str, frequency: int, threshold: float) -> dict:
         output_language=integration.get_user_language_preference(uid) or 'en',
         base_threshold=threshold,
     )
+    if config.prompt_version == 'episode-1':
+        from utils.episodes import service as episode_service
+
+        context['episode_state'] = episode_service.mentor_episode_state(uid)
+    return context
 
 
 def mentor_delivery_history(uid: str) -> list[str]:
