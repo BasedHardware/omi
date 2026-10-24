@@ -1570,10 +1570,14 @@ def test_head_wait_commit_order_converges_to_one_conversation(lane, monkeypatch,
 def test_independent_owner_claims_reconcile_in_assignment_transaction(lane, monkeypatch, receipt_kind):
     from utils.stt.voice_centroids import COMMUNITY_MODEL_REVISION, EMBEDDING_MODEL, EMBEDDING_REVISION, EMBEDDING_SPACE
 
+    # Exercise independent accepts even when composed with PR3's optional linker.
+    monkeypatch.setenv('BATCH_PIPELINE_VOICE_LINKING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', 'true')
     monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    lane.payload['words'] = [{'word': 'Synthetic.', 'timestamp': [i * 1.5, (i + 1) * 1.5]} for i in range(4)]
+    lane.payload['speech_seconds'] = 6
     lane.payload['diarization'].update(
-        centroids={'SPEAKER_00': {'embedding': [1, 0], 'evidence_seconds': 4}},
+        centroids={'SPEAKER_00': {'embedding': [1, 0], 'evidence_seconds': 6}},
         embedding_space=EMBEDDING_SPACE,
         provenance={
             'model_revision': COMMUNITY_MODEL_REVISION,
