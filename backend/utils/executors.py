@@ -281,6 +281,22 @@ def get_rollout_executor() -> MonitoredThreadPoolExecutor:
         return _rollout_executor
 
 
+_live_archive_executor: MonitoredThreadPoolExecutor | None = None
+_live_archive_executor_lock = threading.Lock()
+
+
+def get_live_archive_executor() -> MonitoredThreadPoolExecutor:
+    """Bounded bulkhead pool for best-effort LiveAudioArchive writes on backend-listen."""
+    global _live_archive_executor
+    with _live_archive_executor_lock:
+        if _live_archive_executor is None:
+            _live_archive_executor = MonitoredThreadPoolExecutor(
+                name='live_archive', max_workers=8, max_queue_size=32, thread_name_prefix='livearch'
+            )
+            _ALL_EXECUTORS.append(_live_archive_executor)
+        return _live_archive_executor
+
+
 async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: P.args, **kwargs: P.kwargs) -> T:
     """Offload *fn* to *executor*, propagating ContextVars."""
     loop = asyncio.get_running_loop()

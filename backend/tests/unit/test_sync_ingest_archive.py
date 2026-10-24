@@ -93,6 +93,17 @@ class Bucket:
         return [blob for name, blob in self.blobs.items() if name.startswith(prefix) and blob.data is not None]
 
 
+@pytest.fixture(autouse=True)
+def isolate_live_archive_executor(monkeypatch):
+    from utils import executors
+
+    monkeypatch.setattr(executors, '_live_archive_executor', None)
+    monkeypatch.setattr(executors, '_ALL_EXECUTORS', list(executors._ALL_EXECUTORS))
+    yield
+    if executors._live_archive_executor is not None:
+        executors._live_archive_executor.shutdown(wait=False, cancel_futures=True)
+
+
 @pytest.fixture
 def buckets(monkeypatch):
     result = {'canonical': Bucket('canonical'), 'regional': Bucket('regional'), 'staging': Bucket('staging')}
@@ -732,3 +743,49 @@ def test_retired_pcm_still_reaches_optional_owner_pack_archive(monkeypatch, buck
     assert storage.upload_audio_chunks_batch([chunk], 'owner', 'conversation', sample_rate=16000) == [path]
     assert seen == [(forward, 'owner', pcm)]
     assert not any(name.startswith('chunks/') for name in buckets['canonical'].blobs)
+
+
+@pytest.mark.asyncio
+async def test_live_audio_archive_uses_dedicated_bulkhead_and_disables_on_saturation(monkeypatch, buckets):
+    enable(monkeypatch, 'LIVE')
+    host = SimpleNamespace(
+        private_cloud_sync_enabled=True,
+        request=SimpleNamespace(
+            uid='owner',
+            codec='opus',
+            sample_rate=16000,
+            source='omi',
+            client_device_context=None,
+            websocket=SimpleNamespace(headers={}),
+        ),
+    )
+    host.spawn = lambda coroutine, **kwargs: asyncio.create_task(coroutine)
+    executor = live_audio_archive.get_live_archive_executor()
+    assert executor.name == 'live_archive'
+    assert executor.max_queue_size == 32
+
+    observed_executors = []
+    real_run_blocking = live_audio_archive.run_blocking
+
+    async def spy_run_blocking(pool, fn, *args, **kwargs):
+        observed_executors.append(pool)
+        return await real_run_blocking(pool, fn, *args, **kwargs)
+
+    monkeypatch.setattr(live_audio_archive, 'run_blocking', spy_run_blocking)
+    archive = LiveAudioArchive(host)
+    await archive.append(b'packet', 'conversation', 1000, 160)
+    await archive.close()
+    assert observed_executors == [executor]
+
+    reasons = []
+    monkeypatch.setattr(live_audio_archive, 'record_fallback', lambda **kwargs: reasons.append(kwargs['reason']))
+
+    async def saturated(*args, **kwargs):
+        raise live_audio_archive.ExecutorSaturatedError('live_archive executor is saturated')
+
+    monkeypatch.setattr(live_audio_archive, 'run_blocking', saturated)
+    saturated_archive = LiveAudioArchive(host)
+    await saturated_archive.append(b'packet', 'conversation', 1000, 160)
+    await saturated_archive.close()
+    assert saturated_archive.failed
+    assert reasons == ['capacity_exhausted']

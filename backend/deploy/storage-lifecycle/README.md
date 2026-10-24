@@ -7,9 +7,11 @@ Checked-in lifecycle configuration for `omi-private-cloud-sync` (prod) and
 `gcloud storage buckets update --lifecycle-file` **replaces the whole lifecycle
 config**, so every legacy rule must be re-declared verbatim in these files.
 `backend/scripts/validate_storage_lifecycle.py` refuses any file that drops a
-rule present in the live bucket, lets a `Delete` rule reach `chunks/`, adds a
-`SetStorageClass` rule not scoped to exactly `chunks/`, or adds a
-noncurrent-version (`isLive: false`) rule.
+rule present in the live bucket, lets a `Delete` rule reach `chunks/` or the
+canonical `raw-*` capture prefixes (`raw-live/`, `raw-sync/`,
+`raw-mobile-batch/`), adds a `SetStorageClass` rule not scoped to `chunks/` or
+those `raw-*` capture prefixes, or adds a noncurrent-version (`isLive: false`)
+rule.
 
 Rollback: dispatch the workflow with `lifecycle_variant=rollback`. That stops
 further transitions; objects already moved stay Coldline (reverting the class
