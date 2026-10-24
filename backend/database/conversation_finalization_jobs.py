@@ -21,6 +21,7 @@ from config.listen_quiet_finalization import enabled as quiet_finalization_enabl
 from database import conversations as conversations_db
 from database import recording_sessions as recording_sessions_db
 from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
+from database.quiet_check_retirement import stop_quiet_check_for_conversation, stop_quiet_checks_for_job
 from database._client import document_id_from_seed, get_firestore_client
 from database.conversation_terminal_title import (
     dead_letter_conversation_updates,
@@ -823,6 +824,7 @@ def create_or_get_finalization_intent(
         create_intent_in_transaction,
         operation_name='conversation_finalization_intent',
     )
+    stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
     if intent['created']:
         invalidate_people_stats_cache(uid)
     return intent
@@ -1391,7 +1393,7 @@ def mark_finalization_dead_letter(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_mark_finalization_dead_letter_txn)
-    return transactional(
+    closed = transactional(
         transaction,
         _job_ref(client, job_id),
         dispatch_generation,
@@ -1403,6 +1405,9 @@ def mark_finalization_dead_letter(
         failure_code,
         lambda uid: user_time_zone(client, uid),
     )
+    if closed:
+        stop_quiet_checks_for_job(job_id, firestore_client=client)
+    return closed
 
 
 def get_finalization_job(job_id: str, *, firestore_client: Any = None) -> dict[str, Any] | None:
@@ -1535,7 +1540,7 @@ def record_meeting_receipt(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_record_meeting_receipt_txn)
-    return transactional(
+    result = transactional(
         transaction,
         _conversation_ref(client, uid, conversation_id),
         client.collection(FINALIZATION_JOBS_COLLECTION),
@@ -1548,6 +1553,9 @@ def record_meeting_receipt(
         dedup_speech_s,
         _now(),
     )
+    if result['status'] == 'recorded':
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return result
 
 
 def mark_meeting_receipt_intent_persisted(job_id: str, intent_id: str, *, firestore_client: Any = None) -> bool:
@@ -1731,6 +1739,8 @@ def _claim_finalization_replay_txn(
     if byok_only and not job.get('requires_byok'):
         return _intent_from_job(snapshot.id, job)
     if status == 'blocked_byok' or status in TERMINAL_JOB_STATUSES:
+        if 'reconcile_after_at' in job:
+            transaction.update(job_ref, {'reconcile_after_at': firestore.DELETE_FIELD, 'updated_at': now})
         return _intent_from_job(snapshot.id, job)
     if status == 'leased':
         lease_expires_at = job.get('lease_expires_at')
@@ -1955,7 +1965,12 @@ def defer_finalization_replay(candidate: dict[str, Any], *, firestore_client: An
             current.get(key) != candidate.get(key) for key in ('status', 'dispatch_generation', 'reconcile_after_at')
         ):
             return False
-        transaction.update(ref, {'reconcile_after_at': now + timedelta(seconds=60), 'updated_at': now})
+        updates: dict[str, Any] = {'reconcile_after_at': now + timedelta(seconds=60), 'updated_at': now}
+        if current.get('kind') != 'listen_quiet_check' and (
+            current.get('status') in TERMINAL_JOB_STATUSES or current.get('status') == 'blocked_byok'
+        ):
+            updates['reconcile_after_at'] = firestore.DELETE_FIELD
+        transaction.update(ref, updates)
         return True
 
     return defer(client.transaction())
@@ -2425,7 +2440,10 @@ def complete_unstampable_orphan_conversation(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_complete_unstampable_orphan_conversation_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id), _now() - stale_after)
+    completed = transactional(transaction, _conversation_ref(client, uid, conversation_id), _now() - stale_after)
+    if completed:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return completed
 
 
 def _complete_orphan_conversation_txn(
@@ -2479,7 +2497,7 @@ def complete_orphan_conversation(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_complete_orphan_conversation_txn)
-    return transactional(
+    completed = transactional(
         transaction,
         _conversation_ref(client, uid, conversation_id),
         expected_admitted_at,
@@ -2487,6 +2505,9 @@ def complete_orphan_conversation(
         uid,
         lambda zone_uid: user_time_zone(client, zone_uid),
     )
+    if completed:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return completed
 
 
 def _renew_processing_lease_txn(transaction: Any, conversation_ref: Any, now: datetime) -> bool:
@@ -2563,7 +2584,10 @@ def recover_deferred_processing_failure(uid: str, conversation_id: str, *, fires
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_recover_deferred_processing_failure_txn)
-    return transactional(transaction, _conversation_ref(client, uid, conversation_id))
+    completed = transactional(transaction, _conversation_ref(client, uid, conversation_id))
+    if completed:
+        stop_quiet_check_for_conversation(uid, conversation_id, firestore_client=client)
+    return completed
 
 
 def _job_last_activity_at(job: Mapping[str, Any]) -> datetime | None:
@@ -2820,7 +2844,7 @@ def abandon_byok_finalization_job(
     now = _now()
     transaction = client.transaction()
     transactional = firestore.transactional(_abandon_byok_finalization_job_txn)
-    return transactional(
+    result = transactional(
         transaction,
         _job_ref(client, job_id),
         expected_status,
@@ -2832,6 +2856,9 @@ def abandon_byok_finalization_job(
         client.collection(FINALIZATION_PROJECTION_COLLECTION),
         lambda uid: user_time_zone(client, uid),
     )
+    if result['status'] == 'abandoned':
+        stop_quiet_checks_for_job(job_id, firestore_client=client)
+    return result
 
 
 def get_byok_abandonment_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:

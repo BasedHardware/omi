@@ -160,6 +160,7 @@ def new_episode(
         'conversation_ids': [],
         'sources': [],
         'applied': {},
+        'applied_segment_ids': {},
         'calendar_identity': calendar_identity,
         'pending_boundary': {},
         'primary_conversation_id': conversation_id,
@@ -181,6 +182,29 @@ def _with_conversation(episode: Mapping[str, Any], conversation_id: str, source:
     return {'conversation_ids': ids, 'sources': sources}
 
 
+def _retain_activity(
+    uid: str, episode: Optional[dict[str, Any]], conversation_id: str, at: datetime, c: Collaborators
+) -> Optional[dict[str, Any]]:
+    """Speech owns liveness; notes consumption and its provider are independent."""
+    if not episode or not policy.is_live(episode) or conversation_id not in (episode.get('conversation_ids') or []):
+        return episode
+    last = policy.utc(episode.get('last_activity_at'))
+    if last is not None and at <= last:
+        return episode
+    activity = episodes_db.record_activity(
+        uid,
+        str(episode['id']),
+        conversation_id,
+        at,
+        firestore_client=c.firestore_client,
+    )
+    return (
+        {**episode, 'last_activity_at': activity}
+        if activity
+        else episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+    )
+
+
 def _close(
     uid: str,
     episode: Mapping[str, Any],
@@ -191,7 +215,7 @@ def _close(
     detach: Optional[str] = None,
     closing: Optional[str] = None,
     extra_fields: Optional[Mapping[str, Any]] = None,
-) -> None:
+) -> bool:
     """Close once; resolve any provisional item still open as dropped (never a task).
 
     ``detach`` removes a conversation that joined provisionally and turned out to
@@ -219,11 +243,13 @@ def _close(
         reason,
         closed_at=_idle_closed_at(episode, now) if reason == 'idle' else now,
         extra=extra,
+        expected_activity_at=policy.utc(episode.get('last_activity_at')) if reason == 'idle' else None,
         firestore_client=c.firestore_client,
     )
     if closed is not None:
         metrics.record_episode_closed(reason)
         metrics.record_provisional_outcomes({'dropped': dropped})
+    return closed is not None
 
 
 def _pending(episode: Optional[Mapping[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -238,14 +264,17 @@ def _idle_closed_at(episode: Mapping[str, Any], now: datetime) -> datetime:
     return min(now, last + timedelta(seconds=CLOSE_GAP_SECONDS)) if last else now
 
 
-def _close_stale_current(uid: str, episode: Optional[Mapping[str, Any]], c: Collaborators, now: datetime):
+def _close_stale_current(
+    uid: str, episode: Optional[Mapping[str, Any]], c: Collaborators, now: datetime
+) -> Optional[dict[str, Any]]:
     """Close an idle live episode, or one a wrap-up left live (written before wrap-ups closed at once)."""
     if episode is not None and policy.idle_close_due(episode, now):
-        _close(uid, episode, 'idle', c, now=now)
-        return None
+        if _close(uid, episode, 'idle', c, now=now):
+            return None
+        episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
     if _close_pending_wrap_up(uid, episode, c, now):
         return None
-    return episode
+    return dict(episode) if episode is not None else None
 
 
 def _close_pending_wrap_up(uid: str, episode: Optional[Mapping[str, Any]], c: Collaborators, now: datetime) -> bool:
@@ -302,11 +331,12 @@ def attach_conversation(
 
 def _attach_once(uid: str, conversation_id: str, source: Optional[str], started_at: datetime, c: Collaborators) -> str:
     now = _now(c)
-    episode = _close_stale_current(
-        uid, episodes_db.get_current_episode(uid, firestore_client=c.firestore_client), c, now
-    )
+    episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
     if episode and conversation_id in (episode.get('conversation_ids') or []):
+        # Refresh before the lazy idle-close check, including short speech batches.
+        _retain_activity(uid, episode, conversation_id, started_at, c)
         return 'attached'
+    episode = _close_stale_current(uid, episode, c, now)
     owner = episodes_db.get_episode_for_conversation(uid, conversation_id, firestore_client=c.firestore_client)
     if owner and (episode is None or owner.get('closing_conversation_id') == conversation_id):
         # Already owned by a closed episode (it finalized first, or its end closed it): never reopen
@@ -461,9 +491,12 @@ def _settle_boundary(
 
 def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
     now = _now(c)
-    episode = _close_stale_current(
-        uid, episodes_db.get_current_episode(uid, firestore_client=c.firestore_client), c, now
-    )
+    episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
+    # This entrypoint is also used without the realtime tracker. Record speech before
+    # any short/rate-limit/model-error return, without consuming it for notes.
+    if moment.trigger != 'finalize' and any(str(s.get('text') or '').strip() for s in moment.segments):
+        episode = _retain_activity(uid, episode, moment.conversation_id, moment.ended_at, c)
+    episode = _close_stale_current(uid, episode, c, now)
     closed = _closed_owner(uid, episode, moment, c)
     if closed is not None:
         if moment.trigger != 'finalize':
@@ -474,7 +507,31 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
     applied_until = -1.0
     if episode and moment.conversation_id in (episode.get('conversation_ids') or []):
         applied_until = float((episode.get('applied') or {}).get(moment.conversation_id, -1.0))
-    segments = [s for s in moment.segments if _segment_end(s) > applied_until and str(s.get('text') or '').strip()]
+    consumption_owner = episode
+    if not episode or moment.conversation_id not in (episode.get('conversation_ids') or []):
+        consumption_owner = episodes_db.get_episode_for_conversation(
+            uid, moment.conversation_id, firestore_client=c.firestore_client
+        )
+    consumed = set(((consumption_owner or {}).get('applied_segment_ids') or {}).get(moment.conversation_id) or [])
+    segments = []
+    selected_ids = set()
+    for segment in moment.segments:
+        sid = segment.get('id')
+        if not str(segment.get('text') or '').strip():
+            continue
+        if sid in consumed or sid in selected_ids:
+            continue
+        if _segment_end(segment) < 0:
+            # Unplaced segments retain individual IDs at persistence. Their sentinel
+            # is not an ordering cursor; a repaired placement retains this receipt.
+            if not sid:
+                continue
+            selected_ids.add(sid)
+        elif _segment_end(segment) <= applied_until:
+            # Placed storage may extend an existing segment's text/end in place.
+            # Preserve that cursor contract rather than losing its later suffix.
+            continue
+        segments.append(segment)
     named = _named_segments(uid, segments, c)
     text = incremental.render_moment(
         named, uid=uid, conversation_id=moment.conversation_id, owner_name=_owner_name(uid, c)
@@ -509,7 +566,11 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         metrics.record_moment_update(trigger=moment.trigger, outcome='rate_limited')
         return 'rate_limited'
 
-    base = episode or _empty_episode(moment, now)
+    base = dict(episode) if episode else _empty_episode(moment, now)
+    if episode is None and consumed:
+        # A still-open conversation can span an idle/hard-cap episode boundary.
+        # Carry its receipts even if opening the next episode's notes fails.
+        base['applied_segment_ids'] = {moment.conversation_id: sorted(consumed)}
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     try:
         result = incremental.run_incremental_update(
@@ -568,6 +629,8 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         )
     applied = dict(base.get('applied') or {})
     applied[moment.conversation_id] = max(float(applied.get(moment.conversation_id, -1.0)), end_offset)
+    applied_ids = dict(base.get('applied_segment_ids') or {})
+    applied_ids[moment.conversation_id] = sorted(consumed | selected_ids)
     usage = dict(base.get('usage') or {})
     usage['calls'] = int(usage.get('calls') or 0) + 1
     usage['input_tokens'] = int(usage.get('input_tokens') or 0) + result.input_tokens
@@ -578,6 +641,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         **_with_conversation(base, moment.conversation_id, moment.source),
         'moments': moments,
         'applied': applied,
+        'applied_segment_ids': applied_ids,
         'usage': usage,
         'speaker_keys': sorted(set(base.get('speaker_keys') or []) | set(facts.speakers)),
         'last_activity_at': max(moment.ended_at, last_activity) if last_activity else moment.ended_at,
@@ -925,11 +989,7 @@ def live_episode(uid: str, *, collaborators: Optional[Collaborators] = None) -> 
     c = collaborators or Collaborators()
     episode = episodes_db.get_current_episode(uid, firestore_client=c.firestore_client)
     now = _now(c)
-    if episode and policy.idle_close_due(episode, now):
-        _close(uid, episode, 'idle', c, now=now)
-        return None
-    if _close_pending_wrap_up(uid, episode, c, now):
-        return None
+    episode = _close_stale_current(uid, episode, c, now)
     return episode if policy.is_live(episode) else None
 
 
@@ -942,6 +1002,18 @@ def episode_for_conversation(
         _close(uid, episode, 'idle', c, now=_now(c))
         episode = episodes_db.get_episode(uid, str(episode['id']), firestore_client=c.firestore_client)
     return episode
+
+
+def last_closed_episode(uid: str, *, collaborators: Optional[Collaborators] = None) -> Optional[dict[str, Any]]:
+    c = collaborators or Collaborators()
+    return episodes_db.get_last_closed_episode(uid, firestore_client=c.firestore_client)
+
+
+def episode_by_id(
+    uid: str, episode_id: str, *, collaborators: Optional[Collaborators] = None
+) -> Optional[dict[str, Any]]:
+    c = collaborators or Collaborators()
+    return episodes_db.get_episode(uid, episode_id, firestore_client=c.firestore_client)
 
 
 def to_wire(episode: Optional[Mapping[str, Any]]) -> Optional[dict[str, Any]]:

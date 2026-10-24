@@ -545,6 +545,11 @@ class TranscriptSegment(BaseModel):
         ) -> Tuple[Optional['TranscriptSegment'], Optional['TranscriptSegment']]:
             if not a or not b:
                 return a, b
+            if a.audio_alignment == 'unplaced' or b.audio_alignment == 'unplaced':
+                # -1 timestamps cannot prove chronological adjacency. Keep each
+                # retained identity immutable so episode consumption survives a
+                # reconnect/crash and finalization can recover unseen segments.
+                return a, b
             if protected_segment_ids and (a.id in protected_segment_ids or b.id in protected_segment_ids):
                 return a, b
             # A speaker-wide decision covers every segment of that speaker, so its
