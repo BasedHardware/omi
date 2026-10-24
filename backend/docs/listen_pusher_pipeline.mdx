@@ -11,6 +11,9 @@ account with Workload Identity as
 `backend-listen-runtime@based-hardware.iam.gserviceaccount.com`. Its values omit
 `SERVICE_ACCOUNT_JSON` and `GOOGLE_APPLICATION_CREDENTIALS`, so a Helm rollout
 preserves ADC instead of restoring a revoked JSON key. Keep
+`workloadIdentityOnly: true` in prod values: Helm rejects either key credential
+name in `env` or protected `privateEnv` overrides before rendering a deployment.
+Dev retains its existing credential behavior. Keep
 `OMI_CUSTOMER_DATA_PROJECT=based-hardware` for Firestore, GCS and Firebase Admin.
 GCS signed URLs use `iam_signing_kwargs` with a cloud-platform-scoped token and
 IAM signing; the runtime GSA needs `iam.serviceAccounts.signBlob` on itself.
