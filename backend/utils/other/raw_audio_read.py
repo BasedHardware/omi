@@ -33,6 +33,11 @@ def list_packs(bucket, uid: str, conversation_id: str):
         if index >= 10000:
             raise TimeoutError('raw capture index budget exhausted')
         metadata = blob.metadata or {}
+        if metadata.get('clock_source') == 'arrival_estimate':
+            # Legacy pusher clocks cannot position independent raw packs on a
+            # capture timeline. Keep them recoverable by immutable receipt;
+            # ordinary playback uses the legacy continuous PCM projection.
+            continue
         try:
             start, end = float(metadata['capture_start']), float(metadata['capture_end'])
             if int(metadata['gap_count']) != 0 or end <= start or int(metadata['channels']) != 1:

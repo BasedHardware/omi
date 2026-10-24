@@ -263,6 +263,7 @@ async def _websocket_util_trigger(
             custody_root,
             custody_sequence,
             data_protection_level=cached_protection_level,
+            clock_source='server_projected' if audio_timeline_v2 else 'arrival_estimate',
         )
         custody_sequence += 1
         if audio_custody == 1:
@@ -296,17 +297,19 @@ async def _websocket_util_trigger(
                     pcm = pcm[ref.offset_samples * 2 : (ref.offset_samples + ref.samples) * 2]
                     if len(pcm) != ref.samples * 2:
                         raise ValueError('durable projection sample range is incomplete')
-                    chunks.append(
-                        {
-                            'data': pcm,
-                            'timestamp': ref.start,
-                            'span': {
-                                'start': ref.start,
-                                'samples': ref.samples,
-                                'sample_rate': ref.sample_rate,
-                            },
+                    chunk: Dict[str, Any] = {'data': pcm, 'timestamp': ref.start}
+                    if audio_timeline_v2:
+                        chunk['span'] = {
+                            'start': ref.start,
+                            'samples': ref.samples,
+                            'sample_rate': ref.sample_rate,
                         }
-                    )
+                    chunks.append(chunk)
+                if not audio_timeline_v2:
+                    # Legacy headers are last-arrival-minus-duration estimates,
+                    # not capture positions. Preserve the old continuous batch
+                    # and its first timestamp; jitter cannot create v2 spans.
+                    chunks = [{'data': b''.join(chunk['data'] for chunk in chunks), 'timestamp': refs[0].start}]
                 await run_blocking(
                     storage_executor,
                     upload_audio_chunks_batch,
@@ -316,7 +319,9 @@ async def _websocket_util_trigger(
                     cached_protection_level,
                     sample_rate=sample_rate,
                 )
-                OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans').inc()
+                OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(
+                    reason='with_spans' if audio_timeline_v2 else 'without_spans'
+                ).inc()
                 audio_files = await run_blocking(
                     storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
                 )
@@ -360,7 +365,7 @@ async def _websocket_util_trigger(
                         end = refs[-1].start + refs[-1].samples / refs[-1].sample_rate
                         total_bytes = (sum(r.samples for r in refs) + ref.samples) * 2
                         if (
-                            abs(ref.start - end) > AUDIO_TIMELINE_CONTINUITY_TOLERANCE
+                            (audio_timeline_v2 and abs(ref.start - end) > AUDIO_TIMELINE_CONTINUITY_TOLERANCE)
                             or len(refs) >= 60
                             or total_bytes > BUFFERED_AUDIO_MAX_BYTES
                         ):

@@ -22,8 +22,13 @@ any derivative buffer. Its queue holds at most 20 generation-pinned receipts.
 The producer waits when it fills. Pending conversations hold bounded lists of
 references; the 21st conversation flushes an existing projection rather than
 evicting PCM. Hydration is serial and bounded by the 20 MiB projection budget.
-Projection failures leave remotely archived audio available to existing
-`raw-live` playback discovery. No projection deletes the original or manifest.
+Projection failures leave remotely archived audio recoverable by receipt;
+positioned v2 captures also participate in `raw-live` playback discovery.
+Legacy headers estimate arrival time, so their projections keep the previous
+continuous, spanless batching. Their immutable originals are marked
+`clock_source=arrival_estimate` and recover by receipt; raw playback discovery
+does not invent capture positions for them. No projection deletes the original
+or manifest.
 
 Media is immutable under `raw-live/<owner>/<conversation>/...`; each receipt
 also pins an `audio-outbox/<owner>/...` manifest generation and both plaintext

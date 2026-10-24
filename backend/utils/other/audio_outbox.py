@@ -179,6 +179,7 @@ def commit_pcm(
     sequence: int,
     *,
     data_protection_level: str | None = None,
+    clock_source: str = 'server_projected',
 ) -> AudioReceipt:
     if not pcm or len(pcm) % 2:
         raise ValueError('audio outbox requires sample-aligned PCM16')
@@ -188,7 +189,7 @@ def commit_pcm(
     metadata.update(
         capture_session_id=source_root,
         channel_index=0,
-        clock_source='server_projected',
+        clock_source=clock_source,
         source_position='unknown',
         consent_state='private_cloud_sync_enabled',
     )

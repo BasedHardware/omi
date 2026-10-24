@@ -512,10 +512,42 @@ async def test_pusher_projects_verified_receipts_in_capture_order(remote, monkey
     frames = [struct.pack('<I', 103) + b'conversation']
     frames.extend(struct.pack('<Id', 101, 1000 + i * 0.01) + pcm for i, pcm in enumerate(payloads))
     sock = Socket(frames)
-    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_timeline=2, audio_custody=1)
     assert [chunk['data'] for chunk in uploaded] == payloads
     assert [chunk['span']['samples'] for chunk in uploaded] == [160, 160]
-    assert len(sock.sent) == 2
+    assert len(sock.sent) == 3  # Timeline negotiation, then two custody receipts.
+
+
+@pytest.mark.asyncio
+async def test_legacy_arrival_jitter_keeps_one_spanless_projection_and_exact_receipts(remote, monkeypatch):
+    monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
+    monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
+    monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
+    uploaded = []
+
+    def project(chunks, *args, **kwargs):
+        uploaded.append(chunks)
+        assert len(chunks) == 1 and 'span' not in chunks[0]
+        blob = remote.blob('chunks/owner/conversation/1000.000.batch.bin')
+        blob.data = chunks[0]['data']
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
+    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
+    payloads = [struct.pack('<16000h', *[value] * 16000) for value in (1, 2, 3)]
+    frames = [struct.pack('<I', 103) + b'conversation']
+    frames += [struct.pack('<Id', 101, start) + pcm for start, pcm in zip((1000, 1001.02, 1002.01), payloads)]
+    sock = Socket(frames)
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert len(uploaded) == 1 and uploaded[0] == [{'data': b''.join(payloads), 'timestamp': 1000}]
+    receipts = [AudioReceipt(**json.loads(frame[4:])['receipt']) for frame in sock.sent]
+    assert [read_pcm('owner', receipt) for receipt in receipts] == payloads
+    assert all(remote.blob(receipt.path).metadata['clock_source'] == 'arrival_estimate' for receipt in receipts)
+    # Estimated clocks never fabricate positioned raw fallback or duplicate
+    # the legacy projection. Originals still recover by pinned receipts.
+    assert not list_packs(remote, 'owner', 'conversation')
+    chunks = storage.list_audio_chunks('owner', 'conversation')
+    assert len(chunks) == 1 and chunks[0]['path'].startswith('chunks/')
+    assert storage.download_audio_chunk_pcm('owner', chunks[0]['path']) == b''.join(payloads)
 
 
 @pytest.mark.asyncio
