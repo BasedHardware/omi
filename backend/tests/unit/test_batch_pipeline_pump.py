@@ -31,6 +31,21 @@ class Worker:
         return [WorkResult(v.segment_id, f'gs://synthetic/{v.segment_id}') for v in reversed(items)]
 
 
+class PausedWorker(Worker):
+    """Keep compute in flight until the test has sent its stop/cancel signal."""
+
+    def __init__(self):
+        super().__init__()
+        self.loop = asyncio.get_running_loop()
+        self.started = asyncio.Event()
+        self.release = threading.Event()
+
+    def process_batch(self, items):
+        self.loop.call_soon_threadsafe(self.started.set)
+        assert self.release.wait(5), 'test never released in-flight compute'
+        return super().process_batch(items)
+
+
 def setup(worker=None, **kwargs):
     store = MemoryStore()
     queue = Scheduler(store)
@@ -92,12 +107,18 @@ async def test_lost_lease_discards_late_result(monkeypatch):
 @pytest.mark.asyncio
 async def test_sigterm_stops_new_pulls_but_drains_and_commits_current_work(monkeypatch):
     monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
-    worker = Worker(0.04)
+    worker = PausedWorker()
     store, _, pump = setup(worker)
     stop = asyncio.Event()
     task = asyncio.create_task(pump.run(stop))
-    await asyncio.sleep(0.02)
-    stop.set()
+    try:
+        await asyncio.wait_for(worker.started.wait(), 5)
+        stop.set()
+        await asyncio.sleep(0)
+        assert not task.done(), 'shutdown returned before in-flight compute drained'
+    finally:
+        stop.set()
+        worker.release.set()
     await task
     assert worker.finished and worker.calls == 1
     assert store.rows['jobs', 'first']['state'] == 'committed'
@@ -106,11 +127,16 @@ async def test_sigterm_stops_new_pulls_but_drains_and_commits_current_work(monke
 @pytest.mark.asyncio
 async def test_cancel_waits_for_nonpreemptible_compute_before_heartbeat_stops(monkeypatch):
     monkeypatch.setattr(module, 'HEARTBEAT_SECONDS', 0.01)
-    worker = Worker(0.04)
+    worker = PausedWorker()
     store, _, pump = setup(worker)
     task = asyncio.create_task(pump.run_once())
-    await asyncio.sleep(0.02)
-    task.cancel()
+    try:
+        await asyncio.wait_for(worker.started.wait(), 5)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done(), 'cancellation returned before nonpreemptible compute drained'
+    finally:
+        worker.release.set()
     with pytest.raises(asyncio.CancelledError):
         await task
     assert worker.finished
