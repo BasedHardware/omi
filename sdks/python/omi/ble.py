@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 from dataclasses import dataclass
-from typing import Awaitable, Callable, List, Optional, Union
+from typing import Any, Awaitable, Callable, List, Optional, Sequence, Union
 
 from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakError
@@ -24,8 +24,21 @@ PacketHandler = Callable[[bytes], None]
 AsyncPacketHandler = Callable[[bytes], Union[None, Awaitable[None]]]
 
 
-async def scan(timeout: float = 5.0) -> List[Device]:
-    found = await BleakScanner.discover(timeout=timeout)
+async def scan(
+    timeout: float = 5.0,
+    *,
+    service_uuids: Optional[Sequence[str]] = None,
+) -> List[Device]:
+    """Scan for nearby Bluetooth devices, optionally filtering by service UUIDs.
+
+    Args:
+        timeout: Duration in seconds to scan for.
+        service_uuids: Optional sequence of service UUID strings to filter discovered devices.
+    """
+    kwargs: dict[str, Any] = {}
+    if service_uuids is not None:
+        kwargs["service_uuids"] = list(service_uuids)
+    found = await BleakScanner.discover(timeout=timeout, **kwargs)
     out: List[Device] = []
     for d in found:
         name = d.name or ""
