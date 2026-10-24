@@ -263,7 +263,7 @@ def test_word_floor_never_uses_duration_or_discards(monkeypatch, words, minimum)
     result = notes_short_clip.quiet_minimum('synthetic-account', conversation, tz='UTC')
     assert (result is not None) is minimum
     if minimum:
-        assert result.title and result.emoji == '' and result.sections == [] and result.action_items == []
+        assert result.title and result.emoji == '💬' and result.sections == [] and result.action_items == []
         assert result.title_provenance == 'server_minimum'
 
 
@@ -368,7 +368,7 @@ def test_every_trigger_skips_paid_notes_for_fragments(monkeypatch, processing, t
         relevance_observer=decisions.append,
         recovery_minimum_fallback_observer=lambda: minimum.append(True),
     )
-    assert structured.title and structured.emoji == '' and not discarded
+    assert structured.title and structured.emoji == '💬' and not discarded
     assert decisions[0].trigger == trigger and minimum == [True]
 
 
@@ -413,9 +413,10 @@ def test_a_submission_without_a_usable_emoji_never_stores_the_default():
     assert blank.emoji == '🩺'
     chosen = NotesOutput.model_validate({'title': 'Pitch', 'category': 'business', 'emoji': '🎯'}).to_structured()
     assert chosen.emoji == '🎯'
-    # Nothing else is derivable for an unmapped category: the default survives.
+    # Category `other` maps to the neutral emoji, so a miscellaneous note also
+    # escapes the brain.
     unmapped = NotesOutput.model_validate({'title': 'Misc', 'category': 'other'}).to_structured()
-    assert unmapped.emoji == '🧠'
+    assert unmapped.emoji == '💬'
 
 
 def test_served_one_shot_output_without_an_emoji_uses_the_category_fallback(monkeypatch):
@@ -523,7 +524,7 @@ def test_external_audio_fragments_also_get_the_model_free_minimum(monkeypatch):
     monkeypatch.setenv(packet.FLAG, 'serve')
     audio = SimpleNamespace(text_source='audio', text='A short synthetic utterance', started_at=START, photos=[])
     minimum = notes_short_clip.quiet_minimum('synthetic-account', audio)
-    assert minimum.title == 'A short synthetic utterance' and minimum.emoji == ''
+    assert minimum.title == 'A short synthetic utterance' and minimum.emoji == '💬'
 
 
 def test_photo_content_is_not_judged_by_a_speech_word_floor(monkeypatch):

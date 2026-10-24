@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal, Optional, cast
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
+from models.conversation_emoji import CATEGORY_EMOJI, DEFAULT_EMOJI, NEUTRAL_EMOJI, fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import Structured
 from models.structured_extraction import (
@@ -19,56 +20,10 @@ from models.structured_extraction import (
 
 # A submission that never chose an emoji must not silently store the pydantic
 # default: every conversation served with the v2 contract would pin 🧠 (the
-# 2026-10-23 rollout). The category's emoji is the cheap deterministic stand-in;
-# 🧠 remains only when the category has no mapping.
-DEFAULT_EMOJI = '🧠'
-
-CATEGORY_EMOJI = {
-    'personal': '🙂',
-    'education': '📚',
-    'health': '🩺',
-    'finance': '💰',
-    'legal': '⚖️',
-    'philosophy': '🤔',
-    'spiritual': '🧘',
-    'science': '🔬',
-    'entrepreneurship': '🚀',
-    'parenting': '👶',
-    'romantic': '❤️',
-    'travel': '✈️',
-    'inspiration': '💡',
-    'technology': '💻',
-    'business': '💼',
-    'social': '👥',
-    'work': '🧑‍💻',
-    'sports': '⚽',
-    'politics': '🏛️',
-    'literature': '📖',
-    'history': '🏺',
-    'architecture': '🏗️',
-    'music': '🎵',
-    'weather': '⛅',
-    'news': '📰',
-    'entertainment': '🎬',
-    'psychology': '💭',
-    'real': '🌍',
-    'design': '🎨',
-    'family': '🏡',
-    'economics': '📊',
-    'environment': '🌿',
-}
-
-
-def fallback_emoji(emoji: str, category: Any) -> str:
-    """The submitted emoji, or the category's emoji when none arrived.
-
-    Agentic submissions are round-tripped through ``model_dump`` before the
-    final validation, so a defaulted emoji is indistinguishable from one the
-    model chose: the default value itself is the signal.
-    """
-    if emoji and emoji.strip() and emoji != DEFAULT_EMOJI:
-        return emoji
-    return CATEGORY_EMOJI.get(getattr(category, 'value', category)) or DEFAULT_EMOJI
+# 2026-10-23 rollout). The shared category fallback in models.conversation_emoji
+# is the deterministic stand-in; it is re-exported here for the existing
+# notes-output importers (backfill tooling, tests).
+__all__ = ['CATEGORY_EMOJI', 'DEFAULT_EMOJI', 'NEUTRAL_EMOJI', 'fallback_emoji']
 
 
 class NotesOutput(BaseModel):
