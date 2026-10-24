@@ -42,6 +42,10 @@ HEARTBEAT_SECONDS = 120
 DEFAULT_REPAIR_WINDOW_SECONDS = 30 * 60
 DISPATCH_RETRY_SECONDS = 5 * 60
 WAIT_ALERT_SECONDS = 12 * 60 * 60  # Well before Redis job / staged blob expiry.
+# Operational knob: SYNC_SEQUENCED_STALE_SECONDS (default: 43200 / 12h) in database.sync_jobs.
+# Controls stale threshold for sequenced jobs waiting or processing before poll recovery
+# releases the active sequencer lease or retires expired pending records.
+DEFAULT_SEQUENCED_STALE_SECONDS = 12 * 60 * 60
 
 
 def enabled() -> bool:
