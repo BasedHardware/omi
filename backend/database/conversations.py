@@ -898,6 +898,7 @@ def _collect_visible_conversation_page(
         else None
     )
     last_doc = None
+    next_offset_by_id = {} if cursor_page is not None else None
 
     def finish(rows):
         if cursor_enabled and cursor_page is not None:
@@ -908,6 +909,8 @@ def _collect_visible_conversation_page(
                 except (ValueError, TypeError, AttributeError):
                     # A null/corrupt ordering key must omit the cursor, not 500 the list route.
                     logger.warning('conversation_list_cursor: ordering key unavailable; next cursor omitted')
+        if cursor_page is not None and next_offset_by_id is not None:
+            cursor_page['next_offset_by_id'] = next_offset_by_id
         return rows
 
     if cursor_enabled and cursor is not None:
@@ -966,13 +969,17 @@ def _collect_visible_conversation_page(
     last_doc = None
     fetched = 0
     batch_limit = limit
+    current_offset = offset
     try:
         for doc in budgeted_stream_iter(page_query, budget):
             fetched += 1
+            current_offset += 1
             last_doc = doc
             conversation = document_data_with_revision(doc)
             if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
                 continue
+            if next_offset_by_id is not None:
+                next_offset_by_id[doc.id] = current_offset
             conversations.append(conversation)
     except ListReadBudgetExhausted:
         return finish(conversations)
@@ -993,6 +1000,7 @@ def _collect_visible_conversation_page(
         try:
             for doc in budgeted_stream_iter(follow, budget):
                 fetched += 1
+                current_offset += 1
                 last_doc = doc
                 conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(conversation, include_discarded=False):
@@ -1000,6 +1008,8 @@ def _collect_visible_conversation_page(
                     if skipped > _RULE_DISCARD_PAGE_SKIP_CAP:
                         return finish(conversations)
                     continue
+                if next_offset_by_id is not None:
+                    next_offset_by_id[doc.id] = current_offset
                 conversations.append(conversation)
                 if len(conversations) >= limit:
                     return finish(conversations)
