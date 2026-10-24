@@ -160,8 +160,6 @@ final class OmiBleManager: NSObject {
                   self.centralManager.state == .poweredOn, self.peripherals[uuid] === peripheral,
                   peripheral.state != .connected else { return }
             self.endSavedScan(uuid, reason: "retry_connect")
-            self.savedRetryAttempts[uuid] = attempt
-            self.reportSavedReconnect(uuid, result: "attempted")
             self.issueConnect(peripheral, uuid: uuid, source: "saved_retry")
         }
         savedRetryTasks[uuid] = task
@@ -169,6 +167,11 @@ final class OmiBleManager: NSObject {
     }
 
     private func issueConnect(_ peripheral: CBPeripheral, uuid: String, source: String) {
+        if savedReconnect.contains(uuid), connectPendingSince[uuid] == nil {
+            savedOutageStarted[uuid] = savedOutageStarted[uuid] ?? Date()
+            savedRetryAttempts[uuid, default: 0] += 1
+            reportSavedReconnect(uuid, result: "attempted")
+        }
         let since = connectPendingSince[uuid] ?? CheckedIntegerConversion.epochMs()
         connectPendingSince[uuid] = since
         logBle(uuid: uuid, event: "connect_requested", detail: "source=\(source),state=\(peripheral.state.rawValue),pending_since_ms=\(since)")
