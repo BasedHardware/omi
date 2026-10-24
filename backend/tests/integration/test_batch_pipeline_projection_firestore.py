@@ -3,9 +3,13 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from itertools import permutations
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
+import json
 import os
+import subprocess
+import sys
 import threading
 
 from google.auth.credentials import AnonymousCredentials
@@ -1763,3 +1767,94 @@ def test_head_wait_commit_order_converges_to_one_conversation(lane, monkeypatch,
             assert row.get('sync_merged_into') == rows[0]['id']
     for unit in units:
         assert unit.ledger.get().to_dict()['status'] == 'completed'
+
+
+def _repair_cli_env(project, owner_env, owner, host):
+    env = dict(os.environ)
+    env.update(
+        GCLOUD_PROJECT=project,
+        FIREBASE_PROJECT_ID=project,
+        FIRESTORE_EMULATOR_HOST=host,
+        NO_PROXY='127.0.0.1,localhost,::1',
+        no_proxy='127.0.0.1,localhost,::1',
+    )
+    env[owner_env] = owner
+    return env
+
+
+def _run_repair_cli(arguments, env):
+    script = str(Path(__file__).resolve().parents[2] / 'scripts/batch_pipeline_projection_repair.py')
+    return subprocess.run([sys.executable, script, *arguments], env=env, capture_output=True, text=True, timeout=180)
+
+
+def test_local_repair_cli_dry_run_is_aggregate_only_and_never_writes():
+    from utils.batch_pipeline.scheduler import owner_key
+
+    host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+    if not host.startswith(('127.0.0.1:', 'localhost:')):
+        pytest.skip('loopback emulator required; no cloud fallback')
+    project = f'demo-pr1-c-{uuid4().hex[:12]}'
+    namespace_id = uuid4().hex[:12]
+    namespace = f'batch_pipeline_test_{namespace_id}'
+    owner = f'synthetic-repair-{uuid4().hex[:8]}'
+    key = owner_key(owner)
+    client = firestore.Client(project=project, credentials=AnonymousCredentials())
+    client.collection(f'{namespace}_owners').document(key).set({'projection_watermark': 'old'})
+    for sid, previous, state in [('old', None, 'persisted'), ('head', 'old', 'pending'), ('tail', 'head', 'pending')]:
+        client.collection(f'{namespace}_results').document(sid).set(
+            {
+                'segment_id': sid,
+                'owner_key': key,
+                'previous_segment_id': previous,
+                'projection_state': state,
+                'committed_at': 1,
+                'result': {'uri': f'gs://synthetic/{sid}'},
+            }
+        )
+        client.collection(f'{namespace}_jobs').document(sid).set(
+            {'owner_id': owner, 'policy_parts': {'projection': {'pinned': True}}}
+        )
+    collections_before = sorted(collection.id for collection in client.collections())
+    results_before = {doc.id: doc.to_dict() for doc in client.collection(f'{namespace}_results').stream()}
+    jobs_before = {doc.id: doc.to_dict() for doc in client.collection(f'{namespace}_jobs').stream()}
+    completed = _run_repair_cli(
+        ['--stage', 'local', '--local-namespace', namespace_id, '--owner-env', 'W1_OWNER_UID'],
+        _repair_cli_env(project, 'W1_OWNER_UID', owner, host),
+    )
+    assert completed.returncode == 0, completed.stderr
+    payload = json.loads(completed.stdout.strip())
+    assert payload['planned_units'] == 3 and payload['apply'] is False
+    assert payload['states'] == {'persisted': 1, 'pending': 2}
+    assert payload['unpinned_units'] == 0
+    assert payload['lookback_missing'] is False and len(payload['plan_sha256']) == 64
+    # Aggregate output only: no owner identity or storage paths leak.
+    assert owner not in completed.stdout and 'gs://' not in completed.stdout
+    # Dry-run stays read-only: identical rows, owner watermark untouched.
+    assert {doc.id: doc.to_dict() for doc in client.collection(f'{namespace}_results').stream()} == results_before
+    assert {doc.id: doc.to_dict() for doc in client.collection(f'{namespace}_jobs').stream()} == jobs_before
+    assert client.collection(f'{namespace}_owners').document(key).get().to_dict() == {'projection_watermark': 'old'}
+    assert sorted(collection.id for collection in client.collections()) == collections_before
+
+
+def test_local_repair_cli_refuses_invalid_namespace_non_loopback_and_prod_overrides():
+    base = dict(os.environ)
+    base.pop('GCP_AGENT_TIER', None)
+    base.pop('FIRESTORE_EMULATOR_HOST', None)
+    base.update(NO_PROXY='127.0.0.1,localhost,::1', no_proxy='127.0.0.1,localhost,::1')
+    loopback = dict(base, FIRESTORE_EMULATOR_HOST='127.0.0.1:8085')
+
+    def refusals(arguments, env, message):
+        completed = _run_repair_cli(arguments, env)
+        assert completed.returncode == 2, completed.stdout + completed.stderr
+        assert message in completed.stderr
+
+    refusals(['--stage', 'local', '--local-namespace', 'Bad-ID'], loopback, 'must match')
+    refusals(['--stage', 'local', '--local-namespace', '../batch_pipeline_prod'], loopback, 'must match')
+    refusals(
+        ['--stage', 'prod', '--local-namespace', 'anything'],
+        loopback,
+        '--local-namespace applies to --stage local only',
+    )
+    refusals(['--stage', 'local'], dict(base, FIRESTORE_EMULATOR_HOST='10.9.8.7:8080'), 'loopback emulator')
+    refusals(['--stage', 'local'], base, 'loopback emulator')
+    refusals(['--stage', 'prod'], base, 'wrong identity')

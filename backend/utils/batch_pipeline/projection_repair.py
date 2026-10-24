@@ -27,7 +27,11 @@ def plan_owner(store, owner_id: str, *, max_units: int = 1000, lookback_units: i
         if sid in seen:
             raise ProjectionBlocked('owner repair chain cycle')
         seen.add(sid)
-        row = store.client.collection(f'{store.namespace}_results').document(sid).get().to_dict() or {}
+        row = store.client.collection(f'{store.namespace}_results').document(sid).get().to_dict()
+        if row is None:
+            # Absent (for example retention-expired) history is reported by the
+            # caller; an existing foreign or relabeled row still refuses below.
+            return None
         if row.get('owner_key') != key or row.get('segment_id') != sid:
             raise ProjectionBlocked('owner repair result scope mismatch')
         snapshots.append((sid, row.get('result'), row.get('committed_at')))
@@ -35,22 +39,32 @@ def plan_owner(store, owner_id: str, *, max_units: int = 1000, lookback_units: i
         return row
 
     # Lost replies/follow-up crashes may leave obligations behind the watermark.
+    # Backward discovery stops at the first missing historical receipt (completed
+    # results legitimately expire) and reports it; forward discovery still runs
+    # from the watermark id. Budget exhaustion is reported separately.
     before = []
     previous = watermark
+    lookback_missing = False
+    lookback_truncated = False
     for _ in range(lookback_units):
         if previous is None:
             break
         row = read(previous)
+        if row is None:
+            lookback_missing = True
+            break
         before.append(previous)
         previous = row.get('previous_segment_id')
-    lookback_truncated = previous is not None
+    else:
+        lookback_truncated = previous is not None
     after = []
     previous = watermark
     for _ in range(max_units):
         sid = store.projection_successor(key, previous)
         if sid is None:
             break
-        read(sid)
+        if read(sid) is None:
+            raise ProjectionBlocked('owner repair forward result missing')
         after.append(sid)
         previous = sid
     forward_truncated = len(after) == max_units and store.projection_successor(key, previous) is not None
@@ -74,6 +88,7 @@ def plan_owner(store, owner_id: str, *, max_units: int = 1000, lookback_units: i
         'unpinned_units': unpinned,
         'states': dict(Counter(row.get('projection_state', 'unknown') for row in rows.values())),
         'lookback_truncated': lookback_truncated,
+        'lookback_missing': lookback_missing,
         'forward_truncated': forward_truncated,
     }
 

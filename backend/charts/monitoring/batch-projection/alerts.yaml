@@ -19,9 +19,8 @@ spec:
             description: "Includes ambiguity quarantine. Retain custody; use the owner repair runbook. Never disable lineage fencing."
         - alert: OmiBatchProjectionObservationStale
           expr: >-
-            omi_batch_projection_obligation_observed_at_seconds > 0
-            and (time() - omi_batch_projection_obligation_observed_at_seconds >= 120)
+            time() - omi_batch_projection_obligation_observed_at_seconds >= 120
           for: 2m
           labels: {severity: warning}
           annotations:
-            summary: "Batch projection obligation observation is stale"
+            summary: "Batch projection obligation observation is stale or was never taken"

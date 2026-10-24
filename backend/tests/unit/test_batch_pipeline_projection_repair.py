@@ -14,22 +14,23 @@ from utils.batch_pipeline import context
 from utils.sync import recording_lineage
 
 
-def seed():
+def seed(*, missing_results=()):
     client = StrictFirestore()
     key = owner_key('synthetic')
     client.collection('test_owners').document(key).create({'projection_watermark': 'old'})
     rows = client.collection('test_results')
     for sid, previous, state in [('old', None, 'persisted'), ('head', 'old', 'pending'), ('tail', 'head', 'pending')]:
-        rows.document(sid).create(
-            {
-                'segment_id': sid,
-                'owner_key': key,
-                'previous_segment_id': previous,
-                'projection_state': state,
-                'committed_at': 1,
-                'result': {'uri': f'gs://synthetic/{sid}'},
-            }
-        )
+        if sid not in missing_results:
+            rows.document(sid).create(
+                {
+                    'segment_id': sid,
+                    'owner_key': key,
+                    'previous_segment_id': previous,
+                    'projection_state': state,
+                    'committed_at': 1,
+                    'result': {'uri': f'gs://synthetic/{sid}'},
+                }
+            )
         client.collection('test_jobs').document(sid).create(
             {'owner_id': 'synthetic', 'policy_parts': {'projection': {}}}
         )
@@ -57,6 +58,47 @@ def test_plan_refuses_cross_owner_and_invalid_budgets():
         plan_owner(store, 'synthetic')
     with pytest.raises(ValueError):
         plan_owner(store, 'synthetic', max_units=0)
+
+
+def test_plan_survives_missing_watermark_receipt_and_discovers_forward_units(monkeypatch):
+    store = seed(missing_results={'old'})
+    # Expired history truncates the backward walk; the plan itself stays
+    # read-only and deterministic, and forward obligations are still found.
+    reference_type = type(store.client.collection('test_results').document('head'))
+    monkeypatch.setattr(reference_type, 'create', Mock(side_effect=AssertionError('dry-run wrote')))
+    monkeypatch.setattr(store.client, 'transaction', Mock(side_effect=AssertionError('dry-run transacted')))
+    plan = plan_owner(store, 'synthetic')
+    assert plan['units'] == ['head', 'tail']
+    assert plan['lookback_missing'] and not plan['lookback_truncated']
+    assert plan == plan_owner(store, 'synthetic')
+
+
+def test_plan_stops_at_missing_older_predecessor_without_losing_intact_history():
+    store = seed(missing_results={'old'})
+    key = owner_key('synthetic')
+    store.client.transaction().update(
+        store.client.collection('test_owners').document(key), {'projection_watermark': 'head'}
+    )
+    plan = plan_owner(store, 'synthetic')
+    assert plan['units'] == ['head', 'tail']
+    assert plan['lookback_missing'] and not plan['lookback_truncated']
+
+
+def test_plan_still_refuses_existing_foreign_history_row():
+    store = seed()
+    key = owner_key('synthetic')
+    store.client.transaction().update(
+        store.client.collection('test_owners').document(key), {'projection_watermark': 'head'}
+    )
+    store.client.transaction().update(store.client.collection('test_results').document('old'), {'owner_key': 'foreign'})
+    with pytest.raises(ProjectionBlocked, match='scope mismatch'):
+        plan_owner(store, 'synthetic')
+
+
+def test_plan_fails_closed_on_missing_forward_result():
+    store = seed(missing_results={'tail'})
+    with pytest.raises(ProjectionBlocked, match='forward result missing'):
+        plan_owner(store, 'synthetic')
 
 
 def test_apply_stops_on_fence_and_never_advances_later_units():

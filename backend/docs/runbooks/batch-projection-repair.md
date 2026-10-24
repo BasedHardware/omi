@@ -38,6 +38,10 @@ in production.
    `python scripts/batch_pipeline_projection_repair.py --stage prod` from backend.
 Dry-run performs bounded metadata reads only, without policy pinning or
 artifact loading. Save its aggregate JSON and `plan_sha256`.
+Local emulator rehearsal uses `--stage local [--local-namespace <id>]`: the
+tool then builds an anonymous-credentials client against the loopback emulator
+and a `batch_pipeline_test_<id>` namespace; `--local-namespace` is refused on
+`--stage prod`, which stays fixed on `batch_pipeline_prod`.
 2. After explicit operator authorization, source the `prod-operator` tier and
    rerun with `--apply --approve-plan-sha256 <digest>`. A changed plan refuses
    before writes. Assignment, follow-up, accounting and publication reuse
@@ -56,7 +60,10 @@ artifact loading. Save its aggregate JSON and `plan_sha256`.
    The default is at most 1,000 forward rows plus 100 backward rows for lost
    follow-up replies. `--max-units` (up to 5,000) and `--lookback-units` (up to
    1,000) are explicit bounds, not proof that an entire owner history was scanned.
-   `lookback_truncated` means older follow-up debt may need separate inspection.
+   `lookback_truncated` means older follow-up debt may need separate inspection;
+   `lookback_missing` means the backward walk stopped at a retention-expired
+   (absent) historical receipt — forward discovery still runs from the watermark
+   id, and an existing foreign or relabeled historical row still refuses.
 4. Verify durable successor completions and client publication, falling pending
    counts/ages and held receipts. Quarantine is an open obligation, never a
    success count. Record unresolved held speech separately; this tool does not
@@ -72,7 +79,10 @@ deadline alarms; it never deletes data. A failed sample leaves the timestamp
 
 The lead installs `charts/monitoring/batch-projection/alerts.yaml` with the
 serving metric scrape. The overdue rule requires a sample younger than 120s;
-the stale rule catches an exporter that still scrapes but cannot refresh.
+the stale rule catches an exporter that still scrapes but cannot refresh,
+including a never-observed zero (`observed_at` stays 0 when every sample has
+failed since startup) — the rule's 2-minute pending duration is the only
+startup grace.
 Scrape absence requires the fleet's target/no-data monitoring. Rule installation
 and notification delivery need separate live verification. No alert is applied
 by this repair or PR. Rollback: deploy the prior image; already held receipts

@@ -7,9 +7,13 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from google.auth.credentials import AnonymousCredentials
+from google.cloud import firestore
 
 from database._client import get_firestore_client
 from database.batch_pipeline_store import FirestoreStore
@@ -18,11 +22,29 @@ from utils.batch_pipeline.projection import Projector
 from utils.batch_pipeline.projection_repair import plan_owner, apply_owner
 from utils.rollout_cohorts import configure_rollout_runtime
 
+LOCAL_NAMESPACE_ID = re.compile(r'[a-z0-9_]{1,40}')
+
+
+def local_firestore_client():
+    # Loopback emulator only: explicit anonymous credentials so a local run
+    # never uses interactive ADC or a service-account payload.
+    project = (
+        os.getenv('GCLOUD_PROJECT')
+        or os.getenv('FIREBASE_PROJECT_ID')
+        or os.getenv('GOOGLE_CLOUD_PROJECT')
+        or 'demo-omi-local'
+    )
+    return firestore.Client(project=project, credentials=AnonymousCredentials())
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--stage', choices=['prod', 'local'], required=True)
     parser.add_argument('--owner-env', default='DAVID_UID')
+    parser.add_argument(
+        '--local-namespace',
+        help='id after batch_pipeline_test_ for --stage local; emulator-only, never a prod namespace',
+    )
     parser.add_argument('--max-units', type=int, default=1000)
     parser.add_argument('--lookback-units', type=int, default=100)
     parser.add_argument('--apply', action='store_true')
@@ -31,15 +53,24 @@ def main():
     # Suppress library logs containing identifiers or content; own output is counts only.
     logging.disable(logging.CRITICAL)
     if args.stage == 'prod':
+        if args.local_namespace:
+            parser.error('--local-namespace applies to --stage local only; prod is fixed batch_pipeline_prod')
         if os.getenv('FIRESTORE_EMULATOR_HOST') or os.getenv('GCP_AGENT_TIER') != (
             'prod-operator' if args.apply else 'ro-prod'
         ):
             parser.error('wrong identity for requested operation')
-    elif not os.getenv('FIRESTORE_EMULATOR_HOST', '').startswith(('127.0.0.1:', 'localhost:')):
-        parser.error('local requires loopback emulator; no cloud fallback')
+        namespace, client = 'batch_pipeline_prod', get_firestore_client()
+    else:
+        host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
+        if not host.startswith(('127.0.0.1:', 'localhost:')):
+            parser.error('local requires loopback emulator; no cloud fallback')
+        namespace_id = args.local_namespace or 'repair'
+        if not LOCAL_NAMESPACE_ID.fullmatch(namespace_id):
+            parser.error('--local-namespace must match [a-z0-9_]{1,40} (the batch_pipeline_test_<id> id)')
+        namespace, client = f'batch_pipeline_test_{namespace_id}', local_firestore_client()
     owner = os.getenv(args.owner_env, '')
     os.environ['OMI_ENV_STAGE'] = args.stage
-    store = FirestoreStore(f'batch_pipeline_{args.stage}', firestore_client=get_firestore_client())
+    store = FirestoreStore(namespace, firestore_client=client)
     plan = plan_owner(store, owner, max_units=args.max_units, lookback_units=args.lookback_units)
     report = {key: value for key, value in plan.items() if key != 'units'}
     report.update(apply=args.apply, planned_units=len(plan['units']))
