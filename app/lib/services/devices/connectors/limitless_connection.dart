@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
@@ -10,9 +11,134 @@ import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 
+enum LimitlessMetadataQueryStatus {
+  ok,
+  disconnected,
+  wrongDevice,
+  busy,
+  overlappingQuery,
+  timeout,
+  malformedResponse,
+  unmatchedResponse,
+  deviceError,
+  cancelled,
+}
+
+class LimitlessCompatibilityMetadata {
+  static const String placeholderModelNumber = 'Limitless Pendant';
+  static const String placeholderFirmwareRevision = '1.0.0';
+  static const String placeholderHardwareRevision = 'Unknown';
+  static const String placeholderManufacturerName = 'Limitless';
+
+  static const Set<String> allowlistedKeys = {
+    'modelNumber',
+    'firmwareRevision',
+    'hardwareRevision',
+    'manufacturerName',
+    'protocolVersion',
+  };
+
+  final String? modelNumber;
+  final String? firmwareRevision;
+  final String? hardwareRevision;
+  final String? manufacturerName;
+  final int? protocolVersion;
+  final bool isPlaceholder;
+
+  const LimitlessCompatibilityMetadata({
+    this.modelNumber,
+    this.firmwareRevision,
+    this.hardwareRevision,
+    this.manufacturerName,
+    this.protocolVersion,
+    this.isPlaceholder = false,
+  });
+
+  const LimitlessCompatibilityMetadata.placeholder()
+      : modelNumber = placeholderModelNumber,
+        firmwareRevision = placeholderFirmwareRevision,
+        hardwareRevision = placeholderHardwareRevision,
+        manufacturerName = placeholderManufacturerName,
+        protocolVersion = null,
+        isPlaceholder = true;
+
+  bool get hasFirmwareRevision => firmwareRevision != null && !isPlaceholder;
+  bool get hasHardwareRevision => hardwareRevision != null && !isPlaceholder;
+
+  bool get hasReportedMetadata {
+    if (isPlaceholder) return false;
+    if (firmwareRevision != null || hardwareRevision != null || protocolVersion != null) {
+      return true;
+    }
+    if (modelNumber != null && modelNumber != placeholderModelNumber) {
+      return true;
+    }
+    return manufacturerName != null && manufacturerName != placeholderManufacturerName;
+  }
+
+  Map<String, String> toAllowlistedMap() {
+    return Map.unmodifiable({
+      if (modelNumber != null) 'modelNumber': modelNumber!,
+      if (firmwareRevision != null) 'firmwareRevision': firmwareRevision!,
+      if (hardwareRevision != null) 'hardwareRevision': hardwareRevision!,
+      if (manufacturerName != null) 'manufacturerName': manufacturerName!,
+      if (protocolVersion != null) 'protocolVersion': protocolVersion.toString(),
+    });
+  }
+}
+
+class LimitlessMetadataQueryResult {
+  final LimitlessMetadataQueryStatus status;
+  final LimitlessCompatibilityMetadata? metadata;
+  final int? requestId;
+
+  const LimitlessMetadataQueryResult({
+    required this.status,
+    this.metadata,
+    this.requestId,
+  });
+
+  bool get isSuccess => status == LimitlessMetadataQueryStatus.ok && metadata != null && !metadata!.isPlaceholder;
+
+  bool get didWriteToDevice => requestId != null;
+}
+
+class _PendingLimitlessMetadataQuery {
+  final completer = Completer<LimitlessMetadataQueryResult>();
+  int? requestId;
+  Timer? timer;
+  bool sawUnmatchedResponse = false;
+  bool sawMalformedResponse = false;
+}
+
+class _ParsedDeviceInfo {
+  final LimitlessCompatibilityMetadata? metadata;
+  final int? requestId;
+  final bool hasError;
+  final bool malformed;
+
+  const _ParsedDeviceInfo({
+    required this.metadata,
+    required this.requestId,
+    required this.hasError,
+    required this.malformed,
+  });
+
+  const _ParsedDeviceInfo.malformed({
+    this.requestId,
+    this.hasError = false,
+  })  : metadata = null,
+        malformed = true;
+}
+
 class LimitlessDeviceConnection extends DeviceConnection {
   static const Duration _defaultStreamHealthWindow = Duration(seconds: 8);
   static const Duration _defaultStorageStatusTimeout = Duration(seconds: 3);
+  static const Duration _defaultMetadataQueryTimeout = Duration(seconds: 3);
+  static const int _deviceInfoMessageNumber = 14;
+  static const int _requestDataMessageNumber = 30;
+  static const int _maxMetadataFieldBytes = 64;
+  static const Set<String> _placeholderTokens = {'unknown', 'n/a', 'none', 'null', 'placeholder'};
 
   int _messageIndex = 0;
   int _requestId = 0;
@@ -46,6 +172,8 @@ class LimitlessDeviceConnection extends DeviceConnection {
   bool _isBatchMode = false;
   final Duration _streamHealthWindow;
   final Duration _storageStatusTimeout;
+  final Duration _metadataQueryTimeout;
+  _PendingLimitlessMetadataQuery? _pendingMetadataQuery;
   Timer? _streamHealthTimer;
   int _streamHealthGeneration = 0;
   int _rxPacketsSinceStreamActivation = 0;
@@ -56,6 +184,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
   /// Drift of pendant RTC vs phone at connect, before forward clock sync.
   /// Null when no Type-8 clock was observed (fail-open: no correction).
   int? get clockDriftOffsetMs => _clockDriftOffsetMs;
+
+  bool get isInitialized => _isInitialized;
+  bool get isMetadataQueryInFlight => _pendingMetadataQuery != null;
 
   int _highestReceivedIndex = -1;
   int _lastAcknowledgedIndex = -1;
@@ -70,8 +201,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
     super.transport, {
     Duration streamHealthWindow = _defaultStreamHealthWindow,
     Duration storageStatusTimeout = _defaultStorageStatusTimeout,
+    Duration metadataQueryTimeout = _defaultMetadataQueryTimeout,
   })  : _streamHealthWindow = streamHealthWindow,
-        _storageStatusTimeout = storageStatusTimeout;
+        _storageStatusTimeout = storageStatusTimeout,
+        _metadataQueryTimeout = metadataQueryTimeout;
 
   /// Injected in main.dart; true while Transcribe Later keeps the pendant recording to flash.
   static bool Function()? realtimeSuppressionPolicy;
@@ -138,6 +271,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   Future<void> _disconnect() async {
     _closed = true;
     _pendingReinit = false;
+    _retireActiveMetadataQuery(LimitlessMetadataQueryStatus.disconnected);
     _cancelStreamHealthWatch();
     await _transportReconnectSubscription?.cancel();
     _transportReconnectSubscription = null;
@@ -150,7 +284,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   @override
-  void onPhysicalConnectionLost() => _cancelStreamHealthWatch();
+  void onPhysicalConnectionLost() {
+    _retireActiveMetadataQuery(LimitlessMetadataQueryStatus.disconnected);
+    _cancelStreamHealthWatch();
+  }
 
   void _attachRxSubscription() {
     _rxSubscription?.cancel();
@@ -371,6 +508,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
     // Parse BLE packet to get fragmentation info
     final packet = _parseBlePacket(data);
     if (packet == null) {
+      if (_tryHandleDeviceInfoPayload(data)) {
+        return;
+      }
       if (_isBatchMode) {
         Logger.debug(
           'Limitless: Batch mode - packet parse failed, data=${data.length}b, first bytes: ${data.take(10).toList()}',
@@ -407,6 +547,10 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
       // Reassembled payload: Type-8 clock lives inside wrapper field 4.
       _tryCaptureClockDrift(completePayload);
+
+      if (_tryHandleDeviceInfoPayload(completePayload)) {
+        return;
+      }
 
       if (_isBatchMode) {
         _handlePendantMessage(completePayload);
@@ -447,6 +591,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   }
 
   void _resetProtocolSessionForReconnect() {
+    _retireActiveMetadataQuery(LimitlessMetadataQueryStatus.disconnected);
     _rawDataBuffer.clear();
     _fragmentBuffer.clear();
     _storageState = null;
@@ -1339,6 +1484,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!_isInitialized) return;
 
     try {
+      _retireActiveMetadataQuery(LimitlessMetadataQueryStatus.busy);
       _cancelStreamHealthWatch();
       // Clear all buffers before switching modes to prevent cross-contamination
       _rawDataBuffer.clear();
@@ -2174,11 +2320,474 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
   Future<Map<String, String>> getDeviceInfo() async {
     return {
-      'modelNumber': 'Limitless Pendant',
-      'firmwareRevision': '1.0.0',
-      'hardwareRevision': 'Unknown',
-      'manufacturerName': 'Limitless',
+      'modelNumber': LimitlessCompatibilityMetadata.placeholderModelNumber,
+      'firmwareRevision': LimitlessCompatibilityMetadata.placeholderFirmwareRevision,
+      'hardwareRevision': LimitlessCompatibilityMetadata.placeholderHardwareRevision,
+      'manufacturerName': LimitlessCompatibilityMetadata.placeholderManufacturerName,
     };
+  }
+
+  List<int> _encodeGetDeviceInfo() {
+    final cmd = [..._encodeMessage(_deviceInfoMessageNumber, const []), ..._encodeRequestData()];
+    return _encodeBleWrapper(cmd);
+  }
+
+  /// Performs a bounded, explicit compatibility-metadata query on the existing,
+  /// already-connected, initialized Limitless session without reconnecting,
+  /// re-initializing, changing capture mode, or mutating paired-device state.
+  Future<LimitlessMetadataQueryResult> queryCompatibilityMetadata({
+    Duration? timeout,
+    Future<void>? cancelTrigger,
+  }) async {
+    if (device.type != DeviceType.limitless) {
+      return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.wrongDevice);
+    }
+    if (_closed || status != DeviceConnectionState.connected || !_isInitialized || _activeConnect != null) {
+      return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.disconnected);
+    }
+    if (_isBatchMode || _isReinitializing || _pendingReinit) {
+      return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.busy);
+    }
+    if (_pendingMetadataQuery != null) {
+      return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.overlappingQuery);
+    }
+
+    final epoch = connectionEpoch;
+    final query = _PendingLimitlessMetadataQuery();
+    _pendingMetadataQuery = query;
+
+    if (cancelTrigger != null) {
+      final cancelFuture = cancelTrigger.then(
+        (_) => _cancelMetadataQuery(query),
+        onError: (_, __) => _cancelMetadataQuery(query),
+      );
+      unawaited(cancelFuture);
+    }
+
+    try {
+      final connected = await transport.isConnected();
+      if (!identical(_pendingMetadataQuery, query)) {
+        return query.completer.future;
+      }
+      if (!connected || !_isCurrentSession(epoch) || !_isInitialized) {
+        _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.disconnected);
+        return query.completer.future;
+      }
+      if (_isBatchMode || _isReinitializing || _pendingReinit) {
+        _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.busy);
+        return query.completer.future;
+      }
+
+      final cmd = _encodeGetDeviceInfo();
+      final requestId = _requestId;
+      query.requestId = requestId;
+
+      final effectiveTimeout = timeout ?? _metadataQueryTimeout;
+      query.timer = Timer(effectiveTimeout, () {
+        var status = LimitlessMetadataQueryStatus.timeout;
+        if (query.sawMalformedResponse) {
+          status = LimitlessMetadataQueryStatus.malformedResponse;
+        } else if (query.sawUnmatchedResponse) {
+          status = LimitlessMetadataQueryStatus.unmatchedResponse;
+        }
+        _retireMetadataQueryWithStatus(query, status);
+      });
+
+      await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
+      if (!identical(_pendingMetadataQuery, query)) {
+        return query.completer.future;
+      }
+      if (!_isCurrentSession(epoch)) {
+        _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.disconnected);
+      }
+    } catch (e) {
+      Logger.debug('Limitless: Error sending device info query: $e');
+      _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.deviceError);
+    }
+
+    return query.completer.future;
+  }
+
+  void _cancelMetadataQuery(_PendingLimitlessMetadataQuery query) {
+    _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.cancelled);
+  }
+
+  void _retireActiveMetadataQuery(LimitlessMetadataQueryStatus status) {
+    final query = _pendingMetadataQuery;
+    if (query == null) return;
+    _retireMetadataQueryWithStatus(query, status);
+  }
+
+  void _retireMetadataQueryWithStatus(
+    _PendingLimitlessMetadataQuery query,
+    LimitlessMetadataQueryStatus status, {
+    LimitlessCompatibilityMetadata? metadata,
+  }) {
+    final result = LimitlessMetadataQueryResult(
+      status: status,
+      metadata: metadata,
+      requestId: query.requestId,
+    );
+    _retireMetadataQuery(query, result);
+  }
+
+  void _retireMetadataQuery(_PendingLimitlessMetadataQuery query, LimitlessMetadataQueryResult result) {
+    query.timer?.cancel();
+    query.timer = null;
+    if (identical(_pendingMetadataQuery, query)) {
+      _pendingMetadataQuery = null;
+    }
+    _pruneIncompleteDeviceInfoFragments();
+    if (!query.completer.isCompleted) {
+      query.completer.complete(result);
+    }
+  }
+
+  void _pruneIncompleteDeviceInfoFragments() {
+    final staleIndices = <int>[];
+    for (final entry in _fragmentBuffer.entries) {
+      final first = entry.value[0];
+      if (first != null && first.isNotEmpty && (first[0] >> 3) == _deviceInfoMessageNumber) {
+        staleIndices.add(entry.key);
+      }
+    }
+    for (final index in staleIndices) {
+      _fragmentBuffer.remove(index);
+    }
+  }
+
+  bool _tryHandleDeviceInfoPayload(List<int> payload) {
+    if (payload.isEmpty) return false;
+
+    var pos = 0;
+    var sawDeviceInfoField = false;
+    var sawOtherContentField = false;
+    var malformed = false;
+    List<int>? deviceInfoBytes;
+    int? requestId;
+    var hasRequestError = false;
+
+    while (pos < payload.length) {
+      final tagDecoded = _decodeSafeVarint(payload, pos);
+      if (tagDecoded == null) {
+        malformed = true;
+        break;
+      }
+      final tag = tagDecoded.$1;
+      pos = tagDecoded.$2;
+      final fieldNum = tag >> 3;
+      final wireType = tag & 0x07;
+      if (fieldNum <= 0) {
+        malformed = true;
+        break;
+      }
+
+      if (fieldNum == _deviceInfoMessageNumber) {
+        sawDeviceInfoField = true;
+      } else if (fieldNum != _requestDataMessageNumber) {
+        sawOtherContentField = true;
+      }
+
+      if (wireType == 0) {
+        final valueDecoded = _decodeSafeVarint(payload, pos);
+        if (valueDecoded == null) {
+          malformed = true;
+          break;
+        }
+        pos = valueDecoded.$2;
+      } else if (wireType == 2) {
+        final lenDecoded = _decodeSafeVarint(payload, pos);
+        if (lenDecoded == null) {
+          malformed = true;
+          break;
+        }
+        final length = lenDecoded.$1;
+        pos = lenDecoded.$2;
+        if (length < 0 || pos + length > payload.length) {
+          malformed = true;
+          break;
+        }
+        final fieldBytes = payload.sublist(pos, pos + length);
+        pos += length;
+
+        if (fieldNum == _deviceInfoMessageNumber) {
+          deviceInfoBytes = fieldBytes;
+        } else if (fieldNum == _requestDataMessageNumber) {
+          final req = _parseRequestDataSubmessage(fieldBytes);
+          if (req == null) {
+            malformed = true;
+          } else {
+            requestId = req.$1 ?? requestId;
+            if (req.$2) hasRequestError = true;
+          }
+        }
+      } else if (wireType == 1) {
+        if (pos + 8 > payload.length) {
+          malformed = true;
+          break;
+        }
+        pos += 8;
+      } else if (wireType == 5) {
+        if (pos + 4 > payload.length) {
+          malformed = true;
+          break;
+        }
+        pos += 4;
+      } else {
+        malformed = true;
+        break;
+      }
+    }
+
+    final query = _pendingMetadataQuery;
+    final expectedRequestId = query?.requestId;
+    final matchesActiveRequest = expectedRequestId != null && requestId == expectedRequestId;
+
+    if (!sawDeviceInfoField) {
+      if (query != null && !sawOtherContentField && requestId != null) {
+        if (matchesActiveRequest && hasRequestError) {
+          _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.deviceError);
+          return true;
+        }
+        if (!matchesActiveRequest) {
+          query.sawUnmatchedResponse = true;
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Late or unsolicited device-info notifications are consumed without side effects.
+    if (query == null || expectedRequestId == null) {
+      return !sawOtherContentField;
+    }
+
+    if (malformed || deviceInfoBytes == null) {
+      if (matchesActiveRequest) {
+        _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.malformedResponse);
+      } else {
+        query.sawMalformedResponse = true;
+      }
+      return !sawOtherContentField;
+    }
+
+    final parsed = _parseDeviceInfoSubmessage(deviceInfoBytes);
+    final resolvedRequestId = requestId ?? parsed.requestId;
+    final resolvedError = hasRequestError || parsed.hasError;
+
+    if (resolvedRequestId == null || resolvedRequestId != expectedRequestId) {
+      query.sawUnmatchedResponse = true;
+      return !sawOtherContentField;
+    }
+
+    if (resolvedError) {
+      _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.deviceError);
+      return !sawOtherContentField;
+    }
+
+    if (parsed.malformed || parsed.metadata == null || !parsed.metadata!.hasReportedMetadata) {
+      _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.malformedResponse);
+      return !sawOtherContentField;
+    }
+
+    _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.ok, metadata: parsed.metadata);
+    return !sawOtherContentField;
+  }
+
+  (int?, bool)? _parseRequestDataSubmessage(List<int> bytes) {
+    var pos = 0;
+    int? requestId;
+    var hasError = false;
+
+    while (pos < bytes.length) {
+      final tagDecoded = _decodeSafeVarint(bytes, pos);
+      if (tagDecoded == null) return null;
+      final tag = tagDecoded.$1;
+      pos = tagDecoded.$2;
+      final fieldNum = tag >> 3;
+      final wireType = tag & 0x07;
+      if (fieldNum <= 0) return null;
+
+      if (wireType == 0) {
+        final valDecoded = _decodeSafeVarint(bytes, pos);
+        if (valDecoded == null) return null;
+        final value = valDecoded.$1;
+        pos = valDecoded.$2;
+        if (fieldNum == 1) {
+          requestId = value;
+        } else if ((fieldNum == 2 || fieldNum == 3) && value != 0) {
+          hasError = true;
+        }
+      } else if (wireType == 2) {
+        final lenDecoded = _decodeSafeVarint(bytes, pos);
+        if (lenDecoded == null) return null;
+        final length = lenDecoded.$1;
+        pos = lenDecoded.$2;
+        if (length < 0 || pos + length > bytes.length) return null;
+        if (fieldNum == 4 && length > 0) hasError = true;
+        pos += length;
+      } else if (wireType == 1) {
+        if (pos + 8 > bytes.length) return null;
+        pos += 8;
+      } else if (wireType == 5) {
+        if (pos + 4 > bytes.length) return null;
+        pos += 4;
+      } else {
+        return null;
+      }
+    }
+
+    return (requestId, hasError);
+  }
+
+  _ParsedDeviceInfo _parseDeviceInfoSubmessage(List<int> bytes) {
+    if (bytes.isEmpty) {
+      return const _ParsedDeviceInfo.malformed();
+    }
+
+    var pos = 0;
+    String? firmwareRevision;
+    String? hardwareRevision;
+    String? modelNumber;
+    String? manufacturerName;
+    int? protocolVersion;
+    int? nestedRequestId;
+    var hasError = false;
+
+    while (pos < bytes.length) {
+      final tagDecoded = _decodeSafeVarint(bytes, pos);
+      if (tagDecoded == null) {
+        return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+      }
+      final tag = tagDecoded.$1;
+      pos = tagDecoded.$2;
+      final fieldNum = tag >> 3;
+      final wireType = tag & 0x07;
+      if (fieldNum <= 0) {
+        return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+      }
+
+      if (wireType == 0) {
+        final valDecoded = _decodeSafeVarint(bytes, pos);
+        if (valDecoded == null) {
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+        }
+        final value = valDecoded.$1;
+        pos = valDecoded.$2;
+        if (fieldNum == 1 && nestedRequestId == null && value > 0) {
+          nestedRequestId = value;
+        } else if (fieldNum == 5 && value > 0 && value <= 1000) {
+          protocolVersion = value;
+        } else if ((fieldNum == 14 || fieldNum == 15) && value != 0) {
+          hasError = true;
+        }
+      } else if (wireType == 2) {
+        final lenDecoded = _decodeSafeVarint(bytes, pos);
+        if (lenDecoded == null) {
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+        }
+        final length = lenDecoded.$1;
+        pos = lenDecoded.$2;
+        if (length < 0 || pos + length > bytes.length) {
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+        }
+        final fieldBytes = bytes.sublist(pos, pos + length);
+        pos += length;
+
+        if (fieldNum == _requestDataMessageNumber) {
+          final req = _parseRequestDataSubmessage(fieldBytes);
+          if (req == null) {
+            return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+          }
+          nestedRequestId = req.$1 ?? nestedRequestId;
+          if (req.$2) hasError = true;
+        } else if (fieldNum >= 1 && fieldNum <= 4) {
+          final sanitized = _sanitizeAllowlistedString(fieldBytes, fieldNum: fieldNum);
+          if (sanitized.$2) {
+            return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+          }
+          final value = sanitized.$1;
+          if (fieldNum == 1) firmwareRevision = value;
+          if (fieldNum == 2) hardwareRevision = value;
+          if (fieldNum == 3) modelNumber = value;
+          if (fieldNum == 4) manufacturerName = value;
+        }
+        // Non-allowlisted fields (e.g. serialNumber, keys, raw blobs at field >= 5)
+        // are intentionally dropped without exporting or logging their contents.
+      } else if (wireType == 1) {
+        if (pos + 8 > bytes.length) {
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+        }
+        pos += 8;
+      } else if (wireType == 5) {
+        if (pos + 4 > bytes.length) {
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+        }
+        pos += 4;
+      } else {
+        return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
+      }
+    }
+
+    final resolvedManufacturer = manufacturerName ?? LimitlessCompatibilityMetadata.placeholderManufacturerName;
+    final metadata = LimitlessCompatibilityMetadata(
+      modelNumber: modelNumber ?? LimitlessCompatibilityMetadata.placeholderModelNumber,
+      firmwareRevision: firmwareRevision,
+      hardwareRevision: hardwareRevision,
+      manufacturerName: resolvedManufacturer,
+      protocolVersion: protocolVersion,
+      isPlaceholder: false,
+    );
+
+    return _ParsedDeviceInfo(
+      metadata: metadata,
+      requestId: nestedRequestId,
+      hasError: hasError,
+      malformed: false,
+    );
+  }
+
+  (String?, bool) _sanitizeAllowlistedString(List<int> bytes, {required int fieldNum}) {
+    if (bytes.length > _maxMetadataFieldBytes) {
+      return (null, true);
+    }
+    String decoded;
+    try {
+      decoded = utf8.decode(bytes, allowMalformed: false);
+    } on FormatException {
+      return (null, true);
+    }
+    for (final codeUnit in decoded.codeUnits) {
+      if (codeUnit < 0x20 || codeUnit == 0x7f) {
+        return (null, true);
+      }
+    }
+    final trimmed = decoded.trim();
+    if (trimmed.isEmpty) return (null, false);
+
+    if (_placeholderTokens.contains(trimmed.toLowerCase())) {
+      return (null, false);
+    }
+    const placeholderFw = LimitlessCompatibilityMetadata.placeholderFirmwareRevision;
+    if (fieldNum == 1 && (trimmed == placeholderFw || trimmed == '0.0.0')) {
+      return (null, false);
+    }
+    return (trimmed, false);
+  }
+
+  (int, int)? _decodeSafeVarint(List<int> data, int startPos) {
+    var result = 0;
+    var shift = 0;
+    var pos = startPos;
+    while (pos < data.length) {
+      final byte = data[pos];
+      pos++;
+      result |= (byte & 0x7f) << shift;
+      if ((byte & 0x80) == 0) return (result, pos);
+      shift += 7;
+      if (shift > 63) return null;
+    }
+    return null;
   }
 
   List<int> _encodeUnpairBluetooth({bool doNotReset = true}) {
