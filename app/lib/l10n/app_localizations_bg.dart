@@ -14465,6 +14465,25 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Текущите бележки не се обновяват. Засега вижте транскрипцията.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Записване · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Предишен епизод';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Чакащи фрагменти: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Отворете предишния епизод';
+
+  @override
   String get episodeNotesSoon => 'Бележките се появяват след първите минути разговор.';
 
   @override

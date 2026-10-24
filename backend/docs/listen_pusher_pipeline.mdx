@@ -6,6 +6,20 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Production listen uses the chart's `prod-omi-backend-listen` Kubernetes service
+account with Workload Identity as
+`backend-listen-runtime@based-hardware.iam.gserviceaccount.com`. Its values omit
+`SERVICE_ACCOUNT_JSON` and `GOOGLE_APPLICATION_CREDENTIALS`, so a Helm rollout
+preserves ADC instead of restoring a revoked JSON key. Keep
+`workloadIdentityOnly: true` in prod values: Helm rejects either key credential
+name in `env` or protected `privateEnv` overrides before rendering a deployment.
+Dev retains its existing credential behavior. Keep
+`OMI_CUSTOMER_DATA_PROJECT=based-hardware` for Firestore, GCS and Firebase Admin.
+GCS signed URLs use `iam_signing_kwargs` with a cloud-platform-scoped token and
+IAM signing; the runtime GSA needs `iam.serviceAccounts.signBlob` on itself.
+The chart render regression is `tests/unit/test_listen_workload_identity_chart.py`;
+the ADC/signing unit contract is `tests/unit/test_keyless_runtime_identity.py`.
+
 Sync redirect hydration reuses the survivor's raw snapshot and update-time
 within one owner read. A bridge with no donor lineage reuses metadata before
 any external effect; donor reads, transfer, retraction, audio copying and receipt writes retain
@@ -401,7 +415,12 @@ This signal does not change diarization, thresholds, provider choice or labeling
 
 Conversation responses project the internal receipt's `capture_evidence.coverage`
 into optional `capture_coverage` (`mapped` / `incomplete` / `unknown`). Internal
-source-position receipts remain excluded from the wire. Mobile conversation
+source-position receipts remain excluded from the wire. A committed-proof
+`incomplete` whose lifetime is complete with zero conflicts states a ledger
+bound (evicted proof runs, transcript-note overflow), never observed loss —
+observed loss fails the snapshot before an envelope exists — so the projection
+serves `mapped` there and `unknown` for the overflow stub; only observed loss
+serves `incomplete`. Mobile conversation
 detail shows the localized “Partial recording” chip only for `incomplete`; legacy,
 unknown and mapped rows stay quiet. No conversation-list placeholder is added.
 

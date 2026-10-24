@@ -441,6 +441,7 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_OBSERVATION_INTAKE_ENABLED` | Default on; route ordinary captured observations inline and in maintenance independently of Dream | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_RELEASED_PROJECTION` | Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_UNDECIDED_VISIBLE` | Default on; keep undecided and review Short-term memories visible until an explicit disposition | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
+| `NEW_BUYER_SINGLE_PLAN_ENABLED` | Default on; a buyer with no current paid subscription on an explicit non-desktop platform (mobile or web) is offered only Omi Pro (unlimited_v2) in the v1 catalog, a single-tier Omi Pro v2 storefront sheet and checkout | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OCCASION_CONVERSATIONS_ENABLED` | Default on unless set off (0/false/off/no); for the episodes cohort with a capable client, a mobile live conversation stays open across lulls and reconnects for 15 min (3 h span cap), one occasion per conversation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_DEV_ACTION_ITEMS_CACHE_NORMALIZE_ENABLED` | Default on unless false; canonicalize equivalent Developer action-item date query instants in cache keys only | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_DEV_ACTION_ITEMS_FILTERED_LEGACY_PROBE_ENABLED` | Default on unless false; prove owner-wide canonical completion before skipping filtered Developer legacy scans; preserve saturated active-prefix refill | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -838,6 +839,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_RELEASED_WRITERS_COVERED` — Initially absent; v1:<unique-epoch> attests every released-memory writer participates in atomic invalidation (fail: closed)
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
 - `MEMORY_UNDECIDED_VISIBLE` — Default on; keep undecided and review Short-term memories visible until an explicit disposition (fail: open)
+- `NEW_BUYER_SINGLE_PLAN_ENABLED` — Default on; a buyer with no current paid subscription on an explicit non-desktop platform (mobile or web) is offered only Omi Pro (unlimited_v2) in the v1 catalog, a single-tier Omi Pro v2 storefront sheet and checkout (fail: open)
 - `NOTES_PACKET_V2_MODE` — One notes packet, output contract, safe speaker rendering, output language, word floor and recap revisions; default shadow (fail: closed)
 - `NOTES_PACKET_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default 0 (fail: closed)
 - `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` — Serve cohort SHA256 digests; default empty, never raw identifiers (fail: closed)

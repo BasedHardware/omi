@@ -23,7 +23,7 @@ import os
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
-from unittest.mock import patch  # noqa: E402
+from unittest.mock import Mock, patch  # noqa: E402
 
 import pytest  # noqa: E402
 from fastapi import HTTPException  # noqa: E402
@@ -94,6 +94,42 @@ def test_upgrade_endpoint_rejects_non_purchasable_price_id_before_stripe():
         with pytest.raises(HTTPException) as ei:
             payment.upgrade_subscription_endpoint(UpgradeSubscriptionRequest(price_id='price_unknown'), uid='u1')
     assert ei.value.status_code == 400
+
+
+# --- New-buyer single-plan rule (2026-10-24): the checkout endpoint routes the
+#     X-App-Platform header into the single-plan guard, which runs after every
+#     subscriber escape; a non-desktop new buyer posting a legacy price 400s. ---
+
+
+def test_checkout_endpoint_routes_platform_header_into_single_plan_guard():
+    violation = Mock(return_value="Omi Pro is the only plan available for new subscriptions.")
+    with patch.object(payment, 'is_purchasable_price_id', return_value=True), patch.object(
+        payment.subscription_utils, 'can_user_make_payment', Mock(return_value=(True, ''))
+    ), patch.object(payment, '_try_reactivate_subscription', Mock(return_value=None)), patch.object(
+        payment.subscription_utils, 'new_buyer_single_plan_violation', violation
+    ):
+        with pytest.raises(HTTPException) as ei:
+            payment.create_checkout_session_endpoint(
+                CreateCheckoutRequest(price_id='price_x'), uid='u1', x_app_platform='ios'
+            )
+    assert ei.value.status_code == 400
+    assert 'Omi Pro' in ei.value.detail
+    assert violation.call_args.args[2] == 'ios'
+
+
+def test_checkout_endpoint_missing_platform_header_is_not_desktop():
+    violation = Mock(return_value="Omi Pro is the only plan available for new subscriptions.")
+    with patch.object(payment, 'is_purchasable_price_id', return_value=True), patch.object(
+        payment.subscription_utils, 'can_user_make_payment', Mock(return_value=(True, ''))
+    ), patch.object(payment, '_try_reactivate_subscription', Mock(return_value=None)), patch.object(
+        payment.subscription_utils, 'new_buyer_single_plan_violation', violation
+    ):
+        with pytest.raises(HTTPException):
+            payment.create_checkout_session_endpoint(CreateCheckoutRequest(price_id='price_x'), uid='u1')
+    # Direct invocation passes FastAPI's Header default instead of None; either
+    # way the value is not a desktop platform token.
+    raw_platform = violation.call_args.args[2]
+    assert raw_platform is None or getattr(raw_platform, 'default', 'not-a-header') is None
 
 
 # --- Regression: a retained price is rejected as a new checkout/upgrade target but still resolves

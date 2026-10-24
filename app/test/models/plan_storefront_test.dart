@@ -692,7 +692,7 @@ void main() {
         .whereType<File>()
         .where((file) => file.path.endsWith('.json'))
         .map((file) => file.uri.pathSegments.last.replaceFirst('.json', ''));
-    expect(names, hasLength(16));
+    expect(names, hasLength(17));
     for (final name in names) {
       final data = PlanStorefront.fromJson(fixture(name));
       expect(data.tiers.where((tier) => tier.isCurrent), isNotEmpty, reason: name);
