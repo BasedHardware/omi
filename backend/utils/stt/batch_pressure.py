@@ -231,6 +231,22 @@ class BatchPressure:
         self._max_snapshot_age, self._reset_after_failures = max_age, reset_after
         self._configured = True
 
+    def ready_replicas(self) -> tuple[str, ...]:
+        """Fresh, DNS-ready identities for live-window direct pod routing."""
+        fresh = self._fresh(time.monotonic())
+        return tuple(ip for ip in self.discovered_replicas() if ip in fresh)
+
+    def discovered_replicas(self) -> tuple[str, ...]:
+        """Fresh DNS membership, independent of individual pressure samples."""
+        now = time.monotonic()
+        if (
+            not getattr(self, '_discovery_available', True)
+            or self._observed_at <= 0
+            or now - self._observed_at > self.STALE_SECONDS
+        ):
+            return ()
+        return self._ready
+
     async def _fetch(self, ip: str, client: httpx.AsyncClient) -> ReplicaPressure:
         response = await asyncio.wait_for(
             client.get(

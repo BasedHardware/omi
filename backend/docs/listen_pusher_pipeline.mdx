@@ -144,6 +144,32 @@ No switch or deployment binding is activated.
 
 ## Windowed live transcription deadlines
 
+Live windows use default-on per-GPU replica recovery when the configured internal
+HTTP family endpoint has fresh DNS and pressure samples. Each listener keeps a
+bounded replica quarantine: a failed POST opens only that GPU for 120 seconds,
+then 240/300 seconds after failed single half-open probes. Missing or stale
+pressure samples cannot erase a DNS-ready GPU's quarantine. Real outages still
+fall through to the existing vendor recovery path after bounded attempts.
+
+An error or empty answer gets at most one retry on a distinct eligible GPU,
+inside the original POST and first-text deadlines. Empty retries are bounded to
+one per empty episode and preserve PCM, replay anchors and emission order;
+silence is not outage evidence. The first attempt reserves retry time only when
+another GPU is eligible. Pre-POST semaphore expiry, local pool pressure and
+signalled GPU queue pressure do not quarantine or retry. Auth, quota, rate and
+bad-input rejections retain their existing hard refusal behavior.
+
+An already scoped socket may use one initial service-VIP POST during the
+admission owner's bounded pressure grace, only before any direct attempt and
+while its family circuit remains closed. It cannot use the VIP on later windows
+to bypass known quarantines. `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED=false`
+restores service-VIP/no-retry/family-breaker behavior for new sockets; existing
+sockets retain their original mode. Attempt outcomes, including owned-deadline
+timeouts and external cancellations after POST start, are visible in
+`omi_stt_window_replica_attempts_total{outcome}` without IP metric labels.
+The [window operations contract](operational/windowed-live-stt.md) owns recovery
+telemetry and rollout acceptance. No Modulate credentials or quota are changed.
+
 Parakeet packing is independently gated by `PARAKEET_PACKING_ENABLED=false`
 on the GPU service. When enabled, `/v1` and `/v2` historical uploads enter the
 same scheduler as live windows, one at-most-120-second GPU quantum at a time.
