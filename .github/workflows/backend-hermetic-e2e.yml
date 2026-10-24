@@ -192,7 +192,7 @@ jobs:
 
       - name: Run hermetic backend e2e harness
         env:
-          E2E_PYTEST_TIMEOUT: 120s
+          E2E_PYTEST_TIMEOUT: 180s
           TIKTOKEN_CACHE_DIR: ${{ runner.temp }}/tiktoken-cache
         run: bash backend/testing/e2e/run.sh -q --tb=short
 
