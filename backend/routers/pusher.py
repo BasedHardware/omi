@@ -242,6 +242,34 @@ async def _websocket_util_trigger(
     # existing per-conversation playback index, independent of this process.
     durable_queue: asyncio.Queue[AudioReceipt] = asyncio.Queue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     custody_root = uuid.uuid4().hex
+    custody_sequence = 0
+
+    async def archive_private_audio(audio_data: bytes, timestamp: float, conversation_id: Optional[str]) -> None:
+        nonlocal custody_sequence
+        if not (durable_audio and private_cloud_sync_enabled and audio_data):
+            return
+        # Before overlap trimming or lossy derivatives. An audio ACK requires
+        # both remote objects; a failed commit leaves the producer unacknowledged.
+        receipt = await run_blocking(
+            storage_executor,
+            commit_pcm,
+            uid,
+            bytes(audio_data),
+            conversation_id,
+            timestamp,
+            sample_rate,
+            custody_root,
+            custody_sequence,
+            data_protection_level=cached_protection_level,
+        )
+        custody_sequence += 1
+        if audio_custody == 1:
+            await websocket.send_bytes(audio_custody_ack_frame(receipt.to_dict()))
+        if conversation_id:
+            if durable_queue.full():
+                BACKPRESSURE.labels(stage='pusher_queue').inc()
+                WOULD_DROP.labels(stage='pusher_queue').inc()
+            await durable_queue.put(receipt)
 
     async def process_durable_private_cloud_queue() -> None:
         # Pending conversations hold only receipts. Hydrate at most one bounded
@@ -786,7 +814,6 @@ async def _websocket_util_trigger(
         private_cloud_sync_buffer = bytearray()
         private_cloud_chunk_start_time: Optional[float] = None
         current_conversation_id: Optional[str] = None
-        custody_sequence = 0
         # Audio-timeline v2 continuity for this socket: the projected end of
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
@@ -1052,31 +1079,7 @@ async def _websocket_util_trigger(
                     buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                     audio_data = data[12:]
 
-                    if durable_audio and private_cloud_sync_enabled and audio_data:
-                        # Do this BEFORE trimming duplicate/overlapping runs or
-                        # touching any lossy derivative (apps, webhooks, PCM
-                        # projection). A failed commit leaves this frame
-                        # unacknowledged; receive stops and listen retains it.
-                        receipt = await run_blocking(
-                            storage_executor,
-                            commit_pcm,
-                            uid,
-                            bytes(audio_data),
-                            current_conversation_id,
-                            buffer_start_timestamp,
-                            sample_rate,
-                            custody_root,
-                            custody_sequence,
-                            data_protection_level=cached_protection_level,
-                        )
-                        custody_sequence += 1
-                        if audio_custody == 1:
-                            await websocket.send_bytes(audio_custody_ack_frame(receipt.to_dict()))
-                        if current_conversation_id:
-                            if durable_queue.full():
-                                BACKPRESSURE.labels(stage='pusher_queue').inc()
-                                WOULD_DROP.labels(stage='pusher_queue').inc()
-                            await durable_queue.put(receipt)
+                    await archive_private_audio(audio_data, buffer_start_timestamp, current_conversation_id)
 
                     if audio_timeline_v2:
                         # v2: the timestamp is the projected start of this

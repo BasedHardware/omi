@@ -56,7 +56,7 @@ def commit_capture(
         metadata = {**metadata, 'custody_schema': 'audio_custody_v1'}
         protection = data_protection_level or storage.users_db.get_data_protection_level(uid)
         path = storage.archive_capture_bytes(uid, raw, 'raw-live', name, metadata, data_protection_level=protection)
-        bucket = storage._get_storage_client().bucket(storage.private_cloud_sync_bucket)
+        bucket = storage.get_private_cloud_sync_bucket()
         blob = bucket.blob(path)
         generation = _generation(blob)
         digest = hashlib.sha256(raw).hexdigest()
@@ -112,7 +112,7 @@ def commit_capture(
 
 def read_pcm(uid: str, receipt: AudioReceipt) -> bytes:
     """Hydrate only the pinned generation and verify actual decoded PCM bytes."""
-    bucket = storage._get_storage_client().bucket(storage.private_cloud_sync_bucket)
+    bucket = storage.get_private_cloud_sync_bucket()
     if receipt.bucket != bucket.name or not receipt.path.startswith(f'raw-live/{uid}/'):
         raise ValueError('audio receipt owner mismatch')
     if not receipt.manifest_path.startswith(f'audio-outbox/{uid}/'):

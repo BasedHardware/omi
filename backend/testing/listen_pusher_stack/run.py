@@ -541,9 +541,9 @@ class Stack:
         return body
 
     def seed_user(self, uid: str) -> None:
-        # Private cloud is enabled solely to exercise 103 + 101.  The pusher
-        # process receives the real frames, but storage leaves are not invoked
-        # by this harness because it intentionally has no cloud credentials.
+        # Consented capture exercises the real 103 + 101 and durable archive
+        # paths against the owned local storage adapter. Derived projection
+        # leaves remain instrumented; no cloud credentials are available.
         self.firestore.collection('users').document(uid).set(
             {
                 'id': uid,

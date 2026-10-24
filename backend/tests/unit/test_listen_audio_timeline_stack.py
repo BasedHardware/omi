@@ -72,13 +72,6 @@ CONV2 = 'conv-at-2'
 T0 = 1_700_000_000.0
 
 
-@pytest.fixture(autouse=True)
-def emergency_timeline_baseline(monkeypatch):
-    # This suite compares the historical timeline placement algorithms.
-    # Custody's default-on fault matrix lives in test_audio_durable_outbox.py.
-    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
-
-
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
@@ -340,6 +333,8 @@ def gcs(monkeypatch):
 
 @pytest.fixture
 def pusher_env(monkeypatch):
+    # Shared by the historical mixed-version/reconnect probes as well.
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     audio_files_by_conversation = {}
 
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
@@ -366,6 +361,9 @@ class _Stack:
     """One hermetic listen session wired to real pusher server tasks."""
 
     def __init__(self, monkeypatch, *, v2: bool, conversation_id: str, spans: bool = False):
+        # This fixture models the historical timeline algorithm. Custody's
+        # default-on fault matrix and real ASGI stack are separate gates.
+        monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
         self.clock = {'wall': T0, 'mono': 0.0}
         self.v2 = v2
         self.spans = spans
