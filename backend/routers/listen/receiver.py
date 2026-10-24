@@ -20,6 +20,7 @@ from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config import audio_timeline as audio_flags
+from config.cloud_live_stt import OFF, STREAM, resolve_cloud_live_stt_mode, suppresses_provider_stream
 from config.translation import resolve_ondemand_config
 from routers.listen.contracts import ConversationCaptureOrigin
 from routers.listen.batch_preview import capture_batch_preview
@@ -160,6 +161,7 @@ from utils.observability.fallback import record_fallback
 from utils.observability.listen_close import note_ws_close
 from utils.observability.listen_loop import FrameTimer
 from utils.observability.transcription import (
+    bounded_client_platform as _bounded_client_platform,
     emit_listen_vad_gate_metrics,
     record_listen_audio_outcome,
     record_listen_realtime_demand,
@@ -172,6 +174,8 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL,
     OMI_AUDIO_TIMELINE_PROVIDER_SOCKETS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
+    OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL,
+    OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL,
     OMI_LISTEN_AUDIO_DECODE_FAILURES_TOTAL,
     audio_timeline_provider_label,
 )
@@ -843,6 +847,26 @@ class ListenReceiver(ReplayFilterMixin):
         )
         pending.note_failure(typed if isinstance(typed, str) else None, continuing=continuing or departing)
 
+    def _record_cloud_live_saved_seconds(self, request: Any, decoded_audio_bytes: int) -> None:
+        """Provider stream seconds this session's policy mode would not have spent. Telemetry only."""
+
+        try:
+            mode = getattr(self, '_cloud_live_mode', None) or STREAM
+            if mode == STREAM:
+                return
+            sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+            if mode == OFF:
+                OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(decoded_audio_bytes / (sample_rate * 2))
+                return
+            # when_watched: hidden seconds (background + foreground-not-visible)
+            # would leave the paid vendor lane for the Parakeet window leg.
+            totals = self.host.state.realtime_demand.totals()
+            OMI_CLOUD_LIVE_STT_SAVED_SECONDS_TOTAL.labels(mode=mode).inc(
+                totals.get('background', 0.0) + totals.get('foreground', 0.0)
+            )
+        except Exception as error:
+            logger.warning('Cloud live mode telemetry failed type=%s', type(error).__name__)
+
     def _emit_realtime_demand(self, request: Any, decoded_audio_bytes: int) -> None:
         """Report who could have watched this session live. Telemetry only; never raises."""
 
@@ -1281,6 +1305,26 @@ class ListenReceiver(ReplayFilterMixin):
 
     async def _initialize_stt(self) -> bool:
         capture_batch_preview(self.host, select_provider=False)
+        mode = resolve_cloud_live_stt_mode()
+        if getattr(self, '_cloud_live_mode', None) is None:
+            self._cloud_live_mode = mode
+            try:
+                OMI_CLOUD_LIVE_STT_MODE_SESSIONS_TOTAL.labels(
+                    mode=mode,
+                    local_preview='true' if getattr(self.host.request, 'local_preview', False) else 'false',
+                    client_platform=_bounded_client_platform(self._telemetry_platform()),
+                ).inc()
+            except Exception:
+                pass  # Session telemetry must never interrupt initialization.
+        self.cloud_live_suppressed = suppresses_provider_stream(
+            mode, use_custom_stt=bool(getattr(self.host, 'use_custom_stt', False))
+        )
+        if self.cloud_live_suppressed:
+            # CLOUD_LIVE_STT_MODE=off: audio is received and persisted through the
+            # ordinary pusher path, but no cloud streaming STT session opens —
+            # neither vendor nor the Parakeet window leg. Mirrors the cap-paused
+            # receive/persist shape; custom (BYOK) STT is never suppressed.
+            return True
         admission = getattr(self, 'cap_admission', None)
         if admission is not None:
             await admission.refresh(force=False)
@@ -1401,6 +1445,8 @@ class ListenReceiver(ReplayFilterMixin):
             return False
 
     async def _switch_live_demand(self, lane: str) -> bool:
+        if getattr(self, 'cloud_live_suppressed', False):
+            return False
         return await switch_live_demand(self, lane)
 
     async def _failover_stt_socket(self) -> bool:
@@ -2669,6 +2715,7 @@ class ListenReceiver(ReplayFilterMixin):
             self._replay_delivery.finish()
         if decoded_audio_bytes:
             self._emit_realtime_demand(request, decoded_audio_bytes)
+            self._record_cloud_live_saved_seconds(request, decoded_audio_bytes)
             sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
             emit_product_event(
                 uid=str(getattr(request, 'uid', '') or ''),

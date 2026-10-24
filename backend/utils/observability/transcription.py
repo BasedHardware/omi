@@ -90,6 +90,12 @@ def _bounded_source(source: str | None) -> str:
         return ConversationSource.unknown.value
 
 
+def bounded_client_platform(platform: str | None) -> str:
+    """Public alias so listen-session counters share the bounded platform labels."""
+
+    return _bounded_platform(platform)
+
+
 def _deployment_version() -> str:
     raw = os.getenv('K_REVISION') or os.getenv('OMI_DEPLOYMENT_VERSION') or 'unknown'
     sanitized = _REVISION_PATTERN.sub('_', raw.strip())[:80]
