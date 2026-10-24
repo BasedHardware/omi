@@ -5783,10 +5783,6 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Z nadaljevanjem bodo vaši pogovori, posnetki in osebni podatki varno shranjeni na naših strežnikih. Vaši zvočni posnetki in prepisi se obdelujejo s storitvami umetne inteligence tretjih oseb (vključno z Deepgram za prepis in OpenAI za analizo), da vam zagotovimo vpoglede, ki jih poganja umetna inteligenca, in omogočimo vse funkcije aplikacije.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
-    },
     "tasksEmptyStateMessage": "Začnite pogovor, da ustvarite nalogo.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
@@ -11851,5 +11847,7 @@
     "recapInTheBackground": "V ozadju",
     "retentionOfferAccept": "Ostani s {percent} % popustom",
     "retentionOfferBody": "Ostanite in plačujte {price} na mesec naslednje {months} mesece.",
-    "retentionOfferApplied": "Končano. {percent} % popusta naslednje {months} mesece."
+    "retentionOfferApplied": "Končano. {percent} % popusta naslednje {months} mesece.",
+    "consentShortMessage": "Omi z umetno inteligenco spremeni vaše pogovore v zapiske. Kadar koli jih lahko izbrišete.",
+    "consentAiProviders": "Obdelano z {providers}."
 }

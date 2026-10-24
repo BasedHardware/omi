@@ -4917,10 +4917,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Дополнительный образец голоса удален';
 
   @override
-  String get consentDataMessage =>
-      'Продолжая, ваши разговоры, записи и личная информация будут надежно храниться на наших серверах. Ваши аудиозаписи и транскрипции обрабатываются сторонними AI-сервисами (включая Deepgram для транскрипции и OpenAI для анализа), чтобы предоставить вам аналитику на основе ИИ и обеспечить работу всех функций приложения.';
-
-  @override
   String get tasksEmptyStateMessage => 'Начните разговор, чтобы создать задачу.';
 
   @override
@@ -14604,5 +14600,14 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. Скидка $percent% на следующие $months месяца.';
+  }
+
+  @override
+  String get consentShortMessage =>
+      'Omi с помощью ИИ превращает ваши разговоры в заметки. Их можно удалить в любой момент.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Обработка: $providers.';
   }
 }

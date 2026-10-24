@@ -5783,10 +5783,6 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Настављањем, ваши разговори, снимци и лични подаци биће безбедно ускладиштени на нашим серверима. Ваши аудио снимци и транскрипти се обрађују од стране AI сервиса трећих страна (укључујући Deepgram за транскрипцију и OpenAI за анализу) како би вам пружили увиде засноване на вештачкој интелигенцији и омогућили све функције апликације.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
-    },
     "tasksEmptyStateMessage": "Започните разговор да бисте направили задатак.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
@@ -11851,5 +11847,7 @@
     "recapInTheBackground": "У позадини",
     "retentionOfferAccept": "Остани уз {percent}% попуста",
     "retentionOfferBody": "Остани и плаћај {price} месечно наредних {months} месеца.",
-    "retentionOfferApplied": "Готово. {percent}% попуста наредних {months} месеца."
+    "retentionOfferApplied": "Готово. {percent}% попуста наредних {months} месеца.",
+    "consentShortMessage": "Omi користи AI да ваше разговоре претвори у белешке. Можете их обрисати у било ком тренутку.",
+    "consentAiProviders": "Обрађује се помоћу {providers}."
 }

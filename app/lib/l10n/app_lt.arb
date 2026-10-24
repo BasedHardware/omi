@@ -462,7 +462,6 @@
     "connectionLostDesc": "Ryšys buvo nutrauktas. Patikrinkite interneto ryšį ir bandykite dar kartą.",
     "connectionLostDescription": "Ryšys nutrūko. Patikrinkite savo interneto ryšį ir bandykite dar kartą.",
     "connectionNeeded": "🌐 Reikalingas ryšys",
-    "consentDataMessage": "Tęsdami, jūsų pokalbiai, įrašai ir asmeninė informacija bus saugiai saugomi mūsų serveriuose. Jūsų garso įrašai ir transkripcijos apdorojami trečiųjų šalių AI paslaugų (įskaitant Deepgram transkripcijai ir OpenAI analizei), kad suteiktų jums AI paremtas įžvalgas ir įgalintų visas programėlės funkcijas.",
     "considerOmiCloud": "Apsvarstykite Omi Cloud naudojimą geresniam veikimui.",
     "contactSupport": "Susisiekti su palaikymu?",
     "contactsPermissionRequired": "Reikalingas kontaktų leidimas",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "Fone",
     "retentionOfferAccept": "Likti su {percent}% nuolaida",
     "retentionOfferBody": "Likite ir mokėkite {price} per mėnesį ateinančius {months} mėnesius.",
-    "retentionOfferApplied": "Atlikta. {percent}% nuolaida ateinančius {months} mėnesius."
+    "retentionOfferApplied": "Atlikta. {percent}% nuolaida ateinančius {months} mėnesius.",
+    "consentShortMessage": "Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.",
+    "consentAiProviders": "Apdorojama su {providers}."
 }

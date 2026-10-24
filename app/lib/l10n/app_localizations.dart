@@ -9315,12 +9315,6 @@ abstract class AppLocalizations {
   /// **'Additional Speech Sample Removed'**
   String get additionalSpeechSampleRemoved;
 
-  /// Consent message explaining how user data will be stored and used
-  ///
-  /// In en, this message translates to:
-  /// **'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.'**
-  String get consentDataMessage;
-
   /// Guidance on the empty Tasks tab: start a conversation to create a task.
   ///
   /// In en, this message translates to:
@@ -25742,6 +25736,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Done. {percent}% off your next {months} months.'**
   String retentionOfferApplied(int percent, int months);
+
+  /// Onboarding data & privacy consent: one-line summary of storage and AI processing
+  ///
+  /// In en, this message translates to:
+  /// **'Omi uses AI to turn your conversations into notes. You can delete them anytime.'**
+  String get consentShortMessage;
+
+  /// Onboarding consent: names the third-party AI providers (brand names, not translated)
+  ///
+  /// In en, this message translates to:
+  /// **'Processed with {providers}.'**
+  String consentAiProviders(String providers);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

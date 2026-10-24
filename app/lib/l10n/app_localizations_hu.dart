@@ -4931,10 +4931,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'További hangminta eltávolítva';
 
   @override
-  String get consentDataMessage =>
-      'A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.';
-
-  @override
   String get tasksEmptyStateMessage => 'Feladat létrehozásához kezdj beszélgetést.';
 
   @override
@@ -14613,5 +14609,14 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'Kész. $percent% kedvezmény a következő $months hónapban.';
+  }
+
+  @override
+  String get consentShortMessage =>
+      'Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Feldolgozás: $providers.';
   }
 }

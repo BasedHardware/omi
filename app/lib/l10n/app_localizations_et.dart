@@ -4901,10 +4901,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Lisakõnenäidis eemaldatud';
 
   @override
-  String get consentDataMessage =>
-      'Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.';
-
-  @override
   String get tasksEmptyStateMessage => 'Ülesande loomiseks alusta vestlust.';
 
   @override
@@ -14548,5 +14544,14 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'Valmis. $percent% allahindlust järgmised $months kuud.';
+  }
+
+  @override
+  String get consentShortMessage =>
+      'Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Töödeldakse teenustega $providers.';
   }
 }

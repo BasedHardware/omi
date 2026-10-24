@@ -4913,10 +4913,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'اضافی صوتی نمونہ ہٹایا گیا';
 
   @override
-  String get consentDataMessage =>
-      'جاری رکھ کر، آپ کی بات چیت، ریکارڈنگز اور ذاتی معلومات ہمارے سرورز پر محفوظ طریقے سے ذخیرہ کی جائیں گی۔ آپ کی آڈیو ریکارڈنگز اور ٹرانسکرپٹس تھرڈ پارٹی AI سروسز کے ذریعے پراسیس کی جاتی ہیں (بشمول ٹرانسکرپشن کے لیے Deepgram اور تجزیے کے لیے OpenAI) تاکہ آپ کو AI سے چلنے والی بصیرتیں فراہم کی جا سکیں اور ایپ کی تمام خصوصیات کو فعال کیا جا سکے۔';
-
-  @override
   String get tasksEmptyStateMessage => 'ٹاسک بنانے کے لیے گفتگو شروع کریں۔';
 
   @override
@@ -14568,5 +14564,14 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'ہو گیا۔ $percent% رعایت، اگلے $months مہینے۔';
+  }
+
+  @override
+  String get consentShortMessage =>
+      'Omi AI کی مدد سے آپ کی گفتگو کو نوٹس میں بدلتا ہے۔ آپ انہیں کسی بھی وقت حذف کر سکتے ہیں۔';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers کے ذریعے پروسیس کیا جاتا ہے۔';
   }
 }

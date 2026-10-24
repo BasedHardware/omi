@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "Mostra addicional {index}",
     "durationSeconds": "Durada: {seconds} segons",
     "additionalSpeechSampleRemoved": "S'ha eliminat la mostra de veu addicional",
-    "consentDataMessage": "Continuant, les vostres converses, enregistraments i informació personal s'emmagatzemaran de manera segura als nostres servidors. Els vostres enregistraments d'àudio i transcripcions són processats per serveis d'IA de tercers (incloent Deepgram per a la transcripció i OpenAI per a l'anàlisi) per proporcionar-vos informació impulsada per IA i habilitar totes les funcions de l'aplicació.",
     "tasksEmptyStateMessage": "Inicia una conversa per crear una tasca.",
     "clearChatAction": "Esborrar el xat",
     "enableApps": "Activar aplicacions",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "En segon pla",
     "retentionOfferAccept": "Queda't amb un {percent}% de descompte",
     "retentionOfferBody": "Queda't i paga {price} al mes durant els propers {months} mesos.",
-    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos."
+    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos.",
+    "consentShortMessage": "Omi fa servir la IA per convertir les teves converses en notes. Les pots esborrar quan vulguis.",
+    "consentAiProviders": "Processat amb {providers}."
 }

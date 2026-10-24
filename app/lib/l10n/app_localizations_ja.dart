@@ -4824,10 +4824,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get additionalSpeechSampleRemoved => '追加の音声サンプルを削除しました';
 
   @override
-  String get consentDataMessage =>
-      '続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。';
-
-  @override
   String get tasksEmptyStateMessage => '会話を始めてタスクを作成しましょう。';
 
   @override
@@ -14350,5 +14346,13 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return '完了しました。$percent%オフが$monthsか月続きます。';
+  }
+
+  @override
+  String get consentShortMessage => 'OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers で処理されます。';
   }
 }

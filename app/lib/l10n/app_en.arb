@@ -5863,10 +5863,6 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
-    },
     "tasksEmptyStateMessage": "Start a conversation to create a task.",
     "@tasksEmptyStateMessage": {
         "description": "Guidance on the empty Tasks tab: start a conversation to create a task."
@@ -17788,6 +17784,20 @@
             },
             "months": {
                 "type": "int"
+            }
+        }
+    },
+    "consentShortMessage": "Omi uses AI to turn your conversations into notes. You can delete them anytime.",
+    "@consentShortMessage": {
+        "description": "Onboarding data & privacy consent: one-line summary of storage and AI processing"
+    },
+    "consentAiProviders": "Processed with {providers}.",
+    "@consentAiProviders": {
+        "description": "Onboarding consent: names the third-party AI providers (brand names, not translated)",
+        "placeholders": {
+            "providers": {
+                "type": "String",
+                "example": "Deepgram, OpenAI"
             }
         }
     }

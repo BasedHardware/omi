@@ -5783,10 +5783,6 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "Працягваючы, вашы размовы, запісы і асабістая інфармацыя будуць надзейна захоўвацца на нашых серверах. Вашы аўдыязапісы і транскрыпцыі апрацоўваюцца староннімі сэрвісамі ШІ (уключаючы Deepgram для транскрыпцыі і OpenAI для аналізу), каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі праграмы.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
-    },
     "tasksEmptyStateMessage": "Пачніце размову, каб стварыць задачу.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
@@ -11851,5 +11847,7 @@
     "recapInTheBackground": "У фоне",
     "retentionOfferAccept": "Застацца са зніжкай {percent}%",
     "retentionOfferBody": "Застаньцеся і плаціце {price} у месяц на працягу {months} месяцаў.",
-    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы."
+    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы.",
+    "consentShortMessage": "Omi з дапамогай ШІ ператварае вашы размовы ў нататкі. Іх можна выдаліць у любы момант.",
+    "consentAiProviders": "Апрацоўка: {providers}."
 }

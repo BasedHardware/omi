@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "ตัวอย่างเพิ่มเติม {index}",
     "durationSeconds": "ระยะเวลา: {seconds} วินาที",
     "additionalSpeechSampleRemoved": "ลบตัวอย่างเสียงเพิ่มเติมแล้ว",
-    "consentDataMessage": "เมื่อดำเนินการต่อ การสนทนา การบันทึก และข้อมูลส่วนบุคคลของคุณจะถูกจัดเก็บอย่างปลอดภัยบนเซิร์ฟเวอร์ของเรา การบันทึกเสียงและการถอดความของคุณจะถูกประมวลผลโดยบริการ AI ของบุคคลที่สาม (รวมถึง Deepgram สำหรับการถอดความ และ OpenAI สำหรับการวิเคราะห์) เพื่อมอบข้อมูลเชิงลึกที่ขับเคลื่อนด้วย AI และเปิดใช้งานคุณสมบัติทั้งหมดของแอป",
     "tasksEmptyStateMessage": "เริ่มการสนทนาเพื่อสร้างงาน",
     "clearChatAction": "ล้างแชท",
     "enableApps": "เปิดใช้งานแอป",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "ในเบื้องหลัง",
     "retentionOfferAccept": "อยู่ต่อพร้อมส่วนลด {percent}%",
     "retentionOfferBody": "อยู่ต่อและจ่ายเดือนละ {price} ใน {months} เดือนถัดไป",
-    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป"
+    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป",
+    "consentShortMessage": "Omi ใช้ AI เปลี่ยนบทสนทนาของคุณเป็นโน้ต คุณลบได้ทุกเมื่อ",
+    "consentAiProviders": "ประมวลผลด้วย {providers}"
 }

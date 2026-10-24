@@ -212,6 +212,7 @@ flutter:
     - assets/models/silero_vad.onnx
     - assets/images/stars.png
     - assets/images/herologo.png
+    - assets/videos/onboarding_launch_loop.mp4
     - assets/images/
     - assets/test/tts_progressive_probe.mp3
     - assets/integration_app_logos/

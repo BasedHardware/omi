@@ -4820,10 +4820,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get additionalSpeechSampleRemoved => '已删除附加语音样本';
 
   @override
-  String get consentDataMessage =>
-      '继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。';
-
-  @override
   String get tasksEmptyStateMessage => '开始对话以创建任务。';
 
   @override
@@ -14330,5 +14326,13 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return '完成。$percent% 折扣，持续 $months 个月。';
+  }
+
+  @override
+  String get consentShortMessage => 'Omi 用 AI 把你的对话整理成笔记。你可以随时删除。';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '由 $providers 处理。';
   }
 }

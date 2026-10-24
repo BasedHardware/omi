@@ -4914,10 +4914,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Đã xóa mẫu giọng nói bổ sung';
 
   @override
-  String get consentDataMessage =>
-      'Bằng cách tiếp tục, các cuộc trò chuyện, bản ghi âm và thông tin cá nhân của bạn sẽ được lưu trữ an toàn trên máy chủ của chúng tôi. Bản ghi âm và bản phiên âm của bạn được xử lý bởi các dịch vụ AI bên thứ ba (bao gồm Deepgram cho phiên âm và OpenAI cho phân tích) để cung cấp cho bạn thông tin chi tiết được hỗ trợ bởi AI và kích hoạt tất cả các tính năng ứng dụng.';
-
-  @override
   String get tasksEmptyStateMessage => 'Bắt đầu cuộc trò chuyện để tạo nhiệm vụ.';
 
   @override
@@ -14556,5 +14552,14 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'Xong. Giảm $percent% trong $months tháng tới.';
+  }
+
+  @override
+  String get consentShortMessage =>
+      'Omi dùng AI để biến các cuộc trò chuyện của bạn thành ghi chú. Bạn có thể xóa chúng bất cứ lúc nào.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Được xử lý bằng $providers.';
   }
 }

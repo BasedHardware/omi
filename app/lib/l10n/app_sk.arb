@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "Ďalšia vzorka {index}",
     "durationSeconds": "Trvanie: {seconds} sekúnd",
     "additionalSpeechSampleRemoved": "Ďalšia hlasová vzorka odstránená",
-    "consentDataMessage": "Pokračovaním budú vaše konverzácie, nahrávky a osobné údaje bezpečne uložené na našich serveroch. Vaše audio nahrávky a prepisy sú spracovávané AI službami tretích strán (vrátane Deepgram na prepis a OpenAI na analýzu), aby vám poskytli poznatky založené na AI a umožnili všetky funkcie aplikácie.",
     "tasksEmptyStateMessage": "Začnite konverzáciu a vytvorte úlohu.",
     "clearChatAction": "Vymazať chat",
     "enableApps": "Povoliť aplikácie",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "V pozadí",
     "retentionOfferAccept": "Zostať so zľavou {percent} %",
     "retentionOfferBody": "Zostaňte a plaťte {price} mesačne počas ďalších {months} mesiacov.",
-    "retentionOfferApplied": "Hotovo. Zľava {percent} % na ďalšie {months} mesiace."
+    "retentionOfferApplied": "Hotovo. Zľava {percent} % na ďalšie {months} mesiace.",
+    "consentShortMessage": "Omi pomocou AI mení vaše konverzácie na poznámky. Kedykoľvek ich môžete vymazať.",
+    "consentAiProviders": "Spracúva {providers}."
 }

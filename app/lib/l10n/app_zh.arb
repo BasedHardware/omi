@@ -1508,7 +1508,6 @@
     "additionalSampleIndex": "附加样本 {index}",
     "durationSeconds": "时长: {seconds} 秒",
     "additionalSpeechSampleRemoved": "已删除附加语音样本",
-    "consentDataMessage": "继续即表示您的对话、录音和个人信息将安全存储在我们的服务器上。您的音频录音和转录由第三方AI服务处理（包括用于转录的Deepgram和用于分析的OpenAI），以为您提供AI驱动的洞察并启用所有应用功能。",
     "tasksEmptyStateMessage": "开始对话以创建任务。",
     "clearChatAction": "清除聊天",
     "enableApps": "启用应用",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "背景中",
     "retentionOfferAccept": "享受 {percent}% 折扣继续使用",
     "retentionOfferBody": "继续使用，每月只需 {price}，持续 {months} 个月。",
-    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。"
+    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。",
+    "consentShortMessage": "Omi 用 AI 把你的对话整理成笔记。你可以随时删除。",
+    "consentAiProviders": "由 {providers} 处理。"
 }

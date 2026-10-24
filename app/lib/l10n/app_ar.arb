@@ -1516,7 +1516,6 @@
     "additionalSampleIndex": "عينة إضافية {index}",
     "durationSeconds": "المدة: {seconds} ثانية",
     "additionalSpeechSampleRemoved": "تمت إزالة عينة الكلام الإضافية",
-    "consentDataMessage": "بالمتابعة، سيتم تخزين محادثاتك وتسجيلاتك ومعلوماتك الشخصية بشكل آمن على خوادمنا. تتم معالجة تسجيلاتك الصوتية ونصوصك بواسطة خدمات ذكاء اصطناعي تابعة لجهات خارجية (بما في ذلك Deepgram للنسخ و OpenAI للتحليل) لتزويدك برؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق.",
     "tasksEmptyStateMessage": "ابدأ محادثة لإنشاء مهمة.",
     "clearChatAction": "مسح المحادثة",
     "enableApps": "تفعيل التطبيقات",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "في الخلفية",
     "retentionOfferAccept": "ابقَ بخصم {percent}%",
     "retentionOfferBody": "ابقَ وادفع {price} شهريًا لمدة {months} أشهر قادمة.",
-    "retentionOfferApplied": "تم. خصم {percent}% لمدة {months} أشهر قادمة."
+    "retentionOfferApplied": "تم. خصم {percent}% لمدة {months} أشهر قادمة.",
+    "consentShortMessage": "يستخدم Omi الذكاء الاصطناعي لتحويل محادثاتك إلى ملاحظات. يمكنك حذفها في أي وقت.",
+    "consentAiProviders": "تتم المعالجة بواسطة {providers}."
 }

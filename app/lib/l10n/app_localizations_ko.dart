@@ -4825,10 +4825,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get additionalSpeechSampleRemoved => '추가 음성 샘플이 삭제되었습니다';
 
   @override
-  String get consentDataMessage =>
-      '계속하면 대화, 녹음 및 개인 정보가 서버에 안전하게 저장됩니다. 오디오 녹음 및 텍스트 변환은 제3자 AI 서비스(전사를 위한 Deepgram 및 분석을 위한 OpenAI 포함)에 의해 처리되어 AI 기반 인사이트를 제공하고 모든 앱 기능을 활성화합니다.';
-
-  @override
   String get tasksEmptyStateMessage => '대화를 시작하여 할 일을 만드세요.';
 
   @override
@@ -14356,5 +14352,13 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return '완료되었습니다. $percent% 할인이 $months개월 동안 적용됩니다.';
+  }
+
+  @override
+  String get consentShortMessage => 'Omi는 AI로 대화를 메모로 정리합니다. 언제든지 삭제할 수 있습니다.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers(으)로 처리됩니다.';
   }
 }

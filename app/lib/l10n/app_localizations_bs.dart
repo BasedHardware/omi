@@ -4913,10 +4913,6 @@ class AppLocalizationsBs extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Dodatni uzorak govora je uklonjen';
 
   @override
-  String get consentDataMessage =>
-      'Nastavljanjem, vaši razgovori, snimke i lični podaci bit će sigurno pohranjeni na našim serverima. Vaši audio zapisi i transkripti se obrađuju od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane vještačkom inteligencijom i omogućili sve funkcije aplikacije.';
-
-  @override
   String get tasksEmptyStateMessage => 'Započnite razgovor da kreirate zadatak.';
 
   @override
@@ -14584,5 +14580,14 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'Gotovo. $percent% popusta sljedećih $months mjeseca.';
+  }
+
+  @override
+  String get consentShortMessage =>
+      'Omi koristi AI da vaše razgovore pretvori u bilješke. Možete ih izbrisati bilo kada.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Obrađuje se pomoću $providers.';
   }
 }

@@ -5783,10 +5783,6 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "पुढे चालू ठेवल्यास, तुमच्या संभाषणा, रेकॉर्डिंग आणि वैयक्तिक माहिती आमच्या सर्व्हरवर सुरक्षितपणे साठवली जाईल. तुमच्या ऑडिओ रेकॉर्डिंग आणि ट्रान्सक्रिप्ट तृतीय-पक्ष AI सेवांद्वारे प्रक्रिया केली जातात (ट्रान्सक्रिप्शनसाठी Deepgram आणि विश्लेषणासाठी OpenAI सह) तुम्हाला AI-चालित अंतर्दृष्टी प्रदान करण्यासाठी आणि सर्व अॅप वैशिष्ट्ये सक्षम करण्यासाठी.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
-    },
     "tasksEmptyStateMessage": "कार्य तयार करण्यासाठी संभाषण सुरू करा.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
@@ -11851,5 +11847,7 @@
     "recapInTheBackground": "पार्श्वभूमीवर",
     "retentionOfferAccept": "{percent}% सवलतीसह सुरू ठेवा",
     "retentionOfferBody": "सुरू ठेवा आणि दरमहा {price} भरा, पुढील {months} महिने.",
-    "retentionOfferApplied": "झाले. {percent}% सवलत, पुढील {months} महिने."
+    "retentionOfferApplied": "झाले. {percent}% सवलत, पुढील {months} महिने.",
+    "consentShortMessage": "Omi AI वापरून तुमच्या संभाषणांच्या नोट्स बनवते. तुम्ही त्या कधीही हटवू शकता.",
+    "consentAiProviders": "{providers} द्वारे प्रक्रिया केली जाते."
 }

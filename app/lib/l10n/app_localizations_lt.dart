@@ -4905,10 +4905,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Papildomas balso pavyzdys pašalintas';
 
   @override
-  String get consentDataMessage =>
-      'Tęsdami, jūsų pokalbiai, įrašai ir asmeninė informacija bus saugiai saugomi mūsų serveriuose. Jūsų garso įrašai ir transkripcijos apdorojami trečiųjų šalių AI paslaugų (įskaitant Deepgram transkripcijai ir OpenAI analizei), kad suteiktų jums AI paremtas įžvalgas ir įgalintų visas programėlės funkcijas.';
-
-  @override
   String get tasksEmptyStateMessage => 'Pradėkite pokalbį, kad sukurtumėte užduotį.';
 
   @override
@@ -14579,5 +14575,14 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'Atlikta. $percent% nuolaida ateinančius $months mėnesius.';
+  }
+
+  @override
+  String get consentShortMessage =>
+      'Omi naudoja DI, kad jūsų pokalbius paverstų užrašais. Juos galite ištrinti bet kada.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Apdorojama su $providers.';
   }
 }

@@ -4944,10 +4944,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Το πρόσθετο δείγμα ομιλίας αφαιρέθηκε';
 
   @override
-  String get consentDataMessage =>
-      'Συνεχίζοντας, οι συνομιλίες, οι εγγραφές και τα προσωπικά σας στοιχεία θα αποθηκευτούν με ασφάλεια στους διακομιστές μας. Οι ηχογραφήσεις και τα μεταγραφές σας επεξεργάζονται από υπηρεσίες τεχνητής νοημοσύνης τρίτων (συμπεριλαμβανομένων των Deepgram για μεταγραφή και OpenAI για ανάλυση) για να σας παρέχουν γνώσεις βασισμένες σε AI και να ενεργοποιήσουν όλες τις λειτουργίες της εφαρμογής.';
-
-  @override
   String get tasksEmptyStateMessage => 'Ξεκινήστε μια συνομιλία για να δημιουργήσετε μια εργασία.';
 
   @override
@@ -14650,5 +14646,14 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'Έγινε. $percent% έκπτωση για τους επόμενους $months μήνες.';
+  }
+
+  @override
+  String get consentShortMessage =>
+      'Το Omi χρησιμοποιεί AI για να μετατρέπει τις συνομιλίες σου σε σημειώσεις. Μπορείς να τις διαγράψεις οποιαδήποτε στιγμή.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return 'Επεξεργασία μέσω $providers.';
   }
 }

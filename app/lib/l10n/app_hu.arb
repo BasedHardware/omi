@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "További minta {index}",
     "durationSeconds": "Időtartam: {seconds} másodperc",
     "additionalSpeechSampleRemoved": "További hangminta eltávolítva",
-    "consentDataMessage": "A folytatással beszélgetéseit, felvételeit és személyes adatait biztonságosan tároljuk szervereinken. Hangfelvételeit és átiratait harmadik féltől származó AI szolgáltatások dolgozzák fel (beleértve a Deepgramot az átíráshoz és az OpenAI-t az elemzéshez), hogy AI-alapú betekintéseket nyújtsunk Önnek és az alkalmazás összes funkcióját biztosítsuk.",
     "tasksEmptyStateMessage": "Feladat létrehozásához kezdj beszélgetést.",
     "clearChatAction": "Chat törlése",
     "enableApps": "Alkalmazások engedélyezése",
@@ -4521,5 +4520,7 @@
     "recapInTheBackground": "A háttérben",
     "retentionOfferAccept": "Maradj {percent}% kedvezménnyel",
     "retentionOfferBody": "Maradj, és fizess havi {price} összeget a következő {months} hónapban.",
-    "retentionOfferApplied": "Kész. {percent}% kedvezmény a következő {months} hónapban."
+    "retentionOfferApplied": "Kész. {percent}% kedvezmény a következő {months} hónapban.",
+    "consentShortMessage": "Az Omi mesterséges intelligenciával jegyzetekké alakítja a beszélgetéseidet. Bármikor törölheted őket.",
+    "consentAiProviders": "Feldolgozás: {providers}."
 }

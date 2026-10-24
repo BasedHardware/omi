@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "Додатковий зразок {index}",
     "durationSeconds": "Тривалість: {seconds} секунд",
     "additionalSpeechSampleRemoved": "Додатковий зразок голосу видалено",
-    "consentDataMessage": "Продовжуючи, ваші розмови, записи та особиста інформація будуть надійно зберігатися на наших серверах. Ваші аудіозаписи та транскрипції обробляються сторонніми AI-сервісами (включаючи Deepgram для транскрипції та OpenAI для аналізу), щоб надати вам аналітику на основі ШІ та увімкнути всі функції додатку.",
     "tasksEmptyStateMessage": "Почніть розмову, щоб створити завдання.",
     "clearChatAction": "Очистити чат",
     "enableApps": "Увімкнути додатки",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "У фоні",
     "retentionOfferAccept": "Залишитися зі знижкою {percent}%",
     "retentionOfferBody": "Залишайтеся і платіть {price} на місяць наступні {months} місяці.",
-    "retentionOfferApplied": "Готово. Знижка {percent}% на наступні {months} місяці."
+    "retentionOfferApplied": "Готово. Знижка {percent}% на наступні {months} місяці.",
+    "consentShortMessage": "Omi за допомогою ШІ перетворює ваші розмови на нотатки. Їх можна видалити будь-коли.",
+    "consentAiProviders": "Обробка: {providers}."
 }

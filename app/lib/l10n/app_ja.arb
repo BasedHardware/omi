@@ -1506,7 +1506,6 @@
     "additionalSampleIndex": "追加サンプル {index}",
     "durationSeconds": "長さ: {seconds} 秒",
     "additionalSpeechSampleRemoved": "追加の音声サンプルを削除しました",
-    "consentDataMessage": "続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。",
     "tasksEmptyStateMessage": "会話を始めてタスクを作成しましょう。",
     "clearChatAction": "チャットを消去",
     "enableApps": "アプリを有効化",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "バックグラウンド",
     "retentionOfferAccept": "{percent}%オフで続ける",
     "retentionOfferBody": "続ければ月額{price}、次の{months}か月間。",
-    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。"
+    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。",
+    "consentShortMessage": "OmiはAIで会話をメモにまとめます。メモはいつでも削除できます。",
+    "consentAiProviders": "{providers} で処理されます。"
 }

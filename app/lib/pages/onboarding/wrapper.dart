@@ -26,6 +26,7 @@ import 'package:omi/pages/onboarding/variants/pocket/pocket_onboarding_flow.dart
 import 'package:omi/pages/onboarding/variants/yinka/yinka_onboarding_flow.dart';
 import 'package:omi/pages/paywall/trial_upsell_sheet.dart';
 import 'package:omi/pages/onboarding/web_onboarding_page.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_hero_film.dart';
 import 'package:omi/pages/paywall/paywall_router.dart';
 import 'package:omi/services/experiments/onboarding_variant_gate.dart';
 import 'package:omi/services/experiments/paywall_experiment.dart';
@@ -725,7 +726,11 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           backgroundColor: OmiColors.surface0,
           body: Stack(
             children: [
-              if (index == kAuthPage || showBackground) _background(),
+              // Sign-in and consent (before any onboarding arm): the launch film behind white type.
+              if (index == kAuthPage || index == kAiConsentPage)
+                const OnboardingHeroFilm()
+              else if (showBackground)
+                _background(),
               OnboardingStepLayout(
                 reserveHeader: index == kSpeechProfilePage,
                 onBack: previous == null ? null : _goBack,

@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "Lisänäyte {index}",
     "durationSeconds": "Kesto: {seconds} sekuntia",
     "additionalSpeechSampleRemoved": "Lisäpuhenäyte poistettu",
-    "consentDataMessage": "Jatkamalla keskustelusi, tallenteet ja henkilötietosi tallennetaan turvallisesti palvelimillemme. Äänitallenteitasi ja transkriptioitasi käsittelevät kolmannen osapuolen tekoälypalvelut (mukaan lukien Deepgram transkriptiota ja OpenAI analyysiä varten) tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.",
     "tasksEmptyStateMessage": "Aloita keskustelu luodaksesi tehtävän.",
     "clearChatAction": "Tyhjennä keskustelu",
     "enableApps": "Ota sovellukset käyttöön",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "Taustalla",
     "retentionOfferAccept": "Jatka {percent} % alennuksella",
     "retentionOfferBody": "Jatka ja maksa {price} kuukaudessa seuraavat {months} kuukautta.",
-    "retentionOfferApplied": "Valmis. {percent} % alennus seuraavat {months} kuukautta."
+    "retentionOfferApplied": "Valmis. {percent} % alennus seuraavat {months} kuukautta.",
+    "consentShortMessage": "Omi tekee keskusteluistasi muistiinpanoja tekoälyn avulla. Voit poistaa ne milloin tahansa.",
+    "consentAiProviders": "Käsittely: {providers}."
 }

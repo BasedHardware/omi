@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "Допълнителна проба {index}",
     "durationSeconds": "Продължителност: {seconds} секунди",
     "additionalSpeechSampleRemoved": "Допълнителната гласова проба е премахната",
-    "consentDataMessage": "С продължаването вашите разговори, записи и лична информация ще бъдат сигурно съхранени на нашите сървъри. Вашите аудиозаписи и транскрипции се обработват от AI услуги на трети страни (включително Deepgram за транскрипция и OpenAI за анализ), за да ви предоставят прозрения, базирани на AI, и да активират всички функции на приложението.",
     "tasksEmptyStateMessage": "Започнете разговор, за да създадете задача.",
     "clearChatAction": "Изчисти чата",
     "enableApps": "Активиране на приложения",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "На заден план",
     "retentionOfferAccept": "Остани с {percent}% отстъпка",
     "retentionOfferBody": "Остани и плащай {price} на месец за следващите {months} месеца.",
-    "retentionOfferApplied": "Готово. {percent}% отстъпка за следващите {months} месеца."
+    "retentionOfferApplied": "Готово. {percent}% отстъпка за следващите {months} месеца.",
+    "consentShortMessage": "Omi използва ИИ, за да превърне разговорите ви в бележки. Можете да ги изтриете по всяко време.",
+    "consentAiProviders": "Обработва се с {providers}."
 }

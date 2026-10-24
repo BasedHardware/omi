@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "Lisanäidis {index}",
     "durationSeconds": "Kestus: {seconds} sekundit",
     "additionalSpeechSampleRemoved": "Lisakõnenäidis eemaldatud",
-    "consentDataMessage": "Jätkates salvestatakse teie vestlused, salvestised ja isikuandmed turvaliselt meie serverites. Teie helisalvestisi ja transkriptsioone töötlevad kolmandate osapoolte AI-teenused (sealhulgas Deepgram transkriptsiooni ja OpenAI analüüsi jaoks), et pakkuda teile AI-põhiseid ülevaateid ja võimaldada kõiki rakenduse funktsioone.",
     "tasksEmptyStateMessage": "Ülesande loomiseks alusta vestlust.",
     "clearChatAction": "Tühjenda vestlus",
     "enableApps": "Luba rakendused",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "Taustal",
     "retentionOfferAccept": "Jää {percent}% allahindlusega",
     "retentionOfferBody": "Jää ja maksa {price} kuus järgmised {months} kuud.",
-    "retentionOfferApplied": "Valmis. {percent}% allahindlust järgmised {months} kuud."
+    "retentionOfferApplied": "Valmis. {percent}% allahindlust järgmised {months} kuud.",
+    "consentShortMessage": "Omi muudab tehisintellekti abil sinu vestlused märkmeteks. Saad need igal ajal kustutada.",
+    "consentAiProviders": "Töödeldakse teenustega {providers}."
 }

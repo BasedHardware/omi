@@ -4913,10 +4913,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'Ek ses örneği kaldırıldı';
 
   @override
-  String get consentDataMessage =>
-      'Devam ederek, konuşmalarınız, kayıtlarınız ve kişisel bilgileriniz sunucularımızda güvenli bir şekilde saklanacaktır. Ses kayıtlarınız ve transkriptleriniz, size yapay zeka destekli içgörüler sağlamak ve tüm uygulama özelliklerini etkinleştirmek için üçüncü taraf yapay zeka hizmetleri (transkripsiyon için Deepgram ve analiz için OpenAI dahil) tarafından işlenir.';
-
-  @override
   String get tasksEmptyStateMessage => 'Görev oluşturmak için bir konuşma başlatın.';
 
   @override
@@ -14568,5 +14564,14 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'Tamam. %$percent indirim, önümüzdeki $months ay.';
+  }
+
+  @override
+  String get consentShortMessage =>
+      'Omi, konuşmalarını yapay zekâ ile notlara dönüştürür. İstediğin zaman silebilirsin.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers ile işlenir.';
   }
 }

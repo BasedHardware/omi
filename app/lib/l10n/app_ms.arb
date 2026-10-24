@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "Sampel tambahan {index}",
     "durationSeconds": "Tempoh: {seconds} saat",
     "additionalSpeechSampleRemoved": "Sampel suara tambahan dibuang",
-    "consentDataMessage": "Dengan meneruskan, perbualan, rakaman dan maklumat peribadi anda akan disimpan dengan selamat di pelayan kami. Rakaman audio dan transkrip anda diproses oleh perkhidmatan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan anda pandangan dikuasakan AI dan membolehkan semua ciri aplikasi.",
     "tasksEmptyStateMessage": "Mulakan perbualan untuk mencipta tugasan.",
     "clearChatAction": "Kosongkan sembang",
     "enableApps": "Dayakan aplikasi",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "Di latar belakang",
     "retentionOfferAccept": "Kekal dengan diskaun {percent}%",
     "retentionOfferBody": "Kekal dan bayar {price} sebulan untuk {months} bulan akan datang.",
-    "retentionOfferApplied": "Selesai. Diskaun {percent}% untuk {months} bulan akan datang."
+    "retentionOfferApplied": "Selesai. Diskaun {percent}% untuk {months} bulan akan datang.",
+    "consentShortMessage": "Omi menggunakan AI untuk menukar perbualan anda kepada nota. Anda boleh memadamkannya bila-bila masa.",
+    "consentAiProviders": "Diproses dengan {providers}."
 }

@@ -4925,10 +4925,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get additionalSpeechSampleRemoved => 'ಹೆಚ್ಚುವರಿ ಭಾಷಣ ಮಾದರಿ ತೆಗೆದುಹಾಕಲಾಗಿದೆ';
 
   @override
-  String get consentDataMessage =>
-      'ಮುಂದುವರಿಯುವ ಮೂಲಕ, ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ವೈಯಕ್ತಿಕ ಮಾಹಿತಿಯನ್ನು ನಮ್ಮ ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ. ನಿಮ್ಮ ಆಡಿಯೋ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್‌ಗಳನ್ನು ಮೂರನೇ ವ್ಯಕ್ತಿಯ AI ಸೇವೆಗಳಿಂದ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ (ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್‌ಗಾಗಿ Deepgram ಮತ್ತು ವಿಶ್ಲೇಷಣೆಗಾಗಿ OpenAI ಸೇರಿದಂತೆ) AI-ಚಾಲಿತ ಒಳನೋಟಗಳನ್ನು ಒದಗಿಸಲು ಮತ್ತು ಎಲ್ಲಾ ಅಪ್ಲಿಕೇಶನ್ ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು.';
-
-  @override
   String get tasksEmptyStateMessage => 'ಕಾರ್ಯವನ್ನು ರಚಿಸಲು ಸಂಭಾಷಣೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ.';
 
   @override
@@ -14603,5 +14599,13 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String retentionOfferApplied(int percent, int months) {
     return 'ಆಯಿತು. $percent% ರಿಯಾಯಿತಿ, ಮುಂದಿನ $months ತಿಂಗಳು.';
+  }
+
+  @override
+  String get consentShortMessage => 'Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.';
+
+  @override
+  String consentAiProviders(String providers) {
+    return '$providers ಮೂಲಕ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ.';
   }
 }

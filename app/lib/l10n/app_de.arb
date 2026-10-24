@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "Zusätzliche Probe {index}",
     "durationSeconds": "Dauer: {seconds} Sekunden",
     "additionalSpeechSampleRemoved": "Zusätzliche Sprachprobe entfernt",
-    "consentDataMessage": "Durch Fortfahren werden Ihre Gespräche, Aufnahmen und persönlichen Daten sicher auf unseren Servern gespeichert. Ihre Audioaufnahmen und Transkripte werden von KI-Diensten Dritter verarbeitet (einschließlich Deepgram für die Transkription und OpenAI für die Analyse), um Ihnen KI-gestützte Erkenntnisse zu liefern und alle App-Funktionen zu ermöglichen.",
     "tasksEmptyStateMessage": "Starte ein Gespräch, um eine Aufgabe zu erstellen.",
     "clearChatAction": "Chat löschen",
     "enableApps": "Apps aktivieren",
@@ -4425,5 +4424,7 @@
     "recapInTheBackground": "Im Hintergrund",
     "retentionOfferAccept": "Bleiben mit {percent}% Rabatt",
     "retentionOfferBody": "Bleib und zahle {price} pro Monat für die nächsten {months} Monate.",
-    "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate."
+    "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate.",
+    "consentShortMessage": "Omi macht mit KI aus deinen Gesprächen Notizen. Du kannst sie jederzeit löschen.",
+    "consentAiProviders": "Verarbeitet mit {providers}."
 }

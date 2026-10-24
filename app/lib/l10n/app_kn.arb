@@ -5783,10 +5783,6 @@
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
     },
-    "consentDataMessage": "ಮುಂದುವರಿಯುವ ಮೂಲಕ, ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ವೈಯಕ್ತಿಕ ಮಾಹಿತಿಯನ್ನು ನಮ್ಮ ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ. ನಿಮ್ಮ ಆಡಿಯೋ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್‌ಗಳನ್ನು ಮೂರನೇ ವ್ಯಕ್ತಿಯ AI ಸೇವೆಗಳಿಂದ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ (ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್‌ಗಾಗಿ Deepgram ಮತ್ತು ವಿಶ್ಲೇಷಣೆಗಾಗಿ OpenAI ಸೇರಿದಂತೆ) AI-ಚಾಲಿತ ಒಳನೋಟಗಳನ್ನು ಒದಗಿಸಲು ಮತ್ತು ಎಲ್ಲಾ ಅಪ್ಲಿಕೇಶನ್ ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
-    },
     "tasksEmptyStateMessage": "ಕಾರ್ಯವನ್ನು ರಚಿಸಲು ಸಂಭಾಷಣೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
@@ -11851,5 +11847,7 @@
     "recapInTheBackground": "ಹಿನ್ನೆಲೆಯಲ್ಲಿ",
     "retentionOfferAccept": "{percent}% ರಿಯಾಯಿತಿಯೊಂದಿಗೆ ಮುಂದುವರಿಸಿ",
     "retentionOfferBody": "ಮುಂದುವರಿಸಿ ಮತ್ತು ತಿಂಗಳಿಗೆ {price} ಪಾವತಿಸಿ, ಮುಂದಿನ {months} ತಿಂಗಳು.",
-    "retentionOfferApplied": "ಆಯಿತು. {percent}% ರಿಯಾಯಿತಿ, ಮುಂದಿನ {months} ತಿಂಗಳು."
+    "retentionOfferApplied": "ಆಯಿತು. {percent}% ರಿಯಾಯಿತಿ, ಮುಂದಿನ {months} ತಿಂಗಳು.",
+    "consentShortMessage": "Omi AI ಬಳಸಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ಟಿಪ್ಪಣಿಗಳಾಗಿ ಮಾಡುತ್ತದೆ. ಯಾವಾಗ ಬೇಕಾದರೂ ಅಳಿಸಬಹುದು.",
+    "consentAiProviders": "{providers} ಮೂಲಕ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ."
 }

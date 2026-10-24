@@ -1505,7 +1505,6 @@
     "additionalSampleIndex": "Yderligere prøve {index}",
     "durationSeconds": "Varighed: {seconds} sekunder",
     "additionalSpeechSampleRemoved": "Yderligere stemmeprøve fjernet",
-    "consentDataMessage": "Ved at fortsætte vil dine samtaler, optagelser og personlige oplysninger blive sikkert gemt på vores servere. Dine lydoptagelser og udskrifter behandles af tredjeparts AI-tjenester (herunder Deepgram til transskription og OpenAI til analyse) for at give dig AI-drevne indsigter og aktivere alle appfunktioner.",
     "tasksEmptyStateMessage": "Start en samtale for at oprette en opgave.",
     "clearChatAction": "Ryd chat",
     "enableApps": "Aktivér apps",
@@ -4467,5 +4466,7 @@
     "recapInTheBackground": "I baggrunden",
     "retentionOfferAccept": "Bliv for {percent}% rabat",
     "retentionOfferBody": "Bliv og betal {price} om måneden de næste {months} måneder.",
-    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder."
+    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder.",
+    "consentShortMessage": "Omi bruger AI til at gøre dine samtaler til noter. Du kan slette dem når som helst.",
+    "consentAiProviders": "Behandles med {providers}."
 }
