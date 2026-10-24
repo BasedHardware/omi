@@ -4428,6 +4428,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get continueText => 'Nadaljujte';
 
   @override
+  String get checkoutExistingSubscription => 'Naročnino že imate. Namesto nove upravljajte obstoječo naročnino.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Najprej se ponovno naročite, da zamenjate načrt.';
 
   @override

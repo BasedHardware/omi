@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง",
     "useFreePlan": "ใช้แพ็คเกจฟรี",
     "continueText": "ดำเนินการต่อ",
+    "checkoutExistingSubscription": "คุณมีการสมัครสมาชิกอยู่แล้ว โปรดจัดการการสมัครสมาชิกปัจจุบันแทนการเริ่มใหม่",
     "resubscribeFirstToChangePlans": "สมัครใหม่ก่อนเพื่อเปลี่ยนแผน",
     "resubscribe": "สมัครใหม่",
     "couldNotOpenPaymentSettings": "ไม่สามารถเปิดการตั้งค่าการชำระเงินได้ กรุณาลองอีกครั้ง",

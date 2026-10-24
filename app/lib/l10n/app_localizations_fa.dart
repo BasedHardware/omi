@@ -4423,6 +4423,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get continueText => 'ادامه';
 
   @override
+  String get checkoutExistingSubscription =>
+      'شما از قبل اشتراک دارید. به‌جای شروع اشتراک جدید، اشتراک فعلی خود را مدیریت کنید.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'برای تغییر طرح، ابتدا دوباره مشترک شوید.';
 
   @override

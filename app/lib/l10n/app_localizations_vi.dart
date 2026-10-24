@@ -4432,6 +4432,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get continueText => 'Tiếp tục';
 
   @override
+  String get checkoutExistingSubscription => 'Bạn đã có gói đăng ký. Hãy quản lý gói hiện tại thay vì bắt đầu gói mới.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Hãy đăng ký lại trước để đổi gói.';
 
   @override

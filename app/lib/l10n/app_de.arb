@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Überprüfe deine Verbindung und versuche es erneut.",
     "useFreePlan": "Kostenlosen Plan nutzen",
     "continueText": "Fortfahren",
+    "checkoutExistingSubscription": "Du hast bereits ein Abonnement. Verwalte dein bestehendes Abonnement, statt ein neues abzuschließen.",
     "resubscribeFirstToChangePlans": "Abonnieren Sie zuerst erneut, um den Plan zu wechseln.",
     "resubscribe": "Erneut abonnieren",
     "couldNotOpenPaymentSettings": "Zahlungseinstellungen konnten nicht geöffnet werden. Bitte versuchen Sie es erneut.",

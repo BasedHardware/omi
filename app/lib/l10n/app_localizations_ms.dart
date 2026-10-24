@@ -4435,6 +4435,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get continueText => 'Teruskan';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Anda sudah mempunyai langganan. Urus langganan semasa dan bukannya memulakan yang baharu.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Langgan semula dahulu untuk menukar pelan.';
 
   @override

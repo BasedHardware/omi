@@ -1359,6 +1359,7 @@
     "checkConnectionTryAgain": "接続を確認して、もう一度お試しください。",
     "useFreePlan": "無料プランを使用",
     "continueText": "続ける",
+    "checkoutExistingSubscription": "すでにサブスクリプションがあります。新規契約ではなく、現在のサブスクリプションを管理してください。",
     "resubscribeFirstToChangePlans": "プランを変更するには、先に再購読してください。",
     "resubscribe": "再購読",
     "couldNotOpenPaymentSettings": "支払い設定を開けませんでした。もう一度お試しください。",

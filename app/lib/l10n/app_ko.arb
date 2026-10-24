@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "연결을 확인한 후 다시 시도하세요.",
     "useFreePlan": "무료 플랜 사용",
     "continueText": "계속",
+    "checkoutExistingSubscription": "이미 구독 중입니다. 새 구독을 시작하는 대신 현재 구독을 관리하세요.",
     "resubscribeFirstToChangePlans": "플랜을 변경하려면 먼저 다시 구독하세요.",
     "resubscribe": "재구독",
     "couldNotOpenPaymentSettings": "결제 설정을 열 수 없습니다. 다시 시도해 주세요.",

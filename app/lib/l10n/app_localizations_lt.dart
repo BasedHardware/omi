@@ -4421,6 +4421,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get continueText => 'Tęsti';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Jau turite prenumeratą. Užuot pradėję naują, tvarkykite esamą prenumeratą.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Norėdami pakeisti planą, pirmiausia užsiprenumeruokite iš naujo.';
 
   @override

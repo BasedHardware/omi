@@ -4435,6 +4435,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get continueText => 'Продължи';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Вече имате абонамент. Управлявайте текущия си абонамент, вместо да започвате нов.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Първо се абонирайте отново, за да смените плана.';
 
   @override

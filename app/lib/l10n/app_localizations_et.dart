@@ -4418,6 +4418,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get continueText => 'Jätka';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Sul on juba tellimus. Halda oma praegust tellimust uue alustamise asemel.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Paketi muutmiseks tellige esmalt uuesti.';
 
   @override

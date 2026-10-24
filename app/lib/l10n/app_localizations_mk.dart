@@ -4442,6 +4442,10 @@ class AppLocalizationsMk extends AppLocalizations {
   String get continueText => 'Продолжи';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Веќе имате претплата. Управувајте со тековната претплата наместо да започнете нова.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Прво претплатете се повторно за да го смените планот.';
 
   @override

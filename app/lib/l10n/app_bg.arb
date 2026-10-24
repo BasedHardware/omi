@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Проверете връзката си и опитайте отново.",
     "useFreePlan": "Използвай безплатен план",
     "continueText": "Продължи",
+    "checkoutExistingSubscription": "Вече имате абонамент. Управлявайте текущия си абонамент, вместо да започвате нов.",
     "resubscribeFirstToChangePlans": "Първо се абонирайте отново, за да смените плана.",
     "resubscribe": "Повторен абонамент",
     "couldNotOpenPaymentSettings": "Не може да се отворят настройките за плащане. Моля, опитайте отново.",

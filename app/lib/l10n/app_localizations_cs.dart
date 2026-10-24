@@ -4416,6 +4416,9 @@ class AppLocalizationsCs extends AppLocalizations {
   String get continueText => 'Pokračovat';
 
   @override
+  String get checkoutExistingSubscription => 'Předplatné již máte. Místo nového předplatného spravujte to stávající.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Chcete-li změnit plán, nejprve se znovu přihlaste.';
 
   @override

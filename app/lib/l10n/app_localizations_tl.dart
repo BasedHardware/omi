@@ -4460,6 +4460,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get continueText => 'Magpatuloy';
 
   @override
+  String get checkoutExistingSubscription =>
+      'May subscription ka na. Pamahalaan ang kasalukuyan mong subscription sa halip na magsimula ng bago.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Mag-subscribe muna ulit para magpalit ng plan.';
 
   @override

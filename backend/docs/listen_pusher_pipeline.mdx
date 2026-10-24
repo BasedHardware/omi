@@ -6,6 +6,19 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+Sync redirect hydration reuses the survivor's raw snapshot and update-time
+within one owner read. A bridge with no donor lineage reuses metadata before
+any external effect; donor reads, transfer, retraction, audio copying and receipt writes retain
+the final refresh. `SYNC_OPERATION_SNAPSHOT_ENABLED=false` restores the prior
+reads. The [operation snapshot contract](sync-operation-snapshots.md) documents
+the constant read origin, counted savings and the separate P4/index designs.
+
+Python conversation/action commits also maintain compact list metadata rows and
+opaque per-owner versions in the same Firestore commit. This does not change
+transcript, lifecycle, privacy or hold policy. Conditional list reads require a
+completed writer-fleet rollout; see [list serving projections](list-serving-projection.md)
+for the kill switch, rollout epoch, migration coverage and read/write cost contract.
+
 At a new recording reservation during a partial batch ramp, the owner-load
 predicate in `config/policy/ramp.py` keeps heavy owners on the legacy route.
 `BATCH_PIPELINE_RAMP_EXCLUDE_HEAVY_OWNERS=off` disables this admission narrowing.
@@ -24,12 +37,22 @@ and has `close_cause=keepalive_ping_timeout`. These diagnostics omit exception
 text and provider close reasons, and retain the existing typed failure and
 recovery behavior.
 
-## Default-off funded transcription cap
+## Funded transcription cap
 
 `STT_CAP_DISPATCH_ENFORCEMENT` gates provider creation and audio sends through a
 shared live admission state, including multichannel, replay and replacement legs.
 Denial preserves receiving and existing audio storage paths; accepted provider
 work drains. Custom/on-device STT and flag-off metering retain their behavior.
+Sync and batch spend refusal is separately **default on** via the kill switch
+`STT_CAP_OFFLINE_ENFORCEMENT=false`. Both upload versions hold denied audio before
+cloud STT; language probes, confirmation retries, multilingual recovery, queued
+GPU authorization, worker microbatches and batch vendor dispatch recheck current
+allowance. Unselected/disabled legacy batch scope cannot permit capped cloud
+spend. Admitted BYOK funding and reviewer/paid-through resolver access are preserved.
+Live scope remains unchanged. Bounded per-path decisions appear in
+`omi_stt_cap_dispatch_decisions_total{path,outcome,reason}`; the
+[offline release/rollback contract](stt-cap-dispatch.md#offline-allowance-enforcement-default-on)
+owns deployment coordination and the metric window. PTT voice-message is follow-up.
 The [dispatch contract](stt-cap-dispatch.md) also documents sync holds, recovery,
 BYOK funding, additive metrics and the per-client activation decision.
 The cap proxy forwards provider-specific finalize arguments, including window
@@ -55,7 +78,7 @@ as failed reconciliation. Successful siblings finalize independently. Flagged
 oversized GPU empty-result retries become held work without a failure attempt;
 the unflagged retry follows main's behavior.
 
-Both legacy and ladder-only execution require the authenticated owner to match
+Live and held-backlog recovery execution require the authenticated owner to match
 `STT_CAP_DISPATCH_COHORT` and the original lane to match
 `STT_CAP_DISPATCH_LANES`. Empty cohort admits nobody; both manifests keep the
 switch false, cohort empty, lanes `live`. Listen's receiver and each provider
@@ -210,6 +233,12 @@ successful provider responses increment root `hourly_usage.transcription_seconds
 by that duration, rounded up to a second. Deepgram BYOK cannot exempt this
 Omi-managed Parakeet call. This proxy does not measure VAD speech or change the
 live-listen, offline-sync, or locked-conversation policies.
+
+Hourly usage writers also maintain [monthly totals](monthly-usage-totals.md) in
+the same commit, under the existing sync receipt when present. The reader lever
+`usage_month_total` stays off until every writer has that contract; warm monthly
+allowance refreshes then read one durable total. Resets invalidate it atomically.
+This changes read work, preserving the existing allowance and reservation policy.
 
 Admission and usage recording are not a distributed monthly reservation. The
 proxy probes the seekable upload spool and initially checks allowance before

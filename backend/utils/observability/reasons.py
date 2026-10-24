@@ -346,6 +346,8 @@ class FallbackReason(StrEnum):
     TEXT = 'text'
     NO_TEXT = 'no_text'
     GATE_UNAVAILABLE = 'gate_unavailable'
+    USAGE_ROOT_MISSING = 'usage_root_missing'
+    USAGE_FENCE_BLOCKED = 'usage_fence_blocked'
     HTTP_ERROR = 'http_error'
     HTTP_429 = 'http_429'
     TRANSPORT_ERROR = 'transport_error'

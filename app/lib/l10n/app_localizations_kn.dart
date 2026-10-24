@@ -4440,6 +4440,10 @@ class AppLocalizationsKn extends AppLocalizations {
   String get continueText => 'ಮುಂದುವರಿಸಿ';
 
   @override
+  String get checkoutExistingSubscription =>
+      'ನೀವು ಈಗಾಗಲೇ ಚಂದಾದಾರಿಕೆಯನ್ನು ಹೊಂದಿದ್ದೀರಿ. ಹೊಸದನ್ನು ಪ್ರಾರಂಭಿಸುವ ಬದಲು ಪ್ರಸ್ತುತ ಚಂದಾದಾರಿಕೆಯನ್ನು ನಿರ್ವಹಿಸಿ.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'ಯೋಜನೆ ಬದಲಾಯಿಸಲು ಮೊದಲು ಮರುಸದಸ್ಯರಾಗಿ.';
 
   @override

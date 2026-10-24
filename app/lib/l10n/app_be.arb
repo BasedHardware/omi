@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "У вас ужо ёсць падпіска. Замест новай падпіскі кіруйце бягучай.",
     "resubscribeFirstToChangePlans": "Спачатку падпішыцеся зноў, каб змяніць план.",
     "resubscribe": "Падпішыцеся яшчэ раз",
     "@resubscribe": {

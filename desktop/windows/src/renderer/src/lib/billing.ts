@@ -487,11 +487,18 @@ export function trialTimeTone(remainingSeconds: number): 'amber' | 'yellow' | 'g
 // ── Checkout orchestration (BillingHelpers.startCheckout) ───────────────────
 
 export const RESUBSCRIBE_FIRST = 'Resubscribe first to change plans.'
+export const EXISTING_SUBSCRIPTION =
+  'You already have a subscription. Manage your existing subscription instead of starting a new checkout.'
+
+function isConflict(e: unknown): boolean {
+  return (e as { response?: { status?: number } } | null)?.response?.status === 409
+}
 
 export type StartCheckoutResult =
   | { kind: 'upgraded' }
   | { kind: 'reactivated'; message?: string }
   | { kind: 'blocked' }
+  | { kind: 'existing_subscription' }
   | { kind: 'completed' }
   | { kind: 'refresh_lagging' }
   | { kind: 'cancelled' }
@@ -534,12 +541,25 @@ export async function startCheckout(
   }
 
   const upgradeInPlace = hasPaidSubscription(sub) && sub.cancel_at_period_end === false
+  // The two routes use 409 for different refusals: upgrade means a pending
+  // cancellation, checkout means the account already has a subscription.
   if (upgradeInPlace) {
-    await deps.upgradeSubscription(priceId, promotionCode)
+    try {
+      await deps.upgradeSubscription(priceId, promotionCode)
+    } catch (e) {
+      if (isConflict(e)) return { kind: 'blocked' }
+      throw e
+    }
     return { kind: 'upgraded' }
   }
 
-  const session = await deps.createCheckoutSession(priceId, promotionCode)
+  let session: PaymentCheckoutSessionResponse
+  try {
+    session = await deps.createCheckoutSession(priceId, promotionCode)
+  } catch (e) {
+    if (isConflict(e)) return { kind: 'existing_subscription' }
+    throw e
+  }
   if (session.status === 'reactivated') {
     const seconds = session.next_billing_date ?? sub.current_period_end
     const date = formatMediumDate(seconds)

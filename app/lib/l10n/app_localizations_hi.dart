@@ -4398,6 +4398,10 @@ class AppLocalizationsHi extends AppLocalizations {
   String get continueText => 'जारी रखें';
 
   @override
+  String get checkoutExistingSubscription =>
+      'आपके पास पहले से सदस्यता है। नई सदस्यता शुरू करने के बजाय अपनी मौजूदा सदस्यता प्रबंधित करें।';
+
+  @override
   String get resubscribeFirstToChangePlans => 'प्लान बदलने के लिए पहले पुनः सदस्यता लें।';
 
   @override

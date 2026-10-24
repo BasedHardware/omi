@@ -4428,6 +4428,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get continueText => 'Lanjutkan';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Anda sudah memiliki langganan. Kelola langganan saat ini alih-alih memulai yang baru.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Berlangganan lagi dulu untuk mengubah paket.';
 
   @override

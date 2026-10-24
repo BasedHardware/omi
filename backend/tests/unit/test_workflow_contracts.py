@@ -612,10 +612,23 @@ def test_mobile_android_compile_smoke_uploads_debug_apk_and_runs_jvm_tests_in_pa
     assert "app/build/app/outputs/flutter-apk/app-dev-debug.apk" in android
     assert "retention-days: 5" in android
     assert "${{ secrets." not in android
-    # Compile-smoke is the wall: restore-only so main does not pay Gradle
-    # save+cleanup after the APK, and so it does not race the JVM writer
-    # for the same content keys (runs 35256814704 / 35268313733).
-    assert "cache-read-only: true" in android
+    # Cold Gradle homes took 11-12m (40022514904 / 40025498700), and
+    # 40030083284 hit the 25m cap. Compile-smoke must seed its own cache on
+    # PRs and main; basic and enhanced use separate key namespaces, avoiding
+    # the old ReserveCacheError race with the parallel JVM writer.
+    android_gradle = next(
+        step["with"]
+        for step in yaml.safe_load(android)["steps"]
+        if step.get("uses") == "gradle/actions/setup-gradle@v6"
+    )
+    unit_gradle = next(
+        step["with"]
+        for step in yaml.safe_load(unit_tests)["steps"]
+        if step.get("uses") == "gradle/actions/setup-gradle@v6"
+    )
+    assert android_gradle["cache-provider"] == "basic"
+    assert android_gradle["cache-read-only"] is False
+    assert unit_gradle.get("cache-provider", "enhanced") == "enhanced"
     assert "cache-read-only: ${{ github.ref != 'refs/heads/main' }}" not in android
 
     # Size report is a zip breakdown of the debug APK this job already built.

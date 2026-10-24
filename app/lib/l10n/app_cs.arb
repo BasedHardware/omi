@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Zkontrolujte připojení a zkuste to znovu.",
     "useFreePlan": "Použít bezplatný plán",
     "continueText": "Pokračovat",
+    "checkoutExistingSubscription": "Předplatné již máte. Místo nového předplatného spravujte to stávající.",
     "resubscribeFirstToChangePlans": "Chcete-li změnit plán, nejprve se znovu přihlaste.",
     "resubscribe": "Znovu se přihlásit",
     "couldNotOpenPaymentSettings": "Nelze otevřít nastavení platby. Zkuste to prosím znovu.",

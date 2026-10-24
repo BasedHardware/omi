@@ -4349,6 +4349,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get continueText => '继续';
 
   @override
+  String get checkoutExistingSubscription => '您已有订阅。请管理现有订阅，而不要开始新的订阅。';
+
+  @override
   String get resubscribeFirstToChangePlans => '请先重新订阅再更改套餐。';
 
   @override

@@ -4437,6 +4437,10 @@ class AppLocalizationsHr extends AppLocalizations {
   String get continueText => 'Nastavi';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Već imate pretplatu. Upravljajte postojećom pretplatom umjesto pokretanja nove.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Prvo se ponovno pretplati da promijeniš plan.';
 
   @override

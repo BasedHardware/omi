@@ -4397,6 +4397,10 @@ class AppLocalizationsTh extends AppLocalizations {
   String get continueText => 'ดำเนินการต่อ';
 
   @override
+  String get checkoutExistingSubscription =>
+      'คุณมีการสมัครสมาชิกอยู่แล้ว โปรดจัดการการสมัครสมาชิกปัจจุบันแทนการเริ่มใหม่';
+
+  @override
   String get resubscribeFirstToChangePlans => 'สมัครใหม่ก่อนเพื่อเปลี่ยนแผน';
 
   @override

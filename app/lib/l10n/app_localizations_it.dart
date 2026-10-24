@@ -4450,6 +4450,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get continueText => 'Continua';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Hai già un abbonamento. Gestisci quello attuale invece di attivarne uno nuovo.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Riabbonati prima per cambiare piano.';
 
   @override

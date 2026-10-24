@@ -4354,6 +4354,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get continueText => '계속';
 
   @override
+  String get checkoutExistingSubscription => '이미 구독 중입니다. 새 구독을 시작하는 대신 현재 구독을 관리하세요.';
+
+  @override
   String get resubscribeFirstToChangePlans => '플랜을 변경하려면 먼저 다시 구독하세요.';
 
   @override

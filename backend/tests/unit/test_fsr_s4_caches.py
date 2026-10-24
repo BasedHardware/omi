@@ -21,6 +21,7 @@ from routers import users as router, payment, desktop_prompts, updates
 from utils.other import endpoints as auth
 from database import fsr_read_cache as cache
 from utils import subscription
+from tests.unit.fixtures.shadow_usage_firestore import Transaction
 
 
 class Snapshot:
@@ -46,12 +47,30 @@ class Store:
         return Ref(self, name)
 
     def transaction(self):
-        return None
+        return Transaction()
+
+    def batch(self):
+        class Batch:
+            def __init__(self):
+                self.pending = []
+
+            def set(self, ref, data, merge=False):
+                self.pending.append((ref, data, merge))
+
+            def commit(self):
+                for ref, data, merge in self.pending:
+                    ref.set(data, merge=merge)
+
+        return Batch()
 
 
 class Ref:
     def __init__(self, store, path, filters=(), count=None):
         self.store, self.path, self.filters, self.count = store, path, filters, count
+
+    @property
+    def id(self):
+        return self.path.split('/')[-1]
 
     def document(self, name):
         return Ref(self.store, self.path + '/' + name)
@@ -59,7 +78,9 @@ class Ref:
     def collection(self, name):
         return Ref(self.store, self.path + '/' + name)
 
-    def get(self, fields=None):
+    def get(self, fields=None, transaction=None):
+        if transaction is not None and transaction.pending:
+            raise RuntimeError('Firestore transactions must read before writing')
         self.store.reads.append(self.path)
         data = self.store.docs.get(self.path)
         if fields is not None and data is not None:

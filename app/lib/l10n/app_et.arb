@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Kontrolli ühendust ja proovi uuesti.",
     "useFreePlan": "Kasuta tasuta plaani",
     "continueText": "Jätka",
+    "checkoutExistingSubscription": "Sul on juba tellimus. Halda oma praegust tellimust uue alustamise asemel.",
     "resubscribeFirstToChangePlans": "Paketi muutmiseks tellige esmalt uuesti.",
     "resubscribe": "Telli uuesti",
     "couldNotOpenPaymentSettings": "Makseseadeid ei saanud avada. Palun proovi uuesti.",
