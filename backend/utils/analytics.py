@@ -2,6 +2,9 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Mapping, Optional, TypedDict
 
 from database import user_usage as user_usage_db
+from database.legal_holds import DestructiveOperationInProgress
+from database.monthly_usage_totals import UsagePublicationRootMissing
+from utils.observability.fallback import record_fallback
 
 
 class _MetadataKwargs(TypedDict, total=False):
@@ -54,7 +57,7 @@ def record_usage(
     cost_exclusion: str | None = None,
     usage_metadata: Mapping[str, Any] | None = None,
 ):
-    """Records hourly usage stats for a user."""
+    """Record hourly usage without failing capture on an erasure-fence refusal."""
     now = datetime.now(timezone.utc)
     effective_cost_exclusion = cost_exclusion or ('provider_cost_not_recorded' if cost_status != 'complete' else None)
     updates = {
@@ -65,26 +68,39 @@ def record_usage(
         'speech_seconds': speech_seconds,
     }
     metadata_kwargs: _MetadataKwargs = {'usage_metadata': usage_metadata} if usage_metadata is not None else {}
-    if idempotency_key:
-        user_usage_db.update_hourly_usage_once(
-            uid,
-            now,
-            updates,
-            idempotency_key,
-            cost_usd=cost_usd,
-            cost_status=cost_status,
-            cost_exclusion=effective_cost_exclusion,
-            **metadata_kwargs,
-        )
-    else:
-        user_usage_db.update_hourly_usage(
-            uid,
-            now,
-            updates,
-            cost_usd=cost_usd,
-            cost_status=cost_status,
-            cost_exclusion=effective_cost_exclusion,
-            **metadata_kwargs,
+    # Accounting must never fail a capture because erasure authorities refuse
+    # publication. Catch outside the writer transaction: hourly/monthly counters
+    # and the once receipt all remain uncommitted. Other write errors retain
+    # their existing retry/failure semantics.
+    try:
+        if idempotency_key:
+            user_usage_db.update_hourly_usage_once(
+                uid,
+                now,
+                updates,
+                idempotency_key,
+                cost_usd=cost_usd,
+                cost_status=cost_status,
+                cost_exclusion=effective_cost_exclusion,
+                **metadata_kwargs,
+            )
+        else:
+            user_usage_db.update_hourly_usage(
+                uid,
+                now,
+                updates,
+                cost_usd=cost_usd,
+                cost_status=cost_status,
+                cost_exclusion=effective_cost_exclusion,
+                **metadata_kwargs,
+            )
+    except DestructiveOperationInProgress as exc:
+        record_fallback(
+            component='usage_publication',
+            from_mode='publish',
+            to_mode='skip',
+            reason='usage_root_missing' if isinstance(exc, UsagePublicationRootMissing) else 'usage_fence_blocked',
+            outcome='degraded',
         )
 
 

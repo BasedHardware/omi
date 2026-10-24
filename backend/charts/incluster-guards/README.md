@@ -40,7 +40,23 @@ autoscaling replica changes do not restart the clock. Configuration/image change
 reset the 15-minute clock. Readiness shortfall uses HPA desiredReplicas, not the
 floor. ScalingActive must be true, as in the original P77 guard.
 
-P77 thresholds: refusal fraction >= .02, first-text p95 >= 30s, post/v2 p95 >=
+P77r refusal threshold: `max(.02, baseline * 1.25 + .005)`, inclusive. The
+baseline is the admission-weighted refusal fraction over the same rolling UTC
+hour ending exactly seven days earlier (`[1h] offset 7d`), using the same
+accepted / overflow / batch_pressure outcomes as the current 15-minute reading.
+It requires >=20 historical admissions and exactly 12 available Parakeet replicas
+throughout that hour. Historical accepted-counter and replica freshness are
+checked at one-minute checkpoints (<=120s); absent checkpoints fail qualification.
+Each checkpoint also requires every listen scrape target to be up and have an
+accepted counter, with no unmatched counter targets. The target count must match
+the independent available-replica inventory for the listen deployments, including
+canaries; fresh target and deployment telemetry is required. Partial target data
+cannot inflate the baseline while the remaining admission series stay fresh.
+Missing/nonfinite/low-sample/non-12-pod history is BLIND, never an implicit 2%
+fallback. At a 6.3% baseline, the trip threshold is 8.375%. Values and the computed
+`reading.refusal_threshold` are logged. This guard version restarts the arming clock.
+
+Other P77 thresholds are unchanged: first-text p95 >= 30s, post/v2 p95 >=
 3s, first-text >30s count >12, no-text deadline count >36 in 15m. Under 20
 first-text/admission samples, latency/fraction thresholds are observations only;
 absolute error counts, readiness and scheduling trips remain independent.
@@ -55,11 +71,25 @@ counter also gets an explicit freshness check beyond the original script.
 
 The only serving write is P77 `step_fast.build(old, 12, rollback=True)`:
 JSON Patch tests the **entire observed `/spec`**, sets minReplicas=12, and restores
-the Value=3 latency metric. All original metric/cap/scaling drift assertions are
-retained. Concurrent changes fail the test, with no retry against a newly read
+the Value=3 latency metric. Metric/cap/downscale drift assertions are retained.
+Scale-up must match either the legacy +1 pod/60s policy with zero stabilization,
+or P77r's exact zero-stabilization, selectPolicy Max, +4 pods/15s policy.
+Concurrent changes fail the test, with no retry against a newly read
 spec. Failed drift checks fail the Job. Kubernetes read failures fail without
 inventing an observed spec or bypassing the lookback. Missing HPA is therefore
 safe in development and visible as a failed reading.
+
+The production chart proposes floor 8, workload-only scaling and +4 pods/15s,
+retaining max12, requests2/GPU35 and the 900s downscale window. That allows an
+8->12 recommendation on the next controller sync (normally 15s), within a 60s
+controller-response budget once metrics recommend scale-out. It cannot promise
+GPU readiness within 60s; adapter lag, scheduling and model startup still apply.
+See [Kubernetes scaling behavior](https://kubernetes.io/docs/concepts/workloads/autoscaling/horizontal-pod-autoscale/#configurable-scaling-behavior).
+Install/verify the updated guard first; then the lead may activate the chart
+retry and arm a fresh 15m lookback. Do not apply the chart with the old guard,
+whose rollback drift check rejects the faster policy. For a retry halt, restore
+floor12 and workloadOnly=false together; the fast scale-up policy can remain.
+PR #23425's floor/workload-only changes are included in this proposal.
 
 The mutable, nonsecret state ConfigMap is created by Helm. The Job may only
 get/patch that exact ConfigMap, using a resourceVersion test. It records verdicts

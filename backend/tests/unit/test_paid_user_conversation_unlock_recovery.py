@@ -169,7 +169,11 @@ def test_redirect_repairs_the_survivor_not_the_deleted_url_record(monkeypatch):
     rows, updated, _ = _setup_mock_db(monkeypatch)
     rows['old'] = {'id': 'old', 'deleted': True, 'sync_merged_into': CONV_LOCKED_1}
     monkeypatch.setattr(conversations_db, 'is_soft_deleted', lambda row: row.get('deleted', False))
-    monkeypatch.setattr(conversations_db, 'resolve_sync_conversation_redirect', lambda *args: CONV_LOCKED_1)
+    monkeypatch.setattr(
+        conversations_db,
+        'get_sync_redirected_conversation',
+        lambda *args, **kwargs: conversations_db.get_conversation(UID, CONV_LOCKED_1),
+    )
     restored = routes._get_valid_conversation_by_id(UID, 'old', follow_sync_bridge=True)
     assert restored['id'] == CONV_LOCKED_1
     assert set(updated) == {CONV_LOCKED_1}

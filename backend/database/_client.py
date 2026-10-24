@@ -130,6 +130,17 @@ def _install_action_item_write_fences() -> None:
 _install_action_item_write_fences()
 
 
+def _install_memory_change_heads() -> None:
+    try:
+        from database.memory_change_head import install_write_heads
+    except ImportError:
+        return
+    install_write_heads()
+
+
+_install_memory_change_heads()
+
+
 def _install_list_projection_writer() -> None:
     try:
         from database.list_projection import install_list_projection_writer
