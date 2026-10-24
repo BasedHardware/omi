@@ -512,6 +512,7 @@ async def accept_upload(
                 input_language,
                 unit.wav,
                 surface='batch',
+                cohort_key=uid,
                 before_probe=lambda duration=unit.duration_seconds: not execution_admission_enabled(uid, 'batch')
                 or sync_allowed(uid, duration, 'modulate', lane='batch'),
             )
@@ -550,6 +551,7 @@ async def accept_upload(
                     'capture_coverage_runs': list(getattr(unit, 'coverage_runs', ())),
                     'stt_language_evidence': language_decision.evidence,
                     'stt_language_confidence': language_decision.confidence,
+                    'stt_language_probe_seconds': language_decision.probe_seconds,
                 },
             )
             uri = await run_blocking(storage_executor, artifacts.stage_audio, item, frozen)

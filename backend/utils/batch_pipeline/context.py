@@ -3,11 +3,29 @@
 from dataclasses import dataclass
 import math
 import os
-from typing import Any
+from typing import Any, Literal
 
 from database.batch_pipeline_projection import ProjectionBlocked
 from models.geolocation import Geolocation
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding
+
+ProjectionBlockReason = Literal[
+    'intake_binding_mismatch',
+    'invalid_recording_clock',
+    'invalid_recording_identity',
+    'invalid_recording_interval',
+    'invalid_upload_filenames',
+    'lineage_identity_missing',
+    'lineage_ambiguous',
+    'other',
+]
+
+
+def _blocked(message: str, reason: ProjectionBlockReason) -> ProjectionBlocked:
+    """Keep the refusal message/type while attaching a closed log-safe reason."""
+    error = ProjectionBlocked(message)
+    setattr(error, 'block_reason', reason)
+    return error
 
 
 @dataclass(frozen=True)
@@ -38,7 +56,7 @@ def resolve_context(
         'conversation_id': binding.target_conversation_id,
     }
     if any(context.get(key) != value for key, value in expected.items()):
-        raise ProjectionBlocked('authenticated intake metadata binding mismatch')
+        raise _blocked('authenticated intake metadata binding mismatch', 'intake_binding_mismatch')
     geo = context.get('geolocation')
     if geo is not None:
         from utils.conversations.location import resolve_geolocation
@@ -52,11 +70,11 @@ def resolve_context(
     start, end = context.get('audio_start_seconds'), context.get('audio_end_seconds')
     for value in (start, end):
         if value is not None and (type(value) not in (float, int) or not math.isfinite(value)):
-            raise ProjectionBlocked('invalid intake recording clock')
+            raise _blocked('invalid intake recording clock', 'invalid_recording_clock')
     if origin is not None and (not isinstance(origin, str) or not origin or len(origin) > 256):
-        raise ProjectionBlocked('invalid intake recording identity')
+        raise _blocked('invalid intake recording identity', 'invalid_recording_identity')
     if start is not None and end is not None and start > end:
-        raise ProjectionBlocked('invalid intake recording interval')
+        raise _blocked('invalid intake recording interval', 'invalid_recording_interval')
     from utils.sync.recording_lineage import (
         lineage_resolution_requested,
         plan_segment_targets,
@@ -72,7 +90,7 @@ def resolve_context(
         else [os.path.basename(path) for path in context.get('raw_capture_paths') or []]
     )
     if not isinstance(filenames, list) or any(not isinstance(name, str) for name in filenames):
-        raise ProjectionBlocked('invalid intake upload filenames')
+        raise _blocked('invalid intake upload filenames', 'invalid_upload_filenames')
     requested = lineage_resolution_requested(
         item.owner_id,
         origin,
@@ -86,7 +104,7 @@ def resolve_context(
     reason = None
     if requested:
         if not isinstance(origin, str):
-            raise ProjectionBlocked('recording identity required for lineage resolution')
+            raise _blocked('recording identity required for lineage resolution', 'lineage_identity_missing')
         reasons: dict = {}
         targets = plan_segment_targets(
             [projection_item.segment_id],
@@ -103,7 +121,7 @@ def resolve_context(
         )
         target, reason = targets.get(projection_item.segment_id), reasons.get(projection_item.segment_id)
         if ambiguous_binding_pending(item.owner_id, reason):
-            raise ProjectionBlocked('recording generation binding remains ambiguous')
+            raise _blocked('recording generation binding remains ambiguous', 'lineage_ambiguous')
     elif origin and start is not None and end is not None:
         from utils.sync.recording_session_target import resolve_recording_session_sync_target
 
