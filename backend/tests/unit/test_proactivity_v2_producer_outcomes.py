@@ -156,3 +156,109 @@ def test_server_reducer_refuses_reply_without_persisted_chat_or_exposure(store):
     item = ready(store, producer='conversation_mentor_v2')
     with pytest.raises(ProactivityDenied, match='chat_unconfirmed'):
         ledger.record_server_outcome(item['item_id'], 'replied', uid='u', firestore_client=store, now=NOW)
+
+
+def test_record_mentor_reply_tolerates_naive_iso_and_corrupt_anchors_and_missing_item_id(store, monkeypatch):
+    item = ready(store, producer='conversation_mentor_v2')
+    ledger.record_mentor_chat(
+        uid='u',
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        status='persisted',
+        message_id='chat-message',
+        firestore_client=store,
+        now=NOW,
+    )
+    valid_snapshot = dict(store.rows[('users', 'u', ledger.ITEMS, item['item_id'])])
+    valid_snapshot['delivered_at'] = NOW.isoformat().replace('+00:00', 'Z')
+    snapshots = [
+        SimpleNamespace(to_dict=lambda: {'state': 'ready', 'delivered_at': NOW}),
+        SimpleNamespace(
+            to_dict=lambda: {
+                'item_id': 'old-naive',
+                'state': 'ready',
+                'delivered_at': (NOW - timedelta(hours=30)).replace(tzinfo=None),
+            }
+        ),
+        SimpleNamespace(
+            to_dict=lambda: {
+                'item_id': 'corrupt-str',
+                'state': 'ready',
+                'delivered_at': 'not-a-timestamp',
+            }
+        ),
+        SimpleNamespace(
+            to_dict=lambda: {
+                'item_id': 'bool-anchor',
+                'state': 'ready',
+                'delivered_at': True,
+            }
+        ),
+        SimpleNamespace(to_dict=lambda: valid_snapshot),
+    ]
+    monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=2))
+    monkeypatch.setattr(mapping, 'recent_mentor_query', lambda *args: SimpleNamespace(stream=lambda: snapshots))
+
+    mapping.record_mentor_reply('u', firestore_client=store)
+
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    assert row['acted_24h'] and row['delivered']
+
+
+def test_record_mentor_reply_credits_item_with_naive_snapshot_anchor(store, monkeypatch):
+    item = ready(store, producer='conversation_mentor_v2')
+    ledger.record_mentor_chat(
+        uid='u',
+        item_id=item['item_id'],
+        claim_token=item['claim_token'],
+        status='persisted',
+        message_id='chat-message',
+        firestore_client=store,
+        now=NOW,
+    )
+    naive_snapshot = dict(store.rows[('users', 'u', ledger.ITEMS, item['item_id'])])
+    naive_snapshot['mentor_chat_persisted_at'] = NOW.replace(tzinfo=None)
+    monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=5))
+    monkeypatch.setattr(
+        mapping,
+        'recent_mentor_query',
+        lambda *args: SimpleNamespace(stream=lambda: [SimpleNamespace(to_dict=lambda: naive_snapshot)]),
+    )
+
+    mapping.record_mentor_reply('u', firestore_client=store)
+
+    row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    assert row['acted_24h'] and row['delivered']
+
+
+def test_record_task_completion_skips_items_missing_item_id(store, monkeypatch):
+    item = ready(store)
+    outcome(store, item, 'shown')
+    valid_row = store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]
+    snapshots = [
+        SimpleNamespace(to_dict=lambda: {'producer': 'commitment_followup', 'state': 'ready'}),
+        SimpleNamespace(to_dict=lambda: {'item_id': '', 'producer': 'commitment_followup', 'state': 'ready'}),
+        SimpleNamespace(to_dict=lambda: valid_row),
+    ]
+    monkeypatch.setattr(mapping, 'utc_now', lambda: NOW + timedelta(minutes=2))
+    monkeypatch.setattr(mapping, 'task_items_query', lambda *args: SimpleNamespace(stream=lambda: snapshots))
+
+    mapping.record_task_completion('u', 'a', firestore_client=store)
+
+    assert store.rows[('users', 'u', ledger.ITEMS, item['item_id'])]['acted_24h']
+
+
+def test_coerce_utc_datetime_handles_naive_aware_iso_epoch_and_rejects_bool():
+    from datetime import timezone
+
+    naive = NOW.replace(tzinfo=None)
+    assert mapping._coerce_utc_datetime(naive) == NOW
+    assert mapping._coerce_utc_datetime(NOW) == NOW
+    assert mapping._coerce_utc_datetime(NOW.isoformat().replace('+00:00', 'Z')) == NOW
+    assert mapping._coerce_utc_datetime(NOW.timestamp()) == NOW
+    assert mapping._coerce_utc_datetime(True) is None
+    assert mapping._coerce_utc_datetime(False) is None
+    assert mapping._coerce_utc_datetime('') is None
+    assert mapping._coerce_utc_datetime('   ') is None
+    assert mapping._coerce_utc_datetime('not-a-timestamp') is None
+    assert mapping._coerce_utc_datetime(naive).tzinfo == timezone.utc

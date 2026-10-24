@@ -463,7 +463,10 @@ async def produce_followup(uid: str, action_item_id: str, due_revision: str) -> 
         return
     due = task.get('due_at')
     if isinstance(due, str):
-        due = datetime.fromisoformat(due.replace('Z', '+00:00'))
+        try:
+            due = datetime.fromisoformat(due.replace('Z', '+00:00'))
+        except ValueError:
+            return
     if not isinstance(due, datetime) or due.tzinfo is None:
         return
     revision = due.astimezone(timezone.utc).isoformat()
@@ -495,7 +498,10 @@ async def produce_followup(uid: str, action_item_id: str, due_revision: str) -> 
         current = await run_blocking(db_executor, tasks.get_action_item, uid, action_item_id)
         current_due = current.get('due_at') if current else None
         if isinstance(current_due, str):
-            current_due = datetime.fromisoformat(current_due.replace('Z', '+00:00'))
+            try:
+                current_due = datetime.fromisoformat(current_due.replace('Z', '+00:00'))
+            except ValueError:
+                current_due = None
         if (
             not current
             or current.get('completed')
@@ -597,15 +603,26 @@ def mentor_context(uid: str, frequency: int, threshold: float) -> dict:
     )
 
 
+_UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+
+
 def mentor_delivery_history(uid: str) -> list[str]:
     from database.chat import get_app_messages
-    from database.proactivity_producers import delivered_mentor_items
+    from database.proactivity_producers import _coerce_utc_datetime, delivered_mentor_items
 
-    candidates = [
-        (item['delivered_at'], spine.decode_feed_item(uid, item).body) for item in delivered_mentor_items(uid)
-    ]
+    candidates: list[tuple[datetime, str]] = []
+    for item in delivered_mentor_items(uid):
+        if not isinstance(item, dict):
+            continue
+        body = spine.decode_feed_item(uid, item).body
+        if isinstance(body, str) and body:
+            candidates.append((_coerce_utc_datetime(item.get('delivered_at')) or _UTC_MIN, body))
     # Legacy notifications share this chat. Human turns and unexposed v2 messages never enter history.
     for message in get_app_messages(uid, 'mentor', limit=50):
+        if not isinstance(message, dict):
+            continue
         if message.get('sender') == 'ai' and not message.get('proactivity_item_id'):
-            candidates.append((message['created_at'], message['text']))
+            text = message.get('text')
+            if isinstance(text, str) and text:
+                candidates.append((_coerce_utc_datetime(message.get('created_at')) or _UTC_MIN, text))
     return [text for _, text in sorted(candidates, key=lambda x: x[0], reverse=True)[:5]]
