@@ -1564,3 +1564,131 @@ def test_revoke_user_grant_leaves_other_clients_and_hosts_untouched():
     survivors = {grant['id']: grant for grant in mcp_oauth.list_user_grants(uid)}
     assert survivors[other_client['id']]['status'] == 'active'
     assert survivors[other_host['id']]['status'] == 'active'
+
+
+def test_list_user_grants_sorts_mixed_naive_aware_and_iso_timestamps():
+    uid = 'user-mixed-grant-ts'
+    scopes = ['memories.read']
+    g1 = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    g2 = mcp_oauth.create_or_update_grant(uid, 'omi-mcp-public', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    g3 = mcp_oauth.create_or_update_grant(uid, 'omi-claude-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+
+    now = mcp_oauth._now()
+    naive_oldest = (now - timedelta(hours=3)).replace(tzinfo=None)
+    iso_middle = (now - timedelta(hours=2)).isoformat().replace('+00:00', 'Z')
+    aware_newest = now - timedelta(hours=1)
+
+    mcp_oauth.db.collection('mcp_oauth_grants').document(g1['id']).set(
+        {'updated_at': naive_oldest, 'created_at': naive_oldest}, merge=True
+    )
+    mcp_oauth.db.collection('mcp_oauth_grants').document(g2['id']).set(
+        {'updated_at': iso_middle, 'created_at': iso_middle}, merge=True
+    )
+    mcp_oauth.db.collection('mcp_oauth_grants').document(g3['id']).set(
+        {'updated_at': aware_newest, 'created_at': aware_newest}, merge=True
+    )
+
+    listed = mcp_oauth.list_user_grants(uid)
+    assert [grant['id'] for grant in listed] == [g3['id'], g2['id'], g1['id']]
+
+
+def test_authorization_code_consume_and_exchange_accept_naive_and_iso_expires_at():
+    uid = 'user-code-ts'
+    scopes = ['memories.read']
+    redirect_uri = 'https://chatgpt.com/connector_platform_oauth_redirect'
+    verifier = 'v' * 64
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+
+    code_naive = mcp_oauth.issue_authorization_code(
+        uid,
+        grant['id'],
+        'omi-chatgpt-prod',
+        redirect_uri,
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256(verifier),
+    )
+    future_naive = (mcp_oauth._now() + timedelta(minutes=5)).replace(tzinfo=None)
+    mcp_oauth.db.collection('mcp_oauth_authorization_codes').document(mcp_oauth.hash_secret(code_naive)).update(
+        {'expires_at': future_naive}
+    )
+    consumed = mcp_oauth.consume_authorization_code(
+        code_naive, 'omi-chatgpt-prod', redirect_uri, mcp_oauth.MCP_RESOURCE_URL, verifier
+    )
+    assert consumed is not None
+    assert consumed['grant_id'] == grant['id']
+
+    code_iso = mcp_oauth.issue_authorization_code(
+        uid,
+        grant['id'],
+        'omi-chatgpt-prod',
+        redirect_uri,
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256(verifier),
+    )
+    future_iso = (mcp_oauth._now() + timedelta(minutes=5)).isoformat().replace('+00:00', 'Z')
+    mcp_oauth.db.collection('mcp_oauth_authorization_codes').document(mcp_oauth.hash_secret(code_iso)).update(
+        {'expires_at': future_iso}
+    )
+    exchanged = mcp_oauth.exchange_authorization_code_for_tokens(
+        code_iso, 'omi-chatgpt-prod', redirect_uri, mcp_oauth.MCP_RESOURCE_URL, verifier
+    )
+    assert exchanged is not None
+    assert exchanged['access_token'].startswith('omi_oat_')
+
+    code_expired_naive = mcp_oauth.issue_authorization_code(
+        uid,
+        grant['id'],
+        'omi-chatgpt-prod',
+        redirect_uri,
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256(verifier),
+    )
+    past_naive = (mcp_oauth._now() - timedelta(minutes=1)).replace(tzinfo=None)
+    mcp_oauth.db.collection('mcp_oauth_authorization_codes').document(
+        mcp_oauth.hash_secret(code_expired_naive)
+    ).update({'expires_at': past_naive})
+    assert (
+        mcp_oauth.exchange_authorization_code_for_tokens(
+            code_expired_naive, 'omi-chatgpt-prod', redirect_uri, mcp_oauth.MCP_RESOURCE_URL, verifier
+        )
+        is None
+    )
+
+
+def test_validate_access_token_and_rotate_refresh_token_handle_naive_and_iso_timestamps():
+    uid = 'user-token-ts'
+    scopes = ['memories.read']
+    grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    pair = mcp_oauth.issue_token_pair(grant, scopes=scopes)
+
+    now = mcp_oauth._now()
+    access_ref = mcp_oauth.db.collection('mcp_oauth_access_tokens').document(
+        mcp_oauth.hash_secret(pair['access_token'])
+    )
+    access_ref.update({'expires_at': (now + timedelta(minutes=30)).isoformat().replace('+00:00', 'Z')})
+    fake_redis.strings.clear()
+    fake_redis.sets.clear()
+
+    identity = mcp_oauth.validate_access_token(pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
+    assert identity is not None
+    assert identity['uid'] == uid
+
+    refresh_ref = mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(
+        mcp_oauth.hash_secret(pair['refresh_token'])
+    )
+    refresh_ref.update(
+        {
+            'expires_at': (now + timedelta(days=30)).replace(tzinfo=None),
+            'used_at': (now - timedelta(seconds=30)).replace(tzinfo=None),
+        }
+    )
+    outcomes = []
+    reissued = mcp_oauth.rotate_refresh_token(
+        pair['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, on_outcome=outcomes.append
+    )
+    assert reissued is not None
+    assert outcomes == ['replay_grace_reissued']
+
