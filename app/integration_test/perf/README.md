@@ -120,3 +120,16 @@ on failures, but the seeded host scenarios use debug-only fixture credential
 trust and must not be advertised as profile-ready. The device prototype and
 current access/credential asks are maintained in the dedicated device-route PR.
 Never use iOS simulator timing as profile evidence.
+
+## Legacy budget provenance
+
+The following original Stage 1 contract explains the historical numeric time
+budgets retained in budgets.json; current host admission is defined above.
+
+Keep scenario behavior, data sizes, sampling, and measurement definitions
+fixed while optimizing production code in later stages. Compare all four
+scenarios and their rebuild/animation evidence. Tighten budgets only after an
+accepted optimization win demonstrated across repeated comparable runs; do
+not raise budgets or weaken the interaction to hide a regression. The initial
+100 ms p90 budgets are generous bootstrap gates, not a 60 fps quality claim.
+Stage 1 neither changes production code nor publishes changes.
