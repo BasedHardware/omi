@@ -19,6 +19,9 @@ def mock_dependencies(monkeypatch):
     )
     monkeypatch.setattr(conversation_finalization.jobs_db, 'defer_finalization_replay', mock.Mock(return_value=False))
     monkeypatch.setattr(
+        conversation_finalization.jobs_db, 'get_finalization_job', mock.Mock(return_value={'status': 'quiet_done'})
+    )
+    monkeypatch.setattr(
         conversation_finalization.jobs_db,
         'recover_stranded_byok_jobs',
         mock.Mock(return_value={'blocked': 0, 'errors': 0}),
@@ -228,6 +231,8 @@ def test_reconcile_skips_generation_already_dispatched_by_another_tick(mock_depe
         ('deferred', {'status': 'waiting_quiet', 'dispatch_generation': 2}, 'advanced'),
         ('deferred', {'status': 'waiting_quiet', 'dispatch_generation': 1}, 'no_progress'),
         ('queued', {'status': 'waiting_quiet', 'dispatch_generation': 2}, 'requeued'),
+        ('done', {'status': 'waiting_quiet', 'dispatch_generation': 1}, 'no_progress'),
+        ('queued', {'status': 'waiting_quiet', 'dispatch_generation': 1}, 'no_progress'),
     ],
 )
 def test_quiet_replay_counts_actual_outcome(mock_dependencies, monkeypatch, outcome, current, key):
