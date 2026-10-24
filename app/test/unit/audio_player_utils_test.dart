@@ -10,6 +10,15 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/audio_player_utils.dart';
 
+Int16List _decodeTestOpusFrame(Uint8List frame, int sampleRate, int channels) {
+  // RFC 6716 10ms silent Opus frame ([176, 255, 254]); reject malformed frames
+  // so the worker isolate exercises the corrupt-frame Logger.debug skip path.
+  if (frame.length == 3 && frame[0] == 176 && frame[1] == 255 && frame[2] == 254) {
+    return Int16List.fromList([0x0201, 0x0403]);
+  }
+  throw const FormatException('Corrupt Opus frame');
+}
+
 void main() {
   late AudioPlayerUtils player;
 
@@ -191,6 +200,7 @@ void main() {
     });
 
     tearDown(() async {
+      player.debugOpusFrameDecoder = null;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
         const MethodChannel('plugins.flutter.io/path_provider'),
         null,
@@ -241,6 +251,47 @@ void main() {
       expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF');
       expect(wav.sublist(44), [5, 6, 7, 8]);
       expect(player.lastWorkerIsolateName, equals('decodeWalAudio'));
+      expect(player.lastWorkerIsolateName, isNot(equals(Isolate.current.debugName)));
+    });
+
+    test('decodes Opus frames and safely runs Logger.debug skip paths in background isolate', () async {
+      player.debugOpusFrameDecoder = _decodeTestOpusFrame;
+      final opusName = 'audio_2600.bin';
+      final opusBytes = BytesBuilder();
+      for (final frame in <List<int>>[
+        [176, 255, 254],
+        [0xFF],
+        [176, 255, 254],
+      ]) {
+        opusBytes
+          ..add((ByteData(4)..setUint32(0, frame.length, Endian.little)).buffer.asUint8List())
+          ..add(frame);
+      }
+      await File('${dir.path}/$opusName').writeAsBytes(opusBytes.takeBytes());
+      final opusWal = Wal(
+        timerStart: 2600,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        filePath: opusName,
+        storage: WalStorage.disk,
+        device: 'omi',
+      );
+
+      final corruptPartWal = await pcmFile(2610, [9, 9, 9, 9]);
+      final cachedCorruptPath = await player.ensureAudioFileExists(corruptPartWal);
+      await File(cachedCorruptPath!).writeAsBytes([0, 1, 2, 3]);
+
+      final validLaterWal = await pcmFile(2620, [5, 6, 7, 8]);
+      final out = await player.writeRecordingWav(
+        [opusWal, corruptPartWal, validLaterWal],
+        outputPath: '${dir.path}/opus_out.wav',
+      );
+
+      expect(out, isNotNull);
+      final wav = await out!.readAsBytes();
+      expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF');
+      expect(wav.sublist(44), [1, 2, 3, 4, 1, 2, 3, 4, 5, 6, 7, 8]);
+      expect(player.lastWorkerIsolateName, equals('writeRecordingWav'));
       expect(player.lastWorkerIsolateName, isNot(equals(Isolate.current.debugName)));
     });
 

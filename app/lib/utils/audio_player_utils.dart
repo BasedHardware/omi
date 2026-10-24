@@ -43,6 +43,9 @@ List<Uint8List> parseLengthPrefixedFrames(Uint8List data) {
   return frames;
 }
 
+@visibleForTesting
+typedef OpusFrameDecoder = Int16List Function(Uint8List frame, int sampleRate, int channels);
+
 class AudioPlayerUtils extends ChangeNotifier {
   // Singleton pattern
   static final AudioPlayerUtils _instance = AudioPlayerUtils._internal();
@@ -62,6 +65,9 @@ class AudioPlayerUtils extends ChangeNotifier {
 
   final Map<String, String> _audioFileCache = {};
   String? _lastWorkerIsolateName;
+
+  @visibleForTesting
+  OpusFrameDecoder? debugOpusFrameDecoder;
 
   @visibleForTesting
   String? get lastWorkerIsolateName => _lastWorkerIsolateName;
@@ -303,6 +309,7 @@ class AudioPlayerUtils extends ChangeNotifier {
       sampleRate: wal.sampleRate,
       channels: wal.channel,
       bitsPerSample: bitsPerSample,
+      opusFrameDecoder: debugOpusFrameDecoder,
     );
   }
 
@@ -420,6 +427,7 @@ class _WalWavWorkItem {
   final int sampleRate;
   final int channels;
   final int bitsPerSample;
+  final OpusFrameDecoder? opusFrameDecoder;
 
   const _WalWavWorkItem.cached({required this.walId, required String this.cachedWavPath})
       : inputPath = null,
@@ -427,7 +435,8 @@ class _WalWavWorkItem {
         isOpus = false,
         sampleRate = 0,
         channels = 0,
-        bitsPerSample = 0;
+        bitsPerSample = 0,
+        opusFrameDecoder = null;
 
   const _WalWavWorkItem.decode({
     required this.walId,
@@ -437,6 +446,7 @@ class _WalWavWorkItem {
     required this.sampleRate,
     required this.channels,
     required this.bitsPerSample,
+    this.opusFrameDecoder,
   }) : cachedWavPath = null;
 }
 
@@ -503,16 +513,26 @@ Future<String?> _decodeWalWorkItemToWav(_WalWavWorkItem item) async {
 
   final Uint8List combinedPcm;
   if (item.isOpus) {
-    await _ensureOpusInitializedInIsolate();
-    final decoder = SimpleOpusDecoder(sampleRate: item.sampleRate, channels: item.channels);
+    final customDecoder = item.opusFrameDecoder;
+    SimpleOpusDecoder? nativeDecoder;
+    if (customDecoder == null) {
+      await _ensureOpusInitializedInIsolate();
+      nativeDecoder = SimpleOpusDecoder(sampleRate: item.sampleRate, channels: item.channels);
+    }
     final pcmFrames = <Uint8List>[];
-    for (final opusFrame in frames) {
-      try {
-        final pcmFrame = decoder.decode(input: opusFrame);
-        pcmFrames.add(Uint8List.fromList(pcmFrame.buffer.asUint8List()));
-      } catch (e) {
-        Logger.debug('AudioPlayerUtils: skipping corrupted Opus frame for WAL ${item.walId}: $e');
+    try {
+      for (final opusFrame in frames) {
+        try {
+          final pcmFrame = customDecoder != null
+              ? customDecoder(opusFrame, item.sampleRate, item.channels)
+              : nativeDecoder!.decode(input: opusFrame);
+          pcmFrames.add(Uint8List.fromList(pcmFrame.buffer.asUint8List()));
+        } catch (e) {
+          Logger.debug('AudioPlayerUtils: skipping corrupted Opus frame for WAL ${item.walId}: $e');
+        }
       }
+    } finally {
+      nativeDecoder?.destroy();
     }
     if (pcmFrames.isEmpty) return null;
     final totalLength = pcmFrames.fold<int>(0, (sum, frame) => sum + frame.length);
