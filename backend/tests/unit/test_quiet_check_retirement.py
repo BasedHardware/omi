@@ -263,8 +263,6 @@ def test_processing_rollback_cannot_commit_live_without_restoring_owed_custody(m
 
 
 def test_deferred_cleanup_telemetry_failure_cannot_invalidate_owner_result(monkeypatch, caplog):
-    from utils.observability import fallback
-
     def fail(**kwargs):
         raise RuntimeError('synthetic telemetry failure')
 
@@ -272,7 +270,7 @@ def test_deferred_cleanup_telemetry_failure_cannot_invalidate_owner_result(monke
         def collection(self, name):
             raise RuntimeError('synthetic cleanup read failure')
 
-    monkeypatch.setattr(fallback, 'record_fallback', fail)
+    monkeypatch.setattr(retirement, 'record_fallback', fail)
     assert not retirement.stop_quiet_check_for_conversation(
         'synthetic', 'capture', firestore_client=UnavailableClient()
     )

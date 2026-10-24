@@ -8,6 +8,7 @@ from typing import Any
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +30,6 @@ def _retire(transaction: Any, ref: Any, *, failure_code: str | None = None) -> N
 
 def _record_deferred_retirement(operation: str) -> None:
     try:
-        from utils.observability.fallback import record_fallback
-
         record_fallback(
             component='conversation_finalization',
             from_mode='inline',
