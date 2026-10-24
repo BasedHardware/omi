@@ -293,13 +293,20 @@ def cleanup_completed_artifacts(
             data = artifact.to_dict() or {}
             erasure_requested = data.get('erasure_requested') is True
             uri = data.get('uri')
+            uid = data.get('owner_id')
             if not isinstance(uri, str) or not uri.strip():
+                invalid_reason = 'missing_uri'
+            elif not isinstance(uid, str) or not uid or data.get('owner_key') != privacy_owner_key(uid):
+                invalid_reason = 'owner_mismatch'
+            else:
+                invalid_reason = None
+            if invalid_reason:
                 # A malformed/previously cleaned receipt is not delete authority.
                 # Park and flag it so it cannot starve every subsequent due page.
                 try:
                     artifact.reference.update(
                         {
-                            'cleanup_error': 'missing_uri',
+                            'cleanup_error': invalid_reason,
                             'cleanup_flagged_at': now,
                             'cleanup_after': firestore.DELETE_FIELD,
                             'expires_at': firestore.DELETE_FIELD,
@@ -309,7 +316,7 @@ def cleanup_completed_artifacts(
                     touched.append(('artifacts', artifact.id))
                 except (NotFound, FailedPrecondition):
                     pass
-                logger.warning('event=batch_cleanup outcome=retained reason=missing_uri')
+                logger.warning('event=batch_cleanup outcome=retained reason=%s', invalid_reason)
                 continue
             if not erasure_requested:
                 capture_at, duration = data.get('capture_at'), data.get('duration_seconds')

@@ -272,6 +272,10 @@ def test_incident_hold_and_uri_less_receipt_do_not_block_unrelated_or_privacy_cl
     )
     table.document('erasure').set({**base, 'uri': 'gs://synthetic/erase#42', 'erasure_requested': True})
     table.document('false-erasure').set({**base, 'erasure_requested': 'false'})
+    table.document('invalid-calendar').set({**base, 'capture_at': 1792000000000})
+    table.document('inconsistent-owner').set(
+        {**base, 'owner_key': privacy_owner_key('different-synthetic-owner'), 'erasure_requested': True}
+    )
     erased = []
     assert cleanup_completed_artifacts(store, now, delete_uri=lambda owner, uri: erased.append(uri)) == 2
     assert set(erased) == {'gs://synthetic/good#42', 'gs://synthetic/erase#42'}
@@ -281,6 +285,10 @@ def test_incident_hold_and_uri_less_receipt_do_not_block_unrelated_or_privacy_cl
     assert missing['cleanup_error'] == 'missing_uri' and 'cleanup_after' not in missing
     assert not table.document('erasure').get().exists
     assert table.document('false-erasure').get().to_dict()['cleanup_hold'] == 'capture_window'
+    assert table.document('invalid-calendar').get().to_dict()['cleanup_hold'] == 'unknown_capture_range'
+    inconsistent = table.document('inconsistent-owner').get().to_dict()
+    assert inconsistent['cleanup_error'] == 'owner_mismatch'
+    assert inconsistent['uri'] == base['uri'] and 'cleanup_after' not in inconsistent
 
 
 def test_real_firestore_update_precondition_preserves_a_newer_privacy_erasure(state, monkeypatch):
@@ -294,6 +302,7 @@ def test_real_firestore_update_precondition_preserves_a_newer_privacy_erasure(st
     reference.set(
         {
             'owner_id': uid,
+            'owner_key': privacy_owner_key(uid),
             'uri': 'gs://synthetic/race#42',
             'kind': 'audio',
             'capture_at': datetime(2026, 10, 23, tzinfo=timezone.utc).timestamp(),

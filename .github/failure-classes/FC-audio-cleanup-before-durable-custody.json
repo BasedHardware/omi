@@ -6,13 +6,15 @@
   "canonical_prevention_artifact": [
     "backend/tests/unit/test_sync_staging_custody.py",
     "backend/tests/unit/test_batch_cleanup_custody.py",
-    "backend/tests/unit/test_audio_cleanup_custody.py"
+    "backend/tests/unit/test_audio_cleanup_custody.py",
+    "backend/tests/unit/test_sync_staging_lifecycle_guard.py"
   ],
   "evidence_prs": [],
   "scope_hints": [
     "backend/utils/sync/staging_custody.py",
     "backend/utils/batch_pipeline/retention.py",
-    "backend/utils/audio_cleanup_custody.py"
+    "backend/utils/audio_cleanup_custody.py",
+    "backend/scripts/check_sync_staging_lifecycle.py"
   ],
   "status": "open"
 }

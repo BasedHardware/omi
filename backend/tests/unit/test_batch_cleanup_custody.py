@@ -11,6 +11,7 @@ from utils.batch_pipeline import retention
 def row(key='a', **values):
     data = {
         'owner_id': 'synthetic',
+        'owner_key': retention.privacy_owner_key('synthetic'),
         'segment_id': key,
         'uri': 'gs://synthetic/object#42',
         'kind': 'audio',
@@ -65,6 +66,25 @@ def test_incident_audio_and_results_are_held_before_any_delete(cleanup):
         assert update['cleanup_hold'] == 'capture_window'
         assert update['cleanup_after'] == now + timedelta(hours=1)
         assert update['expires_at'] is retention.firestore.DELETE_FIELD
+
+
+@pytest.mark.parametrize(
+    'values', [{'owner_key': None}, {'owner_key': 'different-owner'}, {'owner_id': None}, {'owner_id': 42}]
+)
+@pytest.mark.parametrize('erasure', [False, True])
+def test_inconsistent_owner_receipt_never_authorizes_routine_or_privacy_delete(cleanup, values, erasure):
+    run, _, _, _ = cleanup
+    inconsistent = row('bad-owner', **values, erasure_requested=erasure)
+    good = row('good')
+    count, delete = run([inconsistent, good])
+    assert count == 1
+    delete.assert_called_once_with('synthetic', good.to_dict()['uri'])
+    update = inconsistent.reference.update.call_args.args[0]
+    assert update['cleanup_error'] == 'owner_mismatch'
+    assert update['cleanup_after'] is retention.firestore.DELETE_FIELD
+    assert update['expires_at'] is retention.firestore.DELETE_FIELD
+    assert inconsistent.reference.update.call_args.kwargs['option']._last_update_time == inconsistent.update_time
+    inconsistent.reference.delete.assert_not_called()
 
 
 def test_old_receipts_resolve_capture_range_from_job(cleanup):

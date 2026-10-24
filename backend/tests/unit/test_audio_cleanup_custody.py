@@ -25,6 +25,11 @@ def clean_config(monkeypatch):
         (True, 60, True),
         ('2026-10-25T00:00:00', 0, True),
         ('2026-10-25T00:00:00Z', -1, True),
+        (1e308, 60, True),
+        (-1e308, 60, True),
+        (1792000000000, 60, True),
+        ('0001-01-01T00:00:00+01:00', 60, True),
+        ('9999-12-31T23:59:59-01:00', 60, True),
     ],
 )
 def test_capture_window_overlap_and_unknown_provenance(start, duration, held):

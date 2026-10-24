@@ -44,12 +44,19 @@ timezone-qualified, inclusive `start..end` capture windows. Its default is:
 ```
 
 The shared policy holds overlapping ranges, invalid/empty configuration and
-missing capture provenance. An unknown end is treated conservatively: a source
+missing or calendar-invalid capture provenance, including epoch-milliseconds
+misreported as seconds. An unknown end is treated conservatively: a source
 that starts before a window ends can overlap it. Thus legacy sources with only
 a filename timestamp can remain held outside the exact incident start until
 their end is certified. New batch artifact receipts include capture time and
 duration; older receipts fall back to their job's capture metadata. Missing
 jobs retain artifacts.
+
+Before any routine or receipt-driven erasure, the receipt's `owner_key` must
+match the canonical hash of its nonempty `owner_id`. Inconsistent rows are
+flagged `cleanup_error=owner_mismatch`, retain their URI and leave the due
+query. An untrusted erasure flag cannot grant authority to delete another
+owner's data. Direct owner-wide privacy purges remain authoritative.
 
 Held batch rows retain their URI, lose any receipt TTL and re-enter the due
 queue in one hour. This rotates a held first page so unrelated cleanup keeps
@@ -63,6 +70,38 @@ or checksum/generation gates. Already parked batch rows recheck within an hour.
 Do not remove the hold before the incident owner has reconciled custody. Keep
 URI-less receipts for the repair owner; this change does not guess their URI or
 erase their metadata.
+
+## Bucket-policy release prerequisite
+
+An application receipt does not stop a GCS lifecycle deletion. Historical
+one-day lifecycle assumptions are not current policy guarantees:
+a read-only metadata check on 2026-10-24 at 21:24Z found `syncing-local`
+metageneration 15 with no lifecycle rule. Recheck policy before promotion;
+source tests cannot establish live bucket configuration.
+
+Run `backend/scripts/check_sync_staging_lifecycle.py` through a read-only agent
+tier, with the release candidate's resolved bucket configuration. The guard
+audits every configured `BUCKET_TEMPORAL_SYNC_LOCAL`, `BUCKET_AUDIO_DERIVED`
+and `BUCKET_BATCH_PIPELINE`; repeated `--bucket` arguments supplement those
+targets. Include any configured target absent from the audit environment.
+For the known temporal target:
+
+```bash
+source ~/.local/bin/gcp-agent-env.sh ro-prod
+backend/.venv/bin/python backend/scripts/check_sync_staging_lifecycle.py --bucket syncing-local
+```
+
+Keep its timestamped JSON receipt before the T3b release. It reads bucket
+metadata only and emits counts, metagenerations and policy digests, with no
+bucket/env values, prefixes or provider diagnostics. Missing metadata,
+lifecycle `Delete` actions and bucket retention/default holds that could block
+privacy erasure fail the guard. It never lists, reads, copies or restores
+objects, changes policy, or uses the interactive human identity.
+
+Do not substitute a GCS retention lock or object hold for this application
+hold: privacy erasure must remain possible immediately. The rollout lead owns
+any separately authorized policy remediation and must not promote an unsafe
+or unaudited staging target.
 
 ## Privacy precedence and release
 

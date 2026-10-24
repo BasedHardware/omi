@@ -1,6 +1,6 @@
 """Capture-window preservation for routine cleanup only, never privacy erasure."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 import math
 import os
 
@@ -8,15 +8,20 @@ DEFAULT_HOLD_WINDOWS = '2026-10-22T13:36:30Z..2026-10-24T07:16:00Z'
 
 
 def _epoch(value):
+    if isinstance(value, str):
+        return _epoch(datetime.fromisoformat(value.replace('Z', '+00:00')))
     if isinstance(value, datetime):
         if value.tzinfo is None:
             raise ValueError('capture timestamp must have a timezone')
-        return value.timestamp()
-    if isinstance(value, str):
-        return _epoch(datetime.fromisoformat(value.replace('Z', '+00:00')))
-    if isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
-        return float(value)
-    raise ValueError('invalid capture timestamp')
+        epoch = value.timestamp()
+    elif isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value):
+        epoch = float(value)
+    else:
+        raise ValueError('invalid capture timestamp')
+    # Finite numbers can still be malformed epoch-milliseconds or outside the
+    # representable UTC calendar. They must not release an incident hold.
+    datetime.fromtimestamp(epoch, timezone.utc)
+    return epoch
 
 
 def cleanup_hold_reason(capture_at, duration_seconds=None) -> str | None:
