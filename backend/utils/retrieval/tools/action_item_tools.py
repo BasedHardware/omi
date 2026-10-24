@@ -171,18 +171,22 @@ def get_action_items_tool(
             logger.info(f"❌ get_action_items_tool - config is None")
             return "Error: Configuration not available"
 
-        if 'configurable' not in cfg:
-            logger.info(
-                f"❌ get_action_items_tool - config['configurable'] not found. Config keys: {list(cfg.keys()) if cfg else 'None'}"
-            )
-            return "Error: Configuration format invalid"
+        if not isinstance(cfg, dict):
+            logger.info("❌ get_action_items_tool - config is not a dict")
+            return "Error: Configuration error."
 
         configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
+        if isinstance(configurable, dict):
+            uid = configurable.get('user_id') or configurable.get('uid')
+        else:
+            uid = None
+            configurable = {}
+
         if not uid:
-            logger.info(
-                f"❌ get_action_items_tool - no user_id in config. Configurable keys: {list(configurable.keys()) if configurable else 'None'}"
-            )
+            uid = cfg.get('user_id') or cfg.get('uid')
+
+        if not uid:
+            logger.info("❌ get_action_items_tool - no user_id in config")
             return "Error: User ID not found in configuration"
         clock = clock_for_config(cfg, uid)
 
@@ -205,59 +209,72 @@ def get_action_items_tool(
     if scope_err:
         return f"Error: {scope_err}"
 
-    # Cap at 500 per call
+    # Safe limit and offset coercion
+    try:
+        limit = int(limit)
+    except (ValueError, TypeError):
+        limit = 50
     if limit > 500:
         logger.info(f"⚠️ get_action_items_tool - limit capped from {limit} to 500")
         limit = 500
+    elif limit < 1:
+        limit = 1
+
+    try:
+        offset = max(0, int(offset))
+    except (ValueError, TypeError):
+        offset = 0
 
     # Parse created_at dates if provided (must be ISO format with timezone)
     start_dt = None
     end_dt = None
 
-    if start_date:
+    if start_date is not None:
+        if not isinstance(start_date, str) or not start_date.strip():
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
         try:
-            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
-            start_dt = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+            start_dt = datetime.fromisoformat(start_date.strip().replace('Z', '+00:00'))
             if start_dt.tzinfo is None:
                 return f"Error: start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {start_date}"
             logger.info("Parsed action-item start_date")
-        except ValueError:
-            return (
-                f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
-            )
+        except (ValueError, TypeError, AttributeError):
+            return f"Error: Invalid start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {start_date}"
 
-    if end_date:
+    if end_date is not None:
+        if not isinstance(end_date, str) or not end_date.strip():
+            return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
         try:
-            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
-            end_dt = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+            end_dt = datetime.fromisoformat(end_date.strip().replace('Z', '+00:00'))
             if end_dt.tzinfo is None:
                 return f"Error: end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {end_date}"
             logger.info("Parsed action-item end_date")
-        except ValueError:
+        except (ValueError, TypeError, AttributeError):
             return f"Error: Invalid end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {end_date}"
 
     # Parse due_at dates if provided
     due_start_dt = None
     due_end_dt = None
 
-    if due_start_date:
+    if due_start_date is not None:
+        if not isinstance(due_start_date, str) or not due_start_date.strip():
+            return f"Error: Invalid due_start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_start_date}"
         try:
-            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
-            due_start_dt = datetime.fromisoformat(due_start_date.replace('Z', '+00:00'))
+            due_start_dt = datetime.fromisoformat(due_start_date.strip().replace('Z', '+00:00'))
             if due_start_dt.tzinfo is None:
                 return f"Error: due_start_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T15:00:00-08:00'): {due_start_date}"
             logger.info("Parsed action-item due_start_date")
-        except ValueError:
+        except (ValueError, TypeError, AttributeError):
             return f"Error: Invalid due_start_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_start_date}"
 
-    if due_end_date:
+    if due_end_date is not None:
+        if not isinstance(due_end_date, str) or not due_end_date.strip():
+            return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date}"
         try:
-            # Parse ISO format with timezone - should be in user's timezone (YYYY-MM-DDTHH:MM:SS+HH:MM)
-            due_end_dt = datetime.fromisoformat(due_end_date.replace('Z', '+00:00'))
+            due_end_dt = datetime.fromisoformat(due_end_date.strip().replace('Z', '+00:00'))
             if due_end_dt.tzinfo is None:
                 return f"Error: due_end_date must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-19T23:59:59-08:00'): {due_end_date}"
             logger.info("Parsed action-item due_end_date")
-        except ValueError:
+        except (ValueError, TypeError, AttributeError):
             return f"Error: Invalid due_end_date format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_end_date}"
 
     # Get action items
@@ -438,18 +455,24 @@ def create_action_item_tool(
 
     try:
         configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
+        if isinstance(configurable, dict):
+            uid = configurable.get('user_id') or configurable.get('uid')
+        else:
+            uid = None
+            configurable = {}
+        if not uid:
+            uid = cfg.get('user_id') or cfg.get('uid')
     except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ create_action_item_tool - error accessing config: {e}", exc_info=True)
         return "Error: Configuration not available"
 
     if not uid:
-        logger.info(f"❌ create_action_item_tool - no user_id in config")
+        logger.info("❌ create_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     clock = clock_for_config(cfg, uid)
 
     # Validate description
-    if not description or not description.strip():
+    if not isinstance(description, str) or not description.strip():
         return "Error: Description is required to create an action item."
     # Prepare action item data
     action_item_data: Dict[str, Any] = {
@@ -475,9 +498,11 @@ def create_action_item_tool(
 
     # Parse or set due date
     if due_at is not None:
+        if not isinstance(due_at, str) or not due_at.strip():
+            return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at}"
         # Parse provided due date (must be ISO format with timezone)
         try:
-            due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+            due_dt = datetime.fromisoformat(due_at.strip().replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
                 return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
             # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences).
@@ -492,7 +517,7 @@ def create_action_item_tool(
                     "Please use a future date for the due date."
                 )
             action_item_data['due_at'] = due_dt
-        except ValueError:
+        except (ValueError, TypeError, AttributeError):
             return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at}"
     else:
         # A task the user never dated has no due date. Inventing now+24h put it in
@@ -627,15 +652,25 @@ def update_action_item_tool(
 
     try:
         configurable: Any = cfg.get('configurable')
-        uid = configurable.get('user_id')
+        if isinstance(configurable, dict):
+            uid = configurable.get('user_id') or configurable.get('uid')
+        else:
+            uid = None
+            configurable = {}
+        if not uid:
+            uid = cfg.get('user_id') or cfg.get('uid')
     except (KeyError, TypeError, AttributeError) as e:
         logger.error(f"❌ update_action_item_tool - error accessing config: {e}", exc_info=True)
         return "Error: Configuration not available"
 
     if not uid:
-        logger.info(f"❌ update_action_item_tool - no user_id in config")
+        logger.info("❌ update_action_item_tool - no user_id in config")
         return "Error: User ID not found in configuration"
     clock = clock_for_config(cfg, uid)
+
+    if not action_item_id or not isinstance(action_item_id, str) or not action_item_id.strip():
+        return "Error: action_item_id is required to update an action item."
+    action_item_id = action_item_id.strip()
 
     # Check if action item exists
     resolved_id, ref_error = resolve_edit_ref(configurable, 'tasks', action_item_id, parameter='action_item_id')
@@ -668,13 +703,17 @@ def update_action_item_tool(
             changes.append("marked as pending")
 
     if description is not None:
-        update_data['description'] = description
-        changes.append(f"description updated to '{description}'")
+        if isinstance(description, str) and description.strip():
+            desc_clean = description.strip()
+            update_data['description'] = desc_clean
+            changes.append(f"description updated to '{desc_clean}'")
 
     if due_at is not None:
+        if not isinstance(due_at, str) or not due_at.strip():
+            return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at}"
         try:
             # Parse due date (must be ISO format with timezone)
-            due_dt = datetime.fromisoformat(due_at.replace('Z', '+00:00'))
+            due_dt = datetime.fromisoformat(due_at.strip().replace('Z', '+00:00'))
             if due_dt.tzinfo is None:
                 return f"Error: due_at must include timezone in user's timezone format YYYY-MM-DDTHH:MM:SS+HH:MM (e.g., '2024-01-20T14:30:00-08:00'): {due_at}"
             # Reject due dates more than 1 day in the past (allow 1-day grace for timezone differences)
@@ -689,7 +728,7 @@ def update_action_item_tool(
 
             update_data['due_at'] = due_dt
             changes.append(f"due date set to {format_instant(due_dt, clock)}")
-        except ValueError:
+        except (ValueError, TypeError, AttributeError):
             return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at}"
 
     if not update_data:

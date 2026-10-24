@@ -100,7 +100,7 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         except Exception:
             date_str = started_at
 
-    category_tag = strip_surrogates(category).lower().replace(" ", "-")
+    category_tag = strip_surrogates(str(category)).lower().replace(" ", "-")
 
     # Serialize YAML frontmatter scalars safely using json.dumps to prevent injection and Python 3.10/3.11 SyntaxError
     lines: List[str] = [
@@ -158,14 +158,26 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         for seg in transcript_segments:
             if not isinstance(seg, dict):
                 continue
-            speaker = seg.get("speaker", "Speaker")
-            if isinstance(speaker, int):
+            speaker = seg.get("speaker")
+            if speaker is None:
+                speaker = seg.get("speaker_name")
+            if speaker is None:
+                speaker = seg.get("speaker_id")
+            if speaker is None:
+                speaker = "Speaker"
+
+            if isinstance(speaker, bool):
+                speaker_label = "Speaker"
+            elif isinstance(speaker, int):
                 speaker_label = f"Speaker {speaker}"
             else:
-                speaker_label = str(speaker) if speaker else "Speaker"
+                speaker_str = str(speaker).strip()
+                speaker_label = speaker_str if speaker_str else "Speaker"
 
             start_time = format_timestamp(seg.get("start"))
-            text = (seg.get("text") or "").strip()
+            raw_text = seg.get("text") or ""
+            # Flatten multiline text so it stays inside blockquote without breaking formatting
+            text = " ".join(str(raw_text).split()).strip()
             if text:
                 lines.append(f"> **[{start_time}] {speaker_label}:** {text}")
                 lines.append(">")
@@ -209,6 +221,10 @@ def export_conversations(
         md_content = conversation_to_markdown(conv)
 
         if overwrite:
+            counter = 1
+            while filepath in used_paths:
+                counter += 1
+                filepath = output_dir / f"{base_name}_{counter}.md"
             used_paths.add(filepath)
             filepath.write_text(md_content, encoding="utf-8")
         else:
