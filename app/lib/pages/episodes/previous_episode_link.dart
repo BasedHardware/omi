@@ -42,13 +42,16 @@ class _PreviousEpisodeLinkState extends State<PreviousEpisodeLink> {
   @override
   Widget build(BuildContext context) {
     final id = context.select<CaptureProvider, String?>((c) => c.topConversationId);
-    if (id != _conversationId) {
+    final episodes = context.watch<EpisodeProvider?>();
+    // A current episode already identifies this capture. Only recover through its member
+    // when the live endpoint is empty; a later disappearance re-arms this lookup.
+    if (id != _conversationId && episodes?.live == null) {
       _conversationId = id;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && id != null) unawaited(_episodes?.recoverPrevious(id));
       });
     }
-    final episode = context.watch<EpisodeProvider?>()?.previous;
+    final episode = episodes?.previous;
     if (episode == null) return const SizedBox.shrink();
     return Padding(
       key: const Key('previous_episode_link'),
