@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-list-filter-without-visible-clear-control",
+  "violated_contract": "A filter that narrows a list must stay visible on that list, with a way to clear it, for as long as it is active. #7639 fixed Home's filter chips hiding on an empty filtered result, which left no way to clear the filter short of restarting the app. After #19730 moved folders into search and removed Home's folder chips, deleting a folder from search still called ConversationProvider.filterByFolder(destination): Home then listed only the folder the conversations moved to, with no chip to show or clear that filter, until the app restarted.",
+  "canonical_prevention": "Set a list filter only from a surface that shows it with its clear action, and when that surface goes away, remove or migrate every caller that sets the filter in the same change. Flows that change items (deleting a folder, moving conversations) reload the list under its current filters and never select a new one. Guard with a widget test that drives the flow through the production sheet and asserts the list's filter is unchanged and rows outside the touched folder are still displayed.",
+  "canonical_prevention_artifact": [
+    "app/test/pages/conversations/folder_options_sheet_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/pages/conversations/**",
+    "app/lib/pages/search/**",
+    "app/lib/providers/conversation_provider.dart"
+  ],
+  "status": "open"
+}
