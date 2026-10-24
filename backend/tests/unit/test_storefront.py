@@ -119,10 +119,45 @@ def client(monkeypatch):
     monkeypatch.setattr(route.auth, 'check_rate_limit', lambda *args: (True, 12, 0))
     monkeypatch.setattr(route.auth, 'RATE_LIMIT_SHADOW', False)
     monkeypatch.setenv('STOREFRONT_LADDER_V1_ENABLED', 'true')
+    # These tests pin ladder presentation policy for a default (basic) caller.
+    # The 2026-10-24 new-buyer single-plan rule 404s that caller on non-desktop
+    # platforms (see test_new_buyer_single_plan_rule_below), so restore the
+    # pre-ruling storefront here; the rule itself has its own tests.
+    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
     monkeypatch.setattr(route, 'should_hide_subscription_ui', lambda *args: False)
     monkeypatch.setattr(route.users_db, 'get_user_valid_subscription', lambda uid, **kwargs: Subscription())
     monkeypatch.setattr(route, '_usage', lambda *args: StorefrontUsage())
     return TestClient(app)
+
+
+def test_new_buyer_single_plan_rule_blocks_ladder_storefront_for_non_desktop(client, monkeypatch):
+    """2026-10-24 ruling at the v2 route: a basic buyer on mobile/web/unknown or
+    missing platform gets no ladder storefront (404, same as flag-off); desktop
+    and existing subscribers are unchanged; the kill switch restores the sheet."""
+    monkeypatch.delenv('NEW_BUYER_SINGLE_PLAN_ENABLED', raising=False)
+    no_storefront = [
+        {},
+        {'X-App-Platform': 'ios'},
+        {'X-App-Platform': 'android'},
+        {'X-App-Platform': 'web'},
+        {'X-App-Platform': 'not-a-platform'},
+    ]
+    for headers in no_storefront:
+        response = client.get('/v2/payments/plans', headers=headers)
+        assert response.status_code == 404, (headers, response.status_code)
+        assert response.json()['detail'] == 'Storefront is not enabled'
+    for platform in ('macos', 'windows'):
+        assert client.get('/v2/payments/plans', headers={'X-App-Platform': platform}).status_code == 200
+
+    monkeypatch.setattr(
+        route.users_db, 'get_user_valid_subscription', lambda uid, **kwargs: Subscription(plan=PlanType.plus)
+    )
+    assert client.get('/v2/payments/plans', headers={'X-App-Platform': 'ios'}).status_code == 200
+
+    monkeypatch.setattr(route.users_db, 'get_user_valid_subscription', lambda uid, **kwargs: Subscription())
+    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
+    for headers in no_storefront:
+        assert client.get('/v2/payments/plans', headers=headers).status_code == 200, headers
 
 
 def test_route_dark_by_default_and_bad_flag_cannot_read_data(client, monkeypatch):

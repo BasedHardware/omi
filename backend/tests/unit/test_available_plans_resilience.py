@@ -20,6 +20,10 @@ UNLIM_MONTHLY = "price_1RrxXL1F8wnoWYvwIddzR902"
 UNLIM_ANNUAL = "price_1RrxXL1F8wnoWYvw3kDbWmjs"
 ARCH_MONTHLY = "price_1TAznX1F8wnoWYvwyaSVQbZW"
 ARCH_ANNUAL = "price_1TAznX1F8wnoWYvwN8YmzbiC"
+# Omi Pro (unlimited_v2) — the single plan a header-less new buyer may see
+# under the 2026-10-24 ruling.
+PRO_MONTHLY = "price_unlimited_v2_monthly_test"
+PRO_ANNUAL = "price_unlimited_v2_annual_test"
 
 
 @pytest.fixture(scope="module")
@@ -36,6 +40,8 @@ def ctx():
     mp.setenv("STRIPE_UNLIMITED_ANNUAL_PRICE_ID", UNLIM_ANNUAL)
     mp.setenv("STRIPE_ARCHITECT_MONTHLY_PRICE_ID", ARCH_MONTHLY)
     mp.setenv("STRIPE_ARCHITECT_ANNUAL_PRICE_ID", ARCH_ANNUAL)
+    mp.setenv("STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID", PRO_MONTHLY)
+    mp.setenv("STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID", PRO_ANNUAL)
 
     # DB helpers the endpoint reaches at request time. Tests reconfigure
     # ``return_value`` per-case via these persistent MagicMock objects.
@@ -69,9 +75,14 @@ def _make_stripe_price(price_id, amount, interval):
     return price
 
 
-def test_invalid_architect_price_skips_architect_but_unlimited_remains(ctx):
-    """When stripe.Price.retrieve fails for Architect prices, only Unlimited plans are returned."""
+def test_invalid_architect_price_skips_architect_but_unlimited_remains(ctx, monkeypatch):
+    """When stripe.Price.retrieve fails for Architect prices, only Unlimited plans are returned.
+
+    The multi-plan shape needs the pre-ruling catalog, so this runs with the
+    new-buyer single-plan kill switch off; the ruling's own catalog shape is
+    pinned in test_new_buyer_headerless_gets_single_plan_catalog below."""
     ctx["get_user_subscription"].return_value = None
+    monkeypatch.setenv("NEW_BUYER_SINGLE_PLAN_ENABLED", "false")
 
     def _mock_retrieve(price_id):
         if price_id in (ARCH_MONTHLY, ARCH_ANNUAL):
@@ -102,9 +113,13 @@ def test_invalid_architect_price_skips_architect_but_unlimited_remains(ctx):
     assert len(plans) == 2
 
 
-def test_all_valid_prices_returns_all_plans(ctx):
-    """When all Stripe prices are valid, all four pricing options are returned."""
+def test_all_valid_prices_returns_all_plans(ctx, monkeypatch):
+    """When all Stripe prices are valid, all four pricing options are returned.
+
+    The four-option shape is the pre-ruling catalog; the kill switch keeps that
+    path testable (the ruling's single-plan shape has its own test below)."""
     ctx["get_user_subscription"].return_value = None
+    monkeypatch.setenv("NEW_BUYER_SINGLE_PLAN_ENABLED", "false")
 
     def _mock_retrieve(price_id):
         intervals = {UNLIM_MONTHLY: "month", UNLIM_ANNUAL: "year", ARCH_MONTHLY: "month", ARCH_ANNUAL: "year"}
@@ -125,6 +140,58 @@ def test_all_valid_prices_returns_all_plans(ctx):
     descriptions = {p["id"]: p["description"] for p in plans}
     assert "chat questions per month" in descriptions[UNLIM_MONTHLY]
     assert "Power-user AI" in descriptions[ARCH_MONTHLY]
+
+
+def test_new_buyer_headerless_gets_single_plan_catalog(ctx, monkeypatch):
+    """2026-10-24 ruling: a buyer with no current paid subscription and no
+    platform header is offered only Omi Pro (`unlimited_v2`) — both intervals,
+    and nothing else, even though Neo/Architect prices are configured and
+    retrievable. The kill switch restores the multi-plan catalog."""
+    ctx["get_user_subscription"].return_value = None
+    monkeypatch.delenv("NEW_BUYER_SINGLE_PLAN_ENABLED", raising=False)
+
+    def _mock_retrieve(price_id):
+        intervals = {
+            UNLIM_MONTHLY: "month",
+            UNLIM_ANNUAL: "year",
+            ARCH_MONTHLY: "month",
+            ARCH_ANNUAL: "year",
+            PRO_MONTHLY: "month",
+            PRO_ANNUAL: "year",
+        }
+        amounts = {
+            UNLIM_MONTHLY: 1900,
+            UNLIM_ANNUAL: 18000,
+            ARCH_MONTHLY: 990,
+            ARCH_ANNUAL: 9900,
+            PRO_MONTHLY: 2999,
+            PRO_ANNUAL: 26991,
+        }
+        if price_id not in intervals:
+            raise Exception(f"Unexpected price_id: {price_id}")
+        return _make_stripe_price(price_id, amounts[price_id], intervals[price_id])
+
+    stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
+
+    response = ctx["client"].get("/v1/payments/available-plans")
+    assert response.status_code == 200
+    plans = response.json()["plans"]
+    assert {p["id"] for p in plans} == {PRO_MONTHLY, PRO_ANNUAL}
+    assert {p["plan_id"] for p in plans} == {"unlimited_v2"}
+
+    monkeypatch.setenv("NEW_BUYER_SINGLE_PLAN_ENABLED", "false")
+    response = ctx["client"].get("/v1/payments/available-plans")
+    assert response.status_code == 200
+    # Kill switch off: the header-less caller again sees every configured plan
+    # (this fixture configures Neo, Architect and Omi Pro prices).
+    assert {p["id"] for p in response.json()["plans"]} == {
+        UNLIM_MONTHLY,
+        UNLIM_ANNUAL,
+        ARCH_MONTHLY,
+        ARCH_ANNUAL,
+        PRO_MONTHLY,
+        PRO_ANNUAL,
+    }
 
 
 def test_legacy_unlimited_subscriber_sees_is_active(ctx):

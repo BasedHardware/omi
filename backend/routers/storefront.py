@@ -110,6 +110,14 @@ def get_storefront(
     subscription = users_db.get_user_valid_subscription(uid, provision=False)
     if subscription is None:
         subscription = subscription_utils.get_default_basic_subscription()
+    # New-buyer single-plan rule (2026-10-24): the ladder sheet has no Omi Pro
+    # (`unlimited_v2`) card, so a buyer with no current paid subscription on a
+    # non-desktop platform gets no ladder storefront at all — the v1 catalog,
+    # which lists only Omi Pro for them, is their sheet of record. Desktop and
+    # existing subscribers are unchanged; NEW_BUYER_SINGLE_PLAN_ENABLED=false
+    # restores the ladder sheet for everyone.
+    if subscription_utils.new_buyer_single_plan_applies(subscription.plan, x_app_platform):
+        raise HTTPException(status_code=404, detail='Storefront is not enabled')
     # W3's generated declaration is absent until #21351 merges. No env prices
     # can accidentally become ladder-v1 just because they exist.
     configured = catalog.configured_ladder_prices()

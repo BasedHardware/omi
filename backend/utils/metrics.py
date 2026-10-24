@@ -1375,6 +1375,17 @@ OMI_SUBSCRIPTION_EVENTS = Counter(
     ['event', 'plan', 'interval', 'reason'],
 )
 
+OMI_NEW_BUYER_CHECKOUT_REJECTED = Counter(
+    'omi_new_buyer_checkout_rejected_total',
+    'Checkout-session requests rejected because a buyer with no current paid '
+    'subscription on a non-desktop platform posted a price outside the Omi Pro '
+    '(unlimited_v2) single-plan catalog, by rejection reason and the rejected '
+    "price's plan. Counts rejections of the policy, not purchases. The closed "
+    'label surfaces and zero-initialization live next to the recorder in '
+    'utils.subscription.',
+    ['reason', 'plan'],
+)
+
 
 # Pusher readiness / drain gauges. Label-free (low cardinality) so they scrape
 # cheaply. Initialized to serving below so an idle healthy pod reads

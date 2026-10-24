@@ -648,7 +648,11 @@ def _validate_price_id(price_id: str) -> None:
     response_model_exclude_none=True,
 )
 @fresh_reader
-def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
+def create_checkout_session_endpoint(
+    request: CreateCheckoutRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     _validate_price_id(request.price_id)
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
@@ -667,6 +671,15 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     reactivation_result = _try_reactivate_subscription(uid, request.price_id)
     if reactivation_result:
         return reactivation_result
+
+    # New-buyer single-plan rule (2026-10-24), after every subscriber escape
+    # (a stale Firestore record can make a current subscriber look basic): a
+    # first-time buyer on a non-desktop platform — mobile, web, or a missing/
+    # unknown platform header — may only start on Omi Pro (`unlimited_v2`).
+    # Desktop checkout is unchanged.
+    single_plan_error = subscription_utils.new_buyer_single_plan_violation(uid, request.price_id, x_app_platform)
+    if single_plan_error:
+        raise HTTPException(status_code=400, detail=single_plan_error)
 
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())

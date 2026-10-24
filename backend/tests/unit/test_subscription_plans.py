@@ -169,6 +169,104 @@ def test_can_pay_basic_stale_defers_plan_change_until_cancellation_ends(monkeypa
     assert "reactivate" in reason
 
 
+def _mock_new_buyer(monkeypatch, subscription_module):
+    """A buyer with no current paid subscription and no Stripe-side surprises."""
+    sub = subscription_module
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = lambda uid: None
+    sub.users_db.get_stripe_customer_id = lambda uid: "cus_x"
+    monkeypatch.setattr(sub, "_has_active_stripe_subscription", lambda uid: False)
+    monkeypatch.setattr(sub, "find_active_paid_subscription_for_user", lambda uid: None)
+
+
+def _set_catalog_prices(monkeypatch):
+    monkeypatch.setenv("STRIPE_PLUS_MONTHLY_PRICE_ID", "price_plus_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID", "price_unlimited_v2_monthly")
+    monkeypatch.setenv("STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID", "price_unlimited_v2_annual")
+    monkeypatch.setenv("STRIPE_OPERATOR_MONTHLY_PRICE_ID", "price_operator_monthly")
+
+
+def test_new_buyer_single_plan_rejects_legacy_prices_off_desktop(monkeypatch, subscription_module):
+    """2026-10-24 ruling: a buyer with no current paid subscription may only
+    start on Omi Pro (`unlimited_v2`). Mobile, web, and unknown/missing platform
+    values all reject a legacy price; a missing header must not reach the
+    legacy catalog."""
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+
+    for platform in ("ios", "android", "web", "unknown", None):
+        error = sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", platform)
+        assert error is not None and "Omi Pro" in error, platform
+
+
+def test_new_buyer_single_plan_accepts_unlimited_v2_off_desktop(monkeypatch, subscription_module):
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+
+    for platform in ("ios", "web", None):
+        for price_id in ("price_unlimited_v2_monthly", "price_unlimited_v2_annual"):
+            assert sub.new_buyer_single_plan_violation("u1", price_id, platform) is None, (platform, price_id)
+
+
+def test_new_buyer_single_plan_desktop_platforms_unchanged(monkeypatch, subscription_module):
+    """Desktop checkout keeps every pre-ruling target, including Plus."""
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+
+    for platform in ("macos", "windows", "MacOS"):
+        assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", platform) is None, platform
+
+
+def test_new_buyer_single_plan_kill_switch_restores_old_targets(monkeypatch, subscription_module):
+    for off_value in ("false", "0", "off", "no"):
+        monkeypatch.setenv("NEW_BUYER_SINGLE_PLAN_ENABLED", off_value)
+        sub = subscription_module
+        _mock_new_buyer(monkeypatch, sub)
+        _set_catalog_prices(monkeypatch)
+        assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "ios") is None, off_value
+    monkeypatch.delenv("NEW_BUYER_SINGLE_PLAN_ENABLED", raising=False)
+
+
+def test_new_buyer_single_plan_rejection_metric_counts_by_reason_and_plan(monkeypatch, subscription_module):
+    from prometheus_client import REGISTRY
+
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+    labels = {"reason": "non_omi_pro_price", "plan": "plus"}
+    before = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels) or 0.0
+
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "ios") is not None
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "web") is not None
+    # A rejection-free call must not move the counter.
+    assert sub.new_buyer_single_plan_violation("u1", "price_unlimited_v2_monthly", "ios") is None
+
+    after = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels)
+    assert after == before + 2.0
+
+
+def test_paid_subscriber_not_restricted_by_single_plan_rule(monkeypatch, subscription_module):
+    """A current paid subscriber is never constrained by the single-plan rule,
+    on any platform — their plan-change rules are can_user_make_payment's,
+    unchanged."""
+    sub = subscription_module
+    _set_catalog_prices(monkeypatch)
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = lambda uid: SimpleNamespace(
+        plan=PlanType.plus,
+        status="active",
+        cancel_at_period_end=False,
+        current_period_end=2_000_000_000,
+        stripe_subscription_id="sub_1",
+        current_price_id="price_plus_monthly",
+    )
+    for platform in ("ios", "web", None):
+        assert sub.new_buyer_single_plan_violation("u1", "price_operator_monthly", platform) is None, platform
+
+
 def test_retained_price_matches_current_price_with_same_plan_and_interval(monkeypatch, subscription_module):
     sub = subscription_module
     retained_price_id = "price_1RtJPm1F8wnoWYvwhVJ38kLb"

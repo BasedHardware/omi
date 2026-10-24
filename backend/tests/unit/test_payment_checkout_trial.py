@@ -43,6 +43,9 @@ def _checkout(trial_days, existing_customer_id):
     with (
         patch.object(payment, 'is_purchasable_price_id', return_value=True),
         patch.object(payment.subscription_utils, 'can_user_make_payment', return_value=(True, '')),
+        # Trial semantics are orthogonal to the new-buyer single-plan rule, and
+        # `price_1` is not a resolvable plan price.
+        patch.object(payment.subscription_utils, 'new_buyer_single_plan_violation', return_value=None),
         patch.object(payment, '_try_reactivate_subscription', return_value=None),
         patch.object(payment.users_db, 'get_stripe_customer_id', return_value=existing_customer_id),
         patch.object(payment.stripe_utils, 'create_subscription_checkout_session', side_effect=create_session),
