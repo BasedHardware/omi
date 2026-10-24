@@ -21,6 +21,7 @@ def values():
     result = dict.fromkeys(guard.queries('prod-omi-backend'), 0.0)
     result.update(
         first_p95=20,
+        first_over30=4,
         post_p95=0.5,
         v2_p95=1,
         first_count=30,
@@ -92,6 +93,65 @@ def test_peak_baseline_does_not_trip_at_peak_or_old_absolute_boundary():
         assert reading['refusal_threshold'] == pytest.approx(0.08375)
 
 
+def test_first_p95_baseline_query_reads_same_metric_same_hour_last_week():
+    expressions = guard.queries('unused')
+    assert 'histogram_quantile(0.95' in expressions['first_p95_baseline']
+    assert 'omi_stt_window_first_text_seconds_bucket' in expressions['first_p95_baseline']
+    assert '[1h] offset 7d' in expressions['first_p95_baseline']
+    assert expressions['first_count_baseline'] == (
+        'sum(increase(omi_stt_window_first_text_seconds_count{job="backend-listen-metrics"}[1h] offset 7d))'
+    )
+
+
+@pytest.mark.parametrize('baseline,limit', [(0, 30), (20, 30), (25, 30), (35, 42), (100, 120)])
+@pytest.mark.parametrize('delta', [-1e-8, 0, 1e-8])
+def test_first_p95_is_relative_to_weekly_same_hour_baseline(baseline, limit, delta):
+    v = dict(values(), first_p95_baseline=baseline, first_count_baseline=100, first_p95=limit + delta)
+    reading = guard.evaluate(v)
+    assert not reading['blind']
+    assert reading['first_p95_threshold'] == pytest.approx(limit)
+    assert ('first_p95' in reading['trips']) == (delta >= 0)
+
+
+def test_sparse_weekly_baseline_falls_back_to_floor():
+    # One 60s text last week prices the historical p95 near 59.25s; unqualified,
+    # the 1.2x threshold (~71.1s) would mask this week's real regression at 45s.
+    v = dict(values(), first_p95=45, first_over30=4, first_p95_baseline=59.25, first_count_baseline=1)
+    reading = guard.evaluate(v)
+    assert reading['first_p95_threshold'] == 30
+    assert reading['trips'] == ['first_p95']
+    assert 'first_p95' not in guard.evaluate(dict(v, first_count_baseline=20))['trips']
+    assert guard.evaluate(dict(v, first_count_baseline=None))['first_p95_threshold'] == 30
+
+
+@pytest.mark.parametrize('baseline', [None, float('nan'), float('inf')])
+def test_first_p95_baseline_unavailable_falls_back_to_floor_not_p95_alone(baseline):
+    v = dict(values(), first_p95=30)
+    if baseline is None:
+        del v['first_p95_baseline']
+    else:
+        v['first_p95_baseline'] = baseline
+    reading = guard.evaluate(v)
+    assert not reading['blind'] and reading['first_p95_threshold'] == 30
+    assert reading['trips'] == ['first_p95']
+    assert 'first_p95' not in guard.evaluate(dict(v, first_over30=3.99))['trips']
+
+
+def test_one_or_two_slow_sessions_never_trip_first_p95():
+    # 04:08Z/06:19Z shape: 1-2 slow sessions in a ~40-text window push p95 past
+    # 60s while floor 10 beat floor 12 fleet-wide (p95 14.3s vs 17.5s, 6h cohort).
+    v = dict(values(), first_p95=60, first_over30=3)
+    assert guard.evaluate(v)['trips'] == []
+    assert guard.evaluate(dict(v, first_p95_baseline=100))['trips'] == []
+    assert 'first_p95' in guard.evaluate(dict(v, first_over30=4))['trips']
+
+
+def test_first_p95_needs_twenty_first_texts():
+    v = dict(values(), first_count=19.99, first_p95=60, first_over30=10)
+    reading = guard.evaluate(v)
+    assert reading['low_sample'] and reading['trips'] == []
+
+
 @pytest.mark.parametrize(
     'key,bad',
     [
@@ -161,7 +221,9 @@ def test_guard_upgrade_restarts_full_lookback(monkeypatch):
     assert guard.decide(hpa, dep, [], values(), old_state, 900)[0] == 'WARMUP'
 
 
-@pytest.mark.parametrize('key', list(guard.queries('unused')))
+@pytest.mark.parametrize(
+    'key', [k for k in guard.queries('unused') if k not in ('first_p95_baseline', 'first_count_baseline')]
+)
 @pytest.mark.parametrize('bad', [None, float('nan'), float('inf'), -float('inf')])
 def test_missing_nonfinite_never_clean(key, bad):
     v = values()
@@ -524,7 +586,7 @@ def test_guard_chart_selects_its_behavioral_suite_on_future_changes():
 def test_fresh_quiet_nan_arithmetic_is_low_sample_not_three_blind_trips():
     hpa, dep = objects()
     v = dict(values(), first_count=0, admission_count=0, dcgm_nonzero=0)
-    for key in ('first_p95', 'post_p95', 'v2_p95', 'refusal_fraction'):
+    for key in ('first_p95', 'post_p95', 'v2_p95', 'refusal_fraction', 'first_p95_baseline'):
         v[key] = float('nan')
     state = {}
     for now in (0, 300, 600, 900, 1200, 1500):
