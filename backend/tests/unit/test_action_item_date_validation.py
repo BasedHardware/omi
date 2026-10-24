@@ -108,6 +108,8 @@ _SYS_MODULE_NAMES = [
     "database.auth",
     "database.action_items",
     "database.notifications",
+    "database.dream_store",
+    "database.person_aliases",
     "utils",
     "utils.model_text",
     "utils.user_clock",
@@ -126,6 +128,9 @@ _SYS_MODULE_NAMES = [
     "utils.llm.conversation_prompt_context",
     "utils.llm.conversation_processing",
     "utils.llm.model_config",
+    "utils.llm.known_spellings",
+    "utils.llm.notes_packet",
+    "models.person_confidence",
     "utils.retrieval",
     "utils.retrieval.tools",
     "utils.retrieval.tools.action_item_tools",
@@ -462,6 +467,14 @@ sys.modules["utils.observability"].__path__ = [str(BACKEND_DIR / "utils" / "obse
 fallback_stub = _stub_module("utils.observability.fallback")
 fallback_stub.record_fallback = MagicMock()
 _load_module_from_file("utils.llm.conversation_notes_prompts", BACKEND_DIR / "utils/llm/conversation_notes_prompts.py")
+
+# The notes packet imports real spelling helpers. Keep their IO at the database
+# boundary, like the action-item stores above, without importing the dream-agent
+# runtime through database.dream_store during this isolated date test.
+_stub_module("database.dream_store").vocabulary = MagicMock(return_value=[])
+_stub_module("database.person_aliases").list_people = MagicMock(return_value=[])
+_stub_module("database._client").get_firestore_client = MagicMock()
+_load_module_from_file("utils.llm.known_spellings", BACKEND_DIR / "utils" / "llm" / "known_spellings.py")
 
 conversation_processing = _load_module_from_file(
     "utils.llm.conversation_processing",
