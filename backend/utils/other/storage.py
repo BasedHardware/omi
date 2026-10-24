@@ -628,8 +628,8 @@ def upload_syncing_temporal_file(file_path: str):
 def download_syncing_temporal_file(file_path: str, *, max_bytes: int | None = None) -> bool:
     """Download a staged blob back to its local relative path.
 
-    Returns False when the blob no longer exists (e.g. deleted by the
-    bucket's 1-day lifecycle rule before a deeply delayed task ran).
+    Returns False when the blob no longer exists, for example after explicit
+    cleanup. Lifecycle policies are operator-managed; no expiry is assumed.
     """
     directory = os.path.dirname(file_path)
     if directory:

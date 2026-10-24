@@ -595,11 +595,13 @@ def test_backend_integration_deploy_pins_mcp_serving_capacity():
     integration_flags = _deploy_backend_stack_step_flags('deploy-backend-integration')
     backend_flags = _deploy_backend_stack_step_flags('deploy-backend')
     sync_flags = _deploy_backend_stack_step_flags('deploy-backend-sync')
+    # 2026-10-24 right-sizing: prod integration stays warm; the dev project idles at 0.
+    integration_min = "--min-instances=${{ inputs.runtime_env == 'prod' && '3' || '0' }}"
     for flag in (
         '--cpu=2',
         '--memory=2Gi',
         '--concurrency=40',
-        '--min-instances=3',
+        integration_min,
         '--max-instances=50',
         '--no-cpu-throttling',
     ):

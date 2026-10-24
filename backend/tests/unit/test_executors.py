@@ -177,6 +177,7 @@ def test_get_executor_metrics_returns_all_pools():
     assert len(metrics) == len(_ALL_EXECUTORS)
     names = {m['name'] for m in metrics}
     expected = {
+        'quiet_replay',
         'critical',
         'db',
         'llm',

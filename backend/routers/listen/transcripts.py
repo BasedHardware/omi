@@ -42,6 +42,7 @@ from models.transcript_segment import (
 from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
 from utils.audio_timeline import UNPLACED_SEGMENT_OFFSET
+from utils.episodes import live as episode_live
 from utils.conversations.factory import deserialize_conversation
 from utils.metrics import (
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
@@ -275,6 +276,12 @@ class TranscriptProcessor:
             raise RuntimeError('Legacy unplaced transcript persistence returned no receipt')
         self.current_session_segments[str(segment.id)] = segment.speech_profile_processed
         if is_current:
+            # This recovery path bypasses _deliver_live_updates and its pusher
+            # integrations. Retained speech still owes the episode activity/notes.
+            if self.host.user_has_credits:
+                await episode_live.on_realtime_segments(
+                    self.host.request.uid, [segment.model_dump()], owner, self.host.request.source
+                )
             await self._deliver_segments([item.model_dump() for item in result[1]])
 
     def _queue_v2_photos(self, photos: List[ConversationPhoto]) -> None:
