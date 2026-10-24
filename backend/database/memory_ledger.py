@@ -51,6 +51,37 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
     return cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
 
+def _coerce_utc_datetime(value: Any) -> Optional[datetime]:
+    """Coerce naive/aware datetime, ISO-8601 string, or numeric epoch timestamp into UTC datetime."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, datetime):
+        if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+    if isinstance(value, str):
+        val_str = value.strip()
+        if not val_str:
+            return None
+        if val_str.endswith('Z') or val_str.endswith('z'):
+            val_str = val_str[:-1] + '+00:00'
+        try:
+            dt = datetime.fromisoformat(val_str)
+            if dt.tzinfo is None or dt.tzinfo.utcoffset(dt) is None:
+                return dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+        except (ValueError, TypeError):
+            return None
+    return None
+
+
 users_collection = 'users'
 memory_state_collection = 'memory_state'
 memory_state_document = 'head'
@@ -230,7 +261,10 @@ def add_fact(fact: Dict[str, Any]) -> Dict[str, Any]:
 
 def normalize_fact_for_ledger(fact: Dict[str, Any]) -> Dict[str, Any]:
     normalized = copy.deepcopy(fact)
-    qualifiers = normalized.setdefault('qualifiers', {})
+    qualifiers = normalized.get('qualifiers')
+    if not isinstance(qualifiers, dict):
+        qualifiers = {}
+        normalized['qualifiers'] = qualifiers
     if normalized.get('valid_at') is not None and qualifiers.get('valid_from') is None:
         qualifiers['valid_from'] = normalized.get('valid_at')
     if normalized.get('invalid_at') is not None and qualifiers.get('valid_to') is None:
@@ -853,15 +887,19 @@ def read_head(uid: str) -> Optional[str]:
 
 def fold_commits(commits: List[Dict[str, Any]], valid_time: Optional[datetime] = None) -> Dict[str, Dict[str, Any]]:
     facts: Dict[str, Dict[str, Any]] = {}
-    for commit in sorted(
-        commits, key=lambda item: item.get('commit_time') or datetime.min.replace(tzinfo=timezone.utc)
-    ):
+
+    def _commit_sort_key(item: Dict[str, Any]) -> datetime:
+        ct = _coerce_utc_datetime(item.get('commit_time'))
+        return ct if ct is not None else datetime.min.replace(tzinfo=timezone.utc)
+
+    for commit in sorted(commits, key=_commit_sort_key):
         mutations: List[Dict[str, Any]] = cast(List[Dict[str, Any]], commit.get('mutations') or [])
         for item in mutations:
             _apply_mutation(facts, item, commit.get('commit_time'))
     if valid_time is None:
         return {fact_id: fact for fact_id, fact in facts.items() if fact.get('invalid_at') is None}
-    return {fact_id: fact for fact_id, fact in facts.items() if _fact_valid_at(fact, valid_time)}
+    valid_time_dt = _coerce_utc_datetime(valid_time)
+    return {fact_id: fact for fact_id, fact in facts.items() if _fact_valid_at(fact, valid_time_dt)}
 
 
 def _resolve_arg_change(value: Any) -> Any:
@@ -888,7 +926,11 @@ def _apply_mutation(facts: Dict[str, Dict[str, Any]], item: Dict[str, Any], comm
         valid_interval: Dict[str, Any] = cast(Dict[str, Any], item.get('valid_interval') or {})
         invalid_at: Any = valid_interval.get('valid_to') or commit_time
         facts[fact_id]['invalid_at'] = invalid_at
-        facts[fact_id].setdefault('qualifiers', {})['valid_to'] = invalid_at
+        qualifiers = facts[fact_id].get('qualifiers')
+        if not isinstance(qualifiers, dict):
+            qualifiers = {}
+            facts[fact_id]['qualifiers'] = qualifiers
+        qualifiers['valid_to'] = invalid_at
         return
 
     if mutation_type == 'retract_fact':
@@ -958,14 +1000,24 @@ def _apply_arg_changes(fact: Dict[str, Any], arg_changes: Dict[str, Any]) -> Non
         arguments[key] = resolved
 
 
-def _fact_valid_at(fact: Dict[str, Any], valid_time: datetime) -> bool:
-    qualifiers: Dict[str, Any] = cast(Dict[str, Any], fact.get('qualifiers') or {})
-    valid_from: Any = qualifiers.get('valid_from') or fact.get('valid_at')
-    valid_to: Any = qualifiers.get('valid_to') or fact.get('invalid_at')
-    if isinstance(valid_from, datetime) and valid_time < valid_from:
+def _fact_valid_at(fact: Dict[str, Any], valid_time: Optional[datetime]) -> bool:
+    qualifiers_raw = fact.get('qualifiers')
+    qualifiers: Dict[str, Any] = qualifiers_raw if isinstance(qualifiers_raw, dict) else {}
+    valid_from_raw: Any = qualifiers.get('valid_from') or fact.get('valid_at')
+    valid_to_raw: Any = qualifiers.get('valid_to') or fact.get('invalid_at')
+
+    valid_time_dt = _coerce_utc_datetime(valid_time)
+    if valid_time_dt is None:
+        return True
+
+    valid_from_dt = _coerce_utc_datetime(valid_from_raw)
+    if valid_from_dt is not None and valid_time_dt < valid_from_dt:
         return False
-    if isinstance(valid_to, datetime) and valid_time > valid_to:
+
+    valid_to_dt = _coerce_utc_datetime(valid_to_raw)
+    if valid_to_dt is not None and valid_time_dt > valid_to_dt:
         return False
+
     return True
 
 
@@ -976,11 +1028,16 @@ def replay_to(
 ) -> Dict[str, Dict[str, Any]]:
     commits_ref = db.collection(users_collection).document(uid).collection(memory_commits_collection)
     commits: List[Dict[str, Any]] = []
+    target_commit_time = _coerce_utc_datetime(commit_time) if commit_time is not None else None
     for doc in commits_ref.order_by('commit_time').stream():
         commit: Dict[str, Any] = _typed_doc(doc)
         commit_time_value: Any = commit.get('commit_time')
-        if commit_time is None or commit_time_value <= commit_time:
+        if target_commit_time is None:
             commits.append(commit)
+        else:
+            commit_time_dt = _coerce_utc_datetime(commit_time_value)
+            if commit_time_dt is not None and commit_time_dt <= target_commit_time:
+                commits.append(commit)
     return fold_commits(commits, valid_time=valid_time)
 
 

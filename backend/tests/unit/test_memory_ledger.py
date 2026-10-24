@@ -839,3 +839,91 @@ def test_legacy_commit_override_only_tombstone_is_fenced():
         )
 
     assert f"users/{uid}/memory_historical_overrides/m1" in database.gets
+
+
+def test_normalize_fact_for_ledger_handles_none_and_missing_qualifiers():
+    raw_fact = {"id": "m1", "valid_at": "2026-06-01", "qualifiers": None}
+    normalized = memory_ledger.normalize_fact_for_ledger(raw_fact)
+    assert normalized["qualifiers"] == {"valid_from": "2026-06-01"}
+
+    raw_fact_invalid = {"id": "m2", "invalid_at": "2026-06-30", "qualifiers": None}
+    normalized_invalid = memory_ledger.normalize_fact_for_ledger(raw_fact_invalid)
+    assert normalized_invalid["qualifiers"] == {"valid_to": "2026-06-30"}
+
+
+def test_supersede_mutation_handles_none_qualifiers():
+    facts = {"m1": {"id": "m1", "qualifiers": None}}
+    item = {
+        "type": "supersede_fact",
+        "fact_id": "m1",
+        "by": "m2",
+        "valid_interval": {"valid_to": "2026-06-02T00:00:00Z"},
+    }
+    memory_ledger._apply_mutation(facts, item, datetime(2026, 6, 2, tzinfo=timezone.utc))
+    assert facts["m1"]["qualifiers"]["valid_to"] == "2026-06-02T00:00:00Z"
+    assert facts["m1"]["superseded_by"] == "m2"
+
+
+def test_fold_commits_sorts_mixed_timestamp_types_without_type_error():
+    commits = [
+        {"commit_id": "c_str", "commit_time": "2026-06-03T00:00:00Z", "mutations": []},
+        {"commit_id": "c_naive", "commit_time": datetime(2026, 6, 1, 0, 0, 0), "mutations": []},
+        {"commit_id": "c_aware", "commit_time": datetime(2026, 6, 2, 0, 0, 0, tzinfo=timezone.utc), "mutations": []},
+        {"commit_id": "c_epoch", "commit_time": 1780531200, "mutations": []},
+        {"commit_id": "c_none", "commit_time": None, "mutations": []},
+    ]
+    folded = memory_ledger.fold_commits(commits)
+    assert isinstance(folded, dict)
+
+
+def test_fact_valid_at_coerces_iso_bounds_and_mixed_timezones():
+    fact_iso = {
+        "id": "m1",
+        "qualifiers": {
+            "valid_from": "2026-06-01",
+            "valid_to": "2026-06-10T23:59:59Z",
+        },
+    }
+    assert memory_ledger._fact_valid_at(fact_iso, datetime(2026, 5, 31, tzinfo=timezone.utc)) is False
+    assert memory_ledger._fact_valid_at(fact_iso, datetime(2026, 6, 5, 12, 0, 0)) is True
+    assert memory_ledger._fact_valid_at(fact_iso, "2026-06-05T12:00:00Z") is True
+    assert memory_ledger._fact_valid_at(fact_iso, datetime(2026, 6, 11, tzinfo=timezone.utc)) is False
+
+
+def test_replay_to_coerces_iso_string_and_naive_bounds(monkeypatch):
+    class _FakeStreamDoc:
+        def __init__(self, data):
+            self._data = data
+
+        def to_dict(self):
+            return self._data
+
+    class _FakeCommitsRef:
+        def __init__(self, docs):
+            self._docs = docs
+
+        def order_by(self, field):
+            return self
+
+        def stream(self):
+            return [_FakeStreamDoc(d) for d in self._docs]
+
+    class _FakeDocRef:
+        def collection(self, name):
+            return _FakeCommitsRef([
+                {"commit_id": "c1", "commit_time": "2026-06-01T00:00:00Z", "mutations": []},
+                {"commit_id": "c2", "commit_time": datetime(2026, 6, 2), "mutations": []},
+                {"commit_id": "c3", "commit_time": "2026-06-03T00:00:00Z", "mutations": []},
+                {"commit_id": "c_null", "commit_time": None, "mutations": []},
+            ])
+
+    class _FakeDb:
+        def collection(self, name):
+            return self
+
+        def document(self, uid):
+            return _FakeDocRef()
+
+    monkeypatch.setattr(memory_ledger, "db", _FakeDb())
+    replayed = memory_ledger.replay_to("u1", commit_time="2026-06-02T12:00:00Z")
+    assert isinstance(replayed, dict)
