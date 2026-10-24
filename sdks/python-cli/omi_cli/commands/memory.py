@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Iterable, Optional
 
 import typer
 from rich.markup import escape
@@ -27,6 +27,40 @@ def _ctx(typer_ctx: typer.Context) -> "AppContext":
 
 
 _LIST_COLUMNS = ["id", "category", "visibility", "content", "tags", "created_at"]
+
+_MAX_CONTENT_LENGTH = 500
+
+
+def _validate_content(content: str) -> str:
+    """Return stripped content, rejecting oversized or blank input before any HTTP call.
+
+    The backend caps the raw string at 500 characters, so the length check runs
+    before stripping to keep the friendly CLI error aligned with the server's
+    422 rather than letting a wrapped-in-whitespace payload round-trip.
+    """
+    if len(content) > _MAX_CONTENT_LENGTH:
+        raise UsageError(
+            message=f"Memory content must be at most {_MAX_CONTENT_LENGTH} characters (got {len(content)})",
+            detail="Shorten the content and try again.",
+        )
+    cleaned = content.strip()
+    if not cleaned:
+        raise UsageError(
+            message="Memory content cannot be empty",
+            detail="Provide 1-500 characters of non-whitespace content.",
+        )
+    return cleaned
+
+
+def _validate_tags(tags: Iterable[str]) -> list[str]:
+    """Return stripped tags, rejecting blank entries before any HTTP call."""
+    cleaned = [tag.strip() for tag in tags]
+    if any(not tag for tag in cleaned):
+        raise UsageError(
+            message="Memory tags cannot be empty",
+            detail="Remove blank --tag values or pass non-whitespace tags.",
+        )
+    return cleaned
 
 
 @app.command("list", help="List memories.")
@@ -102,7 +136,9 @@ def create_memory(
     tag: list[str] = typer.Option([], "--tag", help="Tag (repeat for multiple)."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    body: dict[str, object] = {"content": content, "visibility": visibility.value, "tags": tag}
+    content = _validate_content(content)
+    clean_tags = _validate_tags(tag)
+    body: dict[str, object] = {"content": content, "visibility": visibility.value, "tags": clean_tags}
     if category is not None:
         body["category"] = category.value
     with ctx.make_client() as client:
@@ -123,13 +159,13 @@ def update_memory(
     ctx = _ctx(typer_ctx)
     body: dict[str, object] = {}
     if content is not None:
-        body["content"] = content
+        body["content"] = _validate_content(content)
     if category is not None:
         body["category"] = category.value
     if visibility is not None:
         body["visibility"] = visibility.value
     if tag is not None:
-        body["tags"] = list(tag)
+        body["tags"] = _validate_tags(tag)
     if not body:
         raise UsageError(
             message="No fields to update", detail="Provide at least one of --content/--category/--visibility/--tag."
