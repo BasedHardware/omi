@@ -125,10 +125,10 @@ class _PreviousEpisodePageState extends State<PreviousEpisodePage> {
     final episodes = context.watch<EpisodeProvider?>();
     final cached = _memberId == null ? null : episodes?.cachedEpisodeFor(_memberId!);
     final previous = episodes?.previous;
-    final episode = cached?.id == widget.episode.id
-        ? cached!
-        : previous?.id == widget.episode.id
-            ? previous!
+    final episode = previous?.id == widget.episode.id
+        ? previous!
+        : cached?.id == widget.episode.id
+            ? cached!
             : widget.episode;
     final dates = OmiDateFormat.of(context);
     final ids = {...episode.conversationIds, ...episode.moments.map((m) => m.conversationId)};

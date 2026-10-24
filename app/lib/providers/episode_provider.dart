@@ -140,9 +140,9 @@ class EpisodeProvider extends ChangeNotifier {
         final episode = data.episode;
         if (episode != null && !episode.live && episode.id != _live?.id) {
           _remember(episode);
-          _cacheEpisode(id, episode);
+          _cacheEpisode(id, episode, recovered: true);
           for (final member in episode.conversationIds) {
-            _cacheEpisode(member, episode);
+            _cacheEpisode(member, episode, recovered: true);
           }
           notifyListeners();
         }
@@ -177,9 +177,14 @@ class EpisodeProvider extends ChangeNotifier {
   // Closure can precede member finalization. A recovered closed snapshot is not immutable.
   static const episodeCacheTtl = pollInterval;
 
-  void _cacheEpisode(String conversationId, Episode? episode) {
+  void _cacheEpisode(String conversationId, Episode? episode, {bool recovered = false}) {
     _byConversation[conversationId] = episode;
-    _cachedAt[conversationId] = _clock();
+    // Render recovered notes immediately, but always revalidate when opening member details.
+    if (recovered) {
+      _cachedAt.remove(conversationId);
+    } else {
+      _cachedAt[conversationId] = _clock();
+    }
   }
 
   final Map<String, Future<Episode?>> _lookups = {};

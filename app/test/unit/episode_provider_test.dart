@@ -215,7 +215,7 @@ void main() {
     expect(provider.previous?.id, 'newer');
   });
 
-  test('a recovered closed snapshot expires after a new live episode starts', () async {
+  test('a recovered snapshot cannot hide finalization when member details open', () async {
     var time = _t0;
     var lookups = 0;
     final finalized = Episode(
@@ -236,11 +236,15 @@ void main() {
     addTearDown(provider.dispose);
     await provider.recoverPrevious('c1');
     provider.debugSetLive(_episode(id: 'ep2'));
-    expect((await provider.episodeFor('c1'))?.bullets, isEmpty);
+    expect(provider.cachedEpisodeFor('c1')?.bullets, isEmpty);
     expect(lookups, 1);
-    time = time.add(EpisodeProvider.episodeCacheTtl);
     expect((await provider.episodeFor('c1'))?.bullets, ['Finalized note']);
     expect(lookups, 2);
+    expect((await provider.episodeFor('c1'))?.bullets, ['Finalized note']);
+    expect(lookups, 2, reason: 'fresh detail reads still coalesce and cache');
+    time = time.add(EpisodeProvider.episodeCacheTtl);
+    await provider.episodeFor('c1');
+    expect(lookups, 3, reason: 'even detail snapshots have a bounded lifetime');
   });
 
   test('item status parsing hides dropped and dismissed items', () {
