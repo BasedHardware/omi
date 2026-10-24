@@ -78,6 +78,19 @@ PUSHER_QUEUE_DROPS = Counter(
     ['queue'],
 )
 
+# Alert selectors must exist before the first loss, including emergency rollback.
+for _pusher_queue in (
+    'speaker_sample',
+    'transcript',
+    'audio_bytes',
+    'private_cloud',
+    'private_cloud_buffer',
+    'private_cloud_pending',
+    'audio_app_buffer',
+    'audio_webhook_buffer',
+):
+    PUSHER_QUEUE_DROPS.labels(queue=_pusher_queue).inc(0)
+
 PUSHER_QUEUE_DROPPED_BYTES = Counter(
     'pusher_queue_dropped_bytes_total',
     'Pusher queue bytes dropped by bounded queue name',

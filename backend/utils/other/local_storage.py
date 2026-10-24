@@ -139,6 +139,7 @@ class LocalBlob:
     def delete(self, *_args, **_kwargs) -> None:
         if not self.exists():
             raise NotFound(f'Local storage blob not found: {self.bucket.name}/{self.name}')
+        self._check_generation(_kwargs.get('if_generation_match'))
         self.path.unlink()
         self._metadata_path.unlink(missing_ok=True)
 

@@ -5,6 +5,11 @@ selects emergency legacy behavior; empty or malformed values retain custody.
 The rollout lead owns merge, coordinated listen/pusher rollout, alert activation
 and any emergency rollback. This change does not authorize a production write.
 
+This switch is the sole custody kill switch. `AUDIO_ARCHIVE_LIVE_ENABLED`
+controls legacy raw admission only after the outbox switch is set to `false`;
+it cannot disable the default-on custody barrier. `AUDIO_ARCHIVE_READ_ENABLED`
+continues to control raw playback reads independently.
+
 For consented capture, listen retains original packs through capacity pressure,
 upload errors and cancellation. Four commits can run at once; the fifth waits
 before removing its active pack. Transcript persistence and pusher audio flush

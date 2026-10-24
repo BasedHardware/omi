@@ -35,6 +35,28 @@ class AudioReceipt:
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class AudioProjection:
+    """Accepted derivative window; the custody receipt always covers the original."""
+
+    receipt: AudioReceipt
+    start: float
+    offset_samples: int
+    samples: int
+
+    def __post_init__(self):
+        if self.offset_samples < 0 or self.samples <= 0 or self.offset_samples + self.samples > self.receipt.samples:
+            raise ValueError('projection falls outside its custody receipt')
+
+    @property
+    def conversation_id(self) -> str | None:
+        return self.receipt.conversation_id
+
+    @property
+    def sample_rate(self) -> int:
+        return self.receipt.sample_rate
+
+
 def _generation(blob) -> str:
     blob.reload(timeout=10, retry=None)
     if not blob.generation:

@@ -57,7 +57,7 @@ from utils.webhooks import (
     get_audio_bytes_webhook_seconds,
 )
 from utils.other.storage import upload_audio_chunks_batch
-from utils.other.audio_outbox import AudioReceipt, commit_pcm, read_pcm
+from utils.other.audio_outbox import AudioReceipt, AudioProjection, commit_pcm, read_pcm
 from utils.other.audio_outbox_metrics import BACKPRESSURE, record_failure, record_would_drop
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
@@ -240,14 +240,16 @@ async def _websocket_util_trigger(
     # The bounded lane holds generation-pinned references, never the only PCM.
     # A crash after commit but before queue.put is recoverable via raw-live's
     # existing per-conversation playback index, independent of this process.
-    durable_queue: asyncio.Queue[AudioReceipt] = asyncio.Queue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
+    durable_queue: asyncio.Queue[AudioProjection] = asyncio.Queue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     custody_root = uuid.uuid4().hex
     custody_sequence = 0
 
-    async def archive_private_audio(audio_data: bytes, timestamp: float, conversation_id: Optional[str]) -> None:
+    async def archive_private_audio(
+        audio_data: bytes, timestamp: float, conversation_id: Optional[str]
+    ) -> Optional[AudioReceipt]:
         nonlocal custody_sequence
         if not (durable_audio and private_cloud_sync_enabled and audio_data):
-            return
+            return None
         # Before overlap trimming or lossy derivatives. An audio ACK requires
         # both remote objects; a failed commit leaves the producer unacknowledged.
         receipt = await run_blocking(
@@ -265,17 +267,20 @@ async def _websocket_util_trigger(
         custody_sequence += 1
         if audio_custody == 1:
             await websocket.send_bytes(audio_custody_ack_frame(receipt.to_dict()))
-        if conversation_id:
+        return receipt
+
+    async def queue_private_projection(receipt: Optional[AudioReceipt], start: float, samples: int) -> None:
+        if receipt is not None and receipt.conversation_id and samples:
             if durable_queue.full():
                 BACKPRESSURE.labels(stage='pusher_queue').inc()
                 record_would_drop('pusher_queue')
-            await durable_queue.put(receipt)
+            await durable_queue.put(AudioProjection(receipt, start, receipt.samples - samples, samples))
 
     async def process_durable_private_cloud_queue() -> None:
         # Pending conversations hold only receipts. Hydrate at most one bounded
         # contiguous batch for the legacy playback projection, preserving the
         # old 60-second write cadence without retaining 60 seconds of PCM.
-        pending_refs: dict[str, list[AudioReceipt]] = {}
+        pending_refs: dict[str, list[AudioProjection]] = {}
         queued_at: dict[str, float] = {}
         identity_refreshed: set[str] = set()
 
@@ -287,7 +292,10 @@ async def _websocket_util_trigger(
             try:
                 chunks: List[Dict[str, Any]] = []
                 for ref in refs:
-                    pcm = await run_blocking(storage_executor, read_pcm, uid, ref)
+                    pcm = await run_blocking(storage_executor, read_pcm, uid, ref.receipt)
+                    pcm = pcm[ref.offset_samples * 2 : (ref.offset_samples + ref.samples) * 2]
+                    if len(pcm) != ref.samples * 2:
+                        raise ValueError('durable projection sample range is incomplete')
                     chunks.append(
                         {
                             'data': pcm,
@@ -1080,7 +1088,7 @@ async def _websocket_util_trigger(
                     buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                     audio_data = data[12:]
 
-                    await archive_private_audio(audio_data, buffer_start_timestamp, current_conversation_id)
+                    receipt = await archive_private_audio(audio_data, buffer_start_timestamp, current_conversation_id)
 
                     if audio_timeline_v2:
                         # v2: the timestamp is the projected start of this
@@ -1129,6 +1137,10 @@ async def _websocket_util_trigger(
                                 run_end = run_start + len(audio_data) / (sample_rate * 2)
                         audio_timeline_last_end = run_end
                         buffer_start_timestamp = run_start
+
+                    # Custody retains the original; only the accepted v2 tail
+                    # enters the derivative projection after replay trimming.
+                    await queue_private_projection(receipt, buffer_start_timestamp, len(audio_data) // 2)
 
                     # Only accumulate audio buffers if there's a consumer (app trigger or webhook)
                     # Without this guard, buffers grow ~16KB/s indefinitely for users with no audio apps

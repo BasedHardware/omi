@@ -24,6 +24,8 @@ from routers.listen.transcripts import TranscriptProcessor
 from utils.other.live_audio_archive import LiveAudioArchive
 from utils.other.raw_audio import CapturePack, AudioSegment, decode_capture
 from utils.other.raw_audio_read import list_packs, read_pack
+from database.audio_timeline import span_blob_metadata
+from utils.other.audio_chunks import iter_audio_chunk_pcm
 from utils.pusher_protocol import AudioBackpressure, ByteBudget, append_bounded, extend_bounded, bound_private_pending
 import routers.pusher as pusher
 
@@ -57,6 +59,10 @@ class Blob:
         if kwargs.get('if_generation_match', self.generation) != self.generation:
             raise PreconditionFailed('generation changed')
         return self.data
+
+    def delete(self, *, if_generation_match, **kwargs):
+        assert if_generation_match == self.generation
+        self.data = None
 
 
 class Bucket:
@@ -521,3 +527,101 @@ async def test_pusher_upload_failure_never_audio_acknowledges(remote, monkeypatc
     sock = Socket([struct.pack('<I', 103) + b'conversation', struct.pack('<Id', 101, 1000) + b'\x01\x00'])
     await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
     assert not sock.sent and sock.close_code == 1011
+
+
+@pytest.mark.parametrize('stage', ['raw-live', 'audio-outbox'])
+def test_deletion_during_upload_removes_the_new_generation_before_receipt(remote, monkeypatch, stage):
+    deleted = False
+    real_upload = Blob.upload_from_string
+
+    def upload(blob, data, **kwargs):
+        nonlocal deleted
+        if blob.name.startswith(stage + '/'):
+            deleted = True
+            # Privacy purge sees only objects committed before this upload.
+            for existing in remote.blobs.values():
+                existing.data = None
+        real_upload(blob, data, **kwargs)
+
+    monkeypatch.setattr(Blob, 'upload_from_string', upload)
+    monkeypatch.setattr(storage.conversation_tombstones, 'is_deleted', lambda *a: deleted)
+    with pytest.raises(storage.audio_packs.CaptureDeleted):
+        commit_pcm('owner', b'\x01\x00' * 160, 'conversation', 1000, 16000, 'root', 0)
+    assert not any(blob.data is not None for blob in remote.blobs.values())
+
+
+@pytest.mark.asyncio
+async def test_outbox_is_the_sole_custody_kill_and_legacy_live_applies_after_rollback(remote, monkeypatch):
+    monkeypatch.setenv('AUDIO_ARCHIVE_LIVE_ENABLED', 'false')
+    monkeypatch.delenv('AUDIO_DURABLE_OUTBOX_ENABLED', raising=False)
+    durable = LiveAudioArchive(host())
+    await durable.append(b'\x01\x00', 'conversation', 1000, 1)
+    await durable.close()
+    assert durable.host.events
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
+    legacy = LiveAudioArchive(host())
+    await legacy.append(b'\x02\x00', 'conversation', 1000, 1)
+    await legacy.close()
+    assert not legacy.packs and not legacy.host.events
+
+
+@pytest.mark.asyncio
+async def test_v2_projection_trims_replays_while_custody_keeps_every_original(remote, monkeypatch):
+    monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
+    monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
+    monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
+    projected = []
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', lambda chunks, *a, **kw: projected.extend(chunks))
+    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
+    first = b'\x01\x00' * 16000
+    replay = b'\x09\x00' * 8000 + b'\x02\x00' * 8000
+    frames = [struct.pack('<I', 103) + b'conversation']
+    frames += [
+        struct.pack('<Id', 101, start) + data for start, data in ((1000, first), (1000.5, replay), (1000, first))
+    ]
+    sock = Socket(frames)
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_timeline=2, audio_custody=1)
+    assert [chunk['data'] for chunk in projected] == [first, replay[16000:]]
+    assert [chunk['timestamp'] for chunk in projected] == [1000, 1001]
+    receipts = [
+        AudioReceipt(**json.loads(frame[4:])['receipt'])
+        for frame in sock.sent
+        if struct.unpack('<I', frame[:4])[0] == 203
+    ]
+    assert [read_pcm('owner', receipt) for receipt in receipts] == [first, replay, first]
+
+
+def _legacy_chunk(remote, start, pcm, name=None):
+    blob = remote.blob(f'chunks/owner/conversation/{name or f"{start:.3f}"}.batch.bin')
+    blob.metadata = {
+        **span_blob_metadata({'start': start, 'samples': len(pcm) // 2, 'sample_rate': 16000}),
+        'pcm_sha256': hashlib.sha256(pcm).hexdigest(),
+    }
+    blob.upload_from_string(pcm, if_generation_match=0)
+
+
+def test_sixty_custody_packs_and_projected_minute_publish_one_audio_file(remote):
+    pcm = b'\x01\x00' * 16000
+    for sequence in range(60):
+        commit_pcm('owner', pcm, 'conversation', 1000 + sequence, 16000, 'root', sequence)
+    _legacy_chunk(remote, 1000, pcm * 60, '1000.000-1059.000')
+    chunks = storage.list_audio_chunks('owner', 'conversation')
+    assert len(chunks) == 1 and chunks[0]['span']['samples'] == 60 * 16000
+    files = pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')
+    assert len(files) == 1 and files[0].duration == 60
+    assert storage.download_audio_chunks_and_merge('owner', 'conversation', [1000]) == pcm * 60
+
+
+def test_partial_raw_overlap_serves_only_uncovered_bytes_and_keeps_legacy_identity(remote):
+    parts = [bytes([value, 0]) * 16000 for value in (1, 2, 3)]
+    commit_pcm('owner', b''.join(parts), 'conversation', 1000, 16000, 'root', 0)
+    accepted_middle = b'\x09\x00' * 16000
+    _legacy_chunk(remote, 1001, accepted_middle)
+    chunks = storage.list_audio_chunks('owner', 'conversation')
+    assert [chunk['timestamp'] for chunk in chunks] == [1000, 1001, 1002]
+    files = pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')
+    assert len(files) == 1 and files[0].duration == 3
+    expected = parts[0] + accepted_middle + parts[2]
+    assert storage.download_audio_chunks_and_merge('owner', 'conversation', [1000, 1001, 1002]) == expected
+    decoded = iter_audio_chunk_pcm('owner', 'conversation', lambda *a: True)
+    assert b''.join(pcm for _, pcm in decoded) == expected
