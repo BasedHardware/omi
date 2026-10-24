@@ -496,6 +496,90 @@ async def test_reconnect_recovers_receipts_after_pusher_process_state_is_lost(re
 
 
 @pytest.mark.asyncio
+async def test_real_pending_conversation_overflow_keeps_every_receipt_after_projection_failure(remote, monkeypatch):
+    monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
+    monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
+    monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
+    interval = 0.123456
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', interval)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 1000000)
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_BATCH_MAX_AGE', 1000000)
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', MagicMock(side_effect=OSError('projection unavailable')))
+    stages = []
+    real_would_drop = pusher.record_would_drop
+
+    def observe(stage):
+        stages.append(stage)
+        real_would_drop(stage)
+
+    monkeypatch.setattr(pusher, 'record_would_drop', observe)
+    frames = []
+    payloads = [struct.pack('<h', value) * 160 for value in range(21)]
+    for index, pcm in enumerate(payloads):
+        frames += [
+            struct.pack('<I', 103) + f'conversation-{index}'.encode(),
+            struct.pack('<Id', 101, 1000 + index) + pcm,
+        ]
+    sock = Socket(frames)
+    first_archived = asyncio.Event()
+    first_pending = asyncio.Event()
+    all_archived = asyncio.Event()
+    real_wait = pusher.wait_for_event
+    real_send = sock.send_bytes
+    real_receive = sock.receive_bytes
+    private_waits = 0
+    receipt_count = 0
+    received = 0
+
+    async def controlled_wait(event, seconds):
+        nonlocal private_waits
+        if seconds != interval or private_waits >= 2:
+            return await real_wait(event, seconds)
+        if private_waits == 0:
+            await first_archived.wait()
+        else:
+            first_pending.set()
+            await all_archived.wait()
+        private_waits += 1
+        await asyncio.sleep(0)
+
+    async def observe_receipt(data):
+        nonlocal receipt_count
+        await real_send(data)
+        if struct.unpack('<I', data[:4])[0] == 203:
+            receipt_count += 1
+            if receipt_count == 1:
+                first_archived.set()
+            if receipt_count == 21:
+                all_archived.set()
+
+    async def hold_rollover_until_first_pending():
+        nonlocal received
+        if received == 2:
+            await first_pending.wait()
+        frame = await real_receive()
+        received += 1
+        return frame
+
+    # First retain one pending conversation, then deliver twenty more before
+    # the next worker tick. Explicit latches exercise pending overflow without
+    # racing the ordinary conversation-close flush or the queue's own cap.
+    monkeypatch.setattr(pusher, 'wait_for_event', controlled_wait)
+    monkeypatch.setattr(sock, 'send_bytes', observe_receipt)
+    monkeypatch.setattr(sock, 'receive_bytes', hold_rollover_until_first_pending)
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_timeline=2, audio_custody=1)
+    receipts = [
+        AudioReceipt(**json.loads(frame[4:])['receipt'])
+        for frame in sock.sent
+        if struct.unpack('<I', frame[:4])[0] == 203
+    ]
+    assert 'pending_refs' in stages
+    assert [receipt.conversation_id for receipt in receipts] == [f'conversation-{index}' for index in range(21)]
+    assert [read_pcm('owner', receipt) for receipt in receipts] == payloads
+    assert pusher.upload_audio_chunks_batch.call_count == 21
+
+
+@pytest.mark.asyncio
 async def test_pusher_projects_verified_receipts_in_capture_order(remote, monkeypatch):
     monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
     monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
