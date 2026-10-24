@@ -7,7 +7,7 @@ import uuid
 from config.audio_archive import admitted
 from config.audio_outbox import enabled as audio_outbox_enabled
 from models.message_event import AudioCustodyEvent
-from utils.executors import run_blocking, storage_executor
+from utils.executors import ExecutorSaturatedError, get_live_archive_executor, run_blocking
 from utils.other.raw_audio import CapturePack
 from utils.other.storage import archive_capture_bytes
 from utils.other.audio_outbox import commit_capture
@@ -179,6 +179,10 @@ class LiveAudioArchive:
             await self._write(pack, channel)
             self.uncommitted.pop(id(pack), None)
             self.frames.pop(id(pack), None)
+        except ExecutorSaturatedError:
+            self._disable('capacity_exhausted')
+            if self.durable:
+                raise
         except Exception:
             self._disable('upload_failed')
             if self.durable:
@@ -189,42 +193,48 @@ class LiveAudioArchive:
     async def _write(self, pack: CapturePack, channel: int):
         request = self.host.request
         context = request.client_device_context
-        raw, metadata = await run_blocking(storage_executor, pack.encoded, preserve_pcm=self.durable)
         headers = getattr(request.websocket, 'headers', {})
-        metadata.update(
-            firmware=headers.get('x-omi-firmware-version'),
-            frame_size='variable' if request.codec == 'opus' else 'sample-aligned',
-            capture_sha256=hashlib.sha256(bytes(pack.data)).hexdigest(),
-            app_version=getattr(context, 'app_version', None),
-            device_model=headers.get('x-omi-device-model') or request.source,
-            consent_state='private_cloud_sync_enabled',
-            consent_version=headers.get('x-omi-audio-consent-version', 'unknown'),
-            consent_scope='cloud_audio_storage',
-            training_consent_state='unknown',
-            channel_index=channel,
-            capture_session_id=self.capture_session_id,
-            clock_source='server_projected',
-            gap_domain='server_projected_sample_clock',
-            source_layout='multi-channel' if getattr(self.host, 'is_multi_channel', False) else 'mono',
-        )
         # Unknown linkage is explicit rather than inventing a conversation.
         # These packs remain training captures, but cannot qualify playback.
         owner = pack.conversation_id or 'unlinked'
         if pack.start is None:
             raise ValueError('capture has no start clock')
         hour = int(pack.start // 3600)
+        extra_metadata = {
+            'firmware': headers.get('x-omi-firmware-version'),
+            'frame_size': 'variable' if request.codec == 'opus' else 'sample-aligned',
+            'app_version': getattr(context, 'app_version', None),
+            'device_model': headers.get('x-omi-device-model') or request.source,
+            'consent_state': 'private_cloud_sync_enabled',
+            'consent_version': headers.get('x-omi-audio-consent-version', 'unknown'),
+            'consent_scope': 'cloud_audio_storage',
+            'training_consent_state': 'unknown',
+            'channel_index': channel,
+            'capture_session_id': self.capture_session_id,
+            'clock_source': 'server_projected',
+            'gap_domain': 'server_projected_sample_clock',
+            'source_layout': 'multi-channel' if getattr(self.host, 'is_multi_channel', False) else 'mono',
+        }
         if self.durable:
             frames = self.frames.get(id(pack), [])
             first = frames[0]['sequence'] if frames else 0
-            receipt = await run_blocking(
-                storage_executor,
-                commit_capture,
-                request.uid,
-                raw,
-                f'{owner}/{hour}/{channel}/{self.capture_session_id}/{first}',
-                metadata,
-                frames,
-            )
+            capture_name = f'{owner}/{hour}/{channel}/{self.capture_session_id}/{first}'
+
+            def _encode_and_commit():
+                raw, metadata = pack.encoded(preserve_pcm=True)
+                metadata.update(
+                    **extra_metadata,
+                    capture_sha256=hashlib.sha256(bytes(pack.data)).hexdigest(),
+                )
+                return commit_capture(
+                    request.uid,
+                    raw,
+                    capture_name,
+                    metadata,
+                    frames,
+                )
+
+            receipt = await run_blocking(get_live_archive_executor(), _encode_and_commit)
             # A failed/disconnected delivery leaves the producer unacknowledged;
             # receipt loss is safe because the immutable media remains indexed.
             query = getattr(request.websocket, 'query_params', {})
@@ -239,15 +249,23 @@ class LiveAudioArchive:
                     )
                 )
             return
-        await run_blocking(
-            storage_executor,
-            archive_capture_bytes,
-            request.uid,
-            raw,
-            'raw-live',
-            f'{owner}/{hour}/{channel}/{pack.start:.6f}',
-            metadata,
-        )
+        capture_name = f'{owner}/{hour}/{channel}/{pack.start:.6f}'
+
+        def _encode_and_archive() -> None:
+            raw, metadata = pack.encoded(preserve_pcm=False)
+            metadata.update(
+                **extra_metadata,
+                capture_sha256=hashlib.sha256(bytes(pack.data)).hexdigest(),
+            )
+            archive_capture_bytes(
+                request.uid,
+                raw,
+                'raw-live',
+                capture_name,
+                metadata,
+            )
+
+        await run_blocking(get_live_archive_executor(), _encode_and_archive)
 
     async def ensure_durable(self):
         """Barrier before transcript commit/ACK; also commits silence-only tails."""

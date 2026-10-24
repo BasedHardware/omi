@@ -14,9 +14,11 @@ The load-bearing facts this guards:
   ``--allow-rule-removal-of <apply document>`` permits dropping only rules that
   the apply variant declared (the Coldline rule); any other live rule still
   blocks. ``--allow-rule-removal`` remains as an explicit operator override.
-* No ``Delete`` action may ever reach ``chunks/``. An unscoped Delete rule counts
-  as reaching it.
-* Every ``SetStorageClass`` rule must be prefix-scoped to exactly ``chunks/``.
+* No ``Delete`` action may ever reach ``chunks/`` or the canonical raw capture
+  prefixes (``raw-live/``, ``raw-sync/``, ``raw-mobile-batch/``). An unscoped
+  Delete rule counts as reaching them.
+* Every ``SetStorageClass`` rule must be prefix-scoped to ``['chunks/']`` or
+  ``['raw-live/', 'raw-sync/', 'raw-mobile-batch/']``.
 * Noncurrent-version rules (``isLive: false`` and friends) are forbidden: a
   bucket-wide noncurrent rule would move ``playback/`` noncurrent versions to
   Coldline, which the 30-day Delete rule then early-deletes.
@@ -31,6 +33,12 @@ from pathlib import Path
 from typing import Any
 
 CHUNKS_PREFIX = "chunks/"
+RAW_CAPTURE_PREFIXES: tuple[str, ...] = ("raw-live/", "raw-sync/", "raw-mobile-batch/")
+PROTECTED_AUDIO_PREFIXES: tuple[str, ...] = (CHUNKS_PREFIX, *RAW_CAPTURE_PREFIXES)
+ALLOWED_COLDLINE_PREFIX_SCOPES: tuple[list[str], ...] = (
+    [CHUNKS_PREFIX],
+    list(RAW_CAPTURE_PREFIXES),
+)
 ALLOWED_ACTIONS = {"Delete", "SetStorageClass"}
 ALLOWED_SOURCE_CLASSES = {"STANDARD", "MULTI_REGIONAL"}
 NONCURRENT_CONDITION_KEYS = ("daysSinceNoncurrentTime", "noncurrentTimeBefore", "numNewerVersions")
@@ -52,9 +60,13 @@ def _rules(document: Mapping[str, Any] | None) -> list[Any]:
     return list(rules) if isinstance(rules, list) else []
 
 
-def _prefix_touches_chunks(prefix: str) -> bool:
-    """True when a lifecycle prefix can select an object under ``chunks/``."""
-    return prefix.startswith(CHUNKS_PREFIX) or CHUNKS_PREFIX.startswith(prefix)
+def _matching_protected_prefixes(prefix: str) -> list[str]:
+    """Return canonical audio prefixes that ``prefix`` could select."""
+    return [
+        protected
+        for protected in PROTECTED_AUDIO_PREFIXES
+        if prefix.startswith(protected) or protected.startswith(prefix)
+    ]
 
 
 def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
@@ -70,7 +82,7 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
         errors.append("desired document must contain lifecycle.rule as a list")
         return errors
 
-    set_class_rules = 0
+    seen_coldline_scopes: list[list[str]] = []
     for index, rule in enumerate(lifecycle["rule"]):
         if not isinstance(rule, Mapping):
             errors.append(f"desired rule {index} is not an object")
@@ -102,12 +114,11 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                 )
             else:
                 for prefix in prefixes:
-                    if _prefix_touches_chunks(prefix):
+                    for protected in _matching_protected_prefixes(prefix):
                         errors.append(
-                            f"desired rule {index} is a Delete rule whose prefix {prefix!r} can match {CHUNKS_PREFIX!r}"
+                            f"desired rule {index} is a Delete rule whose prefix {prefix!r} can match {protected!r}"
                         )
         else:  # SetStorageClass
-            set_class_rules += 1
             if action.get("storageClass") != "COLDLINE":
                 errors.append(
                     f"desired rule {index} must set storageClass COLDLINE, got {action.get('storageClass')!r}"
@@ -115,11 +126,18 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
             age = condition.get("age")
             if not isinstance(age, int) or isinstance(age, bool) or age < 30:
                 errors.append(f"desired rule {index} must carry an integer age >= 30, got {age!r}")
-            if list(prefixes or []) != [CHUNKS_PREFIX]:
+            prefix_list = list(prefixes or [])
+            if prefix_list not in ALLOWED_COLDLINE_PREFIX_SCOPES:
                 errors.append(
-                    f"desired rule {index} SetStorageClass must be prefix-scoped to exactly ['{CHUNKS_PREFIX}'], "
-                    f"got {prefixes!r}"
+                    f"desired rule {index} SetStorageClass must be prefix-scoped to exactly "
+                    f"{[CHUNKS_PREFIX]} or {list(RAW_CAPTURE_PREFIXES)}, got {prefixes!r}"
                 )
+            elif prefix_list in seen_coldline_scopes:
+                errors.append(
+                    f"desired document declares duplicate SetStorageClass rules for matchesPrefix {prefix_list!r}"
+                )
+            else:
+                seen_coldline_scopes.append(prefix_list)
             source_classes = condition.get("matchesStorageClass")
             classes_ok = (
                 isinstance(source_classes, list)
@@ -132,8 +150,6 @@ def validate_desired_document(document: Mapping[str, Any]) -> list[str]:
                     f"{sorted(ALLOWED_SOURCE_CLASSES)}, got {source_classes!r}"
                 )
 
-    if set_class_rules > 1:
-        errors.append(f"desired document declares {set_class_rules} SetStorageClass rules; exactly one is expected")
     if bucket == PROD_BUCKET:
         for legacy in LEGACY_DELETE_RULES:
             if legacy not in lifecycle["rule"]:

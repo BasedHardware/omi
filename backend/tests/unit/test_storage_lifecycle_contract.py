@@ -3,6 +3,8 @@ from pathlib import Path
 
 from scripts.validate_storage_lifecycle import (
     LEGACY_DELETE_RULES,
+    PROTECTED_AUDIO_PREFIXES,
+    RAW_CAPTURE_PREFIXES,
     validate_against_live,
     validate_desired_document,
     validate_notifications,
@@ -26,7 +28,7 @@ def test_checked_in_documents_pass_the_source_contract():
         assert validate_desired_document(_load(name)) == [], name
 
 
-def test_no_delete_rule_can_reach_chunks():
+def test_no_delete_rule_can_reach_chunks_or_raw_capture_prefixes():
     for name in APPLY_FILES + ROLLBACK_FILES:
         for rule in _rules(_load(name)):
             if rule["action"]["type"] != "Delete":
@@ -34,22 +36,30 @@ def test_no_delete_rule_can_reach_chunks():
             prefixes = rule["condition"].get("matchesPrefix")
             assert prefixes, f"{name}: unscoped Delete rule"
             for prefix in prefixes:
-                assert not prefix.startswith("chunks/"), f"{name}: {prefix}"
-                assert not "chunks/".startswith(prefix), f"{name}: {prefix}"
+                for protected in PROTECTED_AUDIO_PREFIXES:
+                    assert not prefix.startswith(protected), f"{name}: {prefix} touches {protected}"
+                    assert not protected.startswith(prefix), f"{name}: {prefix} touches {protected}"
 
 
-def test_apply_files_declare_exactly_one_coldline_rule_scoped_to_chunks():
+def test_apply_files_declare_coldline_rules_for_chunks_and_raw_capture_prefixes():
     for name in APPLY_FILES:
         set_class = [r for r in _rules(_load(name)) if r["action"]["type"] == "SetStorageClass"]
-        assert len(set_class) == 1, name
-        rule = set_class[0]
-        assert rule["action"]["storageClass"] == "COLDLINE"
-        assert rule["condition"]["age"] == 30
-        assert rule["condition"]["matchesPrefix"] == ["chunks/"]
+        assert len(set_class) == 2, name
+        for rule in set_class:
+            assert rule["action"]["storageClass"] == "COLDLINE"
+            assert rule["condition"]["age"] == 30
+        assert [r["condition"]["matchesPrefix"] for r in set_class] == [
+            ["chunks/"],
+            list(RAW_CAPTURE_PREFIXES),
+        ]
 
 
 def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
-    set_class = [r for r in _rules(_load("prod.json")) if r["action"]["type"] == "SetStorageClass"]
+    set_class = [
+        r
+        for r in _rules(_load("prod.json"))
+        if r["action"]["type"] == "SetStorageClass" and r["condition"].get("matchesPrefix") == ["chunks/"]
+    ]
     assert len(set_class) == 1
     rule = set_class[0]
     assert rule["condition"]["matchesSuffix"] == [".batch.enc", ".batch.bin"], (
@@ -74,7 +84,7 @@ def test_rollback_files_only_drop_the_set_storage_class_rule():
         assert all(rule["action"]["type"] == "Delete" for rule in rollback_rules)
         assert all(rule in apply_rules for rule in rollback_rules)
         dropped = [rule for rule in apply_rules if rule not in rollback_rules]
-        assert [rule["action"]["type"] for rule in dropped] == ["SetStorageClass"]
+        assert dropped and all(rule["action"]["type"] == "SetStorageClass" for rule in dropped)
         assert _load(apply_name)["bucket"] == _load(rollback_name)["bucket"]
 
 
@@ -118,6 +128,20 @@ def test_delete_rule_on_chunks_is_rejected():
         }
     )
     assert any("can match 'chunks/'" in error for error in errors)
+
+
+def test_delete_rule_on_raw_capture_prefixes_is_rejected():
+    for raw_prefix in (*RAW_CAPTURE_PREFIXES, "raw-"):
+        errors = validate_desired_document(
+            {
+                "bucket": "omi-dev-private-cloud-sync",
+                "project": "based-hardware-dev",
+                "lifecycle": {
+                    "rule": [{"action": {"type": "Delete"}, "condition": {"age": 365, "matchesPrefix": [raw_prefix]}}]
+                },
+            }
+        )
+        assert any("is a Delete rule whose prefix" in error for error in errors), raw_prefix
 
 
 def test_noncurrent_version_rule_is_rejected():
