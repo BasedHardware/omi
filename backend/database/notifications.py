@@ -371,10 +371,12 @@ def remove_invalid_token(token: str) -> None:
         return
 
 
-def remove_bulk_tokens(tokens: list[str]) -> None:
+def remove_bulk_tokens(tokens: list[str], *, firestore_client: Any = None) -> None:
     """Remove multiple invalid tokens efficiently using IN queries and batch deletes"""
     if not tokens:
         return
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
 
     # Firestore IN queries support up to 30 items
     chunk_size = 30
@@ -382,10 +384,10 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
 
     for chunk in token_chunks:
         # Query for all tokens in this chunk at once
-        query = db.collection_group('fcm_tokens').where(filter=FieldFilter('token', 'in', chunk))
+        query = client.collection_group('fcm_tokens').where(filter=FieldFilter('token', 'in', chunk))
 
         # Batch delete for efficiency
-        batch = db.batch()
+        batch = client.batch()
         count = 0
 
         for doc in query.stream():
@@ -395,7 +397,7 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
             # Firestore batch limit is 500 operations
             if count >= 500:
                 batch.commit()
-                batch = db.batch()
+                batch = client.batch()
                 count = 0
 
         # Commit remaining deletes
@@ -403,12 +405,14 @@ def remove_bulk_tokens(tokens: list[str]) -> None:
             batch.commit()
 
 
-def get_users_token_in_timezones(timezones: list[str]) -> List[str]:
-    return _get_users_in_timezones(timezones, 'fcm_token')
+def get_users_token_in_timezones(timezones: list[str], *, firestore_client: Any = None) -> List[str]:
+    return _get_users_in_timezones(timezones, 'fcm_token', firestore_client=firestore_client)
 
 
-def get_users_id_in_timezones(timezones: list[str]) -> List[Union[str, Tuple[str, List[str], Any]]]:
-    return _get_users_in_timezones(timezones, 'id')
+def get_users_id_in_timezones(
+    timezones: list[str], *, firestore_client: Any = None
+) -> List[Union[str, Tuple[str, List[str], Any]]]:
+    return _get_users_in_timezones(timezones, 'id', firestore_client=firestore_client)
 
 
 def get_users_for_daily_summary_indexed(
@@ -460,8 +464,14 @@ def get_users_for_daily_summary_indexed(
         )
 
 
-def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
+def _get_users_in_timezones(
+    timezones: list[str], filter: str, *, firestore_client: Any = None
+) -> List[Any]:
     """Query main user documents by timezone, then get tokens from subcollection and legacy field"""
+    if not timezones:
+        return []
+
+    client = firestore_client if firestore_client is not None else get_firestore_client()
     users: List[Any] = []
 
     # 'Where in' query only supports 30 or fewer items in list so we split in chunks
@@ -471,7 +481,7 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
         chunk_users: List[Any] = []
         try:
             # Query main user documents by time_zone
-            query = db.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
+            query = client.collection('users').where(filter=FieldFilter('time_zone', 'in', chunk))
 
             for user_doc in query.stream():
                 uid = str(user_doc.id)
@@ -479,7 +489,7 @@ def _get_users_in_timezones(timezones: list[str], filter: str) -> List[Any]:
 
                 # Collect tokens from subcollection
                 tokens: List[str] = []
-                token_docs = db.collection('users').document(uid).collection('fcm_tokens').stream()
+                token_docs = client.collection('users').document(uid).collection('fcm_tokens').stream()
                 for token_doc in token_docs:
                     token_data = _typed_doc(token_doc)
                     token_value = token_data.get('token')
