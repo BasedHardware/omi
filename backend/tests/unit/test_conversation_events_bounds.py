@@ -186,6 +186,9 @@ def router():
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": endpoints,
         "utils.other.list_budget": list_budget_real,
+        # These tests exercise event/speaker handlers, not list serving. Keep
+        # the new router collaborator inside this fixture's existing isolation.
+        "utils.list_version_check": _pkg("utils.list_version_check"),
         "utils.other.storage": _pkg("utils.other.storage"),
         # utils.conversations.* is DERIVED, not listed: a new module in that package
         # must not break this suite at collection. See package_submodule_stubs.

@@ -7,7 +7,7 @@ from testing.e2e.sync_helpers import patch_fresh_sync_lane
 from testing.e2e.test_sync_lifecycle import _drain_background_coroutines, _patch_sync_pipeline, _poll_sync_job
 
 
-def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, monkeypatch):
+def test_watch_process_now_keeps_recovered_speech_visible(client, auth_headers, monkeypatch, live_user):
     import database.conversations as conversations_db
     import utils.conversations.lifecycle as lifecycle
     import utils.conversations.demand_processing as demand_processing

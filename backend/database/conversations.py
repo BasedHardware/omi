@@ -48,6 +48,7 @@ from utils.manual_speaker_assignments import (
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
+from database.sync_conversation_snapshot import read_redirected, resolve_snapshot
 from database.sync_live_overlap import find_sync_live_overlap_candidates
 from utils.sync.live_overlap import live_overlap_enabled
 from .audio_timeline import group_chunks_by_coverage
@@ -56,6 +57,7 @@ from .firestore_index_registry import (
     CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
 )
 from .firestore_read_metrics import FirestoreReadOutcome, FirestoreReadSite, record_document_read
+from .firestore_read_origin import read_origin
 from .conversation_revisions import ensure_timezone_aware, firestore_revision_datetime
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from .people_stats_cache import invalidate_people_stats_cache
@@ -661,8 +663,9 @@ def prepare_photo_for_read(photo_data: Optional[Dict[str, Any]], uid: str) -> Op
 
 
 @prepare_for_read(decrypt_func=prepare_photo_for_read)
-def get_conversation_photos(uid: str, conversation_id: str):
-    user_ref = db.collection('users').document(uid)
+def get_conversation_photos(uid: str, conversation_id: str, *, firestore_client: Any = None):
+    client = firestore_client if firestore_client is not None else db
+    user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     photos_ref = conversation_ref.collection('photos')
     photos = [doc.to_dict() for doc in photos_ref.stream()]
@@ -1379,10 +1382,12 @@ def get_conversation(
     uid,
     conversation_id,
     *,
+    firestore_client: Any = None,
     read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
     include_transcript_decode_status: bool = False,
 ):
-    user_ref = db.collection('users').document(uid)
+    client = firestore_client if firestore_client is not None else db
+    user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_data = document_data_with_revision(conversation_ref.get())
     record_document_read(
@@ -1425,40 +1430,49 @@ def get_conversation_raw_snapshot(
     return snapshot.to_dict()
 
 
-def resolve_sync_conversation_redirect(uid: str, conversation_id: str, *, max_hops: int = 16) -> Optional[str]:
-    """Resolve a server-authored sync bridge for an owner read.
+def resolve_sync_conversation_redirect(
+    uid: str, conversation_id: str, *, firestore_client: Any = None, max_hops: int = 16
+) -> Optional[str]:
+    """Resolve an owner bridge; user deletion remains terminal at every hop."""
+    resolved = resolve_snapshot(
+        uid,
+        conversation_id,
+        client_factory=lambda: firestore_client if firestore_client is not None else get_firestore_client(),
+        max_hops=max_hops,
+    )
+    return resolved.conversation_id if resolved is not None else None
 
-    User deletion is terminal, including deletion of the survivor. Do not
-    follow arbitrary deleted rows or expose another account's conversation.
-    """
-    seen: set[str] = set()
-    current_id = conversation_id
-    for _ in range(max_hops):
-        if current_id in seen or not current_id or '/' in current_id or len(current_id.encode()) > 256:
-            return None
-        seen.add(current_id)
-        if (
-            get_firestore_client()
-            .collection('users')
-            .document(uid)
-            .collection('deleted_conversations')
-            .document(current_id)
-            .get()
-            .exists
-        ):
-            return None
-        row = get_conversation_raw_snapshot(uid, current_id)
-        if not row:
-            return None
-        if row.get('owner_uid', uid) != uid or row.get('id', current_id) != current_id:
-            return None
-        if not row.get('deleted'):
-            return current_id
-        successor = row.get('sync_merged_into')
-        if not isinstance(successor, str) or not successor:
-            return None
-        current_id = successor
-    return None
+
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
+@with_photos(get_conversation_photos)
+def _hydrate_sync_conversation_snapshot(
+    uid: str,
+    conversation_data: dict,
+    *,
+    firestore_client: Any = None,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+) -> Optional[dict]:
+    record_document_read(read_site, FirestoreReadOutcome.HIT)
+    return conversation_data
+
+
+@read_origin('job:sync_operation_snapshot')
+def get_sync_redirected_conversation(
+    uid: str,
+    conversation_id: str,
+    *,
+    firestore_client: Any = None,
+    read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED,
+) -> Optional[dict]:
+    """Hydrate one checked snapshot; mutations still reread/CAS independently."""
+    return read_redirected(
+        uid,
+        conversation_id,
+        client_factory=lambda: firestore_client if firestore_client is not None else get_firestore_client(),
+        hydrate=_hydrate_sync_conversation_snapshot,
+        read_current=get_conversation,
+        read_site=read_site,
+    )
 
 
 def get_manual_speaker_receipt(uid: str, conversation_id: str, *, firestore_client: Any = None) -> dict:
