@@ -1450,16 +1450,41 @@ def get_pending_apple_reminders_sync(uid: str) -> Dict[str, Any]:
     items_ref = user_ref.collection(action_items_collection)
 
     # Pending export: sync_requested=True, filter exported!=True in Python
-    # (avoids composite index + handles missing 'exported' field)
-    pending_query = items_ref.where(filter=FieldFilter('sync_requested', '==', True)).limit(50)
-    pending_docs = pending_query.stream()
+    # (avoids composite index + handles missing 'exported' field).
+    # Settle already-exported rows encountered so the backlog drains
+    # instead of starving genuinely pending exports behind 50 settled rows.
     pending_export: List[Dict[str, Any]] = []
-    for doc in pending_docs:
-        data: Dict[str, Any] = typed_doc(doc)
-        if data.get('exported') is True:
-            continue
-        data['id'] = doc.id
-        pending_export.append(prepare_action_item_for_read(data))
+    seen_ids: set[str] = set()
+    while len(pending_export) < 50:
+        pending_query = items_ref.where(filter=FieldFilter('sync_requested', '==', True)).limit(50)
+        pending_docs = list(pending_query.stream())
+        if not pending_docs:
+            break
+        settled_any = False
+        for doc in pending_docs:
+            if doc.id in seen_ids:
+                continue
+            seen_ids.add(doc.id)
+            data: Dict[str, Any] = typed_doc(doc)
+            if data.get('exported') is True:
+                settled_any = True
+                try:
+                    if hasattr(doc, 'reference') and hasattr(doc.reference, 'update'):
+                        doc.reference.update({'sync_requested': False})
+                    else:
+                        items_ref.document(doc.id).update({'sync_requested': False})
+                except Exception:
+                    try:
+                        items_ref.document(doc.id).update({'sync_requested': False})
+                    except Exception as e:
+                        logger.warning(f'Failed to clear sync_requested on settled doc {doc.id}: {e}')
+                continue
+            data['id'] = doc.id
+            pending_export.append(prepare_action_item_for_read(data))
+            if len(pending_export) >= 50:
+                break
+        if not settled_any:
+            break
 
     # Synced items: exported to apple_reminders (for bidirectional sync)
     # Uses only equality filters to avoid composite index requirement
