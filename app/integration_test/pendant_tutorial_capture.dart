@@ -29,6 +29,7 @@ Future<void> main() async {
   await SharedPreferencesUtil.init();
   SharedPreferencesUtil().voiceResponseMode = 0;
   await PlatformManager.initializeServices();
+  OmiColors.active = OmiPalette.dark;
   runApp(const _Fixture());
 }
 

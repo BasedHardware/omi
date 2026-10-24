@@ -66,7 +66,12 @@ extension _CaptureVoiceQuestions on CaptureController {
         codec: codec,
         playResponseAudio: true,
         onNoSpeech: () async {
-          if (isCurrent()) await _playVoiceQuestionFailureHaptic(deviceId);
+          if (!isCurrent()) return;
+          // A best-effort vibration is not request-completion authority. A
+          // stalled BLE lookup/write must not strand the tutorial or its retry.
+          unawaited(_playVoiceQuestionFailureHaptic(deviceId).catchError((Object error) {
+            Logger.warning('Pendant failure haptic failed: ${error.runtimeType}');
+          }));
         },
       );
       finish(result);

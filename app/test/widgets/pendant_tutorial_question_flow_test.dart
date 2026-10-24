@@ -21,6 +21,7 @@ import 'package:omi/providers/message_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 
 import '../support/pendant_tutorial_harness.dart';
 
@@ -257,6 +258,35 @@ void main() {
       await tester.pump();
     });
   }
+
+  testWidgets('a pending Bluetooth haptic cannot block no-speech recovery or retry', (tester) async {
+    final connection = Completer<DeviceConnection?>();
+    var lookups = 0;
+    var requests = 0;
+    final h = PendantTutorialHarness(messages(() {
+      if (requests++ > 0) return answered();
+      return Stream.value(ServerMessageChunk('e', 'No speech', MessageChunkType.error, errorCode: 'no_speech'));
+    }), connection: (_) {
+      lookups++;
+      return connection.future;
+    });
+    addTearDown(h.dispose);
+    await tester.pumpWidget(questionStep(h));
+    h.submit();
+    await flush(tester);
+    expect(lookups, greaterThan(0));
+    expect(connection.isCompleted, isFalse);
+    expect(h.tutorial.questionFailure, VoiceQuestionFailure.noSpeech);
+    expect(h.tutorial.questionSent, isFalse);
+    h.submit();
+    await flush(tester);
+    expect(find.text('Your meeting is at two.'), findsOneWidget);
+    connection.complete(null);
+    await flush(tester);
+    await tester.pumpWidget(const SizedBox());
+    h.dispose();
+    await tester.pump();
+  });
 
   testWidgets('auto-submit shows its answer and ignores a late second press', (tester) async {
     final response = StreamController<ServerMessageChunk>();

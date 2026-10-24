@@ -18,6 +18,7 @@ import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 
@@ -57,7 +58,8 @@ class _Usage extends ChangeNotifier implements UsageProvider {
 /// Real capture, production external-actions adapter and tutorial state. Only OS,
 /// codec and HTTP I/O are supplied by the caller. No capture defaults are resolved.
 class PendantTutorialHarness {
-  PendantTutorialHarness(this.messages, {Future<BleAudioCodec> Function(String)? codec}) {
+  PendantTutorialHarness(this.messages,
+      {Future<BleAudioCodec> Function(String)? codec, Future<DeviceConnection?> Function(String)? connection}) {
     final coordinator = RecordingTransferCoordinator(
       reconcile: () async {},
       discover: () async {},
@@ -98,7 +100,7 @@ class PendantTutorialHarness {
       refreshConversation: () async {},
       telemetry:
           RecordingLifecycleTelemetry(emitter: (_, __) {}, idFactory: () => 'tutorial-fixture', clock: DateTime.now),
-      ensureDeviceConnection: (_) async => null,
+      ensureDeviceConnection: connection ?? (_) async => null,
     ));
     capture.updateExternalActions(ProviderCaptureExternalActions(
       conversationProvider: _Conversations(),
