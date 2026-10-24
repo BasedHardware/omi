@@ -2305,12 +2305,7 @@ class CaptureController extends ChangeNotifier
       return Future.value(null);
     }
     if (_fenceUplinkForSync()) return null;
-    try {
-      return await connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
-    } catch (e) {
-      Logger.debug('Failed to get BLE audio bytes listener for device $deviceId: $e');
-      return null;
-    }
+    return await connection.getBleAudioBytesListener(onAudioBytesReceived: onAudioBytesReceived);
   }
 
   Future<StreamSubscription?> _getBleButtonListener(

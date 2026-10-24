@@ -152,8 +152,8 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     return _syncedWalsCache!;
   }
 
-  /// Terminally unavailable recordings. They remain reachable for review or
-  /// deletion, but never count as retryable pending work.
+  /// Recordings excluded from automatic uploads. Request refusals can be
+  /// explicitly re-armed; confirmed audio/window failures stay terminal.
   List<Wal> get corruptedWals {
     _ensureFilteredCaches();
     return _corruptedWalsCache!;
@@ -245,11 +245,10 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
             s == WalSyncDisplayState.uploadRejected,
       );
 
-  /// The part of [needsAttentionWalsCount] a retry can still upload: the
-  /// automatic budget ([walMaxAutoRetries]) is spent, the recording is still
-  /// pending. The rest are terminal and no sync can move them.
+  /// Spent retry budgets and request refusals can be explicitly retried.
+  /// Missing files and permanent audio/lookback verdicts remain excluded.
   List<Wal> get retryableAttentionWals =>
-      _allWals.where((w) => w.syncDisplayState == WalSyncDisplayState.failed).toList();
+      _allWals.where((w) => !w.onDeviceOnly && isRetryableSyncState(w.syncDisplayState)).toList();
 
   /// Retry every recording in [retryableAttentionWals]. The automatic drain
   /// skips a recording once its budget is spent, so a plain [syncWals] from
@@ -257,9 +256,7 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
   /// fresh budget a per-recording Retry gives ([syncWal]) before draining.
   Future<void> retryNeedsAttentionWals() async {
     for (final wal in retryableAttentionWals) {
-      wal
-        ..retryCount = 0
-        ..lastRetryAt = 0;
+      wal.prepareManualRetry();
     }
     await syncWals();
   }
@@ -780,13 +777,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> syncWal(Wal wal) async {
     final generation = _sessionGeneration;
+    wal.prepareManualRetry();
     // UI Sync/Auto Sync still call syncWal for a single row, but must not
     // race a coordinator drain (or device download) on the same WAL stack.
     if (_startBackgroundSync && _isTransferSeamBusy()) {
       // Coalescing this tap into the running drain must not silently drop it:
       // the drain skips recordings whose auto-upload budget is spent, so grant
       // the same fresh budget the direct path gives.
-      wal.retryCount = 0;
       await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }
@@ -1009,16 +1006,20 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
 
   Future<void> retrySync() async {
     final generation = _sessionGeneration;
+    final failedWal = _syncState.failedWal;
+    if (failedWal != null && (failedWal.status == WalStatus.miss || failedWal.status == WalStatus.uploadRejected)) {
+      await syncWal(failedWal);
+      return;
+    }
+    if (retryableAttentionWals.isNotEmpty) {
+      await retryNeedsAttentionWals();
+      return;
+    }
     if (_startBackgroundSync) {
       await _wakeTransfer(WakeTrigger.userRetry);
       return;
     }
-    final failedWal = _syncState.failedWal;
-    if (failedWal != null) {
-      await syncWal(failedWal);
-    } else {
-      await _syncWalsDirect(generation);
-    }
+    await _syncWalsDirect(generation);
   }
 
   void clearSyncResult() {
