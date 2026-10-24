@@ -15,11 +15,18 @@ two places, neither of which adds a model call:
 
 Sources are only the user's own lines:
 
+- written: messages the user wrote to that person, where the platform can read
+  them (``user_written_lines``; none by default). These are the best evidence of
+  how the user texts someone and win for every measure once there are enough.
 - spoken: transcript segments with ``is_user`` in conversations where that person
   is a tagged speaker. These carry length, greetings, language mix and examples.
 - typed: messages the user typed to Omi. Speech-to-text inserts its own
-  punctuation, so line endings, "!" and emoji are measured on typed lines when
-  there are enough of them, and on all lines otherwise.
+  punctuation, so without written lines, endings, "!" and emoji are measured on
+  typed lines when there are enough of them, and on all lines otherwise.
+
+Questions are left out of the ending shares: a question ends with "?" because of
+what it says, not how the person writes, and someone who mostly asks Omi things
+would otherwise look like they end every line with "?".
 
 Locked, discarded and deleted conversations are never read. The feature is
 opt-in (``assistant_settings.drafts.user_voice``); the profile is cached for
@@ -45,13 +52,15 @@ from utils.encryption import decrypt, encrypt
 logger = logging.getLogger(__name__)
 
 USER_VOICE_CACHE_TTL_SECONDS = 7 * 24 * 3600
-USER_VOICE_PROFILE_VERSION = 1
+USER_VOICE_PROFILE_VERSION = 2
 
 # Below this many of the user's own lines a profile is noise; the prompt block
 # then says so instead of inventing a style.
 USER_VOICE_MIN_LINES = 8
 # Endings and "!" come from typed lines only when there are at least this many.
 USER_VOICE_MIN_TYPED_LINES = 12
+# A greeting is worth naming only when the user opens this often (percent).
+GREETING_MIN_PERCENT = 15
 
 # Bounded reads: one page of recent conversations and recent chat messages.
 USER_VOICE_MAX_CONVERSATIONS = 200
@@ -67,6 +76,7 @@ _EMOJI_RE = re.compile('[\U0001f300-\U0001faff☀-➿\U0001f1e6-\U0001f1ff]')
 _URL_RE = re.compile(r'https?://\S+')
 _BANG_RE = re.compile('[!！]')
 _LAUGH_RE = re.compile(r'(haha+|hehe+|lol|lmao|哈哈+)$', re.IGNORECASE)
+_STRETCH_RE = re.compile(r'([^\W\d_])\1{2,}|\bokk+\b', re.IGNORECASE)
 _GREETING_RE = re.compile(
     r'^(hi|hey|hello|yo|dear|good morning|morning|嗨|哈喽|你好|hola|bonjour|ciao)\b',
     re.IGNORECASE,
@@ -110,8 +120,13 @@ class UserVoiceProfile(BaseModel):
     exclamation_rate: int = 0
     exclamations_per_line: float = 0.0
     emoji_rate: int = 0
-    # Percent of letters by script, e.g. {'latin': 70, 'han': 30}.
+    # Percent of lines by their main script, e.g. {'latin': 70, 'han': 30}. Lines,
+    # not letters: one Han character carries about what a Latin word does.
     scripts: dict[str, int] = Field(default_factory=dict)
+    written_lines: int = 0
+    # Percent of lines that stretch a word ("okk", "cominggg", "heyyy").
+    stretch_rate: int = 0
+    greeting_rate: int = 0
     lowercase_start_rate: int = 0
     median_chars: int = 0
     p90_chars: int = 0
@@ -189,41 +204,49 @@ def build_profile(
     spoken_lines: Iterable[str],
     typed_lines: Iterable[str],
     *,
+    written_lines: Iterable[str] = (),
     now: Optional[datetime] = None,
 ) -> UserVoiceProfile:
     """Build the profile from the user's own lines, oldest first."""
     spoken = [line for line in (_clean(t) for t in spoken_lines) if line][-USER_VOICE_MAX_LINES:]
     typed = [line for line in (_clean(t) for t in typed_lines) if line][-USER_VOICE_MAX_LINES:]
-    everything = spoken + typed
+    written = [line for line in (_clean(t) for t in written_lines) if line][-USER_VOICE_MAX_LINES:]
+    everything = written + spoken + typed
     profile = UserVoiceProfile(
         person_id=person_id,
         person_name=person_name,
         built_at=now or datetime.now(timezone.utc),
-        lines=len(spoken),
+        lines=len(written) + len(spoken),
         spoken_lines=len(spoken),
         typed_lines=len(typed),
+        written_lines=len(written),
     )
     if not everything:
         return profile
 
-    # Marks: typed lines when there are enough, because STT punctuates for the user.
-    marked = typed if len(typed) >= USER_VOICE_MIN_TYPED_LINES else everything
-    endings = Counter(e for e in (line_ending(line) for line in marked) if e)
+    # Marks: what the user wrote to this person when there is enough of it; else
+    # typed lines, because STT punctuates for the user; else everything.
+    if len(written) >= USER_VOICE_MIN_LINES:
+        marked = written
+    elif len(typed) >= USER_VOICE_MIN_TYPED_LINES:
+        marked = typed
+    else:
+        marked = everything
+    statements = [line for line in marked if line_ending(line) != '?'] or marked
+    endings = Counter(e for e in (line_ending(line) for line in statements) if e)
     bang_lines = sum(1 for line in marked if _BANG_RE.search(line))
     bangs = sum(len(_BANG_RE.findall(line)) for line in marked)
     emoji_lines = sum(1 for line in marked if _EMOJI_RE.search(line))
-    profile.endings = {k: _percent(v, len(marked)) for k, v in endings.most_common()}
+    profile.endings = {k: _percent(v, len(statements)) for k, v in endings.most_common()}
     profile.exclamation_rate = _percent(bang_lines, len(marked))
     profile.exclamations_per_line = round(bangs / len(marked), 2)
     profile.emoji_rate = _percent(emoji_lines, len(marked))
 
-    # Everything else is about this person: the spoken lines, or all lines if none yet.
-    personal = spoken or everything
-    scripts: Counter = Counter()
-    for line in personal:
-        scripts.update(letter_scripts(line))
-    total_letters = sum(scripts.values())
-    profile.scripts = {k: _percent(v, total_letters) for k, v in scripts.most_common() if _percent(v, total_letters)}
+    # Everything else is about this person: their lines, or all lines if none yet.
+    personal = (written if len(written) >= USER_VOICE_MIN_LINES else written + spoken) or everything
+    scripts = Counter(s for s in (_dominant_script(line) for line in personal) if s)
+    profile.scripts = {k: _percent(v, len(personal)) for k, v in scripts.most_common() if _percent(v, len(personal))}
+    profile.stretch_rate = _percent(sum(1 for line in personal if _STRETCH_RE.search(line)), len(personal))
 
     latin_lines = [line for line in personal if _dominant_script(line) == 'latin']
     if len(latin_lines) >= 5:
@@ -233,8 +256,9 @@ def build_profile(
     profile.median_chars = _quantile(lengths, 0.5)
     profile.p90_chars = _quantile(lengths, 0.9)
 
-    greetings = Counter(m.group(1).lower() for m in (_GREETING_RE.match(line) for line in personal) if m)
-    profile.greetings = [g for g, _ in greetings.most_common(3)]
+    greeted = [m.group(1).lower() for m in (_GREETING_RE.match(line) for line in personal) if m]
+    profile.greeting_rate = _percent(len(greeted), len(personal))
+    profile.greetings = [g for g, _ in Counter(greeted).most_common(3)]
 
     seen: set[str] = set()
     examples: list[str] = []
@@ -282,7 +306,13 @@ def profile_prompt_block(profile: Optional[UserVoiceProfile]) -> str:
     ]
     if profile.scripts:
         mix = ', '.join(f'{script} {pct}%' for script, pct in profile.scripts.items())
-        lines.append(f'- script mix: {mix}; reply in the same language mix')
+        main_script, main_pct = next(iter(profile.scripts.items()))
+        advice = (
+            f'write in {main_script} script unless the user asked otherwise'
+            if main_pct >= 50
+            else 'either is natural with them; follow the language the user used in this request'
+        )
+        lines.append(f'- lines by script: {mix}; {advice}')
     ends = ', '.join(f'{_ENDING_WORDS.get(k, k)} {v}%' for k, v in list(profile.endings.items())[:3])
     rare = [_ENDING_WORDS[k] for k in _rare_endings(profile)]
     lines.append(f'- lines end with: {ends}' + (f"; almost never {' or '.join(rare)}" if rare else ''))
@@ -291,10 +321,16 @@ def profile_prompt_block(profile: Optional[UserVoiceProfile]) -> str:
     lines.append(f'- emoji in {profile.emoji_rate}% of lines' + ('; use none' if profile.emoji_rate == 0 else ''))
     if profile.lowercase_start_rate >= 60:
         lines.append(f'- starts lines lowercase ({profile.lowercase_start_rate}%)')
-    lines.append(f'- length: usually about {profile.median_chars} characters (90% under {profile.p90_chars})')
+    if profile.stretch_rate >= 10:
+        lines.append(f'- stretches words like "okk" or "heyyy" in {profile.stretch_rate}% of lines')
     lines.append(
-        f"- greets with: {', '.join(profile.greetings)}" if profile.greetings else '- rarely opens with a greeting'
+        f'- length: usually about {profile.median_chars} characters (90% under {profile.p90_chars}); '
+        'as short as the user would send it, often a fragment, never padded with extra pleasantries'
     )
+    if profile.greetings and profile.greeting_rate >= GREETING_MIN_PERCENT:
+        lines.append(f"- opens with a greeting in {profile.greeting_rate}% of lines: {', '.join(profile.greetings)}")
+    else:
+        lines.append('- almost never opens with a greeting or their name; start with the point')
     if profile.examples:
         quoted = ' / '.join(f'"{e}"' for e in profile.examples)
         lines.append(f'- the user\'s own recent lines (style only, never copy facts from them): {quoted}')
@@ -408,6 +444,17 @@ def typed_user_lines(messages: Iterable[dict]) -> list[str]:
     return list(reversed(typed))
 
 
+def user_written_lines(uid: str, person: dict) -> list[str]:
+    """Messages the user wrote to this person, oldest first, where the platform can read them.
+
+    Omi has no such source today (iOS gives apps no access to sent messages), so this
+    returns nothing; a client that can read them with the user's permission (Android
+    SMS, macOS Messages) fills it, and the profile prefers it over everything else.
+    Text the assistant drafted must not be passed: it is not the user's voice.
+    """
+    return []
+
+
 def _cache_key(uid: str, person_id: str) -> str:
     return f'user_voice:{uid}:{person_id}'
 
@@ -446,6 +493,7 @@ def get_user_voice_profile(uid: str, person: dict) -> UserVoiceProfile:
         person.get('name') or '',
         user_lines_with_person(conversations, person_id),
         typed_user_lines(messages),
+        written_lines=user_written_lines(uid, person),
     )
     _write_cached(uid, profile)
     return profile

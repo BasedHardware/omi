@@ -372,3 +372,54 @@ def test_opted_in_contacts_that_are_known_people_carry_the_voice(fake_redis, fak
 def test_a_run_of_exclamations_collapses_to_one_mark(mia, daniel):
     assert polish_draft('see you at 7!!!', mia).text == 'see you at 7!'
     assert polish_draft('See you at 7!!!', daniel).text == 'See you at 7.'
+
+
+# --- v2: written lines, questions, scripts by line, greetings (real-message eval 10/24) ---
+
+
+def test_questions_do_not_count_as_a_line_ending_style():
+    # Someone who mostly asks Omi things still ends statements without a mark.
+    typed = ['what time is it?', 'can you check the weather?', 'where is my phone?'] * 5 + ['ok on my way'] * 3
+    profile = build_profile('p-mia', 'Mia', [], typed, now=NOW)
+    assert '?' not in profile.endings
+    assert profile.endings == {'none': 100}
+
+
+def test_written_lines_win_over_typed_lines_for_marks_and_voice():
+    typed = ['Please summarise my day.'] * 20
+    written = ['omg yes!', 'okk im here!', 'cominggg', 'love you too', 'we ball', 'haha same', 'ok wait', 'see u soon!']
+    profile = build_profile('p-mia', 'Mia', [], typed, written_lines=written, now=NOW)
+    assert profile.written_lines == 8 and profile.lines == 8
+    assert profile.endings.get('.', 0) == 0
+    assert profile.exclamation_rate == 38
+    assert profile.stretch_rate >= 25
+    assert profile.examples[0] == 'see u soon!'
+    block = profile_prompt_block(profile)
+    assert 'stretches words' in block and 'almost never a period' in block
+
+
+def test_scripts_are_shares_of_lines_not_letters():
+    # Short Chinese lines would vanish next to long English ones if letters were counted.
+    lines = ['好的好的', '门锁了吗', '吃了吗', '我到了', '明天见', 'I replied to the ones in the email already', 'sounds good see you then', 'ok']
+    profile = build_profile('p-mia', 'Mia', lines, [], now=NOW)
+    assert profile.scripts == {'han': 62, 'latin': 38}
+    assert 'write in han script' in profile_prompt_block(profile)
+
+
+def test_a_rare_greeting_is_not_offered_as_an_opener():
+    lines = ['yo whats up'] + ['ok see you there', 'sounds good', 'on my way', 'love that', 'haha true', 'wait what', 'cool cool'] * 2
+    profile = build_profile('p-mia', 'Mia', lines, [], now=NOW)
+    assert profile.greetings == ['yo'] and profile.greeting_rate < 15
+    block = profile_prompt_block(profile)
+    assert 'yo' not in block.split('recent lines')[0]
+    assert 'almost never opens with a greeting' in block
+
+
+def test_written_lines_reach_the_cached_profile(fake_redis):
+    with (
+        patch.object(user_voice, 'user_written_lines', lambda uid, person: ['okk im here!'] * 10),
+        patch.object(user_voice.conversations_db, 'get_conversations', lambda uid, limit: []),
+        patch.object(user_voice.chat_db, 'get_messages', lambda uid, limit: []),
+    ):
+        profile = get_user_voice_profile('uid-1', MIA)
+    assert profile.written_lines == 10 and profile.version == 2
