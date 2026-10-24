@@ -7,6 +7,46 @@ class OmiBleConnectionPolicyTest < Minitest::Test
   IOS_ROOT = File.expand_path('..', __dir__)
   POLICY_SOURCE = File.join(IOS_ROOT, 'Runner', 'Ble', 'OmiBleConnectionPolicy.swift')
 
+  def test_saved_reconnect_manager_callbacks_with_suspended_timers
+    manager = File.read(File.join(IOS_ROOT, 'Runner/Ble/OmiBleManager.swift'))
+    signatures = [
+      'private func scheduleSavedRetry(', 'private func setupRetryRemaining(',
+      'private func issueConnect(', 'private func reconcileSavedReconnect(',
+      'private func runSavedScanWindow(', 'private func endSavedScan(',
+      'private func updateReconnectScan(', 'private func reportDiscoveryFailure(',
+      'private func recoverCaptureConnection(',
+      'func centralManager(_ central: CBCentralManager, didDiscover ',
+      'func centralManager(_ central: CBCentralManager, didFailToConnect ',
+      'func centralManager(_ central: CBCentralManager, didDisconnectPeripheral ',
+    ]
+    methods = signatures.map do |signature|
+      start = manager.index("    #{signature}")
+      raise "missing production method #{signature}" unless start
+      finish = manager.index("\n    }", start) + "\n    }".length
+      manager[start...finish]
+    end.join("\n")
+    # Replace only radio/scheduler boundaries, preserving production control flow.
+    methods = methods.gsub('private func', 'func')
+      .gsub(/\bCBCentralManager\b/, 'TestCentral').gsub(/\bCBPeripheral\b/, 'TestPeripheral')
+      .gsub('DispatchWorkItem', 'TestWorkItem')
+      .gsub('DispatchQueue.main.asyncAfter', 'self.queue.asyncAfter')
+      .gsub('ProcessInfo.processInfo.systemUptime', 'self.queue.now')
+      .gsub('.now()', 'self.queue.now').gsub('.milliseconds(200)', '0.2')
+    template = File.read(File.join(__dir__, 'omi_saved_reconnect_manager_test.swift'))
+    harness = template.sub('    // Production methods are inserted here by the Ruby runner.', methods)
+    Dir.mktmpdir('omi-reconnect-manager') do |directory|
+      source = File.join(directory, 'harness.swift')
+      binary = File.join(directory, 'test')
+      File.write(source, harness)
+      stdout, stderr, compile = Open3.capture3('swiftc', '-parse-as-library', POLICY_SOURCE,
+        File.join(IOS_ROOT, 'Runner/SafeFoundationSinks.swift'),
+        File.join(IOS_ROOT, 'Runner/Ble/OmiCaptureHealth.swift'), source, '-o', binary)
+      assert compile.success?, "manager harness compile failed:\n#{stdout}\n#{stderr}"
+      stdout, stderr, run = Open3.capture3(binary)
+      assert run.success?, "manager callback assertions failed:\n#{stdout}\n#{stderr}"
+    end
+  end
+
   def test_pairing_recovery_classifies_only_authentication_and_encryption_att_errors
     Dir.mktmpdir('omi-ble-connection-policy') do |directory|
       harness = File.join(directory, 'main.swift')

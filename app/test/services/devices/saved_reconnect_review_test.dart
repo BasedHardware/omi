@@ -149,6 +149,34 @@ void main() {
     expect(calls, isNot(contains('manage:$a')));
   });
 
+  for (final hasTransport in [true, false]) {
+    test('manual disconnect still tears down when native disarm fails; transport=$hasTransport', () async {
+      await SharedPreferencesUtil().btDeviceSet(pendant(a));
+      final owner = service();
+      await owner.reconnectSavedDevice('launch');
+      if (!hasTransport) await owner.recoverConnection(a, shouldRetry: () => false);
+      calls.clear();
+      handle('configureSavedReconnect', (args) {
+        calls.add('config:${args[0]}:${args[1]}');
+        throw PlatformException(code: 'temporarily_unavailable');
+      });
+      await owner.disconnectDevice(a, userInitiated: true);
+      expect(calls, containsAllInOrder(['config:$a:false', 'unmanage:$a']));
+      expect(owner.connectionFor(a), isNull);
+      expect(live, isNot(contains(a)));
+      expect(SharedPreferencesUtil().getStringList('manualBleDisconnects'), contains(a));
+      await owner.reconnectSavedDevice('resume');
+      expect(calls, isNot(contains('manage:$a')));
+      // Failed disarm stays tracked so service shutdown can retry it.
+      handle('configureSavedReconnect', (args) {
+        calls.add('retry:${args[0]}:${args[1]}');
+        return null;
+      });
+      await owner.stop();
+      expect(calls, contains('retry:$a:false'));
+    });
+  }
+
   test('forget and service stop retire native ownership before teardown', () async {
     await SharedPreferencesUtil().btDeviceSet(pendant(a));
     final owner = service();

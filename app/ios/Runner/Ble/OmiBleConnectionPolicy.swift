@@ -11,6 +11,9 @@ enum OmiBleConnectionPolicy {
         min(60, pow(2, Double(min(max(attempt - 1, 0), 6))))
     }
 
+    static let savedScanWindow: TimeInterval = 5
+    static let savedScanRest: TimeInterval = 55
+
     enum ReadyRecoveryAction: Equatable {
         case connect
         case replayReady

@@ -474,7 +474,12 @@ class DeviceService {
     if (userInitiated || reconnectPaused || _staleBondRecoveryRequired || _manuallyDisconnected(deviceId)) {
       // Explicit retirement precedes transport release. Capture recovery leaves
       // native saved intent armed even if its Dart continuation is cancelled.
-      await _configureSavedReconnect(deviceId, false);
+      try {
+        await _configureSavedReconnect(deviceId, false);
+      } catch (e) {
+        // Keep the failed disarm retryable, but never strand explicit teardown.
+        Logger.debug("DeviceService: saved reconnect disarm for $deviceId failed: $e");
+      }
     }
     final connection = _connections.remove(deviceId);
     if (connection == null) {
