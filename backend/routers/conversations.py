@@ -2292,10 +2292,10 @@ def _hydrate_suggested_app(app_id: str, uid: str) -> Optional[App]:
     # Function-scope for the same isolation reason as _validate_reprocess_app_selection.
     from utils.apps import get_available_app_by_id_with_reviews, get_is_user_paid_app
 
-    app_data = get_available_app_by_id_with_reviews(app_id, uid)
-    if not app_data:
+    # A malformed stored app is skipped, as the marketplace lists do, rather than failing the response.
+    app = App.deserialize_safe(get_available_app_by_id_with_reviews(app_id, uid))
+    if not app:
         return None
-    app = App(**app_data)
     # Add user-specific data
     app.is_user_paid = get_is_user_paid_app(app.id, uid)
 
