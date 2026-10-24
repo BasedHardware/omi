@@ -34,6 +34,7 @@ from pydantic import BaseModel, Field
 
 from database.redis_db import r as redis_client
 from utils.executors import db_executor, run_blocking
+from utils.llm.user_voice import UserVoiceProfile, annotate_contacts_with_voice, polish_draft, profile_for_recipients
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
@@ -102,7 +103,8 @@ DEVICE_TOOL_SPECS: dict[str, dict[str, Any]] = {
             "and body. This does NOT send on its own: iOS requires the user to tap Send. The "
             "result reports status=sent when they sent it, or status=cancelled when they "
             "dismissed the sheet. Never tell the user a message was sent unless the result says "
-            "sent. Resolve a named person with search_contacts first."
+            "sent. Resolve a named person with search_contacts first. When the matching contact "
+            "carries user_voice, write the text the way it describes: the user is the sender."
         ),
     },
     'search_contacts': {
@@ -282,17 +284,55 @@ def build_device_tools(
     the bound rather than inherit a stale one.
     """
     tools = []
+    # Turn-local: search_contacts learns how the user writes to a contact, and
+    # propose_message to that contact in the same turn polishes with it.
+    voices: dict[str, UserVoiceProfile] = {}
     for name in sorted(DEVICE_TOOL_NAMES & set(available_tool_names)):
         spec = DEVICE_TOOL_SPECS[name]
-        tools.append(_build_one(uid, name, spec, callback, timeout_seconds))
+        tools.append(_build_one(uid, name, spec, callback, timeout_seconds, voices))
     return tools
 
 
-def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: int | Callable[[], int]):
+async def _annotate_with_user_voice(uid: str, result: dict, voices: dict[str, UserVoiceProfile]) -> None:
+    """Add the user's voice toward matched contacts. Fails open: the draft is just unstyled."""
+    try:
+        voices.update(await run_blocking(db_executor, annotate_contacts_with_voice, uid, result))
+    except Exception as error:
+        record_fallback(
+            component='chat',
+            from_mode='user_voice_profile',
+            to_mode='unstyled_draft',
+            reason=type(error).__name__,
+            outcome='degraded',
+            log=logger,
+        )
+
+
+def _polish_with_user_voice(uid: str, arguments: dict, voices: dict[str, UserVoiceProfile]) -> None:
+    profile = profile_for_recipients(voices, arguments.get('to') or [])
+    if profile is None or not arguments.get('text'):
+        return
+    polished = polish_draft(arguments['text'], profile)
+    if polished.changes:
+        arguments['text'] = polished.text
+        logger.info('User voice polish uid=%s changes=%s', uid, ','.join(polished.changes))
+
+
+def _build_one(
+    uid: str,
+    name: str,
+    spec: dict,
+    callback: Any,
+    timeout_seconds: int | Callable[[], int],
+    voices: dict[str, UserVoiceProfile],
+):
     async def _call(**kwargs) -> str:
         # Drop the RunnableConfig LangChain injects; it is not part of the
         # payload the device should receive.
         kwargs.pop('config', None)
+        if name == 'propose_message':
+            # Before the sheet opens, so the user sees and sends the polished text.
+            _polish_with_user_voice(uid, kwargs, voices)
         call_id = str(uuid.uuid4())
         request = {
             'call_id': call_id,
@@ -323,6 +363,8 @@ def _build_one(uid: str, name: str, spec: dict, callback: Any, timeout_seconds: 
             result.get('ok'),
             int((time.monotonic() - started_at) * 1000),
         )
+        if name == 'search_contacts':
+            await _annotate_with_user_voice(uid, result, voices)
         # Returned as JSON text: the model reads `status` and `ok` directly, and
         # a cancelled sheet must stay visibly distinct from a delivered message.
         return json.dumps(result)

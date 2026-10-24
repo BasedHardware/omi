@@ -357,3 +357,66 @@ async def test_a_late_result_is_refused_once_the_wait_is_over(fake_redis):
     call_id = callback.requests[0]['call_id']
     with pytest.raises(UnknownDeviceToolCall):
         store_device_tool_result('uid-1', call_id, {'ok': True, 'status': 'sent'})
+
+
+@pytest.mark.asyncio
+async def test_propose_message_to_a_searched_contact_is_polished_in_the_users_voice(fake_redis):
+    from utils.llm.user_voice import build_profile, handle_key
+
+    # How this user texts their sister: no full stops, "!" rarely, never two.
+    sister = build_profile(
+        'p-mia', 'Mia', ['ok wait for me', 'are you home yet', 'see you soon!', 'love it haha'] * 3, []
+    )
+
+    def fake_annotate(uid, result):
+        result['contacts'][0]['user_voice'] = 'style block'
+        return {handle_key('+15550100199'): sister}
+
+    callback = FakeCallback()
+    tools = {
+        t.name: t
+        for t in build_device_tools(
+            'uid-1', {'search_contacts', 'propose_message'}, callback, timeout_seconds=TEST_TIMEOUT
+        )
+    }
+
+    async def respond(index, payload):
+        while len(callback.requests) <= index:
+            await asyncio.sleep(0.01)
+        fake_redis.setex(device_tool_result_key('uid-1', callback.requests[index]['call_id']), 60, json.dumps(payload))
+
+    contacts = {'ok': True, 'contacts': [{'name': 'Mia Chen', 'preferred_messaging_handle': '+15550100199'}]}
+    with patch.object(device_tools, 'annotate_contacts_with_voice', fake_annotate):
+        responder = asyncio.create_task(respond(0, contacts))
+        searched = json.loads(await tools['search_contacts'].ainvoke({'query': 'Mia'}))
+        await responder
+    assert searched['contacts'][0]['user_voice'] == 'style block'
+
+    responder = asyncio.create_task(respond(1, {'ok': True, 'status': 'sent'}))
+    await tools['propose_message'].ainvoke({'to': ['+1 555 010 0199'], 'text': 'Great! See you at 7!!'})
+    await responder
+
+    # The sheet opens with the polished text, so what the user sends is what was shown.
+    assert callback.requests[1]['arguments']['text'] == 'Great. See you at 7!'
+
+
+@pytest.mark.asyncio
+async def test_a_voice_lookup_failure_leaves_the_contact_result_intact(fake_redis):
+    def broken(uid, result):
+        raise RuntimeError('firestore down')
+
+    callback = FakeCallback()
+    tool = build_device_tools('uid-1', {'search_contacts'}, callback, timeout_seconds=TEST_TIMEOUT)[0]
+    contacts = {'ok': True, 'contacts': [{'name': 'Mia Chen'}]}
+
+    async def respond():
+        while not callback.requests:
+            await asyncio.sleep(0.01)
+        fake_redis.setex(device_tool_result_key('uid-1', callback.requests[0]['call_id']), 60, json.dumps(contacts))
+
+    with patch.object(device_tools, 'annotate_contacts_with_voice', broken):
+        responder = asyncio.create_task(respond())
+        raw = await tool.ainvoke({'query': 'Mia'})
+        await responder
+
+    assert json.loads(raw) == contacts
