@@ -29,6 +29,7 @@ def values():
         refusal_baseline_count=100,
         refusal_baseline_ready_min=12,
         refusal_baseline_ready_max=12,
+        refusal_baseline_coverage=1,
     )
     return result
 
@@ -102,6 +103,9 @@ def test_peak_baseline_does_not_trip_at_peak_or_old_absolute_boundary():
         ('refusal_baseline_ready_stale', 120.01),
         ('refusal_baseline_admission_stale', 120.01),
         ('refusal_baseline_ready_stale', -1),
+        ('refusal_baseline_coverage', 0),
+        ('refusal_baseline_target_stale', 121),
+        ('refusal_baseline_listener_stale', 121),
     ],
 )
 def test_unqualified_baseline_is_blind_and_retains_other_trips(key, bad):
@@ -133,6 +137,20 @@ def test_baseline_queries_use_weekly_history_and_qualified_deployment_only():
     assert 'namespace="prod-omi-backend"' in expressions['refusal_baseline_ready_min']
     assert all('vector(1000000000)' in expressions[k] for k in expressions if k.endswith('_stale'))
     assert all('[1h:1m]' in expressions[k] for k in expressions if k.endswith('_stale'))
+    coverage = expressions['refusal_baseline_coverage']
+    assert 'up{job="backend-listen-metrics"}' in coverage
+    assert 'unless on(job,instance)' in coverage
+    assert 'count(' in coverage and 'sum(kube_deployment_status_replicas_available' in coverage
+
+
+def test_partial_history_does_not_raise_threshold_above_real_baseline():
+    # The review's incomplete-target example: 8% instead of the full 3% baseline
+    # must be BLIND even with abundant admissions, fresh remaining series and 12 GPUs.
+    row = dict(values(), refusal_baseline_fraction=0.08, refusal_fraction=0.05, refusal_baseline_coverage=0)
+    reading = guard.evaluate(row)
+    assert reading['refusal_threshold'] is None and reading['blind']
+    complete = dict(row, refusal_baseline_fraction=0.03, refusal_baseline_coverage=1)
+    assert guard.evaluate(complete)['trips'] == ['refusal_fraction']
 
 
 def test_guard_upgrade_restarts_full_lookback(monkeypatch):

@@ -48,6 +48,21 @@ def refusal_baseline_queries(namespace):
     name = namespace.removesuffix('-backend') + '-parakeet'
     ready = 'kube_deployment_status_replicas_available{namespace="' + namespace + '",deployment="' + name + '"}'
     admissions = 'omi_stt_window_admissions_total{job="backend-listen-metrics",outcome="accepted"}'
+    targets = 'up{job="backend-listen-metrics"}'
+    listeners = (
+        'kube_deployment_status_replicas_available{namespace="'
+        + namespace
+        + '",deployment=~"'
+        + namespace.removesuffix('-backend')
+        + '-backend-listen(-.*)?"}'
+    )
+    # Count against the independent deployment inventory so a target missing from
+    # both up and admissions cannot disappear from the completeness check.
+    coverage = (
+        f'(min({targets}) == bool 1) * (count({targets}) == bool sum({listeners}))'
+        f' * ((count({targets} unless on(job,instance) {admissions}) or vector(0)) == bool 0)'
+        f' * ((count({admissions} unless on(job,instance) {targets}) or vector(0)) == bool 0)'
+    )
 
     def stale(metric):
         # A one-minute subquery checks freshness throughout the historical hour.
@@ -61,6 +76,9 @@ def refusal_baseline_queries(namespace):
         'refusal_baseline_ready_max': f'max(max_over_time({ready}[1h] offset 7d))',
         'refusal_baseline_ready_stale': stale(ready),
         'refusal_baseline_admission_stale': stale(admissions),
+        'refusal_baseline_coverage': f'min_over_time((({coverage}) or vector(0))[1h:1m] offset 7d)',
+        'refusal_baseline_target_stale': stale(targets),
+        'refusal_baseline_listener_stale': stale(listeners),
     }
 
 
@@ -72,7 +90,17 @@ def refusal_limit(values):
         return None
     if values['refusal_baseline_ready_min'] != 12 or values['refusal_baseline_ready_max'] != 12:
         return None
-    if any(not 0 <= values[k] <= 120 for k in ('refusal_baseline_ready_stale', 'refusal_baseline_admission_stale')):
+    if values['refusal_baseline_coverage'] != 1:
+        return None
+    if any(
+        not 0 <= values[k] <= 120
+        for k in (
+            'refusal_baseline_ready_stale',
+            'refusal_baseline_admission_stale',
+            'refusal_baseline_target_stale',
+            'refusal_baseline_listener_stale',
+        )
+    ):
         return None
     return max(0.02, values['refusal_baseline_fraction'] * 1.25 + 0.005)
 

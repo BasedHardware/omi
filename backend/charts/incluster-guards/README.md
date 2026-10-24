@@ -47,6 +47,11 @@ accepted / overflow / batch_pressure outcomes as the current 15-minute reading.
 It requires >=20 historical admissions and exactly 12 available Parakeet replicas
 throughout that hour. Historical accepted-counter and replica freshness are
 checked at one-minute checkpoints (<=120s); absent checkpoints fail qualification.
+Each checkpoint also requires every listen scrape target to be up and have an
+accepted counter, with no unmatched counter targets. The target count must match
+the independent available-replica inventory for the listen deployments, including
+canaries; fresh target and deployment telemetry is required. Partial target data
+cannot inflate the baseline while the remaining admission series stay fresh.
 Missing/nonfinite/low-sample/non-12-pod history is BLIND, never an implicit 2%
 fallback. At a 6.3% baseline, the trip threshold is 8.375%. Values and the computed
 `reading.refusal_threshold` are logged. This guard version restarts the arming clock.
