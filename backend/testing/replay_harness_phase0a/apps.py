@@ -438,7 +438,7 @@ else:
         if _egress_sink:
             _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "write_level_terminal_guard"})
 
-        async def _noop_delete_blobs(_paths: Any) -> None:
+        async def _noop_delete_blobs(_paths: Any, **_custody: Any) -> None:
             """FEASIBILITY-ONLY mutant: keep staged audio so a redelivery re-downloads."""
             if _egress_sink:
                 _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "staged_audio_cleanup"})
