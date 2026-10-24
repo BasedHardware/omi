@@ -48,6 +48,9 @@
 * [`memories_pipeline.md`](memories_pipeline.md) — stream, deduplicate, and convert memories to JSONL for LLM fine-tuning or CSV for spreadsheets.
 * [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
   exports as an Atom 1.0 feed for any feed reader.
+* [`conversations_jupyter.md`](conversations_jupyter.md) — turn a conversation export
+  into a Jupyter notebook (.ipynb): summaries, action items, and a `transcript`
+  variable ready for pandas.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
 * [`action_items_csv.md`](action_items_csv.md) — convert an action-item JSON export to CSV/TSV spreadsheets for Todoist, Notion, or Excel.
