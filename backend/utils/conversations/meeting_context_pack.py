@@ -21,6 +21,7 @@ import database.screen_activity as screen_activity_db
 from database._client import db as firestore_db, get_firestore_client
 from database.auth import get_user_from_uid
 from utils.memory.memory_service import MemoryService
+from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations.meeting_context import stored_meeting_window
 from utils.conversations.meeting_participants import MeetingRoster
 from utils.conversations.meeting_context_render import (
@@ -168,10 +169,11 @@ def _record_person_ids(record: Mapping[str, Any]) -> set[str]:
     return ids
 
 
+_UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+
+
 def _as_utc(value: Any) -> Optional[datetime]:
-    if not isinstance(value, datetime):
-        return None
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    return coerce_utc_datetime(value)
 
 
 def _local_date_label(value: Optional[datetime], timezone_name: Optional[str]) -> str:
@@ -209,23 +211,24 @@ def _gather_prior_meetings(
     started_at: Optional[datetime],
     timezone_name: Optional[str],
 ) -> tuple[PriorMeetingNote, ...]:
-    if started_at is None:
+    started_at_utc = _as_utc(started_at)
+    if started_at_utc is None:
         return ()
     names, emails, person_ids = _roster_identity(roster)
     if not names and not emails and not person_ids:
         return ()
-    window_start = started_at - timedelta(days=PRIOR_MEETING_LOOKBACK_DAYS)
+    window_start = started_at_utc - timedelta(days=PRIOR_MEETING_LOOKBACK_DAYS)
     # The database helpers are typed as dict rows but this is a runtime trust
     # boundary — a malformed record degrades instead of aborting the source.
     meetings: Any = None
     conversations: Any = None
     try:
-        meetings = calendar_db.list_meetings(uid, start_date=window_start, end_date=started_at, limit=60)
+        meetings = calendar_db.list_meetings(uid, start_date=window_start, end_date=started_at_utc, limit=60)
     except Exception as exc:  # noqa: BLE001 - best effort
         _log_source_failure('meetings', uid, exc)
     try:
         conversations = conversations_db.get_conversations_without_photos(
-            uid, limit=60, start_date=window_start, end_date=started_at
+            uid, limit=60, start_date=window_start, end_date=started_at_utc
         )
     except Exception as exc:  # noqa: BLE001 - best effort
         _log_source_failure('prior_conversations', uid, exc)
@@ -268,7 +271,7 @@ def _gather_prior_meetings(
                 matched = True
         if not matched:
             continue
-        sort_key = _as_utc(record.get('started_at')) or _as_utc(record.get('created_at')) or started_at
+        sort_key = _as_utc(record.get('started_at')) or _as_utc(record.get('created_at')) or _UTC_MIN
         candidates.append((sort_key, record))
     candidates.sort(key=lambda item: item[0], reverse=True)
 
