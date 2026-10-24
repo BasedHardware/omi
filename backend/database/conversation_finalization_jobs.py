@@ -7,6 +7,7 @@ No transcript, credential, request header, or raw exception is stored here.
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 from hashlib import sha256
@@ -1900,6 +1901,14 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
         next_cursor = {'reconcile_after_at': (last.to_dict() or {})['reconcile_after_at'], 'job_id': last.id}
     firestore.transactional(_advance_finalization_replay_cursor_txn)(
         client.transaction(), state_ref, int(state.get('generation', 0)), next_cursor
+    )
+    logging.getLogger(__name__).info(
+        'event=finalization_replay_page project=%s database=%s selected=%s quiet=%s resumed=%s',
+        getattr(client, 'project', 'injected'),
+        getattr(client, '_database', '(default)'),
+        len(snapshots),
+        sum((snapshot.to_dict() or {}).get('kind') == 'listen_quiet_check' for snapshot in snapshots),
+        bool(cursor),
     )
     return [(snapshot.to_dict() or {}) | {'job_id': snapshot.id} for snapshot in snapshots]
 

@@ -92,7 +92,7 @@ def arm_quiet_check(
                     },
                 )
                 transaction.update(job_ref, {'quiet_timeout_seconds': quiet_timeout(timeout)})
-            return job | {'job_id': job_id, 'quiet_timeout_seconds': quiet_timeout(timeout)}
+            return job | {'job_id': job_id, 'quiet_timeout_seconds': quiet_timeout(timeout), 'arm_outcome': 'reused'}
         generation = int(job.get('dispatch_generation') or 0) + 1
         updated = {
             'kind': QUIET_CHECK_KIND,
@@ -114,7 +114,7 @@ def arm_quiet_check(
             },
         )
         transaction.set(job_ref, updated)
-        return updated | {'job_id': job_id}
+        return updated | {'job_id': job_id, 'arm_outcome': 'rearmed' if job else 'created'}
 
     return arm(client.transaction())
 

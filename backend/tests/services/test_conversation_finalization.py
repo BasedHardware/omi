@@ -233,3 +233,19 @@ def test_replay_limit_environment_is_bounded(mock_dependencies, monkeypatch):
     monkeypatch.setenv('LISTEN_FINALIZATION_RECONCILE_LIMIT', '1000')
     reconcile_listen_finalization_jobs()
     mock_dependencies['get_candidates'].assert_called_once_with(limit=1000, firestore_client=None)
+
+
+@pytest.mark.parametrize('age,expected', [(299, 100), (300, 500), (3600, 500)])
+def test_aged_backlog_scales_default_limit(mock_dependencies, monkeypatch, age, expected):
+    monkeypatch.delenv('LISTEN_FINALIZATION_RECONCILE_LIMIT', raising=False)
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **kw: age
+    )
+    reconcile_listen_finalization_jobs()
+    mock_dependencies['get_candidates'].assert_called_once_with(limit=expected, firestore_client=None)
+
+
+def test_explicit_limit_is_operator_rollback(mock_dependencies, monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECONCILE_LIMIT', '2000')
+    reconcile_listen_finalization_jobs(limit=100)
+    mock_dependencies['get_candidates'].assert_called_once_with(limit=100, firestore_client=None)

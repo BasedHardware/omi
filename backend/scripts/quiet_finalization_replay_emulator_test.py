@@ -54,9 +54,9 @@ def main():
     ), patch.object(
         jobs, 'defer_finalization_replay', return_value=False
     ):
-        first = service.reconcile_listen_finalization_jobs(firestore_client=client)
+        first = service.reconcile_listen_finalization_jobs(limit=100, firestore_client=client)
         assert first['stale'] == 100 and first['requeued'] == 0
-        second = service.reconcile_listen_finalization_jobs(firestore_client=client)
+        second = service.reconcile_listen_finalization_jobs(limit=100, firestore_client=client)
         assert second['retired'] == 1 and processed == ['quiet-100']
 
     # Reset, capture a full page, mutate/delete its last row. The persisted

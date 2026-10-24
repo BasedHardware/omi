@@ -636,3 +636,13 @@ def test_replay_backoff_cannot_overwrite_newer_generation(store, monkeypatch):
     _job(store)['dispatch_generation'] = 1
     assert jobs.defer_finalization_replay(candidate, firestore_client=store)
     assert _job(store)['reconcile_after_at'] > checks._now()
+
+
+def test_repeated_arm_reuses_one_conversation_obligation(store):
+    first = checks.arm_quiet_check('synthetic', 'old', 120, firestore_client=store)
+    second = checks.arm_quiet_check('synthetic', 'old', 120, firestore_client=store)
+    assert first['arm_outcome'] == 'created'
+    assert second['arm_outcome'] == 'reused'
+    assert first['job_id'] == second['job_id']
+    assert _job(store)['dispatch_generation'] == 1
+    assert 'arm_outcome' not in _job(store)

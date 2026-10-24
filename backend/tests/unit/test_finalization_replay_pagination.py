@@ -1,4 +1,4 @@
-"""Hermetic guard for the cursor contract qualified by the replay emulator test."""
+"""Cursor contract qualified by backend/scripts/quiet_finalization_replay_emulator_test.py."""
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -89,8 +89,8 @@ def test_hundred_nonadvancing_rows_cannot_starve_valid_check(monkeypatch):
         return 'stale'
 
     monkeypatch.setattr(service.quiet_finalization, 'run', run)
-    first = service.reconcile_listen_finalization_jobs(firestore_client=store)
-    second = service.reconcile_listen_finalization_jobs(firestore_client=store)
+    first = service.reconcile_listen_finalization_jobs(limit=100, firestore_client=store)
+    second = service.reconcile_listen_finalization_jobs(limit=100, firestore_client=store)
     assert first['stale'] == 100 and first['requeued'] == 0
     assert second['retired'] == 1 and processed == ['quiet-100']
 

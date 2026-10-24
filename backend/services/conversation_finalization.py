@@ -121,7 +121,9 @@ def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -
     return combined
 
 
-def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: Any = None) -> dict[str, int | float]:
+def reconcile_listen_finalization_jobs(
+    limit: int | None = None, *, firestore_client: Any = None
+) -> dict[str, int | float]:
     """Replay stale queued/leased platform-key jobs and publish backlog signals."""
     result: dict[str, int | float] = {
         'requeued': 0,
@@ -144,17 +146,23 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
         _publish_job_metrics(firestore_client=firestore_client)
         return result
 
-    if limit == 100:
-        try:
-            limit = max(1, min(2000, int(os.getenv('LISTEN_FINALIZATION_RECONCILE_LIMIT', '100'))))
-        except ValueError:
-            limit = 100
+    oldest_overdue_age = 0.0
     try:
-        REPLAY_OLDEST_OVERDUE_AGE.set(
-            jobs_db.get_finalization_replay_oldest_overdue_age_seconds(firestore_client=firestore_client)
+        oldest_overdue_age = jobs_db.get_finalization_replay_oldest_overdue_age_seconds(
+            firestore_client=firestore_client
         )
+        REPLAY_OLDEST_OVERDUE_AGE.set(oldest_overdue_age)
     except Exception:
         logger.exception('listen finalization overdue-age query failed')
+    if limit is None:
+        # A 100/min ceiling cannot recover when obligations arrive at 110/min.
+        # Grow only while there is an aged backlog; explicit limits remain the
+        # operator rollback and do not depend on a temporary revision env.
+        default_limit = 500 if oldest_overdue_age >= 300 else 100
+        try:
+            limit = max(1, min(2000, int(os.getenv('LISTEN_FINALIZATION_RECONCILE_LIMIT', str(default_limit)))))
+        except ValueError:
+            limit = default_limit
     stale_after = jobs_db.get_finalization_reconcile_stale_after()
     try:
         candidates = jobs_db.get_finalization_replay_candidates(limit=limit, firestore_client=firestore_client)
