@@ -714,3 +714,64 @@ class TestResolveMergedFinishedAt:
     def test_missing_key_treated_like_none(self, merge):
         later = datetime(2026, 5, 30, 11, 0, tzinfo=timezone.utc)
         assert merge._resolve_merged_finished_at([{}, {"finished_at": later}]) == later
+
+
+# ---------------------------------------------------------------------------
+# _merge_order_key
+# ---------------------------------------------------------------------------
+
+
+class TestMergeOrderKey:
+    def test_prefers_started_at_when_present(self, merge):
+        started = datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc)
+        created = datetime(2026, 5, 30, 12, 0, tzinfo=timezone.utc)
+        assert merge._merge_order_key({"started_at": started, "created_at": created}) == started
+
+    def test_falls_back_to_created_at_when_started_at_missing(self, merge):
+        created = datetime(2026, 5, 30, 12, 0, tzinfo=timezone.utc)
+        assert merge._merge_order_key({"created_at": created}) == created
+        assert merge._merge_order_key({"started_at": None, "created_at": created}) == created
+
+    def test_coerces_iso_string_timestamps(self, merge):
+        assert merge._merge_order_key({"started_at": "2026-05-30T10:00:00Z"}) == datetime(
+            2026, 5, 30, 10, 0, tzinfo=timezone.utc
+        )
+        assert merge._merge_order_key({"created_at": "2026-05-30T12:00:00Z"}) == datetime(
+            2026, 5, 30, 12, 0, tzinfo=timezone.utc
+        )
+
+    def test_falls_back_to_utc_min_when_both_missing_or_unparseable(self, merge):
+        assert merge._merge_order_key({}) == merge._UTC_MIN
+        assert merge._merge_order_key({"started_at": None, "created_at": None}) == merge._UTC_MIN
+        assert merge._merge_order_key({"started_at": "invalid", "created_at": "invalid"}) == merge._UTC_MIN
+
+    def test_source_without_started_at_ordered_by_created_at(self, merge):
+        T = lambda h, m=0, s=0: datetime(2026, 5, 30, h, m, s, tzinfo=timezone.utc)
+        pendant = {"id": "pendant", "created_at": T(10), "started_at": T(10), "finished_at": T(10, 0, 5)}
+        api = {"id": "api", "created_at": T(12), "started_at": None, "finished_at": None}
+
+        ordered = sorted([api, pendant], key=merge._merge_order_key)
+        assert [c["id"] for c in ordered] == ["pendant", "api"]
+
+    def test_validate_merge_compatibility_orders_by_created_at_when_started_at_absent(self, merge):
+        T = lambda h, m=0, s=0: datetime(2026, 5, 30, h, m, s, tzinfo=timezone.utc)
+        early = {
+            "id": "early",
+            "created_at": T(10),
+            "started_at": None,
+            "finished_at": None,
+            "status": "completed",
+            "deleted": False,
+        }
+        late = {
+            "id": "late",
+            "created_at": T(10, 30),
+            "started_at": T(10, 30),
+            "finished_at": T(10, 45),
+            "status": "completed",
+            "deleted": False,
+        }
+        ok, err, warn = merge.validate_merge_compatibility([late, early])
+        assert ok is True
+        assert err is None
+        assert warn is None
