@@ -30,6 +30,13 @@ def omi():
         "utils.app_integrations": app_integrations_stub,
     }
     with stub_modules(fakes):
+        # Pure production dependencies must be importable inside the isolated package.
+        # Register them normally so dataclass annotations can resolve their module.
+        load_module_fresh("utils.model_text", str(BACKEND_DIR / "utils" / "model_text.py"))
+        load_module_fresh(
+            "utils.retrieval.tools.result_bounds",
+            str(BACKEND_DIR / "utils" / "retrieval" / "tools" / "result_bounds.py"),
+        )
         module = load_module_fresh(
             "utils.retrieval.tools.omi_tools",
             os.path.join(str(BACKEND_DIR), "utils", "retrieval", "tools", "omi_tools.py"),
