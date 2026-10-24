@@ -3,9 +3,10 @@ Tool for creating inline chart visualizations in chat responses.
 """
 
 import contextvars
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from langchain_core.tools import tool  # type: ignore[reportUnknownVariableType]  # langchain @tool decorator partially typed
+from langchain_core.runnables import RunnableConfig
 
 try:
     from utils.retrieval.agentic import agent_config_context
@@ -25,12 +26,13 @@ def _agent_config() -> Optional[Dict[str, Any]]:
 def create_chart_tool(
     chart_type: str,
     title: str,
-    labels: List[str],
-    values: List[float],
+    labels: Any,
+    values: Any,
     dataset_label: str = "Data",
     color: Optional[str] = None,
     x_label: Optional[str] = None,
     y_label: Optional[str] = None,
+    config: RunnableConfig = None,  # type: ignore[reportAssignmentType]  # langchain injects at runtime; None default for direct calls
 ) -> str:
     """
     Create an inline chart visualization in the chat response.
@@ -56,14 +58,34 @@ def create_chart_tool(
     Returns:
         Confirmation message. The chart data is automatically attached to the response.
     """
+    if labels is None or values is None or not isinstance(labels, (list, tuple)) or not isinstance(values, (list, tuple)):
+        return "Error: labels and values must be lists."
+
     if len(labels) != len(values):
         return "Error: labels and values must have the same length."
 
-    if chart_type not in ('line', 'bar'):
-        return "Error: chart_type must be 'line' or 'bar'."
-
     if len(labels) == 0:
         return "Error: at least one data point is required."
+
+    normalized_type = chart_type.lower().strip() if isinstance(chart_type, str) else ""
+    if normalized_type not in ('line', 'bar'):
+        return "Error: chart_type must be 'line' or 'bar'."
+    chart_type = normalized_type
+
+    if not title or not str(title).strip():
+        return "Error: title is required."
+    title = str(title).strip()
+
+    coerced_values: List[float] = []
+    for v in values:
+        if v is None or isinstance(v, bool):
+            return "Error: values must be numeric."
+        try:
+            coerced_values.append(float(v))
+        except (TypeError, ValueError):
+            return f"Error: Invalid numeric value '{v}' in values."
+
+    coerced_labels = [str(l) for l in labels]
 
     chart_data = {
         "chart_type": chart_type,
@@ -73,15 +95,18 @@ def create_chart_tool(
         "datasets": [
             {
                 "label": dataset_label,
-                "data_points": [{"label": l, "value": v} for l, v in zip(labels, values)],
+                "data_points": [{"label": l, "value": v} for l, v in zip(coerced_labels, coerced_values)],
                 "color": color,
             }
         ],
     }
 
-    config = _agent_config()
-    if config:
-        configurable = config.get('configurable', {})
-        configurable['chart_data'] = chart_data
+    cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
+    ctx_cfg = _agent_config()
+    targets = [c for c in (cfg, ctx_cfg) if isinstance(c, dict)]
+    for target in targets:
+        if not isinstance(target.get('configurable'), dict):
+            target['configurable'] = {}
+        target['configurable']['chart_data'] = chart_data
 
-    return f"Chart created: {title} ({chart_type} chart with {len(labels)} data points). The chart will be displayed inline in the chat."
+    return f"Chart created: {title} ({chart_type} chart with {len(coerced_labels)} data points). The chart will be displayed inline in the chat."
