@@ -197,6 +197,16 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   # 20ms poll, competing with pytest workers throughout every isolated shard.
   active_count=0
 
+  wait_for_worker_completion() {
+    # Bash 5.1+ can wait for any tracked child, including one that completed
+    # between the status-file scan and this call. Older shells keep polling.
+    if (( BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 1) )); then
+      wait -n "${active_pids[@]}" || true
+    else
+      sleep 0.02
+    fi
+  }
+
   reap_finished_children() {
     local index
     local pid
@@ -279,14 +289,14 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
         if [[ "$active_count" -lt "$worker_count" ]]; then
           break
         fi
-        sleep 0.02
+        wait_for_worker_completion
       done
     done
 
     while [[ "$active_count" -gt 0 ]]; do
       reap_finished_children
       if [[ "$active_count" -gt 0 ]]; then
-        sleep 0.02
+        wait_for_worker_completion
       fi
     done
 
