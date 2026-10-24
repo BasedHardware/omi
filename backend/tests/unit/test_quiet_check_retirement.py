@@ -131,3 +131,52 @@ def test_terminal_nonquiet_backoff_clears_index_and_preserves_newer_snapshot(mon
     store.rows[JOB].update(status='queued', dispatch_generation=8, reconcile_after_at=NOW)
     assert not jobs.defer_finalization_replay(candidate, firestore_client=store)
     assert store.rows[JOB]['reconcile_after_at'] == NOW
+
+
+@pytest.mark.parametrize('failure_stage', ['read', 'write'])
+def test_cleanup_failure_preserves_committed_processing_admission(monkeypatch, caplog, failure_stage):
+    store = seeded()
+    monkeypatch.setattr(conversations, 'db', store)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *a: None)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
+
+    def fail(*args, **kwargs):
+        raise RuntimeError('synthetic cleanup dependency failure')
+
+    with monkeypatch.context() as fault:
+        if failure_stage == 'read':
+            # Initial quiet-job read fails before cleanup can start a transaction.
+            original_collection = store.collection
+
+            def collection(name):
+                if name == 'conversation_finalization_jobs':
+                    raise RuntimeError('synthetic cleanup read failure')
+                return original_collection(name)
+
+            fault.setattr(store, 'collection', collection)
+        else:
+            fault.setattr(retirement, '_retire', fail)
+        assert conversations.claim_conversation_status(
+            'synthetic', 'capture', ConversationStatus.in_progress, ConversationStatus.processing
+        )
+    assert store.rows[ROW]['status'] == 'processing'
+    assert store.rows[JOB]['status'] == 'waiting_quiet'
+    assert store.rows[JOB]['reconcile_after_at'] == NOW
+    assert 'event=quiet_check_retirement outcome=deferred' in caplog.text
+    # The same indexed obligation remains repairable when the dependency recovers.
+    assert retirement.stop_quiet_check_for_conversation('synthetic', 'capture', firestore_client=store)
+    assert_retired(store)
+
+
+@pytest.mark.parametrize('operation', ['job', 'account'])
+def test_indirect_cleanup_read_failure_is_deferred_after_commit(caplog, operation):
+    class UnavailableClient:
+        def collection(self, name):
+            raise RuntimeError('synthetic post-commit dependency failure')
+
+    client = UnavailableClient()
+    if operation == 'job':
+        retirement.stop_quiet_checks_for_job('terminal-job', firestore_client=client)
+    else:
+        retirement.stop_quiet_checks_for_account('synthetic', firestore_client=client)
+    assert 'event=quiet_check_retirement outcome=deferred' in caplog.text

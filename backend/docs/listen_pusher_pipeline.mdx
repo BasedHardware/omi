@@ -6531,6 +6531,10 @@ shared retirement write: a concurrently reopened live conversation keeps its
 successor check. Missing checks are never created. Worker deliveries still use a
 generation fence; stale deliveries cannot stop a newer check. Refused arms also
 retire an existing check when its owner is gone, merged, hidden or non-live.
+Post-commit cleanup failures log `quiet_check_retirement outcome=deferred` and
+leave indexed debt for replay. They cannot invalidate a committed processing
+admission, terminal transition or deletion. Delivered replay workers still
+surface their own storage errors for retry.
 
 Reconnects reuse the deterministic conversation key and an earlier/equal waiting
 deadline. `listen_quiet_check_arm_total{outcome="created|rearmed|reused|refused"}`
@@ -6560,7 +6564,8 @@ Drain procedure (configuration/deployment requires operator authorization):
 1. Verify the receiving revision's release SHA and effective controls. Sample at
    least two complete passes: selected rows, duration, outcomes, oldest overdue
    age (aggregate replicas with `max`, never `sum`), due arrivals/departures,
-   Firestore latency/errors and downstream Cloud Tasks/processing/vendor pressure.
+   Firestore latency/errors, deferred-retirement logs and downstream
+   Cloud Tasks/processing/vendor pressure.
 2. Start with the adaptive default. If debt is not shrinking and pressure is
    clean, consider limit 500 / interval 30 / concurrency 16. After a full
    observation window, consider 1000 / 15 only if net departure rate improves
