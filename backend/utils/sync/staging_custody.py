@@ -169,11 +169,12 @@ def cleanup_sync_staging(
             blob = bucket.blob(path)
             try:
                 blob.reload()
-                if blob.md5_hash != staging[path]:
+                generation = getattr(blob, 'generation', None)
+                if getattr(blob, 'md5_hash', None) != staging[path] or generation is None:
                     logger.warning('event=sync_staging_cleanup outcome=retained reason=generation_changed')
                     continue
                 with storage.owner_storage_write_gate(uid, bucket):
-                    blob.delete(if_generation_match=int(blob.generation))
+                    blob.delete(if_generation_match=int(generation))
                 cleaned += 1
             except NotFound:
                 pass

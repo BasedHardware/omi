@@ -137,6 +137,16 @@ def test_replaced_staging_generation_is_preserved(cleanup, local_receipt):
     blobs[fragment].delete.assert_called_once_with(if_generation_match=42)
 
 
+@pytest.mark.parametrize('attribute', ['md5_hash', 'generation'])
+def test_storage_without_checksum_or_generation_cannot_authorize_deletion(cleanup, local_receipt, attribute):
+    run, _, blobs, _ = cleanup
+    raw, fragment, _, _ = local_receipt
+    delattr(blobs[raw], attribute)
+    assert run() == 1
+    blobs[raw].delete.assert_not_called()
+    blobs[fragment].delete.assert_called_once_with(if_generation_match=42)
+
+
 def test_hold_applies_to_original_capture_even_when_fragment_is_later(cleanup, local_receipt, monkeypatch):
     run, _, blobs, _ = cleanup
     monkeypatch.setenv('AUDIO_CLEANUP_HOLD_WINDOWS', '2026-10-24T08:00:00Z..2026-10-24T09:00:00Z')
