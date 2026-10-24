@@ -250,11 +250,14 @@ def _build_subscription_from_stripe_object(
     # subscription or an adopted replacement always wins over this grace.
     if stripe_status not in ('active', 'trialing'):
         period_end = stripe_sub.get('current_period_end')
+        effective_now = now if now is not None else int(time.time())
+        # Preserve paid access if:
+        # 1. grant_cancel_grace is True and status is 'canceled', with paid period unexpired.
+        # 2. status is 'past_due' (e.g. failed proration charge or renewal retry) and current period has not ended yet.
         if (
-            grant_cancel_grace
-            and stripe_status == 'canceled'
+            ((grant_cancel_grace and stripe_status == 'canceled') or stripe_status == 'past_due')
             and period_end
-            and period_end > (now if now is not None else int(time.time()))
+            and period_end > effective_now
         ):
             items = stripe_sub.get('items', {}).get('data', [])
             price_id = items[0]['price']['id'] if items else None
@@ -269,7 +272,7 @@ def _build_subscription_from_stripe_object(
                     current_period_end=period_end,
                     current_period_start=stripe_sub.get('current_period_start'),
                     stripe_subscription_id=stripe_sub['id'],
-                    cancel_at_period_end=True,
+                    cancel_at_period_end=stripe_sub.get('cancel_at_period_end', stripe_status == 'canceled'),
                     limits=get_plan_limits(paid_plan),
                 )
         return project_subscription(stripe_sub, None, get_basic_plan_limits())
@@ -806,12 +809,75 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             modify_params = {
                 'items': [{'id': current_item_id, 'price': request.price_id}],
                 'proration_behavior': 'always_invoice',
+                'payment_behavior': 'pending_if_incomplete',
+                'expand': ['latest_invoice.payment_intent'],
                 'metadata': {'uid': uid, 'sub_type': target_plan.value},
             }
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
 
-            updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+            try:
+                updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+            except stripe.error.CardError as e:
+                logger.warning(f"Card declined on plan upgrade for user {uid}: {sanitize(str(e))}")
+                error_detail = e.user_message or str(e)
+                raise HTTPException(
+                    status_code=402,
+                    detail=f"Upgrade payment failed or was declined: {error_detail}. Your current plan remains active.",
+                )
+
+            # Check if proration invoice payment was declined or incomplete
+            sub_dict = (
+                updated_sub if isinstance(updated_sub, dict) else (
+                    updated_sub.to_dict() if hasattr(updated_sub, 'to_dict') else {}
+                )
+            )
+            latest_inv = sub_dict.get('latest_invoice')
+            if isinstance(latest_inv, str):
+                try:
+                    retrieved_inv = stripe.Invoice.retrieve(latest_inv, expand=['payment_intent'])
+                    latest_inv = retrieved_inv.to_dict() if hasattr(retrieved_inv, 'to_dict') else retrieved_inv
+                except Exception as e:
+                    logger.debug("Failed to retrieve latest_invoice %s during plan change: %s", latest_inv, e)
+
+            payment_failed = False
+            failure_reason = None
+
+            if isinstance(latest_inv, dict):
+                inv_status = latest_inv.get('status')
+                pi = latest_inv.get('payment_intent')
+                if isinstance(pi, dict):
+                    pi_status = pi.get('status')
+                    if pi_status == 'requires_payment_method':
+                        payment_failed = True
+                        last_error = pi.get('last_payment_error')
+                        if isinstance(last_error, dict) and last_error.get('message'):
+                            failure_reason = last_error['message']
+                        else:
+                            failure_reason = "Payment method was declined."
+                    elif pi_status == 'requires_action':
+                        payment_failed = True
+                        failure_reason = "Payment requires additional authentication."
+                    elif pi_status and pi_status not in ('succeeded',):
+                        payment_failed = True
+                        failure_reason = f"Payment status is {pi_status}."
+                elif inv_status and inv_status not in ('paid',):
+                    payment_failed = True
+                    failure_reason = f"Invoice status is {inv_status}."
+
+            if sub_dict.get('pending_update') is not None or sub_dict.get('status') == 'past_due':
+                payment_failed = True
+                if not failure_reason:
+                    failure_reason = "Payment was not completed."
+
+            if payment_failed:
+                detail_msg = (
+                    f"Upgrade payment failed or was declined: {failure_reason}. Your current plan remains active."
+                    if failure_reason
+                    else "Upgrade payment failed or was declined. Your current plan remains active."
+                )
+                logger.warning(f"Immediate plan change payment failed for user {uid}: {detail_msg}")
+                raise HTTPException(status_code=402, detail=detail_msg)
 
             # Update our database immediately
             new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
@@ -892,6 +958,13 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     except HTTPException:
         raise
+    except stripe.error.CardError as e:
+        logger.warning(f"Card error on subscription upgrade: {sanitize(str(e))}")
+        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        raise HTTPException(
+            status_code=402,
+            detail=f"Upgrade payment failed or was declined: {detail}. Your current plan remains active.",
+        )
     except stripe.error.InvalidRequestError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
@@ -1206,7 +1279,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 # A paid-through canceled snapshot (grace) is downgrade-shaped for
                 # the stale shield: a newer stored paid sub or an adoptable active
                 # paid sub must still win over the grace candidate.
-                if not is_paid_plan(new_subscription.plan) or subscription_obj.get('status') == 'canceled':
+                if not is_paid_plan(new_subscription.plan) or subscription_obj.get('status') in ('canceled', 'past_due'):
                     event_sub_id = subscription_obj.get('id')
                     current_subscription = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
                     if preserves_current_paid_subscription(current_subscription, event_sub_id, now):
@@ -1222,13 +1295,13 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                             f"a different active paid sub {active_paid.stripe_subscription_id} exists."
                         )
                 decision_candidate = new_subscription
-                # Paid-through grace applies only when the canceled event belongs
-                # to the user's current subscription (the portal cancel flow). A
-                # canceled snapshot for a different, superseded subscription id
+                # Paid-through grace applies only when the canceled/past_due event belongs
+                # to the user's current subscription (the portal cancel flow or renewal/upgrade retry).
+                # A canceled/past_due snapshot for a different, superseded subscription id
                 # keeps main's downgrade semantics: project Basic and let the
                 # stale guard / replacement adoption decide.
                 grace_candidate = (
-                    subscription_obj.get('status') == 'canceled'
+                    subscription_obj.get('status') in ('canceled', 'past_due')
                     and is_paid_plan(new_subscription.plan)
                     and (
                         current_subscription is None
@@ -1236,7 +1309,7 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                     )
                 )
                 if (
-                    subscription_obj.get('status') == 'canceled'
+                    subscription_obj.get('status') in ('canceled', 'past_due')
                     and is_paid_plan(new_subscription.plan)
                     and not grace_candidate
                 ):
@@ -1266,11 +1339,11 @@ async def _handle_stripe_event(event: dict, background_tasks: BackgroundTasks | 
                 elif (
                     is_paid_plan(new_subscription.plan)
                     and decision.outcome != 'preserved_current'
-                    and subscription_obj.get('status') == 'canceled'
+                    and subscription_obj.get('status') in ('canceled', 'past_due')
                 ):
                     logger.info(
-                        f"Early-cancel paid-through grace for user {uid}: keeping plan until period end "
-                        f"for canceled sub {subscription_obj.get('id')}."
+                        f"Paid-through grace for user {uid}: keeping plan until period end "
+                        f"for sub {subscription_obj.get('id')} with status {subscription_obj.get('status')}."
                     )
                 try:
                     if 'unlock_conversations' in decision.effects:
