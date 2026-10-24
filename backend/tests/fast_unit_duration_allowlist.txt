@@ -231,6 +231,11 @@ tests/unit/test_parakeet_nim.py::TestNimTranscribe::test_nim_text_only_fallback
 tests/unit/test_parakeet_prerecorded.py::TestProviderClass::test_provider_transcribe_url_delegates
 tests/unit/test_parakeet_stream_session.py::TestStreamSessionFeed::test_silence_produces_no_segments
 tests/unit/test_parakeet_stream_session.py::TestStreamSessionRNNTStreaming::test_streaming_utterance_does_not_call_batch_transcribe_when_text_not_ready
+# Declined-proration flows exercise the subscription/Stripe wiring; the module graph is paid
+# inside these calls under file isolation (measured 1.25-1.66s CPU on CI runners, #23416).
+tests/unit/test_payment_declined_proration.py::test_declined_proration_card_error_returns_402_and_preserves_paid_plan
+tests/unit/test_payment_declined_proration.py::test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic
+tests/unit/test_payment_declined_proration.py::test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify
 tests/unit/test_payment_promotion_codes.py::test_checkout_invalid_promo_returns_400
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_releases_only_matching_active
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_noop_without_customer

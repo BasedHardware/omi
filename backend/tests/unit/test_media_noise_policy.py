@@ -262,7 +262,7 @@ def test_serving_minimum_has_no_paid_notes_or_action_items(monkeypatch):
     assert conversation.content_kind == 'media' and not conversation.discarded
     assert minimum.title == 'Watched: Synthetic tutorial'
     assert minimum.title_provenance == 'server_minimum'
-    assert minimum.overview == '' and minimum.emoji == '' and minimum.action_items == []
+    assert minimum.overview == '' and minimum.emoji == '💬' and minimum.action_items == []
     assert recorded and recorded[0].kind == 'media_playback'
 
 
