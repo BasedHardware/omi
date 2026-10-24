@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-batch-export-overwrites-a-same-batch-sibling",
+  "violated_contract": "A batch exporter that is allowed to replace existing output must still give every item in the batch its own output path. `export_conversations(overwrite=True)` in `sdks/python-cli/examples/conversations_to_markdown.py` recorded the resolved path without checking it against the paths the active batch had already written, so two conversations whose date, title slug and 8-character id prefix agreed resolved to the same file: the second write replaced the first conversation, the function returned that path twice, and the first conversation was lost with no error and no warning. The same batch collision was already guarded on the `overwrite=False` path, so the two branches disagreed about what `overwrite` may discard. Reported as #23485 on 2026-10-24.",
+  "canonical_prevention": "Disambiguate the output path against the set of paths the active batch has already claimed before writing, on the overwrite path as well as the exclusive-create path, so `overwrite` keeps replacing files left behind by earlier runs while a name already claimed inside the current batch is never reused. Keep a batch-collision regression test that exports two conversations resolving to the same base name and asserts two distinct files with both bodies intact.",
+  "canonical_prevention_artifact": [
+    "sdks/python-cli/tests/test_conversations_to_markdown_filename_collisions.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "sdks/python-cli/examples/conversations_to_markdown.py",
+    "sdks/python-cli/tests/test_conversations_to_markdown_filename_collisions.py"
+  ],
+  "status": "open"
+}
