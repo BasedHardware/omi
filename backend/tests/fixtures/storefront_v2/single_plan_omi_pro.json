@@ -56,6 +56,30 @@
           "months_free": 3
         }
       ]
+    },
+    {
+      "tier_id": "basic:single_plan",
+      "plan_id": "basic",
+      "name": "Free",
+      "recommended": false,
+      "is_current": true,
+      "hours_line": "About 15 hours of recording a month",
+      "bullets": [],
+      "action": "current",
+      "cta_label": null,
+      "blocked_line": null,
+      "compact": true,
+      "prices": [
+        {
+          "price_id": null,
+          "interval": "month",
+          "amount_minor": 0,
+          "currency": "usd",
+          "headline": "$0",
+          "subline": null,
+          "renewal_line": null
+        }
+      ]
     }
   ],
   "yearly_toggle_label": "Yearly · 3 months free"

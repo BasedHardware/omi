@@ -130,7 +130,7 @@ def test_single_plan_storefront_builder_pins_golden(monkeypatch):
         usage=StorefrontUsage(),
         retrieve_price=lambda key: SINGLE_PLAN_PRICES[key],
     )
-    assert [tier.tier_id for tier in sheet.tiers] == ['unlimited_v2:single_plan']
+    assert [tier.tier_id for tier in sheet.tiers] == ['unlimited_v2:single_plan', 'basic:single_plan']
     tier = sheet.tiers[0]
     assert tier.name == 'Unlimited' and tier.recommended and tier.is_current is False
     assert tier.action == 'checkout' and tier.cta_label == 'Get Unlimited'
@@ -138,6 +138,8 @@ def test_single_plan_storefront_builder_pins_golden(monkeypatch):
     assert tier.prices[0].headline == '$29.99/month'
     assert tier.prices[1].months_free == 3 and tier.prices[1].subline == '$269.91 billed yearly · 3 months free'
     assert sheet.current.plan_id == 'basic' and sheet.current.line == "You're on Free"
+    free_card = sheet.tiers[1]
+    assert free_card.is_current and free_card.action == 'current' and free_card.bullets == []
     assert sheet.current.legacy is False and sheet.current.price_id is None
     assert sheet.yearly_toggle_label == 'Yearly · 3 months free'
     payload = json.dumps(sheet.model_dump(mode='json'), indent=2, ensure_ascii=False) + '\n'
@@ -204,7 +206,7 @@ def test_new_buyer_single_plan_rule_serves_omi_pro_sheet(client, monkeypatch):
         response = client.get('/v2/payments/plans', headers={'X-App-Platform': platform})
         assert response.status_code == 200, platform
         payload = response.json()
-        assert [tier['plan_id'] for tier in payload['tiers']] == ['unlimited_v2'], platform
+        assert [tier['plan_id'] for tier in payload['tiers']] == ['unlimited_v2', 'basic'], platform
         assert [item['price_id'] for item in payload['tiers'][0]['prices']] == [
             'price_omi_pro_month',
             'price_omi_pro_year',

@@ -560,6 +560,8 @@ def build_single_plan_storefront(
     """
     ladder = load_ladder()
     current_plan = subscription.plan.value
+    raw_currency = ladder.get('currency')
+    currency = raw_currency if isinstance(raw_currency, str) else 'usd'
     prices = _prices_for(_configured_unlimited_v2_rows(retrieve_price), offered=['month', 'year'], locale=locale)
     action: Literal['checkout', 'current', 'none'] = 'checkout' if prices else 'none'
     tier = StorefrontTier(
@@ -575,6 +577,23 @@ def build_single_plan_storefront(
         blocked_line=None,
         compact=False,
         prices=prices,
+    )
+    # The Free current card keeps the sheet shape every other golden has (a
+    # current row: no bullets, no CTA, the $0 price) so clients render the Omi
+    # Pro offer next to where the buyer already is.
+    free_tier = StorefrontTier(
+        tier_id='basic:single_plan',
+        plan_id='basic',
+        name=plan_name('basic', ladder),
+        recommended=False,
+        is_current=True,
+        hours_line=hours_line('basic', locale),
+        bullets=[],
+        action='current',
+        cta_label=None,
+        blocked_line=None,
+        compact=True,
+        prices=[_free_price(currency, locale)],
     )
     line, _ = current_line(
         plan_id=current_plan,
@@ -598,7 +617,7 @@ def build_single_plan_storefront(
             plan_name_text=plan_name(current_plan, ladder),
             period_end=None,
         ),
-        tiers=[tier],
+        tiers=[tier, free_tier],
         current=StorefrontCurrent(
             plan_id=current_plan,
             name=plan_name(current_plan, ladder),
