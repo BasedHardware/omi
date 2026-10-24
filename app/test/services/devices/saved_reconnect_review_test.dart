@@ -124,6 +124,19 @@ void main() {
     });
   }
 
+  test('stop retires a native recovery owner after its Dart transport was released', () async {
+    await SharedPreferencesUtil().btDeviceSet(pendant(a));
+    final owner = service();
+    await owner.reconnectSavedDevice('launch');
+    await owner.recoverConnection(a, shouldRetry: () => false);
+    expect(owner.connectionFor(a), isNull);
+    expect(nativeSavedIntent, contains(a));
+    calls.clear();
+    await owner.stop();
+    expect(calls, containsAllInOrder(['config:$a:false', 'unmanage:$a']));
+    expect(nativeSavedIntent, isEmpty);
+  });
+
   test('manual disconnect disarms native intent before transport teardown', () async {
     await SharedPreferencesUtil().btDeviceSet(pendant(a));
     final owner = service();

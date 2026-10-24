@@ -317,6 +317,7 @@ class DeviceService {
     savedReconnect.stop();
     for (final id in _savedReconnectDevices.toList()) {
       await _configureSavedReconnect(id, false);
+      if (!_connections.containsKey(id)) await BleHostApi().unmanageDevice(id);
     }
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
