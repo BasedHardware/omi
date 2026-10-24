@@ -43,7 +43,8 @@
      "projection": {
       "async_projection": false,
       "authoritative_labels": false,
-      "policy_id": "37f9fde5e22533b1d7f7049147ca425850f98269b23d600363fba436fce956eb",
+      "local_quality_enabled": true,
+      "policy_id": "c51bc4f3f8daecfc0b4c21ab27108765404e84ff692704e96aea44ef5d474b53",
       "projection_contention": false,
       "projection_timing": false,
       "require_live_target": false,
@@ -245,7 +246,8 @@
      "projection": {
       "async_projection": false,
       "authoritative_labels": false,
-      "policy_id": "37f9fde5e22533b1d7f7049147ca425850f98269b23d600363fba436fce956eb",
+      "local_quality_enabled": true,
+      "policy_id": "c51bc4f3f8daecfc0b4c21ab27108765404e84ff692704e96aea44ef5d474b53",
       "projection_contention": false,
       "projection_timing": false,
       "require_live_target": false,
@@ -447,7 +449,8 @@
      "projection": {
       "async_projection": false,
       "authoritative_labels": false,
-      "policy_id": "37f9fde5e22533b1d7f7049147ca425850f98269b23d600363fba436fce956eb",
+      "local_quality_enabled": true,
+      "policy_id": "c51bc4f3f8daecfc0b4c21ab27108765404e84ff692704e96aea44ef5d474b53",
       "projection_contention": false,
       "projection_timing": false,
       "require_live_target": false,

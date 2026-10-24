@@ -31,6 +31,7 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  embeddingApiUrl: "http://127.0.0.1:9"
   apiUrl: https://backend-sync-staging-1031333818730.us-central1.run.app
   audience: https://backend-sync-staging-1031333818730.us-central1.run.app
   emptyAsrRecoveryEnabled: true

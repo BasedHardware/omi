@@ -513,7 +513,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         flags=re.DOTALL,
     )
     # These fixtures exercise unrelated gateway/secret failures. Carry explicit
-    # Dream and demand defaults from the manifest, including empty allowlists.
+    # Dream, demand, and local-quality defaults from the manifest, including empty allowlists.
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text())
     services = manifest['environments']['dev']['cloud_run']['services']
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
@@ -521,6 +521,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         entries = ',\n'.join(
             '        ' + json.dumps({'name': name, 'value': bindings[name]['value']})
             for name in (
+                'BATCH_PIPELINE_LOCAL_QUALITY_ENABLED',
                 'DREAM_AGENT_ELIGIBILITY',
                 'DREAM_ON_DEMAND_ENABLED',
                 'DEMAND_PROCESSING_ENABLED',

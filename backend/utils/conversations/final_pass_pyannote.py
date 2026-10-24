@@ -1,10 +1,7 @@
 """Synchronous leaf operation called in the existing bounded shadow worker."""
 
 import time
-import uuid
 from models.diarization import OMI_EMBEDDING_SPACE
-from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
-from models.speaker_label_provenance import project_source
 from utils.observability.fallback import record_fallback
 from utils.stt.diarization import get_diarizer_backend, LegacyAHC
 from utils.stt.diarization_eval import score_words
@@ -15,8 +12,7 @@ from utils.stt.vad_compaction import diarize_with_speech_compaction
 import httpx
 from prometheus_client import Counter, Histogram
 
-from models.transcript_segment import TranscriptSegment
-from utils.conversations.final_pass_assignment import assign_words, name_centroids, skip_single_speaker
+from utils.conversations.final_pass_assignment import assign_words, build_turns, name_centroids, skip_single_speaker
 
 OUTCOMES = Counter('omi_transcription_final_pass_total', 'Pyannote final-pass outcomes', ['outcome'])
 LATENCY = Histogram('omi_transcription_final_pass_latency_seconds', 'Pyannote final-pass latency')
@@ -64,41 +60,15 @@ def run_final_pass(
                 outcome='degraded',
             )
         speakers = {s: i for i, s in enumerate(sorted({t['speaker'] for t in output['turns']}))}
-        segments = []
-        # Keep word clocks, avoiding postprocess_words' first-word rebase.
-        for word in assigned:
-            speaker = word['speaker']
-            decision = decisions.get(speaker)
-            identity = decision.person_id if decision else None
-            left, right = word['timestamp']
-            if segments and speaker is not None and segments[-1].speaker == speaker and left - segments[-1].end < 1:
-                segments[-1].text += ' ' + word['text']
-                segments[-1].end = right
-            else:
-                segments.append(
-                    TranscriptSegment(
-                        id=str(uuid.uuid5(uuid.NAMESPACE_URL, f'omi/final-pass/{conversation_id}/{len(segments)}')),
-                        text=word['text'],
-                        start=left,
-                        end=right,
-                        speaker=speaker,
-                        speaker_id=speakers.get(speaker, OMI_SPEAKER_ID_SENTINEL),
-                        speaker_id_scope=f"final:{output['provenance']['backend']}:{conversation_id}",
-                        is_user=identity == 'user',
-                        person_id=identity if identity not in (None, 'user') else None,
-                        speaker_match_source='final_centroid:' + output['version'],
-                        speaker_label_source=project_source(
-                            {
-                                'is_user': identity == 'user',
-                                'person_id': identity if identity != 'user' else None,
-                                'speaker_match_source': 'final_centroid',
-                            }
-                        ),
-                        speaker_identity_status=(
-                            'user' if identity == 'user' else 'not_user' if identity else 'no_match'
-                        ),
-                    )
-                )
+        segments = build_turns(
+            words,
+            output['turns'],
+            decisions=decisions,
+            scope=f"final:{output['provenance']['backend']}:{conversation_id}",
+            id_namespace=f'omi/final-pass/{conversation_id}/',
+            source='final_centroid:' + output['version'],
+            speaker_ids=speakers,
+        )
         # Compare anonymous voices with a permutation-invariant overlap mapping.
         total = len(words)
         agreement = (

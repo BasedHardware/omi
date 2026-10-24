@@ -12,6 +12,11 @@ from datetime import datetime, timedelta, timezone, tzinfo
 from types import ModuleType, SimpleNamespace
 from zoneinfo import ZoneInfo
 
+# Router projection imports use the pinned numerical packages, not external
+# services. Keep their real package hierarchy and load it before timed calls.
+import scipy.cluster.hierarchy  # noqa: F401
+import scipy.spatial.distance  # noqa: F401
+
 
 @pytest.fixture(scope='module', autouse=True)
 def _shaped_notes_enabled():
@@ -163,9 +168,6 @@ _stubs = [
     'pinecone',
     'pycountry',
     'pytz',
-    'scipy',
-    'scipy.spatial',
-    'scipy.spatial.distance',
     'tiktoken',
     'twilio',
     'twilio.jwt',

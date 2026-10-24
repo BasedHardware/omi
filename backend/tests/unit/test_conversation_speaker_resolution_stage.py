@@ -292,6 +292,22 @@ def test_two_sync_batches_with_no_audio_withdraw_automatic_owner_claims():
     assert all(segment.speaker_identity_status == 'ambiguous' for segment in conversation.transcript_segments)
 
 
+@pytest.mark.parametrize('manual', [False, True])
+def test_independent_final_batch_owner_accepts_are_withdrawn_before_processing(manual):
+    conversation = _conversation([0, 1], pcs=False, scopes=['final:batch:a', 'final:batch:b'])
+    for segment in conversation.transcript_segments:
+        segment.is_user = True
+        segment.speaker_identity_status = 'user'
+        segment.speaker_match_source = 'final_centroid:batch-v1'
+        segment.speaker_label_source = 'auto'
+    if manual:
+        conversation.transcript_segments[0].speaker_label_source = 'manual'
+    stage.resolve_speakers_for_processing('u', conversation)
+    assert conversation.speaker_resolution.status == 'unavailable'
+    assert [s.is_user for s in conversation.transcript_segments] == [manual, False]
+    assert conversation.transcript_segments[1].speaker_identity_status == 'ambiguous'
+
+
 def test_cache_means_a_growing_conversation_embeds_each_segment_once(env, monkeypatch):
     store, diarizer = env
     plan = [0, 1] * 6

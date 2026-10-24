@@ -13,11 +13,19 @@ from fastapi import HTTPException
 from pyannote.audio import Pipeline  # type: ignore[reportMissingImports]  # GPU runtime dependency
 from metrics import AUDIO, RTF, GPU_MEMORY
 from utils.stt.diarization_turns import overlap_regions, exclusive_from_activity
+from utils.stt.voice_centroids import (
+    COMMUNITY_MODEL_REVISION,
+    EMBEDDING_MODEL,
+    EMBEDDING_REVISION,
+    EMBEDDING_SPACE,
+    select_evidence,
+    pool_centroids,
+)
 
 from admission import GPU_LOCK
 from embedding import embedding_inference_v2
 
-MODEL_REVISION = '3533c8cf8e369892e6b79ff1bf80f7b0286a54ee'
+MODEL_REVISION = COMMUNITY_MODEL_REVISION
 MAX_AUDIO_SECONDS = 7200
 
 
@@ -62,42 +70,16 @@ def infer(waveform: Any, min_speakers: int | None = None, max_speakers: int | No
         exclusive = turns(native_exclusive) if native_exclusive is not None else exclusive_from_activity(activity)
         overlaps = overlap_regions(activity)
         centroids = {}
-        # Separate v2 WeSpeaker model intentionally: community-1's internal
-        # embeddings are not an Omi enrollment-space compatibility guarantee.
-        for speaker in sorted({t['speaker'] for t in exclusive}):
-            samples = []
-            for turn in exclusive:
-                if turn['speaker'] != speaker:
-                    continue
-                # Exclude simultaneous speech from biometric evidence.
-                cuts = [(turn['start'], turn['end'])]
-                for region in overlaps:
-                    cuts = [
-                        (a, b)
-                        for l, r in cuts
-                        for a, b in [(l, min(r, region['start'])), (max(l, region['end']), r)]
-                        if b > a
-                    ]
-                for l, r in cuts:
-                    if r - l >= 0.5:
-                        samples.append((l, r))
-            vectors, evidence = [], 0.0
-            # Bounded, duration-weighted evidence; avoid concatenating hours.
-            for l, r in sorted(samples, key=lambda x: x[1] - x[0], reverse=True)[:3]:
-                r = min(r, l + 10)
-                clip = waveform[:, int(l * 16000) : int(r * 16000)]
-                vector = np.asarray(embedding_inference_v2({'waveform': clip, 'sample_rate': 16000})).reshape(-1)
-                norm = np.linalg.norm(vector)
-                if norm > 0 and np.isfinite(vector).all():
-                    vectors.append((vector / norm, r - l))
-                    evidence += r - l
-            if vectors:
-                centroid: Any = sum(v * w for v, w in vectors) / evidence
-                norm = float(np.linalg.norm(centroid))
-                if norm <= 0 or not np.isfinite(centroid).all():
-                    continue
-                centroid /= norm
-                centroids[speaker] = {'embedding': centroid.tolist(), 'evidence_seconds': evidence}
+        # Use the same bounded evidence/pooling policy as the batch worker.
+        for speaker, clips in select_evidence(exclusive, overlaps, duration_seconds=seconds).items():
+            vectors = []
+            for left, right in clips:
+                clip = waveform[:, int(left * 16000) : int(right * 16000)]
+                vector = embedding_inference_v2({'waveform': clip, 'sample_rate': 16000})
+                vectors.append((vector, right - left))
+            centroid = pool_centroids(vectors)
+            if centroid is not None:
+                centroids[speaker] = centroid
         if torch.cuda.is_available():
             GPU_MEMORY.set(torch.cuda.max_memory_allocated())
     elapsed = time.monotonic() - started
@@ -110,13 +92,14 @@ def infer(waveform: Any, min_speakers: int | None = None, max_speakers: int | No
         'audio_seconds': seconds,
         'inference_seconds': elapsed,
         'model_revision': MODEL_REVISION,
-        'embedding_space': 'pyannote/wespeaker-voxceleb-resnet34-LM:v2',
+        'embedding_space': EMBEDDING_SPACE,
         'version': 'community-1:' + MODEL_REVISION,
         'provenance': {
             'backend': 'pyannote',
             'pipeline': 'pyannote.audio==4.0.3',
             'model_revision': MODEL_REVISION,
-            'embedding_revision': '837717ddb9ff5507820346191109dc79c958d614',
+            'embedding_model': EMBEDDING_MODEL,
+            'embedding_revision': EMBEDDING_REVISION,
             'exclusive_method': 'native' if native_exclusive is not None else 'longest_active_turn',
         },
     }

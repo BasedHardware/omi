@@ -10,7 +10,7 @@ fields are ignored; missing fields use original code defaults, never current env
 | Part | Owner / first stamp | Durable record |
 | --- | --- | --- |
 | `BatchUnitPolicy` | Sync or native-record admission: batch/cohort, live-record admission, nested retire, local final-pass decision | Batch job `policy`, Redis sync job beside `ledger_fence_mode` |
-| `ProjectionPolicy` | Projection's first handling: contention, async, labels, live target, timing | Batch job `policy_parts.projection` |
+| `ProjectionPolicy` | Projection's first handling: contention, async, labels, live target, timing, local quality | Batch job `policy_parts.projection` |
 | `SchedulerPolicy` | Scheduler's first pull/failure: head priority, shared live, max attempts | Batch job `policy_parts.scheduler` |
 | `RecoveryPolicy` | Quarantine owner's first handling: mode/cohort, multilingual and terminal-empty decisions | Batch job `policy_parts.recovery` |
 | `FirstSummaryPolicy` | Enrichment owner when creating the obligation: cohort and deadline | Outbox `first_summary_policy` (sim: recorded obligation part) |
@@ -168,3 +168,8 @@ Run the complete matrix from `backend/` with
 `python scripts/policy_pairwise_sweep.py --seed 1`. The script prints factor,
 feasible-pair, row, simulation, spend and runtime totals. Scheduling that sweep
 nightly remains pending David; E3 adds no workflow.
+
+`BATCH_PIPELINE_LOCAL_QUALITY_ENABLED` is an explicit default-on live override of
+`ProjectionPolicy.local_quality_enabled`, including older persisted policies.
+Read it only through the registered `kill_switch` helper. It affects new compute
+and projection; it never withdraws committed authority or manual receipts.

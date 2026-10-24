@@ -198,6 +198,9 @@ def test_rendered_prod_deployment_contains_stream_admission_settings():
             },
         },
     ]
+    assert 'parakeet_request_latency_p99' not in {
+        metric[metric['type'].lower()]['metric']['name'] for metric in hpa['spec']['metrics']
+    }
     assert hpa['spec']['behavior'] == {
         'scaleUp': {
             'stabilizationWindowSeconds': 0,

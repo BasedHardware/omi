@@ -927,3 +927,16 @@ def test_gpu_batch_retry_cap_does_not_reach_cloud_tasks(contracts_module):
     assert not any(
         module.startswith('google.cloud.tasks') for module in contracts_module.third_party_dependency_modules(contract)
     )
+
+
+def test_diarizer_batch_entrypoint_requires_shared_centroid_copy(contracts_module, tmp_path):
+    contract = _contract(contracts_module, 'diarizer')
+    assert 'batch_main' in contract.entrypoints
+    assert 'utils.stt.voice_centroids' in contracts_module.first_party_import_closure(contract, ('batch_main',))
+    dockerfile = _dockerfile_without(
+        contract.dockerfile,
+        'COPY backend/utils/stt/voice_centroids.py ./utils/stt/voice_centroids.py\n',
+        tmp_path / 'Dockerfile',
+    )
+    errors = contracts_module.source_closure_errors(replace(contract, dockerfile=dockerfile))
+    assert any('utils.stt.voice_centroids' in error and 'final_pass' in error for error in errors)

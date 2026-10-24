@@ -81,6 +81,7 @@ from utils.stt.speaker_embedding import extract_embedding_from_bytes, speaker_em
 from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.stt.voiceprints import usable_person_voiceprint
+from utils.stt.batch_naming import competing_owner_claim_indices
 
 logger = logging.getLogger(__name__)
 
@@ -700,26 +701,23 @@ def _without_resolution(
     reason: str = 'none',
     force_unavailable: bool = False,
     diagnostics: Optional[Mapping[str, Any]] = None,
+    manual_receipt: Optional[Mapping] = None,
 ) -> None:
     segments = conversation.transcript_segments
     speaker_evidence.reason(outcome)
     owner_diagnostics.resolver_counts(**(diagnostics or {}))
-    # Independent sync batches can each accept an owner in isolation. Without
-    # conversation audio there is no evidence that their capture IDs name the
-    # same voice. Withdraw only automatic claims when several scoped voices
-    # claim the owner; the transactional manual receipt is reapplied on write.
-    sync_owners = {
-        (segment.speaker_id_scope, segment.speaker_id)
-        for segment in segments
-        if segment.is_user and (segment.speaker_id_scope or '').startswith('sync:')
-    }
-    if len(sync_owners) > 1:
-        for segment in segments:
-            if segment.is_user and segment.speaker_match_source == 'sync_embedding':
-                segment.is_user = False
-                segment.person_id = None
-                segment.speaker_identity_status = SpeakerIdentityStatus.ambiguous
-                segment.speaker_match_source = MATCH_SOURCE
+    # Without conversation-wide evidence, independently accepted unit voices
+    # are not proof of a common owner. The transaction reapplies manual receipts.
+    competing = competing_owner_claim_indices(
+        [segment.model_dump() for segment in segments], manual_receipt, canonical_ids=True
+    )
+    for index in competing:
+        segment = segments[index]
+        segment.is_user = False
+        segment.person_id = None
+        segment.speaker_label_source = None
+        segment.speaker_identity_status = SpeakerIdentityStatus.ambiguous
+        segment.speaker_match_source = MATCH_SOURCE
     if not force_unavailable and _capture_trusted(segments):
         conversation.speaker_resolution = ConversationSpeakers(
             status='capture',
@@ -943,7 +941,9 @@ def resolve_speakers_for_processing(
             resolver_reason('batch_authoritative')
             # Legacy owner-safe abstention; manual receipts still win below.
             trusted = _capture_trusted(conversation.transcript_segments)
-            _without_resolution(conversation, 'batch_authoritative', force_unavailable=not trusted)
+            _without_resolution(
+                conversation, 'batch_authoritative', force_unavailable=not trusted, manual_receipt=receipt
+            )
             resolution = conversation.speaker_resolution
             if trusted and resolution is not None:
                 resolution.participant_speaker_ids = significant_capture_speaker_ids(
@@ -990,7 +990,7 @@ def resolve_speakers_for_processing(
         if resolution_enabled() and not any(
             (segment.speaker_id_scope or '').startswith('final:batch:') for segment in conversation.transcript_segments
         ):
-            _without_resolution(conversation, 'failed')
+            _without_resolution(conversation, 'failed', manual_receipt=receipt)
     finally:
         for segment, labels in preserved:
             for field, value in labels.items():
@@ -1214,7 +1214,7 @@ def _resolve(
         owner_diagnostics.resolver_reason(
             'private_cloud_disabled' if not conversation.private_cloud_sync_enabled else 'endpoint_unconfigured'
         )
-        _without_resolution(conversation, 'no_audio')
+        _without_resolution(conversation, 'no_audio', manual_receipt=receipt)
         return
 
     invalid_text = [s for s in segments if text_window_refusal(s.start, s.end) is not None]
@@ -1271,7 +1271,9 @@ def _resolve(
         for segment in segments:
             if time.monotonic() >= deadline:
                 resolver_reason('placement_deadline')
-                _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
+                _without_resolution(
+                    conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True, manual_receipt=receipt
+                )
                 return
             if segment.id is None or segment.id in invalid_text_ids:
                 continue
@@ -1359,7 +1361,13 @@ def _resolve(
             resolver_reason(
                 _inventory_refusal_reason(index, placements, segments, invalid_text if all_usable_invalid else ())
             )
-            _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
+            _without_resolution(
+                conversation,
+                'unaligned_audio',
+                reason='unverified_inventory',
+                force_unavailable=True,
+                manual_receipt=receipt,
+            )
             return
 
         def historical_cache(segment):
@@ -1380,13 +1388,21 @@ def _resolve(
         pending = [s for s in pending if s.id not in abstained and s.id is not None]
         if abstained and not pending and not any(s.id not in abstained and s.id in cache for s in segments):
             resolver_reason('manifest_unvalidated' if not index.validated else 'no_proven_window')
-            _without_resolution(conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True)
+            _without_resolution(
+                conversation, 'unaligned_audio', reason='unplaced', force_unavailable=True, manual_receipt=receipt
+            )
             return
     read_session = None
     if pending:
         read_session = _verified_read_session(uid, conversation, inventory_files, pending, placements, deadline)
         if read_session is None:
-            _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
+            _without_resolution(
+                conversation,
+                'unaligned_audio',
+                reason='unverified_inventory',
+                force_unavailable=True,
+                manual_receipt=receipt,
+            )
             return
     speaker_evidence.window_abstentions(placements, abstained)
     diagnostics = EmbeddingDiagnostics()
@@ -1413,7 +1429,13 @@ def _resolve(
     )
     if read_session is not None and read_session.limit_hit:
         resolver_reason('read_budget')
-        _without_resolution(conversation, 'unaligned_audio', reason='unverified_inventory', force_unavailable=True)
+        _without_resolution(
+            conversation,
+            'unaligned_audio',
+            reason='unverified_inventory',
+            force_unavailable=True,
+            manual_receipt=receipt,
+        )
         return
     if new_embeddings or stale:
         upload_speaker_embedding_cache(uid, conversation.id, encode_cache(cache, clip_seconds))
@@ -1488,7 +1510,7 @@ def _resolve(
                 else 'embedding_failed' if reason == 'embed_failed' else 'no_vectors'
             )
         )
-        _without_resolution(conversation, 'no_embeddings', reason=reason, diagnostics=fields)
+        _without_resolution(conversation, 'no_embeddings', reason=reason, diagnostics=fields, manual_receipt=receipt)
         return
 
     resolution = compare_and_select(

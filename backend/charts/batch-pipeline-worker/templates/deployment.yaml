@@ -71,6 +71,8 @@ spec:
             - {name: BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED, value: {{ .Values.worker.shortSpeechSingleEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED, value: {{ .Values.worker.emptyAsrDispositionEnabled | quote }}}
             - {name: BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED, value: {{ .Values.worker.emptyAsrRecoveryEnabled | quote }}}
+            - {name: HOSTED_SPEAKER_EMBEDDING_API_URL, value: {{ .Values.worker.embeddingApiUrl | quote }}}
+            - {name: BATCH_PIPELINE_LOCAL_QUALITY_ENABLED, value: {{ .Values.worker.localQualityEnabled | quote }}}
             - {name: BATCH_PIPELINE_CORRECTNESS_METRICS_ENABLED, value: {{ .Values.worker.correctnessMetricsEnabled | quote }}}
             - {name: BATCH_PIPELINE_HEAD_PRIORITY_ENABLED, value: {{ .Values.worker.headPriorityEnabled | quote }}}
             # Pump flights per GPU: claim and publication overlap the exclusive chain; "1" is the serial kill switch.

@@ -188,6 +188,8 @@ env:
     value: "false"
   - name: BATCH_PIPELINE_READ_ONLY_METRICS_ENABLED
     value: "false"
+  - name: BATCH_PIPELINE_LOCAL_QUALITY_ENABLED
+    value: "true"
   - name: BATCH_PIPELINE_PROJECTION_TIMING_ENABLED
     value: "false"
   - name: BATCH_PIPELINE_RECOVERY_MODE

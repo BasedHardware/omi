@@ -28,6 +28,8 @@ COPY --from=builder /opt/venv /opt/venv
 COPY backend/diarizer/ .
 COPY backend/omi_logging.py ./omi_logging.py
 COPY backend/utils/stt/diarization_turns.py ./utils/stt/diarization_turns.py
+COPY backend/utils/stt/voice_centroids.py ./utils/stt/voice_centroids.py
+COPY backend/utils/stt/embedding_inference.py ./utils/stt/embedding_inference.py
 COPY backend/utils/logging_config.py ./utils/logging_config.py
 
 EXPOSE 8080
