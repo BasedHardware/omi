@@ -7,7 +7,7 @@ stay in a permission-restricted artifact directory beside the corpus manifest.
 
 import argparse
 from contextlib import redirect_stderr, redirect_stdout
-from dataclasses import asdict
+from dataclasses import asdict, replace
 import importlib
 import importlib.metadata
 import json
@@ -268,11 +268,14 @@ def evaluate(
                     wav=wav,
                     current_settings=settings,
                 )
-                if inference_archive is not None and not cached.exists()
+                if inference_archive is not None
                 else None
             )
             if archived is not None:
                 original_payload, original_receipt = archived
+                key = original_receipt['cache_key']
+                item = replace(item, segment_id=key)
+                cached = root / ('archive-' + key + '.json')
                 # The archive validator proved the original pin; do not alter
                 # its immutable file, and retain the full original receipt.
                 original_payload.setdefault('diarization', {}).setdefault('provenance', {})['model_revision'] = (
@@ -388,6 +391,10 @@ def evaluate(
                     .get('original_inference', {})
                     .get('provider_config_evidence', 'captured_current'),
                     'declared_crop_seconds': recording['dur'],
+                    'inference_reused': archived is not None,
+                    'original_configuration_evidence': (
+                        archived[1]['provider_config_evidence'] if archived else 'captured'
+                    ),
                 }
             )
             scores.append(score)
@@ -450,6 +457,8 @@ def evaluate(
                         **settings,
                         'projection_fingerprint': projection_fingerprint,
                         'gallery_fingerprint': fingerprint(gallery),
+                        'full_current_worker_executed': archived is None,
+                        'original_inference': archived[1] if archived else None,
                     },
                     'cache_key': key,
                     'composed_provenance': payload.get('local_composed_provenance'),
