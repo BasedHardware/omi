@@ -336,7 +336,7 @@ Future<ServerMessage> getInitialAppMessage(String? appId) {
 }
 
 Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
-    {String? language, ApiStreamingSeams? seams}) async* {
+    {String? language, ApiStreamingSeams? seams, Future<void>? abort}) async* {
   var messageId = "1000"; // Default new message
 
   await for (var line in makeMultipartStreamingApiCall(
@@ -344,6 +344,7 @@ Stream<ServerMessageChunk> sendVoiceMessageStreamServer(List<File> files,
     files: files,
     fields: language != null ? {'language': language} : {},
     seams: seams,
+    abort: abort,
   )) {
     if (_isIgnorableStreamFrame(line)) continue;
     var messageChunk = parseVoiceMessageStreamChunk(line, messageId);

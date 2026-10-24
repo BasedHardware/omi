@@ -1,3 +1,4 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'package:omi/services/capture/live_held_audio_state.dart';
 import 'package:omi/models/stt_provider.dart';
 import 'package:omi/services/capture/local_stt_custody.dart';
@@ -104,6 +105,7 @@ part 'capture_speaker_events.dart';
 part 'capture_uplink_policy.dart';
 part 'capture_live_recovery.dart';
 part 'capture_continuity_watch.dart';
+part 'capture_voice_questions.dart';
 
 enum _VoiceCommandTrigger { toggle, legacyLongPress }
 
@@ -1822,73 +1824,6 @@ class CaptureController extends ChangeNotifier
     return device?.type == DeviceType.omi;
   }
 
-  void _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason reason) {
-    Logger.warning('Pendant voice question dropped: ${reason.wireName}');
-    const TypedEvents().emit(PendantVoiceQuestionDropped(reason: reason));
-  }
-
-  Future<void> _processVoiceCommandBytes(
-    String deviceId,
-    List<List<int>> data, {
-    bool allowWhenDisabled = false,
-  }) async {
-    final submissionGeneration = _voiceCommandSubmissionGeneration;
-    if (_omiButtonActionsDisabled && !allowWhenDisabled) {
-      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.actionsDisabled);
-      return;
-    }
-    if (data.isEmpty) {
-      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.emptyFrames);
-      if (deviceOnboardingProvider?.isOnboardingActive == true) {
-        deviceOnboardingProvider!.onVoiceQuestionFailed();
-      }
-      return;
-    }
-
-    if (_recordingDevice == null) {
-      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.noDevice);
-      return;
-    }
-
-    late final BleAudioCodec codec;
-    try {
-      codec = await _getAudioCodec(_recordingDevice!.id);
-    } catch (_) {
-      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.codecLookupFailed);
-      return;
-    }
-    if (submissionGeneration != _voiceCommandSubmissionGeneration) {
-      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.cancelled);
-      return;
-    }
-    if (_omiButtonActionsDisabled && !allowWhenDisabled) {
-      _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.actionsDisabled);
-      return;
-    }
-    await externalActions.sendVoiceMessageStreamToServer(
-      data,
-      onFirstChunkRecived: () {
-        _playSpeakerHaptic(deviceId, 2);
-      },
-      codec: codec,
-      // Device-button voice → speak the reply aloud (BG/lock-screen safe).
-      // Gated by _preferences.voiceResponseEnabled inside the service.
-      playResponseAudio: true,
-      onNoSpeech: () async {
-        await _playVoiceQuestionFailureHaptic(deviceId);
-        if (deviceOnboardingProvider?.isOnboardingActive == true) {
-          deviceOnboardingProvider!.onVoiceQuestionFailed();
-        }
-      },
-    );
-  }
-
-  Future<void> _playVoiceQuestionFailureHaptic(String deviceId) async {
-    if (!await _playSpeakerHaptic(deviceId, 1)) return;
-    await Future<void>.delayed(const Duration(milliseconds: 80));
-    await _playSpeakerHaptic(deviceId, 1);
-  }
-
   @visibleForTesting
   Future<void> processVoiceCommandBytesForTesting(String deviceId, List<List<int>> data) {
     return _processVoiceCommandBytes(deviceId, data);
@@ -1912,7 +1847,7 @@ class CaptureController extends ChangeNotifier
     _voiceCommandSession = null;
     _voiceCommandTrigger = null;
     _lastVoiceCommandAutoSubmitAt = autoSubmitted ? _now() : null;
-    if (autoSubmitted) deviceOnboardingProvider?.onQuestionAutoSubmitted();
+    if (_voiceCommandStartedDuringOnboarding) deviceOnboardingProvider?.onQuestionAutoSubmitted();
 
     // The started-during-onboarding exemption only holds while the tutorial is
     // still active: if onboarding exited (dispose/skip/complete), the session
@@ -1929,7 +1864,7 @@ class CaptureController extends ChangeNotifier
         'auto_submitted': autoSubmitted,
       }),
     );
-    _processVoiceCommandBytes(deviceId, data, allowWhenDisabled: allowWhenDisabled);
+    unawaited(_processVoiceCommandBytes(deviceId, data, allowWhenDisabled: allowWhenDisabled));
   }
 
   void cancelActiveVoiceSession() {
@@ -1998,15 +1933,17 @@ class CaptureController extends ChangeNotifier
 
   void _handleButtonEvent(String deviceId, int buttonState) {
     unawaited(DebugLogManager.logEvent('pendant_button_event', {'state': buttonState}));
-    // Intercept for interactive device onboarding
-    if (deviceOnboardingProvider?.isOnboardingActive == true) {
-      deviceOnboardingProvider!.onButtonEvent(buttonState);
-      // For step 1 (ask question), let single-tap fall through to normal voice command handling
-      if (deviceOnboardingProvider!.currentStep == 1 && buttonState == 1) {
-        // Fall through to normal single-tap handling below
-      } else {
+    // Only an admitted capture transition may move the question UI. Raw
+    // presses can be ignored (auto-submit grace / a reply already pending).
+    final tutorial = deviceOnboardingProvider;
+    if (tutorial?.isOnboardingActive == true) {
+      if (tutorial!.currentStep != DeviceOnboardingProvider.askQuestionStep) {
+        tutorial.onButtonEvent(buttonState);
         return;
       }
+      if (buttonState != 1 || tutorial.questionSent) return;
+      // A question started before the tutorial is not this step's question.
+      if (_voiceCommandSession != null && !_voiceCommandStartedDuringOnboarding) cancelActiveVoiceSession();
     }
 
     // Omi button actions are disabled by the user: skip action handling but
@@ -2095,6 +2032,7 @@ class CaptureController extends ChangeNotifier
         _voiceCommandTrigger = _VoiceCommandTrigger.toggle;
         _commandBytes = [];
         _voiceCommandStartedDuringOnboarding = deviceOnboardingProvider?.isOnboardingActive == true;
+        if (_voiceCommandStartedDuringOnboarding) deviceOnboardingProvider!.onVoiceQuestionStarted();
 
         _startVoiceCommandTimeout(deviceId);
         _playSpeakerHaptic(deviceId, 1);

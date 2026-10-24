@@ -1,3 +1,4 @@
+import 'package:omi/models/voice_question_result.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -70,7 +71,7 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
   int sendCount = 0;
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionResult> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required void Function() onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
@@ -78,6 +79,7 @@ class _RecordingCaptureExternalActions extends NoopCaptureExternalActions {
     required bool playResponseAudio,
   }) async {
     sendCount++;
+    return const VoiceQuestionResult.answered("Test answer");
   }
 }
 
