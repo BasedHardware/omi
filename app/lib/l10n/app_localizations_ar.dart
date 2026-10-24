@@ -4870,7 +4870,7 @@ class AppLocalizationsAr extends AppLocalizations {
       'بالمتابعة، سيتم تخزين محادثاتك وتسجيلاتك ومعلوماتك الشخصية بشكل آمن على خوادمنا. تتم معالجة تسجيلاتك الصوتية ونصوصك بواسطة خدمات ذكاء اصطناعي تابعة لجهات خارجية (بما في ذلك Deepgram للنسخ و OpenAI للتحليل) لتزويدك برؤى مدعومة بالذكاء الاصطناعي وتمكين جميع ميزات التطبيق.';
 
   @override
-  String get tasksEmptyStateMessage => 'ابدأ محادثة لإنشاء مهمة.';
+  String get tasksEmptyStateMessage => 'ستظهر هنا المهام من محادثاتك.';
 
   @override
   String get clearChatAction => 'مسح المحادثة';
@@ -13533,6 +13533,25 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'اضغط للإصلاح';
+
+  @override
+  String get voiceProfileCardDismissed => 'يمكنك إعداد بصمة صوتك في أي وقت من الإعدادات.';
+
+  @override
+  String get homeNewRecordingButton => 'تسجيل جديد';
+
+  @override
+  String get chatWelcomeMessage =>
+      'مرحبًا، أنا Omi. اسألني عن أي شيء تحدثت عنه: ما قاله شخص ما، أو ما وعدت به، أو ملخص يومك. يمكنني أيضًا إضافة مهام وتذكّر الأشياء لك.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'اسأل Omi عن يومك';
+
+  @override
+  String get onboardingStarterTaskRecord => 'سجّل محادثة مع Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'ضع علامة على هذه المهمة لإنهائها';
 
   @override
   String get homePendingTitle => 'محادثات في الطريق';

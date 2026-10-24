@@ -5,9 +5,11 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/pages/settings/settings_destinations.dart';
+import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/settings_groups.dart';
-import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
+import 'package:omi/pages/settings/widgets/settings_plan_section.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/ui/ui.dart';
@@ -107,11 +109,17 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     );
   }
 
-  /// Show the subscriber's actual tier on the Plan & Usage row.
+  /// The plan on the Plan & Usage row: "Free Plan" and the Plus plan name (their section adds an
+  /// Upgrade button), "Pro" for the other paid plans.
   String? _planValue(UsageProvider usage) {
-    final plan = usage.subscription?.subscription.plan;
-    if (plan == null || !plan.isPaid) return null;
-    return currentPlanDisplayName(context, usage.subscription);
+    final subscription = usage.subscription;
+    final plan = subscription?.subscription.plan;
+    if (plan == null) return null;
+    if (usage.showSubscriptionUI && (plan == PlanType.basic || plan == PlanType.plus)) {
+      return planDisplayName(plan, subscription!.availablePlans, context.l10n);
+    }
+    if (!plan.isPaid) return null;
+    return currentPlanDisplayName(context, subscription);
   }
 
   /// Free readers who can still start a trial get Pocket's Upgrade row above Plan & Usage.
@@ -156,12 +164,14 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 title: l10n.upgrade,
                 subtitle: l10n.settingsUpgradeTrialSubtitle(7),
               ),
-            _row(
-              SettingsDestination.planAndUsage,
-              key: 'settings_row_planAndUsage',
-              icon: FontAwesomeIcons.chartLine,
-              title: l10n.planAndUsage,
-              value: planValue,
+            SettingsPlanSection(
+              row: _row(
+                SettingsDestination.planAndUsage,
+                key: 'settings_row_planAndUsage',
+                icon: FontAwesomeIcons.chartLine,
+                title: l10n.planAndUsage,
+                value: planValue,
+              ),
             ),
             _row(
               SettingsDestination.referral,

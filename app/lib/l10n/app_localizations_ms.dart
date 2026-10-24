@@ -4924,7 +4924,7 @@ class AppLocalizationsMs extends AppLocalizations {
       'Dengan meneruskan, perbualan, rakaman dan maklumat peribadi anda akan disimpan dengan selamat di pelayan kami. Rakaman audio dan transkrip anda diproses oleh perkhidmatan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan anda pandangan dikuasakan AI dan membolehkan semua ciri aplikasi.';
 
   @override
-  String get tasksEmptyStateMessage => 'Mulakan perbualan untuk mencipta tugasan.';
+  String get tasksEmptyStateMessage => 'Tugasan daripada perbualan anda akan dipaparkan di sini.';
 
   @override
   String get clearChatAction => 'Kosongkan sembang';
@@ -13639,6 +13639,25 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Ketik untuk membetulkan';
+
+  @override
+  String get voiceProfileCardDismissed => 'Anda boleh menyediakan Profil Suara pada bila-bila masa dalam Tetapan.';
+
+  @override
+  String get homeNewRecordingButton => 'Rakaman Baharu';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hai, saya Omi. Tanya saya apa sahaja tentang perkara yang anda bualkan: apa yang dikatakan seseorang, apa yang anda janjikan atau ringkasan hari anda. Saya juga boleh menambah tugasan dan mengingati sesuatu untuk anda.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Tanya Omi tentang hari anda';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Rakam perbualan dengan Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Tandakan tugasan ini untuk menyelesaikannya';
 
   @override
   String get homePendingTitle => 'Perbualan sedang diproses';

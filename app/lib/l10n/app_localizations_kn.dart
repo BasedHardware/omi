@@ -4929,7 +4929,7 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಮುಂದುವರಿಯುವ ಮೂಲಕ, ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ವೈಯಕ್ತಿಕ ಮಾಹಿತಿಯನ್ನು ನಮ್ಮ ಸರ್ವರ್‌ಗಳಲ್ಲಿ ಸುರಕ್ಷಿತವಾಗಿ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ. ನಿಮ್ಮ ಆಡಿಯೋ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು ಮತ್ತು ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್‌ಗಳನ್ನು ಮೂರನೇ ವ್ಯಕ್ತಿಯ AI ಸೇವೆಗಳಿಂದ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ (ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಷನ್‌ಗಾಗಿ Deepgram ಮತ್ತು ವಿಶ್ಲೇಷಣೆಗಾಗಿ OpenAI ಸೇರಿದಂತೆ) AI-ಚಾಲಿತ ಒಳನೋಟಗಳನ್ನು ಒದಗಿಸಲು ಮತ್ತು ಎಲ್ಲಾ ಅಪ್ಲಿಕೇಶನ್ ವೈಶಿಷ್ಟ್ಯಗಳನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಲು.';
 
   @override
-  String get tasksEmptyStateMessage => 'ಕಾರ್ಯವನ್ನು ರಚಿಸಲು ಸಂಭಾಷಣೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ.';
+  String get tasksEmptyStateMessage => 'ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.';
 
   @override
   String get clearChatAction => 'ಚ್ಯಾಟ್ ತೀಕ್ಷ್ಣ ಮಾಡಿ';
@@ -13647,6 +13647,25 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get voiceProfileCardDismissed => 'ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.';
+
+  @override
+  String get homeNewRecordingButton => 'ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್';
+
+  @override
+  String get chatWelcomeMessage =>
+      'ನಮಸ್ಕಾರ, ನಾನು Omi. ನೀವು ಮಾತನಾಡಿದ ಯಾವುದರ ಬಗ್ಗೆಯೂ ಕೇಳಿ: ಯಾರು ಏನು ಹೇಳಿದರು, ನೀವು ಏನು ಭರವಸೆ ನೀಡಿದ್ದೀರಿ ಅಥವಾ ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ. ನಾನು ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಬಹುದು ಮತ್ತು ನಿಮಗಾಗಿ ವಿಷಯಗಳನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದು.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'ನಿಮ್ಮ ದಿನದ ಬಗ್ಗೆ Omi ಅನ್ನು ಕೇಳಿ';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi ಮೂಲಕ ಒಂದು ಸಂಭಾಷಣೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ';
+
+  @override
+  String get onboardingStarterTaskCheck => 'ಮುಗಿಸಲು ಈ ಕಾರ್ಯವನ್ನು ಟಿಕ್ ಮಾಡಿ';
 
   @override
   String get homePendingTitle => 'ಸಂಭಾಷಣೆಗಳು ಬರುತ್ತಿವೆ';

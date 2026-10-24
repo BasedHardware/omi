@@ -9324,7 +9324,7 @@ abstract class AppLocalizations {
   /// Guidance on the empty Tasks tab: start a conversation to create a task.
   ///
   /// In en, this message translates to:
-  /// **'Start a conversation to create a task.'**
+  /// **'To-dos from your conversations will show up here.'**
   String get tasksEmptyStateMessage;
 
   /// Menu item text for clearing chat history
@@ -24206,6 +24206,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Tap to fix'**
   String get onboardingPermissionTapToFix;
+
+  /// Toast after dismissing the Teach Omi your voice card on Home; points to Settings > Voice Profile.
+  ///
+  /// In en, this message translates to:
+  /// **'You can set up Voice Profile anytime in Settings.'**
+  String get voiceProfileCardDismissed;
+
+  /// Label on Home's main bottom button that starts a new recording with the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'New Recording'**
+  String get homeNewRecordingButton;
+
+  /// First message Omi shows in an empty chat the first time it is opened, explaining what chat can do
+  ///
+  /// In en, this message translates to:
+  /// **'Hi, I\'m Omi. Ask me anything you\'ve talked about: what someone said, what you promised, or a summary of your day. I can also add to-dos and remember things for you.'**
+  String get chatWelcomeMessage;
+
+  /// Starter task added to an empty task list after onboarding: try chatting with Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi about your day'**
+  String get onboardingStarterTaskAsk;
+
+  /// Starter task added to an empty task list after onboarding: try recording
+  ///
+  /// In en, this message translates to:
+  /// **'Record a conversation with Omi'**
+  String get onboardingStarterTaskRecord;
+
+  /// Starter task added to an empty task list after onboarding: shows how completing a task works
+  ///
+  /// In en, this message translates to:
+  /// **'Check this off to finish a task'**
+  String get onboardingStarterTaskCheck;
 
   /// Home row title while recordings are still turning into conversations
   ///

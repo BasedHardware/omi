@@ -4907,7 +4907,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.';
 
   @override
-  String get tasksEmptyStateMessage => 'Start a conversation to create a task.';
+  String get tasksEmptyStateMessage => 'To-dos from your conversations will show up here.';
 
   @override
   String get clearChatAction => 'Clear Chat';
@@ -13592,6 +13592,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tap to fix';
+
+  @override
+  String get voiceProfileCardDismissed => 'You can set up Voice Profile anytime in Settings.';
+
+  @override
+  String get homeNewRecordingButton => 'New Recording';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hi, I\'m Omi. Ask me anything you\'ve talked about: what someone said, what you promised, or a summary of your day. I can also add to-dos and remember things for you.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Ask Omi about your day';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Record a conversation with Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Check this off to finish a task';
 
   @override
   String get homePendingTitle => 'Conversations on the way';

@@ -1,6 +1,7 @@
 import 'package:omi/pages/phone_calls/phone_calls_feature.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'package:provider/provider.dart';
 
@@ -8,8 +9,12 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/capture/connect.dart';
+import 'package:omi/pages/conversations/live_capture_summary.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
+import 'package:omi/pages/home/widgets/home_capture_sheet.dart';
 import 'package:omi/pages/home/device.dart';
+import 'package:omi/pages/home/widgets/home_bottom_controls.dart';
+import 'package:omi/pages/home/widgets/grow_route.dart';
 import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -35,8 +40,6 @@ const EdgeInsets _pillTargetMargin = EdgeInsets.symmetric(vertical: (kMinTapTarg
 
 /// Battery at or below this shows a low-battery glyph and a warning colour, not just a dot.
 const int kLowBatteryPercent = 20;
-
-const _stopGlyphRadius = BorderRadius.all(Radius.circular(4)); // omi-ux-allow: radius-literal -- a glyph
 
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
@@ -185,15 +188,13 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                 children: [
                   // The asset is white; tint it so it shows on the light pill too.
                   Image.asset(Assets.images.logoTransparent.path, width: 16, height: 16, color: OmiColors.textPrimary),
-                  // Home has room for the word; the other tabs keep the logo alone (it still has a
-                  // spoken label).
-                  if (isMemoriesPage) ...[
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(label,
-                          maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.caption.copyWith(fontSize: 12)),
-                    ),
-                  ],
+                  // The word stays on every page (the logo alone reads as a loading spinner); it gives
+                  // way with an ellipsis so the header fits narrow screens and large text.
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(label,
+                        maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.caption.copyWith(fontSize: 12)),
+                  ),
                 ],
               );
             }
@@ -259,10 +260,13 @@ class _DevicePill extends StatelessWidget {
   }
 }
 
-/// Circular phone-mic record button shown to the right of the home chat bar.
-/// Tap starts/stops recording; long-press opens the record options sheet (phone call). The options
-/// are announced as the long-press action, and a one-time tip points them out after the first
-/// recording.
+/// Home's main bottom control, a light pill beside Ask Omi:
+/// - "+ New" starts a recording with the phone, and the live transcript grows out of the pill;
+/// - "Stop" while the phone records (its status is the card at the top of Home);
+/// - with a device connected, the device itself: its picture, what it is doing and its battery.
+///   Tap opens what it is capturing; hold offers the phone instead.
+/// Long-press on "New" opens the record options sheet (phone call) when calls are offered, and a
+/// one-time tip points that out after the first recording.
 class HomeRecordButton extends StatefulWidget {
   const HomeRecordButton({super.key});
 
@@ -272,6 +276,17 @@ class HomeRecordButton extends StatefulWidget {
 
 class _HomeRecordButtonState extends State<HomeRecordButton> {
   static const _optionsTipKey = 'v2/homeRecordOptionsTipShown';
+
+  /// Finishing takes a moment (the last audio is flushed): the pill says so at once.
+  bool _stopping = false;
+
+  /// The phone recording is this pill's own: live, paused, or reconnecting to transcription.
+  static bool _phoneOwnsCapture(CaptureProvider capture) {
+    final state = capture.recordingState;
+    return state == RecordingState.record ||
+        capture.isPhoneMicPaused ||
+        (state == RecordingState.interrupted && capture.liveCaptureSource == 'phone');
+  }
 
   void _showRecordOptions(BuildContext context) {
     OmiHaptics.light();
@@ -359,10 +374,16 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
   Future<void> _startPhoneRecording(BuildContext context) async {
     final captureProvider = context.read<CaptureProvider>();
     OmiHaptics.medium();
-    if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
+    if (_phoneOwnsCapture(captureProvider)) {
       // The phone recording is this button's own: finish it (processed, except Transcribe Later,
       // whose local file is finalized on stop), then any pendant it paused resumes.
-      await captureProvider.finishCapture();
+      if (_stopping) return;
+      setState(() => _stopping = true);
+      try {
+        await captureProvider.finishCapture();
+      } finally {
+        if (mounted) setState(() => _stopping = false);
+      }
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
       if (context.mounted) _maybeShowOptionsTip(context);
       return;
@@ -391,105 +412,246 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
       }
       return;
     }
-    if (context.mounted) {
-      routeToPage(context,
-          LiveEpisodePage(topConversationId: captureProvider.topConversationId, initialTab: LiveEpisodeTab.transcript));
+    if (context.mounted) _openTranscript(context);
+  }
+
+  /// The pendant capture the pill last showed, so a pendant that drops mid-capture reads as
+  /// Disconnected instead of the pill going back to New. The controller forgets the device on
+  /// disconnect, so "was capturing" is remembered here and cleared when it reconnects, is unpaired,
+  /// or another source takes over.
+  String? _droppedSource;
+
+  bool _trackPendantDrop(CaptureProvider capture, {required bool connected, required bool paired}) {
+    final source = capture.liveCaptureSource;
+    if (source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled) {
+      _droppedSource = source;
+      return false;
     }
+    if (source != null || connected || !paired) {
+      _droppedSource = null;
+      return false;
+    }
+    return _droppedSource != null;
+  }
+
+  /// The status the pill shows: the state and its short detail ("Recording · Audio saved…").
+  static String _pillStatus(LiveCaptureSummary summary) {
+    final detail = summary.copy.detail;
+    if (detail == null || detail.isEmpty) return summary.copy.status;
+    return '${summary.copy.status} · $detail';
+  }
+
+  Future<void> _resume(BuildContext context) async {
+    OmiHaptics.medium();
+    try {
+      await context.read<CaptureProvider>().resumeCapture();
+      PlatformManager.instance.analytics.phoneMicRecordingStarted();
+    } catch (_) {
+      if (context.mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    }
+  }
+
+  /// Everything the old Home card said and offered, on demand: why (when something needs a look),
+  /// the capture's own controls (Pause/Resume, Transcribe Later's New recording and Stop, retrying
+  /// transcription), and the way to the live transcript.
+  void _showCaptureSheet(BuildContext context, LiveCaptureSummary? summary) {
+    final l10n = context.l10n;
+    final capture = context.read<CaptureProvider>();
+    final phoneLive = _phoneOwnsCapture(capture) && !capture.isPhoneMicBatchRecording;
+    showOmiSheet<void>(
+      context: context,
+      title: summary?.copy.status ?? l10n.listening,
+      builder: (sheetContext) => HomeCaptureSheet(
+        explanation: summary?.copy.explanation,
+        onOpenTranscript: summary != null && !summary.batch
+            ? () {
+                Navigator.pop(sheetContext);
+                if (context.mounted) _openTranscript(context);
+              }
+            : null,
+        onStop: phoneLive
+            ? () {
+                Navigator.pop(sheetContext);
+                // Only ever finishes: the recording may have ended while the sheet was open, and
+                // the record toggle would then start a new one.
+                if (context.mounted && _phoneOwnsCapture(context.read<CaptureProvider>())) {
+                  _startPhoneRecording(context);
+                }
+              }
+            : null,
+      ),
+    );
+  }
+
+  void _showDroppedSheet(BuildContext context) {
+    showOmiSheet<void>(
+      context: context,
+      title: context.l10n.disconnected,
+      builder: (sheetContext) => HomeCaptureSheet(
+        explanation: context.l10n.capturePendantDisconnectedDetail,
+        showCard: false,
+        // The pendant may be gone for a while: recording with the phone stays one tap away.
+        onRecordWithPhone: () {
+          Navigator.pop(sheetContext);
+          if (context.mounted) _startPhoneRecording(context);
+        },
+      ),
+    );
+  }
+
+  final GlobalKey _pillKey = GlobalKey();
+
+  /// The live transcript, grown out of this pill.
+  void _openTranscript(BuildContext context) {
+    final capture = context.read<CaptureProvider>();
+    pushGrowingFrom<void>(
+      context,
+      from: _pillKey,
+      page: LiveEpisodePage(topConversationId: capture.topConversationId, initialTab: LiveEpisodeTab.transcript),
+    );
+  }
+
+  /// The capturing pendant's pill: its live transcript, or the call while an Omi call owns it.
+  void _openDevice(BuildContext context) {
+    OmiHaptics.selection();
+    if (_callInProgress(context)) {
+      routeToPage(context, const ActiveCallPage());
+      return;
+    }
+    final capture = context.read<CaptureProvider>();
+    PlatformManager.instance.analytics.liveTranscriptCardClicked(
+      hasSegments: capture.segments.isNotEmpty,
+      hasPhotos: capture.photos.isNotEmpty,
+      segmentCount: capture.segments.length,
+      photoCount: capture.photos.length,
+    );
+    _openTranscript(context);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CaptureProvider>(
-      builder: (context, captureProvider, _) {
-        // The phone recording is this button's own (live or paused); anything else is idle here.
-        final isRecording = captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused;
-        final isInitialising = captureProvider.recordingState == RecordingState.initialising;
-        // The options sheet only adds a phone call; with calls hidden there is nothing else to offer.
-        final canShowOptions = PhoneCallsFeature.visible && !isRecording && !isInitialising;
-        final l10n = context.l10n;
-        final circle = Semantics(
-          button: true,
-          label: isRecording ? l10n.stopRecording : l10n.startRecording,
-          enabled: !isInitialising,
-          // The child's gestures are excluded below, so the actions (tap, and long-press for the
-          // record options) are declared here where assistive tech can reach them.
-          onTap: isInitialising ? null : () => _startRecording(context),
-          onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
-          onLongPressHint: canShowOptions ? l10n.moreOptions : null,
-          excludeSemantics: true,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _startRecording(context),
-            onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
-            // "Record with this phone": a neutral circle with a white dot, a stop square while the
-            // phone records. The ⌄ badge opens the other ways to record.
-            child: Container(
-              width: 62,
-              height: 62,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: OmiColors.surface1,
-                shape: BoxShape.circle,
-                border: Border.all(color: OmiColors.border, width: 1),
+    final l10n = context.l10n;
+    final capture = context.watch<CaptureProvider>();
+    final device = context.select<DeviceProvider, BtDevice?>((d) => d.connectedDevice);
+    final starting = capture.recordingState == RecordingState.initialising;
+    // The pendant stands in for "New" only while it is capturing live; connected but idle (or
+    // saving for Transcribe Later), the phone is still one tap away and the header shows the device.
+    final pendantCapturing = device != null && _pendantHasCapture(capture);
+    // A phone recording that is starting already looks live, so the pill changes the moment it is
+    // tapped instead of after the microphone is up (Home shows no separate card meanwhile).
+    final phoneRecording = _phoneOwnsCapture(capture) || (starting && !pendantCapturing);
+    // The options sheet only adds a phone call; with calls hidden there is nothing else to offer.
+    final canShowOptions = PhoneCallsFeature.visible && !phoneRecording && !starting;
+
+    // What is recording and how it is going: the same summary the details sheet shows.
+    final summary = summarizeLiveCapture(l10n, capture);
+    final paired = context.select<DeviceProvider, BtDevice?>((d) => d.pairedDevice);
+    final pendantConnecting = context.select<DeviceProvider, bool>((d) => d.isConnecting);
+    final dropped = _trackPendantDrop(capture, connected: device != null, paired: paired != null);
+    final pendantBatch = summary != null && summary.batch && !summary.isPhone;
+
+    final Widget pill;
+    if (phoneRecording) {
+      void stop() => _startRecording(context);
+      final batch = capture.isPhoneMicBatchRecording;
+      final resumable = summary != null && summary.readerPaused && !batch;
+      final status = summary == null ? l10n.listening : _pillStatus(summary);
+      final healthy = summary == null || summary.healthy;
+      pill = HomeControlSurface(
+        key: const ValueKey('home_record_pill_stop'),
+        semanticsLabel: status,
+        semanticsHint: healthy ? l10n.liveTranscript : l10n.moreOptions,
+        semanticsActions: _stopping ? null : {CustomSemanticsAction(label: l10n.stopRecording): stop},
+        // While the microphone is still starting, the transcript opens by itself when it is up.
+        onTap: _stopping || starting
+            ? null
+            : () {
+                OmiHaptics.selection();
+                healthy ? _openTranscript(context) : _showCaptureSheet(context, summary);
+              },
+        child: HomeLivePillContent(
+          status: status,
+          lastLine: batch ? null : capture.segments.lastOrNull?.text,
+          live: summary == null || summary.tone == CaptureTone.live,
+          attention: summary?.tone == CaptureTone.attention,
+          stopping: _stopping,
+          onStop: stop,
+          onResume: resumable ? () => _resume(context) : null,
+        ),
+      );
+    } else if ((pendantCapturing || pendantBatch) && !starting && summary != null) {
+      final shown = device ?? paired;
+      final status = _pillStatus(summary);
+      final open = summary.healthy ? () => _openDevice(context) : () => _showCaptureSheet(context, summary);
+      pill = HomeControlSurface(
+        key: const ValueKey('home_record_pill_device'),
+        semanticsLabel: shown == null ? status : '${shown.name}, $status',
+        semanticsHint: summary.healthy ? l10n.liveTranscript : l10n.moreOptions,
+        onTap: () {
+          OmiHaptics.selection();
+          open();
+        },
+        // Holding it offers the phone instead (or a call), as tapping record used to.
+        onLongPress: pendantCapturing ? () => _showPendantListening(context) : null,
+        longPressHint: pendantCapturing ? l10n.moreOptions : null,
+        child: shown == null
+            ? HomeLivePillContent(
+                status: status,
+                live: summary.tone == CaptureTone.live,
+                attention: summary.tone == CaptureTone.attention,
+                onStop: null,
+              )
+            : HomeDevicePillContent(
+                device: shown,
+                status: status,
+                live: summary.tone == CaptureTone.live,
+                attention: summary.tone == CaptureTone.attention,
+                lastLine: summary.batch ? null : capture.segments.lastOrNull?.text,
               ),
-              child: isRecording
-                  ? Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(
-                        color: OmiColors.textPrimary,
-                        borderRadius: _stopGlyphRadius,
-                      ),
-                    )
-                  : isInitialising
-                      ? const OmiSpinner(size: OmiSpinnerSize.small)
-                      : Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
-                        ),
-            ),
-          ),
-        );
-        // The badge is its own control (and its own accessibility node) beside the circle's.
-        return SizedBox(
-          width: 62,
-          height: 62,
-          child: Stack(clipBehavior: Clip.none, children: [
-            circle,
-            if (canShowOptions)
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Semantics(
-                  button: true,
-                  label: l10n.moreWaysToRecord,
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _showRecordOptions(context),
-                    // A 30pt hit area around the 22pt badge, inside the button's 62pt box (a Stack
-                    // does not hit-test outside its bounds, and 44pt would cover the circle's
-                    // centre). Screen readers also get the options as the circle's long-press action.
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Container(
-                        width: 22,
-                        height: 22,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          color: OmiColors.surface3,
-                          shape: BoxShape.circle,
-                          border: Border.all(color: OmiColors.surface0, width: 2),
-                        ),
-                        child: Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textPrimary),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-          ]),
-        );
-      },
+      );
+    } else if (dropped && paired != null) {
+      // The pendant dropped mid-capture: say so here (it reconnects on its own) instead of a card.
+      final status =
+          '${l10n.disconnected} · ${pendantConnecting ? l10n.reconnecting : l10n.capturePendantDisconnectedShort}';
+      pill = HomeControlSurface(
+        key: const ValueKey('home_record_pill_dropped'),
+        semanticsLabel: '${paired.name}, $status',
+        semanticsHint: l10n.moreOptions,
+        onTap: () {
+          OmiHaptics.selection();
+          _showDroppedSheet(context);
+        },
+        // Holding it records with the phone instead, as + New would.
+        onLongPress: () => _startPhoneRecording(context),
+        longPressHint: l10n.recordWith,
+        child: HomeDevicePillContent(device: paired, status: status, live: false, attention: true),
+      );
+    } else {
+      pill = HomeControlSurface(
+        key: const ValueKey('home_record_pill_new'),
+        semanticsLabel: l10n.newRecording,
+        onTap: starting ? null : () => _startRecording(context),
+        onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
+        longPressHint: l10n.moreWaysToRecord,
+        child: HomeNewPillContent(starting: starting),
+      );
+    }
+
+    return KeyedSubtree(
+      key: _pillKey,
+      child: AnimatedSwitcher(
+        duration: OmiMotion.of(context).standard,
+        switchInCurve: Curves.easeOut,
+        switchOutCurve: Curves.easeIn,
+        // Cross-fade with a slight rise, so a change of state reads as the same control updating.
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(scale: Tween(begin: 0.98, end: 1.0).animate(animation), child: child),
+        ),
+        layoutBuilder: (current, previous) =>
+            Stack(alignment: Alignment.center, children: [...previous, if (current != null) current]),
+        child: pill,
+      ),
     );
   }
 }

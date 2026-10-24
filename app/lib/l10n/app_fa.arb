@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "برای ایجاد یک کار، گفتگو را شروع کنید.",
+    "tasksEmptyStateMessage": "کارهای گفتگوهای شما اینجا نمایش داده می‌شوند.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11593,6 +11593,12 @@
     "onboardingOmiNotOrdered": "هنوز سفارش نداده‌ام",
     "onboardingOmiOrdered": "سفارش داده‌ام",
     "onboardingPermissionTapToFix": "برای رفع ضربه بزنید",
+    "voiceProfileCardDismissed": "هر زمان می‌توانید نمایه صدا را در تنظیمات راه‌اندازی کنید.",
+    "homeNewRecordingButton": "ضبط جدید",
+    "chatWelcomeMessage": "سلام، من Omi هستم. هر چیزی درباره صحبت‌هایت بپرس: اینکه کسی چه گفت، چه قولی دادی یا خلاصه‌ای از روزت. می‌توانم کار هم اضافه کنم و چیزها را برایت به خاطر بسپارم.",
+    "onboardingStarterTaskAsk": "از Omi درباره روزت بپرس",
+    "onboardingStarterTaskRecord": "یک گفتگو را با Omi ضبط کن",
+    "onboardingStarterTaskCheck": "این کار را تیک بزن تا تمام شود",
     "homePendingTitle": "گفتگوها در راه است",
     "homePendingCatchingUp": "در حال پردازش صدای قبلی",
     "onTheWayTitle": "در راه",

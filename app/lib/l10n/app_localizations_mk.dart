@@ -4932,7 +4932,7 @@ class AppLocalizationsMk extends AppLocalizations {
       'Со продолжување, вашите разговори, снимки и лични информации ќе бидат безбедно зачувани на нашите сервери. Вашите аудио снимки и транскрипти се обработуваат од AI услуги на трети страни (вклучувајќи Deepgram за транскрипција и OpenAI за анализа) за да ви обезбедат увиди базирани на AI и да ги овозможат сите функции на апликацијата.';
 
   @override
-  String get tasksEmptyStateMessage => 'Започнете разговор за да создадете задача.';
+  String get tasksEmptyStateMessage => 'Задачите од вашите разговори ќе се појават тука.';
 
   @override
   String get clearChatAction => 'Очисти разговор';
@@ -13669,6 +13669,25 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Допрете за да поправите';
+
+  @override
+  String get voiceProfileCardDismissed => 'Гласовниот профил можете да го поставите во секое време во Поставки.';
+
+  @override
+  String get homeNewRecordingButton => 'Ново снимање';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Здраво, јас сум Omi. Прашај ме било што за она за што си зборувал: што рекол некој, што си ветил или резиме на твојот ден. Можам и да додавам задачи и да паметам работи за тебе.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Прашај го Omi за твојот ден';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Сними разговор со Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Штиклирај ја оваа задача за да ја завршиш';
 
   @override
   String get homePendingTitle => 'Разговори на пат';

@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "ಕಾರ್ಯವನ್ನು ರಚಿಸಲು ಸಂಭಾಷಣೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ.",
+    "tasksEmptyStateMessage": "ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11593,6 +11593,12 @@
     "onboardingOmiNotOrdered": "ಇನ್ನೂ ಆರ್ಡರ್ ಮಾಡಿಲ್ಲ",
     "onboardingOmiOrdered": "ನಾನು ಆರ್ಡರ್ ಮಾಡಿದ್ದೇನೆ",
     "onboardingPermissionTapToFix": "ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "voiceProfileCardDismissed": "ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಧ್ವನಿ ಪ್ರೊಫೈಲ್ ಹೊಂದಿಸಬಹುದು.",
+    "homeNewRecordingButton": "ಹೊಸ ರೆಕಾರ್ಡಿಂಗ್",
+    "chatWelcomeMessage": "ನಮಸ್ಕಾರ, ನಾನು Omi. ನೀವು ಮಾತನಾಡಿದ ಯಾವುದರ ಬಗ್ಗೆಯೂ ಕೇಳಿ: ಯಾರು ಏನು ಹೇಳಿದರು, ನೀವು ಏನು ಭರವಸೆ ನೀಡಿದ್ದೀರಿ ಅಥವಾ ನಿಮ್ಮ ದಿನದ ಸಾರಾಂಶ. ನಾನು ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಬಹುದು ಮತ್ತು ನಿಮಗಾಗಿ ವಿಷಯಗಳನ್ನು ನೆನಪಿಟ್ಟುಕೊಳ್ಳಬಹುದು.",
+    "onboardingStarterTaskAsk": "ನಿಮ್ಮ ದಿನದ ಬಗ್ಗೆ Omi ಅನ್ನು ಕೇಳಿ",
+    "onboardingStarterTaskRecord": "Omi ಮೂಲಕ ಒಂದು ಸಂಭಾಷಣೆಯನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಿ",
+    "onboardingStarterTaskCheck": "ಮುಗಿಸಲು ಈ ಕಾರ್ಯವನ್ನು ಟಿಕ್ ಮಾಡಿ",
     "homePendingTitle": "ಸಂಭಾಷಣೆಗಳು ಬರುತ್ತಿವೆ",
     "homePendingCatchingUp": "ಹಿಂದಿನ ಆಡಿಯೊವನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ",
     "onTheWayTitle": "ದಾರಿಯಲ್ಲಿದೆ",

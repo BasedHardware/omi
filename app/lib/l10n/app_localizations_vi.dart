@@ -4918,7 +4918,7 @@ class AppLocalizationsVi extends AppLocalizations {
       'Bằng cách tiếp tục, các cuộc trò chuyện, bản ghi âm và thông tin cá nhân của bạn sẽ được lưu trữ an toàn trên máy chủ của chúng tôi. Bản ghi âm và bản phiên âm của bạn được xử lý bởi các dịch vụ AI bên thứ ba (bao gồm Deepgram cho phiên âm và OpenAI cho phân tích) để cung cấp cho bạn thông tin chi tiết được hỗ trợ bởi AI và kích hoạt tất cả các tính năng ứng dụng.';
 
   @override
-  String get tasksEmptyStateMessage => 'Bắt đầu cuộc trò chuyện để tạo nhiệm vụ.';
+  String get tasksEmptyStateMessage => 'Việc cần làm từ các cuộc trò chuyện của bạn sẽ hiện ở đây.';
 
   @override
   String get clearChatAction => 'Xóa cuộc trò chuyện';
@@ -13605,6 +13605,25 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Nhấn để khắc phục';
+
+  @override
+  String get voiceProfileCardDismissed => 'Bạn có thể thiết lập Hồ sơ giọng nói bất cứ lúc nào trong Cài đặt.';
+
+  @override
+  String get homeNewRecordingButton => 'Ghi âm mới';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Chào bạn, mình là Omi. Hỏi mình bất cứ điều gì bạn đã nói: ai đã nói gì, bạn đã hứa gì hay tóm tắt ngày của bạn. Mình cũng có thể thêm việc cần làm và ghi nhớ mọi thứ giúp bạn.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Hỏi Omi về ngày của bạn';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Ghi âm một cuộc trò chuyện với Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Đánh dấu việc này để hoàn thành';
 
   @override
   String get homePendingTitle => 'Cuộc trò chuyện đang đến';

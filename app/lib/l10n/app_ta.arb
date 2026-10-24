@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "ஒரு பணியை உருவாக்க உரையாடலைத் தொடங்குங்கள்.",
+    "tasksEmptyStateMessage": "உங்கள் உரையாடல்களில் உள்ள பணிகள் இங்கே தோன்றும்.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11593,6 +11593,12 @@
     "onboardingOmiNotOrdered": "இன்னும் ஆர்டர் செய்யவில்லை",
     "onboardingOmiOrdered": "நான் ஆர்டர் செய்துவிட்டேன்",
     "onboardingPermissionTapToFix": "சரிசெய்ய தட்டவும்",
+    "voiceProfileCardDismissed": "அமைப்புகளில் எப்போது வேண்டுமானாலும் குரல் சுயவிவரத்தை அமைக்கலாம்.",
+    "homeNewRecordingButton": "புதிய பதிவு",
+    "chatWelcomeMessage": "வணக்கம், நான் Omi. நீங்கள் பேசிய எதைப் பற்றியும் கேளுங்கள்: யார் என்ன சொன்னார்கள், நீங்கள் என்ன வாக்குறுதி அளித்தீர்கள் அல்லது உங்கள் நாளின் சுருக்கம். பணிகளைச் சேர்க்கவும் உங்களுக்காக விஷயங்களை நினைவில் வைக்கவும் என்னால் முடியும்.",
+    "onboardingStarterTaskAsk": "உங்கள் நாளைப் பற்றி Omi-யிடம் கேளுங்கள்",
+    "onboardingStarterTaskRecord": "Omi மூலம் ஒரு உரையாடலைப் பதிவுசெய்யுங்கள்",
+    "onboardingStarterTaskCheck": "முடிக்க இந்தப் பணியைக் குறியிடுங்கள்",
     "homePendingTitle": "உரையாடல்கள் வருகின்றன",
     "homePendingCatchingUp": "முந்தைய ஆடியோ செயலாக்கப்படுகிறது",
     "onTheWayTitle": "வழியில்",

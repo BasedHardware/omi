@@ -4920,7 +4920,7 @@ class AppLocalizationsBe extends AppLocalizations {
       'Працягваючы, вашы размовы, запісы і асабістая інфармацыя будуць надзейна захоўвацца на нашых серверах. Вашы аўдыязапісы і транскрыпцыі апрацоўваюцца староннімі сэрвісамі ШІ (уключаючы Deepgram для транскрыпцыі і OpenAI для аналізу), каб забяспечыць вас аналітыкай на аснове ШІ і ўключыць усе функцыі праграмы.';
 
   @override
-  String get tasksEmptyStateMessage => 'Пачніце размову, каб стварыць задачу.';
+  String get tasksEmptyStateMessage => 'Справы з вашых размоў з\'явяцца тут.';
 
   @override
   String get clearChatAction => 'Очыстіць Чат';
@@ -13642,6 +13642,25 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Націсніце, каб выправіць';
+
+  @override
+  String get voiceProfileCardDismissed => 'Профіль голасу заўсёды можна наладзіць у Наладах.';
+
+  @override
+  String get homeNewRecordingButton => 'Новы запіс';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Прывітанне, я Omi. Пытайцеся пра ўсё, пра што вы размаўлялі: што хтосьці сказаў, што вы паабяцалі, ці як прайшоў ваш дзень. Я таксама магу дадаваць задачы і запамінаць рэчы за вас.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Спытайце Omi пра свой дзень';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Запішыце размову з Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Адзначце гэтую задачу, каб завяршыць яе';
 
   @override
   String get homePendingTitle => 'Размовы ў дарозе';

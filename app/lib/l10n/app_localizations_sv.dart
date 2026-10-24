@@ -4911,7 +4911,7 @@ class AppLocalizationsSv extends AppLocalizations {
       'Genom att fortsätta kommer dina konversationer, inspelningar och personlig information att lagras säkert på våra servrar. Dina ljudinspelningar och transkriptioner behandlas av AI-tjänster från tredje part (inklusive Deepgram för transkription och OpenAI för analys) för att ge dig AI-drivna insikter och aktivera alla appfunktioner.';
 
   @override
-  String get tasksEmptyStateMessage => 'Starta ett samtal för att skapa en uppgift.';
+  String get tasksEmptyStateMessage => 'Att göra från dina samtal visas här.';
 
   @override
   String get clearChatAction => 'Rensa chatt';
@@ -13613,6 +13613,25 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Tryck för att åtgärda';
+
+  @override
+  String get voiceProfileCardDismissed => 'Du kan ställa in din röstprofil när som helst i Inställningar.';
+
+  @override
+  String get homeNewRecordingButton => 'Ny inspelning';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hej, jag är Omi. Fråga mig om allt du har pratat om: vad någon sa, vad du lovade eller en sammanfattning av din dag. Jag kan också lägga till uppgifter och komma ihåg saker åt dig.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Fråga Omi om din dag';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Spela in ett samtal med Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Bocka av den här uppgiften för att slutföra den';
 
   @override
   String get homePendingTitle => 'Samtal på väg';

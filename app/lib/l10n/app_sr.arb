@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Започните разговор да бисте направили задатак.",
+    "tasksEmptyStateMessage": "Задаци из ваших разговора појавиће се овде.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11593,6 +11593,12 @@
     "onboardingOmiNotOrdered": "Још нисам наручио/ла",
     "onboardingOmiOrdered": "Наручио/ла сам га",
     "onboardingPermissionTapToFix": "Додирните да поправите",
+    "voiceProfileCardDismissed": "Гласовни профил можете подесити било када у Подешавањима.",
+    "homeNewRecordingButton": "Ново снимање",
+    "chatWelcomeMessage": "Zdravo, ja sam Omi. Pitaj me bilo šta o čemu si pričao: šta je neko rekao, šta si obećao ili rezime tvog dana. Mogu i da dodajem zadatke i pamtim stvari za tebe.",
+    "onboardingStarterTaskAsk": "Pitaj Omi o svom danu",
+    "onboardingStarterTaskRecord": "Snimi razgovor uz Omi",
+    "onboardingStarterTaskCheck": "Označi ovaj zadatak da ga završiš",
     "homePendingTitle": "Разговори стижу",
     "homePendingCatchingUp": "Обрађујемо ранији звук",
     "onTheWayTitle": "На путу",

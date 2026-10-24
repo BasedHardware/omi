@@ -35,6 +35,7 @@ import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/ui/ui.dart';
@@ -361,9 +362,14 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     if (mounted) setState(() {});
   }
 
+  void _onHomeRedesign() {
+    if (mounted) setState(() {});
+  }
+
   @override
   void initState() {
     super.initState();
+    HomeRedesign.listenable.addListener(_onHomeRedesign);
     _scheduleDayRollover();
     _pendingWork.addListener(_onPendingWorkChanged);
     unawaited(_pendingWork.refresh());
@@ -470,6 +476,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
   @override
   void dispose() {
+    HomeRedesign.listenable.removeListener(_onHomeRedesign);
     _pendingWork.removeListener(_onPendingWorkChanged);
     _dayTimer?.cancel();
     for (final timer in _deferred) {
@@ -560,6 +567,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   Widget build(BuildContext context) {
     Logger.debug('building conversations page');
     super.build(context);
+    // home-redesign experiment: the redesigned Home, or today's (control).
+    final redesign = HomeRedesign.on;
     // Episodes on: a streaming capture is the live episode's row in Today, not a card above the recaps.
     final episodes = context.watch<EpisodeProvider?>();
     final episodesOn = episodes?.enabled == true;
@@ -632,22 +641,27 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             ? _withProcessingRows(withLive, snapshot.processingConversations, DateTime.now())
             : withLive;
 
+        Future<void> refresh() async {
+          _lastLoadMoreRequestKey = null;
+          unawaited(_pendingWork.refresh());
+          if (context.read<EpisodeProvider?>() case final episodes?) unawaited(episodes.refreshLive());
+          Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
+          await Future.wait([
+            convoProvider.getInitialConversations(),
+            Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
+            if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
+            // Review's entry hides when caught up; a pull is how a hidden one comes back.
+            if (Provider.of<ReviewProvider?>(context, listen: false) case final review?
+                when review.availability != ReviewAvailability.off)
+              review.load(),
+          ]);
+        }
+
         return RefreshIndicator(
+          notificationPredicate: redesign ? OmiRefreshControl.materialPredicate : defaultScrollNotificationPredicate,
           onRefresh: () async {
             HapticFeedback.mediumImpact();
-            _lastLoadMoreRequestKey = null;
-            unawaited(_pendingWork.refresh());
-            if (context.read<EpisodeProvider?>() case final episodes?) unawaited(episodes.refreshLive());
-            Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
-            await Future.wait([
-              convoProvider.getInitialConversations(),
-              Provider.of<LocalRecordingsProvider>(context, listen: false).refresh(),
-              if (_recapsKey.currentState != null) _recapsKey.currentState!.refresh(),
-              // Review's entry hides when caught up; a pull is how a hidden one comes back.
-              if (Provider.of<ReviewProvider?>(context, listen: false) case final review?
-                  when review.availability != ReviewAvailability.off)
-                review.load(),
-            ]);
+            await refresh();
           },
           color: OmiColors.onAccent,
           backgroundColor: OmiColors.accent,
@@ -655,10 +669,12 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              if (redesign && OmiRefreshControl.supported) OmiRefreshControl(onRefresh: refresh),
               // The live capture row: recording, a call, or a conversation being captured. With episodes
               // on, a streaming capture is the live episode row in Today instead.
               SliverToBoxAdapter(
-                  child: ConversationCaptureWidget(showsCall: true, deferStreamingToEpisode: episodeLive)),
+                  child: ConversationCaptureWidget(
+                      showsCall: true, deviceStatusInBottomBar: redesign, deferStreamingToEpisode: episodeLive)),
               const SliverToBoxAdapter(child: CaptureContinuityDogfoodBanner()),
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),

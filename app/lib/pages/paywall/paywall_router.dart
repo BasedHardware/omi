@@ -61,6 +61,22 @@ abstract final class PaywallRouter {
     return true;
   }
 
+  /// Control's side of a placement only variants have (the end of first-run onboarding): nothing
+  /// is shown, but an eligible control reader is exposed at the same moment a variant reader would
+  /// see a paywall, so both arms enter the experiment at the same point. True when exposed.
+  static bool exposeControl(
+    BuildContext context, {
+    required PaywallExperimentConfig config,
+    bool Function(String key, String variant)? record,
+  }) {
+    if (!config.isControl) return false;
+    final usage = context.read<UsageProvider>();
+    if (!usage.showSubscriptionUI) return false;
+    if (usage.subscription?.subscription.plan.isPaid == true) return false;
+    PaywallExperiment.recordExposure(config, record: record);
+    return true;
+  }
+
   static PaywallVariantShownVariant variantWire(PaywallVariant variant) => switch (variant) {
         PaywallVariant.control => PaywallVariantShownVariant.control,
         PaywallVariant.outline => PaywallVariantShownVariant.outline,

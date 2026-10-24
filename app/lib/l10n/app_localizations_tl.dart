@@ -4950,7 +4950,7 @@ class AppLocalizationsTl extends AppLocalizations {
       'Sa pagpapatuloy, ang iyong mga pag-uusap, recording, at personal na impormasyon ay ligtas na maiimbak sa aming mga server. Ang iyong mga audio recording at transcript ay pinoproseso ng third-party na mga serbisyo ng AI (kabilang ang Deepgram para sa transcription at OpenAI para sa analysis) upang mabigyan ka ng AI-powered na mga insight at ma-enable ang lahat ng feature ng app.';
 
   @override
-  String get tasksEmptyStateMessage => 'Magsimula ng pag-uusap para gumawa ng gawain.';
+  String get tasksEmptyStateMessage => 'Lalabas dito ang mga gagawin mula sa iyong mga usapan.';
 
   @override
   String get clearChatAction => 'Burahin ang Chat';
@@ -13713,6 +13713,25 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'I-tap para ayusin';
+
+  @override
+  String get voiceProfileCardDismissed => 'Maaari mong i-set up ang Voice Profile anumang oras sa Settings.';
+
+  @override
+  String get homeNewRecordingButton => 'Bagong Recording';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Tanungin si Omi tungkol sa araw mo';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Mag-record ng usapan gamit ang Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Lagyan ng tsek ang gawaing ito para matapos';
 
   @override
   String get homePendingTitle => 'Paparating na ang mga usapan';

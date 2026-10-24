@@ -4915,7 +4915,7 @@ class AppLocalizationsBn extends AppLocalizations {
       'চালিয়ে যাওয়ার মাধ্যমে, আপনার কথোপকথন, রেকর্ডিং এবং ব্যক্তিগত তথ্য আমাদের সার্ভারে নিরাপদে সংরক্ষণ করা হবে। আপনার অডিও রেকর্ডিং এবং ট্রান্সক্রিপ্ট তৃতীয় পক্ষের AI পরিষেবা দ্বারা প্রক্রিয়া করা হয় (ট্রান্সক্রিপশনের জন্য Deepgram এবং বিশ্লেষণের জন্য OpenAI সহ) যাতে আপনাকে AI-চালিত অন্তর্দৃষ্টি প্রদান করা যায় এবং সমস্ত অ্যাপ বৈশিষ্ট্য সক্ষম করা যায়।';
 
   @override
-  String get tasksEmptyStateMessage => 'একটি কাজ তৈরি করতে কথোপকথন শুরু করুন।';
+  String get tasksEmptyStateMessage => 'আপনার কথোপকথনের করণীয়গুলো এখানে দেখা যাবে।';
 
   @override
   String get clearChatAction => 'চ্যাট সাফ করুন';
@@ -13605,6 +13605,25 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'ঠিক করতে ট্যাপ করুন';
+
+  @override
+  String get voiceProfileCardDismissed => 'সেটিংসে যেকোনো সময় ভয়েস প্রোফাইল সেট করতে পারেন।';
+
+  @override
+  String get homeNewRecordingButton => 'নতুন রেকর্ডিং';
+
+  @override
+  String get chatWelcomeMessage =>
+      'হাই, আমি Omi। আপনি যা নিয়ে কথা বলেছেন তার যেকোনো কিছু জিজ্ঞেস করুন: কেউ কী বলেছে, আপনি কী প্রতিশ্রুতি দিয়েছেন, বা আপনার দিনের সারাংশ। আমি কাজ যোগ করতে এবং আপনার জন্য জিনিস মনে রাখতেও পারি।';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omi-কে আপনার দিন সম্পর্কে জিজ্ঞেস করুন';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omi দিয়ে একটি কথোপকথন রেকর্ড করুন';
+
+  @override
+  String get onboardingStarterTaskCheck => 'শেষ করতে এই কাজটিতে টিক দিন';
 
   @override
   String get homePendingTitle => 'কথোপকথন আসছে';

@@ -4909,7 +4909,7 @@ class AppLocalizationsLt extends AppLocalizations {
       'Tęsdami, jūsų pokalbiai, įrašai ir asmeninė informacija bus saugiai saugomi mūsų serveriuose. Jūsų garso įrašai ir transkripcijos apdorojami trečiųjų šalių AI paslaugų (įskaitant Deepgram transkripcijai ir OpenAI analizei), kad suteiktų jums AI paremtas įžvalgas ir įgalintų visas programėlės funkcijas.';
 
   @override
-  String get tasksEmptyStateMessage => 'Pradėkite pokalbį, kad sukurtumėte užduotį.';
+  String get tasksEmptyStateMessage => 'Užduotys iš jūsų pokalbių bus rodomos čia.';
 
   @override
   String get clearChatAction => 'Išvalyti pokalbį';
@@ -13632,6 +13632,25 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Bakstelėkite, kad pataisytumėte';
+
+  @override
+  String get voiceProfileCardDismissed => 'Balso profilį galite nustatyti bet kada nustatymuose.';
+
+  @override
+  String get homeNewRecordingButton => 'Naujas įrašas';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Labas, aš Omi. Klausk manęs apie bet ką, apie ką kalbėjai: ką kas nors pasakė, ką pažadėjai ar tavo dienos santrauką. Taip pat galiu pridėti užduočių ir prisiminti dalykus už tave.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Paklausk Omi apie savo dieną';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Įrašyk pokalbį su Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Pažymėk šią užduotį kaip atliktą';
 
   @override
   String get homePendingTitle => 'Pokalbiai pakeliui';

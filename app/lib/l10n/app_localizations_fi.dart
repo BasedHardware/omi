@@ -4910,7 +4910,7 @@ class AppLocalizationsFi extends AppLocalizations {
       'Jatkamalla keskustelusi, tallenteet ja henkilötietosi tallennetaan turvallisesti palvelimillemme. Äänitallenteitasi ja transkriptioitasi käsittelevät kolmannen osapuolen tekoälypalvelut (mukaan lukien Deepgram transkriptiota ja OpenAI analyysiä varten) tarjotaksemme sinulle tekoälypohjaisia oivalluksia ja mahdollistaaksemme kaikki sovelluksen ominaisuudet.';
 
   @override
-  String get tasksEmptyStateMessage => 'Aloita keskustelu luodaksesi tehtävän.';
+  String get tasksEmptyStateMessage => 'Keskusteluistasi poimitut tehtävät näkyvät täällä.';
 
   @override
   String get clearChatAction => 'Tyhjennä keskustelu';
@@ -13612,6 +13612,25 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Korjaa napauttamalla';
+
+  @override
+  String get voiceProfileCardDismissed => 'Voit määrittää ääniprofiilin milloin tahansa asetuksissa.';
+
+  @override
+  String get homeNewRecordingButton => 'Uusi tallennus';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hei, olen Omi. Kysy minulta mitä tahansa siitä, mistä olet puhunut: mitä joku sanoi, mitä lupasit tai yhteenveto päivästäsi. Voin myös lisätä tehtäviä ja muistaa asioita puolestasi.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Kysy Omilta päivästäsi';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Tallenna keskustelu Omilla';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Merkitse tämä tehtävä tehdyksi';
 
   @override
   String get homePendingTitle => 'Keskusteluja tulossa';

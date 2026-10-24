@@ -4828,7 +4828,7 @@ class AppLocalizationsJa extends AppLocalizations {
       '続行することで、会話、録音、個人情報は安全に当社のサーバーに保存されます。音声録音と文字起こしは、サードパーティのAIサービス（文字起こし用のDeepgramと分析用のOpenAIを含む）によって処理され、AI駆動のインサイトを提供し、すべてのアプリ機能を有効にします。';
 
   @override
-  String get tasksEmptyStateMessage => '会話を始めてタスクを作成しましょう。';
+  String get tasksEmptyStateMessage => '会話から見つかったToDoがここに表示されます。';
 
   @override
   String get clearChatAction => 'チャットを消去';
@@ -13417,6 +13417,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'タップして修正';
+
+  @override
+  String get voiceProfileCardDismissed => 'ボイスプロフィールは設定からいつでも設定できます。';
+
+  @override
+  String get homeNewRecordingButton => '新規録音';
+
+  @override
+  String get chatWelcomeMessage => 'こんにちは、Omiです。話した内容なら何でも聞いてください。誰が何を言ったか、何を約束したか、一日のまとめなど。タスクの追加や、覚えておくこともできます。';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Omiに今日のことを聞いてみる';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Omiで会話を録音する';
+
+  @override
+  String get onboardingStarterTaskCheck => 'このタスクにチェックして完了する';
 
   @override
   String get homePendingTitle => '会話を準備中';

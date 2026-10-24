@@ -1000,6 +1000,11 @@ class SharedPreferencesUtil {
 
   set hasSpeakerProfile(bool value) => saveBool('hasSpeakerProfile', value);
 
+  /// The reader closed Home's "Teach Omi your voice" card; Settings > Voice Profile still has it.
+  bool get voiceProfileCardDismissed => getBool('voiceProfileCardDismissed');
+
+  set voiceProfileCardDismissed(bool value) => saveBool('voiceProfileCardDismissed', value);
+
   bool get showDiscardedMemories => getBool('showDiscardedMemories', defaultValue: false);
 
   set showDiscardedMemories(bool value) => saveBool('showDiscardedMemories', value);

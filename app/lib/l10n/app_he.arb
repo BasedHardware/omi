@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "התחילו שיחה כדי ליצור משימה.",
+    "tasksEmptyStateMessage": "משימות מהשיחות שלך יופיעו כאן.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11593,6 +11593,12 @@
     "onboardingOmiNotOrdered": "עוד לא הזמנתי",
     "onboardingOmiOrdered": "הזמנתי",
     "onboardingPermissionTapToFix": "הקישו לתיקון",
+    "voiceProfileCardDismissed": "אפשר להגדיר פרופיל קולי בכל עת בהגדרות.",
+    "homeNewRecordingButton": "הקלטה חדשה",
+    "chatWelcomeMessage": "היי, אני Omi. שאל אותי כל דבר על מה שדיברת: מה מישהו אמר, מה הבטחת או סיכום של היום שלך. אני יכול גם להוסיף משימות ולזכור דברים בשבילך.",
+    "onboardingStarterTaskAsk": "שאל את Omi על היום שלך",
+    "onboardingStarterTaskRecord": "הקלט שיחה עם Omi",
+    "onboardingStarterTaskCheck": "סמן משימה זו כדי לסיים אותה",
     "homePendingTitle": "שיחות בדרך",
     "homePendingCatchingUp": "משלימים אודיו קודם",
     "onTheWayTitle": "בדרך",

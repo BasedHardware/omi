@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
@@ -17,7 +18,8 @@ class NoConversationsHero extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(bottom: 120),
       child: OmiEmptyState(
-        icon: Icons.forum_rounded,
+        // home-redesign: text only; today's Home keeps the icon.
+        icon: HomeRedesign.on ? null : Icons.forum_rounded,
         title: context.l10n.noConversationsYet,
         titleLayoutReference: context.l10n.noTasksYet,
         message: message,
@@ -47,7 +49,7 @@ class EmptyConversationsWidget extends StatelessWidget {
                   title: l10n.noStarredConversations,
                   message: l10n.starConversationHint,
                 )
-              : OmiEmptyState(icon: Icons.forum_rounded, title: l10n.noConversationsYet),
+              : OmiEmptyState(icon: HomeRedesign.on ? null : Icons.forum_rounded, title: l10n.noConversationsYet),
     );
   }
 }

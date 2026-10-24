@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Magsimula ng pag-uusap para gumawa ng gawain.",
+    "tasksEmptyStateMessage": "Lalabas dito ang mga gagawin mula sa iyong mga usapan.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11593,6 +11593,12 @@
     "onboardingOmiNotOrdered": "Hindi pa naka-order",
     "onboardingOmiOrdered": "Na-order ko na",
     "onboardingPermissionTapToFix": "I-tap para ayusin",
+    "voiceProfileCardDismissed": "Maaari mong i-set up ang Voice Profile anumang oras sa Settings.",
+    "homeNewRecordingButton": "Bagong Recording",
+    "chatWelcomeMessage": "Hi, ako si Omi. Itanong mo sa akin ang kahit ano tungkol sa mga napag-usapan mo: ang sinabi ng isang tao, ang ipinangako mo, o buod ng araw mo. Kaya ko ring magdagdag ng mga gawain at tandaan ang mga bagay para sa iyo.",
+    "onboardingStarterTaskAsk": "Tanungin si Omi tungkol sa araw mo",
+    "onboardingStarterTaskRecord": "Mag-record ng usapan gamit ang Omi",
+    "onboardingStarterTaskCheck": "Lagyan ng tsek ang gawaing ito para matapos",
     "homePendingTitle": "Paparating na ang mga usapan",
     "homePendingCatchingUp": "Hinahabol ang naunang audio",
     "onTheWayTitle": "Paparating",

@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "ٹاسک بنانے کے لیے گفتگو شروع کریں۔",
+    "tasksEmptyStateMessage": "آپ کی گفتگو سے کام یہاں ظاہر ہوں گے۔",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11593,6 +11593,12 @@
     "onboardingOmiNotOrdered": "ابھی آرڈر نہیں کیا",
     "onboardingOmiOrdered": "میں نے آرڈر کر دیا ہے",
     "onboardingPermissionTapToFix": "ٹھیک کرنے کے لیے ٹیپ کریں",
+    "voiceProfileCardDismissed": "آپ کسی بھی وقت سیٹنگز میں وائس پروفائل سیٹ کر سکتے ہیں۔",
+    "homeNewRecordingButton": "نئی ریکارڈنگ",
+    "chatWelcomeMessage": "ہیلو، میں Omi ہوں۔ آپ نے جس بارے میں بات کی، اس کے بارے میں کچھ بھی پوچھیں: کسی نے کیا کہا، آپ نے کیا وعدہ کیا یا آپ کے دن کا خلاصہ۔ میں کام بھی شامل کر سکتا ہوں اور آپ کے لیے باتیں یاد بھی رکھ سکتا ہوں۔",
+    "onboardingStarterTaskAsk": "Omi سے اپنے دن کے بارے میں پوچھیں",
+    "onboardingStarterTaskRecord": "Omi کے ساتھ ایک گفتگو ریکارڈ کریں",
+    "onboardingStarterTaskCheck": "مکمل کرنے کے لیے اس کام پر نشان لگائیں",
     "homePendingTitle": "گفتگوئیں آ رہی ہیں",
     "homePendingCatchingUp": "پچھلی آڈیو پر کارروائی ہو رہی ہے",
     "onTheWayTitle": "راستے میں",

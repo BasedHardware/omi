@@ -15,6 +15,14 @@ void main() {
   });
 
   group('parse', () {
+    test('control carries the onboarding placement from its payload', () {
+      final config = PaywallExperiment.parse(variant: 'control', payload: '{"onboarding_paywall": true}');
+      expect(config.isControl, isTrue);
+      expect(config.onboardingPaywall, isTrue);
+      expect(PaywallExperiment.parse(variant: 'control', payload: {'url': 'https://x.example'}),
+          PaywallExperimentConfig.control);
+    });
+
     test('control, null and unknown variants are control', () {
       expect(PaywallExperiment.parse(variant: 'control'), PaywallExperimentConfig.control);
       expect(PaywallExperiment.parse(variant: null), PaywallExperimentConfig.control);
@@ -76,18 +84,21 @@ void main() {
       expect(payloadReads, ['paywall-variant']);
     });
 
-    test('control skips the payload read', () async {
-      var payloadReads = 0;
-      final config = await PaywallExperiment.resolve(
+    test('control reads its payload for the onboarding placement', () async {
+      final plain = await PaywallExperiment.resolve(
         identity: () => 'u',
         readVariant: (_) async => 'control',
-        readPayload: (_) async {
-          payloadReads++;
-          return null;
-        },
+        readPayload: (_) async => null,
       );
-      expect(config, PaywallExperimentConfig.control);
-      expect(payloadReads, 0);
+      expect(plain, PaywallExperimentConfig.control);
+      PaywallExperiment.resetForTesting();
+      final placed = await PaywallExperiment.resolve(
+        identity: () => 'u',
+        readVariant: (_) async => 'control',
+        readPayload: (_) async => {'onboarding_paywall': true},
+      );
+      expect(placed.isControl, isTrue);
+      expect(placed.onboardingPaywall, isTrue);
     });
 
     test('an unresolved read is control but not cached', () async {

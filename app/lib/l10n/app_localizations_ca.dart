@@ -4938,7 +4938,7 @@ class AppLocalizationsCa extends AppLocalizations {
       'Continuant, les vostres converses, enregistraments i informació personal s\'emmagatzemaran de manera segura als nostres servidors. Els vostres enregistraments d\'àudio i transcripcions són processats per serveis d\'IA de tercers (incloent Deepgram per a la transcripció i OpenAI per a l\'anàlisi) per proporcionar-vos informació impulsada per IA i habilitar totes les funcions de l\'aplicació.';
 
   @override
-  String get tasksEmptyStateMessage => 'Inicia una conversa per crear una tasca.';
+  String get tasksEmptyStateMessage => 'Les tasques de les teves converses apareixeran aquí.';
 
   @override
   String get clearChatAction => 'Esborrar el xat';
@@ -13677,6 +13677,25 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Toca per solucionar-ho';
+
+  @override
+  String get voiceProfileCardDismissed => 'Pots configurar el perfil de veu quan vulguis a Configuració.';
+
+  @override
+  String get homeNewRecordingButton => 'Nova gravació';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Hola, soc l\'Omi. Pregunta\'m qualsevol cosa del que has parlat: què va dir algú, què vas prometre o un resum del teu dia. També puc afegir tasques i recordar coses per tu.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Pregunta a l\'Omi pel teu dia';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Grava una conversa amb l\'Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Marca aquesta tasca per completar-la';
 
   @override
   String get homePendingTitle => 'Converses en camí';

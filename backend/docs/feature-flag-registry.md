@@ -109,6 +109,7 @@ entries are exempt: they are queued for removal, not running.
 | --- | --- | --- | --- | --- |
 | `DAY3_REENGAGEMENT_EMAIL_ENABLED` | undecided | dazheng | [backend/docs/experiments/EXP-001-day3-reengagement.md](../../backend/docs/experiments/EXP-001-day3-reengagement.md) | 2026-10-30 |
 | `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | undecided | dazheng | [backend/utils/conversations/EPISODE_EVIDENCE.md](../../backend/utils/conversations/EPISODE_EVIDENCE.md) | 2026-11-05 |
+| `home-redesign` | undecided | yinka | [product/experiments/home-redesign.md](../../product/experiments/home-redesign.md) | 2026-11-14 |
 | `onboarding-variant` | undecided | nik | [product/experiments/onboarding-variant.md](../../product/experiments/onboarding-variant.md) | 2026-11-13 |
 | `paywall-variant` | undecided | nik | [product/experiments/paywall-variant.md](../../product/experiments/paywall-variant.md) | 2026-11-12 |
 
@@ -132,6 +133,7 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `DAY3_REENGAGEMENT_EMAIL_ENABLED` | Send randomized day-three re-engagement email | backend | env | closed | declared | false | true | — | kill_after_readout | undecided | 2026-10-30 | dazheng |
 | `MEETING_NOTES_EPISODE_CLAIMS_ENABLED` | Generate optional episode claim bindings, default off; visible provenance rules remain | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-05 | dazheng |
+| `home-redesign` | Mobile Home redesign A/B: test shows the redesigned Home from #21711 (one recording pill with no card above the list, condensing processing row, text-only empty states, pull-to-refresh, page actions beside the switcher, locked rows that upgrade in place, Tasks fold, chat welcome, starter to-dos); control, an unread flag or an unknown variant show today's Home. Client-evaluated; the arm is saved per account and never switches a Home already on screen | mobile | posthog | closed | — | — | — | expected (exposure) | pending | undecided | 2026-11-14 | yinka |
 | `onboarding-variant` | Mobile first-run onboarding A/B/C/D after sign-in and consent: control (native steps unchanged) / reid (device-first onboarding rendered from a web page, OTA; payload names it) / yinka (onboarding ending in a first conversation, PR #21445, native) / pocket (Pocket's order and trial mechanics, native). Client-evaluated multivariate flag; an unread flag, an unknown variant or a reid payload without an https URL is control; the page never owns completion | mobile | posthog | closed | — | — | — | expected (exposure) | pending | undecided | 2026-11-13 | nik |
 | `paywall-variant` | Mobile paywall A/B test: control (current PlansSheet) / outline (PR #21412 soft paywall, native) / web (webview paywall whose page is the variant) / trial (native free-trial paywall shown once right after sign-up, Stripe checkout with trial_days). Client-evaluated multivariate flag; control collapses to the shipped sheet, paid readers and App Review builds never see a variant | mobile | posthog | closed | — | — | — | expected (exposure) | pending | undecided | 2026-11-12 | nik |
 

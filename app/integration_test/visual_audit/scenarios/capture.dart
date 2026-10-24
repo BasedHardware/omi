@@ -1,7 +1,7 @@
 // Home's capture surfaces where the app really draws them: the live card at the top of Home, the
-// record button to the right of the floating Ask Omi bar, the device chip in the header,
-// the sheets they open, and the live page. The frame mirrors HomePage's layout; its Ask Omi bar
-// is a copy of HomePage._buildChatBar (private there).
+// record pill beside the Ask Omi button at the bottom ("+ New", "Stop", or the capturing pendant),
+// the device chip in the header, the sheets they open, and the live page. The frame mirrors
+// HomePage's layout.
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -20,7 +20,9 @@ import 'package:omi/pages/activity/activity_page.dart';
 import 'package:omi/pages/activity/activity_seen.dart';
 import 'package:omi/pages/episodes/live_episode_page.dart';
 import 'package:omi/pages/home/home_content.dart';
+import 'package:omi/pages/action_items/widgets/tasks_more_menu.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
+import 'package:omi/pages/home/widgets/home_bottom_controls.dart';
 import 'package:omi/pages/home/widgets/home_daily_recaps.dart';
 import 'package:omi/pages/home/widgets/home_tab_switcher.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -237,7 +239,18 @@ class HomeFrame extends StatelessWidget {
       ),
       body: Stack(children: [
         Column(children: [
-          HomeTabSwitcher(onTabTap: (_, __) {}),
+          // The selected page's one action beside the switcher, as HomePage draws it.
+          HomeTabSwitcher(
+            onTabTap: (_, __) {},
+            trailing: tasks != null
+                ? const TasksMoreMenu()
+                : OmiIconButton(
+                    icon: const FaIcon(FontAwesomeIcons.calendar, size: 18),
+                    label: 'Filter by date',
+                    color: OmiColors.textSecondary,
+                    onPressed: () {},
+                  ),
+          ),
           Expanded(child: tasks ?? HomeContentPage(loadRecaps: recaps)),
         ]),
         if (tasks == null) const HomeChatBarBackdrop(),
@@ -246,19 +259,15 @@ class HomeFrame extends StatelessWidget {
             left: 16,
             right: 16,
             bottom: homeChatBarOffset(context),
-            child: const Row(children: [Expanded(child: _AskOmiBar()), SizedBox(width: 10), HomeRecordButton()]),
+            child: Row(children: [
+              HomeChatButton(onTap: () {}, onLongPress: () {}),
+              const SizedBox(width: 10),
+              const Expanded(child: HomeRecordButton()),
+            ]),
           ),
       ]),
     );
   }
-}
-
-/// Copy of HomePage._buildChatBar's look.
-class _AskOmiBar extends StatelessWidget {
-  const _AskOmiBar();
-
-  @override
-  Widget build(BuildContext context) => const HomeAskAnythingButton();
 }
 
 Future<void> _runHome(
@@ -466,11 +475,11 @@ final captureScenarios = <AuditScenario>[
   ),
   AuditScenario(
     id: 'home-capture-pendant-tap',
-    title: 'Tap the record button while the pendant records',
+    title: 'Hold the pendant pill while the pendant records',
     page: _home,
-    state: 'The pendant streams; the record button is tapped',
+    state: 'The pendant streams; its pill (in place of + New) is held',
     run: (a) => _runHome(a, AuditLive.pendant,
-        pendantConnected: true, tap: find.byType(HomeRecordButton), action: 'Tap the record button'),
+        pendantConnected: true, longPress: find.byType(HomeRecordButton), action: 'Hold the pendant pill'),
   ),
   AuditScenario(
     id: 'home-capture-phone-after-pendant',
@@ -497,9 +506,9 @@ final captureScenarios = <AuditScenario>[
     id: 'home-capture-options',
     title: 'Other ways to record',
     page: _home,
-    state: 'Nothing recording; the record button is held (the ⌄ badge opens the same sheet)',
+    state: 'Nothing recording; + New is held',
     run: (a) async {
-      await _runHome(a, AuditLive.idle, longPress: find.byType(HomeRecordButton), action: 'Hold the record button');
+      await _runHome(a, AuditLive.idle, longPress: find.byType(HomeRecordButton), action: 'Hold + New');
     },
   ),
   AuditScenario(

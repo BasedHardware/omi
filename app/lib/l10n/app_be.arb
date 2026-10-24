@@ -5787,7 +5787,7 @@
     "@consentDataMessage": {
         "description": "Consent message explaining how user data will be stored and used"
     },
-    "tasksEmptyStateMessage": "Пачніце размову, каб стварыць задачу.",
+    "tasksEmptyStateMessage": "Справы з вашых размоў з'явяцца тут.",
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
@@ -11593,6 +11593,12 @@
     "onboardingOmiNotOrdered": "Яшчэ не замовіў",
     "onboardingOmiOrdered": "Я ўжо замовіў",
     "onboardingPermissionTapToFix": "Націсніце, каб выправіць",
+    "voiceProfileCardDismissed": "Профіль голасу заўсёды можна наладзіць у Наладах.",
+    "homeNewRecordingButton": "Новы запіс",
+    "chatWelcomeMessage": "Прывітанне, я Omi. Пытайцеся пра ўсё, пра што вы размаўлялі: што хтосьці сказаў, што вы паабяцалі, ці як прайшоў ваш дзень. Я таксама магу дадаваць задачы і запамінаць рэчы за вас.",
+    "onboardingStarterTaskAsk": "Спытайце Omi пра свой дзень",
+    "onboardingStarterTaskRecord": "Запішыце размову з Omi",
+    "onboardingStarterTaskCheck": "Адзначце гэтую задачу, каб завяршыць яе",
     "homePendingTitle": "Размовы ў дарозе",
     "homePendingCatchingUp": "Апрацоўваем ранейшае аўдыя",
     "onTheWayTitle": "У дарозе",

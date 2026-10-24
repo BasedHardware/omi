@@ -1,3 +1,4 @@
+import 'package:omi/services/experiments/home_redesign.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -21,11 +22,29 @@ import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/photos_grid.dart';
 import 'package:omi/widgets/transcript.dart';
 
-class SpeechProfileCardWidget extends StatelessWidget {
+/// "Teach Omi your voice" on Home, for readers who have no voice profile yet (onboarding no longer
+/// records one). Closing it hides it for good and points to Settings > Voice Profile.
+class SpeechProfileCardWidget extends StatefulWidget {
   const SpeechProfileCardWidget({super.key});
 
   @override
+  State<SpeechProfileCardWidget> createState() => _SpeechProfileCardWidgetState();
+}
+
+class _SpeechProfileCardWidgetState extends State<SpeechProfileCardWidget> {
+  bool _dismissed = SharedPreferencesUtil().voiceProfileCardDismissed;
+
+  void _dismiss() {
+    OmiHaptics.light();
+    PlatformManager.instance.analytics.track('Voice Profile Card Dismissed');
+    SharedPreferencesUtil().voiceProfileCardDismissed = true;
+    setState(() => _dismissed = true);
+    OmiFeedback.info(context, context.l10n.voiceProfileCardDismissed);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_dismissed && HomeRedesign.on) return const SizedBox();
     return Consumer<HomeProvider>(
       builder: (context, provider, child) {
         if (provider.isLoading) return const SizedBox();
@@ -43,6 +62,8 @@ class SpeechProfileCardWidget extends StatelessWidget {
                     label: context.l10n.teachOmiYourVoice,
                     // A dot marks a setup step still to do.
                     badge: true,
+                    // home-redesign: closable; today's Home keeps it until a profile exists.
+                    onDismiss: HomeRedesign.on ? _dismiss : null,
                     onTap: () async {
                       PlatformManager.instance.analytics.pageOpened('Speech Profile Memories');
                       bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
@@ -65,44 +86,63 @@ class SpeechProfileCardWidget extends StatelessWidget {
 
 /// A tappable card row on the capture surfaces: icon, label, chevron; announced as a button.
 class _CardRow extends StatelessWidget {
-  const _CardRow({required this.icon, required this.label, required this.onTap, this.badge = false});
+  const _CardRow({required this.icon, required this.label, required this.onTap, this.badge = false, this.onDismiss});
 
   final IconData icon;
   final String label;
   final VoidCallback onTap;
   final bool badge;
 
+  /// Shows a close button in place of the chevron.
+  final VoidCallback? onDismiss;
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, 0),
-      child: Semantics(
-        button: true,
-        label: label,
-        excludeSemantics: true,
-        child: Material(
-          color: OmiColors.surface1,
-          borderRadius: OmiRadius.xlAll,
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              child: Row(
-                children: [
-                  Icon(icon, color: OmiColors.textPrimary),
-                  const SizedBox(width: OmiSpacing.md),
-                  Expanded(child: Text(label, style: OmiType.callout)),
-                  if (badge) ...[
-                    Icon(Icons.fiber_manual_record, color: OmiColors.danger, size: 10),
-                    const SizedBox(width: OmiSpacing.xs),
-                  ],
-                  Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
-                ],
-              ),
-            ),
+    final open = Semantics(
+      button: true,
+      label: label,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding:
+              EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, onDismiss == null ? OmiSpacing.md : 0, OmiSpacing.md),
+          child: Row(
+            children: [
+              Icon(icon, color: OmiColors.textPrimary),
+              const SizedBox(width: OmiSpacing.md),
+              Expanded(child: Text(label, style: OmiType.callout)),
+              if (badge) ...[
+                Icon(Icons.fiber_manual_record, color: OmiColors.danger, size: 10),
+                const SizedBox(width: OmiSpacing.xs),
+              ],
+              if (onDismiss == null) Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
+            ],
           ),
         ),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, 0),
+      child: Material(
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.xlAll,
+        clipBehavior: Clip.antiAlias,
+        child: onDismiss == null
+            ? open
+            : Row(
+                children: [
+                  Expanded(child: open),
+                  OmiIconButton(
+                    key: const ValueKey('voice_profile_card_dismiss'),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    label: context.l10n.dismiss,
+                    color: OmiColors.textSecondary,
+                    onPressed: onDismiss!,
+                  ),
+                  const SizedBox(width: OmiSpacing.xxs),
+                ],
+              ),
       ),
     );
   }

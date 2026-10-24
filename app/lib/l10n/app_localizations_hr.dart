@@ -4926,7 +4926,7 @@ class AppLocalizationsHr extends AppLocalizations {
       'Nastavljanjem, vaši razgovori, snimke i osobni podaci bit će sigurno pohranjeni na našim poslužiteljima. Vaši audio zapisi i transkripti obrađuju se od strane AI usluga trećih strana (uključujući Deepgram za transkripciju i OpenAI za analizu) kako bi vam pružili uvide pokretane umjetnom inteligencijom i omogućili sve značajke aplikacije.';
 
   @override
-  String get tasksEmptyStateMessage => 'Započnite razgovor da biste stvorili zadatak.';
+  String get tasksEmptyStateMessage => 'Zadaci iz vaših razgovora pojavit će se ovdje.';
 
   @override
   String get clearChatAction => 'Očisti razgovor';
@@ -13641,6 +13641,25 @@ class AppLocalizationsHr extends AppLocalizations {
 
   @override
   String get onboardingPermissionTapToFix => 'Dodirnite za popravak';
+
+  @override
+  String get voiceProfileCardDismissed => 'Glasovni profil možete postaviti bilo kada u Postavkama.';
+
+  @override
+  String get homeNewRecordingButton => 'Novo snimanje';
+
+  @override
+  String get chatWelcomeMessage =>
+      'Bok, ja sam Omi. Pitaj me bilo što o čemu si razgovarao: što je netko rekao, što si obećao ili sažetak tvog dana. Mogu i dodavati zadatke i pamtiti stvari za tebe.';
+
+  @override
+  String get onboardingStarterTaskAsk => 'Pitaj Omi o svom danu';
+
+  @override
+  String get onboardingStarterTaskRecord => 'Snimi razgovor uz Omi';
+
+  @override
+  String get onboardingStarterTaskCheck => 'Označi ovaj zadatak da ga završiš';
 
   @override
   String get homePendingTitle => 'Razgovori stižu';
