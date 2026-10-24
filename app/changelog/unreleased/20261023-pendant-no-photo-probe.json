@@ -1,0 +1,4 @@
+{
+  "kind": "none",
+  "reason": "Pendants stop logging photo-controller starts for a camera they do not have; the native transport already dropped the writes, so nothing changes for the user"
+}
