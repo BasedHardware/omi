@@ -329,8 +329,6 @@ def get_conversations_tool(
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 get_conversations_tool - got config from context variable")
 
     if cfg is None:
         logger.info(f"❌ get_conversations_tool - config is None")
@@ -353,16 +351,10 @@ def get_conversations_tool(
     # Coerce numeric arguments
     try:
         max_transcript_segments = int(max_transcript_segments)
-    except (TypeError, ValueError):
-        return f"Error: Invalid max_transcript_segments format: {max_transcript_segments}"
-    try:
         limit = int(limit)
-    except (TypeError, ValueError):
-        return f"Error: Invalid limit format: {limit}"
-    try:
         offset = int(offset)
-    except (TypeError, ValueError):
-        return f"Error: Invalid offset format: {offset}"
+    except (TypeError, ValueError) as e:
+        return f"Error: Invalid numeric parameter format: {e}"
 
     # Apply limits
     if max_transcript_segments != -1:
@@ -603,8 +595,6 @@ def search_conversations_tool(
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
-        if cfg:
-            logger.info(f"🔧 search_conversations_tool - got config from context variable")
 
     if cfg is None:
         logger.info(f"❌ search_conversations_tool - config is None")
@@ -635,12 +625,9 @@ def search_conversations_tool(
     # Coerce numeric arguments
     try:
         max_transcript_segments = int(max_transcript_segments)
-    except (TypeError, ValueError):
-        return f"Error: Invalid max_transcript_segments format: {max_transcript_segments}"
-    try:
         limit = int(limit)
-    except (TypeError, ValueError):
-        return f"Error: Invalid limit format: {limit}"
+    except (TypeError, ValueError) as e:
+        return f"Error: Invalid numeric parameter format: {e}"
 
     # Apply limits
     if max_transcript_segments != -1:
