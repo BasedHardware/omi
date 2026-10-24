@@ -1,6 +1,8 @@
 import sys
 from types import ModuleType
 
+import pytest
+
 from services import conversation_frame_evidence
 
 # Snapshot at collection: this file imports conversation_frame_evidence and
@@ -31,6 +33,36 @@ def test_conversation_frame_read_requires_owner_conversation_and_photo(monkeypat
 
     assert (payload, content_type) == (b"pixels", "image/webp")
     assert reads == [("uid-1", "permanent/uid/frame")]
+
+
+def test_conversation_frame_read_rejects_soft_deleted_tombstone(monkeypatch):
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db,
+        "get_conversation",
+        lambda uid, cid: {"id": cid, "deleted": True},
+    )
+    monkeypatch.setattr(
+        conversation_frame_evidence.conversations_db,
+        "get_conversation_photos",
+        lambda uid, cid: [{"id": "photo-1", "storage_id": "permanent/uid/frame", "content_type": "image/webp"}],
+    )
+    reads = []
+    monkeypatch.setattr(
+        conversation_frame_evidence,
+        "download_frame_request_pixels",
+        lambda uid, storage_id: reads.append((uid, storage_id)) or b"pixels",
+    )
+
+    with pytest.raises(KeyError, match="conversation frame not found"):
+        conversation_frame_evidence.read_conversation_frame("uid-1", "conv-1", "photo-1")
+
+    assert reads == []
+
+
+def test_conversation_frame_read_rejects_missing_conversation(monkeypatch):
+    monkeypatch.setattr(conversation_frame_evidence.conversations_db, "get_conversation", lambda uid, cid: None)
+    with pytest.raises(KeyError, match="conversation frame not found"):
+        conversation_frame_evidence.read_conversation_frame("uid-1", "conv-1", "photo-1")
 
 
 def test_conversation_frame_deletion_outboxes_before_metadata_and_retries_failed_pixels(monkeypatch):
