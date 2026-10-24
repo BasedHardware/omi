@@ -32,9 +32,9 @@ from utils.conversations.episode_runtime import process_with_episode_budget
 from utils.conversations.processing_trigger import is_recovery_trigger
 from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.smart_merge import (
-    _INCOMPLETE_CODES,
+    _INCOMPLETE_CODES,  # pyright: ignore[reportPrivateUsage] — the closed incomplete-code set this boundary must reuse, never re-declare
     SmartMergeIncomplete,
-    _incomplete_cause,
+    _incomplete_cause,  # pyright: ignore[reportPrivateUsage]
     smart_merge_step,
 )
 from utils.conversations.smart_merge_policy import is_donor
