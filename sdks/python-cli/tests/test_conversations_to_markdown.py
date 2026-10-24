@@ -280,6 +280,71 @@ class TestConversationsToMarkdown(unittest.TestCase):
             text = exported[0].read_text(encoding="utf-8")
             self.assertIn("hello  world", text)
 
+    def test_same_batch_collisions_with_overwrite_true_are_disambiguated(self):
+        """Conversations in the same batch with the same filename prefix must not overwrite each other."""
+        conv1 = {
+            "id": "12345678-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "started_at": "2026-09-17T10:00:00Z",
+            "structured": {"title": "Team Sync", "overview": "First note in batch"},
+        }
+        conv2 = {
+            "id": "12345678-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "started_at": "2026-09-17T10:00:00Z",
+            "structured": {"title": "Team Sync", "overview": "Second note in batch"},
+        }
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            out_dir = Path(tmp_dir)
+            # Write a pre-existing file on disk to ensure overwrite=True still replaces pre-existing disk file
+            preexisting_file = out_dir / "2026-09-17_team_sync_12345678.md"
+            preexisting_file.write_text("Old disk note from yesterday", encoding="utf-8")
+
+            exported = c2m.export_conversations([conv1, conv2], output_dir=out_dir, overwrite=True)
+
+            self.assertEqual(len(exported), 2)
+            self.assertEqual(len(set(exported)), 2)
+
+            file1 = out_dir / "2026-09-17_team_sync_12345678.md"
+            file2 = out_dir / "2026-09-17_team_sync_12345678_2.md"
+
+            self.assertTrue(file1.exists())
+            self.assertTrue(file2.exists())
+
+            content1 = file1.read_text(encoding="utf-8")
+            content2 = file2.read_text(encoding="utf-8")
+
+            self.assertIn("First note in batch", content1)
+            self.assertIn("Second note in batch", content2)
+            self.assertNotIn("Old disk note from yesterday", content1)
+
+    def test_non_string_category_and_boolean_speaker_and_multiline_transcript(self):
+        """Verify non-string category, bool speaker, and multiline transcript formatting."""
+        conv = {
+            "id": "conv-edge-cases",
+            "started_at": "2026-09-17T10:00:00Z",
+            "structured": {
+                "title": "Edge Case Note",
+                "category": 12345,  # Non-string integer category
+                "overview": "Overview test",
+            },
+            "transcript_segments": [
+                {"speaker": False, "text": "Line one\nLine two\nLine three", "start": 0.0},
+                {"speaker_name": "Alice", "text": "Hello world", "start": 5.0},
+                {"speaker_id": 0, "text": "Zero speaker id", "start": 10.0},
+            ],
+        }
+
+        md = c2m.conversation_to_markdown(conv)
+        self.assertIn('category: "12345"', md)
+        self.assertIn('**Category:** `12345`', md)
+
+        # Speaker False must not render as Speaker False
+        self.assertNotIn("Speaker False", md)
+        self.assertIn("> **[00:00] Speaker:** Line one Line two Line three", md)
+        self.assertIn("> **[00:05] Alice:** Hello world", md)
+        self.assertIn("> **[00:10] Speaker 0:** Zero speaker id", md)
+
 
 if __name__ == "__main__":
     unittest.main()
+
