@@ -105,6 +105,9 @@ class CanonicalTaskCreate(BaseModel):
 
     @model_validator(mode="after")
     def reconcile_legacy_completed(self):
+        self.description = self.description.strip()
+        if not self.description:
+            raise ValueError("description cannot be blank")
         if self.status is None:
             self.status = TaskStatus.completed if self.completed is True else TaskStatus.active
         expected_completed = self.status == TaskStatus.completed
