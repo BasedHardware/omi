@@ -77,7 +77,11 @@ def get_folder(folder_id: str, uid: str = Depends(auth.get_current_user_uid)):
     folder = folders_db.get_folder(uid, folder_id)
     if not folder:
         raise HTTPException(status_code=404, detail="Folder not found")
-    return folder
+    try:
+        return Folder.model_validate(folder)
+    except ValidationError as e:
+        logger.warning("Malformed folder doc %s for uid %s: %s", folder_id, uid, type(e).__name__)
+        raise HTTPException(status_code=404, detail="Folder not found") from e
 
 
 @router.patch('/v1/folders/{folder_id}', response_model=Folder, tags=['folders'])
