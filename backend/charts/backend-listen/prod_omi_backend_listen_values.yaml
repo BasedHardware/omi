@@ -17,6 +17,9 @@ image:
 gcpProjectId: based-hardware
 runtimeGcpProjectId: based-hardware
 
+# Reject key credentials even when supplied through protected private values.
+workloadIdentityOnly: true
+
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 imagePullSecrets: []
 # This is to override the chart name.
@@ -30,9 +33,9 @@ serviceAccount:
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
   # Annotations to add to the service account.
-  # Keyless runtime identity (Workload Identity) that replaces the nik-164
-  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
-  # present the JSON still wins. Shared by the listen canary deployments.
+  # Keyless runtime identity (Workload Identity), shared by listen canaries.
+  # Do not inject SERVICE_ACCOUNT_JSON or GOOGLE_APPLICATION_CREDENTIALS:
+  # they override ADC and can resurrect a revoked key on the next rollout.
   annotations:
     iam.gke.io/gcp-service-account: backend-listen-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
@@ -454,16 +457,6 @@ env:
     value: "true"
   - name: BUCKET_TEMPORAL_SYNC_LOCAL
     value: "syncing-local"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
   - name: OMI_CUSTOMER_DATA_PROJECT
     value: "based-hardware"
   - name: HOSTED_PUSHER_API_URL
@@ -576,7 +569,7 @@ env:
   - name: STT_ROUTING_REDIS_TIMEOUT_SECONDS
     value: "0.075"
   - name: STT_ROUTING_ON_PERCENT
-    value: "90"
+    value: "100"
   - name: STT_ROUTING_TARGETS_JSON
     value: ""
   - name: STT_ROUTING_DISRUPTION_GATE

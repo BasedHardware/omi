@@ -581,3 +581,49 @@ def test_tombstone_of_another_id_still_creates_and_appends():
     assert created and first['id'] == 'first'
     second, created, _ = intake(store, chunk('second', 1012))
     assert not created and second['id'] == 'first'
+
+
+def test_adapter_retires_sync_merge_donors_and_terminal_target(monkeypatch):
+    from database import conversations as db, conversation_quiet_checks as checks
+    from google.cloud import firestore
+
+    store = StrictFirestore()
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, '_delete_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    for cid, timestamp in [('a', 1000), ('b', 1240)]:
+        incoming = chunk(cid, timestamp)
+        incoming['data_protection_level'] = 'standard'
+        db.assign_sync_conversation('u', incoming, firestore_client=store)
+        store.rows[('conversation_finalization_jobs', checks.quiet_check_id('u', cid))] = {
+            'kind': 'listen_quiet_check',
+            'status': 'waiting_quiet',
+            'dispatch_generation': 1,
+            'reconcile_after_at': incoming['finished_at'],
+        }
+    bridge = chunk('bridge', 1120)
+    bridge['data_protection_level'] = 'standard'
+    result, _, _ = db.assign_sync_conversation('u', bridge, firestore_client=store)
+    donor_ids = result['sync_merged_from']
+    assert donor_ids
+    for cid in [result['id'], *donor_ids]:
+        job = store.rows[('conversation_finalization_jobs', checks.quiet_check_id('u', cid))]
+        assert job['status'] == 'quiet_done'
+        assert job['reconcile_after_at'] is firestore.DELETE_FIELD
+
+
+def test_adapter_preserves_live_sync_target_quiet_check(monkeypatch):
+    from database import conversations as db, conversation_quiet_checks as checks
+
+    store = StrictFirestore()
+    monkeypatch.setattr(db, '_sync_conversation_search_index', lambda *a: None)
+    monkeypatch.setattr(db, 'invalidate_people_stats_cache', lambda *a: None)
+    live = chunk('live', 1000)
+    live.update(status='in_progress', data_protection_level='standard')
+    store.rows[('users', 'u', 'conversations', 'live')] = live
+    job_path = ('conversation_finalization_jobs', checks.quiet_check_id('u', 'live'))
+    store.rows[job_path] = {'kind': 'listen_quiet_check', 'status': 'waiting_quiet', 'dispatch_generation': 1}
+    incoming = chunk('sync', 1060)
+    incoming['data_protection_level'] = 'standard'
+    db.assign_sync_conversation('u', incoming, target_id='live', firestore_client=store)
+    assert store.rows[job_path]['status'] == 'waiting_quiet'

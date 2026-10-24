@@ -27,6 +27,7 @@ LATENCY = {
 WINDOW = 900
 BLIND_LIMIT = 3
 REFUSAL_GATE_VERSION = 'same-hour-of-week-12-pod-v2'
+REFUSAL_ABSOLUTE_CEILING = 0.02
 FIRST_P95_FLOOR = 30
 FIRST_P95_BASELINE_FACTOR = 1.2
 FIRST_P95_MIN_SLOW_TEXTS = 4
@@ -88,7 +89,12 @@ def refusal_baseline_queries(namespace):
 
 
 def refusal_limit(values):
-    """None means unqualified evidence, never an implicit 2% fallback."""
+    """The same-hour-of-week relative limit, or None when that baseline is unqualified.
+
+    None is not a limit: evaluate substitutes REFUSAL_ABSOLUTE_CEILING rather
+    than blinding, so a coverage series younger than the 7d offset cannot roll
+    the floor back on blindness alone (2026-10-24 16:05Z, blind_runs=4).
+    """
     if not all(finite(values.get(k)) for k in refusal_baseline_queries('unused')):
         return None
     if not 0 <= values['refusal_baseline_fraction'] <= 1 or values['refusal_baseline_count'] < 20:
@@ -107,7 +113,7 @@ def refusal_limit(values):
         )
     ):
         return None
-    return max(0.02, values['refusal_baseline_fraction'] * 1.25 + 0.005)
+    return max(REFUSAL_ABSOLUTE_CEILING, values['refusal_baseline_fraction'] * 1.25 + 0.005)
 
 
 def first_p95_limit(values):
@@ -235,11 +241,14 @@ def evaluate(values):
     idle_nan = {'first_p95', 'post_p95', 'v2_p95', 'refusal_fraction'} if low and fresh else set()
     # The weekly first_p95 evidence (quantile + its sample count) is optional
     # (retention, metric age, sparse hour): its absence selects the fallback
-    # threshold instead of blinding the whole reading.
+    # threshold instead of blinding the whole reading. The weekly refusal
+    # baseline is optional the same way: missing or unqualified selects the
+    # absolute refusal ceiling below, never blindness.
+    optional_weekly = ('first_p95_baseline', 'first_count_baseline', *refusal_baseline_queries('unused'))
     blind = [
         f'missing_or_nonfinite_{k}'
         for k in queries('unused')
-        if k not in ('first_p95_baseline', 'first_count_baseline')
+        if k not in optional_weekly
         and not finite(values.get(k))
         and not (k in idle_nan and isinstance(values.get(k), float) and math.isnan(values[k]))
     ]
@@ -248,8 +257,15 @@ def evaluate(values):
         blind.append('dcgm_no_real_nonzero_value')
     trips = []
     refusal_threshold = refusal_limit(values)
+    refusal_mode = 'relative'
     if refusal_threshold is None:
-        blind.append('unqualified_refusal_baseline')
+        # An unqualified weekly baseline (coverage series younger than its 7d
+        # offset, sparse hour, missing series) left this guard BLIND on every
+        # run and rolled floor 8 back with zero refusals. Fail closed on the
+        # absolute ceiling instead; missing or stale CURRENT refusal data
+        # still blinds via the keys above.
+        refusal_threshold = REFUSAL_ABSOLUTE_CEILING
+        refusal_mode = 'absolute_fallback'
     if not low:
         trips += [k for k, limit in [('post_p95', 3), ('v2_p95', 3)] if finite(values.get(k)) and values[k] >= limit]
         # A 15-minute p95 over ~35-45 first texts is small-sample noise: one or
@@ -279,6 +295,7 @@ def evaluate(values):
         'blind': blind,
         'low_sample': low,
         'refusal_threshold': refusal_threshold,
+        'refusal_mode': refusal_mode,
         'first_p95_threshold': first_p95_limit(values),
     }
 

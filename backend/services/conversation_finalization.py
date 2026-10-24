@@ -13,7 +13,7 @@ import os
 import time
 from datetime import datetime, timedelta, timezone
 from functools import partial
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import as_completed
 from typing import Any
 
 from google.api_core.exceptions import InvalidArgument
@@ -24,7 +24,7 @@ from database import conversation_quiet_checks as quiet_checks_db
 from database._client import is_document_size_limit_error
 from services.conversation_selfheal import STALE_AFTER, run_selfheal_tick
 from utils.conversations import quiet_finalization
-from utils.executors import submit_with_context
+from utils.executors import quiet_replay_executor, submit_with_context
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
@@ -241,15 +241,39 @@ def reconcile_listen_finalization_jobs(
             for candidate in quiet_candidates:
                 result[_reconcile_quiet_candidate(candidate, firestore_client=firestore_client)] += 1
         else:
-            with ThreadPoolExecutor(
-                max_workers=min(concurrency, len(quiet_candidates)), thread_name_prefix='quiet-replay'
-            ) as pool:
-                futures = [
-                    submit_with_context(pool, _reconcile_quiet_candidate, candidate, firestore_client=firestore_client)
-                    for candidate in quiet_candidates
-                ]
+            # Keep at most concurrency submissions outstanding, rather than
+            # queueing the entire (up to 2000-row) page into the shared pool.
+            remaining = iter(quiet_candidates)
+            futures = set()
+            try:
+                for _ in range(min(concurrency, len(quiet_candidates))):
+                    futures.add(
+                        submit_with_context(
+                            quiet_replay_executor,
+                            _reconcile_quiet_candidate,
+                            next(remaining),
+                            firestore_client=firestore_client,
+                        )
+                    )
+                while futures:
+                    for future in as_completed(futures):
+                        futures.remove(future)
+                        result[future.result()] += 1
+                        candidate = next(remaining, None)
+                        if candidate is not None:
+                            futures.add(
+                                submit_with_context(
+                                    quiet_replay_executor,
+                                    _reconcile_quiet_candidate,
+                                    candidate,
+                                    firestore_client=firestore_client,
+                                )
+                            )
+                        break
+            finally:
+                # Even a rejected submission cannot detach already-owned work.
                 for future in as_completed(futures):
-                    result[future.result()] += 1
+                    future.result()
 
     for candidate in candidates:
         try:

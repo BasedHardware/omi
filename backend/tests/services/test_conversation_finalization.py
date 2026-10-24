@@ -316,7 +316,7 @@ def test_serial_rollback_uses_no_additional_thread_pool(mock_dependencies, monke
         {'job_id': f'quiet-{i}', 'kind': 'listen_quiet_check', 'dispatch_generation': 1} for i in range(2)
     ]
     monkeypatch.setattr(
-        conversation_finalization, 'ThreadPoolExecutor', mock.Mock(side_effect=AssertionError('serial rollback'))
+        conversation_finalization, 'submit_with_context', mock.Mock(side_effect=AssertionError('serial rollback'))
     )
     monkeypatch.setattr(conversation_finalization.quiet_finalization, 'run', mock.Mock(return_value='done'))
     result = reconcile_listen_finalization_jobs()
