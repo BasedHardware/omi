@@ -143,6 +143,38 @@ class DeadCodeRatchetTests(unittest.TestCase):
                 self.assertIn("delete it, or add it to", result.stdout)
                 self.assertIn(f"{area}.allowlist.json", result.stdout)
 
+    def test_sparse_excluded_area_is_skipped_not_failed(self) -> None:
+        seed_allowlist(self.root)
+
+        def git(*args: str) -> None:
+            subprocess.run(["git", "-C", str(self.root), *args], check=True, capture_output=True)
+
+        git("init", "-q", "-b", "main")
+        git("config", "user.email", "dead-code@example.test")
+        git("config", "user.name", "Dead Code Tests")
+        git("add", "-A")
+        git("commit", "-qm", "fixture")
+        git("sparse-checkout", "init", "--cone")
+        git("sparse-checkout", "set", "backend", ".github")
+
+        # app/ and desktop/ are cone-excluded: their areas carry no signal in
+        # this worktree and are skipped, not failed; CI's dense run enforces.
+        for area in ("flutter", "agent", "windows"):
+            result = run_checker(self.root, "--area", area)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("skipped", result.stdout)
+
+        # An area inside the cone keeps enforcing: the seeded dead file fails.
+        result = run_checker(self.root, "--area", "backend")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+
+        # A user deletion inside the cone is NOT sparse exclusion and fails.
+        git("sparse-checkout", "set", "backend", ".github", "app")
+        (self.root / "app" / "lib" / "main.dart").unlink()
+        result = run_checker(self.root, "--area", "flutter")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("nothing to anchor reachability", result.stdout)
+
     def test_check_passes_once_dead_files_are_allowlisted_with_reason(self) -> None:
         seed_allowlist(self.root)
         for area, dead in DEAD_BY_AREA.items():

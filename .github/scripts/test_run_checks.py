@@ -28,6 +28,7 @@ from run_checks import (
     command_for_host,
     detect_platform,
     execute_checks,
+    head_blob,
     load_manifest,
     resolve_check_selections,
     resolve_checks,
@@ -275,6 +276,43 @@ class ManifestContractTests(unittest.TestCase):
             validate_manifest(invalid, REPO_ROOT),
         )
 
+    def test_explicit_trigger_path_tracked_at_head_satisfies_sparse_worktree(self) -> None:
+        # Cone-mode sparse checkouts do not materialise out-of-cone paths, so
+        # a real trigger path can be absent from the working tree. Validation
+        # must accept anything tracked at HEAD, or every sparse checkout fails
+        # pre-push at manifest resolution.
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        tracked_but_sparse = "web/app/Dockerfile"
+        malformed = Check(
+            first.id,
+            first.command,
+            (*first.triggers, tracked_but_sparse),
+            first.lanes,
+            first.reason,
+        )
+        valid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertFalse(any(
+            "explicit trigger path does not exist" in error
+            for error in validate_manifest(valid, REPO_ROOT)
+        ))
+
+    def test_command_path_tracked_at_head_satisfies_sparse_worktree(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        malformed = Check(
+            first.id,
+            ("python3", "mcp/tests/test_date_filters.py"),
+            first.triggers,
+            first.lanes,
+            first.reason,
+        )
+        valid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertFalse(any(
+            "command path does not exist" in error
+            for error in validate_manifest(valid, REPO_ROOT)
+        ))
+
     def test_workflow_checks_are_registered_or_exempt(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         registered = registered_script_paths()
@@ -334,11 +372,17 @@ class ManifestContractTests(unittest.TestCase):
         offenders: list[str] = []
         for check in manifest.checks:
             for relative in interpreter_invoked_test_modules(check.command):
+                # Cone-mode sparse checkouts keep out-of-cone paths in the
+                # index without materialising them; read disk first, HEAD blob
+                # second, and only report "does not exist" when neither has it.
                 path = REPO_ROOT / relative
-                if not path.exists():
+                source = (
+                    path.read_text(encoding="utf-8") if path.is_file() else head_blob(REPO_ROOT, relative)
+                )
+                if source is None:
                     offenders.append(f"{check.id}: {relative} does not exist")
                     continue
-                reason = non_self_running_reason(path.read_text(encoding="utf-8"))
+                reason = non_self_running_reason(source)
                 if reason:
                     offenders.append(f"{check.id}: {relative} {reason}")
         self.assertEqual(offenders, [], f"manifest test commands that execute no cases: {offenders}")

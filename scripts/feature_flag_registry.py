@@ -12,7 +12,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / ".github/scripts"))
-from run_checks import _parse_yaml_subset
+from run_checks import _parse_yaml_subset, head_tree_paths
 
 KINDS = {"env", "posthog", "bundle", "server_capability", "build_define", "firestore", "hardcoded"}
 LIFECYCLES = {"experiment", "rollout", "ops_kill", "config_switch"}
@@ -198,7 +198,15 @@ def validate_registry(registry: dict[str, list[dict[str, Any]]], *, root: Path =
                     elif not resolved.is_relative_to(resolved_root):
                         errors.append(f"{label}: prereg escapes the repository root: {prereg}")
                     elif not resolved.is_file():
-                        errors.append(f"{label}: prereg file does not exist: {prereg}")
+                        # Cone-mode sparse checkouts do not materialise
+                        # out-of-cone paths, so a prereg doc that is real at
+                        # HEAD is valid evidence; absent from disk AND HEAD is
+                        # still an error. None means "not a git repo" (tests
+                        # validate against plain directories): disk only.
+                        tracked = head_tree_paths(resolved_root)
+                        relative = resolved.relative_to(resolved_root).as_posix()
+                        if tracked is None or relative not in tracked:
+                            errors.append(f"{label}: prereg file does not exist: {prereg}")
                 elif "prereg" in entry:
                     errors.append(f"{label}: prereg must be a nonempty repo-relative path")
                 elif entry.get("lifecycle") == "experiment" and entry.get("decision") != "kill":
@@ -255,6 +263,29 @@ def tracked_code_paths(root: Path) -> list[str]:
         env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
     )
     return sorted({p.decode("utf-8") for p in result.stdout.split(b"\0") if p})
+
+
+def source_text(root: Path, path: str) -> str | None:
+    """File content from the working tree, falling back to the HEAD blob.
+
+    Cone-mode sparse checkouts keep out-of-cone paths in the index but do not
+    materialise them, so flag reads outside the cone must be scanned at HEAD
+    or the registry misreports those flags as stale. None = unreadable
+    everywhere (deleted without a commit): callers skip, as before.
+    """
+    file = root / path
+    if file.is_file():
+        return file.read_text(encoding="utf-8")
+    result = subprocess.run(
+        ["git", "-C", str(root), "show", f"HEAD:{path}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        check=False,
+        env={key: value for key, value in os.environ.items() if not key.startswith("GIT_")},
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.decode("utf-8")
 
 
 def relevant_code(path: str) -> bool:
@@ -367,9 +398,11 @@ def _in_client_comment(text: str, pos: int) -> bool:
 def extract_code_reads(root: Path, known: set[str]) -> list[Read]:
     reads: list[Read] = []
     for path in tracked_code_paths(root):
-        if not relevant_code(path) or not (root / path).is_file():
+        if not relevant_code(path):
             continue
-        text = (root / path).read_text(encoding="utf-8")
+        text = source_text(root, path)
+        if text is None:
+            continue
         matches: list[tuple[str, int]] = []
         if path.endswith(".py"):
             matches = python_reads(path, text, known)
@@ -422,12 +455,21 @@ def extract_deploy_declarations(root: Path) -> list[Read]:
     files = [
         root / "backend/deploy/runtime_env" / name for name in ("_base.yaml", "dev.overlay.yaml", "prod.overlay.yaml")
     ]
-    files += [p for p in (root / "backend/charts").rglob("*values.yaml") if p.name.startswith(("dev_", "prod_"))]
+    # Track the index (not a directory walk) so cone-mode sparse checkouts
+    # still see chart manifests that are not materialised on disk.
+    files += [
+        root / path
+        for path in tracked_code_paths(root)
+        if path.startswith("backend/charts/")
+        and path.endswith("values.yaml")
+        and Path(path).name.startswith(("dev_", "prod_"))
+    ]
     reads: list[Read] = []
     for file in files:
-        if not file.is_file():
+        text = source_text(root, file.relative_to(root).as_posix())
+        if text is None:
             continue
-        for lineno, line in enumerate(file.read_text(encoding="utf-8").splitlines(), 1):
+        for lineno, line in enumerate(text.splitlines(), 1):
             pattern = CHART_KEY if "/charts/" in file.as_posix() else MANIFEST_KEY
             match = pattern.match(line)
             if match and (FLAG_SUFFIX.search(match[1]) or "ALLOWLIST" in match[1]):
