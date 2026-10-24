@@ -8,7 +8,7 @@ from utils.generated_compute import generated_compute_allowed, generated_compute
 
 from collections import Counter
 from datetime import datetime, timezone, date
-from typing import List, Dict, Any, Set, cast
+from typing import List, Dict, Any, Optional, Set, cast
 
 import database.wrapped as wrapped_db
 import database.conversations as conversations_db
@@ -99,7 +99,11 @@ def _compute_conversation_duration(conv: Conversation) -> float:
     """Compute conversation duration in seconds."""
     # Try to get duration from transcript segments
     if conv.transcript_segments:
-        max_end = max((seg.end for seg in conv.transcript_segments if seg.end is not None), default=0)
+        # Legacy/unvalidated conversation data can carry segments without an end
+        # timestamp, so the None filter below is real at runtime even though
+        # TranscriptSegment.end is annotated float.
+        ends = cast(List[Optional[float]], [seg.end for seg in conv.transcript_segments])
+        max_end = max((end for end in ends if end is not None), default=0)
         if max_end > 0:
             return max_end
 
@@ -780,9 +784,7 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
         )
         conversations_data = [c for c in conversations_data if not c.get("is_locked")]
 
-        conversations = [
-            c for c in deserialize_conversations(conversations_data) if not getattr(c, "is_locked", False)
-        ]
+        conversations = [c for c in deserialize_conversations(conversations_data) if not getattr(c, "is_locked", False)]
         logger.info(
             f"[Wrapped] Step 1 complete: Found {len(conversations)} conversations for 2025 (took {time.time() - step_start:.2f}s)"
         )

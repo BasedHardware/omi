@@ -30,7 +30,7 @@ T = TypeVar("T")
 MAX_RESULT_CHARS = 60000
 
 
-def cap_items_for_llm(items: List[T], max_items: int) -> Tuple[List[T], int, bool]:
+def cap_items_for_llm(items: List[T] | None, max_items: int) -> Tuple[List[T], int, bool]:
     """Keep at most ``max_items`` rows for the chat model.
 
     Callers pass rows in their chosen order, so this keeps a prefix without inferring relevance.
@@ -49,7 +49,7 @@ def cap_items_for_llm(items: List[T], max_items: int) -> Tuple[List[T], int, boo
 
 
 def bounded_result(
-    result: str,
+    result: str | None,
     truncated: bool,
     noun: str = "results",
     *,
@@ -62,10 +62,11 @@ def bounded_result(
     The note deliberately does not state a total count: callers may pass an already-paginated
     page whose length is not the true total, so claiming a total would mislead (cubic on #8527).
     """
-    if result is None:
-        result = ""
-    elif not isinstance(result, str):
-        result = str(result)
+    if not isinstance(result, str):
+        if result is None:
+            result = ""
+        else:
+            result = str(result)
 
     if len(result) > MAX_RESULT_CHARS:
         result = result[:MAX_RESULT_CHARS]
@@ -89,5 +90,8 @@ def bounded_result(
             note = note.replace(
                 "more were omitted, not absent.", "more may exist; omitted data is not evidence of absence."
             )
-        result += "\n\n" + note
+        # Plain assignment (not +=): the fallback import above can leave
+        # truncation_note untyped, and an augmented assignment would then widen
+        # result back to its declared Optional type at the return.
+        result = f"{result}\n\n{note}"
     return result
