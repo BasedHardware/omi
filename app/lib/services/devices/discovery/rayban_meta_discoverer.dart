@@ -34,7 +34,7 @@ class RayBanMetaDiscoverer extends DeviceDiscoverer {
   String get name => 'Ray-Ban Meta';
 
   @override
-  bool get isSupported => Platform.isIOS;
+  bool get isSupported => Platform.isIOS || Platform.isAndroid;
 
   @override
   Future<DeviceDiscoveryResult> discover({int timeout = 5}) async {

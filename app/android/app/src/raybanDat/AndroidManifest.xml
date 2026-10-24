@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- raybanDat flavor only: Meta Wearables Device Access Toolkit wiring.
+     Merged over src/main/AndroidManifest.xml; dev/prod never see these entries. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <!-- App attestation. Developer Mode (glasses Developer Mode on in the Meta AI
+             app) needs no credentials, so both default to "0"; set mwdat.applicationId /
+             mwdat.clientToken in android/local.properties for a Wearables Developer
+             Center beta-channel build. -->
+        <meta-data
+            android:name="com.meta.wearable.mwdat.APPLICATION_ID"
+            android:value="${mwdatApplicationId}" />
+        <meta-data
+            android:name="com.meta.wearable.mwdat.CLIENT_TOKEN"
+            android:value="${mwdatClientToken}" />
+
+        <!-- The toolkit reports SDK analytics and crashes to Meta by default. -->
+        <meta-data
+            android:name="com.meta.wearable.mwdat.ANALYTICS_OPT_OUT"
+            android:value="true" />
+        <meta-data
+            android:name="com.meta.wearable.mwdat.CRASH_REPORTING_OPT_OUT"
+            android:value="true" />
+
+        <activity android:name="com.friend.ios.MainActivity">
+            <!-- Meta AI app → Omi callback; same scheme as the iOS MWDAT AppLinkURLScheme. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="omirayban" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

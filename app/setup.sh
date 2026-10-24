@@ -136,11 +136,13 @@ function generate_ios_custom_config() {
 # Setup Firebase with prebuilt configs
 ######################################
 function setup_firebase() {
-  mkdir -p android/app/src/dev/ android/app/src/prod/ ios/Config/Dev/ ios/Config/Prod/ ios/Runner/
+  mkdir -p android/app/src/dev/ android/app/src/prod/ android/app/src/raybanDat/ ios/Config/Dev/ ios/Config/Prod/ ios/Runner/
   cp lib/firebase_options_local.dart lib/firebase_options_dev.dart
   cp lib/firebase_options_local.dart lib/firebase_options_prod.dart
   cp setup/prebuilt/google-services-local.json android/app/src/dev/google-services.json
   cp setup/prebuilt/google-services-local.json android/app/src/prod/google-services.json
+  # Ray-Ban Meta camera flavor: dev identity, so the dev Firebase config.
+  cp setup/prebuilt/google-services-local.json android/app/src/raybanDat/google-services.json
   cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Dev/GoogleService-Info.plist
   cp setup/prebuilt/GoogleService-Info-Local.plist ios/Config/Prod/GoogleService-Info.plist
   cp setup/prebuilt/GoogleService-Info-Local.plist ios/Runner/GoogleService-Info.plist

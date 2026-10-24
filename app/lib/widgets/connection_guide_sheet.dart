@@ -98,7 +98,7 @@ class ConnectionGuideSheet extends StatelessWidget {
         pairingDescription: l10n.pairingDescNeoOne,
         localImagePath: Assets.images.neoOne.path,
       ),
-      if (Platform.isIOS)
+      if (Platform.isIOS || Platform.isAndroid)
         DeviceGuideProduct(id: 'rayban_meta', name: 'Ray-Ban Meta', localImagePath: Assets.images.raybanMeta.path),
     ];
   }

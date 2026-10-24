@@ -9596,7 +9596,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerEmpty =>
-      'Bluetooth-mikrofone ei leitud. Ühendage prillid iPhone\'i seadetes ja proovige uuesti.';
+      'Bluetooth-mikrofone ei leitud. Ühendage prillid telefoni Bluetoothi seadetes ja proovige uuesti.';
 
   @override
   String get rayBanMetaMicPickerLoadError =>
@@ -9604,7 +9604,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get rayBanMetaMicPickerConnectError =>
-      'Selle mikrofoniga ei saanud ühendust luua. Veenduge, et see oleks iPhone\'i seadetes ühendatud.';
+      'Selle mikrofoniga ei saanud ühendust luua. Veenduge, et see oleks telefoni Bluetoothi seadetes ühendatud.';
 
   @override
   String get syncStatusTooOld => 'Sünkroonimiseks liiga vana — Omi ei saa seda vastu võtta';
