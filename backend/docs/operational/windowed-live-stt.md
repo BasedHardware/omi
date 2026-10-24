@@ -147,8 +147,8 @@ the fallback chain. Keep the merged 5% allocation for this code release; a later
 configuration rollout advances it only after the gates below pass.
 
 The headless Service selects ready Parakeet pods. `utils/stt/batch_pressure.py`
-polls each replica every five seconds with its own three-second HTTP and wall-clock
-deadline. A failed fetch does not discard the other responses: each replica
+polls each replica every five seconds with its own three-second wall-clock
+deadline and two-second HTTP phase budgets. A failed fetch does not discard the other responses: each replica
 keeps its last valid sample and original timestamp for **at most 15 seconds**.
 Departed replicas are removed. DNS failure retains the last discovery only for
 the bounded admission grace below; admission

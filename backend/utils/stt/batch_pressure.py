@@ -43,6 +43,7 @@ class BatchPressure:
     # A one-second total deadline can cancel cold connections before TCP retry.
     # Polling is off the admission path; allow cold setup without unbounded waits.
     REQUEST_TIMEOUT_SECONDS = 3.0
+    HTTP_OPERATION_TIMEOUT_SECONDS = 2.0
     MAX_SNAPSHOT_AGE_SECONDS = 60.0
     RESET_AFTER_FAILURES = 3
     MAX_REPLICAS = 64
@@ -114,7 +115,7 @@ class BatchPressure:
                     keepalive_expiry=30.0,
                 )
                 async with httpx.AsyncClient(
-                    timeout=self.REQUEST_TIMEOUT_SECONDS, trust_env=False, limits=limits
+                    timeout=self.HTTP_OPERATION_TIMEOUT_SECONDS, trust_env=False, limits=limits
                 ) as client:
                     while True:
                         try:
@@ -228,7 +229,12 @@ class BatchPressure:
 
     async def _fetch(self, ip: str, client: httpx.AsyncClient) -> ReplicaPressure:
         response = await asyncio.wait_for(
-            client.get(f'http://{ip}:8080/batch/metrics', timeout=self.REQUEST_TIMEOUT_SECONDS),
+            client.get(
+                f'http://{ip}:8080/batch/metrics',
+                # Leave room for HTTPX to report connect/read/pool timeouts
+                # before the total deadline cancels the entire request.
+                timeout=min(self.HTTP_OPERATION_TIMEOUT_SECONDS, self.REQUEST_TIMEOUT_SECONDS),
+            ),
             timeout=self.REQUEST_TIMEOUT_SECONDS,
         )
         response.raise_for_status()

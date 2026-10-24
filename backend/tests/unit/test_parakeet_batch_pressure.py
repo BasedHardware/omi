@@ -196,7 +196,7 @@ async def test_batch_pressure_reuses_bounded_client_until_shutdown(monkeypatch, 
         await asyncio.wait_for(refreshed_twice.wait(), 1)
         assert len(created) == 1
         assert used[:5] == [created[0]] * 5
-        assert created[0].options['timeout'] == 3.0
+        assert created[0].options['timeout'] == 2.0
         assert created[0].options['trust_env'] is False
         limits = created[0].options['limits']
         assert limits.max_connections == pressure.MAX_REPLICAS
