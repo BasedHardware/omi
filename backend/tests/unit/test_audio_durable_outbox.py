@@ -707,8 +707,9 @@ async def test_v2_projection_trims_replays_while_custody_keeps_every_original(re
     assert [read_pcm('owner', receipt) for receipt in receipts] == [first, replay, first]
 
 
-def _legacy_chunk(remote, start, pcm, name=None):
-    blob = remote.blob(f'chunks/owner/conversation/{name or f"{start:.3f}"}.batch.bin')
+def _legacy_chunk(remote, start, pcm, name=None, *, is_batch=True):
+    extension = 'batch.bin' if is_batch else 'bin'
+    blob = remote.blob(f'chunks/owner/conversation/{name or f"{start:.3f}"}.{extension}')
     blob.metadata = {
         **span_blob_metadata({'start': start, 'samples': len(pcm) // 2, 'sample_rate': 16000}),
         'pcm_sha256': hashlib.sha256(pcm).hexdigest(),
@@ -741,3 +742,32 @@ def test_partial_raw_overlap_serves_only_uncovered_bytes_and_keeps_legacy_identi
     assert storage.download_audio_chunks_and_merge('owner', 'conversation', [1000, 1001, 1002]) == expected
     decoded = iter_audio_chunk_pcm('owner', 'conversation', lambda *a: True)
     assert b''.join(pcm for _, pcm in decoded) == expected
+
+
+@pytest.mark.parametrize('is_batch', [False, True])
+def test_submillisecond_raw_fragments_cannot_replace_rounded_legacy_audio(remote, is_batch):
+    prefix, original_middle, suffix = b'\x01\x00' * 4, b'\x02\x00' * 16000, b'\x03\x00' * 4
+    receipt = commit_pcm('owner', prefix + original_middle + suffix, 'conversation', 1000, 16000, 'root', 0)
+    accepted_middle = b'\x09\x00' * 16000
+    _legacy_chunk(remote, 1000.00025, accepted_middle, is_batch=is_batch)
+    chunks = storage.list_audio_chunks('owner', 'conversation')
+    expected = prefix + accepted_middle + suffix
+    timestamps = [chunk['timestamp'] for chunk in chunks]
+
+    def same_pcm(actual, wanted):
+        assert len(actual) == len(wanted)
+        assert hashlib.sha256(actual).digest() == hashlib.sha256(wanted).digest()
+
+    same_pcm(storage.download_audio_chunks_and_merge('owner', 'conversation', timestamps), expected)
+    assert timestamps == pytest.approx([1000, 1000.00025, 1001.00025])
+    loader = lambda path: storage.download_audio_chunk_pcm('owner', path)
+    same_pcm(
+        storage.download_audio_chunks_and_merge(
+            'owner', 'conversation', timestamps, listed_chunks=chunks, chunk_loader=loader
+        ),
+        expected,
+    )
+    same_pcm(b''.join(pcm for _, pcm in iter_audio_chunk_pcm('owner', 'conversation', lambda *a: True)), expected)
+    # Previously persisted AudioFiles can still request the millisecond key.
+    same_pcm(storage.download_audio_chunks_and_merge('owner', 'conversation', [1000]), accepted_middle)
+    assert read_pcm('owner', receipt) == prefix + original_middle + suffix

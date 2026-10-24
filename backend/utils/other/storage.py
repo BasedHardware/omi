@@ -1121,7 +1121,17 @@ def list_audio_chunks(
     if audio_archive.admitted(uid, 'READ') and timeout is None and deadline is None:
         try:
             packs = list_packs(bucket, uid, conversation_id)
-            chunks.extend(uncovered_raw_packs(packs, chunks))
+            raw_chunks = uncovered_raw_packs(packs, chunks)
+            if raw_chunks:
+                for chunk in chunks:
+                    span = chunk.get('span')
+                    if span and span['start'] != chunk['timestamp']:
+                        # A rounded filename cannot identify sample-precision
+                        # raw fragments and a projected source at the same key.
+                        # Retain the old key only as a compatibility alias.
+                        chunk['legacy_timestamp'] = chunk['timestamp']
+                        chunk['timestamp'] = span['start']
+            chunks.extend(raw_chunks)
         except Exception:
             if require_archive:
                 raise
@@ -1295,6 +1305,17 @@ def download_audio_chunks_and_merge(
 
     actual_chunks = list_audio_chunks(uid, conversation_id) if listed_chunks is None else listed_chunks
 
+    requested = set(timestamps)
+    aliases = {
+        chunk['legacy_timestamp']: chunk['timestamp']
+        for chunk in actual_chunks
+        if 'legacy_timestamp' in chunk and chunk['timestamp'] not in requested
+    }
+    timestamps = [aliases.get(timestamp, timestamp) for timestamp in timestamps]
+    raw_by_timestamp = {
+        chunk['timestamp']: chunk for chunk in actual_chunks if chunk['path'].startswith(f'raw-live/{uid}/')
+    }
+
     batch_paths: Dict[str, Dict[str, Any]] = {}
     ts_to_batch_path: Dict[float, str] = {}
 
@@ -1315,6 +1336,8 @@ def download_audio_chunks_and_merge(
 
             # Map requested timestamps that fall within this batch's range
             for ts in timestamps:
+                if ts in raw_by_timestamp:
+                    continue  # A raw fragment is never a rounded batch alias.
                 if batch_start <= round(ts, 3) <= batch_end:
                     ts_to_batch_path[round(ts, 3)] = path
 
@@ -1327,14 +1350,7 @@ def download_audio_chunks_and_merge(
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
         """Download a single-chunk blob by trying extensions in priority order."""
-        raw = next(
-            (
-                item
-                for item in actual_chunks
-                if item['path'].startswith(f'raw-live/{uid}/') and abs(item['timestamp'] - timestamp) < 0.001
-            ),
-            None,
-        )
+        raw = raw_by_timestamp.get(timestamp)
         if raw is not None:
             pcm = _download_and_decode_blob(raw['path'])
             return timestamp, select_raw_pcm(pcm, raw, sample_rate) if pcm is not None else None
@@ -1390,7 +1406,7 @@ def download_audio_chunks_and_merge(
 
     chunk_results: Dict[float, bytes] = {}
 
-    individual_timestamps = [ts for ts in timestamps if round(ts, 3) not in ts_to_batch_path]
+    individual_timestamps = [ts for ts in timestamps if ts in raw_by_timestamp or round(ts, 3) not in ts_to_batch_path]
     unique_batch_paths = list(set(ts_to_batch_path.values()))
 
     # Build unified job list: ('individual', ts) or ('batch', path)

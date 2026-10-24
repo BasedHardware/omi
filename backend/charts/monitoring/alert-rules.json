@@ -20596,6 +20596,7 @@
     "for": "0s",
     "keep_firing_for": "0s",
     "annotations": {
+      "dashboard_url": "https://monitor.omi.me/d/6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
       "summary": "Audio storage pressure or a custody commit failed; captured frames remain unacknowledged.",
       "user_impact": "Recording delivery may pause while the producer retains unacknowledged audio. A receipt is required before releasing the final copy.",
       "scope": "Consented live capture in backend-listen and pusher.",
@@ -20610,9 +20611,9 @@
       "group_by": [
         "alertname"
       ],
-      "group_wait": "0s",
+      "group_wait": "30s",
       "group_interval": "5m",
-      "repeat_interval": "1h"
+      "repeat_interval": "4h"
     },
     "record": null,
     "labels": {
