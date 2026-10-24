@@ -1465,6 +1465,14 @@ def _load_sync_router_for_fast_path():
             'utils.observability.journeys': journeys_mod,
         },
     )
+    # The pipeline schedules the episodes finalize hook at module scope; the
+    # fire-and-forget hook is no sync-coordinator concern, so the whole package
+    # stubs like observability above (MagicMock('utils') is not a package).
+    saved_modules.setdefault('utils.episodes', sys.modules.get('utils.episodes'))
+    episodes_pkg = types.ModuleType('utils.episodes')
+    episodes_pkg.__path__ = []  # type: ignore[attr-defined]
+    sys.modules['utils.episodes'] = episodes_pkg
+    install_package_submodule_stubs('utils.episodes', saved_modules)
     sys.modules['utils.conversation_shape'] = shape_mod
     sys.modules['utils.stt.outcomes'] = actual_outcomes
     # Keep the empty-success guard's vendor-state reads real (stdlib+prometheus
