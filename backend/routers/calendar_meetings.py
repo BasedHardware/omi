@@ -71,8 +71,11 @@ def store_calendar_meeting(
         uid, request.calendar_event_id, request.calendar_source
     )
     if existing_meeting_id:
-        calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
-        meeting_id = existing_meeting_id
+        success = calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
+        if success:
+            meeting_id = existing_meeting_id
+        else:
+            meeting_id = calendar_db.create_meeting(uid, meeting_dict)
     else:
         meeting_id = calendar_db.create_meeting(uid, meeting_dict)
     return StoreMeetingResponse(meeting_id=meeting_id, calendar_event_id=request.calendar_event_id)
