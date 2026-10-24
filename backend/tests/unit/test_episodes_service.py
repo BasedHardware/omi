@@ -61,6 +61,12 @@ def _collaborators(model, *, now, ask=None, saved=None, store=None):
     )
 
 
+@pytest.fixture(autouse=True)
+def _speaker_names(monkeypatch):
+    monkeypatch.setattr(service, 'get_user_name', lambda *_a, **_kw: None)
+    monkeypatch.setattr(service.incremental, 'get_user_name', lambda *_a, **_kw: None)
+
+
 def test_new_episode_resets_the_bounded_voice_order():
     from dataclasses import replace
 
@@ -90,13 +96,6 @@ def test_new_episode_resets_the_bounded_voice_order():
     assert 'Speaker A:' in newest_prompt and 'Speaker B:' not in newest_prompt
     current = episodes_db.get_current_episode(UID, firestore_client=store)
     assert len(current['speaker_display_order']) == 1
-
-
-@pytest.fixture(autouse=True)
-def _speaker_names_offline(monkeypatch):
-    # Speaker presentation needs no account/database IO in this orchestration suite.
-    monkeypatch.setattr(service, 'get_user_name', lambda *_a, **_kw: None)
-    monkeypatch.setattr(service.incremental, 'get_user_name', lambda *_a, **_kw: None)
 
 
 def _segments(text, *, start=0.0, step=5.0, person=None):
