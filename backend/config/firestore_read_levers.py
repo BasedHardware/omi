@@ -29,6 +29,7 @@ KNOWN_LEVERS = frozenset(
         'subscription_cache',
         'deletion_marker_cache',
         'usage_month_cache',
+        'usage_month_total',
         'request_read_dedupe',
         'serving_config_cache',
         'candidates_page',

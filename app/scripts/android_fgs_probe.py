@@ -25,6 +25,14 @@ LOGCAT_TAGS = ("FGS_PROBE", "AndroidRuntime", "SyncTransfer.FgService")
 CASE_DEADLINE_SECONDS = 60
 
 
+def leaked_service_records(services):
+    # "dumpsys activity services <package>" also appends the global
+    # "Last ANR service" section, whose records can belong to any app on the
+    # emulator (e.g. a Google Play Services provider that ANR'd mid-run);
+    # only records naming the probe package count as a leak.
+    return [line for line in services.splitlines() if "ServiceRecord{" in line and PACKAGE in line]
+
+
 def wake_locks(power):
     return power.split("Wake Locks:", 1)[1].split("Suspend Blockers:", 1)[0]
 
@@ -88,7 +96,7 @@ def run_case(device, mode, round_number, output, boot_id, clock=time.monotonic, 
         and "VERIFY_TIMEOUT" not in log
         and f"SURVIVED mode={mode}" in log
         and "FATAL EXCEPTION" not in log
-        and "ServiceRecord{" not in services
+        and not leaked_service_records(services)
         and "omi:sync-transfer" not in wake_locks(power)
         and f"|{PACKAGE}|" not in notifications
     )

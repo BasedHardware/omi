@@ -1,0 +1,4 @@
+namespace: prod-omi-backend
+hpaName: prod-omi-parakeet
+prometheusUrl: http://prod-omi-kube-prometheus-s-prometheus.prod-omi-monitoring.svc:9090
+dryRun: false
