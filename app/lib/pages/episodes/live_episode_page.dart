@@ -319,8 +319,10 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                 runSpacing: OmiSpacing.xxs,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Semantics(
-                    liveRegion: true,
+                  CaptureStateAnnouncement(
+                    message: listening
+                        ? l10n.episodeListeningNow
+                        : captureStateLabel(l10n, EpisodePresentation.displayState(provider)),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [

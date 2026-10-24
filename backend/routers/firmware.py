@@ -72,10 +72,14 @@ def _parse_firmware_version(version_str: Optional[str]) -> Optional[Tuple[int, .
     matches every legacy release and surfaces a stale upgrade prompt to users
     whose actual firmware is current.
     """
-    if not version_str:
+    if not version_str or not isinstance(version_str, str):
         return None
 
-    normalized_version_str = version_str.lower()
+    cleaned = version_str.replace('\x00', '').strip()
+    if not cleaned:
+        return None
+
+    normalized_version_str = cleaned.lower()
     if normalized_version_str.startswith('v'):
         normalized_version_str = normalized_version_str[1:]
 
@@ -139,12 +143,12 @@ def _find_candidate_releases(
         if not release_firmware_version_str:
             continue
 
-        if current_firmware_tuple is not None:
-            release_firmware_tuple = _parse_firmware_version(release_firmware_version_str)
-            # Skip releases with unparseable release_firmware_version metadata.
-            if release_firmware_tuple is None:
-                continue
+        release_firmware_tuple = _parse_firmware_version(release_firmware_version_str)
+        # Skip releases with unparseable release_firmware_version metadata.
+        if release_firmware_tuple is None:
+            continue
 
+        if current_firmware_tuple is not None:
             # Condition A: Release must be strictly newer than current version
             if not (release_firmware_tuple > current_firmware_tuple):
                 continue
