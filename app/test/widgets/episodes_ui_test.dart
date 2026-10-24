@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -30,6 +32,7 @@ import 'package:omi/providers/people_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/enums.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/widgets/transcript.dart';
@@ -93,11 +96,18 @@ class _LiveCapture extends CaptureProvider {
           localSegmentStore: LocalSegmentStore.disabled(),
         );
 
+  String source = 'omi';
+
   @override
-  String? get liveCaptureSource => 'omi';
+  String? get liveCaptureSource => source;
 
   @override
   String? get topConversationId => 'c1';
+
+  String? recordingId;
+
+  @override
+  String? get activeRecordingId => recordingId;
 
   DateTime? _startedAt;
   set startedAt(DateTime? value) {
@@ -287,6 +297,96 @@ void main() {
       await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
       expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
       expect(find.text('Running notes appear after the first few minutes of talk.'), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('a new recording gets its own wait and timer; reconnects keep its deadline', (tester) async {
+      final clock = tester.binding.clock;
+      final capture = _LiveCapture()
+        ..source = 'phone'
+        ..recordingState = RecordingState.record
+        ..recordingId = 'first'
+        ..startedAt = clock.now();
+      final episodes = _episodes(clock: clock.now);
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const LiveEpisodePage(), capture: capture, episodes: episodes);
+      await tester.pump(const Duration(minutes: 4));
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      capture
+        ..recordingId = 'second'
+        ..startedAt = clock.now();
+      await tester.pump();
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsNothing);
+      expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 0s');
+      await tester.pump(const Duration(minutes: 2));
+      // A newer ingress timestamp for the same capture must not renew the promise or clock.
+      capture.startedAt = clock.now();
+      await tester.pump();
+      await tester.pump(const Duration(minutes: 1));
+      expect(find.byKey(const Key('episode_notes_unavailable')), findsOneWidget);
+      expect(tester.widget<Text>(find.byKey(const Key('live_episode_status'))).data, 'Capturing · 3m');
+      await _unmount(tester);
+    });
+
+    testWidgets('the open previous episode adopts delayed closure and finalization by ID', (tester) async {
+      final pending = Completer<ApiResult<EpisodeRead>>();
+      var firstRead = true;
+      Episode closed = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _liveEpisode().startedAt,
+        lastActivityAt: _now,
+        title: 'Recovered title',
+        bullets: const ['Recovered note'],
+        conversationIds: const ['c1'],
+      );
+      final capture = _LiveCapture();
+      final episodes = EpisodeProvider(
+        fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+        lookup: (_) {
+          if (firstRead) {
+            firstRead = false;
+            return pending.future;
+          }
+          return Future.value(ApiSuccess(EpisodeRead(enabled: true, episode: closed)));
+        },
+      )..debugSetLive(_liveEpisode());
+      addTearDown(capture.dispose);
+      addTearDown(episodes.dispose);
+      await _pump(tester, const Scaffold(body: PreviousEpisodeLink()), capture: capture, episodes: episodes);
+      await tester.tap(find.byKey(const Key('previous_episode_link')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.text('Picking a place near the office'), findsOneWidget);
+      pending.complete(ApiSuccess(EpisodeRead(enabled: true, episode: closed)));
+      await tester.pump();
+      expect(find.text('Recovered note'), findsOneWidget);
+      expect(find.text('Picking a place near the office'), findsNothing);
+      // A newer closed episode must not redirect the already-open page.
+      episodes.debugSetLive(Episode(
+        id: 'newer',
+        live: false,
+        startedAt: _now,
+        lastActivityAt: _now,
+        title: 'Newer episode',
+      ));
+      closed = Episode(
+        id: 'ep1',
+        live: false,
+        startedAt: _liveEpisode().startedAt,
+        lastActivityAt: _now,
+        title: 'Final title',
+        bullets: const ['Final note'],
+        moments: _liveEpisode().moments,
+        conversationIds: const ['c1'],
+      );
+      await tester.pump(EpisodeProvider.pollInterval);
+      await tester.pump();
+      expect(find.text('Final note'), findsOneWidget);
+      expect(find.textContaining('Where to eat'), findsOneWidget);
+      expect(find.text('Final title'), findsOneWidget);
+      expect(episodes.previous?.id, 'newer');
       await _unmount(tester);
     });
 

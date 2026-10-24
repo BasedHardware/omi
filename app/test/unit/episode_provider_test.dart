@@ -215,6 +215,34 @@ void main() {
     expect(provider.previous?.id, 'newer');
   });
 
+  test('a recovered closed snapshot expires after a new live episode starts', () async {
+    var time = _t0;
+    var lookups = 0;
+    final finalized = Episode(
+      id: 'ep1',
+      live: false,
+      startedAt: _t0,
+      lastActivityAt: _t0,
+      bullets: const ['Finalized note'],
+      conversationIds: const ['c1', 'c2'],
+    );
+    final provider = EpisodeProvider(
+      clock: () => time,
+      lookup: (_) async {
+        lookups++;
+        return ApiSuccess(EpisodeRead(enabled: true, episode: lookups == 1 ? _episode(live: false) : finalized));
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.recoverPrevious('c1');
+    provider.debugSetLive(_episode(id: 'ep2'));
+    expect((await provider.episodeFor('c1'))?.bullets, isEmpty);
+    expect(lookups, 1);
+    time = time.add(EpisodeProvider.episodeCacheTtl);
+    expect((await provider.episodeFor('c1'))?.bullets, ['Finalized note']);
+    expect(lookups, 2);
+  });
+
   test('item status parsing hides dropped and dismissed items', () {
     final items = [
       _item('a'),

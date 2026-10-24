@@ -74,7 +74,10 @@ class EpisodeProvider extends ChangeNotifier {
     _previous = null;
     _lastLiveRead = null;
     _waitingSince = _clock();
+    _captureId = null;
+    _previousBeforeCapture = null;
     _byConversation.clear();
+    _cachedAt.clear();
     _lookups.clear();
     _ended.clear();
     liveAnchor.clear();
@@ -82,15 +85,25 @@ class EpisodeProvider extends ChangeNotifier {
 
   DateTime? _lastLiveRead;
   late DateTime _waitingSince = _clock();
+  String? _captureId;
+  String? _previousBeforeCapture;
   static const notesWaitLimit = Duration(minutes: 3);
   static const notesStaleLimit = Duration(minutes: 5);
 
-  bool notesUnavailable({DateTime? captureStart}) {
+  bool notesUnavailable({DateTime? captureStart, String? captureId}) {
+    _ensureOwner();
     final time = now();
+    if (captureId != null && captureId != _captureId) {
+      if (_captureId != null) {
+        _previousBeforeCapture = _previous?.id;
+      }
+      _waitingSince = captureStart ?? time;
+      _captureId = captureId;
+    }
     final episode = _live;
     if (episode == null) {
       final since = captureStart != null && captureStart.isBefore(_waitingSince) ? captureStart : _waitingSince;
-      return _previous != null || time.difference(since) >= notesWaitLimit;
+      return (_previous != null && _previous!.id != _previousBeforeCapture) || time.difference(since) >= notesWaitLimit;
     }
     final firstSeen = episode.startedAt.isBefore(_waitingSince) ? episode.startedAt : _waitingSince;
     if (episode.bullets.isEmpty && time.difference(firstSeen) >= notesWaitLimit) return true;
@@ -125,13 +138,11 @@ class EpisodeProvider extends ChangeNotifier {
       if (_disposed || uid != SharedPreferencesUtil().uid) return;
       if (result case ApiSuccess(:final data)) {
         final episode = data.episode;
-        if (episode != null &&
-            !episode.live &&
-            episode.id != _live?.id &&
-            (_previous == null || !episode.startedAt.isBefore(_previous!.startedAt))) {
+        if (episode != null && !episode.live && episode.id != _live?.id) {
           _remember(episode);
+          _cacheEpisode(id, episode);
           for (final member in episode.conversationIds) {
-            _byConversation[member] = episode;
+            _cacheEpisode(member, episode);
           }
           notifyListeners();
         }
@@ -151,13 +162,26 @@ class EpisodeProvider extends ChangeNotifier {
       if (recover && old.conversationIds.isNotEmpty) unawaited(recoverPrevious(old.conversationIds.last));
     }
     if (episode != null && !episode.live) _remember(episode);
-    if (next != null && old?.id != next.id) _waitingSince = _clock();
+    if (next != null && old?.id != next.id) {
+      _waitingSince = _clock();
+      _previousBeforeCapture = null;
+    }
     _live = next;
     if (next != null) _savePointer('lastLiveEpisodeConversation', next);
     _lastLiveRead = _clock();
   }
 
   final Map<String, Episode?> _byConversation = {};
+  final Map<String, DateTime> _cachedAt = {};
+
+  // Closure can precede member finalization. A recovered closed snapshot is not immutable.
+  static const episodeCacheTtl = pollInterval;
+
+  void _cacheEpisode(String conversationId, Episode? episode) {
+    _byConversation[conversationId] = episode;
+    _cachedAt[conversationId] = _clock();
+  }
+
   final Map<String, Future<Episode?>> _lookups = {};
   int _watchers = 0;
   Timer? _poll;
@@ -224,18 +248,24 @@ class EpisodeProvider extends ChangeNotifier {
   /// The conversations a live episode stands for on Home; they reappear as rows once it closes.
   Set<String> get liveConversationIds => _enabled && live != null ? live!.conversationIds.toSet() : const {};
 
-  /// The episode [conversationId] belongs to, read once per conversation and cached.
+  /// The episode [conversationId] belongs to. Coalesce reads and keep only a short-lived cache:
+  /// finalization can add moments even after the episode closes and another one starts.
   Future<Episode?> episodeFor(String conversationId) {
     _ensureOwner();
     final uid = _ownerUid;
-    if (_byConversation.containsKey(conversationId)) return Future.value(_byConversation[conversationId]);
+    final cachedAt = _cachedAt[conversationId];
+    if (_byConversation.containsKey(conversationId) &&
+        cachedAt != null &&
+        _clock().difference(cachedAt) < episodeCacheTtl) {
+      return Future.value(_byConversation[conversationId]);
+    }
     return _lookups[conversationId] ??= _lookup(conversationId).then((result) {
       if (_disposed || uid != SharedPreferencesUtil().uid) return null;
       _lookups.remove(conversationId);
       switch (result) {
         case ApiSuccess(:final data):
           _enabled = data.enabled || _enabled;
-          _byConversation[conversationId] = data.episode;
+          _cacheEpisode(conversationId, data.episode);
           notifyListeners();
           return data.episode;
         case ApiFailure():
@@ -338,7 +368,9 @@ class EpisodeProvider extends ChangeNotifier {
   void debugSetLive(Episode? episode, {bool enabled = true, Map<String, Episode?> byConversation = const {}}) {
     _enabled = enabled;
     _acceptLive(episode, recover: false);
-    _byConversation.addAll(byConversation);
+    for (final entry in byConversation.entries) {
+      _cacheEpisode(entry.key, entry.value);
+    }
     notifyListeners();
   }
 

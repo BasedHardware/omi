@@ -66,16 +66,49 @@ class _PreviousEpisodeLinkState extends State<PreviousEpisodeLink> {
   }
 }
 
-/// The retained server snapshot stays readable even while the member is absent from Home history.
-class PreviousEpisodePage extends StatelessWidget {
+/// Keep the retained snapshot readable while closure and member finalization catch up.
+class PreviousEpisodePage extends StatefulWidget {
   const PreviousEpisodePage({super.key, required this.episode, this.onOpenConversation});
 
   final Episode episode;
   final ValueChanged<String>? onOpenConversation;
 
+  @override
+  State<PreviousEpisodePage> createState() => _PreviousEpisodePageState();
+}
+
+class _PreviousEpisodePageState extends State<PreviousEpisodePage> {
+  EpisodeProvider? _episodes;
+  Timer? _refresh;
+
+  String? get _memberId =>
+      widget.episode.conversationIds.lastOrNull ?? widget.episode.moments.lastOrNull?.conversationId;
+
+  @override
+  void initState() {
+    super.initState();
+    _episodes = context.read<EpisodeProvider?>();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _recover();
+    });
+    _refresh = Timer.periodic(EpisodeProvider.pollInterval, (_) => _recover());
+  }
+
+  void _recover() {
+    if (!mounted || ModalRoute.of(context)?.isCurrent == false) return;
+    final id = _memberId;
+    if (id != null) unawaited(_episodes?.recoverPrevious(id));
+  }
+
+  @override
+  void dispose() {
+    _refresh?.cancel();
+    super.dispose();
+  }
+
   Future<void> _open(BuildContext context, String id) async {
-    if (onOpenConversation != null) {
-      onOpenConversation!(id);
+    if (widget.onOpenConversation != null) {
+      widget.onOpenConversation!(id);
       return;
     }
     final conversation = await getConversationById(id);
@@ -89,6 +122,14 @@ class PreviousEpisodePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final episodes = context.watch<EpisodeProvider?>();
+    final cached = _memberId == null ? null : episodes?.cachedEpisodeFor(_memberId!);
+    final previous = episodes?.previous;
+    final episode = cached?.id == widget.episode.id
+        ? cached!
+        : previous?.id == widget.episode.id
+            ? previous!
+            : widget.episode;
     final dates = OmiDateFormat.of(context);
     final ids = {...episode.conversationIds, ...episode.moments.map((m) => m.conversationId)};
     return Scaffold(

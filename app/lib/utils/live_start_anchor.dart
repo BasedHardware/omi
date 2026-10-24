@@ -5,6 +5,7 @@ import 'package:omi/backend/schema/episode.dart';
 class LiveStartAnchor {
   DateTime? _start;
   String? _episodeId;
+  String? _captureId;
 
   /// When the person last ended the live conversation. The next stretch counts from here, including
   /// once the next episode opens at its first words a little later.
@@ -13,6 +14,7 @@ class LiveStartAnchor {
   void clear() {
     _start = null;
     _episodeId = null;
+    _captureId = null;
     _restartedAt = null;
   }
 
@@ -26,9 +28,18 @@ class LiveStartAnchor {
   DateTime? resolve({
     required Episode? episode,
     required DateTime? captureStart,
+    String? captureId,
     required bool streaming,
     required DateTime now,
   }) {
+    if (captureId != null && captureId != _captureId) {
+      if (_captureId != null && episode == null) {
+        _start = null;
+        _episodeId = null;
+        _restartedAt = null;
+      }
+      _captureId = captureId;
+    }
     final restartedAt = _restartedAt;
     if (restartedAt != null) {
       // Keep counting from the restart: the next episode opens at its first words, and adopting its

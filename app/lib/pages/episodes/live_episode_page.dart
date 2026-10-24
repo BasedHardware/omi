@@ -247,6 +247,9 @@ class LiveEpisodePageState extends State<LiveEpisodePage> with SingleTickerProvi
                   now: now,
                   unavailable: episodes.notesUnavailable(
                     captureStart: context.select<CaptureProvider, DateTime?>((c) => c.liveCaptureStartedAt),
+                    captureId: context.select<CaptureProvider, String?>(
+                      (c) => c.liveCaptureSource == 'phone' ? c.activeRecordingId : null,
+                    ),
                   ),
                   conversationId: conversationId,
                   speakerNamesOf: _speakerNames,
