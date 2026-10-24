@@ -14441,6 +14441,25 @@ class AppLocalizationsSl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Sprotni zapiski se ne posodabljajo. Za zdaj si oglejte prepis.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Snemanje · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Prejšnja epizoda';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Čakajoči deli: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Odpri prejšnjo epizodo';
+
+  @override
   String get episodeNotesSoon => 'Zapiski se prikažejo po prvih minutah pogovora.';
 
   @override

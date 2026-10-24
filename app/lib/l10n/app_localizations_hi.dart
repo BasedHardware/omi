@@ -14397,6 +14397,25 @@ class AppLocalizationsHi extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'चल रहे नोट अपडेट नहीं हो रहे हैं। अभी ट्रांसक्रिप्ट देखें।';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'रिकॉर्डिंग · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'पिछला एपिसोड';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'लंबित खंड: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'पिछला एपिसोड खोलें';
+
+  @override
   String get episodeNotesSoon => 'बातचीत के पहले कुछ मिनटों के बाद नोट्स दिखेंगे।';
 
   @override

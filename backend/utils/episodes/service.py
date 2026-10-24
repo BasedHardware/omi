@@ -31,13 +31,22 @@ Nothing here writes a conversation, an action item or a memory.
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Mapping, Optional, Sequence
 from uuid import uuid4
 
-from config.episodes import CLOSE_GAP_SECONDS, MOMENT_MIN_INTERVAL_SECONDS, MOMENT_MIN_WORDS, episodes_enabled_for
+from config.episodes import (
+    CLOSE_GAP_SECONDS,
+    LAST_CLOSED_CACHE_SECONDS,
+    MOMENT_MIN_INTERVAL_SECONDS,
+    MOMENT_MIN_WORDS,
+    episodes_enabled_for,
+)
 from database import action_items as action_items_db
+from database import episode_receipts
 from database import episodes as episodes_db
 from database import notifications as notification_db
 from database import users as users_db
@@ -49,6 +58,12 @@ from utils.episodes.moment import MomentInput
 from utils.episodes.state import apply_update, clean_text, provisional_items, render_state
 
 logger = logging.getLogger(__name__)
+
+# The live-poll recap cache (see ``last_closed_episode``): bounded per process,
+# simple whole-eviction on overflow, mirroring ``client_gate``'s memos.
+_LAST_CLOSED_CACHE_MAX = 10_000
+_last_closed_cache: dict[str, tuple[Optional[dict[str, Any]], float]] = {}
+_last_closed_lock = threading.Lock()
 
 RECONCILE_TRIGGERS = frozenset({'capture_end', 'client_finalize', 'server_recovery', 'sync_update'})
 CLIENT_FINALIZE = 'client_finalize'
@@ -161,7 +176,6 @@ def new_episode(
         'conversation_ids': [],
         'sources': [],
         'applied': {},
-        'applied_segment_ids': {},
         'calendar_identity': calendar_identity,
         'pending_boundary': {},
         'primary_conversation_id': conversation_id,
@@ -513,7 +527,18 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         consumption_owner = episodes_db.get_episode_for_conversation(
             uid, moment.conversation_id, firestore_client=c.firestore_client
         )
-    consumed = set(((consumption_owner or {}).get('applied_segment_ids') or {}).get(moment.conversation_id) or [])
+    consumed, receipts_exist = episode_receipts.get_consumed_ids(
+        uid,
+        moment.conversation_id,
+        # The finalization tail replays the whole stored transcript: only the
+        # archives hold ids old enough to matter there. Live batches are recent.
+        all_shards=moment.trigger == 'finalize',
+        firestore_client=c.firestore_client,
+    )
+    if not receipts_exist:
+        # Pre-receipts episodes kept consumption in their document; adopt it into
+        # the receipts on this write so the finalization tail still dedupes.
+        consumed |= set(((consumption_owner or {}).get('applied_segment_ids') or {}).get(moment.conversation_id) or [])
     segments = []
     selected_ids = set()
     for segment in moment.segments:
@@ -579,10 +604,6 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         return 'rate_limited'
 
     base = dict(episode) if episode else _empty_episode(moment, now)
-    if episode is None and consumed:
-        # A still-open conversation can span an idle/hard-cap episode boundary.
-        # Carry its receipts even if opening the next episode's notes fails.
-        base['applied_segment_ids'] = {moment.conversation_id: sorted(consumed)}
     known_ids = [item['id'] for item in provisional_items(base) if item.get('status') == 'provisional']
     try:
         result = incremental.run_incremental_update(
@@ -641,8 +662,12 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         )
     applied = dict(base.get('applied') or {})
     applied[moment.conversation_id] = max(float(applied.get(moment.conversation_id, -1.0)), end_offset)
-    applied_ids = dict(base.get('applied_segment_ids') or {})
-    applied_ids[moment.conversation_id] = sorted(consumed | selected_ids)
+    # Record only what this moment consumed: when receipts already exist their archives
+    # hold the older ids, and re-recording them would duplicate every shard. A missing
+    # receipt document adopts the legacy in-document ids on its first write instead.
+    adopt = set() if receipts_exist else consumed
+    receipt_ids = selected_ids | adopt
+    segment_receipts = {moment.conversation_id: sorted(receipt_ids)} if receipt_ids else None
     usage = dict(base.get('usage') or {})
     usage['calls'] = int(usage.get('calls') or 0) + 1
     usage['input_tokens'] = int(usage.get('input_tokens') or 0) + result.input_tokens
@@ -653,7 +678,6 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         **_with_conversation(base, moment.conversation_id, moment.source),
         'moments': moments,
         'applied': applied,
-        'applied_segment_ids': applied_ids,
         'usage': usage,
         'speaker_display_order': list(text.voice_order),
         'speaker_keys': sorted(set(base.get('speaker_keys') or []) | set(facts.speakers)),
@@ -669,6 +693,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
             expected_version=None,
             new_episode={**base, **updates},
             link_conversation_ids=[moment.conversation_id],
+            segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
         )
     elif closed is not None:
@@ -677,6 +702,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
             str(episode['id']),
             expected_version=int(episode.get('state_version') or 0),
             updates=updates,
+            segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
         )
     else:
@@ -686,6 +712,7 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
             expected_version=episode.get('state_version'),
             updates=updates,
             link_conversation_ids=[moment.conversation_id],
+            segment_receipts=segment_receipts,
             firestore_client=c.firestore_client,
         )
     metrics.record_moment_update(
@@ -1077,9 +1104,39 @@ def episode_for_conversation(
     return episode
 
 
-def last_closed_episode(uid: str, *, collaborators: Optional[Collaborators] = None) -> Optional[dict[str, Any]]:
+def last_closed_episode(
+    uid: str,
+    *,
+    collaborators: Optional[Collaborators] = None,
+    fresh: bool = False,
+    now: Optional[float] = None,
+) -> Optional[dict[str, Any]]:
+    """The discoverable closed recap, behind the short live-poll cache.
+
+    ``/v1/episodes/live`` polls often while a live surface is on screen, and the
+    recap changes only when an episode closes, so it is served from a per-process
+    cache for ``LAST_CLOSED_CACHE_SECONDS``. Callers reading it for
+    recovery navigation (no live episode on screen) pass ``fresh`` and always
+    read through; that also refreshes the cache.
+    """
+    wall = time.monotonic() if now is None else now
+    if not fresh:
+        with _last_closed_lock:
+            cached = _last_closed_cache.get(uid)
+        if cached is not None and wall - cached[1] < LAST_CLOSED_CACHE_SECONDS:
+            return cached[0]
     c = collaborators or Collaborators()
-    return episodes_db.get_last_closed_episode(uid, firestore_client=c.firestore_client)
+    episode = episodes_db.get_last_closed_episode(uid, firestore_client=c.firestore_client)
+    with _last_closed_lock:
+        if len(_last_closed_cache) > _LAST_CLOSED_CACHE_MAX:
+            _last_closed_cache.clear()
+        _last_closed_cache[uid] = (episode, wall)
+    return episode
+
+
+def reset_for_tests() -> None:
+    with _last_closed_lock:
+        _last_closed_cache.clear()
 
 
 def episode_by_id(

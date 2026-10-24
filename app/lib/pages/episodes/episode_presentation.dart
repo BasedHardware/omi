@@ -28,6 +28,9 @@ abstract final class EpisodePresentation {
     final start = (anchor ?? LiveStartAnchor()).resolve(
       episode: episode,
       captureStart: capture.liveCaptureStartedAt,
+      // Phone recordings have a stable per-recording identity through pause/reconnect.
+      // Pendant session rolls remain part of the continuous wear timer.
+      captureId: capture.liveCaptureSource == 'phone' ? capture.activeRecordingId : null,
       streaming: streamingSource(capture) != null,
       now: now,
     );

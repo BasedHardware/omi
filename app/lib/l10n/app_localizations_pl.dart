@@ -14456,6 +14456,25 @@ class AppLocalizationsPl extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Bieżące notatki nie są aktualizowane. Na razie zobacz transkrypcję.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Nagrywanie · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Poprzedni odcinek';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Oczekujące fragmenty: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Otwórz poprzedni odcinek';
+
+  @override
   String get episodeNotesSoon => 'Notatki pojawią się po pierwszych minutach rozmowy.';
 
   @override

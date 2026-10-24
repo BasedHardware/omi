@@ -6459,10 +6459,31 @@ offset-only episodes retain their placed-segment cursor; it never excludes
 unplaced IDs. Placed segments may still extend their text/end under the same ID.
 No audio coordinate is synthesized for unplaced moments.
 
+Consumed unplaced IDs are receipts of the conversation, not episode content: a
+conversation spans episode boundaries and its finalization tail replays the
+whole stored transcript, so the receipts must outlive any one episode while no
+document grows with them. They live in
+`users/{uid}/episode_segment_receipts/{conversation_id}` — the base document
+holds the most recent 2,000 IDs, older IDs roll into immutable `s/{index}`
+archive documents of 2,000 each, and episode documents never carry them. The
+receipt write joins the episode compare-and-swap transaction, so a receipt
+exists exactly when the state that consumed the segment was stored. Live
+moments dedupe against the base document alone (their batches are recent); the
+finalization tail reads every archive. Episodes written before the receipts
+collection kept IDs in an `applied_segment_ids` document field: the first
+post-change write adopts that list into the receipts and retires the
+in-document field, so a tail landing across the deploy still dedupes.
+
 Closing the current episode atomically records `episode_links/last_closed` while
 clearing `episode_links/current`. `GET /v1/episodes/live` can return the additive
 `last_closed_episode` field, including alongside a newer live episode; its
-existing `episode` field remains live-only. `GET /v1/episodes/{episode_id}` reads
+existing `episode` field remains live-only. The recap changes only when an
+episode closes, so while a live episode is on screen the poll serves it from a
+short per-process cache (`LAST_CLOSED_CACHE_SECONDS`); when no live episode is
+on screen — the recovery-navigation answer — it is read fresh. Every wire field
+of `episode` and `last_closed_episode` is always sent; the route's
+`response_model_exclude_unset` omits only the recap itself when there is none.
+`GET /v1/episodes/{episode_id}` reads
 the retained recap within the authenticated account and existing episode channel
 gate. Conversation links and closed notes survive while member finalization is
 pending. Clients must use this closed recap field for recovery navigation; a

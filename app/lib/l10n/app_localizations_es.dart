@@ -14457,6 +14457,26 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable =>
+      'Las notas en directo no se están actualizando. Consulta la transcripción por ahora.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Grabando · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episodio anterior';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Fragmentos pendientes: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Abrir episodio anterior';
+
+  @override
   String get episodeNotesSoon => 'Las notas aparecen tras los primeros minutos de conversación.';
 
   @override

@@ -14403,6 +14403,25 @@ class AppLocalizationsDa extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Løbende noter opdateres ikke. Se transskriptionen indtil videre.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Optager · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Forrige episode';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Afventende dele: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Åbn forrige episode';
+
+  @override
   String get episodeNotesSoon => 'Noterne vises efter de første minutters snak.';
 
   @override

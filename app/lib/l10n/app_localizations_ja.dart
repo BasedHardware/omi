@@ -14208,6 +14208,25 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'リアルタイムのメモが更新されていません。今は文字起こしをご確認ください。';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return '録音中 · $duration';
+  }
+
+  @override
+  String get episodePrevious => '前のエピソード';
+
+  @override
+  String captureChunksPending(int pending) {
+    return '保留中の音声チャンク: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => '前のエピソードを開く';
+
+  @override
   String get episodeNotesSoon => '会話が数分続くとメモが表示されます。';
 
   @override

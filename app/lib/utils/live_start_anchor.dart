@@ -5,10 +5,18 @@ import 'package:omi/backend/schema/episode.dart';
 class LiveStartAnchor {
   DateTime? _start;
   String? _episodeId;
+  String? _captureId;
 
   /// When the person last ended the live conversation. The next stretch counts from here, including
   /// once the next episode opens at its first words a little later.
   DateTime? _restartedAt;
+
+  void clear() {
+    _start = null;
+    _episodeId = null;
+    _captureId = null;
+    _restartedAt = null;
+  }
 
   /// The person ended the live conversation: the running length starts again at 0 from [now].
   void restart(DateTime now) {
@@ -20,9 +28,18 @@ class LiveStartAnchor {
   DateTime? resolve({
     required Episode? episode,
     required DateTime? captureStart,
+    String? captureId,
     required bool streaming,
     required DateTime now,
   }) {
+    if (captureId != null && captureId != _captureId) {
+      if (_captureId != null && episode == null) {
+        _start = null;
+        _episodeId = null;
+        _restartedAt = null;
+      }
+      _captureId = captureId;
+    }
     final restartedAt = _restartedAt;
     if (restartedAt != null) {
       // Keep counting from the restart: the next episode opens at its first words, and adopting its
@@ -49,8 +66,9 @@ class LiveStartAnchor {
       return _start;
     }
     if (_episodeId != null) {
-      // The episode closed (idle, wrap-up). The next stretch counts from a fresh capture start when
-      // one is known; with the lease lapsed during the quiet that closed it, keep the old start
+      // The server episode disappeared. This is now capture duration, not a new episode.
+      // Count from the known capture start; with the lease lapsed during the quiet that
+      // closed it, keep the old start
       // rather than reading 0s.
       _episodeId = null;
       if (captureStart != null && !captureStart.isAfter(now)) {

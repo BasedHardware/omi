@@ -14449,6 +14449,25 @@ class AppLocalizationsHr extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Bilješke se ne ažuriraju. Zasad pogledajte transkript.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Snimanje · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Prethodna epizoda';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Dijelovi na čekanju: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Otvori prethodnu epizodu';
+
+  @override
   String get episodeNotesSoon => 'Bilješke se pojavljuju nakon prvih minuta razgovora.';
 
   @override

@@ -8,6 +8,7 @@ from types import SimpleNamespace
 import pytest
 
 from config import episodes as config
+from database import episode_receipts
 from database import episodes as episodes_db
 from models.episode import Episode
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -26,8 +27,11 @@ def _enabled(monkeypatch):
     # These tests exercise a user whose app shows episodes (test_episodes_client_gate covers the marker).
     monkeypatch.setattr(service.client_gate, 'client_seen', lambda uid: True)
     service.client_gate.reset_for_tests()
-    monkeypatch.setattr(service, 'get_user_name', lambda *_a, **_kw: None)
-    monkeypatch.setattr(service.incremental, 'get_user_name', lambda *_a, **_kw: None)
+    service.reset_for_tests()
+
+
+def _consumed(store, conversation_id='c1', *, all_shards=True):
+    return episode_receipts.get_consumed_ids(UID, conversation_id, all_shards=all_shards, firestore_client=store)
 
 
 class FakeModel:
@@ -88,6 +92,13 @@ def test_new_episode_resets_the_bounded_voice_order():
     assert len(current['speaker_display_order']) == 1
 
 
+@pytest.fixture(autouse=True)
+def _speaker_names_offline(monkeypatch):
+    # Speaker presentation needs no account/database IO in this orchestration suite.
+    monkeypatch.setattr(service, 'get_user_name', lambda *_a, **_kw: None)
+    monkeypatch.setattr(service.incremental, 'get_user_name', lambda *_a, **_kw: None)
+
+
 def _segments(text, *, start=0.0, step=5.0, person=None):
     words = text.split('. ')
     return [
@@ -132,7 +143,8 @@ def test_unplaced_only_notes_consume_each_segment_id_once_without_audio_offsets(
     assert len(model.calls) == 2
     assert model.calls[1][1][1].count(LONG) == 1
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert episode['applied_segment_ids']['c1'] == ['s1', 's2']
+    assert _consumed(store) == ({'s1', 's2'}, True)
+    assert 'applied_segment_ids' not in episode
     assert episode['applied']['c1'] == -1
     assert all(m['start_offset'] == m['end_offset'] == -1 for m in episode['moments'])
     assert first.segments[0]['start'] == first.segments[0]['end'] == -1
@@ -162,7 +174,6 @@ def test_unplaced_migrates_from_rca_offset_cursor_and_failed_notes_remain_retrya
     assert service.record_moment(UID, _moment(), c) == 'applied'
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
     raw = store.rows[('users', UID, 'episodes', episode['id'])]
-    raw.pop('applied_segment_ids')
     raw['applied'] = {'c1': 280.404102}
     fresh = _unplaced('new-after-280', minutes=10)
     c.now = lambda: T0 + timedelta(minutes=11)
@@ -170,8 +181,9 @@ def test_unplaced_migrates_from_rca_offset_cursor_and_failed_notes_remain_retrya
     after = episodes_db.get_current_episode(UID, firestore_client=store)
     assert after['last_activity_at'] == fresh.ended_at
     assert after['bullets'] == ['Earlier notes']
-    assert 'new-after-280' not in (after.get('applied_segment_ids') or {}).get('c1', [])
+    assert _consumed(store) == (set(), False)
     assert service.record_moment(UID, fresh, c) == 'applied'
+    assert 'new-after-280' in _consumed(store)[0]
     assert service.record_moment(UID, replace(fresh, trigger='finalize'), c) == 'skipped_applied'
     assert len(model.calls) == 3
 
@@ -278,7 +290,200 @@ def test_unplaced_consumption_survives_episode_boundary_and_failed_open():
     assert 'second-only-marker' not in model.calls[-1][1][1]
     assert 'tail-only-marker' in model.calls[-1][1][1]
     episode = episodes_db.get_current_episode(UID, firestore_client=store)
-    assert episode['applied_segment_ids']['c1'] == ['s1', 's2', 's3']
+    assert _consumed(store) == ({'s1', 's2', 's3'}, True)
+    assert 'applied_segment_ids' not in episode
+
+
+def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_reprocess():
+    """A pathological all-unplaced conversation: receipts must shard out of the episode
+    document (no document may approach the 1 MiB limit) while the finalization tail of
+    the whole transcript still dedupes against everything consumed live."""
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Long unplaced call', 'bullets': ['Notes']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    c.owner_name = lambda uid: 'Owner'
+
+    def unplaced_batch(first_index, count, *, minutes, trigger='interval'):
+        return MomentInput(
+            conversation_id='c1',
+            source='omi',
+            segments=[
+                {
+                    'id': f'seg-{i:05d}',
+                    'text': f'speech {i} alpha beta',
+                    'start': -1.0,
+                    'end': -1.0,
+                    'audio_alignment': 'unplaced',
+                }
+                for i in range(first_index, first_index + count)
+            ],
+            started_at=T0 + timedelta(minutes=minutes),
+            ended_at=T0 + timedelta(minutes=minutes + 1),
+            trigger=trigger,
+        )
+
+    batches = 25
+    per_batch = 2_000
+    total = batches * per_batch
+    consumed_ids = set()
+    for index in range(batches):
+        minute = 1 + index * 1.5  # Faster than the idle gap, slower than the rate limit.
+        c.now = lambda minute=minute: T0 + timedelta(minutes=minute + 1)
+        moment = unplaced_batch(index * per_batch, per_batch, minutes=minute)
+        assert service.record_moment(UID, moment, c) == 'applied'
+        consumed_ids |= {s['id'] for s in moment.segments}
+
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    raw_episode = store.rows[('users', UID, 'episodes', episode['id'])]
+    episode_bytes = len(json.dumps(raw_episode, default=str))
+    assert episode_bytes < 65_536, episode_bytes
+    assert 'applied_segment_ids' not in episode
+
+    # The receipts sharded: a bounded base window plus immutable archives, each small.
+    base = store.rows[('users', UID, 'episode_segment_receipts', 'c1')]
+    assert len(base['ids']) <= episode_receipts.SHARD_SIZE
+    archived = 0
+    receipt_docs = 0
+    for path, row in store.rows.items():
+        if path[:4] == ('users', UID, 'episode_segment_receipts', 'c1'):
+            receipt_docs += 1
+            assert len(json.dumps(row, default=str)) < 128_000, path
+            if len(path) == 6 and path[4] == 's':
+                archived += len(row['ids'])
+    assert base['shards'] == (total - len(base['ids'])) // episode_receipts.SHARD_SIZE
+    assert archived + len(base['ids']) == total
+    assert _consumed(store) == (consumed_ids, True)
+
+    # The whole-transcript finalization tail costs nothing: no id is processed twice.
+    calls_before = len(model.calls)
+    tail = unplaced_batch(0, total, minutes=1 + batches * 1.5, trigger='finalize')
+    assert service.record_moment(UID, tail, c) == 'skipped_applied'
+    assert len(model.calls) == calls_before
+
+
+def test_past_the_cap_the_receipt_base_keeps_the_most_recent_ids_for_live_replays():
+    """Past the cap the base holds the most recently consumed ids, not the
+    alphabetically highest: the live tracker re-presents its buffered segments,
+    so a just-consumed id (or its repaired placement) would otherwise be
+    re-fed to the model on the live path."""
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Long unplaced call', 'bullets': ['Notes']}, {'bullets': ['More']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+
+    def unplaced(ids, *, minutes):
+        return MomentInput(
+            conversation_id='c1',
+            source='omi',
+            segments=[
+                {
+                    'id': sid,
+                    'text': f'speech {sid} alpha beta',
+                    'start': -1.0,
+                    'end': -1.0,
+                    'audio_alignment': 'unplaced',
+                }
+                for sid in ids
+            ],
+            started_at=T0 + timedelta(minutes=minutes),
+            ended_at=T0 + timedelta(minutes=minutes + 1),
+            trigger='interval',
+        )
+
+    # The late batch sorts below every early id: an alphabetical window archived
+    # exactly these and kept the old ids instead.
+    early = [f'm-{i:05d}' for i in range(episode_receipts.SHARD_SIZE)]
+    late = [f'a-{i:05d}' for i in range(50)]
+    assert service.record_moment(UID, unplaced(early, minutes=1), c) == 'applied'
+    c.now = lambda: T0 + timedelta(minutes=3)
+    assert service.record_moment(UID, unplaced(late, minutes=2), c) == 'applied'
+
+    # The base keeps the most recent SHARD_SIZE ids (every late one included);
+    # only the oldest early ids rolled into the first archive.
+    base = store.rows[('users', UID, 'episode_segment_receipts', 'c1')]
+    assert len(base['ids']) == episode_receipts.SHARD_SIZE
+    assert set(base['ids']) == set(early[50:]) | set(late)
+    assert base['shards'] == 1
+    assert store.rows[('users', UID, 'episode_segment_receipts', 'c1', 's', '0')]['ids'] == early[:50]
+    assert _consumed(store) == (set(early) | set(late), True)
+
+    # The live path dedupes against the base alone: the just-consumed batch
+    # replay (the tracker re-presenting its buffer) and its repaired placement
+    # both cost no model call.
+    calls = len(model.calls)
+    c.now = lambda: T0 + timedelta(minutes=4)
+    assert service.record_moment(UID, unplaced(late, minutes=3), c) == 'skipped_applied'
+    repaired = replace(
+        unplaced(late, minutes=4),
+        segments=[
+            {**s, 'start': 5.0, 'end': 10.0, 'audio_alignment': None} for s in unplaced(late, minutes=4).segments
+        ],
+    )
+    c.now = lambda: T0 + timedelta(minutes=5)
+    assert service.record_moment(UID, repaired, c) == 'skipped_applied'
+    assert len(model.calls) == calls
+
+
+def test_legacy_episode_document_receipts_are_adopted_and_retired():
+    """Episodes written before the receipts collection kept consumed ids in the episode
+    document: the first post-upgrade write adopts them and retires the in-document list."""
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Call', 'bullets': ['Earlier notes']}, {'bullets': ['Later notes']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+    assert service.record_moment(UID, _moment(), c) == 'applied'
+    episode = episodes_db.get_current_episode(UID, firestore_client=store)
+    raw = store.rows[('users', UID, 'episodes', episode['id'])]
+    raw['applied_segment_ids'] = {'c1': ['legacy-1', 'legacy-2'], 'other-conversation': ['kept']}
+    # A live replay of a legacy-consumed id, then new speech in the same moment.
+    legacy_replay = {
+        'id': 'legacy-1',
+        'text': LONG,
+        'start': -1.0,
+        'end': -1.0,
+        'audio_alignment': 'unplaced',
+    }
+    fresh = {
+        'id': 'fresh-1',
+        'text': 'so a brand new topic for the running notes',
+        'start': -1.0,
+        'end': -1.0,
+        'audio_alignment': 'unplaced',
+    }
+    moment = MomentInput(
+        conversation_id='c1',
+        source='omi',
+        segments=[legacy_replay, fresh, fresh],
+        started_at=T0 + timedelta(minutes=3),
+        ended_at=T0 + timedelta(minutes=4),
+        trigger='interval',
+    )
+    c.now = lambda: T0 + timedelta(minutes=5)
+    assert service.record_moment(UID, moment, c) == 'skipped_short'
+    # A short moment records nothing; the legacy list still serves the fallback.
+    assert _consumed(store) == (set(), False)
+    longer = replace(moment, segments=[legacy_replay, fresh, fresh, dict(fresh, id='fresh-2', text=LONG)])
+    assert service.record_moment(UID, longer, c) == 'applied'
+    assert _consumed(store) == ({'legacy-1', 'legacy-2', 'fresh-1', 'fresh-2'}, True)
+    after = episodes_db.get_current_episode(UID, firestore_client=store)
+    assert after.get('applied_segment_ids') == {'other-conversation': ['kept']}
+    raw_after = store.rows[('users', UID, 'episodes', episode['id'])]
+    assert raw_after.get('applied_segment_ids') == {'other-conversation': ['kept']}
+
+
+def test_last_closed_recap_poll_cache_reads_firestore_once_per_window(monkeypatch):
+    reads = []
+
+    def read(uid, *, firestore_client=None):
+        reads.append(uid)
+        return {'id': 'e1', 'status': 'closed'}
+
+    monkeypatch.setattr(episodes_db, 'get_last_closed_episode', read)
+    assert service.last_closed_episode(UID, now=0.0)['id'] == 'e1'
+    assert service.last_closed_episode(UID, now=29.9)['id'] == 'e1'  # inside the cache window
+    assert len(reads) == 1
+    assert service.last_closed_episode(UID, fresh=True, now=29.95)['id'] == 'e1'  # recovery navigation reads through
+    assert len(reads) == 2
+    assert service.last_closed_episode(UID, now=75.0)['id'] == 'e1'  # window expired
+    assert len(reads) == 3
 
 
 def _moment(conversation_id='c1', *, minutes=0.0, trigger='pause', text=LONG, start=0.0, source='omi', person=None):

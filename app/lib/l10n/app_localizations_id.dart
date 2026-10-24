@@ -14427,6 +14427,25 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get episodeNotesUnavailable => 'Catatan langsung tidak diperbarui. Lihat transkrip untuk sementara.';
+
+  @override
+  String episodeCaptureFor(String duration) {
+    return 'Merekam · $duration';
+  }
+
+  @override
+  String get episodePrevious => 'Episode sebelumnya';
+
+  @override
+  String captureChunksPending(int pending) {
+    return 'Bagian tertunda: $pending';
+  }
+
+  @override
+  String get episodeOpenPrevious => 'Buka Episode Sebelumnya';
+
+  @override
   String get episodeNotesSoon => 'Catatan muncul setelah beberapa menit pertama percakapan.';
 
   @override
