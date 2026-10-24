@@ -46,7 +46,8 @@ from utils.sync.live_overlap import choose_live_overlap, compatible_capture, liv
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
 from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
 from models.conversation_continuity import intervals_connect
-from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
+from utils.stt.speaker_identity import ConversationSpeakerIdAllocator, canonical_speaker_label
+from utils.stt import batch_voice_links
 
 if TYPE_CHECKING:
     from google.cloud.firestore_v1 import transaction as firestore_transaction
@@ -200,6 +201,7 @@ def assign_in_transaction(
     incoming = deepcopy(incoming)
     lineage_eligible = incoming.pop('_sync_lineage_eligible', False) is True
     lineage_binding = incoming.pop('_sync_lineage_binding', None)
+    voice_evidence = incoming.pop('_batch_voice_evidence', None)
     require_live_target = incoming.pop('_batch_require_live_target', False)
     record_span = incoming.pop('_batch_replace_live', None)
     collection = user_ref.collection('conversations')
@@ -264,7 +266,39 @@ def assign_in_transaction(
     if record_span is not None:
         if not target or not target_id:
             raise SyncAssignmentConflict('record target missing', subtype=Reason.RECORD_TARGET_MISSING)
-        result, survivors = replace_record(decode(target), incoming, record_span)
+        current = decode(target)
+        allocator = ConversationSpeakerIdAllocator()
+        allocator.hydrate(current.get('transcript_segments') or [])
+        allocator.hydrate_receipt(current.get('manual_speaker_assignments'))
+        registry: dict[str, Any] = {}
+        if voice_evidence is not None:
+            registry = batch_voice_links.link_unit_voices(
+                batch_voice_links.decode_registry(target.get(batch_voice_links.FIELD), user_ref.id),
+                voice_evidence,
+                incoming['transcript_segments'],
+                allocator,
+                receipt=current.get('manual_speaker_assignments') or {},
+                existing=current.get('transcript_segments') or [],
+                enabled=batch_voice_links.linking_enabled(),
+                conversation_id=target_id,
+            )
+        result, survivors = replace_record(current, incoming, record_span, allocator=allocator)
+        if voice_evidence is not None:
+            persisted_keys = {
+                (s.get('speaker_id_scope'), canonical_speaker_label(str(s.get('speaker')))) for s in survivors
+            }
+            planned_keys = {
+                (s.get('speaker_id_scope'), canonical_speaker_label(str(s.get('speaker'))))
+                for s in incoming['transcript_segments']
+            }
+            # Unsafe annotated remaps preserve the old text as fresh anonymous
+            # voices. Never teach anchors from candidates that were not applied.
+            if planned_keys <= persisted_keys:
+                result[batch_voice_links.FIELD] = batch_voice_links.encode_registry(registry, user_ref.id)
+            receipt = result.get('manual_speaker_assignments') or {}
+            result['transcript_segments'] = apply_manual_assignments(
+                batch_voice_links.arbitrate_linked_owner_claims(result['transcript_segments'], receipt), receipt
+            )
         invalidate(result)
         encoded = encode(result)
         transaction.update(collection.document(target_id), encoded)
@@ -453,6 +487,7 @@ def assign_in_transaction(
         existing = []
         allocator = ConversationSpeakerIdAllocator()
         allocator.hydrate(result.get('transcript_segments', []) if current else [])
+        allocator.hydrate_receipt(result.get('manual_speaker_assignments'))
         for row in sorted(records, key=lambda row: row['id'] != canonical):
             new = deepcopy(row.get('transcript_segments', []))
             for segment in new:
@@ -564,9 +599,26 @@ def assign_in_transaction(
         )
         surviving = {id(segment) for segment in survivors}
         kept = tuple(i for i, segment in indexed_new if id(segment) in surviving)
+        if voice_evidence is not None:
+            registry = batch_voice_links.decode_registry((current or {}).get(batch_voice_links.FIELD), user_ref.id)
+            registry = batch_voice_links.link_unit_voices(
+                registry,
+                voice_evidence,
+                survivors,
+                allocator,
+                receipt=result.get('manual_speaker_assignments') or {},
+                existing=existing,
+                enabled=batch_voice_links.linking_enabled(),
+                conversation_id=canonical,
+            )
+            result[batch_voice_links.FIELD] = batch_voice_links.encode_registry(registry, user_ref.id)
         for segment in survivors:
             allocator.assign(segment)
         segments = existing + deepcopy(survivors)
+        if voice_evidence is not None:
+            segments = batch_voice_links.arbitrate_linked_owner_claims(
+                segments, result.get('manual_speaker_assignments') or {}
+            )
         segments.sort(key=lambda s: (s['timestamp'], s['end'] - s['start'], s.get('text', '')))
         for segment in segments:
             duration = segment['end'] - segment['start']

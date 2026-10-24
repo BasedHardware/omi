@@ -5563,9 +5563,11 @@ ramp HOLD, never evidence of healthy exposure.
 When enabled, successful batch pyannote turns persist `final:batch:<unit>` speaker
 scopes, shared across that unit's projection parts. These scopes survive rollback;
 enrichment skips conversation-wide AHC when any such segment is present, including
-mixed live/WAL conversations. There are no enrollment-compatible worker centroids:
-identities stay anonymous, owner-safe, and gaps carry explicit `batch_abstention`.
-Existing manual receipts still apply; text, translations and segment IDs are retained.
+mixed live/WAL conversations in the legacy evidence mode. The default-on local
+quality path now emits compatible centroids and names from already-loaded
+enrollment snapshots (see Batch local quality naming and faithful turns below).
+Without compatible evidence, identities stay anonymous and gaps carry explicit
+`batch_abstention`. Existing manual receipts still apply.
 Recovery output keeps legacy scopes and never claims pyannote authority.
 
 `BATCH_PIPELINE_REQUIRE_LIVE_TARGET_ENABLED=false` is the default. When enabled,
@@ -6531,6 +6533,87 @@ lifecycle owner's content/lease-fenced delete succeeds. Notes/episode prompts us
 L2 roster priors and L3 rendering/language authorities; notes cache identities
 include effective packet selection and version. Cloud Run metric export includes
 the refactor families while retaining the prerecorded-language gate allowlist.
+
+### Batch local quality naming and faithful turns
+
+`BATCH_PIPELINE_LOCAL_QUALITY_ENABLED` defaults on. CPU projection builds turns
+from maximum-overlap word assignment, splits at every voice change and joins
+consecutive same-voice words only when their gap is strictly below two seconds.
+Gap words remain explicit anonymous abstentions. Word/capture clocks, deterministic
+segment IDs and the original unit's `final:batch:<unit>` scope survive multipart
+projection; conversation partitioning thresholds are unchanged.
+
+Naming requires Omi v2 WeSpeaker centroids with pinned embedding/model revisions
+and the existing evidence, cosine threshold, margin and owner arbitration rules.
+The GPU worker never sees an enrollment gallery. Projection reuses the user
+profile already read by the transactional privacy guard for owner-only naming;
+no profile acquisition, enrollment read or owner audio repair is introduced.
+A changed owner vector between planning and commit blocks assignment for a fresh
+retry. A newly discovered canonical manual owner reservation withdraws only this
+part's new automatic owner accepts before the manual receipt is reapplied. The canonical manual receipt remains
+transactional authority. A callback may supply already-loaded people only with
+an enrollment revocation fence, paid entitlement, active v3 samples and matching
+privacy generation; absent or incompatible snapshots leave speakers anonymous.
+Names never come from transcript text, a roster or channel numbers. Overlapping
+same-voice turns are unioned before excerpt selection; unused slots may sample
+disjoint tails of a long clean turn within the existing three-clip/ten-second
+limits. Repeated intervals never count the same PCM twice.
+
+Setting the switch false restores the previous word grouper and stops new
+centroid naming/extraction. This is a live override even for an older pinned
+projection policy. It preserves committed batch authority and manual labels.
+The independent local scorecard reports strict automatic identity separately
+from the Hungarian oracle; missing gallery evidence cannot qualify naming.
+
+Speaker evidence modes retain their existing authority: an abstention supplies
+no replacement label, a fresh accepted acoustic decision may replace it, and
+positive or negative manual receipts dominate. Scope/source strings alone never
+create an identity candidate or bypass the evidence producer.
+
+
+Independently diarized batch units retain separate anonymous gap keys, including
+across projection parts, so correcting one unidentified gap cannot label another.
+When separate scoped voices independently claim the owner without shared
+conversation evidence, projection withdraws their automatic accepts and keeps
+manual or carried labels authoritative. Historical sync integers remain scoped;
+only server-allocated final batch IDs can unify claims across batch scopes.
+Winning whole-voice manual receipts reserve their conversation-local speaker ID
+even without a capture scope; excerpt labels do not reserve the whole voice. Repeated claims
+for a proven common voice remain intact. Enrollment-rich local views retain
+diagnostic status and record that their labels passed through the production
+projector.
+
+### Conversation-local batch voice continuity
+
+Authoritative batch projection carries compatible clean-speech centroids into the
+existing assignment transaction. `utils/stt/batch_voice_links.py` matches each
+unit voice against immutable anchors in the canonical conversation, before the
+integer speaker allocator runs. It performs no enrollment, gallery or additional
+Firestore reads. Multipart parts retain the original unit scope. Five seconds of
+clean evidence, compatible model/revision provenance, the shared cross-scope
+cosine threshold and a nearest-candidate margin are required. Distinct voices
+from one unit cannot link; competing matches abstain. Manual conflicting names
+veto links, as do conflicting accepted acoustic names when no manual authority
+overrides them. Evidence is restricted to the current unit scope before labels
+are compared; equal provider labels in different units are not one voice. Owner
+claims are re-arbitrated across resulting voice IDs.
+
+The registry is always encrypted, including standard-protection conversations,
+and removed at the client read boundary. It has at most 32 voice anchors, 256
+scope bindings and 192 KiB of plaintext; exhaustion retains committed IDs and
+stops expanding evidence rather than dropping transcript speech. Canonical
+merges retain the canonical registry only; donor evidence is never imported.
+Existing privacy-generation and deletion checks fence the same transaction as
+the transcript and projection receipt. A generation change discards old anchors;
+a missing or invalid registry never triggers audio backfill.
+
+`BATCH_PIPELINE_VOICE_LINKING_ENABLED` defaults to `true`. Setting it to `false`
+stops new acoustic links and anchors; existing scope bindings and persisted
+speaker IDs continue to replay unchanged. The environment is checked at the
+reversible projection boundary, so a historical pinned stage policy cannot
+prevent an incident rollback. This does not enable batch admission or change
+its rollout percentage.
+
 
 ### Wave 2 evidence and consumers
 

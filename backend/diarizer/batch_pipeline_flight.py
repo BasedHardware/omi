@@ -52,6 +52,7 @@ fix_reproducibility: Any = getattr(_reproducibility, 'fix_reproducibility', None
 
 from diarizer.batch_pipeline import SAMPLE_RATE, crop_model_vad_spans, is_fatal_cuda_error
 from utils.stt.diarization_turns import exclusive_from_activity, overlap_regions
+from utils.stt.voice_centroids import COMMUNITY_MODEL_REVISION
 
 logger = logging.getLogger(__name__)
 
@@ -124,7 +125,16 @@ def diarization_payload(output) -> dict:
         if exclusive is not None
         else exclusive_from_activity(activity)
     )
-    return {'turns': turns, 'overlaps': overlap_regions(activity), 'backend': 'pyannote'}
+    return {
+        'turns': turns,
+        'overlaps': overlap_regions(activity),
+        'backend': 'pyannote',
+        'provenance': {
+            'model_revision': COMMUNITY_MODEL_REVISION,
+            'pipeline': 'pyannote.audio==4.0.3',
+            'exclusive_method': 'native' if exclusive is not None else 'longest_active_turn',
+        },
+    }
 
 
 def unsupported_reason(diarizer, vad) -> str | None:

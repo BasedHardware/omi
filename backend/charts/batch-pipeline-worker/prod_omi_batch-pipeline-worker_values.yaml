@@ -30,6 +30,7 @@ tolerations:
     value: present
     effect: NoSchedule
 worker:
+  embeddingApiUrl: "http://172.16.160.20/diarizer"
   shadowRecoveryApiUrl: "https://backend-integration-hhibjajaja-uc.a.run.app"
   apiUrl: https://backend-sync-hhibjajaja-uc.a.run.app
   audience: https://backend-sync-hhibjajaja-uc.a.run.app

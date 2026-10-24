@@ -1,0 +1,8 @@
+# Python 3.11.15, matching diarizer/Dockerfile.batch-pipeline. Install only in
+# backend/.venv-eval; never use the backend service environment.
+# Keep the exact production direct pins. The serving pylock targets Linux;
+# macOS transitive dependencies resolve separately and must be recorded.
+-r ../../diarizer/requirements-batch-pipeline.txt
+
+# Evaluation test runner (not a serving dependency).
+pytest==8.3.5

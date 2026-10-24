@@ -538,7 +538,8 @@
         ".github/workflows/gcp_diarizer.yml"
       ],
       "build_context": ".",
-      "source_root": "backend/diarizer",
+      "source_root": "backend",
+      "entrypoint_source_root": "backend/diarizer",
       "workdir": "/app",
       "entrypoints": [
         "main",

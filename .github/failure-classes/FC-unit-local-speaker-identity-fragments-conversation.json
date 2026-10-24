@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-unit-local-speaker-identity-fragments-conversation",
+  "violated_contract": "A provider's unit-local speaker label is provenance, not a conversation-wide identity. Reallocating one voice on every upload unit fragments a canonical conversation, while forced nearest matching can merge distinct voices and overwrite manual identities.",
+  "canonical_prevention": "Bind compatible clean-speech anchors to conversation-local speaker IDs inside the transcript assignment transaction. Persist encrypted bounded scope bindings, enforce same-unit and manual-identity cannot-links, abstain on short or ambiguous evidence, and retain committed bindings across retry, restart and rollback.",
+  "canonical_prevention_artifact": ["backend/utils/stt/batch_voice_links.py", "backend/tests/unit/test_batch_voice_links.py", "backend/tests/integration/test_batch_pipeline_projection_firestore.py"],
+  "evidence_prs": [],
+  "scope_hints": ["backend/utils/stt/batch_voice_links.py", "backend/utils/sync/assignment.py", "backend/utils/stt/speaker_identity.py"],
+  "status": "open"
+}

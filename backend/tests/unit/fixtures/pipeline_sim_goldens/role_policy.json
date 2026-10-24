@@ -44,7 +44,8 @@
      "projection": {
       "async_projection": false,
       "authoritative_labels": true,
-      "policy_id": "a496cd8f45b0b1f8ea5fbab6e628773a05f4cd3e2921d1860a3d4aee7503759f",
+      "local_quality_enabled": true,
+      "policy_id": "303cf5b6d5b629b17cd272c75f6f0ea99fb1d5ee3e37ada3064fc3afc77ebe3f",
       "projection_contention": false,
       "projection_timing": false,
       "require_live_target": false,
@@ -468,7 +469,8 @@
      "projection": {
       "async_projection": false,
       "authoritative_labels": true,
-      "policy_id": "a496cd8f45b0b1f8ea5fbab6e628773a05f4cd3e2921d1860a3d4aee7503759f",
+      "local_quality_enabled": true,
+      "policy_id": "303cf5b6d5b629b17cd272c75f6f0ea99fb1d5ee3e37ada3064fc3afc77ebe3f",
       "projection_contention": false,
       "projection_timing": false,
       "require_live_target": false,

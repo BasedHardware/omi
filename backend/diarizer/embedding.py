@@ -2,13 +2,14 @@ import os
 import shutil
 import uuid
 import wave
-from functools import lru_cache
 from typing import Any, Dict, List, cast
 
 import torch  # type: ignore[reportMissingImports]  # torch not installed in dev venv
 import torchaudio  # type: ignore[reportMissingImports]  # torchaudio not installed in dev venv
 from fastapi import HTTPException, UploadFile
-from pyannote.audio import Model, Inference  # type: ignore[reportMissingImports]  # pyannote.audio not installed in dev venv
+from utils.stt.embedding_inference import get_embedding_inference
+
+_get_inference = get_embedding_inference
 
 # Minimum audio duration (seconds) for speaker embedding extraction.
 # Audio shorter than this crashes wespeaker fbank (see issue #4572).
@@ -48,22 +49,6 @@ def _validate_audio_duration(file_path: str) -> None:
                 "actual_duration": round(duration, 3),
             },
         )
-
-
-@lru_cache(maxsize=2)
-def _get_inference(version: int) -> Any:
-    device: Any = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if version == 2:
-        model = Model.from_pretrained(
-            "pyannote/wespeaker-voxceleb-resnet34-LM",
-            revision="837717ddb9ff5507820346191109dc79c958d614",
-            token=os.getenv('HUGGINGFACE_TOKEN'),
-        )
-    else:
-        model = Model.from_pretrained("pyannote/embedding", token=os.getenv('HUGGINGFACE_TOKEN'))
-    inference = Inference(model, window="whole")
-    inference.to(device)
-    return inference
 
 
 def initialize_embeddings(*, batch_only: bool = False) -> None:
