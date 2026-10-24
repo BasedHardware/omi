@@ -172,6 +172,19 @@ answer returning near expiry; it does not extend the deadline or guarantee
 survival for a held answer returned earlier. Forced releases remain included in
 `omi_stt_window_forced_cuts_total`.
 
+## Pressure sampler recovery
+
+Window admission retains last-good replica observations for at most 60 seconds
+by default, with the existing quorum and conservative unknown-pod accounting.
+`PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS` accepts 15 through 60 seconds;
+setting it to `15` restores strict behavior. Values above 60 fail closed.
+After `PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES` (default 3) sweeps without
+a new quorum, listen recreates the sampler HTTP client and rediscovers the pool.
+Fetches have a three-second deadline; admission performs no pressure network
+requests. The monitoring live-STT rule `omi-stt-pressure-sampler-stuck` detects
+per-pod zero freshness for five minutes and a frozen progress timestamp. Full
+operational contract: [windowed live STT](operational/windowed-live-stt.md).
+
 ## Same-provider speaker scope preservation and successor replay deduplication
 
 During live `/v4/listen` sessions on flaky connections, mid-session reconnects to the same STT provider retain the session's active `SpeakerProviderEpoch` and connection scope across successor sockets (`same_provider=True`). This guarantees that `ConversationSpeakerIdAllocator` preserves mapped speaker numbers (e.g. SPEAKER_0, SPEAKER_1) across reconnects without renumbering speakers. Successor replay duplicates and straddling segments are deduplicated against the session timeline's `last_end` in the session callback, while successor windowed sockets count stream seconds from their own 0.0 boundary without premature `last_emitted_end` truncation.
@@ -445,6 +458,12 @@ before VAD. Each refusal emits one bounded `s1_refused` outcome with a closed
 reason and no ids, names or claim content. The former S1 requirement flag was
 graduated on 2026-10-20; lineage admission and its kill switch remain authoritative.
 Widen only after the 48 h log gates in `ARCHITECTURE.md`, then watch 24 h.
+Gate 3 uses the id-free `event=sync_lineage_resolve stage=assignment` creation
+outcomes `created_clear|created_overlap|created_unknown`. Only lineage-admitted,
+S1-validated creates emit; unknown remains unmeasured and blocks widening.
+Classification reuses assignment's transactional read cache and changes no routing
+or persistence. See `utils/sync/ARCHITECTURE.md` for the closed count buckets and
+lookup-completeness rules.
 The full API `backend-integration` image also mounts sync and listen routes and carries the same gate. `desktop-backend` has a separate router set with neither site. Deploy renderers reject missing or divergent prod literals and chart drift. Persisted refresh debt from an admitted append survives narrowing without reappending speech; open live rows leave that refresh to finalization. Stage the chart before gated code, drain sync work across mixed writer revisions, and use only a compatible historical Helm release for rollback. See the deployment details in `utils/sync/ARCHITECTURE.md`.
 
 
@@ -6590,3 +6609,10 @@ Both one-shot and agentic notes mounts receive cohort-gated owner-involved task
 rules, authenticated identity and matching cache identity. Exact-reference stale
 capture policy still lacks its producer binding/CAS lifecycle adapter; no fuzzy
 or historical task cancellation is performed.
+# Batch projection ambiguity custody
+
+The batch generation fence retains unresolved text as a durable quarantined
+part receipt and advances the owner watermark only with the final assignment
+receipt transaction. Successors can drain while held uploads stay incomplete
+and outside completion retention. See [owner repair](runbooks/batch-projection-repair.md)
+for the dry-run operator tool, 15-minute obligation metric, and lead-only recovery.

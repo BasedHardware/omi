@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/format/omi_date_format.dart';
 import 'package:omi/ui/omi_routes.dart';
+import 'package:omi/utils/analytics/lag_recorder.dart';
 
 /// Formats [dateTime] with a pattern string. Legacy: a pattern fixes the order and the 12/24-hour
 /// clock for every locale. New code uses `OmiDateFormat.of(context)` (docs/ux-contract.md §7); the
@@ -23,6 +24,7 @@ Future routeToPage(BuildContext context, Widget page, {bool replace = false}) {
   }
 
   final route = omiPageRoute<dynamic>(builder: (c) => page);
+  lagRouteLabels[route] = page.runtimeType.toString();
   if (replace) {
     return Navigator.of(context).pushAndRemoveUntil(route, (route) => false);
   }

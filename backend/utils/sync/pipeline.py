@@ -1431,6 +1431,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     attempt_ref: str | None = None,
     source_position_map: tuple[dict, int] | None = None,
     lineage_binding: Optional[str] = None,
+    lineage_eligible: bool = False,
     cap_recovery: bool = False,
     cap_content_id: str | None = None,
     cap_recovery_service: tuple[str, str | None, str] | None = None,
@@ -1771,6 +1772,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         annotate_identity(incoming, client_device_id, recording_session_id)
         if lineage_binding is not None and target_conversation_id:
             incoming['_sync_lineage_binding'] = lineage_binding
+        if lineage_eligible:
+            incoming['_sync_lineage_eligible'] = True
         phase = 'persistence'
         conversation_turns.append(conversation_turn_lease.acquire(uid, candidate_id, sync_lane))
         from utils.conversations.lifecycle import ingest_sync_conversation
@@ -1786,6 +1789,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 else {}
             ),
         )
+        incoming.pop('_sync_lineage_eligible', None)
         if assigned['id'] != candidate_id:
             # Assignment redirected; hold the conversation the bridge will finalize into too.
             conversation_turns.append(conversation_turn_lease.acquire(uid, assigned['id'], sync_lane))
@@ -3133,7 +3137,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     attempt_ref=attempt_ref,
                     source_position_map=segment_source_maps.get(path),
                     recording_session_id=recording_session_id,
-                    **({'lineage_binding': segment_binding_reasons.get(path)} if use_lineage else {}),
+                    **(
+                        {'lineage_binding': segment_binding_reasons.get(path), 'lineage_eligible': True}
+                        if use_lineage
+                        else {}
+                    ),
                     **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                 )

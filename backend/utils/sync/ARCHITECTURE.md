@@ -67,10 +67,25 @@ Widening procedure. Keep only David listed for 48 h, then widen only if the logs
 
 - `event=sync_lineage_lookup outcome=degraded|lookup_failed`: 0.
 - `outcome=truncated`: at most 2% of decisions; at least 20 `bound` or `split_across_generations` decisions.
-- Zero new sync rows overlapping a live row from eligible uploads (baseline 22/day before the fix).
+- Zero `event=sync_lineage_resolve stage=assignment outcome=created_overlap` from lineage-admitted, S1-validated uploads (baseline 22 overlapping new rows/day). Report `created_clear|created_overlap|created_unknown` counts; unknown is **unmeasured**, never zero violations, and blocks widening. The live test is deliberately conservative (a bare `recording_session_id` or a missing content revision counts as live, because appended live rows may carry nothing else), so it can over-report: under `CAPTURE_COVERAGE_MODE` serve, sync rows also carry `recording_session_id`. Triage each `created_overlap` before treating it as a violation; it can never under-report.
 - Doubled speech (sync-appended time overlapping live segments by absolute time, from segment timing only) at most 10% of appended sync speech; otherwise widening needs time-range dedupe or David's explicit sign-off after seeing his rows.
 - Live rows whose span grew by more than 5 min on a `stamp_fallback` append: 0.
 - Sync job failure, conflict and fenced rates, and the stale-processing orphan sweep count, within +20% of the 7-day baseline; no rise in backend-listen errors.
+
+Gate 3 emits one log-only observation per committed new sync row, after successful
+transaction retries and before indexing/followup. Appends, existing-row retries
+and non-admitted users emit none. `checked_live_candidates_bucket` is one of
+`0|1|2_5|6_10|11_20|gt_20`; it counts compatible live rows (including empty stubs)
+already read in the transaction, using the same source/device/lock/clock-run
+partition. `lookup_complete=true|false` preserves existing discovery and reread
+coverage. Failed, capped (128-row), skipped and missing-device lookups cannot
+prove clear; an observed strict overlap proves overlap even when incomplete.
+Eligibility/observations are transient: no persisted fields, extra Firestore
+reads, routing changes or metric labels. Legacy/held paths without an S1
+validation attestation are outside this observed population. Exclude these
+`stage=assignment` outcomes from the resolver-decision/truncation denominator.
+Eligibility carries the admission decision from the coordinator/projection;
+assignment checks only the local kill switch, without refreshing cohort storage.
 
 Then clear the value on all five services in one change and watch 24 h against the same gates. Rollback: restore the uid list (stops the feature for everyone else) or set `SYNC_LINEAGE_RESOLVE_ENABLED=false` on all five services. Neither undoes appends already written into live rows.
 

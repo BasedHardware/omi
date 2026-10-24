@@ -800,11 +800,25 @@ _add(
         trials=2,
     )
 )
+
+
+def _replay_cursor(client, combo, trial):
+    if trial:
+        client.documents['conversation_recovery_state/finalization_replay'] = {
+            'cursor': {'reconcile_after_at': T0, 'job_id': 'cursor-row'},
+            'generation': 1,
+        }
+
+
 _add(
     DriverEntry(
-        'database.conversation_finalization_jobs.get_finalization_replay_candidates', neutrals={'limit': _LIMIT}
+        'database.conversation_finalization_jobs.get_finalization_replay_candidates',
+        neutrals={'limit': _LIMIT},
+        setup=_replay_cursor,
+        trials=2,
     )
 )
+_add(DriverEntry('database.conversation_finalization_jobs.get_finalization_replay_oldest_overdue_age_seconds'))
 _add(
     DriverEntry(
         'database.conversation_finalization_jobs.get_meeting_receipt_backfill_candidates',
@@ -960,6 +974,7 @@ _add(
             'user_ref': ref_document(f'users/{UID}'),
             'incoming': {'started_at': T0, 'finished_at': T1, 'client_device_id': 'device-1', 'source': 'omi'},
         },
+        neutrals={'diagnostics': (None, 'caller-owned diagnostic sink; no filter, order or projection effect')},
     )
 )
 _add(DriverEntry('database.conversations.get_conversation_ids', base={'uid': UID}))

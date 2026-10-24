@@ -174,7 +174,10 @@ except ModuleNotFoundError:
             description='A brief overview of the conversation, highlighting the key details from it',
             default='',
         )
-        emoji: str = Field(description='An emoji to represent the conversation', default='🧠')
+        # The neutral "nothing chose" default (models.conversation_emoji.NEUTRAL_EMOJI):
+        # 🧠 is the extraction schemas' unset sentinel; a path that forgets the
+        # emoji must land on the neutral one, not the "unset" brain.
+        emoji: str = Field(description='An emoji to represent the conversation', default='💬')
         category: CategoryEnum = Field(description='A category for this conversation', default=CategoryEnum.other)
         sections: List[Section] = Field(
             description='Detailed, free-form note sections in the model-chosen structure', default_factory=list

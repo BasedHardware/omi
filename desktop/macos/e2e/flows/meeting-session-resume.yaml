@@ -1,0 +1,47 @@
+version: 2
+name: meeting-session-resume
+tier: manual
+description: Confirm one local meeting survives a detector gap and scheduled-call relaunch without an ambient confirmation fragment
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MeetingDetector.swift
+  - desktop/macos/Desktop/Sources/Audio/MeetingCallObservation.swift
+  - desktop/macos/Desktop/Sources/Audio/CaptureAudioTimeline.swift
+  - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
+  - desktop/macos/Desktop/Sources/TranscriptionService.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+MeetingBoundaries.swift
+  - desktop/macos/Desktop/Sources/AppState/MeetingConversationBoundaryPolicy.swift
+  - desktop/macos/Desktop/Sources/AppState/MeetingSessionResumePolicy.swift
+  - desktop/macos/Desktop/Sources/CalendarMeetingContext/SystemCalendarMeetingContextService.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+preconditions:
+  - auth_ready
+  - backend_reachable
+steps:
+  - id: S1
+    name: Prepare isolated capture and calendar evidence
+    do: "Use an isolated macOS test user or VM with only a synthetic local Calendar event spanning this test. Grant that named test bundle Calendar access. Start the offline local harness backend and a named omi-meeting-resume bundle with its synthetic account, empty Rewind profile, and on-device STT. Verify the running bundle's sourceIdentity and loopback backend URLs with omi-ctl health. Use a controlled Discord test room carrying harmless fixture speech and a digitally muted microphone. Never use production accounts, production app bundles, api.omi.me, or personal calendar/transcript data. Do not use capture_test_transcript: these cases require real detector probes and the local ASR audio path. Before S2, run the input-only negative control in a fresh test recording: a messaging voice note must not confirm a meeting. Reset that test recording before joining the controlled room."
+  - id: S2
+    name: Confirm the meeting and record its local identity
+    do: "Select Only Meetings and join the controlled Discord call. Maintain input and output evidence for at least 10 seconds. Record the active meeting session id from the named bundle's private log and test SQLite database. Speak or play the first fixture phrase and wait for its segment to persist. Confirm the role is meeting and the stored calendar event matches the synthetic event."
+  - id: S3
+    name: Sustain a confirmed call on input alone
+    do: "Keep Discord's microphone stream open while stopping its output stream for at least 10 seconds. Verify that capture remains open, no meeting boundary is emitted, and the session id remains unchanged. Restore output without resetting this meeting or its session id. Repeat output at intervals below five minutes and confirm the session continues. Then keep only input running for five minutes: after the eight-second off grace capture must close and start the 240-second resume hold. Restore output inside that hold and confirm the same session resumes. Repeat without output returning and verify finalization on hold expiry."
+  - id: S4
+    name: Close the gate without finalizing the meeting
+    do: "Remove Discord input and output evidence, for example by leaving the test room while keeping the room and synthetic calendar event available. After the 8-second grace, confirm mic and system capture close and the log says meeting ENDED with last positive input/output evidence and resumePending=true. Keep evidence absent for 150 seconds. The original meeting must remain unfinalized, with no new ambient session. The updater must continue to defer installation during this hold."
+  - id: S5
+    name: Resume the same session and preserve segment time
+    do: "Rejoin the same test room within 240 seconds of the off edge and play a second distinct fixture phrase. Confirm meeting RESUMED, the same local session id and meeting role, no meeting_started rotation, and no ambient session. Inspect the synthetic session's persisted segments: the second phrase's timestamp must retain the real capture gap, and an ASR window must not join speech from both sides of that gap. Capture the named-bundle log and synthetic session/segment rows as evidence."
+  - id: S6
+    name: Expire the hold at the original off edge
+    do: "Remove both streams again and record the capture off-edge time. Leave evidence absent for more than 240 seconds. Confirm exactly one meeting_ended finalization and, in Only Meetings, finishedAt at the original off edge rather than the expiry. A later call must undergo normal confirmation. In a separate Always recording, verify that capture continues across the evidence gap and that expiry retains the continuously recorded tail inside the stored interval."
+  - id: S7
+    name: Recover the scheduled call without an ambient fragment
+    do: "Return to Only Meetings and start another confirmed test meeting with the same synthetic Calendar event still active. Keep this session running for at least 30 seconds and persist fixture speech before the crash. Verify the named test bundle's PID, terminate only that PID with SIGKILL, and relaunch that same bundle/profile while the controlled call retains input and output evidence. The old session must recover with crash_recovery and its evidence-based capture end. The first new recording session must have role meeting; the 10-second detector confirmation must not finalize an ambient conversation. Repeat with no active overlapping event and with no call evidence: calendar-only or unrelated interrupted history must not promote ambient capture."
+  - id: S8
+    name: Preserve distinct-call boundaries and document the receipt
+    do: "Re-establish an active synthetic event and a confirmed test call. During its resume hold, detect a different native call app with a different calendar event and verify a fresh meeting boundary after confirmation. Repeat the Zoom microphone-release generation case without a matching event to ensure it remains a new call. Record the exact source revision, named bundle, test profile, local endpoints, log/session evidence and pass/fail for every step. This manual receipt is separate from the fake-clock XCTest results; an unexecuted flow must remain explicitly unverified."
+  - id: S9
+    name: Verify final draining, pending notices and the cloud lifetime
+    do: "In the isolated local-ASR profile, resume with fixture speech buffered on both sides of the gap, then immediately stop or rotate: both phrases must persist before retirement, including when the earlier decoder result is filtered out. Induce a gap before the delayed notice appears: the committed notice must appear once on resume and never repeat if it was already shown. With an isolated loopback-only listen backend and synthetic STT provider, repeat the 150-second gap using cloud STT without a calendar event: the meeting socket must send conversation_timeout=600 (covering sustain plus resume with margin), retain one backend conversation across the gap, and finalize on normal client close. In a separate unclean network-drop run, verify the backend conversation expires after ten minutes of inactivity. Ambient sockets must retain their default timeout. Never route this variant to production services or real user data."

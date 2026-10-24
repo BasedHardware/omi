@@ -299,6 +299,28 @@ async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: 
     return await future
 
 
+def _byok_detail_code(error: BaseException) -> str | None:
+    """Read the byok failure class off an already-mapped HTTPException detail.
+
+    Structural mirror of ``utils.llm.gateway_error_contract.byok_failure_class_of``
+    without importing it: this module sits below utils.byok in the import graph
+    (gateway_error_contract reads the BYOK contextvars), so an import here would
+    be circular. Only the typed conversation-processing boundary produces these
+    details.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        detail = getattr(current, 'detail', None)
+        if isinstance(detail, dict):
+            code = detail.get('code')
+            if isinstance(code, str) and code.startswith('byok_'):
+                return code
+        current = current.__cause__ or current.__context__
+    return None
+
+
 def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if future.cancelled():
         return
@@ -310,6 +332,17 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     # what Cloud Error Reporting groups as a crash at legal_holds.py.
     if type(error).__name__ == 'DestructiveOperationInProgress':
         logger.info('background task %s deferred reason=destructive_operation', name)
+        return
+    # A BYOK provider failure is the user's own provider account state, not a
+    # server fault: one structured WARNING, never a traceback at ERROR.
+    byok_class = _byok_detail_code(error)
+    if byok_class is not None:
+        logger.warning(
+            'byok provider failure is user account state, not a server fault: byok=true failure_class=%s '
+            'route=background_task/%s',
+            byok_class,
+            name,
+        )
         return
     logger.error("background task %s failed: %s", name, error, exc_info=error)
 
