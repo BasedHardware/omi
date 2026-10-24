@@ -16,7 +16,11 @@ NOTES_MIN_WORDS = 12
 
 
 def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None) -> Any:
-    """A short nonempty speech capture is kept, without any paid notes or emoji."""
+    """A short nonempty speech capture is kept, without any paid notes.
+
+    The emoji is the minimum's deterministic category emoji (💬): a blank value
+    does not render blank in the app, it renders the client's random fallback.
+    """
     if not shadow_or_serve('NOTES_PACKET_V2_MODE') or getattr(conversation, 'photos', None):
         return None
     segments = list(getattr(conversation, 'transcript_segments', None) or ())
@@ -39,7 +43,6 @@ def quiet_minimum(uid: str, conversation: Any, *, tz: str | None = None) -> Any:
     if not eligible or not serving_for('NOTES_PACKET_V2_MODE', uid):
         return None
     minimum = build_deterministic_minimum_structured(view, uid=uid, tz_name_provider=lambda: tz)
-    minimum.emoji = ''
     minimum.title_provenance = 'server_minimum'
     result('short_clip', 'minimum')
     return minimum
