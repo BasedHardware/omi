@@ -25,7 +25,10 @@ SONIOX = next(t for t in DEFAULT_TARGETS if t.id == 'soniox')
 
 @pytest.mark.parametrize('dead_before_close', [False, True])
 @pytest.mark.parametrize('text', [False, True])
-def test_pre_teardown_death_counts_but_post_teardown_death_does_not(dead_before_close, text):
+def test_pre_teardown_death_counts_but_post_teardown_death_does_not(dead_before_close, text, monkeypatch):
+    # The three-vote fairness budget is per five-minute window. Keep this
+    # teardown assertion in one window even when CI crosses a wall-clock boundary.
+    monkeypatch.setattr(live_chain.health, '_clock', lambda: 1000.0)
     before = observed('soniox', 'provider_failure', 'connection_lost')
     for _ in range(46):
         leg = serving_leg(family='soniox')
