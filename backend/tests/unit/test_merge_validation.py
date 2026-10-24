@@ -714,3 +714,79 @@ class TestResolveMergedFinishedAt:
     def test_missing_key_treated_like_none(self, merge):
         later = datetime(2026, 5, 30, 11, 0, tzinfo=timezone.utc)
         assert merge._resolve_merged_finished_at([{}, {"finished_at": later}]) == later
+
+
+# ---------------------------------------------------------------------------
+# validate_merge_compatibility — ordering must follow _merge_order_key
+# ---------------------------------------------------------------------------
+
+
+class TestValidateOrderingUsesCreatedAtFallback:
+    """The gap-warning ordering inside ``validate_merge_compatibility`` must use
+    the same created_at fallback as ``perform_merge_async``.
+
+    It previously sorted on ``started_at or _UTC_MIN``, so a source with no
+    started_at (API/integration-created) was placed first and compared against
+    the wrong neighbour. These tests pin the shared key so the two paths cannot
+    drift apart again.
+    """
+
+    def _conv(self, cid, started, finished, created):
+        return {
+            "id": cid,
+            "status": "completed",
+            "started_at": started,
+            "finished_at": finished,
+            "created_at": created,
+        }
+
+    def test_gap_warning_neighbours_follow_created_at_ordering(self, merge):
+        """The warning must compare the same neighbours ``perform_merge_async`` merges.
+
+        Three sources: ``backfill`` has no started_at but a created_at that
+        places it between ``recorded`` (10:00-10:05) and ``late`` (16:00-16:05).
+        Ordering by the shared key yields recorded -> backfill -> late, whose
+        only gap is backfill.finished (15:00) to late.started (16:00) = 1h,
+        i.e. no warning. Ordering by ``started_at or _UTC_MIN`` puts ``backfill``
+        first and reports a fabricated 6.0h gap between backfill.finished and
+        recorded.started — a warning the merge path never acts on.
+        """
+        ten = datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc)
+        recorded = self._conv("recorded", ten, ten.replace(minute=5), ten)
+        backfill = self._conv("backfill", None, ten.replace(hour=15), ten.replace(hour=14))
+        late = self._conv("late", ten.replace(hour=16), ten.replace(hour=16, minute=5), ten.replace(hour=16))
+
+        # The shared key must place the backfill between its real neighbours.
+        ordered = sorted([late, backfill, recorded], key=merge._merge_order_key)
+        assert [c["id"] for c in ordered] == ["recorded", "backfill", "late"]
+
+        # The old sentinel key misplaces it and fabricates a 6h gap.
+        old = sorted([late, backfill, recorded], key=lambda c: merge._coerce_dt(c.get("started_at")) or merge._UTC_MIN)
+        assert [c["id"] for c in old] == ["backfill", "recorded", "late"]
+
+        is_valid, error, warning = merge.validate_merge_compatibility([late, backfill, recorded])
+        assert is_valid is True and error is None
+        assert warning is None
+
+    def test_validate_accepts_sources_with_only_created_at(self, merge):
+        ten = datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc)
+        noon = datetime(2026, 5, 30, 12, 0, tzinfo=timezone.utc)
+        a = self._conv("a", None, None, ten)
+        b = self._conv("b", None, None, noon)
+        is_valid, error, warning = merge.validate_merge_compatibility([b, a])
+        assert is_valid is True and error is None
+
+    def test_validate_gap_warning_preserved_for_recorded_sources(self, merge):
+        """Sharing the order key must not suppress a real >1h gap warning.
+
+        Two recorded sources with a 3h gap still order by started_at and still
+        warn; the created_at fallback only affects sources that have no
+        started_at, which skip the gap comparison by construction.
+        """
+        ten = datetime(2026, 5, 30, 10, 0, tzinfo=timezone.utc)
+        thirteen = datetime(2026, 5, 30, 13, 0, tzinfo=timezone.utc)
+        first = self._conv("first", ten, ten.replace(minute=5), ten)
+        second = self._conv("second", thirteen, thirteen.replace(minute=5), thirteen)
+        is_valid, error, warning = merge.validate_merge_compatibility([second, first])
+        assert is_valid is True and error is None
+        assert warning is not None and "gap" in warning
