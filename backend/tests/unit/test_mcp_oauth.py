@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import ModuleType
 
@@ -1564,3 +1564,190 @@ def test_revoke_user_grant_leaves_other_clients_and_hosts_untouched():
     survivors = {grant['id']: grant for grant in mcp_oauth.list_user_grants(uid)}
     assert survivors[other_client['id']]['status'] == 'active'
     assert survivors[other_host['id']]['status'] == 'active'
+
+
+# ---------------------------------------------------------------------------
+# Mixed naive / aware / ISO-8601 timestamps in the OAuth grant, code and token
+# paths. Firestore hands back whichever representation the writer used, and
+# every one of these call sites compares the value against an aware UTC
+# ``datetime.now(timezone.utc)``; an unnormalized value either raises
+# ``TypeError: can't compare offset-naive and offset-aware datetimes`` or is
+# silently misread (an ISO string is never ``expires_at`` and never ``> now``).
+# ---------------------------------------------------------------------------
+
+
+def test_coerce_utc_datetime_normalizes_naive_aware_and_iso_values():
+    aware = datetime(2026, 5, 30, 10, 0, 0, tzinfo=timezone.utc)
+    candidates = {
+        'naive': datetime(2026, 5, 30, 10, 0, 0),
+        'aware_utc': aware,
+        'aware_offset': datetime(2026, 5, 30, 18, 0, 0, tzinfo=timezone(timedelta(hours=8))),
+        'iso_z': '2026-05-30T10:00:00Z',
+        'iso_offset_zero': '2026-05-30T10:00:00+00:00',
+        'iso_offset_eight': '2026-05-30T18:00:00+08:00',
+        'iso_naive': '2026-05-30T10:00:00',
+        'iso_lower_z_padded': '  2026-05-30T10:00:00z  ',
+    }
+    for label, value in candidates.items():
+        coerced = mcp_oauth._coerce_utc_datetime(value)
+        assert coerced == aware, label
+        assert coerced.utcoffset() == timedelta(0), label
+
+    for absent in (None, '', '   ', 'not-a-timestamp', '2026-13-45T99:99:99Z', 0, 1.5, [], {}, b'2026-05-30'):
+        assert mcp_oauth._coerce_utc_datetime(absent) is None, repr(absent)
+
+
+def test_grant_listing_sorts_mixed_naive_aware_and_iso_timestamps():
+    collection = mcp_oauth.db.collection('mcp_oauth_grants')
+    resource = mcp_oauth.MCP_RESOURCE_URL
+    collection.document('mixed-naive').set(
+        {
+            'uid': 'mixed-ts-user',
+            'client_id': 'client-naive',
+            'resource': resource,
+            'updated_at': datetime(2026, 5, 30, 10, 0, 0),
+        }
+    )
+    collection.document('mixed-aware').set(
+        {
+            'uid': 'mixed-ts-user',
+            'client_id': 'client-aware',
+            'resource': resource,
+            'created_at': datetime(2026, 5, 30, 11, 0, 0, tzinfo=timezone.utc),
+        }
+    )
+    collection.document('mixed-iso').set(
+        {
+            'uid': 'mixed-ts-user',
+            'client_id': 'client-iso',
+            'resource': resource,
+            'updated_at': '2026-05-30T12:00:00Z',
+        }
+    )
+
+    # Before the fix the sort raised TypeError on the first naive/aware
+    # comparison; the ISO record was never orderable against either.
+    assert [grant['id'] for grant in mcp_oauth.list_user_grants('mixed-ts-user')] == [
+        'mixed-iso',
+        'mixed-aware',
+        'mixed-naive',
+    ]
+
+
+def test_is_unexpired_accepts_naive_aware_and_iso_timestamps():
+    now = datetime(2026, 5, 30, 12, 0, 0, tzinfo=timezone.utc)
+
+    assert mcp_oauth._is_unexpired(datetime(2026, 5, 30, 13, 0, 0), now)
+    assert mcp_oauth._is_unexpired('2026-05-30T13:00:00Z', now)
+    assert mcp_oauth._is_unexpired('2026-05-30T21:00:00+08:00', now)
+    assert not mcp_oauth._is_unexpired(datetime(2026, 5, 30, 11, 0, 0), now)
+    assert not mcp_oauth._is_unexpired('2026-05-30T11:00:00Z', now)
+    assert not mcp_oauth._is_unexpired(None, now)
+    assert not mcp_oauth._is_unexpired('garbage', now)
+
+
+def test_authorization_code_consumption_handles_naive_and_iso_expiry():
+    scopes = ['memories.read']
+    verifier = 'b' * 64
+    redirect_uri = 'https://chatgpt.com/connector_platform_oauth_redirect'
+    codes = mcp_oauth.db.collection('mcp_oauth_authorization_codes')
+
+    def issue(uid):
+        grant = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+        return mcp_oauth.issue_authorization_code(
+            uid,
+            grant['id'],
+            'omi-chatgpt-prod',
+            redirect_uri,
+            mcp_oauth.MCP_RESOURCE_URL,
+            scopes,
+            mcp_oauth.pkce_s256(verifier),
+        )
+
+    def consume(code):
+        return mcp_oauth.consume_authorization_code(
+            code, 'omi-chatgpt-prod', redirect_uri, mcp_oauth.MCP_RESOURCE_URL, verifier
+        )
+
+    naive_future = issue('naive-expiry-user')
+    codes.document(mcp_oauth.hash_secret(naive_future)).update({'expires_at': datetime(2099, 1, 1, 0, 0, 0)})
+    assert consume(naive_future) is not None
+
+    iso_future = issue('iso-expiry-user')
+    codes.document(mcp_oauth.hash_secret(iso_future)).update({'expires_at': '2099-01-01T00:00:00Z'})
+    assert consume(iso_future) is not None
+
+    naive_past = issue('naive-expired-user')
+    codes.document(mcp_oauth.hash_secret(naive_past)).update({'expires_at': datetime(2000, 1, 1, 0, 0, 0)})
+    assert consume(naive_past) is None
+
+
+def test_authorization_code_exchange_handles_naive_expiry():
+    scopes = ['memories.read']
+    verifier = 'c' * 64
+    redirect_uri = 'https://chatgpt.com/connector_platform_oauth_redirect'
+    grant = mcp_oauth.create_or_update_grant(
+        'naive-exchange-user', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes
+    )
+    code = mcp_oauth.issue_authorization_code(
+        'naive-exchange-user',
+        grant['id'],
+        'omi-chatgpt-prod',
+        redirect_uri,
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256(verifier),
+    )
+    mcp_oauth.db.collection('mcp_oauth_authorization_codes').document(mcp_oauth.hash_secret(code)).update(
+        {'expires_at': datetime(2099, 1, 1, 0, 0, 0)}
+    )
+
+    pair = mcp_oauth.exchange_authorization_code_for_tokens(
+        code, 'omi-chatgpt-prod', redirect_uri, mcp_oauth.MCP_RESOURCE_URL, verifier
+    )
+
+    assert pair is not None
+    assert pair['access_token'].startswith('omi_oat_')
+
+
+@pytest.mark.parametrize('stored_used_at', ['naive', 'iso'])
+def test_refresh_replay_grace_tolerates_naive_and_iso_used_at(monkeypatch, stored_used_at):
+    grant = mcp_oauth.create_or_update_grant(
+        'mixed-used-at', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    now = mcp_oauth._now()
+    monkeypatch.setattr(mcp_oauth, '_now', lambda: now)
+    monkeypatch.setattr(mcp_oauth, 'MCP_OAUTH_REPLAY_GRACE_SECONDS', 120)
+    used_at = now - timedelta(seconds=30)
+    stored = used_at.replace(tzinfo=None) if stored_used_at == 'naive' else used_at.isoformat()
+    mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(mcp_oauth.hash_secret(pair['refresh_token'])).update(
+        {'used_at': stored}
+    )
+
+    outcomes = []
+    reissued = mcp_oauth.rotate_refresh_token(
+        pair['refresh_token'], 'omi-chatgpt-prod', None, on_outcome=outcomes.append
+    )
+
+    # A naive or ISO-8601 used_at used to fall outside the grace window (the
+    # isinstance guard failed), which revoked the whole grant family instead of
+    # reissuing inside the replay window.
+    assert outcomes == ['replay_grace_reissued']
+    assert reissued is not None
+    assert mcp_oauth.get_active_grant(grant['id']) is not None
+
+
+def test_refresh_rotation_handles_naive_expiry(monkeypatch):
+    grant = mcp_oauth.create_or_update_grant(
+        'naive-refresh-expiry', 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, ['memories.read']
+    )
+    pair = mcp_oauth.issue_token_pair(grant, scopes=['memories.read'])
+    mcp_oauth.db.collection('mcp_oauth_refresh_tokens').document(mcp_oauth.hash_secret(pair['refresh_token'])).update(
+        {'expires_at': datetime(2099, 1, 1, 0, 0, 0)}
+    )
+
+    rotated = mcp_oauth.rotate_refresh_token(pair['refresh_token'], 'omi-chatgpt-prod', None)
+
+    assert rotated is not None
+    assert rotated['refresh_token'] != pair['refresh_token']
