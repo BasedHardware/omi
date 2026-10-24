@@ -75,6 +75,11 @@ PEOPLE_STATS_FIELD_PATHS = (
     'data_protection_level',
     'manual_speaker_assignments',
     'manual_speaker_assignments_compressed',
+    # is_visible_conversation hides a Dream duplicate capture by dream_duplicate_of
+    # alone: the row stays discarded == False, so the indexed filter still returns
+    # it and only the projected field can hide it. A field the mask drops comes
+    # back absent, and an absent hide flag reads as visible.
+    'dream_duplicate_of',
 )
 
 
