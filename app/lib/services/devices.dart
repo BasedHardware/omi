@@ -61,12 +61,7 @@ class DeviceService {
       blocked: (id) =>
           _staleBondRecoveryRequired || (!savedReconnect.killed && reconnectPaused) || _manuallyDisconnected(id),
       connected: (id) => _connections[id]?.status == DeviceConnectionState.connected,
-      configure: (id, enabled) async {
-        enabled ? _savedReconnectDevices.add(id) : _savedReconnectDevices.remove(id);
-        final transport = _connections[id]?.transport;
-        if (transport is NativeBleTransport) transport.savedReconnectEnabled = enabled;
-        await BleHostApi().configureSavedReconnect(id, enabled);
-      },
+      configure: _configureSavedReconnect,
       connect: (id, legacy) async {
         await ensureConnection(id, force: true, automatic: !legacy);
       },
@@ -82,6 +77,19 @@ class DeviceService {
 
   late final SavedPendantReconnect savedReconnect;
   final Set<String> _savedReconnectDevices = {};
+  Future<void> _configureSavedReconnect(String id, bool enabled) async {
+    // Track in-flight owners too, so stop/retirement can disarm a pending enable.
+    enabled ? _savedReconnectDevices.add(id) : _savedReconnectDevices.remove(id);
+    final transport = _connections[id]?.transport;
+    if (transport is NativeBleTransport) transport.savedReconnectEnabled = enabled;
+    try {
+      await BleHostApi().configureSavedReconnect(id, enabled);
+    } catch (_) {
+      if (!enabled) _savedReconnectDevices.add(id); // Keep failed disarms retryable.
+      rethrow;
+    }
+  }
+
   bool reconnectPaused = false;
   bool _manuallyDisconnected(String id) =>
       !savedReconnect.killed && SharedPreferencesUtil().getStringList('manualBleDisconnects').contains(id);
@@ -307,6 +315,9 @@ class DeviceService {
 
   Future<void> stop() async {
     savedReconnect.stop();
+    for (final id in _savedReconnectDevices.toList()) {
+      await _configureSavedReconnect(id, false);
+    }
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
 
@@ -456,6 +467,11 @@ class DeviceService {
 
   Future<void> disconnectDevice(String deviceId, {bool userInitiated = false}) async {
     if (userInitiated) _setManualDisconnect(deviceId, true);
+    if (userInitiated || reconnectPaused || _staleBondRecoveryRequired || _manuallyDisconnected(deviceId)) {
+      // Explicit retirement precedes transport release. Capture recovery leaves
+      // native saved intent armed even if its Dart continuation is cancelled.
+      await _configureSavedReconnect(deviceId, false);
+    }
     final connection = _connections.remove(deviceId);
     if (connection == null) {
       await BleHostApi().unmanageDevice(deviceId);
@@ -490,6 +506,7 @@ class DeviceService {
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
     _setManualDisconnect(deviceId, true);
+    await _configureSavedReconnect(deviceId, false);
     clearStaleBondRecoveryRequirement();
     if (_connections.containsKey(deviceId)) {
       await _teardownConnection(deviceId);

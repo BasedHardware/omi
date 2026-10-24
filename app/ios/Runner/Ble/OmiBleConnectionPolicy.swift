@@ -122,6 +122,14 @@ struct OmiSavedReconnectIntent {
         try? SafeDefaults.store(.array(blocked.sorted().map { .string($0) }), forKey: Self.blockedKey, in: defaults)
     }
 
+    /// A transport can be released by capture recovery. Only a prior explicit
+    /// intent disarm turns that release into durable user suppression.
+    mutating func releaseTransport(_ uuid: String) -> Bool {
+        let keepReconnect = saved.contains(uuid) && !blocked.contains(uuid)
+        if !keepReconnect { suppress(uuid) }
+        return keepReconnect
+    }
+
     /// Process teardown is not a user disconnect. Keep saved OS requests eligible
     /// for CoreBluetooth restoration; only unsaved/blocked owners are retired.
     func terminationTargets(_ known: Set<String>) -> Set<String> {

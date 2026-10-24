@@ -27,6 +27,12 @@ class OmiBleConnectionPolicyTest < Minitest::Test
                 intent.configure(saved, enabled: true)
                 // A remote disconnect owes a request immediately, irrespective of capture.
                 precondition(intent.action(saved, poweredOn: true, state: .disconnected) == .connect)
+                // A cancelled capture-recovery continuation cannot turn native
+                // transport release into a persisted manual disconnect.
+                precondition(intent.releaseTransport(saved))
+                intent = OmiSavedReconnectIntent(defaults: defaults)
+                precondition(intent.action(saved, poweredOn: true, state: .connecting) == .keepPending)
+                precondition(!intent.blocked.contains(saved))
                 // applicationWillTerminate cleanup must preserve saved OS requests
                 // without turning termination into a durable manual disconnect.
                 precondition(intent.terminationTargets([saved, other]) == [other])
@@ -49,7 +55,8 @@ class OmiBleConnectionPolicyTest < Minitest::Test
                 precondition(health.reason == "capture_denied")
                 precondition(intent.action(saved, poweredOn: true, state: .disconnected) == .connect)
                 // Explicit suppression survives a new process and stale restoration.
-                intent.suppress(saved)
+                intent.configure(saved, enabled: false)
+                precondition(!intent.releaseTransport(saved))
                 precondition(intent.terminationTargets([saved, other]) == [saved, other])
                 intent = OmiSavedReconnectIntent(defaults: defaults)
                 precondition(intent.action(saved, poweredOn: true, state: .connecting) == .suppressed)

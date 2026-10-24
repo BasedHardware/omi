@@ -123,6 +123,8 @@ final class OmiBleManager: NSObject {
         reconnectIntent.configure(uuid, enabled: enabled)
         if enabled {
             logBle(uuid: uuid, event: "reconnect_intent", detail: "enabled")
+            // Intent owns the radio even when Dart's connected mirror is stale.
+            reconcileSavedReconnect(uuid, source: "intent_authorized")
         } else {
             logBle(uuid: uuid, event: "reconnect_intent", detail: "disabled_by_policy_or_target_change")
             endSavedScan(uuid, reason: "intent_disabled")
@@ -617,18 +619,32 @@ final class OmiBleManager: NSObject {
     }
 
     func disconnectPeripheral(uuid: String) {
-        reconnectIntent.suppress(uuid)
-        endSavedScan(uuid, reason: "manual_disconnect")
-        logBle(uuid: uuid, event: "connect_cancelled", detail: "manual_disconnect:pending_since_ms=\(connectPendingSince.removeValue(forKey: uuid) ?? 0)")
-        diagnosticScanStarted.remove(uuid)
+        let keepReconnect = reconnectIntent.releaseTransport(uuid)
         savedRetryTasks.removeValue(forKey: uuid)?.cancel()
-        persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
-        manuallyDisconnected.insert(uuid)
+        if keepReconnect {
+            logBle(uuid: uuid, event: "transport_released", detail: "saved_reconnect_retained")
+        } else {
+            endSavedScan(uuid, reason: "manual_disconnect_or_retirement")
+            connectPendingSince.removeValue(forKey: uuid)
+            diagnosticScanStarted.remove(uuid)
+            persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
+            manuallyDisconnected.insert(uuid)
+            finishReadyRequest(uuid: uuid)
+        }
         setCaptureAuthorized(uuid: uuid, authorized: false)
         captureReconnects.removeValue(forKey: uuid)?.finish(false)
         pairingLostBlocked.remove(uuid)
-        finishReadyRequest(uuid: uuid)
-        guard let peripheral = peripherals[uuid] else { return }
+        guard let peripheral = peripherals[uuid] else {
+            if keepReconnect { reconcileSavedReconnect(uuid, source: "transport_release") }
+            return
+        }
+        if keepReconnect, peripheral.state != .connected {
+            // A released Dart transport must not cancel the OS's pending connect
+            // or cache-miss scan. A future transport adopts readiness normally.
+            reconcileSavedReconnect(uuid, source: "transport_release")
+            return
+        }
+        logBle(uuid: uuid, event: "connect_cancelled", detail: keepReconnect ? "transport_recovery" : "manual_disconnect_or_retirement")
         centralManager.cancelPeripheralConnection(peripheral)
     }
 
