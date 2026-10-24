@@ -67,7 +67,11 @@ def resolve_addresses(host: str) -> list[str]:
 
 def inspect_target(url: str, resolver: Optional[Resolver] = None) -> TargetReport:
     resolve = resolver or resolve_addresses
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+    except ValueError as exc:
+        return TargetReport(False, f"Omi cannot parse URL: {exc}")
+
     if parts.scheme not in ("http", "https"):
         return TargetReport(
             False,
@@ -77,6 +81,14 @@ def inspect_target(url: str, resolver: Optional[Resolver] = None) -> TargetRepor
     host = parts.hostname
     if not host:
         return TargetReport(False, "The URL has no hostname")
+
+    try:
+        port = parts.port
+    except ValueError as exc:
+        return TargetReport(False, f"The URL has an invalid port: {exc}")
+
+    if port is not None and not (1 <= port <= 65535):
+        return TargetReport(False, f"The URL has an invalid port: {port}")
 
     try:
         resolved = resolve(host)
