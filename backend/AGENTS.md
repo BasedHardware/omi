@@ -193,12 +193,13 @@ Rate limiting: `Depends(auth.with_rate_limit(get_current_user_uid, "policy_name"
 
 ## Logging Security
 
-Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils.log_sanitizer`.
+Never log raw sensitive data. Use `sanitize()` and `sanitize_pii()` from `utils/log_sanitizer`.
 
 - `sanitize()` for `response.text`, API responses, error bodies.
 - `sanitize_pii()` for names, emails, user text.
 - Keep UIDs, IPs, status codes visible for debugging.
 - Never put raw `response.text` in exception messages.
+- BYOK provider failures are user account state: typed 429 + one WARNING (`byok=true ...`), never ERROR — [runbook](docs/runbooks/byok-provider-failures.md).
 
 ## Error Composition & Memory
 
@@ -315,6 +316,5 @@ WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per 
 10. **New fallbacks** — call `utils.observability.fallback.record_fallback` (see `.github/agent-docs/fallback-telemetry.md`); do not invent a new `*_fallback_total` Counter
 11. **Queue caps for user data** — `private_cloud_queue` uses `deque(maxlen=20)` to prevent OOM kills (sized for 30 conns/pod); dropping oldest chunk is better than killing the pod and losing ALL data for ALL users
 12. **`langdetect` unreliable on short text** — don't use on <20 chars or gate paid API calls on interim streaming text
-13. **DG keepalive vs response timeout** — `keep_alive()` prevents DG's 10s idle timeout but NOT 1011 response timeout after all audio is processed. Post-session 1011 is benign.
 
 Speaker assignments: [owner and teaching](docs/listen_pusher_pipeline.mdx).

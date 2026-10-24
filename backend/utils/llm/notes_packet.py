@@ -21,7 +21,6 @@ from utils.llm.notes_refactor_metrics import shadow
 from utils.observability.fallback import record_fallback
 from utils.llm.output_language import resolve_output_language
 from utils.llm.speaker_evidence_prompt import render_speaker_evidence, SPEAKER_RULES
-from utils.llm import known_spellings
 
 PACKET_VERSION = 2
 FLAG = 'NOTES_PACKET_V2_MODE'
@@ -46,6 +45,9 @@ def notes_people(uid: str | None, inputs: Mapping[str, Any]) -> list[dict[str, A
     if not uid:
         return []
     try:
+        # Deferred: known_spellings pulls the dream store and People database at import.
+        from utils.llm import known_spellings
+
         return known_spellings.conversation_people_names(uid)
     except Exception:
         shadow('contact_spellings', 'error')

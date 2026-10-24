@@ -54,7 +54,8 @@ abstract final class EpisodePresentation {
       {String? ownerLabel, String? Function(String personId)? personName}) {
     final names = SpeakerNames.forSegments(segments, people: people, l10n: l10n);
     final owner = <String>{};
-    final others = <String>{};
+    // Display names are not identities: two People records can share a name.
+    final others = <String, String>{};
     for (final segment in segments) {
       if (segment.isUser) {
         final name = ownerLabel ?? names.forSegment(segment);
@@ -64,9 +65,11 @@ abstract final class EpisodePresentation {
       final person = personById(people, segment.personId);
       final name = (segment.personId == null ? null : personName?.call(segment.personId!)) ??
           (person == null ? null : names.forSegment(segment, person: person));
-      if (name != null && name.trim().isNotEmpty) others.add(name.trim());
+      if (segment.personId != null && name != null && name.trim().isNotEmpty) {
+        others.putIfAbsent(segment.personId!, () => name.trim());
+      }
     }
-    return [...owner, ...others];
+    return [...owner, ...others.values];
   }
 
   /// The source capturing right now, or null when nothing is streaming live (Transcribe Later,

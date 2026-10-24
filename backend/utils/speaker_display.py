@@ -6,7 +6,8 @@ participants authority so identity evidence and count sanity cannot be bypassed.
 
 from __future__ import annotations
 
-from typing import Hashable
+from collections.abc import Mapping
+from typing import Any, Hashable, Optional
 
 
 def _column(index: int) -> str:
@@ -14,6 +15,13 @@ def _column(index: int) -> str:
     if index < 26:
         return chr(ord('A') + index)
     return _column(index // 26 - 1) + chr(ord('A') + index % 26)
+
+
+def voice_key(segment: Any) -> tuple[Optional[Any], Optional[Any]]:
+    """Legacy scoped wire-identity helper; renderers use display_participants."""
+    if isinstance(segment, Mapping):
+        return (segment.get('speaker_id_scope'), segment.get('speaker_id'))
+    return (getattr(segment, 'speaker_id_scope', None), getattr(segment, 'speaker_id', None))
 
 
 class SpeakerLabeler:
@@ -30,4 +38,4 @@ class SpeakerLabeler:
         return label
 
 
-__all__ = ['SpeakerLabeler']
+__all__ = ['SpeakerLabeler', 'voice_key']

@@ -396,12 +396,13 @@ def test_transcript_prompt_is_deterministic_bounded_and_keeps_segment_boundaries
     assert 'segment-1-' in first
     assert 'segment-8-' in first
     assert '[... transcript truncated at segment boundaries ...]' in first
+    dense: dict[int, str] = {}
     for segment in segments:
-        rendered = (
-            f"You: {segment['text']}"
-            if segment['is_user']
-            else f"Speaker {chr(65 + (segment['speaker_id'] - 1) // 2)}: {segment['text']}"
-        )
+        if segment['is_user']:
+            rendered = f"You: {segment['text']}"
+        else:
+            label = dense.setdefault(segment['speaker_id'], chr(ord('A') + len(dense)))
+            rendered = f"Speaker {label}: {segment['text']}"
         assert rendered in first or segment['text'] not in first
 
 

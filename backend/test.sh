@@ -193,11 +193,18 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   status_dir="$(mktemp -d)"
   test_index=0
 
-  active_pid_count() {
-    set +u
-    local count="${#active_pids[@]}"
-    set -u
-    echo "$count"
+  # Count in the parent shell: command substitution here forked twice per
+  # 20ms poll, competing with pytest workers throughout every isolated shard.
+  active_count=0
+
+  wait_for_worker_completion() {
+    # Bash 5.1+ can wait for any tracked child, including one that completed
+    # between the status-file scan and this call. Older shells keep polling.
+    if (( BASH_VERSINFO[0] > 5 || (BASH_VERSINFO[0] == 5 && BASH_VERSINFO[1] >= 1) )); then
+      wait -n "${active_pids[@]}" || true
+    else
+      sleep 0.02
+    fi
   }
 
   reap_finished_children() {
@@ -244,6 +251,7 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     active_pids=("${still_active[@]}")
     active_status_files=("${still_status_files[@]}")
     active_test_paths=("${still_test_paths[@]}")
+    active_count="${#still_active[@]}"
     set -u
   }
 
@@ -274,20 +282,21 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
       active_pids+=("$!")
       active_status_files+=("$status_file")
       active_test_paths+=("$test_path")
+      active_count=$((active_count + 1))
 
-      while [[ "$(active_pid_count)" -ge "$worker_count" ]]; do
+      while [[ "$active_count" -ge "$worker_count" ]]; do
         reap_finished_children
-        if [[ "$(active_pid_count)" -lt "$worker_count" ]]; then
+        if [[ "$active_count" -lt "$worker_count" ]]; then
           break
         fi
-        sleep 0.02
+        wait_for_worker_completion
       done
     done
 
-    while [[ "$(active_pid_count)" -gt 0 ]]; do
+    while [[ "$active_count" -gt 0 ]]; do
       reap_finished_children
-      if [[ "$(active_pid_count)" -gt 0 ]]; then
-        sleep 0.02
+      if [[ "$active_count" -gt 0 ]]; then
+        wait_for_worker_completion
       fi
     done
 

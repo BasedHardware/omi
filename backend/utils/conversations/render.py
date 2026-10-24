@@ -97,6 +97,8 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
         people_map = {str(p['id']): str(p['name']) for p in people_data}
 
     for conv in conversations:
+        # Dense labels are assigned per conversation: the same diarization id in another
+        # conversation is a different voice, never the same "Speaker A".
         segments = cast(List[Dict[str, Any]], conv.get('transcript_segments') or [])
         display = display_participants(
             segments, names=people_map, owner_name=user_name, resolution=conv.get('speaker_resolution')
