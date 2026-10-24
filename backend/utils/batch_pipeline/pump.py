@@ -5,19 +5,21 @@ import contextlib
 import logging
 import time
 from collections import OrderedDict
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Sequence
+from typing import Any, cast
 
 from config.batch_pipeline import MAX_PUBLISH_CONCURRENCY, publish_concurrency as configured_publish_concurrency
 from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.contracts import (
     BatchWorker,
+    PreparedBatch,
     HEARTBEAT_SECONDS,
     LeasedWork,
     PoolCapacity,
     HeldWork,
     RecoveryWork,
     ValidationFailureWork,
+    WorkItem,
 )
 from utils.batch_pipeline.merge import OrderedMerge
 from utils.batch_pipeline.errors import FatalGpuError
@@ -25,7 +27,7 @@ from utils.batch_pipeline.compute_client import from_env as compute_client_from_
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
-from utils.executors import db_executor, run_blocking, sync_executor
+from utils.executors import db_executor, run_blocking, sync_executor, storage_executor
 
 logger = logging.getLogger(__name__)
 
@@ -88,15 +90,17 @@ class Pump:
         self.publish_concurrency = publish_concurrency
         self._owner_locks: dict[str, list] = {}
         self._segment_owners: OrderedDict[str, str] = OrderedDict()
-        # ``flights`` pump lanes overlap claim/admission and result publication
-        # with another lane's GPU chain. The chain itself (decode through
-        # persist and CUDA quiescence) stays exclusive under ``_gpu``, so device
-        # and host memory remain those of one flight.
+        # ``flights`` overlap claim/admission, bounded CPU decode read-ahead and
+        # publication with another lane's exclusive GPU chain. Extra decoded
+        # audio is bounded by the worker across all lanes; CUDA stays one flight.
         self.flights = flights
         self._gpu = asyncio.Lock()
         self._maintenance = asyncio.Lock()
         self.shadow = shadow
         self._normal_flights = 0
+        # StagedAudio's stream/language cache is keyed by segment, not token.
+        # A retry may be leased while a stale GPU attempt is still draining.
+        self._flight_segments: dict[str, int] = {}
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """SIGTERM sets stop_event; in-flight chains drain with heartbeats intact."""
@@ -272,6 +276,11 @@ class Pump:
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
+        prepared: PreparedBatch | None = None
+        segments = {lease.item.segment_id for lease in leases}
+        duplicate_decode = any(segment in self._flight_segments for segment in segments)
+        for segment in segments:
+            self._flight_segments[segment] = self._flight_segments.get(segment, 0) + 1
         try:
             if self.shadow is not None:
                 try:
@@ -320,6 +329,19 @@ class Pump:
                     return set(receipt.get('allowed') or [])
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
+            prepare = cast(
+                Callable[[Sequence[WorkItem]], PreparedBatch | None] | None,
+                getattr(self.worker, 'prepare_batch', None),
+            )
+            if callable(prepare) and self._gpu.locked() and not duplicate_decode:
+                # Reserve read-ahead only for a waiting flight. Preparing the
+                # active flight can monopolize the budget before it consumes
+                # its first item, leaving its waiting sibling nothing to overlap.
+                # Re-leased IDs keep in-flight decoding: read-ahead must not
+                # overwrite a stale attempt's still-unconsumed context cache.
+                prepared = prepare([v.item for v in leases])
+                if prepared is not None:
+                    dispatch_kwargs['prepared'] = prepared
             try:
                 async with self._gpu:
                     if stop_event is not None and stop_event.is_set() and self.flights > 1:
@@ -388,9 +410,29 @@ class Pump:
             await self._release(claimed)
             raise
         finally:
-            self._normal_flights -= 1
-            done.set()
-            await renew
+            try:
+                if prepared is not None:
+                    # A stopped or revoked flight can have unconsumed read-ahead.
+                    # Keep renewal alive until IO drains; never block the event loop.
+                    closing = asyncio.create_task(run_blocking(storage_executor, prepared.close))
+                    try:
+                        await asyncio.shield(closing)
+                    except asyncio.CancelledError:
+                        # Cancellation cannot stop a running storage leaf. Keep
+                        # renewal and the per-segment context exclusion until
+                        # that leaf has actually quiesced.
+                        await closing
+                        raise
+            finally:
+                for segment in segments:
+                    remaining = self._flight_segments[segment] - 1
+                    if remaining:
+                        self._flight_segments[segment] = remaining
+                    else:
+                        del self._flight_segments[segment]
+                self._normal_flights -= 1
+                done.set()
+                await renew
 
     async def _release(self, leases: list[LeasedWork]) -> None:
         for lease in leases:

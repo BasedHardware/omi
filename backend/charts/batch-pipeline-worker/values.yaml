@@ -38,6 +38,9 @@ worker:
   batchSize: 8
   # Ship-on pump pipelining (1-4). Set 1 to restore the serial pump.
   pipelineDepth: 2
+  # 1 preserves current IO; 2-4 prepare up to 1-3 CPU decodes across flights.
+  # GPU concurrency remains 1. Qualify on dev L4 before raising this value.
+  decodeConcurrency: 1
   shadowPercent: 0
   shadowPaidRecoveryPerHour: 200
   shadowRecoveryApiUrl: ""

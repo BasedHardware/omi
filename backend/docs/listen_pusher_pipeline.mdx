@@ -5384,6 +5384,11 @@ pull queue with 64 owner-hash scheduler shards and per-owner ordered result log.
 The sync route selects it only with `BATCH_PIPELINE_ENABLED` plus owner
 allowlist/percentage; an atomic content-ledger protocol seal prevents a legacy
 twin. Admission rollback leaves accepted work draining with 20s heartbeats.
+The dedicated GPU worker can overlap bounded CPU fetch/decode across pump
+flights with `BATCH_PIPELINE_WORKER_DECODE_CONCURRENCY` (default/rollback `1`,
+range 1–4). Model execution stays exclusive; all lanes share at most N−1 ahead
+items and 1,800 admitted audio seconds. Qualification and host/VRAM bounds are
+documented in [the worker runtime](../diarizer/batch_pipeline_runtime.md#pump-pipelining).
 Compute failures retain the ordered head and retry with a 600s backoff cap;
 historical dead heads can be redriven by authenticated internal RPC or owner
 polling. Privacy-fenced recovery is isolated without clearing deletion fences.

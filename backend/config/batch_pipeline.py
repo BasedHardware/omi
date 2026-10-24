@@ -424,6 +424,19 @@ WORKER_IO_CONCURRENCY_DEFAULT = 3
 WORKER_IO_CONCURRENCY_MAX = 8
 
 
+def worker_decode_concurrency() -> int:
+    """1 keeps in-flight IO only; 2-4 allow 1-3 CPU decodes ahead across flights.
+
+    Default stays at the qualified baseline until paired L4 qualification.
+    The GPU still executes one flight at a time at every setting.
+    """
+    try:
+        value = int(os.getenv('BATCH_PIPELINE_WORKER_DECODE_CONCURRENCY', '1'))
+    except ValueError:
+        return 1
+    return value if 1 <= value <= 4 else 1
+
+
 def worker_io_concurrency() -> int:
     """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
 

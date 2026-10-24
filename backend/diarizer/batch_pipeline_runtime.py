@@ -68,6 +68,9 @@ class SynchronizedWorker:
         self.memory_probe = memory_probe
         self._unavailable = False
 
+    def prepare_batch(self, items):
+        return self.worker.prepare_batch(items)
+
     def process_batch(self, items, **kwargs):
         if self._unavailable:
             raise FatalGpuError('GPU chain unavailable; restart required')
