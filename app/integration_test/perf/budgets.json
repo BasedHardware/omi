@@ -10,13 +10,13 @@
   "_gate": {
     "home_scroll": {
       "counts": {
-        "rebuilds": 1000000,
-        "layouts": 1000000,
-        "paints": 1000000,
+        "rebuilds": 8966,
+        "layouts": 21000,
+        "paints": 15438,
         "semantics_compiles": 0,
-        "max_clip_layers": 1000,
-        "max_opacity_layers": 1000,
-        "max_image_pixels": 16000000
+        "max_clip_layers": 3,
+        "max_opacity_layers": 11,
+        "max_image_pixels": 1048576
       },
       "semantics_compiles_per_frame": 0,
       "phase_shares": {
@@ -25,13 +25,13 @@
     },
     "detail_scroll": {
       "counts": {
-        "rebuilds": 1000000,
-        "layouts": 1000000,
-        "paints": 1000000,
+        "rebuilds": 17142,
+        "layouts": 17062,
+        "paints": 53048,
         "semantics_compiles": 0,
-        "max_clip_layers": 1000,
-        "max_opacity_layers": 1000,
-        "max_image_pixels": 16000000
+        "max_clip_layers": 5,
+        "max_opacity_layers": 3,
+        "max_image_pixels": 1048576
       },
       "semantics_compiles_per_frame": 0,
       "phase_shares": {
@@ -40,13 +40,13 @@
     },
     "memory_scroll": {
       "counts": {
-        "rebuilds": 1000000,
-        "layouts": 1000000,
-        "paints": 1000000,
+        "rebuilds": 6931,
+        "layouts": 9010,
+        "paints": 17228,
         "semantics_compiles": 0,
-        "max_clip_layers": 1000,
-        "max_opacity_layers": 1000,
-        "max_image_pixels": 16000000
+        "max_clip_layers": 3,
+        "max_opacity_layers": 2,
+        "max_image_pixels": 1048576
       },
       "semantics_compiles_per_frame": 0,
       "phase_shares": {
@@ -55,13 +55,13 @@
     },
     "chat_tap": {
       "counts": {
-        "rebuilds": 1000000,
-        "layouts": 1000000,
-        "paints": 1000000,
+        "rebuilds": 7832,
+        "layouts": 4315,
+        "paints": 6741,
         "semantics_compiles": 0,
-        "max_clip_layers": 1000,
-        "max_opacity_layers": 1000,
-        "max_image_pixels": 16000000
+        "max_clip_layers": 3,
+        "max_opacity_layers": 16,
+        "max_image_pixels": 1048576
       },
       "semantics_compiles_per_frame": 0,
       "phase_shares": {
@@ -70,13 +70,13 @@
     },
     "home_live_scroll": {
       "counts": {
-        "rebuilds": 1000000,
-        "layouts": 1000000,
-        "paints": 1000000,
+        "rebuilds": 10727,
+        "layouts": 23714,
+        "paints": 26848,
         "semantics_compiles": 0,
-        "max_clip_layers": 1000,
-        "max_opacity_layers": 1000,
-        "max_image_pixels": 16000000
+        "max_clip_layers": 4,
+        "max_opacity_layers": 11,
+        "max_image_pixels": 1048576
       },
       "semantics_compiles_per_frame": 0,
       "phase_shares": {
@@ -85,13 +85,13 @@
     },
     "episode_page": {
       "counts": {
-        "rebuilds": 1000000,
-        "layouts": 1000000,
-        "paints": 1000000,
+        "rebuilds": 72950,
+        "layouts": 79074,
+        "paints": 45379,
         "semantics_compiles": 0,
-        "max_clip_layers": 1000,
-        "max_opacity_layers": 1000,
-        "max_image_pixels": 16000000
+        "max_clip_layers": 5,
+        "max_opacity_layers": 5,
+        "max_image_pixels": 1048576
       },
       "semantics_compiles_per_frame": 0,
       "phase_shares": {
@@ -100,13 +100,13 @@
     },
     "device_page": {
       "counts": {
-        "rebuilds": 1000000,
-        "layouts": 1000000,
-        "paints": 1000000,
+        "rebuilds": 3804,
+        "layouts": 2265,
+        "paints": 4700,
         "semantics_compiles": 0,
-        "max_clip_layers": 1000,
-        "max_opacity_layers": 1000,
-        "max_image_pixels": 16000000
+        "max_clip_layers": 5,
+        "max_opacity_layers": 3,
+        "max_image_pixels": 1048576
       },
       "semantics_compiles_per_frame": 0,
       "phase_shares": {
@@ -115,13 +115,13 @@
     },
     "tab_switch": {
       "counts": {
-        "rebuilds": 1000000,
-        "layouts": 1000000,
-        "paints": 1000000,
+        "rebuilds": 5397,
+        "layouts": 1335,
+        "paints": 8160,
         "semantics_compiles": 0,
-        "max_clip_layers": 1000,
-        "max_opacity_layers": 1000,
-        "max_image_pixels": 16000000
+        "max_clip_layers": 3,
+        "max_opacity_layers": 8,
+        "max_image_pixels": 1048576
       },
       "semantics_compiles_per_frame": 0,
       "phase_shares": {
