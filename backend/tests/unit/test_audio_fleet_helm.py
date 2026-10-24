@@ -179,15 +179,20 @@ def test_prod_pool_placement_preserves_current_cpu_pools(chart):
 def test_parakeet_scales_conservatively_without_relaxing_admission():
     objects = render('parakeet')
     hpa = objects['HorizontalPodAutoscaler']['spec']
-    assert hpa['minReplicas'] == 3
+    assert hpa['minReplicas'] == 8
     assert hpa['maxReplicas'] == 12
+    assert hpa['behavior']['scaleUp'] == {
+        'stabilizationWindowSeconds': 0,
+        'selectPolicy': 'Max',
+        'policies': [{'type': 'Pods', 'value': 4, 'periodSeconds': 15}],
+    }
     assert hpa['behavior']['scaleDown']['stabilizationWindowSeconds'] == 900
     metrics = hpa['metrics']
     assert next(m['pods']['target']['averageValue'] for m in metrics if m['type'] == 'Pods') == '2'
     external = {
         m['external']['metric']['name']: m['external']['target']['value'] for m in metrics if m['type'] == 'External'
     }
-    assert external == {'parakeet_gpu_utilization': '35', 'parakeet_request_latency_p99': '3'}
+    assert external == {'parakeet_gpu_utilization': '35'}
     env = {e['name']: e.get('value') for e in objects['Deployment']['spec']['template']['spec']['containers'][0]['env']}
     assert env['PARAKEET_MAX_INFLIGHT'] == '1'
 
