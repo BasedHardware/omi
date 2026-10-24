@@ -175,13 +175,15 @@ def decision(sample, identity, since, now, first_write_since=None):
     ]
     usable = lambda x: finite(x) and not isinstance(x, bool) and x >= 0
     trips = [key for key, value in fields.items() if usable(value) and value > 0]
-    # A separately proven trip wins over missing measurements, as in P90.
+    complete = all(usable(v) for v in [*fields.values(), *unknowns]) and not any(unknowns)
+    # Before arming, only a complete snapshot can pin an epoch. Once armed, an independently
+    # proven trip still wins over missing measurements, as in P90.
+    if not complete and not (trips and now - since >= WINDOW):
+        return 'BLIND', ['safety_measurement_unknown_no_advance']
     if now - since < WINDOW:
         return 'WARMUP', []
     if trips:
         return 'TRIP', trips
-    if not all(usable(v) for v in [*fields.values(), *unknowns]) or any(unknowns):
-        return 'BLIND', ['safety_measurement_unknown_no_advance']
     return 'CLEAN', []
 
 
@@ -316,7 +318,7 @@ def run(kube, cloud, sample_path, dry_run=False, now=None):
         try:
             sample = json.loads(Path(sample_path).read_text())
             verdict, reasons = decision(sample, identity, state['since'], now, state.get('first_write_since'))
-            if verdict in {'WARMUP', 'CLEAN', 'TRIP'} or reasons == ['safety_measurement_unknown_no_advance']:
+            if verdict in {'WARMUP', 'CLEAN', 'TRIP'}:
                 state['first_write_since'] = sample['since']
         except (OSError, ValueError, TypeError, KeyError):
             verdict, reasons = 'BLIND', ['aggregate_unavailable']

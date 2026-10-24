@@ -84,7 +84,9 @@ The producer reads guard state (`identity`, `since`) from the batch-state
 ConfigMap. `arm_since` must equal that state `since`, the all-serving observation
 clock. The snapshot `since` is the lead's actual **first ramp-write** clock,
 which can precede all-serving confirmation; it is bound on the first valid input
-and cannot move within the identity. Measurements include partial-apply admissions,
+that is complete (or independently proves a trip after arming), and cannot move
+within the identity. An incomplete or unknown snapshot stays BLIND and cannot
+pin that clock, including during arming. Measurements include partial-apply admissions,
 and custody covers retained obligations from prior steps as in P90. The producer
 scopes measurements to those clocks and the exact serving fleet. It
 must invalidate data on serving drift. No env, account/job/object identifiers,

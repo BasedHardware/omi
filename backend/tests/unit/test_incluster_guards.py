@@ -9,6 +9,7 @@ import pytest
 import yaml
 import subprocess
 import sys
+from typing import Any
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -469,10 +470,19 @@ def test_autoscaling_does_not_restart_window_or_hide_ready_shortfall():
 
 
 # Batch admission rollback shares this chart's registered behavioral suite.
-spec = importlib.util.spec_from_file_location('batch_guard', CHART / 'files/batch_guard.py')
-batch = importlib.util.module_from_spec(spec)
-with patch.dict(sys.modules, {'guard': guard}):
-    spec.loader.exec_module(batch)
+batch: Any = None
+
+
+@pytest.fixture(scope='module', autouse=True)
+def batch_runtime_module():
+    spec = importlib.util.spec_from_file_location('batch_guard', CHART / 'files/batch_guard.py')
+    module = importlib.util.module_from_spec(spec)
+    with pytest.MonkeyPatch.context() as imports:
+        imports.setitem(sys.modules, 'guard', guard)
+        spec.loader.exec_module(module)
+    with pytest.MonkeyPatch.context() as state:
+        state.setattr(sys.modules[__name__], 'batch', module)
+        yield
 
 
 def template():
@@ -653,9 +663,9 @@ def test_registered_logging_entrypoint_dispatches_batch(monkeypatch):
     'bad',
     [
         [],
-        [{'name': batch.KEY, 'value': '101'}],
-        [{'name': batch.KEY, 'valueSource': {'secretKeyRef': {}}}],
-        [{'name': batch.KEY, 'value': '5'}] * 2,
+        [{'name': 'BATCH_PIPELINE_PERCENT', 'value': '101'}],
+        [{'name': 'BATCH_PIPELINE_PERCENT', 'valueSource': {'secretKeyRef': {}}}],
+        [{'name': 'BATCH_PIPELINE_PERCENT', 'value': '5'}] * 2,
     ],
 )
 def test_invalid_percent_refuses(bad):
@@ -755,6 +765,38 @@ def prepare(tmp_path, monkeypatch):
     data['custody']['missing'] = 1
     path.write_text(json.dumps(data))
     return cloud, kube, path
+
+
+@pytest.mark.parametrize('observed', [900, 2400])
+@pytest.mark.parametrize('invalid', ['missing', 'unknown', 'fallback'])
+def test_incomplete_snapshot_cannot_pin_epoch_or_block_later_proven_trip(tmp_path, monkeypatch, observed, invalid):
+    cloud, kube, path = prepare(tmp_path, monkeypatch)
+    # Initialize a new all-serving clock, with no trusted safety snapshot yet.
+    kube.cm['data']['state'] = '{}'
+    path.unlink()
+    assert batch.run(kube, cloud, path, now=600) == 1
+    data = sample(kube.state['identity'], since=600, now=observed)
+    data['since'] = 200  # Incorrect but in-range epoch from an incomplete producer read.
+    if invalid == 'missing':
+        data.pop('proven_terminal_loss_speech_seconds')
+    elif invalid == 'unknown':
+        data['custody']['unknown'] = None
+    else:
+        data['since_t0_failed_held_vad_fallback_units'] = 1
+    path.write_text(json.dumps(data))
+    assert batch.run(kube, cloud, path, now=observed) == 1
+    assert kube.cm['data']['verdict'] == 'BLIND'
+    assert 'first_write_since' not in kube.state and not cloud.writes
+
+    now = max(2400, observed + 1)
+    data = sample(kube.state['identity'], since=600, now=now)
+    data['since'] = 100  # Complete read establishes the actual first-write epoch.
+    data['custody']['missing'] = 1
+    path.write_text(json.dumps(data))
+    assert batch.run(kube, cloud, path, now=now) == 1
+    assert kube.state['first_write_since'] == 100
+    assert kube.cm['data']['verdict'] == 'ROLLED_BACK'
+    assert len(cloud.writes) == 8
 
 
 @pytest.mark.parametrize('dry', [True, False])
