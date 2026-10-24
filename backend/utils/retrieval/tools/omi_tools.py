@@ -61,7 +61,7 @@ def get_omi_product_info_tool(query: Optional[str] = None) -> str:
         query="How do I update the firmware on my Omi device?"
         Returns documentation about firmware updates and device management
     """
-    if query is None or not isinstance(query, str) or not query.strip():
+    if not isinstance(query, str) or not query.strip():
         return "Error: Please provide a non-empty question or query about the Omi/Friend product."
 
     # Fetch the product docs. A network or GitHub API failure must not break the chat turn, so fail
