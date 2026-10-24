@@ -104,7 +104,7 @@ void main() {
     final relaunched = service();
     await relaunched.reconnectSavedDevice('launch');
     expect(relaunched.connectionFor(a)?.status, DeviceConnectionState.connected);
-    expect(calls.where((value) => value == 'manage:$a'), hasLength(2));
+    expect(calls.where((value) => value == 'manage:$a'), hasLength(1), reason: 'calls were reset before DFU teardown');
     relaunched.savedReconnect.stop();
   });
 

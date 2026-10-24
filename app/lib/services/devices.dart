@@ -254,6 +254,9 @@ class DeviceService {
           onConnectionStateChanged: onDeviceConnectionStateChanged,
         );
       } catch (e) {
+        // A disconnect/retirement already owns cleanup once it removes this
+        // connection. Its in-flight connect must not unmanage or dispose again.
+        if (!identical(_connections[id], connection)) rethrow;
         final isTimeout = e is TimeoutException || (e is DeviceConnectionException && e.isTimeout);
         final transport = connection.transport;
         if (isTimeout ||
