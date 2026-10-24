@@ -170,27 +170,27 @@
 	<key>NSBluetoothPeripheralUsageDescription</key>
 	<string>Omi uses Bluetooth to connect to your Omi wearable and stream its microphone audio to your phone — for example, to transcribe your meetings into notes and check the device's battery.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Access most functions for calendar viewing and editing.</string>
+	<string>Omi does not read or change the calendar on this device. This string is only present because iOS requires it when the app includes calendar permission support.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Access most functions for calendar viewing and editing.</string>
+	<string>Omi does not read or change the calendar on this device. This string is only present because iOS requires it when the app includes calendar permission support.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>Camera access is required to report issues</string>
+	<string>Omi uses your camera so you can take photos and attach them to chat messages.</string>
 	<key>NSContactsUsageDescription</key>
-	<string>Access contacts for event attendee editing and to share conversation summaries via SMS.</string>
+	<string>Omi uses your contacts so you can call people from the app, share conversation summaries by text message, and find recipients when Omi Chat drafts a message for you.</string>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Omi reads your steps, walking and running distance, active energy, heart rate, sleep, and workouts from Apple Health so you can ask about your fitness, sleep, and activity in Omi Chat. Omi never writes to Apple Health.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Omi does not write any data to Apple Health. This string is only present because iOS requires it when the HealthKit framework is linked.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<string>Omi uses your location to note where your conversations happened.</string>
 	<key>NSLocationUsageDescription</key>
-	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<string>Omi uses your location to note where your conversations happened.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>When creating your memories, we use your location for determining where they were created.</string>
+	<string>Omi uses your location to note where your conversations happened.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>We need access to your microphone so you can share audio explanations of Bugs you find, and for voice commands.</string>
+	<string>Omi uses your phone's microphone to record and transcribe your conversations, create your voice profile, dictate chat messages, and make calls in the app.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>We need access to your photo library to allow you to upload and share photos through Instabug.</string>
+	<string>Omi uses your photo library so you can attach photos to chat messages and add images to apps you create.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>We need access to your reminders to export action items from Omi conversations.</string>
 	<key>NSRemindersUsageDescription</key>
