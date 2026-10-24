@@ -3,7 +3,7 @@ from enum import Enum
 import math
 from typing import Any, Callable, Iterable, List, Literal, Mapping, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 from pydantic.json_schema import SkipJsonSchema
 
 from models.person_confidence import person_confidence
@@ -11,8 +11,18 @@ from models.time_zone_admission import is_schedulable_time_zone
 
 
 class SaveFcmTokenRequest(BaseModel):
-    fcm_token: str
+    fcm_token: str = Field(..., min_length=1, max_length=1000)
     time_zone: str
+
+    @field_validator("fcm_token", mode="before")
+    @classmethod
+    def validate_fcm_token(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("fcm_token must be a string")
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("fcm_token cannot be empty or whitespace only")
+        return stripped
 
     @field_validator("time_zone")
     @classmethod
@@ -44,10 +54,20 @@ class FcmTokenResponse(BaseModel):
 
 
 class SendNotificationRequest(BaseModel):
-    uid: str
-    title: str
-    body: str
+    uid: str = Field(..., min_length=1, max_length=128)
+    title: str = Field(..., min_length=1, max_length=500)
+    body: str = Field(..., min_length=1, max_length=5000)
     data: dict = Field(default_factory=dict)
+
+    @field_validator('uid', 'title', 'body', mode='before')
+    @classmethod
+    def validate_non_blank_strings(cls, value: object, info: ValidationInfo) -> str:
+        if not isinstance(value, str):
+            raise ValueError(f"{info.field_name} must be a string")
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError(f"{info.field_name} cannot be empty or whitespace only")
+        return stripped
 
 
 class SendAppNotificationRequest(BaseModel):
