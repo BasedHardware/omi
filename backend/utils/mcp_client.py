@@ -616,6 +616,34 @@ async def call_mcp_tool(
     return await _call_mcp_tool_http(server_url, tool_name, arguments, access_token, oauth_tokens)
 
 
+async def _refresh_and_apply_oauth_tokens(oauth_tokens: dict[str, Any]) -> str:
+    new_tokens = await refresh_oauth_token(
+        oauth_tokens["token_endpoint"],
+        oauth_tokens["refresh_token"],
+        oauth_tokens["client_id"],
+        oauth_tokens.get("client_secret"),
+    )
+    access_token = new_tokens["access_token"]
+    oauth_tokens["access_token"] = access_token
+    if new_tokens.get("refresh_token"):
+        oauth_tokens["refresh_token"] = new_tokens["refresh_token"]
+    if new_tokens.get("expires_in") is not None:
+        try:
+            oauth_tokens["expires_at"] = time.time() + float(new_tokens["expires_in"])
+        except (TypeError, ValueError):
+            pass
+    return access_token
+
+
+def _can_refresh_oauth(oauth_tokens: Optional[dict[str, Any]]) -> bool:
+    return bool(
+        oauth_tokens
+        and oauth_tokens.get("refresh_token")
+        and oauth_tokens.get("token_endpoint")
+        and oauth_tokens.get("client_id")
+    )
+
+
 async def _call_mcp_tool_http(
     server_url: str,
     tool_name: str,
@@ -624,14 +652,10 @@ async def _call_mcp_tool_http(
     oauth_tokens: Optional[dict[str, Any]] = None,
 ) -> str:
     """Call an MCP tool via Streamable HTTP transport."""
-    req = _jsonrpc_request(
-        "tools/call",
-        params={"name": tool_name, "arguments": arguments},
-        req_id=3,
-    )
-
+    req = _jsonrpc_request("tools/call", params={"name": tool_name, "arguments": arguments}, req_id=3)
     candidates = _resolve_mcp_url(server_url)
     last_error = None
+    refreshed = False
 
     for url in candidates:
         try:
@@ -639,32 +663,31 @@ async def _call_mcp_tool_http(
             resp, _ = await _mcp_post(url, req, access_token, session_id)
             break
         except PermissionError:
-            if oauth_tokens and oauth_tokens.get("refresh_token"):
-                new_tokens = await refresh_oauth_token(
-                    oauth_tokens["token_endpoint"],
-                    oauth_tokens["refresh_token"],
-                    oauth_tokens["client_id"],
-                    oauth_tokens.get("client_secret"),
-                )
-                oauth_tokens["access_token"] = new_tokens["access_token"]
-                if new_tokens.get("refresh_token"):
-                    oauth_tokens["refresh_token"] = new_tokens["refresh_token"]
-                if new_tokens.get("expires_in"):
-                    oauth_tokens["expires_at"] = time.time() + new_tokens["expires_in"]
-
-                session_id = await _initialize_session(url, new_tokens["access_token"])
-                resp, _ = await _mcp_post(url, req, new_tokens["access_token"], session_id)
-                break
-            else:
-                return "Error: MCP server returned 401 Unauthorized and no refresh token available."
+            if not refreshed and _can_refresh_oauth(oauth_tokens):
+                refreshed = True
+                try:
+                    access_token = await _refresh_and_apply_oauth_tokens(cast(dict[str, Any], oauth_tokens))
+                except Exception as e:
+                    return f"Error refreshing MCP OAuth token: {e}"
+                try:
+                    session_id = await _initialize_session(url, access_token)
+                    resp, _ = await _mcp_post(url, req, access_token, session_id)
+                    break
+                except httpx.HTTPStatusError as e:
+                    if 300 <= e.response.status_code < 400:
+                        raise
+                    last_error = e
+                    continue
+                except Exception as e:
+                    last_error = e
+                    continue
+            return "Error: MCP server returned 401 Unauthorized and no refresh token available."
         except httpx.HTTPStatusError as e:
             if 300 <= e.response.status_code < 400:
                 raise
             last_error = e
-            continue
         except Exception as e:
             last_error = e
-            continue
     else:
         if last_error:
             return f"Error calling MCP tool: {last_error}"
@@ -684,20 +707,19 @@ async def _call_mcp_tool_sse(
     try:
         resp = await _call_tool_via_sse(server_url, tool_name, arguments, access_token)
     except PermissionError:
-        if oauth_tokens and oauth_tokens.get("refresh_token"):
-            new_tokens = await refresh_oauth_token(
-                oauth_tokens["token_endpoint"],
-                oauth_tokens["refresh_token"],
-                oauth_tokens["client_id"],
-                oauth_tokens.get("client_secret"),
-            )
-            oauth_tokens["access_token"] = new_tokens["access_token"]
-            if new_tokens.get("refresh_token"):
-                oauth_tokens["refresh_token"] = new_tokens["refresh_token"]
-            if new_tokens.get("expires_in"):
-                oauth_tokens["expires_at"] = time.time() + new_tokens["expires_in"]
-
-            resp = await _call_tool_via_sse(server_url, tool_name, arguments, new_tokens["access_token"])
+        if _can_refresh_oauth(oauth_tokens):
+            try:
+                access_token = await _refresh_and_apply_oauth_tokens(cast(dict[str, Any], oauth_tokens))
+            except Exception as e:
+                return f"Error refreshing MCP OAuth token: {e}"
+            try:
+                resp = await _call_tool_via_sse(server_url, tool_name, arguments, access_token)
+            except httpx.HTTPStatusError as e:
+                if 300 <= e.response.status_code < 400:
+                    raise
+                return f"Error calling MCP tool via SSE: {e}"
+            except Exception as e:
+                return f"Error calling MCP tool via SSE: {e}"
         else:
             return "Error: MCP server returned 401 Unauthorized and no refresh token available."
     except httpx.HTTPStatusError as e:
