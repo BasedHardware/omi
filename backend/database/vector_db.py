@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import os
 from collections import defaultdict
 from dataclasses import dataclass, field
@@ -43,6 +44,7 @@ from database.memory_vector_metadata import (
     build_ledger_memory_vector_filter,
     build_memory_vector_metadata,
     canonical_memory_provider_id,
+    is_tombstoned_or_deleted_metadata,
     parse_memory_search_vector_hit,
     strip_null_metadata_values,
 )
@@ -536,6 +538,31 @@ def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     return len(payload)
 
 
+def _extract_query_matches(resp: Any) -> List[Any]:
+    if resp is None:
+        return []
+    to_dict_resp = getattr(resp, 'to_dict', None)
+    if isinstance(resp, dict):
+        raw_matches = resp.get('matches')
+    elif callable(to_dict_resp):
+        try:
+            r_dict = to_dict_resp()
+        except Exception:
+            r_dict = None
+        raw_matches = r_dict.get('matches') if isinstance(r_dict, dict) else getattr(resp, 'matches', None)
+    else:
+        raw_matches = getattr(resp, 'matches', None)
+
+    if isinstance(raw_matches, (list, tuple)):
+        return list(raw_matches)
+    if raw_matches is not None and hasattr(raw_matches, '__iter__') and not isinstance(raw_matches, (str, bytes, dict)):
+        try:
+            return [m for m in cast(Any, raw_matches)]
+        except Exception:
+            return []
+    return []
+
+
 def find_similar_memories(
     uid: str, content: str, threshold: float = 0.85, limit: int = 5, subject_entity_id: str | None = None
 ) -> List[Dict[str, Any]]:
@@ -556,17 +583,80 @@ def find_similar_memories(
     )
 
     results: List[Dict[str, Any]] = []
-    matches: List[Any] = xc.get('matches', [])
+    matches = _extract_query_matches(xc)
+
     for match in matches:
-        match_metadata: Dict[str, Any] = match['metadata']
-        if match['score'] >= threshold:
-            results.append(
-                {
-                    'memory_id': match_metadata.get('memory_id'),
-                    'category': match_metadata.get('category'),
-                    'score': match['score'],
-                }
-            )
+        try:
+            to_dict_match = getattr(match, 'to_dict', None)
+            if isinstance(match, dict):
+                raw_metadata = match.get('metadata')
+                raw_score = match.get('score')
+            elif callable(to_dict_match):
+                try:
+                    m_dict = to_dict_match()
+                except Exception:
+                    m_dict = None
+                if isinstance(m_dict, dict):
+                    raw_metadata = m_dict.get('metadata')
+                    raw_score = m_dict.get('score')
+                else:
+                    raw_metadata = getattr(match, 'metadata', None)
+                    raw_score = getattr(match, 'score', None)
+            elif hasattr(match, 'metadata') or hasattr(match, 'score'):
+                raw_metadata = getattr(match, 'metadata', None)
+                raw_score = getattr(match, 'score', None)
+            else:
+                continue
+
+            match_metadata: Dict[str, Any] = {}
+            to_dict_meta = getattr(raw_metadata, 'to_dict', None)
+            if isinstance(raw_metadata, dict):
+                match_metadata = raw_metadata
+            elif callable(to_dict_meta):
+                try:
+                    md = to_dict_meta()
+                except Exception:
+                    md = None
+                if isinstance(md, dict):
+                    match_metadata = md
+            elif raw_metadata is not None and hasattr(raw_metadata, 'get'):
+                try:
+                    match_metadata = dict(cast(Any, raw_metadata))
+                except Exception:
+                    match_metadata = {}
+            elif hasattr(raw_metadata, '__dict__'):
+                try:
+                    match_metadata = dict(vars(raw_metadata))
+                except Exception:
+                    match_metadata = {}
+
+            # Skip tombstoned or deleted vectors to prevent read misses in Firestore
+            if is_tombstoned_or_deleted_metadata(match_metadata):
+                continue
+
+            memory_id = match_metadata.get('memory_id')
+            if not isinstance(memory_id, str) or not memory_id.strip():
+                continue
+
+            if raw_score is None:
+                continue
+            try:
+                score = float(raw_score)
+                if math.isnan(score) or math.isinf(score):
+                    continue
+            except (TypeError, ValueError):
+                continue
+
+            if score >= threshold:
+                results.append(
+                    {
+                        'memory_id': memory_id.strip(),
+                        'category': match_metadata.get('category'),
+                        'score': score,
+                    }
+                )
+        except Exception:
+            continue
 
     return results
 
@@ -769,7 +859,7 @@ def query_memory_vector_candidates(
 
     hits: List[SearchVectorHit] = []
     rejected_count = 0
-    matches: List[Any] = response.get('matches', [])
+    matches: List[Any] = _extract_query_matches(response)
     for match in matches:
         parsed = parse_memory_search_vector_hit(match)
         if parsed.hit is None:
