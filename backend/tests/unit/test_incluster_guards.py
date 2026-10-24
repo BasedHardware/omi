@@ -251,7 +251,16 @@ def render(environment='prod', *extra):
         ],
         text=True,
     )
-    return {obj['kind']: obj for obj in yaml.safe_load_all(output) if obj}
+    return {
+        obj['kind']: obj
+        for obj in yaml.safe_load_all(output)
+        if obj
+        and (
+            obj['kind'] == 'PodMonitor'
+            or obj['metadata']['name']
+            not in {f'{environment}-omi-incluster-guards-batch', f'{environment}-omi-incluster-guards-batch-state'}
+        )
+    }
 
 
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
@@ -311,9 +320,11 @@ def test_helm_rbac_and_cpu_placement(environment):
     assert not render(environment, '--set', 'enabled=false')
 
 
-def test_cloud_run_gate_refuses_to_install_identity_or_writer():
+def test_cloud_run_gate_refuses_unapproved_identity_or_namespace():
     with pytest.raises(subprocess.CalledProcessError):
-        render('prod', '--set', 'batch.cloudRunRollbackEnabled=true')
+        render('prod', '--set', 'batch.gcpServiceAccount=wrong@example.com')
+    with pytest.raises(subprocess.CalledProcessError):
+        render('dev', '--set', 'batch.cloudRunRollbackEnabled=true')
 
 
 def test_run_persists_three_blind_observations_and_trips():
