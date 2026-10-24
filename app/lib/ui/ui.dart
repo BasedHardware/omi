@@ -47,6 +47,7 @@ export 'components/omi_search_field.dart';
 export 'components/omi_settings.dart';
 export 'components/omi_sheet.dart';
 export 'components/omi_spinner.dart';
+export 'components/omi_error_form_sheet.dart';
 export 'feedback/omi_clipboard.dart';
 export 'feedback/omi_dialogs.dart';
 export 'feedback/omi_feedback.dart';
