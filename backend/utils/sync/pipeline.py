@@ -136,7 +136,6 @@ from utils.other.storage import (
     get_syncing_file_temporal_signed_url,
     link_archive_captures,
     precache_conversation_audio,
-    schedule_syncing_temporal_file_deletion,
     upload_audio_chunk,
     upload_syncing_temporal_file,
 )
@@ -1497,7 +1496,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             # Queue-time locks do not survive execution-time authorization.
             is_locked = False
         url = get_syncing_file_temporal_signed_url(path)
-        schedule_syncing_temporal_file_deletion(path)
+        # A signed URL is not a success receipt. Staging survives provider
+        # failure/retry; the coordinator cleans only after durable completion.
 
         # Apply user transcription preferences (vocabulary, language, model)
         prefs = transcription_prefs or {}
@@ -2559,6 +2559,19 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
             await run_blocking(db_executor, _mark_job_processing_for_run, job_id, active_run_lock_token)
 
             # --- Phase 1: Decode ---
+            raw_staging_custody = None
+            if content_id and raw_capture_paths:
+                from utils.sync.staging_custody import make_staging_custody_receipt
+
+                try:
+                    raw_staging_custody = await run_blocking(
+                        storage_executor, make_staging_custody_receipt, uid, raw_paths, raw_capture_paths
+                    )
+                except Exception as error:
+                    logger.warning(
+                        'event=sync_staging_cleanup outcome=retained exception_type=%s',
+                        _bounded_exception_type(error),
+                    )
             job_phase = 'decode'
             await run_blocking(
                 db_executor, _update_sync_job_for_run, job_id, active_run_lock_token, {'stage': 'decoding'}
@@ -3451,11 +3464,31 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 final_result['repeat_failure_fingerprint'] = repeat_failure_fingerprint
             if failed_segments == total_segments == provider_invalid_failures[0] and failed_segments > 0:
                 final_result['reason_code'] = 'stt_invalid_input'
+            custody = None
             if content_id and failed_segments == 0:
+                if not cap_holds:
+                    from utils.sync.staging_custody import add_staging_derivatives
+
+                    try:
+                        custody = await run_blocking(
+                            storage_executor,
+                            add_staging_derivatives,
+                            uid,
+                            raw_staging_custody,
+                            segmented_paths,
+                        )
+                    except Exception as error:
+                        # Cleanup is optional; failing its proof retains bytes.
+                        logger.warning(
+                            'event=sync_staging_cleanup outcome=retained exception_type=%s',
+                            _bounded_exception_type(error),
+                        )
                 # The durable content ledger proves every successful segment
                 # before the WAL-visible completed status is published.
                 ledger_writer = mark_sync_content_completed
                 ledger_extra = {}
+                if custody:
+                    ledger_extra['staging_custody'] = custody
                 if cap_holds:
                     from database.sync_cap_holds import mark_content_held
 
@@ -3488,6 +3521,8 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                 failure_class=failure_class,
                 failure_subtype=failure_subtype,
             )
+            if content_id and failed_segments == 0 and custody:
+                await _delete_staged_blobs_async(list(segmented_paths), uid=uid, content_id=content_id, job_id=job_id)
             if content_id and failed_segments > 0:
                 failure_kwargs = (
                     {'failure_key': repeat_failure_key, 'failure_fingerprint': repeat_failure_fingerprint}
@@ -3674,16 +3709,18 @@ def _stage_files_to_gcs(paths: list):
         upload_syncing_temporal_file(p)
 
 
-def _delete_staged_blobs(blob_paths: list):
-    for p in blob_paths:
-        try:
-            delete_syncing_temporal_file(p)
-        except Exception as e:
-            logger.warning('event=sync_unstage outcome=failed exception_type=%s', type(e).__name__)
+def _delete_staged_blobs(blob_paths: list[str], **custody: Any) -> int:
+    from utils.sync.staging_custody import cleanup_sync_staging
+
+    try:
+        return cleanup_sync_staging(blob_paths, **custody)
+    except Exception as e:
+        logger.warning('event=sync_unstage outcome=retained exception_type=%s', type(e).__name__)
+        return 0
 
 
-async def _delete_staged_blobs_async(blob_paths: list):
-    await run_blocking(storage_executor, _delete_staged_blobs, blob_paths)
+async def _delete_staged_blobs_async(blob_paths: list[str], **custody: Any) -> int:
+    return await run_blocking(storage_executor, _delete_staged_blobs, blob_paths, **custody)
 
 
 def _download_staged_files(blob_paths: list, *, bounded_backfill: bool = False) -> bool:

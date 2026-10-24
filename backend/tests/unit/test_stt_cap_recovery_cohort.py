@@ -222,7 +222,6 @@ def test_pipeline_rechecks_narrowing_at_provider_boundary(monkeypatch, narrowed)
     monkeypatch.setattr(pipeline, 'ambiguous_binding_pending', lambda *args: False)
     monkeypatch.setattr(pipeline, 'sync_allowed', lambda *args, **kwargs: True)
     monkeypatch.setattr(pipeline, 'get_syncing_file_temporal_signed_url', lambda path: 'https://synthetic.invalid')
-    monkeypatch.setattr(pipeline, 'schedule_syncing_temporal_file_deletion', Mock())
 
     async def keyterms(uid, vocabulary):
         monkeypatch.setenv('STT_CAP_RECOVERY_COHORT', narrowed)

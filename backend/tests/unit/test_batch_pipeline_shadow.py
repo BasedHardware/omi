@@ -303,9 +303,12 @@ def test_shadow_artifact_cleanup_removes_raw_owner_receipt(repository, monkeypat
         reference=reference,
         to_dict=lambda: {
             'owner_id': 'synthetic-owner',
+            'owner_key': retention.privacy_owner_key('synthetic-owner'),
             'conversation_ids': ['synthetic-conversation'],
             'shadow': True,
             'uri': 'synthetic:audio',
+            'capture_at': 1,
+            'duration_seconds': 1,
         },
     )
     monkeypatch.setattr(retention.queries, 'due_artifacts', lambda *args: [artifact])

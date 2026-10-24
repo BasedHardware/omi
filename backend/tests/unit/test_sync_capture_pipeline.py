@@ -57,7 +57,6 @@ def pipeline():
         module.AudioSegment = AudioSegment
         module.get_timestamp_from_path = lambda path: float(Path(path).stem)
         module.get_syncing_file_temporal_signed_url = lambda path: path
-        module.schedule_syncing_temporal_file_deletion = lambda path: None
         module.get_prerecorded_service = lambda language: ('test', None, 'test')
         module.identify_speakers_for_segments = lambda *a: None
         module.get_closest_conversation_to_timestamps = lambda *a: None
@@ -95,6 +94,33 @@ def test_vad_preserves_speech_origin_and_exports_nothing_for_silence(pipeline, t
     assert row['transcript_segments'][0]['start'] == 0
     assert row['id'] == chunk_identity('u', 'omi', None, False, 1700000020)
     assert outcome['outcome'].value == 'success'
+
+
+def test_provider_failure_after_eight_minutes_never_releases_staging(pipeline, monkeypatch, tmp_path):
+    module, _ = pipeline
+    path = tmp_path / '1700000000.wav'
+    module.AudioSegment.silent(duration=1000).export(path, format='wav')
+    pending = []
+    staging = {'exists': True}
+
+    def schedule(_path):
+        pending.append(lambda: staging.update(exists=False))
+
+    # Fault injection: callbacks scheduled at URL creation would now be due.
+    # Restoring the old call causes this production-path test to lose staging.
+    monkeypatch.setattr(module, 'schedule_syncing_temporal_file_deletion', schedule, raising=False)
+
+    def late_failure(*args, **kwargs):
+        for delete in pending:
+            delete()
+        raise RuntimeError('synthetic provider failure after 481 seconds')
+
+    module.prerecorded = late_failure
+    errors = []
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert module.process_segment(str(path), 'u', response, threading.Lock(), errors) is False
+    assert errors
+    assert staging['exists'] and pending == []
 
 
 @pytest.mark.parametrize('recovered', [False, True])

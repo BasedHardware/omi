@@ -277,6 +277,7 @@ else:
     from models.structured import Structured  # noqa: E402
     import utils.sync.pipeline as sync_pipeline  # noqa: E402
     from utils.conversations import lifecycle as lifecycle_service  # noqa: E402
+    from utils.stt import language_gate  # noqa: E402
     from routers import sync as sync_router  # noqa: E402
 
     _TRANSCRIPT_TOKEN = os.getenv("OMI_REPLAY_TRANSCRIPT_TOKEN", "replay-harness-transcript")
@@ -302,6 +303,12 @@ else:
             _egress_sink({"event": "stt_completed", "job_id": job_id, "word_count": 1})
         words = [{"timestamp": [0.0, 1.0], "speaker": "SPEAKER_00", "text": _TRANSCRIPT_TOKEN}]
         return (words, "en") if return_language else words
+
+    def _local_self_detect(_probe: bytes, *, surface: str) -> None:
+        """FEASIBILITY-ONLY: no language provider; real routing keeps its fallback."""
+        if _egress_sink:
+            _egress_sink({"event": "language_provider_unavailable", "surface": surface})
+        return None
 
     def _local_process_conversation(
         uid: str,
@@ -358,6 +365,7 @@ else:
     sync_pipeline.vad_is_empty = _local_vad
     sync_pipeline.get_prerecorded_service = lambda _language="en": ("parakeet", "en", "parakeet")
     sync_pipeline.prerecorded = _local_prerecorded
+    language_gate.self_detect = _local_self_detect
     sync_pipeline.process_conversation = _local_process_conversation
 
     # ---- DECLARED FAULT CONTROL: terminal_guard_bypassed (boundary perturbation) ----
@@ -438,7 +446,7 @@ else:
         if _egress_sink:
             _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "write_level_terminal_guard"})
 
-        async def _noop_delete_blobs(_paths: Any) -> None:
+        async def _noop_delete_blobs(_paths: Any, **_custody: Any) -> None:
             """FEASIBILITY-ONLY mutant: keep staged audio so a redelivery re-downloads."""
             if _egress_sink:
                 _egress_sink({"event": "idempotency_boundary_defeated", "checkpoint": "staged_audio_cleanup"})

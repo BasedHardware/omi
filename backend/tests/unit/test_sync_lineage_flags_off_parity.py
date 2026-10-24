@@ -48,6 +48,8 @@ def _load(name, source, monkeypatch, namespace=None):
     source = source.replace('from utils.conversation_continuity import', 'from models.conversation_continuity import')
     module.sync_assignment_recovery_enabled = lambda: True
     module.capture_evidence_dark_write_enabled = lambda: True
+    # Historical snapshot only: its retired timer is not a production seam.
+    module.schedule_syncing_temporal_file_deletion = lambda _path: None
     exec(compile(source, name, 'exec', flags=0x1000000), module.__dict__)
     return module
 
@@ -94,7 +96,6 @@ def _drive(module, patch, store, texts, assignment_module, capture_enabled):
     from utils.conversations import lifecycle
 
     patch.setattr(module, 'get_syncing_file_temporal_signed_url', lambda _path: 'file://x')
-    patch.setattr(module, 'schedule_syncing_temporal_file_deletion', lambda _path: None)
     patch.setattr(module, 'get_prerecorded_service', lambda _lang: ('deepgram', 'cfg', 'nova-3'))
     patch.setattr(module, 'prerecorded', lambda *args, **kwargs: (['w'], 'en'))
     patch.setattr(

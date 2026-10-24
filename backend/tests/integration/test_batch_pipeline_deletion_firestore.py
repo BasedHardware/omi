@@ -246,6 +246,92 @@ def test_completion_retention_waits_for_projection_and_object_erasure(state):
     assert 'uri' not in final and 'expires_at' in final
 
 
+def test_incident_hold_and_uri_less_receipt_do_not_block_unrelated_or_privacy_cleanup(state, monkeypatch):
+    store, uid, _, _, _ = state
+    monkeypatch.delenv('AUDIO_CLEANUP_HOLD_ENABLED', raising=False)
+    monkeypatch.delenv('AUDIO_CLEANUP_HOLD_WINDOWS', raising=False)
+    now = datetime(2026, 10, 25, tzinfo=timezone.utc)
+    table = store.client.collection(f'{store.namespace}_artifacts')
+    base = {
+        'owner_id': uid,
+        'owner_key': privacy_owner_key(uid),
+        'kind': 'audio',
+        'cleanup_after': now - timedelta(seconds=1),
+        'duration_seconds': 60,
+        'capture_at': datetime(2026, 10, 23, tzinfo=timezone.utc).timestamp(),
+        'uri': 'gs://synthetic/held#42',
+    }
+    table.document('held').set(base)
+    table.document('missing').set({key: value for key, value in base.items() if key != 'uri'})
+    table.document('good').set(
+        {
+            **base,
+            'uri': 'gs://synthetic/good#42',
+            'capture_at': datetime(2026, 10, 24, 8, tzinfo=timezone.utc).timestamp(),
+        }
+    )
+    table.document('erasure').set({**base, 'uri': 'gs://synthetic/erase#42', 'erasure_requested': True})
+    table.document('false-erasure').set({**base, 'erasure_requested': 'false'})
+    table.document('invalid-calendar').set({**base, 'capture_at': 1792000000000})
+    table.document('inconsistent-owner').set(
+        {**base, 'owner_key': privacy_owner_key('different-synthetic-owner'), 'erasure_requested': True}
+    )
+    store.client.collection(f'{store.namespace}_jobs').document('foreign-job').set(
+        {
+            'owner_id': 'different-synthetic-owner',
+            'capture_at': datetime(2026, 10, 24, 8, tzinfo=timezone.utc).timestamp(),
+            'duration_seconds': 60,
+        }
+    )
+    table.document('foreign-capture-ref').set(
+        {**base, 'segment_id': 'foreign-job', 'capture_at': None, 'duration_seconds': None}
+    )
+    erased = []
+    assert cleanup_completed_artifacts(store, now, delete_uri=lambda owner, uri: erased.append(uri)) == 2
+    assert set(erased) == {'gs://synthetic/good#42', 'gs://synthetic/erase#42'}
+    held = table.document('held').get().to_dict()
+    assert held['uri'] == base['uri'] and held['cleanup_after'] == now + timedelta(hours=1)
+    missing = table.document('missing').get().to_dict()
+    assert missing['cleanup_error'] == 'missing_uri' and 'cleanup_after' not in missing
+    assert not table.document('erasure').get().exists
+    assert table.document('false-erasure').get().to_dict()['cleanup_hold'] == 'capture_window'
+    assert table.document('invalid-calendar').get().to_dict()['cleanup_hold'] == 'unknown_capture_range'
+    inconsistent = table.document('inconsistent-owner').get().to_dict()
+    assert inconsistent['cleanup_error'] == 'owner_mismatch'
+    assert inconsistent['uri'] == base['uri'] and 'cleanup_after' not in inconsistent
+    assert table.document('foreign-capture-ref').get().to_dict()['cleanup_error'] == 'capture_owner_mismatch'
+
+
+def test_real_firestore_update_precondition_preserves_a_newer_privacy_erasure(state, monkeypatch):
+    from utils.batch_pipeline import retention
+
+    store, uid, _, _, _ = state
+    monkeypatch.delenv('AUDIO_CLEANUP_HOLD_ENABLED', raising=False)
+    monkeypatch.delenv('AUDIO_CLEANUP_HOLD_WINDOWS', raising=False)
+    now = datetime(2026, 10, 25, tzinfo=timezone.utc)
+    reference = store.client.collection(f'{store.namespace}_artifacts').document('race')
+    reference.set(
+        {
+            'owner_id': uid,
+            'owner_key': privacy_owner_key(uid),
+            'uri': 'gs://synthetic/race#42',
+            'kind': 'audio',
+            'capture_at': datetime(2026, 10, 23, tzinfo=timezone.utc).timestamp(),
+            'duration_seconds': 60,
+            'cleanup_after': now,
+        }
+    )
+    stale = reference.get()
+    reference.update({'erasure_requested': True, 'cleanup_after': now})
+    monkeypatch.setattr(retention.queries, 'due_artifacts', lambda *args: [stale])
+    erased = []
+    assert cleanup_completed_artifacts(store, now, delete_uri=lambda owner, uri: erased.append(uri)) == 0
+    assert reference.get().to_dict()['cleanup_after'] == now and not erased
+    monkeypatch.setattr(retention.queries, 'due_artifacts', lambda *args: [reference.get()])
+    assert cleanup_completed_artifacts(store, now, delete_uri=lambda owner, uri: erased.append(uri)) == 1
+    assert erased == ['gs://synthetic/race#42'] and not reference.get().exists
+
+
 def test_inflight_object_reference_survives_until_final_erasure(state):
     store, uid, user, purge, _ = state
     queue = Scheduler(store)
