@@ -94,20 +94,34 @@ def test_peak_baseline_does_not_trip_at_peak_or_old_absolute_boundary():
 
 
 def test_first_p95_baseline_query_reads_same_metric_same_hour_last_week():
-    expr = guard.queries('unused')['first_p95_baseline']
-    assert 'histogram_quantile(0.95' in expr
-    assert 'omi_stt_window_first_text_seconds_bucket' in expr
-    assert '[1h] offset 7d' in expr
+    expressions = guard.queries('unused')
+    assert 'histogram_quantile(0.95' in expressions['first_p95_baseline']
+    assert 'omi_stt_window_first_text_seconds_bucket' in expressions['first_p95_baseline']
+    assert '[1h] offset 7d' in expressions['first_p95_baseline']
+    assert expressions['first_count_baseline'] == (
+        'sum(increase(omi_stt_window_first_text_seconds_count{job="backend-listen-metrics"}[1h] offset 7d))'
+    )
 
 
 @pytest.mark.parametrize('baseline,limit', [(0, 30), (20, 30), (25, 30), (35, 42), (100, 120)])
 @pytest.mark.parametrize('delta', [-1e-8, 0, 1e-8])
 def test_first_p95_is_relative_to_weekly_same_hour_baseline(baseline, limit, delta):
-    v = dict(values(), first_p95_baseline=baseline, first_p95=limit + delta)
+    v = dict(values(), first_p95_baseline=baseline, first_count_baseline=100, first_p95=limit + delta)
     reading = guard.evaluate(v)
     assert not reading['blind']
     assert reading['first_p95_threshold'] == pytest.approx(limit)
     assert ('first_p95' in reading['trips']) == (delta >= 0)
+
+
+def test_sparse_weekly_baseline_falls_back_to_floor():
+    # One 60s text last week prices the historical p95 near 59.25s; unqualified,
+    # the 1.2x threshold (~71.1s) would mask this week's real regression at 45s.
+    v = dict(values(), first_p95=45, first_over30=4, first_p95_baseline=59.25, first_count_baseline=1)
+    reading = guard.evaluate(v)
+    assert reading['first_p95_threshold'] == 30
+    assert reading['trips'] == ['first_p95']
+    assert 'first_p95' not in guard.evaluate(dict(v, first_count_baseline=20))['trips']
+    assert guard.evaluate(dict(v, first_count_baseline=None))['first_p95_threshold'] == 30
 
 
 @pytest.mark.parametrize('baseline', [None, float('nan'), float('inf')])
@@ -207,7 +221,9 @@ def test_guard_upgrade_restarts_full_lookback(monkeypatch):
     assert guard.decide(hpa, dep, [], values(), old_state, 900)[0] == 'WARMUP'
 
 
-@pytest.mark.parametrize('key', [k for k in guard.queries('unused') if k != 'first_p95_baseline'])
+@pytest.mark.parametrize(
+    'key', [k for k in guard.queries('unused') if k not in ('first_p95_baseline', 'first_count_baseline')]
+)
 @pytest.mark.parametrize('bad', [None, float('nan'), float('inf'), -float('inf')])
 def test_missing_nonfinite_never_clean(key, bad):
     v = values()

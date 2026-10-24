@@ -29,6 +29,7 @@ REFUSAL_GATE_VERSION = 'same-hour-of-week-12-pod-v2'
 FIRST_P95_FLOOR = 30
 FIRST_P95_BASELINE_FACTOR = 1.2
 FIRST_P95_MIN_SLOW_TEXTS = 4
+FIRST_P95_BASELINE_MIN_COUNT = 20
 FAST_SCALE_UP = {
     'stabilizationWindowSeconds': 0,
     'selectPolicy': 'Max',
@@ -109,13 +110,21 @@ def refusal_limit(values):
 
 
 def first_p95_limit(values):
-    """The 30s floor, or 1.2x the same rolling UTC hour a week ago when that baseline is finite.
+    """The 30s floor, or 1.2x the same rolling UTC hour a week ago when that baseline is qualified.
 
-    An unavailable baseline is the documented fallback (floor plus the slow-text
-    gate below), never blindness: a missing weekly series must not itself roll the floor back.
+    The weekly baseline is used only when its own hour carried at least 20 first
+    texts; a sparse historical hour (one 60s observation prices its p95 near 59s)
+    would otherwise lift the threshold to ~71s and mask a live regression. An
+    unavailable or unqualified baseline is the documented fallback (floor plus
+    the slow-text gate in evaluate), never blindness: a missing weekly series
+    must not itself roll the floor back.
     """
     baseline = values.get('first_p95_baseline')
-    if finite(baseline):
+    if (
+        finite(baseline)
+        and finite(values.get('first_count_baseline'))
+        and values['first_count_baseline'] >= (FIRST_P95_BASELINE_MIN_COUNT)
+    ):
         return max(FIRST_P95_FLOOR, FIRST_P95_BASELINE_FACTOR * baseline)
     return FIRST_P95_FLOOR
 
@@ -141,6 +150,7 @@ def queries(namespace):
         'first_p95_baseline': (
             'histogram_quantile(0.95,sum by(le)(rate(omi_stt_window_first_text_seconds_bucket' f'{sel}[1h] offset 7d)))'
         ),
+        'first_count_baseline': f'sum(increase(omi_stt_window_first_text_seconds_count{sel}[1h] offset 7d))',
         'first_count': inc('omi_stt_window_first_text_seconds_count'),
         'first_over30': inc('omi_stt_window_first_text_seconds_count')
         + ' - '
@@ -222,12 +232,13 @@ def evaluate(values):
     # distinguish that expected lack of samples from a missing series/query error
     # (None). It remains LOW_SAMPLE, never CLEAN, without rolling back quiet hours.
     idle_nan = {'first_p95', 'post_p95', 'v2_p95', 'refusal_fraction'} if low and fresh else set()
-    # first_p95_baseline is optional evidence (retention, metric age): its absence
-    # selects the fallback threshold instead of blinding the whole reading.
+    # The weekly first_p95 evidence (quantile + its sample count) is optional
+    # (retention, metric age, sparse hour): its absence selects the fallback
+    # threshold instead of blinding the whole reading.
     blind = [
         f'missing_or_nonfinite_{k}'
         for k in queries('unused')
-        if k != 'first_p95_baseline'
+        if k not in ('first_p95_baseline', 'first_count_baseline')
         and not finite(values.get(k))
         and not (k in idle_nan and isinstance(values.get(k), float) and math.isnan(values[k]))
     ]
