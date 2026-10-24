@@ -1638,6 +1638,14 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 let uuid = peripheralUuidString(peripheral)
                 peripheral.delegate = self
                 peripherals[uuid] = peripheral
+                if !shouldAutoReconnect(uuid: uuid, pairingLost: false) {
+                    // The process may have died after persisting the user's block
+                    // but before cancelling the OS request. Retire that restored
+                    // request too, including an already-connected restored link.
+                    logBle(uuid: uuid, event: "connect_cancelled", detail: "restored_user_or_pairing_block")
+                    central.cancelPeripheralConnection(peripheral)
+                    continue
+                }
                 // State-restored peripherals have already connected in a prior
                 // process lifetime; count a later connection as a reconnect.
                 everConnected.insert(uuid)

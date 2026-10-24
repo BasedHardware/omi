@@ -49,6 +49,7 @@ class OmiBleConnectionPolicyTest < Minitest::Test
                 intent.suppress(saved)
                 intent = OmiSavedReconnectIntent(defaults: defaults)
                 precondition(intent.action(saved, poweredOn: true, state: .connecting) == .suppressed)
+                precondition(intent.action(saved, poweredOn: true, state: .connected) == .suppressed)
                 intent.configure(saved, enabled: true)
                 precondition(intent.action(saved, poweredOn: true, state: .disconnected) == .suppressed)
                 intent.resume(saved) // Only explicit manageDevice clears the native user block.
