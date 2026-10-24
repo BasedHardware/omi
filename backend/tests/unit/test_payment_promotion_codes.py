@@ -492,3 +492,30 @@ def test_release_attached_schedules_swallows_list_errors():
         # Should not raise
         router._release_attached_schedules({"id": "sub_1", "customer": "cus_1"})
     mock_ss.release.assert_not_called()
+
+
+def _checkout_session_params(promotion_code_id):
+    import importlib.util
+
+    import stripe
+
+    # Earlier tests in this module stub `utils.stripe`; load the real helper from source.
+    spec = importlib.util.spec_from_file_location("_real_utils_stripe", STRIPE_UTILS_SOURCE)
+    stripe_utils = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(stripe_utils)
+    with patch.object(stripe.checkout.Session, "create", return_value=SimpleNamespace(id="cs_1")) as create:
+        stripe_utils.create_subscription_checkout_session("uid_1", "price_1", promotion_code_id=promotion_code_id)
+    return create.call_args.kwargs
+
+
+def test_checkout_with_promo_stays_in_price_currency():
+    """Promo minimums are USD; a local-currency conversion can drop the total below them (#23299)."""
+    params = _checkout_session_params("promo_1")
+    assert params["discounts"] == [{"promotion_code": "promo_1"}]
+    assert params["adaptive_pricing"] == {"enabled": False}
+
+
+def test_checkout_without_promo_keeps_local_currency_pricing():
+    params = _checkout_session_params(None)
+    assert params["allow_promotion_codes"] is True
+    assert "adaptive_pricing" not in params

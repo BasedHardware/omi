@@ -84,6 +84,8 @@ def create_subscription_checkout_session(
 
         if promotion_code_id:
             session_params['discounts'] = [{'promotion_code': promotion_code_id}]
+            # Promotion code minimums are set in USD; a converted local-currency total can fall below them.
+            session_params['adaptive_pricing'] = {'enabled': False}
         else:
             session_params['allow_promotion_codes'] = True
 
