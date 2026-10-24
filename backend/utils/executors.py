@@ -311,6 +311,17 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if type(error).__name__ == 'DestructiveOperationInProgress':
         logger.info('background task %s deferred reason=destructive_operation', name)
         return
+    # A spent BYOK provider account (direct OpenRouter answers 402 'requires
+    # more credits') is user account state, not a defect: retries can never
+    # succeed and the provider's error body must not reach logs. The
+    # conversation boundary answers the same classification as a typed 429;
+    # logging the bounded class without a traceback keeps Error Reporting from
+    # grouping the account state as a crash at the openai SDK frame.
+    from utils.llm.gateway_error_contract import is_byok_quota_error
+
+    if is_byok_quota_error(error):
+        logger.warning('background task %s halted reason=byok_quota', name)
+        return
     logger.error("background task %s failed: %s", name, error, exc_info=error)
 
 
