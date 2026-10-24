@@ -54,8 +54,18 @@ The existing `budgets.json` owns all thresholds. Top-level numeric p90 budgets
 are retained as historical diagnostic values; they no longer gate host runs.
 `_gate` contains the blocking work-count caps for each scenario, zero semantics
 compiles per sampled frame, and zero semantics share of measured pipeline work.
+Initial rebuild/layout/paint caps are the unchanged-production baseline +10%
+and 10 events, clip-layer maxima +2, nonzero opacity-layer maxima +1, and
+painted image size at least 1,048,576 pixels. Semantics remains exactly zero.
+Three independent holdouts passed with identical counts (26.6–28.3 seconds
+each; 0/3 observed false failures). These initialize new count metrics, not
+relaxations of existing timing caps.
+
 Counts include route push/pop and interaction; seeding/warmup are outside the
-measurement. Missing phases, samples, scenarios, or repeated scorecards fail.
+measurement. Missing phases, samples, scenarios, repeated scorecards, framework failure
+evidence or successful process exits fail. `run-status.json` preserves exit
+codes independently of the measured counts; rendering errors cannot export
+a successful admission card.
 
 The scorecard records:
 

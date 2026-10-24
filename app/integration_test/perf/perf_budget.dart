@@ -9,8 +9,9 @@ List<String> budgetViolations(PerfInstrumentation sample, Map<String, dynamic> b
   if (sample.layouts == 0 || sample.paints == 0 || sample.rebuilds.isEmpty) {
     failures.add('Missing layout/paint/rebuild instrumentation; an empty or profile-mode host sample is not admission');
   }
-  if (sample.semanticsEnabled)
+  if (sample.semanticsEnabled) {
     failures.add('Semantics enabled without an accessibility client: release wrapper leaked a handle');
+  }
   final frames = sample.sampledFrames;
   for (final entry in (budget['counts'] as Map<String, dynamic>).entries) {
     final measured = sample.workCounts[entry.key];

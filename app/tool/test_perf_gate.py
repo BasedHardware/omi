@@ -41,6 +41,13 @@ class PerfGateTests(unittest.TestCase):
         self.assertEqual(rows[0]['work']['rebuilds']['stddev'], 1)
         self.assertTrue(summarize([card(12, ['regression'])], 1)[1])
 
+    def test_framework_failure_blocks_even_when_counts_are_complete(self):
+        card = {'schema': 'omi-mobile-perf/v2', 'complete': True, 'test_failure_count': 1,
+                'scenarios': {name: {'work_counts': {'rebuilds': 1}, 'total_ms': {'p90': 1},
+                                    'ui_phase_shares': {'SEMANTICS': 0}, 'gate_violations': []}
+                              for name in SCENARIOS}}
+        self.assertTrue(summarize([card], 1)[1])
+
     def test_missing_scenario_fails(self):
         self.assertTrue(summarize([{'schema': 'omi-mobile-perf/v2', 'complete': True, 'test_failure_count': 0, 'scenarios': {}}], 1)[1])
 
