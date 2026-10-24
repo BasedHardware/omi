@@ -218,6 +218,14 @@ class Stack:
                 'CLOUDSDK_CONFIG': str(isolated_config / 'gcloud'),
                 'NO_PROXY': '127.0.0.1,localhost',
                 'no_proxy': '127.0.0.1,localhost',
+                # Match test.sh: several isolated backend processes must not
+                # each create a host-sized native pool on a shared runner.
+                'OMP_NUM_THREADS': '1',
+                'OPENBLAS_NUM_THREADS': '1',
+                'MKL_NUM_THREADS': '1',
+                'VECLIB_MAXIMUM_THREADS': '1',
+                'NUMEXPR_NUM_THREADS': '1',
+                'BLIS_NUM_THREADS': '1',
                 'FIRESTORE_EMULATOR_HOST': firestore_host,
                 'FIREBASE_AUTH_EMULATOR_HOST': '127.0.0.1:9099',
                 'OMI_HARNESS_INSTANCE': 'sync-cloud-tasks-stack',
@@ -250,6 +258,8 @@ class Stack:
                 'STT_SERVICE_MODELS': 'parakeet',
                 'HOSTED_PARAKEET_API_URL': 'http://127.0.0.1:1',
                 'BUCKET_TEMPORAL_SYNC_LOCAL': 'sync-temporal',
+                'AUDIO_ARCHIVE_SYNC_ENABLED': 'true',
+                'AUDIO_ARCHIVE_PERCENT': '100',
                 'BUCKET_SPEECH_PROFILES': 'speech-profiles',
                 'BUCKET_POSTPROCESSING': 'postprocessing',
                 'BUCKET_PRIVATE_CLOUD_SYNC': 'omi-private-cloud-sync',
@@ -294,6 +304,11 @@ class Stack:
         process_env = self.env.copy()
         if role:
             process_env['OMI_SYNC_STACK_ROLE'] = role
+        if sys.platform == 'darwin' and command[1:3] == ['-m', 'uvicorn']:
+            # macOS uvloop may use an epoch distinct from time.monotonic()
+            # after host sleep. Keep the real, unchanged request deadlines in
+            # one clock domain; Linux CI retains its default runtime loop.
+            command = [*command, '--loop', 'asyncio']
         output = log_path.open('wb')
         process = subprocess.Popen(
             command,
@@ -505,8 +520,10 @@ def _seed_capture_conversation(stack: Stack, uid: str, conversation_id: str) -> 
         raise StackFailure(f'isolated capture provenance seed returned HTTP {response.status_code}')
 
 
-def _submit_and_capture_task(stack: Stack, uid: str) -> tuple[str, dict[str, Any]]:
+def _submit_and_capture_task(stack: Stack, uid: str, *, archive: bool = False) -> tuple[str, dict[str, Any]]:
     stack.seed_user(uid)
+    if archive:
+        stack.firestore.collection('users').document(uid).update({'private_cloud_sync_enabled': True})
     filename = _fresh_pcm_filename()
     audio = _pcm16_upload_bytes()
     capture_conversation_id = f'sync-stack-capture-{uuid.uuid4().hex}'
@@ -759,8 +776,8 @@ def _cleanup_retry_preserves_terminal_work(stack: Stack) -> None:
     retry = _deliver_task(task, retry_count=1)
     if retry.status_code != 200 or retry.json().get('status') != 'acked':
         raise StackFailure('terminal cleanup retry was not ACKed')
-    if staged_path.exists() or _stt_invocation_count(stack, job_id) != 1:
-        raise StackFailure('terminal cleanup retry did not clean exact material without reprocessing')
+    if not staged_path.exists() or _stt_invocation_count(stack, job_id) != 1:
+        raise StackFailure('terminal cleanup retry released unarchived input or reprocessed it')
     _assert_metered_once(stack, uid)
 
 
@@ -851,8 +868,38 @@ def _final_attempt_post_ledger_failure_converges(stack: Stack) -> None:
     _assert_metered_once(stack, uid)
     if _stt_invocation_count(stack, job_id) != 1:
         raise StackFailure('final durable-ledger convergence re-ran the provider pipeline')
-    if stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
-        raise StackFailure('final durable-ledger convergence did not clean staged input')
+    if not stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
+        raise StackFailure('final durable-ledger convergence released unarchived input')
+
+
+def _archived_success_releases_only_staging(stack: Stack) -> None:
+    uid = stack.scenario_uid('archived-success')
+    job_id, task = _submit_and_capture_task(stack, uid, archive=True)
+    response = _deliver_task(task, retry_count=0)
+    if response.status_code != 200:
+        raise StackFailure('archived worker did not finish successfully')
+    _assert_durable_success(stack, uid, job_id)
+    body = task['body']
+    ledger = (
+        stack.firestore.collection('users')
+        .document(uid)
+        .collection('sync_content_ledger_offline')
+        .document(body['content_id'])
+        .get()
+        .to_dict()
+        or {}
+    )
+    receipt = ledger.get('staging_custody') or {}
+    if receipt.get('version') != 1 or not receipt.get('originals'):
+        raise StackFailure('completed ledger lacks original archive custody proof')
+    for original in receipt['originals']:
+        if not (stack.storage_dir / 'omi-private-cloud-sync' / original['archive']).is_file():
+            raise StackFailure('successful staging cleanup removed its durable archive')
+    if any(stack.staged_blob_path(path).exists() for path in body['raw_blob_paths']):
+        raise StackFailure('proven archived success retained redundant staging')
+    duplicate = _deliver_task(task, retry_count=1)
+    if duplicate.status_code != 200 or _stt_invocation_count(stack, job_id) != 1:
+        raise StackFailure('archived terminal duplicate reprocessed audio')
 
 
 def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
@@ -867,8 +914,8 @@ def _retry_budget_terminalizes_truthfully(stack: Stack) -> None:
     status = _poll_terminal_job(stack, uid, job_id)
     if status.get('status') != 'failed':
         raise StackFailure('retry-budget exhaustion did not publish truthful failed job state')
-    if stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
-        raise StackFailure('terminal failure did not release staged material')
+    if not stack.staged_blob_path(task['body']['raw_blob_paths'][0]).exists():
+        raise StackFailure('terminal failure released staged material without durable custody')
     _assert_not_metered(stack, uid)
     duplicate = _deliver_task(task, retry_count=2)
     if duplicate.status_code != 200 or duplicate.json().get('status') != 'acked':
@@ -1040,6 +1087,7 @@ def main() -> int:
     try:
         if args.only in {'all', 'sync'}:
             _run_scenario(state_dir / 'happy-duplicate', scenario=_happy_path_and_terminal_duplicate)
+            _run_scenario(state_dir / 'archived-success', scenario=_archived_success_releases_only_staging)
             _run_scenario(
                 state_dir / 'cleanup-retry', cleanup_failures=1, scenario=_cleanup_retry_preserves_terminal_work
             )

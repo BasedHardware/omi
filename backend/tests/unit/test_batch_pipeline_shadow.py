@@ -306,6 +306,8 @@ def test_shadow_artifact_cleanup_removes_raw_owner_receipt(repository, monkeypat
             'conversation_ids': ['synthetic-conversation'],
             'shadow': True,
             'uri': 'synthetic:audio',
+            'capture_at': 1,
+            'duration_seconds': 1,
         },
     )
     monkeypatch.setattr(retention.queries, 'due_artifacts', lambda *args: [artifact])

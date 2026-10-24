@@ -1,0 +1,85 @@
+# Audio cleanup custody
+
+Routine cleanup cannot use elapsed time or a terminal failure as permission to
+delete accepted source audio. The October 2026 incident exposed a 480-second
+timer started immediately after the legacy sync signed URL was minted, before
+the provider returned. Batch cleanup was accidentally stalled by URI-less
+receipts; repairing that exception without a preservation gate would release
+incident-window originals.
+
+## Legacy sync
+
+The segment path no longer schedules a timer. Before decoding removes local
+originals, the coordinator binds their SHA-256 to the content-addressed raw
+archive paths returned by admission. On all-success completion it adds staging
+MD5 checksums, then writes `staging_custody` beside the result in the same
+owner-fenced content-ledger completion transaction. This bookkeeping is not
+returned in the client result. Receipts larger than 128 KiB are omitted and
+staging stays retained.
+
+Cleanup rereads that ledger, requires an exact job and valid all-success result
+(including no held audio), and verifies every original archive still exists
+with matching plaintext SHA-256 metadata. It checks the original capture
+window, compares each staged object's MD5 and deletes only its observed GCS
+generation. A changed staging generation, missing archive, denied read, missing
+receipt, partial result, failed job or old job without proof retains the object.
+Cleanup errors do not change the successful transcript result. Derived VAD
+blobs are covered by the same receipt and every original archive check.
+
+This is a metadata custody proof based on the existing immutable raw-archive
+writer, not a fresh decode/playback certificate. It does not prove that every
+archived source sample appears in the transcript. Jobs without an original
+archive (including consent-off paths and historical receipts) do not acquire
+routine source-deletion authority. Zero-VAD early completions currently retain
+staging too. No long timer or bucket lifecycle is introduced as a substitute.
+
+## Capture-window hold
+
+`AUDIO_CLEANUP_HOLD_ENABLED` defaults to `true`; only the explicit value `false`
+disables the hold. `AUDIO_CLEANUP_HOLD_WINDOWS` is a comma-separated list of
+timezone-qualified, inclusive `start..end` capture windows. Its default is:
+
+```
+2026-10-22T13:36:30Z..2026-10-24T07:16:00Z
+```
+
+The shared policy holds overlapping ranges, invalid/empty configuration and
+missing capture provenance. An unknown end is treated conservatively: a source
+that starts before a window ends can overlap it. Thus legacy sources with only
+a filename timestamp can remain held outside the exact incident start until
+their end is certified. New batch artifact receipts include capture time and
+duration; older receipts fall back to their job's capture metadata. Missing
+jobs retain artifacts.
+
+Held batch rows retain their URI, lose any receipt TTL and re-enter the due
+queue in one hour. This rotates a held first page so unrelated cleanup keeps
+progressing. A URI-less receipt is flagged with `cleanup_error=missing_uri`,
+removed from the due query and has its TTL removed for investigation; it is not
+treated as a successful delete. Logs report bounded reasons without owner,
+object or content identifiers.
+
+The kill switch releases *only the window hold*, not legacy durable-success
+or checksum/generation gates. Already parked batch rows recheck within an hour.
+Do not remove the hold before the incident owner has reconciled custody. Keep
+URI-less receipts for the repair owner; this change does not guess their URI or
+erase their metadata.
+
+## Privacy precedence and release
+
+`erasure_requested` batch cleanup bypasses the hold. Direct conversation/account
+purges, including owner-scoped all-version GCS erasure, do not call the routine
+hold or the legacy success verifier. Privacy erasure remains immediate and
+retryable, even for incident artifacts or unknown capture timestamps.
+
+The rollout lead owns merge and deployment after T3b. Deploy the backend image
+to backend-sync, backend-sync-backfill and the batch-serving integration host;
+backend/pusher/listen outbox changes are owned separately. No workflow,
+production env, bucket retention, restore or historical data mutation is part
+of this change. Old daemon timers already resident in an old process disappear
+only when that process is replaced.
+
+After release, verify the running release identity on every serving revision,
+check `sync_staging_cleanup` and `batch_cleanup` reason logs, confirm the
+incident artifacts remain present, confirm non-held cleanup advances, and run a
+privacy-erasure synthetic canary through the approved release harness. Source
+tests and CI do not establish deployed artifact preservation or playback.

@@ -8,11 +8,12 @@ and dead letters have no TTL: accepted audio must not silently expire.
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 import hashlib
+import logging
 import os
 from typing import Any
 from urllib.parse import urlsplit
 
-from google.api_core.exceptions import NotFound
+from google.api_core.exceptions import FailedPrecondition, NotFound
 from google.cloud import firestore
 
 from config.policy import RecoveryPolicy
@@ -21,9 +22,12 @@ from database.batch_pipeline_privacy import BatchPrivacyBlocked, assert_batch_wr
 from database.batch_pipeline_shadow_hook import mirror_refresh
 
 from utils.batch_pipeline.upload_policy import UPLOAD_PENDING_SECONDS
+from utils.audio_cleanup_custody import cleanup_hold_reason
 
 ARTIFACT_RETENTION = timedelta(hours=24)
 RECEIPT_RETENTION = timedelta(days=45)
+HOLD_RECHECK = timedelta(hours=1)
+logger = logging.getLogger(__name__)
 
 
 def delete_batch_object(uid: str, uri: str) -> None:
@@ -182,6 +186,8 @@ def register_batch_artifact(
                     'conversation_ids': conversation_ids,
                     'uri': uri,
                     'kind': kind,
+                    'capture_at': getattr(item, 'capture_at', None) or job.get('capture_at'),
+                    'duration_seconds': getattr(item, 'duration_seconds', None) or job.get('duration_seconds'),
                     'privacy_generation': expected_generation,
                     'write_pending_until': datetime.now(timezone.utc) + timedelta(seconds=UPLOAD_PENDING_SECONDS),
                     **(
@@ -285,6 +291,53 @@ def cleanup_completed_artifacts(
     try:
         for artifact in queries.due_artifacts(store.client, store.namespace, now, limit):
             data = artifact.to_dict() or {}
+            uri = data.get('uri')
+            if not isinstance(uri, str) or not uri.strip():
+                # A malformed/previously cleaned receipt is not delete authority.
+                # Park and flag it so it cannot starve every subsequent due page.
+                try:
+                    artifact.reference.update(
+                        {
+                            'cleanup_error': 'missing_uri',
+                            'cleanup_flagged_at': now,
+                            'cleanup_after': firestore.DELETE_FIELD,
+                            'expires_at': firestore.DELETE_FIELD,
+                        },
+                        option=firestore.LastUpdateOption(artifact.update_time),
+                    )
+                    touched.append(('artifacts', artifact.id))
+                except (NotFound, FailedPrecondition):
+                    pass
+                logger.warning('event=batch_cleanup outcome=retained reason=missing_uri')
+                continue
+            if not data.get('erasure_requested'):
+                capture_at, duration = data.get('capture_at'), data.get('duration_seconds')
+                if capture_at is None or duration is None:
+                    job = (
+                        store.client.collection(f'{store.namespace}_jobs')
+                        .document(data.get('segment_id') or artifact.id)
+                        .get()
+                        .to_dict()
+                        or {}
+                    )
+                    capture_at = job.get('capture_at') if capture_at is None else capture_at
+                    duration = job.get('duration_seconds') if duration is None else duration
+                reason = cleanup_hold_reason(capture_at, duration)
+                if reason:
+                    try:
+                        artifact.reference.update(
+                            {
+                                'cleanup_hold': reason,
+                                'cleanup_after': now + HOLD_RECHECK,
+                                'expires_at': firestore.DELETE_FIELD,
+                            },
+                            option=firestore.LastUpdateOption(artifact.update_time),
+                        )
+                        touched.append(('artifacts', artifact.id))
+                    except (NotFound, FailedPrecondition):
+                        pass
+                    logger.info('event=batch_cleanup outcome=held reason=%s', reason)
+                    continue
             delete_uri(data['owner_id'], data['uri'])
             touched.append(('artifacts', artifact.id))
             # Deletion races must never recreate a purged metadata document.
@@ -297,6 +350,7 @@ def cleanup_completed_artifacts(
                     {
                         'uri': firestore.DELETE_FIELD,
                         'cleanup_after': firestore.DELETE_FIELD,
+                        'cleanup_hold': firestore.DELETE_FIELD,
                         'expires_at': now + RECEIPT_RETENTION,
                     }
                 )
