@@ -16,6 +16,8 @@ otherwise.
 
 The `mobile_lag_*` lag capture (`lib/utils/analytics/lag_recorder.dart`) is
 local debug-log only, behind the same Debug logs switch, and never transmitted.
+It shares the render observations' `mobile_render_diagnostic` log type; its
+`event` field names the lag event.
 
 Replacement observations use `POST /v1/telemetry/client/batches` only when
 `OMI_CLIENT_TELEMETRY_MIGRATION` is enabled. The outbox flushes after 30

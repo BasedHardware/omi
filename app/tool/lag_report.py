@@ -34,7 +34,10 @@ def events(paths):
                     event = json.loads(line)
                 except ValueError:
                     continue
-                if str(event.get("type", "")).startswith("mobile_lag_"):
+                # The app logs these as mobile_render_diagnostic events named by their `event` field.
+                kind = str(event.get("event") or event.get("type", ""))
+                if kind.startswith("mobile_lag_"):
+                    event["type"] = kind
                     yield event
 
 

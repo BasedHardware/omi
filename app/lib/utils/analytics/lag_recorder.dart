@@ -11,6 +11,10 @@ import 'package:flutter/widgets.dart';
 /// reach the local debug log.
 final Expando<String> lagRouteLabels = Expando<String>('lag_route_label');
 
+/// Set by [MobilePerformanceTelemetry] while attached; `HomeProvider.setIndex`
+/// calls it, because switching Home tabs is not a route change.
+void Function(int tab)? lagHomeTabChanged;
+
 /// Where the user was and what they were doing when a frame was produced.
 enum LagInteraction { idle, scroll, tap }
 
@@ -86,6 +90,7 @@ class LagRecorder {
     // Forget an in-flight gesture so a later capture never starts mid-scroll.
     _scrollDepth = 0;
     _scrollStartUs = null;
+    _pointer = null;
     _pointerDownUs = null;
     _pointerDownAt = null;
   }
@@ -101,45 +106,67 @@ class LagRecorder {
   }
 
   // ---- input context ------------------------------------------------------
+  //
+  // Fed from GestureBinding's global pointer route (no widget in the tree).
+  // A drag past touch slop is a scroll; frames up to [flingTailUs] after the
+  // finger lifts still belong to it, covering most of a fling's ballistic run.
 
-  void onScrollStart() {
-    if (!_active) return;
+  static const int flingTailUs = 800000;
+
+  void _scrollStart() {
     if (_scrollDepth++ == 0) _scrollStartUs = _nowUs();
   }
 
-  void onScrollEnd() {
-    if (!_active) return;
+  void _scrollEnd() {
     if (_scrollDepth == 0) return;
     if (--_scrollDepth > 0) return;
-    // Frames up to 150 ms after the finger lifts still belong to the gesture.
-    _scrolls.addLast(_Span(_scrollStartUs ?? _nowUs(), _nowUs() + 150000));
+    _scrolls.addLast(_Span(_scrollStartUs ?? _nowUs(), _nowUs() + flingTailUs));
     while (_scrolls.length > 8) {
       _scrolls.removeFirst();
     }
     _scrollStartUs = null;
   }
 
-  void onPointerDown(Offset position) {
-    if (!_active) return;
+  int? _pointer;
+
+  void onPointerDown(int pointer, Offset position) {
+    if (!_active || _pointer != null) return;
+    _pointer = pointer;
     _pointerDownUs = _nowUs();
     _pointerDownAt = position;
     _pointerMoved = false;
   }
 
-  void onPointerMove(Offset position) {
-    if (!_active) return;
+  void onPointerMove(int pointer, Offset position) {
+    if (!_active || pointer != _pointer || _pointerMoved) return;
     final start = _pointerDownAt;
-    if (start != null && (position - start).distance > kTouchSlop) _pointerMoved = true;
+    if (start != null && (position - start).distance > kTouchSlop) {
+      _pointerMoved = true;
+      _scrollStart();
+    }
+  }
+
+  void onPointerCancel(int pointer) {
+    if (!_active || pointer != _pointer) return;
+    _pointer = null;
+    _pointerDownUs = null;
+    if (_pointerMoved) _scrollEnd();
   }
 
   /// A pointer lifted without travelling: a tap. Times it to the end of the
   /// next frame's UI work, which includes the tap handler's own synchronous
-  /// work (this listener sits above the gesture arena, so it runs first).
-  void onPointerUp() {
-    if (!_active) return;
+  /// work: the global pointer route runs before the gesture arena sweeps, and
+  /// the sweep is what fires `onTap`.
+  void onPointerUp(int pointer) {
+    if (!_active || pointer != _pointer) return;
+    _pointer = null;
     final downUs = _pointerDownUs;
     _pointerDownUs = null;
-    if (downUs == null || _pointerMoved || _scrollDepth > 0) return;
+    if (_pointerMoved) {
+      _scrollEnd();
+      return;
+    }
+    if (downUs == null || _scrollDepth > 0) return;
     final upUs = _nowUs();
     _lastTapUs = upUs;
     final generation = ++_tapGeneration;
@@ -337,6 +364,7 @@ class LagRecorder {
   void _emit(String type, Map<String, Object?> fields) {
     try {
       emit(type, {
+        'event': type,
         for (final e in fields.entries)
           if (e.key != '_score') e.key: e.value is List ? _strip(e.value as List) : e.value,
       });
@@ -404,35 +432,4 @@ class _Span {
   _Span(this.start, this.end);
   final int start;
   final int end;
-}
-
-/// Feeds scroll and pointer context to a [LagRecorder]. Mount once above the
-/// navigator; it never consumes a notification or an event.
-class LagInputScope extends StatelessWidget {
-  const LagInputScope({super.key, required this.recorder, required this.child});
-
-  final LagRecorder? recorder;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final recorder = this.recorder;
-    if (recorder == null) return child;
-    // omi-perf-allow: global-input-listener -- lag capture needs taps and scrolls on every surface; each callback is O(1) and returns at once unless Debug logs capture is on (lag_recorder_test.dart)
-    return Listener(
-      behavior: HitTestBehavior.translucent,
-      onPointerDown: (e) => recorder.onPointerDown(e.position),
-      onPointerMove: (e) => recorder.onPointerMove(e.position),
-      onPointerUp: (_) => recorder.onPointerUp(),
-      child: NotificationListener<ScrollNotification>(
-        // omi-perf-allow: global-input-listener -- scroll start/end only, O(1), never consumes the notification
-        onNotification: (n) {
-          if (n is ScrollStartNotification) recorder.onScrollStart();
-          if (n is ScrollEndNotification) recorder.onScrollEnd();
-          return false;
-        },
-        child: child,
-      ),
-    );
-  }
 }

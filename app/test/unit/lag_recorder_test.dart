@@ -22,9 +22,11 @@ void main() {
       lag.observeFrame(buildUs: 6000, rasterUs: 5000, totalUs: 12000);
     }
     expect(events, isEmpty);
-    lag.onScrollStart();
+    lag.onPointerDown(1, Offset.zero);
+    lag.onPointerMove(1, const Offset(0, 40));
     lag.observeFrame(buildUs: 9000, rasterUs: 48000, totalUs: 60000);
     final frame = of('mobile_lag_frame').single;
+    expect(frame['event'], 'mobile_lag_frame');
     expect(frame['surface'], 'ConversationDetailPage');
     expect(frame['bound'], 'raster');
     expect(frame['interaction'], 'scroll');
@@ -70,20 +72,33 @@ void main() {
     expect(of('mobile_lag_tap').single['tap_to_frame_ms'], 180.0);
   });
 
-  test('a moved pointer is not a tap; frames within a second of a tap are tap frames', () {
-    lag.onPointerDown(Offset.zero);
-    lag.onPointerMove(const Offset(0, 40));
-    lag.onPointerUp();
+  test('a drag is a scroll through its fling tail, never a tap', () {
+    lag.onPointerDown(1, Offset.zero);
+    lag.onPointerMove(1, const Offset(0, 40));
+    lag.onPointerUp(1);
+    now += LagRecorder.flingTailUs - 1000;
+    lag.observeFrame(buildUs: 50000, rasterUs: 0, totalUs: 50000);
+    now += 2000;
+    lag.observeFrame(buildUs: 50000, rasterUs: 0, totalUs: 50000);
+    expect(of('mobile_lag_frame').map((f) => f['interaction']), ['scroll', 'idle']);
+    expect(of('mobile_lag_tap'), isEmpty);
+  });
+
+  test('a second finger does not disturb the first pointer', () {
+    lag.onPointerDown(1, Offset.zero);
+    lag.onPointerDown(2, const Offset(100, 100));
+    lag.onPointerMove(2, const Offset(100, 200));
+    lag.onPointerUp(2);
     lag.observeFrame(buildUs: 50000, rasterUs: 0, totalUs: 50000);
     expect(of('mobile_lag_frame').single['interaction'], 'idle');
   });
 
   test('input is ignored while capture is off, and turning it off forgets a live scroll', () {
-    lag.onScrollStart();
+    lag.onPointerDown(1, Offset.zero);
+    lag.onPointerMove(1, const Offset(0, 40));
     lag.active = false;
-    lag.onScrollStart();
-    lag.onPointerDown(Offset.zero);
-    lag.onPointerUp();
+    lag.onPointerDown(2, Offset.zero);
+    lag.onPointerMove(2, const Offset(0, 40));
     lag.active = true;
     lag.observeFrame(buildUs: 50000, rasterUs: 0, totalUs: 50000);
     expect(of('mobile_lag_frame').single['interaction'], 'idle');
@@ -119,5 +134,27 @@ void main() {
     expect(lag.watchdogRunning, isFalse);
     expect(of('mobile_lag_report'), hasLength(1));
     observer.dispose();
+  });
+
+  testWidgets('real drags reach the recorder through the global pointer route, with no widget mounted', (tester) async {
+    final observer = MobilePerformanceTelemetry(
+      emit: (_, __) {},
+      identityEpoch: () => 0,
+      diagnosticsEnabled: () => true,
+      lag: lag,
+    );
+    observer.attach();
+    addTearDown(observer.dispose);
+    await tester.pumpWidget(MaterialApp(
+      home: ListView.builder(itemCount: 100, itemBuilder: (_, i) => SizedBox(height: 60, child: Text('row $i'))),
+    ));
+    final gesture = await tester.startGesture(const Offset(200, 400));
+    await gesture.moveBy(const Offset(0, -120));
+    lag.observeFrame(buildUs: 50000, rasterUs: 0, totalUs: 50000);
+    await gesture.up();
+    expect(of('mobile_lag_frame').single['interaction'], 'scroll');
+    expect(lagHomeTabChanged, isNotNull);
+    observer.dispose();
+    expect(lagHomeTabChanged, isNull);
   });
 }

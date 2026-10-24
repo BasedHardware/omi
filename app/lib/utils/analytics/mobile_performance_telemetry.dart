@@ -1,5 +1,6 @@
 import 'dart:ui';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import 'package:omi/utils/analytics/lag_recorder.dart';
@@ -13,8 +14,8 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
     required this.emit,
     required this.identityEpoch,
     this.diagnosticsEnabled,
-    this.lag,
-  });
+    LagRecorder? lag,
+  }) : _lagOverride = lag;
 
   final PerformanceEmitter emit;
   final int Function() identityEpoch;
@@ -24,8 +25,11 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
   /// bounded local path.
   final bool Function()? diagnosticsEnabled;
 
-  /// Local lag capture, active only while [diagnosticsEnabled] is true.
-  final LagRecorder? lag;
+  /// Local lag capture, active only while [diagnosticsEnabled] is true. It
+  /// writes through [emit] like the render observations, so main.dart's
+  /// existing wiring carries it; each event names itself in its `event` field.
+  late final LagRecorder lag = _lagOverride ?? LagRecorder(emit: _send);
+  final LagRecorder? _lagOverride;
   bool _lagActive = false;
   int _homeTab = 0;
   Route<dynamic>? _top;
@@ -42,21 +46,46 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
     if (_attached) return;
     _attached = true;
     WidgetsBinding.instance.addTimingsCallback(_timings);
+    // Global route: sees every pointer without a widget in the tree, and runs
+    // before the gesture arena sweep that fires onTap.
+    GestureBinding.instance.pointerRouter.addGlobalRoute(_onPointer);
+    lagHomeTabChanged = setHomeTab;
     _begin('launch');
     _refreshLag();
   }
 
+  void _onPointer(PointerEvent event) {
+    if (!_lagActive) return;
+    switch (event) {
+      case PointerDownEvent():
+        lag.onPointerDown(event.pointer, event.position);
+      case PointerMoveEvent():
+        lag.onPointerMove(event.pointer, event.position);
+      case PointerUpEvent():
+        lag.onPointerUp(event.pointer);
+      case PointerCancelEvent():
+        lag.onPointerCancel(event.pointer);
+      default:
+        break;
+    }
+  }
+
   void dispose() {
     flush();
-    lag?.stopWatchdog();
+    lag.stopWatchdog();
+    lag.active = false;
     _generation++;
-    if (_attached) WidgetsBinding.instance.removeTimingsCallback(_timings);
+    if (_attached) {
+      WidgetsBinding.instance.removeTimingsCallback(_timings);
+      GestureBinding.instance.pointerRouter.removeGlobalRoute(_onPointer);
+      if (lagHomeTabChanged == setHomeTab) lagHomeTabChanged = null;
+    }
     _attached = false;
   }
 
   void setForeground(bool value) {
     flush();
-    if (!value && _lagActive) lag?.writeReport('background');
+    if (!value && _lagActive) lag.writeReport('background');
     _foreground = value;
     _generation++;
     _epoch = identityEpoch();
@@ -68,12 +97,11 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
     if (tab == _homeTab) return;
     _homeTab = tab;
     final top = _top;
-    if (top != null) lag?.setSurface(lagSurfaceFor(top, homeTab: _homeTab));
+    if (top != null) lag.setSurface(lagSurfaceFor(top, homeTab: _homeTab));
   }
 
   void _refreshLag() {
     final recorder = lag;
-    if (recorder == null) return;
     _lagActive = _attached && _foreground && diagnosticsEnabled?.call() == true;
     recorder.active = _lagActive;
     if (_lagActive) {
@@ -87,7 +115,7 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
   void didChangeTop(Route<dynamic> topRoute, Route<dynamic>? previousTopRoute) {
     _top = topRoute;
     _refreshLag();
-    lag?.setSurface(lagSurfaceFor(topRoute, homeTab: _homeTab));
+    lag.setSurface(lagSurfaceFor(topRoute, homeTab: _homeTab));
     final name = topRoute.settings.name;
     // Never transmit dynamic routes, query strings, or runtime type names.
     _begin(const {'/', '/home', '/chat', '/settings', '/onboarding', '/conversations', '/tasks'}.contains(name)
@@ -122,7 +150,7 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
       observeFrame(frame.totalSpan.inMicroseconds);
     }
     if (_lagActive) {
-      final recorder = lag!;
+      final recorder = lag;
       recorder.observeTimings(timings);
       // About five minutes of frames at 60 Hz: keep a capture even if the app never backgrounds.
       if (recorder.framesSinceReport >= 18000) recorder.writeReport('periodic');
