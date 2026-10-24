@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "پس منظر میں",
     "retentionOfferAccept": "{percent}% رعایت کے ساتھ رہیں",
     "retentionOfferBody": "رہیں اور ہر ماہ {price} ادا کریں، اگلے {months} مہینے۔",
-    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔"
+    "retentionOfferApplied": "ہو گیا۔ {percent}% رعایت، اگلے {months} مہینے۔",
+    "othersSpeakerLabel": "دیگر"
 }

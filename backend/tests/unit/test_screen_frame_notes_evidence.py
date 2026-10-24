@@ -206,7 +206,7 @@ class TestSpeakerBindingWithScreenRoster:
 
     def test_one_screen_derived_human_names_the_remote_voice(self):
         prefix = self._prefix(screen_frame_names([_evidence('a', 1, ['Jordan Rivera', 'You'])]))
-        assert 'spk 1 Jordan Rivera' in prefix.context
+        assert 'spk c1 Jordan Rivera' in prefix.context
         assert '- Jordan Rivera | - | human | via screen_activity' in prefix.context
 
     def _frame_roster_names(self, names):
@@ -217,14 +217,14 @@ class TestSpeakerBindingWithScreenRoster:
         # Boardy talks on calls: with Jordan and Boardy on screen the remote channel may be
         # either, so it must not bind to the one visible human.
         prefix = self._prefix(self._frame_roster_names(['Jordan Rivera', 'Boardy Boardman']))
-        assert 'spk 1 Jordan Rivera' not in prefix.context
+        assert 'spk c1 Jordan Rivera' not in prefix.context
         assert '- Boardy Boardman | - | ai agent | via screen_activity' in prefix.context
 
     def test_a_silent_notetaker_tile_does_not_block_binding(self):
         # Incident 449565eb: a NoteTaker bot records and never speaks, so the one remote
         # voice is the one remote human.
         prefix = self._prefix(self._frame_roster_names(['Tristan Jensen', 'You', 'Tomorrow Inc - NoteTaker']))
-        assert 'spk 1 Tristan Jensen' in prefix.context
+        assert 'spk c1 Tristan Jensen' in prefix.context
         assert '- Tomorrow Inc - NoteTaker | - | ai agent | via screen_activity' in prefix.context
 
     def test_an_agent_the_roster_would_not_classify_is_not_added(self):
@@ -234,7 +234,7 @@ class TestSpeakerBindingWithScreenRoster:
     def test_an_ai_agent_already_on_the_roster_still_blocks_the_guess(self):
         # Boardy on the OCR roster may be the remote voice: no binding.
         prefix = self._prefix(['Jordan Rivera'], extra_participants=[MeetingParticipant(name='Boardy Boardman')])
-        assert 'spk 1 Jordan Rivera' not in prefix.context
+        assert 'spk c1 Jordan Rivera' not in prefix.context
         assert '| ai agent |' in prefix.context
 
 

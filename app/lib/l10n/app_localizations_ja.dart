@@ -14351,4 +14351,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return '完了しました。$percent%オフが$monthsか月続きます。';
   }
+
+  @override
+  String get othersSpeakerLabel => 'その他';
 }

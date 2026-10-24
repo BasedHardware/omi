@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "ברקע",
     "retentionOfferAccept": "הישארו עם {percent}% הנחה",
     "retentionOfferBody": "הישארו ושלמו {price} לחודש ב-{months} החודשים הבאים.",
-    "retentionOfferApplied": "בוצע. {percent}% הנחה ב-{months} החודשים הבאים."
+    "retentionOfferApplied": "בוצע. {percent}% הנחה ב-{months} החודשים הבאים.",
+    "othersSpeakerLabel": "אחרים"
 }

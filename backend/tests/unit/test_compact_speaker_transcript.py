@@ -94,16 +94,16 @@ def test_renderer_uses_cluster_keys_and_run_length_form(monkeypatch):
     rendered, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map('uid-1', conversation)
 
     assert rendered == (
-        '[seg-1 0] the flush is about 9mm\n\n'
+        '[seg-1 c0] the flush is about 9mm\n\n'
         '[seg-2] it can sit flush with the wall\n\n'
-        '[seg-3 1] can it sit flush\n\n'
+        '[seg-3 c1] can it sit flush\n\n'
         '[seg-4] yes, barely visible\n\n'
-        '[seg-5 0] ultra-thin then'
+        '[seg-5 c0] ultra-thin then'
     )
     assert 'Speaker' not in rendered
     assert 'segment:' not in rendered
     assert '0.000' not in rendered
-    assert speaker_map == {0: 'David', 1: None}
+    assert speaker_map == {'c0': 'David', 'c1': None}
 
 
 def test_speaker_map_binds_only_evidence_backed_names(monkeypatch):
@@ -121,7 +121,7 @@ def test_speaker_map_binds_only_evidence_backed_names(monkeypatch):
 
     _, speaker_map = transcript_for_llm.conversation_transcript_and_speaker_map('uid-1', conversation, people)
 
-    assert speaker_map == {2: 'David', 5: 'Alice', 0: None}
+    assert speaker_map == {'c0': 'David', 'c1': 'Alice', 'c2': None}
 
 
 def test_prefix_renders_spk_map_and_never_speaker_labels(monkeypatch):
@@ -146,10 +146,10 @@ def test_prefix_renders_spk_map_and_never_speaker_labels(monkeypatch):
         speaker_map=speaker_map,
     )
 
-    assert 'spk 0 David\nspk 1 ?' in prefix.context
+    assert 'spk c0 David\nspk c1 ?' in prefix.context
     assert 'Speaker 0' not in prefix.context
     assert 'Speaker 1:' not in prefix.context
-    assert '[seg-1 0] the flush is about 9mm' in prefix.context
+    assert '[seg-1 c0] the flush is about 9mm' in prefix.context
 
 
 def test_calendar_guard_resolves_single_unresolved_cluster_from_map():
@@ -157,15 +157,15 @@ def test_calendar_guard_resolves_single_unresolved_cluster_from_map():
 
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-1',
-        transcript='[seg-1 0] hi',
+        transcript='[seg-1 c0] hi',
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
         timezone_name='UTC',
         language_code='en',
         calendar_context=None,
-        speaker_map={0: 'David', 1: None},
+        speaker_map={'c0': 'David', 'c1': None},
     )
 
-    assert 'spk 1 ?' in prefix.context
+    assert 'spk c1 ?' in prefix.context
 
 
 def test_calendar_guard_requires_exactly_one_unresolved_and_one_remaining_name():
@@ -183,28 +183,28 @@ def test_calendar_guard_requires_exactly_one_unresolved_and_one_remaining_name()
     # Two unresolved clusters, one remaining name: ambiguous, so nothing is bound.
     prefix = build_conversation_prompt_prefix(
         conversation_id='conv-1',
-        transcript='[seg-1 0] hi',
+        transcript='[seg-1 c0] hi',
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
         timezone_name='UTC',
         language_code='en',
         calendar_context=context,
-        speaker_map={0: None, 1: None},
+        speaker_map={'c0': None, 'c1': None},
     )
-    assert 'spk 0 ?' in prefix.context
-    assert 'spk 1 ?' in prefix.context
-    assert 'spk 0 David' not in prefix.context
+    assert 'spk c0 ?' in prefix.context
+    assert 'spk c1 ?' in prefix.context
+    assert 'spk c0 David' not in prefix.context
 
     # One unresolved cluster, one remaining participant: bound through the map, not a transcript rewrite.
     resolved = build_conversation_prompt_prefix(
         conversation_id='conv-2',
-        transcript='[seg-1 0] hi',
+        transcript='[seg-1 c0] hi',
         started_at=datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc),
         timezone_name='UTC',
         language_code='en',
         calendar_context=context,
-        speaker_map={0: 'David', 1: None},
+        speaker_map={'c0': 'David', 'c1': None},
     )
-    assert 'spk 1 Ash' in resolved.context
+    assert 'spk c1 Ash' in resolved.context
     assert 'Speaker' not in resolved.context
 
 
@@ -265,7 +265,7 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
         language_code='en',
         speaker_map=speaker_map,
     )
-    assert 'spk 0 ?' in prefix.context
+    assert 'spk c0 ?' in prefix.context
     assert 'Speaker 0' not in prefix.context
 
     captured: dict = {}
@@ -289,7 +289,7 @@ def test_screenshot_equivalent_scrap_yields_no_speaker_placeholder_title(monkeyp
     evidence = json.loads(captured['messages'][1]['content'])
     assert evidence['capture_evidence'] == prefix.shaped_context
     identity = json.loads(evidence['capture_evidence'].split('\nFULL TRANSCRIPT\n', 1)[0])
-    assert identity['speaker_map'] == {'0': None}
+    assert identity['speaker_map'] == {'c0': None}
     assert 'prompt_cache_breakpoint' not in json.dumps(captured['messages'])
     # Speaker guidance lives in the shaped system block; raw cluster identity remains evidence.
     prompt = _joined_prompt(captured['messages'])
@@ -317,7 +317,7 @@ def test_get_app_result_strips_speaker_and_spk_placeholders(monkeypatch):
         'get_llm',
         lambda *_a, **_k: SimpleNamespace(
             invoke=lambda _messages: SimpleNamespace(
-                content='```json\nSpeaker 0 said the flush is 9mm. spk 1 confirmed it. SPEAKER_02 agreed.```'
+                content='```json\nSpeaker 0 said the flush is 9mm. spk c1 confirmed it. SPEAKER_02 agreed.```'
             )
         ),
     )
@@ -325,6 +325,6 @@ def test_get_app_result_strips_speaker_and_spk_placeholders(monkeypatch):
     legacy = conversation_processing.get_app_result('raw transcript', [], _summary_app())
     assert legacy == 'said the flush is 9mm. confirmed it. agreed.'
 
-    prefix = ConversationPromptPrefix(conversation_id='conv-1', context='FULL TRANSCRIPT\n[seg-1 0] hi')
+    prefix = ConversationPromptPrefix(conversation_id='conv-1', context='FULL TRANSCRIPT\n[seg-1 c0] hi')
     prefixed = conversation_processing.get_app_result('raw transcript', [], _summary_app(), prompt_prefix=prefix)
     assert prefixed == 'said the flush is 9mm. confirmed it. agreed.'

@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "পটভূমিতে",
     "retentionOfferAccept": "{percent}% ছাড়ে থাকুন",
     "retentionOfferBody": "থাকুন এবং মাসে {price} দিন, পরের {months} মাস।",
-    "retentionOfferApplied": "হয়ে গেছে। {percent}% ছাড়, পরের {months} মাস।"
+    "retentionOfferApplied": "হয়ে গেছে। {percent}% ছাড়, পরের {months} মাস।",
+    "othersSpeakerLabel": "অন্যরা"
 }

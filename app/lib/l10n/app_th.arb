@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "ในเบื้องหลัง",
     "retentionOfferAccept": "อยู่ต่อพร้อมส่วนลด {percent}%",
     "retentionOfferBody": "อยู่ต่อและจ่ายเดือนละ {price} ใน {months} เดือนถัดไป",
-    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป"
+    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป",
+    "othersSpeakerLabel": "คนอื่น ๆ"
 }

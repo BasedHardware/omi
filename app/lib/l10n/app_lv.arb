@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "Fonā",
     "retentionOfferAccept": "Palikt ar {percent}% atlaidi",
     "retentionOfferBody": "Paliec un maksā {price} mēnesī nākamos {months} mēnešus.",
-    "retentionOfferApplied": "Gatavs. {percent}% atlaide nākamos {months} mēnešus."
+    "retentionOfferApplied": "Gatavs. {percent}% atlaide nākamos {months} mēnešus.",
+    "othersSpeakerLabel": "Citi"
 }

@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "பின்னணியில்",
     "retentionOfferAccept": "{percent}% தள்ளுபடியுடன் தொடருங்கள்",
     "retentionOfferBody": "தொடருங்கள், மாதம் {price} செலுத்துங்கள், அடுத்த {months} மாதங்களுக்கு.",
-    "retentionOfferApplied": "முடிந்தது. {percent}% தள்ளுபடி, அடுத்த {months} மாதங்களுக்கு."
+    "retentionOfferApplied": "முடிந்தது. {percent}% தள்ளுபடி, அடுத்த {months} மாதங்களுக்கு.",
+    "othersSpeakerLabel": "மற்றவர்கள்"
 }

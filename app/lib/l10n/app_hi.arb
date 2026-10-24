@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "पृष्ठभूमि में",
     "retentionOfferAccept": "{percent}% छूट के साथ बने रहें",
     "retentionOfferBody": "बने रहें और हर महीने {price} दें, अगले {months} महीनों तक।",
-    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।"
+    "retentionOfferApplied": "हो गया। {percent}% छूट, अगले {months} महीनों तक।",
+    "othersSpeakerLabel": "अन्य"
 }

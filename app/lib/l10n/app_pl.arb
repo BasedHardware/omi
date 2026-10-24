@@ -4460,5 +4460,6 @@
     "recapInTheBackground": "W tle",
     "retentionOfferAccept": "Zostań z rabatem {percent}%",
     "retentionOfferBody": "Zostań i płać {price} miesięcznie przez kolejne {months} miesiące.",
-    "retentionOfferApplied": "Gotowe. {percent}% rabatu przez kolejne {months} miesiące."
+    "retentionOfferApplied": "Gotowe. {percent}% rabatu przez kolejne {months} miesiące.",
+    "othersSpeakerLabel": "Inni"
 }

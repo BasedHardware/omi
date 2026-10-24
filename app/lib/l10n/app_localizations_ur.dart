@@ -14569,4 +14569,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'ہو گیا۔ $percent% رعایت، اگلے $months مہینے۔';
   }
+
+  @override
+  String get othersSpeakerLabel => 'دیگر';
 }

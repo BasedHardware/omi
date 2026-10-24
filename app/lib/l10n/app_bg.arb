@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "На заден план",
     "retentionOfferAccept": "Остани с {percent}% отстъпка",
     "retentionOfferBody": "Остани и плащай {price} на месец за следващите {months} месеца.",
-    "retentionOfferApplied": "Готово. {percent}% отстъпка за следващите {months} месеца."
+    "retentionOfferApplied": "Готово. {percent}% отстъпка за следващите {months} месеца.",
+    "othersSpeakerLabel": "Други"
 }

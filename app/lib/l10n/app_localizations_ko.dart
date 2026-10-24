@@ -14357,4 +14357,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return '완료되었습니다. $percent% 할인이 $months개월 동안 적용됩니다.';
   }
+
+  @override
+  String get othersSpeakerLabel => '기타';
 }

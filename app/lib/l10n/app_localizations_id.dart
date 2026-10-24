@@ -14570,4 +14570,7 @@ class AppLocalizationsId extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Selesai. Diskon $percent% untuk $months bulan ke depan.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Lainnya';
 }

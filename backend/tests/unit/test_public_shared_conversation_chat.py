@@ -398,7 +398,9 @@ def test_transcript_prompt_is_deterministic_bounded_and_keeps_segment_boundaries
     assert '[... transcript truncated at segment boundaries ...]' in first
     for segment in segments:
         rendered = (
-            f"Owner: {segment['text']}" if segment['is_user'] else f"Speaker {segment['speaker_id']}: {segment['text']}"
+            f"You: {segment['text']}"
+            if segment['is_user']
+            else f"Speaker {chr(65 + (segment['speaker_id'] - 1) // 2)}: {segment['text']}"
         )
         assert rendered in first or segment['text'] not in first
 
@@ -449,7 +451,7 @@ def test_transcript_builder_does_not_copy_an_oversized_segment():
     finally:
         tracemalloc.stop()
 
-    assert transcript == ('Owner: head\n' '[... transcript truncated at segment boundaries ...]\n' 'Speaker 3: tail')
+    assert transcript == ('You: head\n' '[... transcript truncated at segment boundaries ...]\n' 'Speaker B: tail')
     assert peak_bytes < 500_000
 
 

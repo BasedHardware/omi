@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "Sa background",
     "retentionOfferAccept": "Manatili nang may {percent}% diskwento",
     "retentionOfferBody": "Manatili at magbayad ng {price} kada buwan sa susunod na {months} buwan.",
-    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan."
+    "retentionOfferApplied": "Tapos na. {percent}% diskwento sa susunod na {months} buwan.",
+    "othersSpeakerLabel": "Iba pa"
 }

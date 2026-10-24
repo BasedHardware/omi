@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "En segon pla",
     "retentionOfferAccept": "Queda't amb un {percent}% de descompte",
     "retentionOfferBody": "Queda't i paga {price} al mes durant els propers {months} mesos.",
-    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos."
+    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos.",
+    "othersSpeakerLabel": "Altres"
 }

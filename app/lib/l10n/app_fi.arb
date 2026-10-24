@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "Taustalla",
     "retentionOfferAccept": "Jatka {percent} % alennuksella",
     "retentionOfferBody": "Jatka ja maksa {price} kuukaudessa seuraavat {months} kuukautta.",
-    "retentionOfferApplied": "Valmis. {percent} % alennus seuraavat {months} kuukautta."
+    "retentionOfferApplied": "Valmis. {percent} % alennus seuraavat {months} kuukautta.",
+    "othersSpeakerLabel": "Muut"
 }

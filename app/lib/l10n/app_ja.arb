@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "バックグラウンド",
     "retentionOfferAccept": "{percent}%オフで続ける",
     "retentionOfferBody": "続ければ月額{price}、次の{months}か月間。",
-    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。"
+    "retentionOfferApplied": "完了しました。{percent}%オフが{months}か月続きます。",
+    "othersSpeakerLabel": "その他"
 }

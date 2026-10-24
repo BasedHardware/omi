@@ -17790,5 +17790,9 @@
                 "type": "int"
             }
         }
+    },
+    "othersSpeakerLabel": "Others",
+    "@othersSpeakerLabel": {
+        "description": "Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count."
     }
 }

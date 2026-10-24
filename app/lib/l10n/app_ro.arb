@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "În fundal",
     "retentionOfferAccept": "Rămâi cu {percent}% reducere",
     "retentionOfferBody": "Rămâi și plătești {price} pe lună în următoarele {months} luni.",
-    "retentionOfferApplied": "Gata. {percent}% reducere în următoarele {months} luni."
+    "retentionOfferApplied": "Gata. {percent}% reducere în următoarele {months} luni.",
+    "othersSpeakerLabel": "Alții"
 }

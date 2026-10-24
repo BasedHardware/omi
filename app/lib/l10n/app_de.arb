@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "Im Hintergrund",
     "retentionOfferAccept": "Bleiben mit {percent}% Rabatt",
     "retentionOfferBody": "Bleib und zahle {price} pro Monat für die nächsten {months} Monate.",
-    "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate."
+    "retentionOfferApplied": "Erledigt. {percent}% Rabatt für die nächsten {months} Monate.",
+    "othersSpeakerLabel": "Andere"
 }

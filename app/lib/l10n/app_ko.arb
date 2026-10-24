@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "배경에서",
     "retentionOfferAccept": "{percent}% 할인받고 계속 쓰기",
     "retentionOfferBody": "계속 쓰시면 월 {price}, 앞으로 {months}개월 동안.",
-    "retentionOfferApplied": "완료되었습니다. {percent}% 할인이 {months}개월 동안 적용됩니다."
+    "retentionOfferApplied": "완료되었습니다. {percent}% 할인이 {months}개월 동안 적용됩니다.",
+    "othersSpeakerLabel": "기타"
 }

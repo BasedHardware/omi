@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "Op de achtergrond",
     "retentionOfferAccept": "Blijf met {percent}% korting",
     "retentionOfferBody": "Blijf en betaal {price} per maand de komende {months} maanden.",
-    "retentionOfferApplied": "Klaar. {percent}% korting de komende {months} maanden."
+    "retentionOfferApplied": "Klaar. {percent}% korting de komende {months} maanden.",
+    "othersSpeakerLabel": "Anderen"
 }

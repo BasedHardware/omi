@@ -4460,5 +4460,6 @@
     "recapInTheBackground": "En arrière-plan",
     "retentionOfferAccept": "Rester avec {percent} % de réduction",
     "retentionOfferBody": "Restez et payez {price} par mois pendant les {months} prochains mois.",
-    "retentionOfferApplied": "C'est fait. {percent} % de réduction pendant les {months} prochains mois."
+    "retentionOfferApplied": "C'est fait. {percent} % de réduction pendant les {months} prochains mois.",
+    "othersSpeakerLabel": "Autres"
 }

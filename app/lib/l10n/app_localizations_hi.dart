@@ -14540,4 +14540,7 @@ class AppLocalizationsHi extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'हो गया। $percent% छूट, अगले $months महीनों तक।';
   }
+
+  @override
+  String get othersSpeakerLabel => 'अन्य';
 }

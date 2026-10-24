@@ -25742,6 +25742,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Done. {percent}% off your next {months} months.'**
   String retentionOfferApplied(int percent, int months);
+
+  /// Collective label for unidentified voices with too little evidence in an over-split transcript; not a participant count.
+  ///
+  /// In en, this message translates to:
+  /// **'Others'**
+  String get othersSpeakerLabel;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

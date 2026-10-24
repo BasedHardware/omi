@@ -4460,5 +4460,6 @@
     "recapInTheBackground": "Arka planda",
     "retentionOfferAccept": "%{percent} indirimle kal",
     "retentionOfferBody": "Kal ve ayda {price} öde, önümüzdeki {months} ay boyunca.",
-    "retentionOfferApplied": "Tamam. %{percent} indirim, önümüzdeki {months} ay."
+    "retentionOfferApplied": "Tamam. %{percent} indirim, önümüzdeki {months} ay.",
+    "othersSpeakerLabel": "Diğerleri"
 }

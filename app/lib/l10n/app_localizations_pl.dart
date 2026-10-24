@@ -14599,4 +14599,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Gotowe. $percent% rabatu przez kolejne $months miesiące.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Inni';
 }

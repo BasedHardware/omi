@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "पार्श्वभूमीवर",
     "retentionOfferAccept": "{percent}% सवलतीसह सुरू ठेवा",
     "retentionOfferBody": "सुरू ठेवा आणि दरमहा {price} भरा, पुढील {months} महिने.",
-    "retentionOfferApplied": "झाले. {percent}% सवलत, पुढील {months} महिने."
+    "retentionOfferApplied": "झाले. {percent}% सवलत, पुढील {months} महिने.",
+    "othersSpeakerLabel": "इतर"
 }

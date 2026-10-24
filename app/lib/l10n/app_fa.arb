@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "در پس‌زمینه",
     "retentionOfferAccept": "با {percent}% تخفیف بمانید",
     "retentionOfferBody": "بمانید و ماهانه {price} بپردازید، برای {months} ماه آینده.",
-    "retentionOfferApplied": "انجام شد. {percent}% تخفیف برای {months} ماه آینده."
+    "retentionOfferApplied": "انجام شد. {percent}% تخفیف برای {months} ماه آینده.",
+    "othersSpeakerLabel": "دیگران"
 }

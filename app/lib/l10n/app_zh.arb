@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "背景中",
     "retentionOfferAccept": "享受 {percent}% 折扣继续使用",
     "retentionOfferBody": "继续使用，每月只需 {price}，持续 {months} 个月。",
-    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。"
+    "retentionOfferApplied": "完成。{percent}% 折扣，持续 {months} 个月。",
+    "othersSpeakerLabel": "其他人"
 }

@@ -57,6 +57,16 @@ transcribed, that explicit selection keeps the conversation visible, including
 short recordings. Silence or an empty transcription creates no conversation.
 Automatic offline fallback recordings still follow the usual relevance policy.
 
+## Speaker identities and display labels
+
+A transcript's `speaker_id` is a storage and speaker-correction key, not a person's
+name or a participant count. Keep it unchanged when sending speaker corrections.
+For user-facing text, resolve speaker names from the complete conversation before
+selecting an excerpt: the owner, named people, then small labels for unnamed voices.
+Unresolved voices do not count as people; excess unnamed voices may be grouped as
+“Others” when diarization splits one voice into too many clusters. MCP transcript
+responses use opaque display voice keys rather than raw diarization IDs.
+
 ## WebSocket Endpoint
 
 <Warning>

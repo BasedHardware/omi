@@ -14551,4 +14551,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'انجام شد. $percent% تخفیف برای $months ماه آینده.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'دیگران';
 }

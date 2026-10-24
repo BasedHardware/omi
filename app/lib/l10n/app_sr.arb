@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "У позадини",
     "retentionOfferAccept": "Остани уз {percent}% попуста",
     "retentionOfferBody": "Остани и плаћај {price} месечно наредних {months} месеца.",
-    "retentionOfferApplied": "Готово. {percent}% попуста наредних {months} месеца."
+    "retentionOfferApplied": "Готово. {percent}% попуста наредних {months} месеца.",
+    "othersSpeakerLabel": "Остали"
 }

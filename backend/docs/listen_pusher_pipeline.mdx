@@ -6516,6 +6516,19 @@ suggestions include explicit `is_user`, and committed capture events preserve
 channel, epoch and recording-session identity. These additive fields are ignored
 by clients until their opt-in paths serve.
 
+Notes enforce speaker identity independently of the packet rollout. The output
+contract carries the original speaker-authority map separately from prompt
+roster inference. A People spelling or `search_people` hit cannot identify an
+unresolved speaker: a resolved binding, this conversation's calendar/tile roster,
+or an affirmative owner correction must corroborate it. Model-authored evidence
+lines do not authorize identities. Unsupported participants are removed and their
+names become “a speaker” across visible notes, tasks and events; names actually
+heard in speech remain hedged, without expanding them from the People catalog.
+Unverified names never lead the title. The agent gets an evidence send-back;
+static enforcement also covers exhausted budgets, salvaged submissions and the
+one-shot fallback before persistence. Regression: the 2026-10-23 empty-evidence
+packet incorrectly named Michael Liebmann as an unresolved counterpart.
+
 Live durability → coverage ledger → committed event is the custody ordering.
 Continuation uploads stage encrypted chunks by deterministic session and index,
 retain incomplete/expired assemblies for client retry, and only return a completed

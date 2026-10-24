@@ -14331,4 +14331,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return '完成。$percent% 折扣，持续 $months 个月。';
   }
+
+  @override
+  String get othersSpeakerLabel => '其他人';
 }

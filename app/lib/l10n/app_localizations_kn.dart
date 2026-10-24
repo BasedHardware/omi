@@ -14604,4 +14604,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'ಆಯಿತು. $percent% ರಿಯಾಯಿತಿ, ಮುಂದಿನ $months ತಿಂಗಳು.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'ಇತರರು';
 }

@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "Trong nền",
     "retentionOfferAccept": "Ở lại với ưu đãi giảm {percent}%",
     "retentionOfferBody": "Ở lại và chỉ trả {price} mỗi tháng trong {months} tháng tới.",
-    "retentionOfferApplied": "Xong. Giảm {percent}% trong {months} tháng tới."
+    "retentionOfferApplied": "Xong. Giảm {percent}% trong {months} tháng tới.",
+    "othersSpeakerLabel": "Những người khác"
 }

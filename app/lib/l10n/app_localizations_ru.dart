@@ -14605,4 +14605,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. Скидка $percent% на следующие $months месяца.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Другие';
 }

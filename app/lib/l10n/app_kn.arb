@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "ಹಿನ್ನೆಲೆಯಲ್ಲಿ",
     "retentionOfferAccept": "{percent}% ರಿಯಾಯಿತಿಯೊಂದಿಗೆ ಮುಂದುವರಿಸಿ",
     "retentionOfferBody": "ಮುಂದುವರಿಸಿ ಮತ್ತು ತಿಂಗಳಿಗೆ {price} ಪಾವತಿಸಿ, ಮುಂದಿನ {months} ತಿಂಗಳು.",
-    "retentionOfferApplied": "ಆಯಿತು. {percent}% ರಿಯಾಯಿತಿ, ಮುಂದಿನ {months} ತಿಂಗಳು."
+    "retentionOfferApplied": "ಆಯಿತು. {percent}% ರಿಯಾಯಿತಿ, ಮುಂದಿನ {months} ತಿಂಗಳು.",
+    "othersSpeakerLabel": "ಇತರರು"
 }

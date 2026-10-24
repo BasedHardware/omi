@@ -4460,5 +4460,6 @@
     "recapInTheBackground": "Em segundo plano",
     "retentionOfferAccept": "Fique com {percent}% de desconto",
     "retentionOfferBody": "Fique e pague {price} por mês nos próximos {months} meses.",
-    "retentionOfferApplied": "Pronto. {percent}% de desconto nos próximos {months} meses."
+    "retentionOfferApplied": "Pronto. {percent}% de desconto nos próximos {months} meses.",
+    "othersSpeakerLabel": "Outros"
 }

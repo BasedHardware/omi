@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "Fone",
     "retentionOfferAccept": "Likti su {percent}% nuolaida",
     "retentionOfferBody": "Likite ir mokėkite {price} per mėnesį ateinančius {months} mėnesius.",
-    "retentionOfferApplied": "Atlikta. {percent}% nuolaida ateinančius {months} mėnesius."
+    "retentionOfferApplied": "Atlikta. {percent}% nuolaida ateinančius {months} mėnesius.",
+    "othersSpeakerLabel": "Kiti"
 }

@@ -516,7 +516,7 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
 
     Reviewer's reproduction: hashing stripped person_id 'alice' and ' alice '
     to the same digest while from-segments stored the raw value, so rendering
-    produced 'Alice: approved transfer' versus 'Speaker 0: approved transfer'.
+    produced 'Alice: approved transfer' versus 'Speaker A: approved transfer'.
 
     red-proof: persist ``person_id`` / ``speaker`` without canonical_segment
     (``person_id=payload['person_id']`` on TranscriptSegment) -- then the
@@ -588,7 +588,7 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
     clean_slot = _store({'text': _RENDER_TEXT, 'speaker': 'SPEAKER_07'})
     assert padded_slot.speaker == 'SPEAKER_07'
     assert padded_slot.speaker_id == 7
-    assert _render(padded_slot) == _render(clean_slot) == 'Speaker 7: approved transfer'
+    assert _render(padded_slot) == _render(clean_slot) == 'Speaker A: approved transfer'
 
     # Contrapositive: different rendered attribution ⇒ different digest.
     distinct = [
@@ -605,11 +605,11 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
         'Alice: approved transfer',
         'Bob: approved transfer',
         'You: approved transfer',
-        'Speaker 0: approved transfer',
-        'Speaker 7: approved transfer',
-        'Speaker 7:',
+        'Speaker A: approved transfer',
+        'Speaker A: approved transfer',
+        'Speaker A:',
     ]
-    assert len(set(rendered)) == 6
+    assert len(set(rendered)) == 5  # isolated unnamed voices share a display label; wire identities stay distinct
     assert len(set(digests)) == 6
 
     # Reviewer's reproduction: ['approved transfer'] versus that plus an
@@ -626,11 +626,11 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
     assert transcript_sha256_for_binding(approved_plus_empty) == APPROVED_PLUS_EMPTY_07_DIGEST
     rendered_approved = _render_transcript(approved)
     rendered_plus = _render_transcript(approved_plus_empty)
-    assert rendered_approved == 'Speaker 0: approved transfer'
-    assert rendered_plus == 'Speaker 0: approved transfer\n\nSpeaker 7:'
+    assert rendered_approved == 'Speaker A: approved transfer'
+    assert rendered_plus == 'Speaker A: approved transfer\n\nSpeaker B:'
     assert rendered_approved != rendered_plus
-    assert 'Speaker 7:' not in rendered_approved
-    assert 'Speaker 7:' in rendered_plus
+    assert 'Speaker B:' not in rendered_approved
+    assert 'Speaker B:' in rendered_plus
 
 
 def test_from_segments_persists_canonical_segment_not_raw_request_fields() -> None:

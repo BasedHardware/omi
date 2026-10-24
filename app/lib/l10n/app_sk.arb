@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "V pozadí",
     "retentionOfferAccept": "Zostať so zľavou {percent} %",
     "retentionOfferBody": "Zostaňte a plaťte {price} mesačne počas ďalších {months} mesiacov.",
-    "retentionOfferApplied": "Hotovo. Zľava {percent} % na ďalšie {months} mesiace."
+    "retentionOfferApplied": "Hotovo. Zľava {percent} % na ďalšie {months} mesiace.",
+    "othersSpeakerLabel": "Ostatní"
 }

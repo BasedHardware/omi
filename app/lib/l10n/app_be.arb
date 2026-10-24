@@ -11851,5 +11851,6 @@
     "recapInTheBackground": "У фоне",
     "retentionOfferAccept": "Застацца са зніжкай {percent}%",
     "retentionOfferBody": "Застаньцеся і плаціце {price} у месяц на працягу {months} месяцаў.",
-    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы."
+    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы.",
+    "othersSpeakerLabel": "Іншыя"
 }

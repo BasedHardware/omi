@@ -1,7 +1,8 @@
-# App (Flutter) — Operational Playbook
+# App (Flutter)
 
-Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
-UI rules: [docs/ux-contract.md](docs/ux-contract.md).
+UI: [contract](docs/ux-contract.md).
+
+Speakers: `SpeakerNames`/`DiarizationLabel` (`lib/ui/format/`); `EpisodePresentation.participants` counts names.
 
 ## Build Bootstrap
 

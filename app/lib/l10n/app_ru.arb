@@ -4460,5 +4460,6 @@
     "recapInTheBackground": "На фоне",
     "retentionOfferAccept": "Остаться со скидкой {percent}%",
     "retentionOfferBody": "Оставайтесь и платите {price} в месяц следующие {months} месяца.",
-    "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца."
+    "retentionOfferApplied": "Готово. Скидка {percent}% на следующие {months} месяца.",
+    "othersSpeakerLabel": "Другие"
 }

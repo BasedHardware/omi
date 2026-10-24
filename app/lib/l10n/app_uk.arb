@@ -4425,5 +4425,6 @@
     "recapInTheBackground": "У фоні",
     "retentionOfferAccept": "Залишитися зі знижкою {percent}%",
     "retentionOfferBody": "Залишайтеся і платіть {price} на місяць наступні {months} місяці.",
-    "retentionOfferApplied": "Готово. Знижка {percent}% на наступні {months} місяці."
+    "retentionOfferApplied": "Готово. Знижка {percent}% на наступні {months} місяці.",
+    "othersSpeakerLabel": "Інші"
 }

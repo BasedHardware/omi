@@ -4467,5 +4467,6 @@
     "recapInTheBackground": "I baggrunden",
     "retentionOfferAccept": "Bliv for {percent}% rabat",
     "retentionOfferBody": "Bliv og betal {price} om måneden de næste {months} måneder.",
-    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder."
+    "retentionOfferApplied": "Færdig. {percent}% rabat de næste {months} måneder.",
+    "othersSpeakerLabel": "Andre"
 }
