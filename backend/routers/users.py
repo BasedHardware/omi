@@ -64,7 +64,7 @@ from config.stt_cap_dispatch import any_execution_admission_enabled as funded_pr
 from utils.generated_compute import require_generated_compute, generated_compute_configured
 from models.users import ProcessingBacklog
 from config.stt_provider_policy import supports_live_multilingual_mode
-from models.users import AvailableLanguage, AvailableLanguagesResponse
+from models.users import AvailableLanguage, AvailableLanguagesResponse, IsoTimestampStr
 from utils.user_language import PRIMARY_LANGUAGE_OPTIONS, normalize_user_language
 from utils.feedback import record_chat_message_feedback
 from utils.product_metrics import sanitize_app_build
@@ -2578,7 +2578,7 @@ class UpdateAIUserProfileRequest(BaseModel):
 
 class AIUserProfileResponse(BaseModel):
     profile_text: str | None = None
-    generated_at: Optional[str] = None
+    generated_at: Optional[IsoTimestampStr] = None
     data_sources_used: int | None = None
 
 
