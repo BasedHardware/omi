@@ -157,12 +157,23 @@ def profile_list(typer_ctx: typer.Context) -> None:
     )
 
 
+def _clean_profile_name(name: str) -> str:
+    cleaned = name.strip()
+    if not cleaned:
+        raise UsageError(
+            message="Profile name is required",
+            detail="Profile names cannot be empty or whitespace.",
+        )
+    return cleaned
+
+
 @profile_app.command("use", help="Switch the active profile.")
 def profile_use(
     typer_ctx: typer.Context,
     name: str = typer.Argument(..., help="Profile name to make active."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    name = _clean_profile_name(name)
     config = ctx.load_config()
     if name not in config.profiles:
         # Allow switching to a brand-new (yet-unconfigured) profile so users can
@@ -182,6 +193,7 @@ def profile_delete(
     confirm: bool = typer.Option(False, "--yes", "-y", help="Skip the confirmation prompt."),
 ) -> None:
     ctx = _ctx(typer_ctx)
+    name = _clean_profile_name(name)
     config = ctx.load_config()
     if name not in config.profiles:
         raise UsageError(message=f"No such profile: '{name}'")
