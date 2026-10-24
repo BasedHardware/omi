@@ -23,6 +23,7 @@
 #include "accel.h"
 #include "button.h"
 #include "config.h"
+#include "diagnostics.h"
 #include "features.h"
 #include "haptic.h"
 #include "mic.h"
@@ -292,6 +293,36 @@ static struct bt_gatt_attr time_sync_service_attr[] = {
 
 static struct bt_gatt_service time_sync_service = BT_GATT_SERVICE(time_sync_service_attr);
 
+// Omi Diagnostics: read-only v1 snapshot, no pairing beyond adjacent services.
+static struct bt_uuid_128 diagnostics_service_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10040, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+static struct bt_uuid_128 diagnostics_characteristic_uuid =
+    BT_UUID_INIT_128(BT_UUID_128_ENCODE(0x19B10041, 0xE8F2, 0x537E, 0x4F6C, 0xD104768A1214));
+
+static ssize_t diagnostics_read_handler(struct bt_conn *conn,
+                                        const struct bt_gatt_attr *attr,
+                                        void *buf,
+                                        uint16_t len,
+                                        uint16_t offset)
+{
+    struct omi_diagnostics_snapshot snapshot;
+    uint8_t value[OMI_DIAGNOSTICS_SIZE];
+    omi_diagnostics_snapshot(&snapshot);
+    omi_diagnostics_pack(value, &snapshot);
+    return bt_gatt_attr_read(conn, attr, buf, len, offset, value, sizeof(value));
+}
+
+static struct bt_gatt_attr diagnostics_service_attr[] = {
+    BT_GATT_PRIMARY_SERVICE(&diagnostics_service_uuid),
+    BT_GATT_CHARACTERISTIC(&diagnostics_characteristic_uuid.uuid,
+                           BT_GATT_CHRC_READ,
+                           BT_GATT_PERM_READ,
+                           diagnostics_read_handler,
+                           NULL,
+                           NULL),
+};
+static struct bt_gatt_service diagnostics_service = BT_GATT_SERVICE(diagnostics_service_attr);
+
 // Advertisement data
 static const struct bt_data bt_ad[] = {
     BT_DATA_BYTES(BT_DATA_FLAGS, (BT_LE_AD_GENERAL | BT_LE_AD_NO_BREDR)),
@@ -555,8 +586,13 @@ void broadcast_battery_level(struct k_work *work_item)
                                          ? BATTERY_REFRESH_INTERVAL_CONNECTED
                                          : BATTERY_REFRESH_INTERVAL_DISCONNECTED;
 
-    if (battery_get_millivolt(&battery_millivolt) == 0 &&
-        battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
+    int battery_err = battery_get_millivolt(&battery_millivolt);
+    if (battery_err == 0) {
+        omi_diagnostics_set_battery_mv(battery_millivolt);
+    } else {
+        omi_diagnostics_set_battery_mv(UINT16_MAX);
+    }
+    if (battery_err == 0 && battery_get_percentage(&battery_percentage, battery_millivolt) == 0) {
 
         LOG_PRINTK("Battery at %d mV (capacity %d%%)\n", battery_millivolt, battery_percentage);
 
@@ -987,6 +1023,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
 #endif
 
     if (size > CODEC_OUTPUT_MAX_BYTES) {
+        omi_diagnostics_inc_ble_tx_drop();
         return false;
     }
 
@@ -1001,6 +1038,7 @@ static bool write_to_tx_queue(uint8_t *data, size_t size)
                      tx_buffer_2,
                      (CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE)); // It always fits completely or not at all
     if (written != CODEC_OUTPUT_MAX_BYTES + RING_BUFFER_HEADER_SIZE) {
+        omi_diagnostics_inc_ble_tx_drop();
         return false;
     } else {
         k_sem_give(&tx_queue_sem);
@@ -1119,6 +1157,7 @@ static bool push_to_gatt(struct bt_conn *conn)
         }
 
         if (retry_count >= max_retries) {
+            omi_diagnostics_inc_ble_tx_drop();
             LOG_ERR("Failed to send packet after %d retries", max_retries);
             // bt_gatt_notify_cb never succeeded so its callback will never fire;
             // release the throttle slot manually.
@@ -1391,6 +1430,7 @@ int transport_start()
     bt_gatt_service_register(&settings_service);
     bt_gatt_service_register(&features_service);
     bt_gatt_service_register(&time_sync_service);
+    bt_gatt_service_register(&diagnostics_service);
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
     // Register storage service for offline audio

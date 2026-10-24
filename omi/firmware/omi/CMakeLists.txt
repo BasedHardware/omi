@@ -6,6 +6,8 @@ project(omi)
 
 file(GLOB app_sources
     src/main.c
+    src/diagnostics.c
+    src/diagnostics_packet.c
     src/mic.c
     src/battery.c
     src/led.c
