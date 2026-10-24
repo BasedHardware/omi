@@ -159,6 +159,13 @@ def sync_failure_from_exception(error: BaseException, *, provider: str | None = 
         failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider, retryable=True)
         failure.error_code = 'destructive_operation_in_progress'
         return failure
+    if any(
+        type(item).__name__ == 'InvalidArgument' and 'exceeds the maximum allowed size' in str(item).lower()
+        for item in _exception_chain(error)
+    ):
+        failure = TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider=provider, retryable=False)
+        failure.error_code = 'sync_persistence_failed'
+        return failure
     return failure_from_exception(error, provider=provider)
 
 

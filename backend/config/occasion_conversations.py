@@ -19,11 +19,18 @@ conversation and is discarded by relevance as today.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 import os
+from typing import Any
 
 OCCASION_CONVERSATIONS_ENABLED_ENV = 'OCCASION_CONVERSATIONS_ENABLED'
 OCCASION_GAP_SECONDS = 15 * 60
 OCCASION_MAX_SPAN_SECONDS = 3 * 60 * 60
+# Keep 256 KiB of headroom below Firestore's 1 MiB (1,048,576-byte) ceiling so
+# finalization bindings, summaries, action items, app results, and outbox
+# metadata can still commit without hitting InvalidArgument.
+OCCASION_MAX_DOCUMENT_BYTES = 1_048_576 - 262_144
+OCCASION_MAX_TRANSCRIPT_SEGMENTS = 1_500
 
 _OFF = frozenset({'0', 'false', 'off', 'no'})
 # Sources whose clients do not show episodes; their conversations keep today's boundaries.
@@ -43,6 +50,23 @@ def occasion_source(source: object) -> bool:
 def occasion_timeout(timeout: int) -> int:
     """The silence window for an admitted session: at least the occasion gap."""
     return max(int(timeout), OCCASION_GAP_SECONDS)
+
+
+def occasion_size_exceeded(
+    conversation: Mapping[str, Any],
+    document_path: str | None = None,
+) -> bool:
+    """Whether a live conversation has reached the segment-count or byte-size rollover cap."""
+    segments = conversation.get('transcript_segments')
+    if (
+        isinstance(segments, Sequence)
+        and not isinstance(segments, (str, bytes, bytearray))
+        and len(segments) >= OCCASION_MAX_TRANSCRIPT_SEGMENTS
+    ):
+        return True
+    from utils.firestore_document_size import estimate_firestore_document_bytes
+
+    return estimate_firestore_document_bytes(conversation, document_path) >= OCCASION_MAX_DOCUMENT_BYTES
 
 
 # Explicit rollout bindings for inventory and operators. The generic parser in
