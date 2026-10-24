@@ -13,6 +13,7 @@ try:
     from utils.retrieval.tools.result_bounds import bounded_result, cap_items_for_llm
 except ModuleNotFoundError:
     import importlib.util as _importlib_util
+    import sys as _sys
     from pathlib import Path as _Path
 
     _rb_spec = _importlib_util.spec_from_file_location(
@@ -21,6 +22,9 @@ except ModuleNotFoundError:
     )
     assert _rb_spec is not None and _rb_spec.loader is not None
     _rb_mod = _importlib_util.module_from_spec(_rb_spec)
+    # Register before exec: dataclasses resolves a class's __module__ through
+    # sys.modules and crashes on the unregistered file-loaded module otherwise.
+    _sys.modules[_rb_spec.name] = _rb_mod
     _rb_spec.loader.exec_module(_rb_mod)
     bounded_result = _rb_mod.bounded_result
     cap_items_for_llm = _rb_mod.cap_items_for_llm
@@ -61,7 +65,7 @@ def get_omi_product_info_tool(query: Optional[str] = None) -> str:
         query="How do I update the firmware on my Omi device?"
         Returns documentation about firmware updates and device management
     """
-    if query is None or not isinstance(query, str) or not query.strip():
+    if not isinstance(query, str) or not query.strip():
         return "Error: Please provide a non-empty question or query about the Omi/Friend product."
 
     # Fetch the product docs. A network or GitHub API failure must not break the chat turn, so fail
