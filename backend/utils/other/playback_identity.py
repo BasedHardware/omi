@@ -11,7 +11,13 @@ def source_fingerprint(chunks: list[dict[str, Any]]) -> str | None:
     if not chunks or any(not c.get('path') or not c.get('generation') for c in chunks):
         return None
     manifest = [
-        {key: c.get(key) for key in ('bucket', 'path', 'generation', 'md5_hash', 'crc32c', 'timestamp', 'size', 'span')}
+        {
+            **{
+                key: c.get(key)
+                for key in ('bucket', 'path', 'generation', 'md5_hash', 'crc32c', 'timestamp', 'size', 'span')
+            },
+            **({'raw_source_start': c['raw_source_start']} if 'raw_source_start' in c else {}),
+        }
         for c in chunks
     ]
     payload = {'format': 'mp3-48k-16khz-gapfill-v1', 'chunks': manifest}
