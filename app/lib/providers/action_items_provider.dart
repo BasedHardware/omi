@@ -11,6 +11,7 @@ import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/pages/action_items/services/action_item_export_service.dart';
+import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
 import 'package:omi/services/integrations/apple_reminders_service.dart';
 import 'package:omi/services/siri_integration.dart';
@@ -86,7 +87,7 @@ class ActionItemsProvider extends ChangeNotifier {
   bool _homeDayLoaded = false;
   List<ActionItemWithMetadata> _homeDayItems = [];
 
-  List<ActionItemWithMetadata> _actionItems = [];
+  TaskCategorizationList _actionItems = TaskCategorizationList();
   int _sessionGeneration = 0;
   int _taskWriteRevision = 0;
   bool _disposed = false;
@@ -490,9 +491,7 @@ class ActionItemsProvider extends ChangeNotifier {
     // in-place: the response list may be unmodifiable, and aliasing it
     // would cause removeWhere to throw in deleteActionItem/deleteSelectedItems
     // and retire tombstones prematurely.
-    _actionItems = _pendingDeletionIds.isEmpty
-        ? List.of(response.actionItems)
-        : response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)).toList();
+    _actionItems = TaskCategorizationList(response.actionItems.where((item) => !_pendingDeletionIds.contains(item.id)));
     _loadedTaskPageIds
       ..clear()
       ..addAll(serverIds);
@@ -1183,7 +1182,7 @@ class ActionItemsProvider extends ChangeNotifier {
   }
 
   void _resetTaskQueryPages() {
-    _actionItems = [];
+    _actionItems = TaskCategorizationList();
     _loadedTaskPageIds.clear();
     _loadedPageSetComplete = false;
     _hasMore = true;
@@ -1304,7 +1303,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _hasMore = true;
     _searchQuery = '';
     _isSelectionMode = false;
-    _actionItems = [];
+    _actionItems = TaskCategorizationList();
     _loadedTaskPageIds.clear();
     _showCompletedView = false;
     _completedViewWasAutoRevealed = false;
