@@ -91,7 +91,7 @@ source ~/.local/bin/gcp-agent-env.sh ro-prod
 backend/.venv/bin/python backend/scripts/check_sync_staging_lifecycle.py --bucket syncing-local
 ```
 
-Keep its timestamped JSON receipt before the T3b release. It reads bucket
+Keep its timestamped JSON receipt before the lead-owned post-T3b promotion. It reads bucket
 metadata only and emits counts, metagenerations and policy digests, with no
 bucket/env values, prefixes or provider diagnostics. Missing metadata,
 lifecycle `Delete` actions and bucket retention/default holds that could block
