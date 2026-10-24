@@ -323,3 +323,81 @@ def test_enrichment_outbox_and_consumer_retire_oversized_conversation_obligation
     res = consumer_mod.EnrichmentConsumer(outbox=object(), process=raise_size_limit).process(claim, lambda: True)
     assert res.outcome == Outcome.DISCARDED
     assert res.reason == ConsumerReason.SUPERSEDED
+
+
+def test_terminalize_oversized_finalization_job_dead_letters_when_close_raises(monkeypatch, caplog):
+    import asyncio
+    import json
+    import sys
+    import types
+
+    had_router = 'routers.conversation_finalization' in sys.modules
+    if 'utils.conversations.finalizer' not in sys.modules:
+        fake_finalizer = types.ModuleType('utils.conversations.finalizer')
+        fake_finalizer.ConversationFinalizationDisposition = types.SimpleNamespace(
+            completed='completed', deferred='deferred', fenced='fenced'
+        )
+        fake_finalizer.ConversationFinalizationError = type('ConversationFinalizationError', (RuntimeError,), {})
+        fake_finalizer.finalize_persisted_conversation = lambda *a, **kw: None
+        monkeypatch.setitem(sys.modules, 'utils.conversations.finalizer', fake_finalizer)
+
+    try:
+        from routers import conversation_finalization as finalization_router
+
+        async def inline_run_blocking(_executor, func, *args, **kwargs):
+            return func(*args, **kwargs)
+
+        monkeypatch.setattr(finalization_router, 'run_blocking', inline_run_blocking)
+
+        def raise_on_close(uid, conversation_id, *, quiet_for):
+            raise RuntimeError('transient firestore error during oversized close')
+
+        monkeypatch.setattr(
+            finalization_router.lifecycle_service,
+            'close_oversized_in_progress_conversation',
+            raise_on_close,
+        )
+        dead_letter_calls: list[tuple] = []
+        monkeypatch.setattr(
+            finalization_router,
+            'final_attempt_failed',
+            lambda job_id, gen, epoch, attempt, *, failure_code='final_attempt_failed': (
+                dead_letter_calls.append((job_id, gen, epoch, attempt, failure_code)) or True
+            ),
+        )
+
+        response = asyncio.run(
+            finalization_router._terminalize_oversized_finalization_job(
+                {'uid': 'uid-1', 'conversation_id': 'conv-1', 'fanout_status': 'pending'},
+                'job-oversized-1',
+                2,
+                5,
+                1,
+            )
+        )
+        assert response.status_code == 200
+        assert json.loads(response.body) == {'status': 'dead_letter'}
+        assert dead_letter_calls == [('job-oversized-1', 2, 5, 1, 'document_size_limit')]
+        assert 'listen finalization oversized in_progress close skipped' in caplog.text
+
+        completed_calls: list[tuple] = []
+        monkeypatch.setattr(
+            finalization_router.jobs_db,
+            'mark_finalization_completed',
+            lambda job_id, gen, epoch: completed_calls.append((job_id, gen, epoch)) or True,
+        )
+        done_response = asyncio.run(
+            finalization_router._terminalize_oversized_finalization_job(
+                {'uid': 'uid-1', 'conversation_id': 'conv-1', 'fanout_status': 'completed'},
+                'job-oversized-2',
+                3,
+                6,
+                1,
+            )
+        )
+        assert done_response.status_code == 200
+        assert json.loads(done_response.body) == {'status': 'done'}
+        assert completed_calls == [('job-oversized-2', 3, 6)]
+    finally:
+        if not had_router:
+            sys.modules.pop('routers.conversation_finalization', None)
