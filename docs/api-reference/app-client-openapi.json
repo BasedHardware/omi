@@ -7099,6 +7099,18 @@
             ],
             "title": "Coverage"
           },
+          "lifetime": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifetime"
+          },
           "origin": {
             "anyOf": [
               {
@@ -7109,6 +7121,17 @@
               }
             ],
             "title": "Origin"
+          },
+          "proof": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proof"
           },
           "reason": {
             "anyOf": [
