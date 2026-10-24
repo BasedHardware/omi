@@ -70,11 +70,3 @@ def get_user_messages_with_bot_name() -> List[str]:
 if __name__ == "__main__":
     get_user_messages_with_bot_name()
     get_plugin_data_by_persona_name()
-    # TODO: questions
-    # -- % of people who provided their x vs someone else's, and most popular questions
-    # -- If someone else, who were the top 3 most popular questions and to whom
-    # - how many users have personas messages?
-    # - how many conversations are just automatic messages? (no user messages)
-    # - how many users have no messages back at all? ratio
-    # - conversations length distribution
-    # - # of conversations distribution per user
