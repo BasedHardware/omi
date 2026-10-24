@@ -455,10 +455,13 @@ class TranscriptionService: @unchecked Sendable {
   }
 
   /// The desktop detector owns meeting boundaries, including its quiet resume hold.
-  /// -1 requests the existing bounded four-hour server maximum (the client's recording cap).
+  /// Cover input-only sustain and the resume window with margin, while a dropped
+  /// socket must not leave a backend conversation open for the four-hour maximum.
   /// Normal desktop socket close still finalizes immediately; ambient retains the 120s default.
   static func conversationLifetimeQueryItems(role: MeetingConversationBoundaryPolicy.Role) -> [URLQueryItem] {
-    role == .meeting ? [URLQueryItem(name: "conversation_timeout", value: "-1")] : []
+    role == .meeting
+      ? [URLQueryItem(name: "conversation_timeout", value: String(Int(MeetingDetectionTiming.conversationTimeout)))]
+      : []
   }
 
   private func connectToBackend(authHeader: String) {

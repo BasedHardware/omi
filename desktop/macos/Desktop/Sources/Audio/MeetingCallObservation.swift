@@ -5,6 +5,8 @@ enum MeetingCallObservation {
   /// Meeting evidence is stricter than the dictation suppression call-surface catalog.
   /// Dedicated conferencing apps keep input-only detection: output activity is not
   /// guaranteed while joining or when remote participants are silent.
+  /// `sustainingApps` contains only confirmed apps with output observed inside the
+  /// detector's bounded input-only sustain period; confirmation alone is insufficient.
   static func nativeApps(snapshot: CallAudioSnapshot, sustainingApps: Set<String> = []) -> Set<String> {
     let inputs = Set(
       snapshot.processes.filter(\.isRunningInput).compactMap {
@@ -112,6 +114,14 @@ enum MeetingDetectionTiming {
   static let confirmationPeriod: TimeInterval = 10
   /// Capture closes on the off edge; a confirmed conversation can resume for four minutes.
   static let resumeWindow: TimeInterval = 240
+  /// Covers the observed 150s output gap with headroom, but an AFK messaging app
+  /// holding the microphone must return to output corroboration after five minutes.
+  static let inputOnlySustainPeriod: TimeInterval = 300
+  /// Calendar lookup is optional; a hung EventKit request is retired on the next poll.
+  static let calendarProbeTimeout: TimeInterval = 10
+  /// Five-minute input-only sustain + 8s off grace + four-minute resume, with
+  /// nearly a minute for polling/provider latency. Orphaned sockets stay bounded.
+  static let conversationTimeout: TimeInterval = 600
   /// Wait after confirmation before announcing. Calls ending earlier never show a card.
   static let noticeDelay: TimeInterval = 35
 }

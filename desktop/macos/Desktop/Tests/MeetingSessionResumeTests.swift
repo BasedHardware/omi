@@ -167,6 +167,81 @@ final class MeetingSessionResumeTests: XCTestCase {
     XCTAssertFalse(detector.isMeetingActive, "Discord confirmation must not admit WhatsApp voice notes")
   }
 
+  func testAFKMessagingCallClosesCaptureAfterFiveMinutesAndThenFinalizes() {
+    let detector = detector()
+    confirm(detector)
+    now += MeetingDetectionTiming.inputOnlySustainPeriod - 1
+    detector.applySnapshot(shot(output: false))
+    XCTAssertTrue(detector.isMeetingActive)
+    now += 1
+    detector.applySnapshot(shot(output: false))
+    now += 8
+    detector.applySnapshot(shot(output: false))
+    let offEdge = now
+    XCTAssertFalse(detector.isMeetingActive, "an AFK mic cannot sustain capture indefinitely")
+    XCTAssertEqual(detector.resumeOffAt, offEdge)
+    now += MeetingDetectionTiming.resumeWindow
+    detector.applySnapshot(shot(output: false))
+    XCTAssertFalse(detector.isMeetingConfirmed)
+    XCTAssertEqual(detector.lastMeetingEndedAt, offEdge)
+    XCTAssertEqual(transitions.map(\.finalizationReason), [.meetingStarted, .meetingEnded])
+    now += 4 * 60 * 60
+    detector.applySnapshot(shot(output: false))
+    XCTAssertFalse(detector.isMeetingActive, "continuing input alone must not start a new meeting")
+    XCTAssertEqual(transitions.count, 2)
+  }
+
+  func testIntermittentOutputRefreshesTheCapForALongRealCall() {
+    let detector = detector()
+    confirm(detector)
+    for _ in 0..<12 {
+      now += MeetingDetectionTiming.inputOnlySustainPeriod - 1
+      detector.applySnapshot(shot(output: false))
+      XCTAssertTrue(detector.isMeetingActive)
+      XCTAssertNil(detector.resumeOffAt)
+      // Output from a different helper of this same app refreshes the cap.
+      var snapshot = shot(output: false)
+      snapshot.processes.append(
+        .init(bundleID: "com.hnc.discord.helper", pid: 2, isRunningInput: false, isRunningOutput: true))
+      detector.applySnapshot(snapshot)
+    }
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting])
+    XCTAssertEqual(captureEdges, [true])
+  }
+
+  func testOutputReturningAfterTheCapResumesInsideTheWindow() {
+    let detector = detector()
+    confirm(detector)
+    now += MeetingDetectionTiming.inputOnlySustainPeriod
+    detector.applySnapshot(shot(output: false))
+    now += 8
+    detector.applySnapshot(shot(output: false))
+    XCTAssertFalse(detector.isMeetingActive)
+    now += 150
+    detector.applySnapshot(shot(output: false))
+    XCTAssertFalse(detector.isMeetingActive, "the resume hold cannot extend input-only sustain")
+    detector.applySnapshot(shot())
+    XCTAssertTrue(detector.isMeetingActive)
+    XCTAssertTrue(detector.isMeetingConfirmed)
+    XCTAssertNil(detector.resumeOffAt)
+    XCTAssertEqual(transitions.map(\.nextRole), [.meeting])
+    XCTAssertEqual(captureEdges, [true, false, true])
+  }
+
+  func testOtherAppsOutputCannotRefreshConfirmedMessagingSustain() {
+    let detector = detector()
+    confirm(detector)
+    now += MeetingDetectionTiming.inputOnlySustainPeriod
+    var snapshot = shot(output: false)
+    snapshot.processes.append(
+      .init(bundleID: "net.whatsapp.whatsapp", pid: 2, isRunningInput: false, isRunningOutput: true))
+    detector.applySnapshot(snapshot)
+    now += 8
+    detector.applySnapshot(snapshot)
+    XCTAssertFalse(detector.isMeetingActive)
+    XCTAssertNotNil(detector.resumeOffAt)
+  }
+
   func testProvisionalMessagingAudioStillNeedsOutputUntilConfirmed() {
     let detector = detector()
     detector.applySnapshot(shot())
@@ -276,3 +351,60 @@ final class MeetingSessionResumeTests: XCTestCase {
     XCTAssertEqual(role, .ambient)
   }
 }
+
+#if DEBUG
+  // omi-release-compile: calendar timeout tests inspect DEBUG-only probe receipts.
+  private actor HangingMeetingCalendarProbe {
+    let requested: XCTestExpectation
+    private var continuation: CheckedContinuation<Set<String>, Never>?
+    private var calls = 0
+
+    init(requested: XCTestExpectation) { self.requested = requested }
+
+    func events() async -> Set<String> {
+      calls += 1
+      guard calls == 1 else { return ["fresh-event"] }
+      return await withCheckedContinuation {
+        continuation = $0
+        requested.fulfill()
+      }
+    }
+
+    func release() {
+      continuation?.resume(returning: ["stale-event"])
+      continuation = nil
+    }
+  }
+
+  extension MeetingSessionResumeTests {
+    func testHungCalendarProbeTimesOutRetriesAndIgnoresItsLateResult() async throws {
+      let requested = expectation(description: "first calendar request is suspended")
+      let probe = HangingMeetingCalendarProbe(requested: requested)
+      let name = "MeetingCalendarTimeoutTests.\(UUID().uuidString)"
+      let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+      defer { defaults.removePersistentDomain(forName: name) }
+      let detector = MeetingDetector(
+        processInputAPIAvailable: true,
+        snapshot: { CallAudioSnapshot(processes: [], defaultInputDeviceID: 0, browserWindows: []) },
+        calendarEventIDs: { await probe.events() },
+        now: { [unowned self] in now }, audioLedgerDefaults: defaults,
+        onChange: { _ in }, onConfirmedEvidence: { _ in }, onAudioSummaries: { _ in })
+      detector.start()
+      defer { detector.stop() }
+      await fulfillment(of: [requested], timeout: 2)
+      let hungTask = try XCTUnwrap(detector.currentCalendarTaskForTesting)
+      now += MeetingDetectionTiming.calendarProbeTimeout - 1
+      await detector.triggerProbeForTesting()?.value
+      XCTAssertFalse(hungTask.isCancelled, "a pending lookup is not replaced before its deadline")
+      now += 1
+      await detector.triggerProbeForTesting()?.value
+      await detector.currentCalendarTaskForTesting?.value
+      XCTAssertTrue(hungTask.isCancelled)
+      XCTAssertEqual(detector.calendarEventIDsForTesting, ["fresh-event"])
+      await probe.release()
+      await hungTask.value
+      XCTAssertEqual(
+        detector.calendarEventIDsForTesting, ["fresh-event"], "a late result cannot replace fresh evidence")
+    }
+  }
+#endif

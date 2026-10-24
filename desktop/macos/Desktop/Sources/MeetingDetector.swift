@@ -40,6 +40,7 @@ final class MeetingDetector {
   private let onConfirmedEvidence: (MeetingDetectionEvidence) -> Void
   private var latestEvidence: MeetingDetectionEvidence?
   private var confirmedApps: Set<String> = []
+  private var lastNativeOutputAt: [String: Date] = [:]
   private var confirmedCallIDs: Set<String> = []
   private var confirmedCalendarIDs: Set<String> = []
   private(set) var resumeOffAt: Date?
@@ -49,6 +50,8 @@ final class MeetingDetector {
   private let calendarEventIDs: @Sendable () async -> Set<String>
   private var latestCalendarEventIDs: Set<String> = []
   private var calendarTask: Task<Void, Never>?
+  private var calendarProbeStartedAt: Date?
+  private var calendarProbeGeneration: UInt64 = 0
   /// True after at least one async probe has reported. Until then, `isMeetingActive == false`
   /// means "unknown", not "no meeting".
   private(set) var hasObservedState: Bool = false
@@ -202,7 +205,10 @@ final class MeetingDetector {
     probeTask = nil
     calendarTask?.cancel()
     calendarTask = nil
+    calendarProbeStartedAt = nil
+    calendarProbeGeneration &+= 1
     latestCalendarEventIDs = []
+    lastNativeOutputAt = [:]
 
     timer?.invalidate()
     timer = nil
@@ -224,16 +230,7 @@ final class MeetingDetector {
     let probe = snapshot
     probeGeneration &+= 1
     let generation = probeGeneration
-    // Optional calendar I/O must never delay the audio gate (including its off edge).
-    if calendarTask == nil {
-      let events = calendarEventIDs
-      calendarTask = Task { [weak self] in
-        let ids = await events()
-        guard !Task.isCancelled, let self, self.started else { return }
-        self.latestCalendarEventIDs = ids
-        self.calendarTask = nil
-      }
-    }
+    refreshCalendarEvents()
     let weakSelf = WeakMeetingDetector(self)
     probeTask?.cancel()
     probeTask = Task.detached(priority: .utility) {
@@ -245,6 +242,33 @@ final class MeetingDetector {
         else { return }
         detector.applySnapshot(shot, calendarEventIDs: detector.latestCalendarEventIDs)
       }
+    }
+  }
+
+  private func refreshCalendarEvents() {
+    // Do not use a task group: it would await an EventKit call that ignores cancellation.
+    // The regular audio poll retires the request and fences out any late result, even
+    // across stop/start. Clear cached IDs so stale calendar evidence cannot resume a call.
+    if let since = calendarProbeStartedAt,
+      now().timeIntervalSince(since) >= MeetingDetectionTiming.calendarProbeTimeout
+    {
+      calendarTask?.cancel()
+      calendarTask = nil
+      calendarProbeStartedAt = nil
+      latestCalendarEventIDs = []
+      log("MeetingDetector: calendar probe timed out; retrying")
+    }
+    guard calendarTask == nil else { return }
+    calendarProbeGeneration &+= 1
+    let generation = calendarProbeGeneration
+    calendarProbeStartedAt = now()
+    let events = calendarEventIDs
+    calendarTask = Task { [weak self] in
+      let ids = await events()
+      guard !Task.isCancelled, let self, self.started, self.calendarProbeGeneration == generation else { return }
+      self.latestCalendarEventIDs = ids
+      self.calendarProbeStartedAt = nil
+      self.calendarTask = nil
     }
   }
 
@@ -272,7 +296,18 @@ final class MeetingDetector {
       if started { scheduleTimer() }
     }
     let maySustain = resumeOffAt.map { timestamp.timeIntervalSince($0) < resumeWindow } ?? isMeetingConfirmed
-    let sustainingApps = maySustain ? confirmedApps : []
+    for process in snapshot.processes where process.isRunningOutput {
+      if let app = ConferencingApps.nativeCallAppID(bundleID: process.bundleID) {
+        lastNativeOutputAt[app] = timestamp
+      }
+    }
+    let sustainingApps: Set<String> =
+      maySustain
+      ? confirmedApps.filter { app in
+        lastNativeOutputAt[app].map {
+          timestamp.timeIntervalSince($0) < MeetingDetectionTiming.inputOnlySustainPeriod
+        } ?? false
+      } : []
     let detected = MeetingCallObservation.isDetected(
       snapshot: snapshot, mode: mode, processInputAPIAvailable: processInputAPIAvailable,
       sustainingApps: sustainingApps)
@@ -445,6 +480,9 @@ final class MeetingDetector {
   func restorePendingCallChange() { hasPendingCallChange = true }
 
   #if DEBUG
+    var currentCalendarTaskForTesting: Task<Void, Never>? { calendarTask }
+    var calendarEventIDsForTesting: Set<String> { latestCalendarEventIDs }
+
     var currentProbeTaskForTesting: Task<Void, Never>? {
       probeTask
     }
