@@ -5,7 +5,7 @@ enum MeetingCallObservation {
   /// Meeting evidence is stricter than the dictation suppression call-surface catalog.
   /// Dedicated conferencing apps keep input-only detection: output activity is not
   /// guaranteed while joining or when remote participants are silent.
-  static func nativeApps(snapshot: CallAudioSnapshot) -> Set<String> {
+  static func nativeApps(snapshot: CallAudioSnapshot, sustainingApps: Set<String> = []) -> Set<String> {
     let inputs = Set(
       snapshot.processes.filter(\.isRunningInput).compactMap {
         ConferencingApps.nativeCallAppID(bundleID: $0.bundleID)
@@ -15,7 +15,7 @@ enum MeetingCallObservation {
         ConferencingApps.nativeCallAppID(bundleID: $0.bundleID)
       })
     return inputs.filter { app in
-      !isMessagingApp(app) || outputs.contains(app)
+      !isMessagingApp(app) || outputs.contains(app) || sustainingApps.contains(app)
     }
   }
 
@@ -49,10 +49,11 @@ enum MeetingCallObservation {
   static func isDetected(
     snapshot: CallAudioSnapshot,
     mode: AssistantSettings.AudioRecordingMode,
-    processInputAPIAvailable: Bool
+    processInputAPIAvailable: Bool,
+    sustainingApps: Set<String> = []
   ) -> Bool {
     if processInputAPIAvailable {
-      if !nativeApps(snapshot: snapshot).isEmpty { return true }
+      if !nativeApps(snapshot: snapshot, sustainingApps: sustainingApps).isEmpty { return true }
       let windows = liveBrowserWindows(snapshot: snapshot, processInputAPIAvailable: true)
       let browserMic = snapshot.processes.contains { process in
         process.isRunningInput && browserFamily(process.bundleID) != nil
@@ -73,13 +74,14 @@ enum MeetingCallObservation {
   static func identities(
     snapshot: CallAudioSnapshot,
     processInputAPIAvailable: Bool,
+    sustainingApps: Set<String> = [],
     nativeIdentity: (String) -> String
   ) -> Set<String> {
     var identities = Set<String>()
     if processInputAPIAvailable {
       // Helpers resolve to their app (`com.hnc.discord.helper.renderer` → `com.hnc.discord`), so
       // an app and its helper never look like two calls.
-      for appID in nativeApps(snapshot: snapshot) {
+      for appID in nativeApps(snapshot: snapshot, sustainingApps: sustainingApps) {
         identities.insert(nativeIdentity(appID))
       }
     }
@@ -108,6 +110,8 @@ enum MeetingCallObservation {
 enum MeetingDetectionTiming {
   /// Sustained positive evidence before conversation rotation; capture remains immediate.
   static let confirmationPeriod: TimeInterval = 10
+  /// Capture closes on the off edge; a confirmed conversation can resume for four minutes.
+  static let resumeWindow: TimeInterval = 240
   /// Wait after confirmation before announcing. Calls ending earlier never show a card.
   static let noticeDelay: TimeInterval = 35
 }

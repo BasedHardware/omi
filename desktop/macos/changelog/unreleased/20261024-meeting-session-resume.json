@@ -1,0 +1,3 @@
+{
+  "change": "Fixed calls splitting into multiple conversations after brief audio interruptions or an app relaunch during a scheduled meeting"
+}

@@ -102,7 +102,8 @@ final class LocalTranscriptionService: @unchecked Sendable {
   /// still running across a finishConversation rotation) would be appended past the snapshot and
   /// silently dropped.
   private var acceptingAudio = true
-  private var emittedSeconds = 0.0  // absolute start offset of the next emitted segment
+  private var emittedSamples = 0
+  private var captureTimeline = CaptureAudioTimeline()
   /// RMS of each recently appended capture frame, guarded by `lock`; the room's background level.
   private var recentFrameRMS: [Float] = []
 
@@ -198,6 +199,13 @@ final class LocalTranscriptionService: @unchecked Sendable {
     }
   }
 
+  /// Record gate pauses without inserting silence or retiring the session's recognizer.
+  func setCapturePaused(_ paused: Bool, at now: Date) {
+    lock.withLock {
+      captureTimeline.setPaused(paused, at: now, capturedSamples: emittedSamples + buffer.count)
+    }
+  }
+
   /// Fire-and-forget stop. Prefer `await finish()` whenever the session lifecycle allows it —
   /// `finish()` guarantees the final tail is persisted before the caller rotates/clears the
   /// session. `stop()` only drains on a detached Task, so a caller that mutates session state
@@ -252,7 +260,7 @@ final class LocalTranscriptionService: @unchecked Sendable {
         let lead = Self.leadingSilenceSamples(buffer, chunk: sampleRate / 10, keep: 2, floor: quiet)
         if lead > 0 {
           buffer.removeFirst(lead)
-          emittedSeconds += Double(lead) / Double(sampleRate)
+          emittedSamples += lead
         }
         let available = buffer.count
         // Three ways a window closes: it filled, the speaker paused, or the session is
@@ -263,16 +271,19 @@ final class LocalTranscriptionService: @unchecked Sendable {
           minSamples: Int(Double(sampleRate) * minUtteranceSeconds),
           floor: quiet
         )
-        let ready = available >= windowSamples || endpointed || (force && available > 0)
+        let untilGap = captureTimeline.samplesUntilNextGap(after: emittedSamples)
+        let endsAtGap = untilGap.map { $0 <= available } ?? false
+        let ready = available >= windowSamples || endpointed || endsAtGap || (force && available > 0)
         guard ready else { return nil }
         // A pause-closed window takes the whole buffer: the boundary is the silence itself,
         // so leaving a remainder would just split the next utterance at an arbitrary point.
-        let take = (force || endpointed) ? available : windowSamples
+        let desiredTake = (force || endpointed) ? available : windowSamples
+        let take = min(available, desiredTake, untilGap ?? available)
         let window = Array(buffer.prefix(take))
         buffer.removeFirst(take)
-        let startSec = emittedSeconds
+        let startSec = captureTimeline.timestamp(at: emittedSamples, sampleRate: sampleRate)
         let durSec = Double(take) / Double(sampleRate)
-        emittedSeconds += durSec
+        emittedSamples += take
         isFlushing = true
         return DrainSnapshot(manager: manager, window: window, startSec: startSec, durSec: durSec)
       })
