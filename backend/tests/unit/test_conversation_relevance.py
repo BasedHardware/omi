@@ -45,6 +45,7 @@ def _decide(
     trusted_wake_word=False,
     model=None,
     calendar=None,
+    neighbor=lambda: None,
 ):
     model = model or MagicMock(return_value=False)
     calendar = calendar or MagicMock(return_value=False)
@@ -58,6 +59,7 @@ def _decide(
         trusted_wake_word=trusted_wake_word,
         model_discards=model,
         calendar_retains=calendar,
+        neighbor=neighbor,
     )
     return decision, model, calendar
 
@@ -261,6 +263,30 @@ def test_neighbor_is_the_nearest_visible_conversation_inside_the_boundary_gap():
     assert neighbor == Neighbor('near-before', 40.0, 'before')
 
 
+def test_find_neighbor_normalizes_timezone_awareness():
+    t0 = datetime(2026, 9, 22, 15, 0, tzinfo=timezone.utc)
+    rows = [
+        {
+            'id': 'conv-prev',
+            'started_at': (t0 - timedelta(seconds=300)).replace(tzinfo=None),
+            'finished_at': (t0 - timedelta(seconds=40)).replace(tzinfo=None),
+        }
+    ]
+    neighbor = find_neighbor(rows, conversation_id='me', started_at=t0, finished_at=t0 + timedelta(seconds=10), gap_seconds=120)
+    assert neighbor == Neighbor('conv-prev', 40.0, 'before')
+
+
+def test_nano_decision_degrades_when_neighbor_lookup_fails():
+    def failing_neighbor():
+        raise TypeError('can\'t compare offset-naive and offset-aware datetimes')
+
+    decision, _, _ = _decide(
+        model=lambda _on_error, neighbor: True,
+        neighbor=failing_neighbor,
+    )
+    assert decision.verdict == 'keep'
+
+
 def test_no_neighbor_outside_the_gap_or_for_itself():
     rows = [_row('me', 0, 3), _row('far', -900, -121)]
     assert (
@@ -276,7 +302,7 @@ def test_a_model_discard_next_to_a_kept_conversation_links_to_it():
         seen.append(neighbor)
         return True
 
-    decision, _, _ = _decide(model=model)
+    decision, _, _ = _decide(model=model, neighbor=lambda: None)
     assert seen == [None]
     assert decision.neighbor_id is None
 
