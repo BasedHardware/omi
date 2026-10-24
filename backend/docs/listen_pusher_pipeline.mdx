@@ -415,7 +415,12 @@ This signal does not change diarization, thresholds, provider choice or labeling
 
 Conversation responses project the internal receipt's `capture_evidence.coverage`
 into optional `capture_coverage` (`mapped` / `incomplete` / `unknown`). Internal
-source-position receipts remain excluded from the wire. Mobile conversation
+source-position receipts remain excluded from the wire. A committed-proof
+`incomplete` whose lifetime is complete with zero conflicts states a ledger
+bound (evicted proof runs, transcript-note overflow), never observed loss —
+observed loss fails the snapshot before an envelope exists — so the projection
+serves `mapped` there and `unknown` for the overflow stub; only observed loss
+serves `incomplete`. Mobile conversation
 detail shows the localized “Partial recording” chip only for `incomplete`; legacy,
 unknown and mapped rows stay quiet. No conversation-list placeholder is added.
 

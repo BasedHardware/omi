@@ -1112,7 +1112,9 @@ export interface CaptureEvidenceMetadata {
   clock_epoch?: string | null;
   conflicts?: number | null;
   coverage?: "unknown" | "incomplete" | "mapped" | null;
+  lifetime?: Record<string, unknown> | null;
   origin?: string | null;
+  proof?: string | null;
   reason?: string | null;
   receipts?: Array<Record<string, unknown>> | null;
   runs?: Array<Record<string, unknown>> | null;
