@@ -838,3 +838,49 @@ def test_v2_listen_wakeup_uses_isolated_redis(monkeypatch):
         'uid': 'synthetic',
         'notification_type': 'proactivity_v2',
     }
+
+
+def test_mentor_delivery_history_handles_mixed_timestamp_types_and_missing_fields(monkeypatch):
+    from utils import proactivity_producers as producers
+
+    monkeypatch.setattr(
+        producers,
+        'delivered_mentor_items',
+        lambda uid: [
+            {'item_id': 'i1', 'delivered_at': '2026-06-02T10:00:00Z'},
+            {'item_id': 'i2', 'delivered_at': datetime(2026, 6, 1, 10, 0, 0)},
+            {'item_id': 'i3', 'delivered_at': None},
+        ],
+    )
+    monkeypatch.setattr(
+        producers.spine,
+        'decode_feed_item',
+        lambda uid, item: SimpleNamespace(body=f"Body of {item.get('item_id')}"),
+    )
+    import database.chat as chat
+    monkeypatch.setattr(
+        chat,
+        'get_app_messages',
+        lambda uid, channel, limit: [
+            {'sender': 'ai', 'created_at': '2026-06-03T10:00:00Z', 'text': 'Legacy msg 1'},
+            {'sender': 'ai', 'created_at': 1780531200, 'text': 'Legacy msg 2'},
+            {'sender': 'ai', 'created_at': None, 'text': 'Legacy msg 3'},
+            {'sender': 'ai', 'created_at': '2026-06-01T00:00:00Z'},
+        ],
+    )
+
+    history = producers.mentor_delivery_history('u')
+    assert isinstance(history, list)
+    assert len(history) <= 5
+
+
+@pytest.mark.asyncio
+async def test_produce_followup_handles_malformed_due_at(monkeypatch):
+    from utils import proactivity_producers as producers
+
+    monkeypatch.setattr(
+        producers.tasks,
+        'get_action_item',
+        lambda uid, item_id: {'due_at': 'malformed-date-string', 'status': 'active'},
+    )
+    await producers.produce_followup('u', 'item-1', 'malformed-date-string')
