@@ -5204,9 +5204,12 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
     module.sync_backfill_sequencer.renew_job = MagicMock(return_value=True)
     module.get_sync_job = MagicMock(return_value={'status': 'processing', 'attempt': 1})
 
+    renewal_started = asyncio.Event()
+
     async def _body_returns_after_renewal_started(_request, _task_retry_count, *_args, **_kwargs):
-        # Let the heartbeat reach its first renewal before the response exists.
-        await asyncio.sleep(0.05)
+        # Synchronize with the blocked renewal instead of assuming a sleep
+        # gives the heartbeat enough scheduler time on a loaded runner.
+        await asyncio.wait_for(renewal_started.wait(), timeout=2)
         return module.JSONResponse(status_code=200, content={'status': module.SYNC_JOB_HANDLER_BUDGET_DEFERRED_STATUS})
 
     passthrough_run_blocking = module.run_blocking
@@ -5216,6 +5219,7 @@ async def test_sequenced_attempt_heartbeat_drain_is_bounded():
         nonlocal renewal_reached
         if fn is module.sync_backfill_sequencer.renew_job:
             renewal_reached = True
+            renewal_started.set()
             await asyncio.sleep(10)
         return await passthrough_run_blocking(_executor, fn, *args, **kwargs)
 
