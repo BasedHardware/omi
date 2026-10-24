@@ -48,6 +48,9 @@ environment_shared:
         FSR_DELETION_NEGATIVE_TTL_SECONDS:
           value: '30'
           category: rollout
+        FSR_USAGE_MONTH_TOTAL_EPOCH:
+          value: 'v1'
+          category: rollout
         FSR_USAGE_MONTH_TTL_SECONDS:
           value: '60'
           category: rollout
@@ -553,6 +556,9 @@ environment_shared:
         FSR_DELETION_NEGATIVE_TTL_SECONDS:
           value: '30'
           category: rollout
+        FSR_USAGE_MONTH_TOTAL_EPOCH:
+          value: 'v1'
+          category: rollout
         FSR_USAGE_MONTH_TTL_SECONDS:
           value: '60'
           category: rollout
@@ -808,6 +814,9 @@ environment_shared:
       FSR_DELETION_NEGATIVE_TTL_SECONDS:
         value: '30'
         category: rollout
+      FSR_USAGE_MONTH_TOTAL_EPOCH:
+        value: 'v1'
+        category: rollout
       FSR_USAGE_MONTH_TTL_SECONDS:
         value: '60'
         category: rollout
@@ -1001,6 +1010,9 @@ environment_shared:
             category: rollout
           FSR_DELETION_NEGATIVE_TTL_SECONDS:
             value: '30'
+            category: rollout
+          FSR_USAGE_MONTH_TOTAL_EPOCH:
+            value: 'v1'
             category: rollout
           FSR_USAGE_MONTH_TTL_SECONDS:
             value: '60'
@@ -1383,6 +1395,9 @@ environment_shared:
           FSR_DELETION_NEGATIVE_TTL_SECONDS:
             value: '30'
             category: rollout
+          FSR_USAGE_MONTH_TOTAL_EPOCH:
+            value: 'v1'
+            category: rollout
           FSR_USAGE_MONTH_TTL_SECONDS:
             value: '60'
             category: rollout
@@ -1743,6 +1758,9 @@ environment_shared:
           FSR_DELETION_NEGATIVE_TTL_SECONDS:
             value: '30'
             category: rollout
+          FSR_USAGE_MONTH_TOTAL_EPOCH:
+            value: 'v1'
+            category: rollout
           FSR_USAGE_MONTH_TTL_SECONDS:
             value: '60'
             category: rollout
@@ -2097,6 +2115,9 @@ environment_shared:
           FSR_DELETION_NEGATIVE_TTL_SECONDS:
             value: '30'
             category: rollout
+          FSR_USAGE_MONTH_TOTAL_EPOCH:
+            value: 'v1'
+            category: rollout
           FSR_USAGE_MONTH_TTL_SECONDS:
             value: '60'
             category: rollout
@@ -2322,6 +2343,9 @@ environment_shared:
           FSR_DELETION_NEGATIVE_TTL_SECONDS:
             value: '30'
             category: rollout
+          FSR_USAGE_MONTH_TOTAL_EPOCH:
+            value: 'v1'
+            category: rollout
           FSR_USAGE_MONTH_TTL_SECONDS:
             value: '60'
             category: rollout
@@ -2399,6 +2423,9 @@ environment_shared:
             category: rollout
           FSR_DELETION_NEGATIVE_TTL_SECONDS:
             value: '30'
+            category: rollout
+          FSR_USAGE_MONTH_TOTAL_EPOCH:
+            value: 'v1'
             category: rollout
           FSR_USAGE_MONTH_TTL_SECONDS:
             value: '60'
@@ -2482,6 +2509,9 @@ environment_shared:
             category: rollout
           FSR_DELETION_NEGATIVE_TTL_SECONDS:
             value: '30'
+            category: rollout
+          FSR_USAGE_MONTH_TOTAL_EPOCH:
+            value: 'v1'
             category: rollout
           FSR_USAGE_MONTH_TTL_SECONDS:
             value: '60'
@@ -2568,6 +2598,9 @@ environment_shared:
           FSR_DELETION_NEGATIVE_TTL_SECONDS:
             value: '30'
             category: rollout
+          FSR_USAGE_MONTH_TOTAL_EPOCH:
+            value: 'v1'
+            category: rollout
           FSR_USAGE_MONTH_TTL_SECONDS:
             value: '60'
             category: rollout
@@ -2638,6 +2671,9 @@ environment_shared:
             category: rollout
           FSR_DELETION_NEGATIVE_TTL_SECONDS:
             value: '30'
+            category: rollout
+          FSR_USAGE_MONTH_TOTAL_EPOCH:
+            value: 'v1'
             category: rollout
           FSR_USAGE_MONTH_TTL_SECONDS:
             value: '60'

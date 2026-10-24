@@ -37,6 +37,9 @@ class _FakeBucket:
         b.path = path
         return b
 
+    def list_blobs(self, prefix=''):
+        return []
+
     def copy_blob(self, source_blob, _bucket, _new_path):
         for conv_id in self._fail_for:
             if f'/{conv_id}/' in getattr(source_blob, 'path', ''):
@@ -50,7 +53,7 @@ def _install(monkeypatch, *, chunks_by_conv, bucket, list_raises_for=()):
 
     def _list_audio_chunks(uid, conv_id, **kwargs):
         # Source deletion follows the copy: only a complete listing may drive it.
-        assert kwargs == {'require_archive': True}
+        assert kwargs in ({'require_archive': True}, {'require_archive': True, 'source_identity': True})
         if conv_id in list_raises_for:
             raise Exception(f"simulated transient GCS listing error for {conv_id}")
         return chunks_by_conv.get(conv_id, [])

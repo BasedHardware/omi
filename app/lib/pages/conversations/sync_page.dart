@@ -89,7 +89,7 @@ class WalListItem extends StatelessWidget {
     if (state == WalSyncDisplayState.syncing) {
       return const OmiSpinner(size: OmiSpinnerSize.small);
     }
-    if (hasError || state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
+    if (!wal.onDeviceOnly && (hasError || isRetryableSyncState(state) || state == WalSyncDisplayState.retrying)) {
       return OmiButton.secondary(
         label: context.l10n.tryAgain,
         size: OmiButtonSize.compact,
@@ -100,8 +100,7 @@ class WalListItem extends StatelessWidget {
     // leads to a detail page with nothing actionable on it.
     if (state == WalSyncDisplayState.corrupted ||
         state == WalSyncDisplayState.outsideRecoveryWindow ||
-        state == WalSyncDisplayState.unsupportedAudio ||
-        state == WalSyncDisplayState.uploadRejected) {
+        state == WalSyncDisplayState.unsupportedAudio) {
       return OmiButton.destructive(
         label: context.l10n.delete,
         size: OmiButtonSize.compact,

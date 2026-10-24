@@ -37,10 +37,15 @@ INTENTIONAL_BUDGET_CHANGES = {
     # checkout 72s, apt-get 155s), so 227s + 720s crossed the ceiling and the
     # shard was cancelled mid-run while still inside its step budget — four
     # such 917-920s walls in the week to 2026-10-22 (39741901310,
-    # 39739120103, 39676205452, 39668020536). 20m holds the 720s budget plus
-    # worst-plausible setup; the step budget stays the regression gate, so
+    # 39739120103, 39676205452, 39668020536). 20m held until the apt
+    # cold-cache step needed recycling room. Run 40009383869 still exhausted
+    # the Azure mirror slices; the step now uses official Ubuntu archives,
+    # slices downloads only within 300s, and caps the whole install at 7m.
+    # 25m holds 720s tests + 72s checkout + 90s toolchain + 420s apt, leaving
+    # 198s for cache save and post-actions (test_nightly_main_native_audio.py).
+    # The test regression gate and warm-path walls stay unchanged, so
     # budget_p50 stays 8.
-    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "20",
+    ("backend-unit-tests.yml", "backend-unit-shard", "timeout-minutes"): "25",
 }
 
 
