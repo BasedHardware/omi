@@ -1630,13 +1630,18 @@ def record_new_buyer_checkout_rejection(target_price_id: Optional[str]) -> None:
         logger.warning('new-buyer checkout rejection metric failed', exc_info=True)
 
 
-# Create every reachable label child at import so each series is born at 0 and
-# rate()/increase() see the first rejection (a Counter child does not exist
-# until its first .inc(), and then reads as a flat 1).
-for _reject_reason in NEW_BUYER_CHECKOUT_REJECT_REASONS:
-    for _reject_plan in NEW_BUYER_CHECKOUT_REJECT_PLANS:
-        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason=_reject_reason, plan=_reject_plan)
-del _reject_reason, _reject_plan
+def _zero_initialize_rejection_children() -> None:
+    """Create every reachable label child so each series is born at 0.
+
+    A Counter child does not exist until its first ``.inc()``, and then reads
+    as a flat 1, invisible to rate()/increase() on a rare counter.
+    """
+    for reason in NEW_BUYER_CHECKOUT_REJECT_REASONS:
+        for plan in NEW_BUYER_CHECKOUT_REJECT_PLANS:
+            OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason=reason, plan=plan)
+
+
+_zero_initialize_rejection_children()
 
 
 @fresh_reader
