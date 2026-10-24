@@ -174,6 +174,21 @@ def test_metadata_refuses_node_or_other_gsa_before_token_or_cloud_call(monkeypat
     assert len(calls) == 1 and calls[0].endswith('/email')
 
 
+def test_registered_logging_entrypoint_dispatches_batch(monkeypatch):
+    from types import SimpleNamespace
+
+    called = []
+
+    def batch_main():
+        called.append(True)
+        return 17
+
+    monkeypatch.setattr(sys, 'argv', ['guard.py', '--batch'])
+    with patch.dict(sys.modules, {'batch_guard': SimpleNamespace(main=batch_main)}):
+        assert guard.main() == 17
+    assert called == [True]
+
+
 @pytest.mark.parametrize(
     'bad',
     [
@@ -381,7 +396,7 @@ def test_helm_dedicated_identity_state_only_rbac_and_cpu_placement():
     assert pod['serviceAccountName'] == 'prod-omi-incluster-guards-batch'
     assert pod['tolerations'] == [] and pod['affinity']
     assert pod['volumes'][1]['configMap']['optional'] is True
-    assert pod['containers'][0]['command'] == ['python3', '/guard/batch_guard.py']
+    assert pod['containers'][0]['command'] == ['python3', '/guard/guard.py', '--batch']
     assert all(d['kind'] not in {'ClusterRole', 'ClusterRoleBinding', 'Secret'} for d in docs)
 
 

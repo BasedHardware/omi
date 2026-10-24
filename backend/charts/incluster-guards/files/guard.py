@@ -10,6 +10,7 @@ import logging
 import os
 from pathlib import Path
 import ssl
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -375,6 +376,10 @@ def run(client, dry_run, now=None):
 
 
 def main():
+    if sys.argv[1:] == ['--batch']:
+        from batch_guard import main as batch_main
+
+        return batch_main()
     client = Client(
         os.environ['PROMETHEUS_URL'], os.environ['NAMESPACE'], os.environ['HPA_NAME'], os.environ['STATE_NAME']
     )
