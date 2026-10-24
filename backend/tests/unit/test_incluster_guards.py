@@ -19,7 +19,17 @@ spec.loader.exec_module(guard)
 
 def values():
     result = dict.fromkeys(guard.queries('prod-omi-backend'), 0.0)
-    result.update(first_p95=20, post_p95=0.5, v2_p95=1, first_count=30, admission_count=100, dcgm_nonzero=1)
+    result.update(
+        first_p95=20,
+        post_p95=0.5,
+        v2_p95=1,
+        first_count=30,
+        admission_count=100,
+        dcgm_nonzero=1,
+        refusal_baseline_count=100,
+        refusal_baseline_ready_min=12,
+        refusal_baseline_ready_max=12,
+    )
     return result
 
 
@@ -63,6 +73,76 @@ def test_threshold_boundaries(key, limit, inclusive, delta):
     assert (key in guard.evaluate(v)['trips']) == (delta >= 0 if inclusive else delta > 0)
 
 
+@pytest.mark.parametrize('baseline', [0, 0.01, 0.02, 0.063])
+@pytest.mark.parametrize('delta', [-1e-8, 0, 1e-8])
+def test_relative_refusal_boundary(baseline, delta):
+    threshold = max(0.02, baseline * 1.25 + 0.005)
+    v = dict(values(), refusal_baseline_fraction=baseline, refusal_fraction=threshold + delta)
+    reading = guard.evaluate(v)
+    assert not reading['blind']
+    assert reading['refusal_threshold'] == threshold
+    assert ('refusal_fraction' in reading['trips']) == (delta >= 0)
+
+
+def test_peak_baseline_does_not_trip_at_peak_or_old_absolute_boundary():
+    for current in (0.0203, 0.063):
+        reading = guard.evaluate(dict(values(), refusal_baseline_fraction=0.063, refusal_fraction=current))
+        assert not reading['trips'] and not reading['blind']
+        assert reading['refusal_threshold'] == pytest.approx(0.08375)
+
+
+@pytest.mark.parametrize(
+    'key,bad',
+    [
+        ('refusal_baseline_fraction', -0.01),
+        ('refusal_baseline_fraction', 1.01),
+        ('refusal_baseline_count', 19.99),
+        ('refusal_baseline_ready_min', 11),
+        ('refusal_baseline_ready_max', 13),
+        ('refusal_baseline_ready_stale', 120.01),
+        ('refusal_baseline_admission_stale', 120.01),
+        ('refusal_baseline_ready_stale', -1),
+    ],
+)
+def test_unqualified_baseline_is_blind_and_retains_other_trips(key, bad):
+    v = dict(values(), **{key: bad}, first_p95=30)
+    reading = guard.evaluate(v)
+    assert 'unqualified_refusal_baseline' in reading['blind']
+    assert reading['refusal_threshold'] is None
+    assert 'first_p95' in reading['trips']
+    hpa, dep = objects()
+    _, state, _ = guard.decide(hpa, dep, [], v, {}, 0)
+    assert guard.decide(hpa, dep, [], v, state, 900)[0] == 'TRIP'
+
+
+def test_missing_baseline_never_becomes_clean_or_implicit_absolute_fallback():
+    hpa, dep = objects()
+    v = values()
+    del v['refusal_baseline_fraction']
+    _, state, _ = guard.decide(hpa, dep, [], v, {}, 0)
+    for now, expected in ((900, 'BLIND'), (1200, 'TRIP')):
+        verdict, state, reading = guard.decide(hpa, dep, [], v, state, now)
+        assert verdict == expected
+        assert reading['refusal_threshold'] is None
+
+
+def test_baseline_queries_use_weekly_history_and_qualified_deployment_only():
+    expressions = guard.refusal_baseline_queries('prod-omi-backend')
+    assert all('offset 7d' in query for query in expressions.values())
+    assert 'deployment="prod-omi-parakeet"' in expressions['refusal_baseline_ready_min']
+    assert 'namespace="prod-omi-backend"' in expressions['refusal_baseline_ready_min']
+    assert all('vector(1000000000)' in expressions[k] for k in expressions if k.endswith('_stale'))
+    assert all('[1h:1m]' in expressions[k] for k in expressions if k.endswith('_stale'))
+
+
+def test_guard_upgrade_restarts_full_lookback(monkeypatch):
+    hpa, dep = objects()
+    monkeypatch.setattr(guard, 'REFUSAL_GATE_VERSION', 'old-absolute-refusal')
+    _, old_state, _ = guard.decide(hpa, dep, [], values(), {}, 0)
+    monkeypatch.setattr(guard, 'REFUSAL_GATE_VERSION', 'same-hour-of-week-12-pod-v2')
+    assert guard.decide(hpa, dep, [], values(), old_state, 900)[0] == 'WARMUP'
+
+
 @pytest.mark.parametrize('key', list(guard.queries('unused')))
 @pytest.mark.parametrize('bad', [None, float('nan'), float('inf'), -float('inf')])
 def test_missing_nonfinite_never_clean(key, bad):
@@ -96,6 +176,38 @@ def test_reference_rollback_exact_and_atomic():
     patch = guard.build_rollback(old)
     patch[0]['value']['maxReplicas'] = 999
     assert old == before
+
+
+def test_proposed_scale_up_can_rollback_actual_rendered_production_hpa():
+    chart = ROOT / 'backend/charts/parakeet'
+    output = subprocess.check_output(
+        [
+            'helm',
+            'template',
+            'prod-omi-parakeet',
+            str(chart),
+            '-f',
+            str(chart / 'prod_omi_parakeet_values.yaml'),
+            '--set',
+            'image.tag=test',
+        ],
+        text=True,
+    )
+    old = next(obj['spec'] for obj in yaml.safe_load_all(output) if obj and obj['kind'] == 'HorizontalPodAutoscaler')
+    assert old['behavior']['scaleUp'] == guard.FAST_SCALE_UP
+    patch = guard.build_rollback(old)
+    assert patch[0] == {'op': 'test', 'path': '/spec', 'value': old}
+    assert patch[1] == {'op': 'replace', 'path': '/spec/minReplicas', 'value': 12}
+    assert patch[2]['value'][-1] == guard.LATENCY
+
+
+@pytest.mark.parametrize('key,bad', [('stabilizationWindowSeconds', 60), ('selectPolicy', 'Min')])
+def test_proposed_scale_up_drift_refuses(key, bad):
+    old = objects()[0]['spec']
+    old['behavior']['scaleUp'] = deepcopy(guard.FAST_SCALE_UP)
+    old['behavior']['scaleUp'][key] = bad
+    with pytest.raises(AssertionError, match='Scale-up drift'):
+        guard.build_rollback(old)
 
 
 @pytest.mark.parametrize('drift', ['cap', 'extra', 'duplicate', 'missing', 'requests', 'gpu', 'up', 'down'])

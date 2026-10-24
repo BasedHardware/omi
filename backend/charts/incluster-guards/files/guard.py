@@ -25,6 +25,56 @@ LATENCY = {
 }
 WINDOW = 900
 BLIND_LIMIT = 3
+REFUSAL_GATE_VERSION = 'same-hour-of-week-12-pod-v2'
+FAST_SCALE_UP = {
+    'stabilizationWindowSeconds': 0,
+    'selectPolicy': 'Max',
+    'policies': [{'type': 'Pods', 'value': 4, 'periodSeconds': 15}],
+}
+
+
+def refusal_baseline_queries(namespace):
+    """The same rolling UTC hour a week ago; never learn from the trial itself."""
+
+    def inc(outcome):
+        return (
+            'sum(increase(omi_stt_window_admissions_total'
+            '{job="backend-listen-metrics",outcome' + outcome + '}[1h] offset 7d))'
+        )
+
+    accepted = inc('="accepted"')
+    refused = inc('=~"overflow|batch_pressure"')
+    total = f'({accepted}) + ({refused} or ({accepted} * 0))'
+    name = namespace.removesuffix('-backend') + '-parakeet'
+    ready = 'kube_deployment_status_replicas_available{namespace="' + namespace + '",deployment="' + name + '"}'
+    admissions = 'omi_stt_window_admissions_total{job="backend-listen-metrics",outcome="accepted"}'
+
+    def stale(metric):
+        # A one-minute subquery checks freshness throughout the historical hour.
+        # Fill absent points so gaps cannot silently qualify as a 12-pod baseline.
+        return f'max_over_time((max(time() - timestamp({metric})) or vector(1000000000))[1h:1m] offset 7d)'
+
+    return {
+        'refusal_baseline_fraction': f'({refused} or ({accepted} * 0)) / ({total})',
+        'refusal_baseline_count': total,
+        'refusal_baseline_ready_min': f'min(min_over_time({ready}[1h] offset 7d))',
+        'refusal_baseline_ready_max': f'max(max_over_time({ready}[1h] offset 7d))',
+        'refusal_baseline_ready_stale': stale(ready),
+        'refusal_baseline_admission_stale': stale(admissions),
+    }
+
+
+def refusal_limit(values):
+    """None means unqualified evidence, never an implicit 2% fallback."""
+    if not all(finite(values.get(k)) for k in refusal_baseline_queries('unused')):
+        return None
+    if not 0 <= values['refusal_baseline_fraction'] <= 1 or values['refusal_baseline_count'] < 20:
+        return None
+    if values['refusal_baseline_ready_min'] != 12 or values['refusal_baseline_ready_max'] != 12:
+        return None
+    if any(not 0 <= values[k] <= 120 for k in ('refusal_baseline_ready_stale', 'refusal_baseline_admission_stale')):
+        return None
+    return max(0.02, values['refusal_baseline_fraction'] * 1.25 + 0.005)
 
 
 def queries(namespace):
@@ -41,6 +91,7 @@ def queries(namespace):
     gpu = '{namespace="' + namespace + '",container="parakeet"}'
     v2 = '{namespace="' + namespace + '",exported_endpoint="v2_transcribe"}'
     return {
+        **refusal_baseline_queries(namespace),
         'first_p95': f'histogram_quantile(0.95,sum by(le)(rate(omi_stt_window_first_text_seconds_bucket{sel}[15m])))',
         'first_count': inc('omi_stt_window_first_text_seconds_count'),
         'first_over30': inc('omi_stt_window_first_text_seconds_count')
@@ -90,9 +141,14 @@ def build_rollback(old):
     assert next(
         m for m in metrics if m.get('external', {}).get('metric', {}).get('name') == 'parakeet_gpu_utilization'
     )['external']['target'] == {'type': 'Value', 'value': '35'}, 'GPU drift'
-    assert old['behavior']['scaleUp']['policies'] == [
-        {'type': 'Pods', 'value': 1, 'periodSeconds': 60}
-    ], 'Scale-up drift'
+    # Kubernetes defaults selectPolicy=Max on stored objects; Helm may omit it.
+    up = {'selectPolicy': 'Max', **old['behavior']['scaleUp']}
+    legacy_up = {
+        'stabilizationWindowSeconds': 0,
+        'selectPolicy': 'Max',
+        'policies': [{'type': 'Pods', 'value': 1, 'periodSeconds': 60}],
+    }
+    assert up in (legacy_up, FAST_SCALE_UP), 'Scale-up drift'
     assert old['behavior']['scaleDown']['stabilizationWindowSeconds'] == 900, 'Down drift'
     restored = [
         m for m in metrics if m.get('external', {}).get('metric', {}).get('name') != 'parakeet_request_latency_p99'
@@ -128,18 +184,27 @@ def evaluate(values):
     if finite(values.get('dcgm_nonzero')) and values['dcgm_nonzero'] <= 0 and not low:
         blind.append('dcgm_no_real_nonzero_value')
     trips = []
+    refusal_threshold = refusal_limit(values)
+    if refusal_threshold is None:
+        blind.append('unqualified_refusal_baseline')
     if not low:
         trips += [
             k
-            for k, limit in [('first_p95', 30), ('post_p95', 3), ('v2_p95', 3), ('refusal_fraction', 0.02)]
+            for k, limit in [('first_p95', 30), ('post_p95', 3), ('v2_p95', 3)]
             if finite(values.get(k)) and values[k] >= limit
         ]
+        if (
+            refusal_threshold is not None
+            and finite(values.get('refusal_fraction'))
+            and values['refusal_fraction'] >= refusal_threshold
+        ):
+            trips.append('refusal_fraction')
     trips += [
         k
         for k, limit in [('first_over30', 12), ('no_text_deadline', 36)]
         if finite(values.get(k)) and values[k] > limit
     ]
-    return {'trips': trips, 'blind': blind, 'low_sample': low}
+    return {'trips': trips, 'blind': blind, 'low_sample': low, 'refusal_threshold': refusal_threshold}
 
 
 def scheduling_failures(events, name, now):
@@ -185,6 +250,7 @@ def decide(hpa, deployment, events, values, state, now):
     identity = hashlib.sha256(
         json.dumps(
             [
+                REFUSAL_GATE_VERSION,
                 hpa['spec'],
                 hpa['metadata'].get('generation'),
                 [c['image'] for c in deployment['spec']['template']['spec']['containers']],
