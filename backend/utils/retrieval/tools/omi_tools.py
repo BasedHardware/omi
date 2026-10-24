@@ -13,6 +13,7 @@ try:
     from utils.retrieval.tools.result_bounds import bounded_result, cap_items_for_llm
 except ModuleNotFoundError:
     import importlib.util as _importlib_util
+    import sys as _sys
     from pathlib import Path as _Path
 
     _rb_spec = _importlib_util.spec_from_file_location(
@@ -21,6 +22,9 @@ except ModuleNotFoundError:
     )
     assert _rb_spec is not None and _rb_spec.loader is not None
     _rb_mod = _importlib_util.module_from_spec(_rb_spec)
+    # Register before exec, matching the load_module_fresh recipe.
+    # The loaded module's own fallback resolves dataclass annotations via sys.modules.
+    _sys.modules["utils.retrieval.tools.result_bounds"] = _rb_mod
     _rb_spec.loader.exec_module(_rb_mod)
     bounded_result = _rb_mod.bounded_result
     cap_items_for_llm = _rb_mod.cap_items_for_llm

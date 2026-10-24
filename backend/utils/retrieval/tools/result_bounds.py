@@ -14,6 +14,7 @@ try:
     from utils.model_text import truncation_note
 except ModuleNotFoundError:
     import importlib.util as _importlib_util
+    import sys as _sys
     from pathlib import Path as _Path
 
     _mt_spec = _importlib_util.spec_from_file_location(
@@ -22,6 +23,9 @@ except ModuleNotFoundError:
     )
     assert _mt_spec is not None and _mt_spec.loader is not None
     _mt_mod = _importlib_util.module_from_spec(_mt_spec)
+    # Register before exec, matching the load_module_fresh recipe.
+    # Dataclasses in the loaded module resolve annotations via sys.modules.
+    _sys.modules["utils.model_text"] = _mt_mod
     _mt_spec.loader.exec_module(_mt_mod)
     truncation_note = _mt_mod.truncation_note
 
