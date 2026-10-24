@@ -93,11 +93,10 @@ void main() {
     });
 
     test('never splits a grapheme', () {
-      // 15-byte stamp, a space, 156 letters and one 4-byte emoji make 176 bytes; with ".txt", 180.
-      // The second emoji would pass the cap, so it is left out whole rather than cut in half.
-      final name = conversationTranscriptFileName(_call(title: '${'a' * 156}😀😀'));
-      expect(name, '2026-10-22 0831 ${'a' * 156}😀.txt');
-      expect(utf8.encode(name).length, 180);
+      // 15-byte stamp, a space and 157 letters leave 3 bytes before ".txt" reaches 180: a cut by
+      // code units would keep half of the 4-byte emoji; a cut by graphemes leaves it out whole.
+      final name = conversationTranscriptFileName(_call(title: '${'a' * 157}😀'));
+      expect(name, '2026-10-22 0831 ${'a' * 157}.txt');
     });
 
     test('stays within the 255-byte limit Android imposes, whatever the script', () {

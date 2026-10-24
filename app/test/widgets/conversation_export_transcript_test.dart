@@ -160,6 +160,7 @@ void main() {
     expect(written.map((f) => f.path.split('/').last), ['2026-10-22 0831 Design review.txt']);
     expect(await tester.runAsync(() => written.single.readAsString()), contains('Ship it on Friday.'));
     expect(shares, hasLength(1), reason: 'the share sheet carries the file');
+    expect(shares.single.arguments.toString(), allOf(contains('Design review.txt'), contains('text/plain')));
     await tester.runAsync(() => AnalyticsManager.flushPending(force: true));
     final actions = analytics.events
         .where((e) => e.$1 == 'Conversation Action')
@@ -181,6 +182,23 @@ void main() {
     expect(find.text('Export failed. Please try again.'), findsOneWidget);
     expect(find.text('Try Again'), findsOneWidget);
     expect(shares, isEmpty);
+
+    // Once writing works again, Try Again completes the export.
+    PathProviderPlatform.instance = _Temp(temp.path);
+    await tester.runAsync(() async {
+      await tester.tap(find.text('Try Again'));
+      for (var i = 0; i < 20; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 25));
+        await tester.pump();
+      }
+    });
+    await tester.pumpAndSettle();
+    expect(shares, hasLength(1));
+    // Let the toast's hide animation (started by the Try Again tap) finish before the page goes.
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    // Its completion callback was scheduled in real time (the tap ran under runAsync); flush it.
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 50)));
     await tester.pumpWidget(const SizedBox());
   });
 

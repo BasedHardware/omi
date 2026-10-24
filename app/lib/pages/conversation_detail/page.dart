@@ -854,6 +854,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
   /// Writes the full transcript to a text file, then opens the share sheet with it. The file is
   /// written first so a failure lands here, not as an unhandled error behind the sheet.
   Future<void> _exportTranscript(ConversationDetailProvider provider) async {
+    if (_isSharing) return; // one export or share at a time, Try Again included
     final l10n = context.l10n;
     final dates = OmiDateFormat.of(context);
     final origin = shareSheetOrigin(_shareButtonKey);
