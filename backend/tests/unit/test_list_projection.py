@@ -477,7 +477,14 @@ def test_recursive_wipe_closes_head_recreation_when_user_root_already_missing(mo
             # walked, the worst collection-enumeration order for an erase.
             rows[projection.STATE_COLLECTION][subcollection.id] = {'version': 'rotated'}
 
+    retirements = []
+    monkeypatch.setattr(
+        user_data_deletion,
+        'stop_quiet_checks_for_account',
+        lambda uid, **kwargs: retirements.append((uid, kwargs['firestore_client'])),
+    )
     assert user_data_deletion.purge_user_subtree('owner', client, recursive)['status'] == 'ok'
+    assert retirements == [('owner', client)]
     assert all(not values for values in rows.values())
 
 

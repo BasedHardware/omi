@@ -71,3 +71,46 @@ def stop_quiet_check_for_conversation(uid: str, conversation_id: str, *, firesto
         return True
 
     return stop(client.transaction())
+
+
+def stop_quiet_checks_for_job(job_id: str, *, firestore_client: Any = None) -> None:
+    """Converge quiet debt when a terminal worker knows only its outbox ID."""
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    job = client.collection('conversation_finalization_jobs').document(job_id).get().to_dict() or {}
+    uid = job.get('uid')
+    if not isinstance(uid, str) or not uid:
+        return
+    conversation_id = job.get('conversation_id')
+    conversation_ids = [conversation_id] if isinstance(conversation_id, str) else []
+    if job.get('kind') == 'conversation_merge' and isinstance(job.get('conversation_ids'), list):
+        conversation_ids = job['conversation_ids']
+    for cid in conversation_ids:
+        if isinstance(cid, str) and cid:
+            stop_quiet_check_for_conversation(uid, cid, firestore_client=client)
+
+
+def stop_quiet_checks_for_account(uid: str, *, firestore_client: Any = None, page_size: int = 450) -> None:
+    """Retire global quiet jobs after recursive account erasure, in bounded pages.
+
+    The existing UID single-field index suffices. Filter kind locally so normal
+    finalization jobs keep their own retention/ownership policy. Latest-owner
+    transactions still protect a concurrently reopened conversation.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    query = (
+        client.collection('conversation_finalization_jobs')
+        .where('uid', '==', uid)
+        .select(['kind', 'conversation_id'])
+        .limit(max(1, min(450, page_size)))
+    )
+    cursor = None
+    while True:
+        page = list((query.start_after(cursor) if cursor is not None else query).stream())
+        if not page:
+            return
+        for snapshot in page:
+            row = snapshot.to_dict() or {}
+            cid = row.get('conversation_id')
+            if row.get('kind') == 'listen_quiet_check' and isinstance(cid, str) and cid:
+                stop_quiet_check_for_conversation(uid, cid, firestore_client=client)
+        cursor = page[-1]

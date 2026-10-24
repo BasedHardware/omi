@@ -13,7 +13,8 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'quiet_replay_emulator_only_secret_32
 
 from google.cloud import firestore
 from database import conversations, recording_sessions, proactivity, quiet_check_retirement
-from database import oversized_conversation_terminal, stuck_backfill
+from database import oversized_conversation_terminal, stuck_backfill, user_data_deletion, batch_pipeline_purge
+from database._client import delete_collection_recursive
 from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from config import stt_cap_dispatch
 from models.conversation_enums import ConversationStatus
@@ -112,6 +113,56 @@ def exercise_lifecycle_retirement(client):
             writer(cid)
             retired(ref)
 
+        for cid, byok in (('dead-letter', False), ('byok-abandoned', True)):
+            ref = seed(cid)
+            job_id = 'terminal-' + cid
+            col.document(cid).update(
+                {'status': 'processing', 'finalization_job_id': job_id, 'finalization_revision': 1}
+            )
+            client.collection('conversation_finalization_jobs').document(job_id).set(
+                {
+                    'uid': uid,
+                    'conversation_id': cid,
+                    'status': 'blocked_byok' if byok else 'leased',
+                    'requires_byok': byok,
+                    'dispatch_generation': 1,
+                    'lease_epoch': 1,
+                    'finalization_revision': 1,
+                    'fanout_status': 'pending',
+                    'created_at': now - timedelta(days=2),
+                    'updated_at': now - timedelta(days=2),
+                    'lease_expires_at': now - timedelta(days=1),
+                }
+            )
+            if byok:
+                result = jobs.abandon_byok_finalization_job(
+                    job_id,
+                    expected_status='blocked_byok',
+                    expected_dispatch_generation=1,
+                    expected_lease_epoch=1,
+                    abandoned_after=timedelta(days=1),
+                    firestore_client=client,
+                )
+                assert result == {'status': 'abandoned', 'conversation_outcome': 'closed'}
+            else:
+                assert jobs.mark_finalization_dead_letter(job_id, 1, 1, 1, firestore_client=client)
+            retired(ref)
+
+        ref = seed('meeting-receipt')
+        col.document('meeting-receipt').update({'status': 'completed'})
+        receipt = jobs.record_meeting_receipt(
+            uid,
+            'meeting-receipt',
+            finalization_job_id=None,
+            eligible=False,
+            reason='synthetic',
+            duration_s=1,
+            dedup_speech_s=1,
+            firestore_client=client,
+        )
+        assert receipt['status'] == 'recorded'
+        retired(ref)
+
         # Crash fallback adapters must also pay pre-existing quiet debt.
         for cid, fields, close in (
             (
@@ -177,8 +228,36 @@ def exercise_lifecycle_retirement(client):
         terminal.set({'status': 'completed', 'dispatch_generation': 1, 'reconcile_after_at': now})
         jobs.claim_finalization_replay(terminal.id, stale_after=timedelta(seconds=60), firestore_client=client)
         assert 'reconcile_after_at' not in terminal.get().to_dict()
+        # Account erasure bypasses the single-conversation delete adapter and
+        # must also remove global due indexes. Use the real recursive deleter.
+        stack.enter_context(patch.object(batch_pipeline_purge, 'purge_batch_owner'))
+        stack.enter_context(patch.object(user_data_deletion, 'get_data_plane_firestore_client', return_value=client))
+        user_data_deletion.purge_user_subtree(uid, client, delete_collection_recursive)
+        retired(ref)
+        # Force several pages with equal UID index values; snapshot cursors
+        # must retain the implicit document-name ordering across retirements.
+        for number in range(5):
+            cid = f'account-missing-{number}'
+            client.collection('conversation_finalization_jobs').document(checks.quiet_check_id(uid, cid)).set(
+                {
+                    'kind': 'listen_quiet_check',
+                    'status': 'waiting_quiet',
+                    'uid': uid,
+                    'conversation_id': cid,
+                    'dispatch_generation': 1,
+                    'reconcile_after_at': now,
+                }
+            )
+        quiet_check_retirement.stop_quiet_checks_for_account(uid, firestore_client=client, page_size=2)
+        for number in range(5):
+            retired(
+                client.collection('conversation_finalization_jobs').document(
+                    checks.quiet_check_id(uid, f'account-missing-{number}')
+                )
+            )
+
     print(
-        'PASS: user/empty deletion, capture_end, complete/discard/failed, processing persistence/upsert, live reopen, orphan/deferred/oversized/noise fallback, terminal index deletion'
+        'PASS: user/empty deletion, capture_end, complete/discard/failed, processing persistence/upsert, live reopen, orphan/deferred/oversized/noise fallback, dead-letter/BYOK/meeting terminal, account erasure and multipage cursor, terminal index deletion'
     )
 
 

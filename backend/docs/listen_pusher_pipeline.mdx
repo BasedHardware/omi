@@ -6523,7 +6523,9 @@ available. No user/session/object identities are metric labels.
 
 Sync assignment (`assign_sync_conversation`), smart-merge absorption, user deletion,
 empty-generation deletion, discard, processing admission and terminal persistence
-retire the owner's quiet check immediately after their lifecycle commit. Cleanup
+retire the owner's quiet check immediately after their lifecycle commit. Durable
+dead-letter/BYOK abandonment, meeting receipt binding and merge rollback also
+converge quiet debt attached to older jobs. Cleanup
 re-reads the latest conversation and job in one transaction before calling the
 shared retirement write: a concurrently reopened live conversation keeps its
 successor check. Missing checks are never created. Worker deliveries still use a

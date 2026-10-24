@@ -215,6 +215,13 @@ _add(
     )
 )
 _add(DriverEntry('database._client.get_users_uid'))
+_add(
+    DriverEntry(
+        'database.quiet_check_retirement.stop_quiet_checks_for_account',
+        base={'uid': UID},
+        neutrals={'page_size': _PAGE},
+    )
+)
 
 # Authenticated pending-work projections use bounded, single-field owner queries.
 _add(DriverEntry('database.processing_attention.list_items', base={'uid': UID}, domains={'limit': [None, 100]}))
