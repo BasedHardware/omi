@@ -215,6 +215,11 @@ checks:
     triggers: ["backend/database/screen_activity.py", "backend/database/_client.py", "backend/tests/unit/test_screen_activity_batch_resilience.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Deduplicate documents in screen activity batch commits to prevent Firestore 400 contention errors, enforce 499-op commit chunking, and validate uid inputs"
+  - id: perplexity-tools-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_perplexity_tools_sanitization.py"]
+    triggers: ["backend/utils/retrieval/tools/perplexity_tools.py", "backend/tests/unit/test_perplexity_tools_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Perplexity web search chat tools must safely handle unexpected exceptions without leaking internal gateway error traces"
   - id: go-device-sdk-tests
     command: ["go", "-C", "sdks/device/go", "test", "-race", "./..."]
     triggers: ["sdks/device/go/**"]
