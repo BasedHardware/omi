@@ -10,21 +10,7 @@ from utils.app_integrations import get_github_docs_content
 import logging
 from typing import cast
 
-try:
-    from utils.retrieval.tools.result_bounds import bounded_result, cap_items_for_llm
-except ModuleNotFoundError:
-    import importlib.util as _importlib_util
-    from pathlib import Path as _Path
-
-    _rb_spec = _importlib_util.spec_from_file_location(
-        "utils.retrieval.tools.result_bounds",
-        str(_Path(__file__).resolve().with_name("result_bounds.py")),
-    )
-    assert _rb_spec is not None and _rb_spec.loader is not None
-    _rb_mod = _importlib_util.module_from_spec(_rb_spec)
-    _rb_spec.loader.exec_module(_rb_mod)
-    bounded_result = _rb_mod.bounded_result
-    cap_items_for_llm = _rb_mod.cap_items_for_llm
+from utils.retrieval.tools.result_bounds import bounded_result, cap_items_for_llm
 
 logger = logging.getLogger(__name__)
 
