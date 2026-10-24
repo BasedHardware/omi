@@ -11033,13 +11033,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get captureStorageAlmostFull => 'האחסון כמעט מלא';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi יתחבר מחדש מעצמו';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ואחרים';
   }

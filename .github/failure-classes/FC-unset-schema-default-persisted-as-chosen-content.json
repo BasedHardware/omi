@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "id": "FC-unset-schema-default-persisted-as-chosen-content",
+  "violated_contract": "A schema field whose pydantic default doubles as the internal 'no value arrived' sentinel must never be persisted as row content through a path that never received the field. Once stored, a defaulted value is indistinguishable from one the model or a rule chose, so the user is shown a deliberate-looking value that no code actually decided — 🧠 served as a chosen brain badge on every conversation whose writer simply forgot the emoji field. The trap is that the sentinel is repaired at one boundary and siblings keep leaking it: #23389 fixed the v2 NotesOutput conversion, while the sync-intake deterministic minimum, the short-clip and media minimums, the legacy StructuredExtraction/AgentNotesSubmission writers, the share and client-projection defaults, and the app's own decode fallback all still persisted or rendered the sentinel.",
+  "canonical_prevention": "Repair the sentinel at the shared conversion boundary (fallback at to_structured), make the stored model's own default the neutral value so a forgotten field cannot land on the sentinel, have every deterministic builder set the category fallback explicitly, and make each client decode fallback use the same neutral value. The guard is a behavioral test that enumerates every deterministic/minimum builder and every no-LLM default and asserts none persists the sentinel.",
+  "canonical_prevention_artifact": ["backend/tests/unit/test_structured_emoji_never_defaults_to_brain.py"],
+  "evidence_prs": [23389],
+  "scope_hints": ["backend/models/", "backend/utils/", "plugins/omi-plugin-sdk/", "app/lib/backend/schema/"],
+  "status": "open"
+}

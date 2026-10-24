@@ -1,0 +1,30 @@
+{
+  "version": "1.0.575",
+  "date": "2026-10-24",
+  "changes": [
+    "Starting a new checkout while you already have a subscription now says so, instead of telling you to resubscribe",
+    "Check waiting recordings and show completed sync results when Omi reopens, without requiring another upload first",
+    "A voice sample on a person's page shows Play again once it finishes, instead of a pause button for audio that already stopped.",
+    {
+      "change": "Apple Watch now shows a clear Stop recording button and releases the microphone when recording stops or startup is cancelled.",
+      "platforms": [
+        "ios"
+      ]
+    },
+    "Reduced background work while recordings sync and live indicators animate",
+    "Smoother scrolling through long transcripts and conversation photos.",
+    "With debug logs on, Omi records which screens stutter so a shared log shows where the app is slow",
+    "Home does less work while scrolling long conversation histories and when another tab is open",
+    {
+      "change": "Scrolling and tapping are smoother because Omi no longer builds an accessibility tree on every frame when no assistive feature is on",
+      "platforms": [
+        "ios"
+      ]
+    },
+    "VoiceOver and TalkBack no longer re-announce Home's live conversation row every second",
+    "Tasks stays responsive with long lists, and Chat does less work while replies stream.",
+    "Catching up no longer shows a decades-old start date when a recording was made before the wearable's clock was ever set",
+    "Scrolling further down your conversations and opening a long conversation no longer pause the app while the next page loads",
+    "Improved responsiveness when browsing long task lists and loading app chat history."
+  ]
+}

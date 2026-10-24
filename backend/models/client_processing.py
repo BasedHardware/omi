@@ -186,7 +186,9 @@ class ProjectedStructure(BaseModel):
 
     title: _Heading
     overview: _Overview = ''
-    emoji: _Emoji = '🧠'
+    # NEUTRAL_EMOJI (models.conversation_emoji): a projection that omitted the
+    # emoji is stamped neutral, not the "unset" brain sentinel.
+    emoji: _Emoji = '💬'
     category: CategoryEnum = CategoryEnum.other
     sections: list[ProjectedSection] = Field(default_factory=list[ProjectedSection], max_length=12)
     events: list[ProjectedEvent] = Field(default_factory=list[ProjectedEvent], max_length=12)
