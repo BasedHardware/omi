@@ -335,10 +335,10 @@ async def test_released_segment_retry_cannot_consume_stale_attempt_context(monke
         scheduler.recover(time.time())
         second = asyncio.create_task(pump.run_once(maintain=False))
         for _ in range(500):
-            if pump._flight_segments.get('s0') == 2:
+            if store.rows['jobs', 's0']['state'] == 'leased' and store.rows['jobs', 's0']['token'] != old_token:
                 break
             await asyncio.sleep(0.01)
-        assert pump._flight_segments['s0'] == 2
+        assert store.rows['jobs', 's0']['token'] != old_token
         await asyncio.sleep(0.05)
         assert decoded == ['s0']  # Replacement must not overwrite the old cache.
         release.set()
