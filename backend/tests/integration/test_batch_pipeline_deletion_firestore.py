@@ -437,6 +437,37 @@ def test_owner_id_artifact_fallback_pages_past_one_hundred_rows(state):
     assert len(erased) == 105 and not list(table.stream())
 
 
+def test_stale_owner_mismatch_scan_cannot_repark_a_repaired_privacy_outbox(state, monkeypatch):
+    from utils.batch_pipeline import retention
+
+    store, uid, user, purge, erased = state
+    now = datetime.now(timezone.utc)
+    pending = now + timedelta(minutes=5)
+    reference = store.client.collection(f'{store.namespace}_artifacts').document('repair-race')
+    reference.set(
+        {
+            'owner_id': uid,
+            'owner_key': 'wrong-key',
+            'conversation_ids': ['source'],
+            'uri': 'gs://synthetic/late-upload',
+            'cleanup_after': now,
+            'write_pending_until': pending,
+        }
+    )
+    stale = reference.get()
+    delete_source(user)
+    assert purge('source') == 1
+    monkeypatch.setattr(retention.queries, 'due_artifacts', lambda *args: [stale])
+    assert cleanup_completed_artifacts(store, now, delete_uri=lambda *args: pytest.fail('stale delete')) == 0
+    current = reference.get().to_dict()
+    assert current['owner_key'] == privacy_owner_key(uid)
+    assert current['erasure_requested'] is True and current['cleanup_after'] == pending
+    monkeypatch.setattr(retention.queries, 'due_artifacts', lambda *args: [reference.get()])
+    assert cleanup_completed_artifacts(store, pending, delete_uri=lambda owner, uri: erased.append(uri)) == 1
+    assert erased == ['gs://synthetic/late-upload', 'gs://synthetic/late-upload']
+    assert not reference.get().exists
+
+
 def test_inflight_object_reference_survives_until_final_erasure(state):
     store, uid, user, purge, _ = state
     queue = Scheduler(store)
