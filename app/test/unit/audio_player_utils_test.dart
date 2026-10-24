@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:isolate';
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
@@ -227,6 +228,20 @@ void main() {
       expect(ByteData.sublistView(wav).getUint32(40, Endian.little), 8,
           reason: 'both files\' PCM, nothing from the device');
       expect(wav.sublist(44), [1, 1, 2, 2, 3, 3, 4, 4]);
+      expect(player.lastWorkerIsolateName, equals('writeRecordingWav'));
+      expect(player.lastWorkerIsolateName, isNot(equals(Isolate.current.debugName)));
+    });
+
+    test('decodes single WAL audio file on a background isolate', () async {
+      final wal = await pcmFile(2500, [5, 6, 7, 8]);
+      final path = await player.ensureAudioFileExists(wal);
+
+      expect(path, isNotNull);
+      final wav = await File(path!).readAsBytes();
+      expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF');
+      expect(wav.sublist(44), [5, 6, 7, 8]);
+      expect(player.lastWorkerIsolateName, equals('decodeWalAudio'));
+      expect(player.lastWorkerIsolateName, isNot(equals(Isolate.current.debugName)));
     });
 
     test('returns null when no file in the recording has audio on the phone', () async {
