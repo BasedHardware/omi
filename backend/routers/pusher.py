@@ -2,9 +2,11 @@ import hashlib
 import struct
 import asyncio
 import time
+import uuid
 from collections import deque
 from typing import Any, Awaitable, Deque, Dict, List, Optional, Tuple, cast
 from config.batch_pipeline import live_record_admission_enabled
+from config.audio_outbox import enabled as audio_outbox_enabled
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -29,6 +31,7 @@ from utils.pusher_protocol import (
     TranscriptQueueItem,
     append_bounded,
     audio_timeline_ack_frame,
+    audio_custody_ack_frame,
     bound_private_pending,
     extend_bounded,
     frame_header,
@@ -54,6 +57,8 @@ from utils.webhooks import (
     get_audio_bytes_webhook_seconds,
 )
 from utils.other.storage import upload_audio_chunks_batch
+from utils.other.audio_outbox import AudioReceipt, commit_pcm, read_pcm
+from utils.other.audio_outbox_metrics import BACKPRESSURE, CUSTODY_FAILURES, WOULD_DROP
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
     OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL,
@@ -148,6 +153,7 @@ async def _websocket_util_trigger(
     sample_rate: int = 8000,
     client_kind: str = 'unknown',
     audio_timeline: Optional[int] = None,
+    audio_custody: Optional[int] = None,
 ) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
     resolved_client_kind = bounded_client_kind(client_kind)
@@ -161,6 +167,9 @@ async def _websocket_util_trigger(
 
     if not MIN_SAMPLE_RATE <= sample_rate <= MAX_SAMPLE_RATE:
         await websocket.close(code=1008, reason='Invalid sample rate')
+        return
+    if audio_custody not in (None, 1):
+        await websocket.close(code=1008, reason='Unsupported audio custody version')
         return
 
     # Audio-timeline v2 opt-in: only acknowledged connections get v2
@@ -227,6 +236,125 @@ async def _websocket_util_trigger(
     private_cloud_queue: deque[PrivateCloudChunk] = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
+    durable_audio = audio_outbox_enabled()
+    # The bounded lane holds generation-pinned references, never the only PCM.
+    # A crash after commit but before queue.put is recoverable via raw-live's
+    # existing per-conversation playback index, independent of this process.
+    durable_queue: asyncio.Queue[AudioReceipt] = asyncio.Queue(maxsize=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
+    custody_root = uuid.uuid4().hex
+
+    async def process_durable_private_cloud_queue() -> None:
+        # Pending conversations hold only receipts. Hydrate at most one bounded
+        # contiguous batch for the legacy playback projection, preserving the
+        # old 60-second write cadence without retaining 60 seconds of PCM.
+        pending_refs: dict[str, list[AudioReceipt]] = {}
+        queued_at: dict[str, float] = {}
+        identity_refreshed: set[str] = set()
+
+        async def flush_refs(conv_id: str) -> None:
+            refs = pending_refs.pop(conv_id, [])
+            queued_at.pop(conv_id, None)
+            if not refs:
+                return
+            try:
+                chunks: List[Dict[str, Any]] = []
+                for ref in refs:
+                    pcm = await run_blocking(storage_executor, read_pcm, uid, ref)
+                    chunks.append(
+                        {
+                            'data': pcm,
+                            'timestamp': ref.start,
+                            'span': {
+                                'start': ref.start,
+                                'samples': ref.samples,
+                                'sample_rate': ref.sample_rate,
+                            },
+                        }
+                    )
+                await run_blocking(
+                    storage_executor,
+                    upload_audio_chunks_batch,
+                    chunks,
+                    uid,
+                    conv_id,
+                    cached_protection_level,
+                    sample_rate=sample_rate,
+                )
+                audio_files = await run_blocking(
+                    storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
+                )
+                if audio_files:
+                    applied = await run_blocking(
+                        storage_executor,
+                        conversations_db.update_conversation,
+                        uid,
+                        conv_id,
+                        {'audio_files': [af.model_dump() for af in audio_files]},
+                        record_owner_out=record_owners if len(record_owners) < 128 else None,
+                    )
+                    if applied:
+                        schedule_person_voice_learning_retry(uid, conv_id)
+                        if len(identity_refreshed) < 128:
+                            identity_refreshed.add(conv_id)
+            except Exception:
+                # Projection is optional for custody: media AND its exact
+                # manifest survive in remote storage and are discoverable
+                # by raw-live playback after restart/reconnect.
+                fail_recording(conv_id)
+                CUSTODY_FAILURES.labels(stage='projection').inc()
+                record_fallback(
+                    component='pusher',
+                    from_mode='private_cloud_sync',
+                    to_mode='raw_audio',
+                    reason='other',
+                    outcome='degraded',
+                    log=logger,
+                )
+                logger.warning('Durable audio projection deferred; archive receipt retained')
+
+        while websocket_active or not durable_queue.empty() or pending_refs or record_close_requests:
+            await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
+            while not durable_queue.empty():
+                ref = durable_queue.get_nowait()
+                conv_id = ref.conversation_id
+                if conv_id is not None:
+                    refs = pending_refs.get(conv_id, [])
+                    if refs:
+                        end = refs[-1].start + refs[-1].samples / refs[-1].sample_rate
+                        total_bytes = (sum(r.samples for r in refs) + ref.samples) * 2
+                        if (
+                            abs(ref.start - end) > AUDIO_TIMELINE_CONTINUITY_TOLERANCE
+                            or len(refs) >= 60
+                            or total_bytes > BUFFERED_AUDIO_MAX_BYTES
+                        ):
+                            await flush_refs(conv_id)
+                    elif len(pending_refs) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                        BACKPRESSURE.labels(stage='pending_refs').inc()
+                        WOULD_DROP.labels(stage='pending_refs').inc()
+                        await flush_refs(next(iter(pending_refs)))
+                    pending_refs.setdefault(conv_id, []).append(ref)
+                    queued_at.setdefault(conv_id, time.monotonic())
+                durable_queue.task_done()
+            for conv_id, refs in list(pending_refs.items()):
+                if (
+                    not websocket_active
+                    or conv_id in record_close_requests
+                    or time.monotonic() - queued_at[conv_id] >= PRIVATE_CLOUD_BATCH_MAX_AGE
+                    or sum(r.samples / r.sample_rate for r in refs) >= PRIVATE_CLOUD_CHUNK_DURATION
+                ):
+                    await flush_refs(conv_id)
+            for conv_id in list(record_close_requests):
+                if (
+                    conv_id not in failed_recordings
+                    and not record_upload_failed
+                    and (live_record_admission_enabled() or conv_id in record_owners)
+                ):
+                    await run_blocking(db_executor, conversations_db.seal_record_audio, uid, conv_id)
+                record_owners.pop(conv_id, None)
+                record_close_requests.discard(conv_id)
+        if identity_refreshed:
+            schedule_completed_identity_retries(uid, identity_refreshed)
+
     # (start_wall, end_wall, sha256) of v2 runs whose GCS upload SUCCEEDED, for
     # reconciling replays that reach past the live buffer. Entries are appended
     # by the upload task after `upload_audio_chunks_batch` returns, so a chunk
@@ -256,6 +384,10 @@ async def _websocket_util_trigger(
         """
         nonlocal websocket_active
         nonlocal application_failed, record_upload_failed
+
+        if durable_audio:
+            await process_durable_private_cloud_queue()
+            return
 
         # Pending batches keyed by conversation_id
         pending: Dict[str, Dict[str, Any]] = {}
@@ -654,6 +786,7 @@ async def _websocket_util_trigger(
         private_cloud_sync_buffer = bytearray()
         private_cloud_chunk_start_time: Optional[float] = None
         current_conversation_id: Optional[str] = None
+        custody_sequence = 0
         # Audio-timeline v2 continuity for this socket: the projected end of
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
@@ -661,6 +794,8 @@ async def _websocket_util_trigger(
 
         def _queue_private_cloud_chunk() -> None:
             nonlocal record_upload_failed
+            if durable_audio:
+                return
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
                 return
             if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
@@ -917,6 +1052,32 @@ async def _websocket_util_trigger(
                     buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                     audio_data = data[12:]
 
+                    if durable_audio and private_cloud_sync_enabled and audio_data:
+                        # Do this BEFORE trimming duplicate/overlapping runs or
+                        # touching any lossy derivative (apps, webhooks, PCM
+                        # projection). A failed commit leaves this frame
+                        # unacknowledged; receive stops and listen retains it.
+                        receipt = await run_blocking(
+                            storage_executor,
+                            commit_pcm,
+                            uid,
+                            bytes(audio_data),
+                            current_conversation_id,
+                            buffer_start_timestamp,
+                            sample_rate,
+                            custody_root,
+                            custody_sequence,
+                            data_protection_level=cached_protection_level,
+                        )
+                        custody_sequence += 1
+                        if audio_custody == 1:
+                            await websocket.send_bytes(audio_custody_ack_frame(receipt.to_dict()))
+                        if current_conversation_id:
+                            if durable_queue.full():
+                                BACKPRESSURE.labels(stage='pusher_queue').inc()
+                                WOULD_DROP.labels(stage='pusher_queue').inc()
+                            await durable_queue.put(receipt)
+
                     if audio_timeline_v2:
                         # v2: the timestamp is the projected start of this
                         # run's first sample. Compare against the last accepted
@@ -973,7 +1134,7 @@ async def _websocket_util_trigger(
                         extend_bounded(audiobuffer, audio_data, 'audio_webhook_buffer', audio_budget)
 
                     # Private cloud sync - queue chunks for background processing
-                    if private_cloud_sync_enabled and current_conversation_id:
+                    if private_cloud_sync_enabled and current_conversation_id and not durable_audio:
                         if private_cloud_chunk_start_time is None:
                             # Use timestamp from first buffer of this 5-second chunk
                             private_cloud_chunk_start_time = buffer_start_timestamp
@@ -1126,5 +1287,6 @@ async def websocket_endpoint_trigger(
     sample_rate: int = 8000,
     client_kind: str = 'unknown',
     audio_timeline: Optional[int] = None,
+    audio_custody: Optional[int] = None,
 ) -> None:
-    await _websocket_util_trigger(websocket, uid, sample_rate, client_kind, audio_timeline)
+    await _websocket_util_trigger(websocket, uid, sample_rate, client_kind, audio_timeline, audio_custody)

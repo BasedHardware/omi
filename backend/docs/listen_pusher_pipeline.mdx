@@ -6,6 +6,18 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
+## Durable audio outbox (default on)
+
+Consented raw capture and pusher PCM require immutable media plus a
+generation-pinned frame manifest before relinquishing custody. Listen gates
+transcript commits and pusher sends on its archive barrier. Pusher queues
+bounded durable references; overflow applies backpressure or flushes an older
+projection without deleting its archived bytes. Raw capacity/upload failures
+retain uncommitted packs. `audio_custody` events (and opt-in pusher opcode 203)
+are audio receipts; `capture_committed` remains transcript coverage.
+`AUDIO_DURABLE_OUTBOX_ENABLED=false` is the emergency legacy rollback.
+See [custody, recovery, metrics and acceptance](runbooks/audio-durable-outbox.md).
+
 Sync redirect hydration reuses the survivor's raw snapshot and update-time
 within one owner read. A bridge with no donor lineage reuses metadata before
 any external effect; donor reads, transfer, retraction, audio copying and receipt writes retain

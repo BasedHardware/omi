@@ -35,7 +35,7 @@ def list_packs(bucket, uid: str, conversation_id: str):
             start, end = float(metadata['capture_start']), float(metadata['capture_end'])
             if int(metadata['gap_count']) != 0 or end <= start or int(metadata['channels']) != 1:
                 continue
-            if metadata['codec'] not in {'opus', 'flac'}:
+            if metadata['codec'] not in {'opus', 'flac', 'pcm16', 'pcm8'}:
                 continue
             if metadata.get('source_layout', 'mono') != 'mono':
                 continue

@@ -291,6 +291,7 @@ class SequencedWebSocket:
 
 @pytest.fixture
 def raced_pusher_session(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     """Drive the pusher's private-cloud worker where update_conversation hits
     the read-then-delete race (False) on the first flush."""
     import routers.pusher as pusher

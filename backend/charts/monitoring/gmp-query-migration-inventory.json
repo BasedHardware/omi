@@ -1046,6 +1046,20 @@
       "scope": "explicit-bridge"
     },
     {
+      "expression": "(sum(increase(omi_audio_custody_would_drop_total[5m])) or vector(0)) + (sum(increase(omi_audio_custody_failures_total[5m])) or vector(0)) + (sum(increase(pusher_queue_drops_total{queue=~\"private.*|audio.*\"}[5m])) or vector(0)) + (sum(increase(pusher_private_cloud_upload_drops_total[5m])) or vector(0))",
+      "file": "alerts/pusher.json",
+      "issues": [],
+      "metrics": [
+        "omi_audio_custody_failures_total",
+        "omi_audio_custody_would_drop_total"
+      ],
+      "owner_title": "Audio custody - prevented drop or archive failure",
+      "owner_uid": "omi-audio-custody-pressure",
+      "panel": null,
+      "pointer": "/data/0/model/expr",
+      "scope": "normalized-omi-consumer-source-review"
+    },
+    {
       "expression": "sum(increase(omi_journey_terminal_total{journey=\"chat_response\",outcome=~\"success|failure\"}[30m]))",
       "file": "alerts/resilience.json",
       "issues": [],
@@ -3130,7 +3144,7 @@
   ],
   "counts": {
     "explicit_bridge": 23,
-    "query_consumers": 206
+    "query_consumers": 207
   },
   "schema_version": 1,
   "source": "repository, not live Grafana export"

@@ -101,6 +101,7 @@ def buckets(monkeypatch):
     monkeypatch.setattr(storage, 'syncing_local_bucket', 'staging')
     monkeypatch.setattr(storage.users_db, 'get_data_protection_level', lambda uid: 'standard')
     monkeypatch.setattr(storage.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
+    monkeypatch.setattr(storage.conversation_tombstones, 'is_deleted', lambda *args: False)
     return result
 
 
@@ -341,6 +342,7 @@ async def test_retirement_parts_commit_before_minute_pcm_flush(monkeypatch, buck
 
 
 async def test_live_admission_is_session_stable_across_cohort_cache_expiry(monkeypatch):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     """A TTL miss mid-connection must not drop archive packets (Codex P2)."""
     calls = {'LIVE': 0}
 
@@ -420,6 +422,7 @@ async def test_live_pack_tail_and_metadata(monkeypatch, buckets):
 
 @pytest.mark.asyncio
 async def test_live_kill_switch_writes_nothing_despite_consent(monkeypatch, buckets):
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
     monkeypatch.setenv('AUDIO_ARCHIVE_LIVE_ENABLED', 'false')
     host = SimpleNamespace(
         private_cloud_sync_enabled=True,
@@ -459,7 +462,7 @@ async def test_identical_silence_at_different_times_is_not_deduplicated(monkeypa
     for timestamp in (1000, 1060):
         await archive.append(b'identical-silence', 'conversation', timestamp, 160)
         await archive.close()
-    blobs = list(buckets['canonical'].blobs.values())
+    blobs = [blob for blob in buckets['canonical'].blobs.values() if blob.name.startswith('raw-live/')]
     assert len(blobs) == 2
     assert blobs[0].data == blobs[1].data
     assert blobs[0].metadata['capture_start'] != blobs[1].metadata['capture_start']
@@ -495,12 +498,13 @@ async def test_archive_failure_retains_pcm_path(monkeypatch, buckets):
     def unavailable(*args, **kwargs):
         raise OSError('archive unavailable')
 
-    monkeypatch.setattr(live_audio_archive, 'archive_capture_bytes', unavailable)
+    monkeypatch.setattr(live_audio_archive, 'commit_capture', unavailable)
     host.spawn = lambda coroutine, **kwargs: asyncio.create_task(coroutine)
     archive = LiveAudioArchive(host)
     await archive.append(b'unchanged-packet', 'conversation', 1000, 160)
-    await archive.close()
-    assert archive.failed and not archive.packs
+    with pytest.raises(OSError):
+        await archive.close()
+    assert archive.failed and archive.uncommitted
     chunk = {'timestamp': 1000, 'data': b'\x01\x00' * 160, 'span': {'sample_rate': 16000, 'samples': 160}}
     paths = storage.upload_audio_chunks_batch([chunk], 'owner', 'conversation', sample_rate=16000)
     assert paths[0].startswith('chunks/owner/conversation/')

@@ -218,6 +218,7 @@ def delete_all_user_storage_objects(uid: str) -> int:
                     'diagnostics',
                     'raw-mobile-batch',
                     'raw-live',
+                    'audio-outbox',
                     'raw-sync',
                 )
             ),
@@ -1128,7 +1129,7 @@ def delete_conversation_audio_files(uid: str, conversation_id: str, *, merged_in
     bucket_names = {private_cloud_sync_bucket, os.getenv('BUCKET_AUDIO_DERIVED', '').strip()}
     for bucket_name in filter(None, bucket_names):
         bucket = _get_storage_client().bucket(bucket_name)
-        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live'):
+        for prefix in ('chunks', 'audio', 'merged', 'playback', 'raw-live', 'audio-outbox'):
             _delete_owner_bucket_prefix(bucket, f'{prefix}/{uid}/{conversation_id}/')
         if bucket_name == private_cloud_sync_bucket:
             # Original sync files may span conversations; deleting a linked
@@ -2354,6 +2355,12 @@ def archive_capture_bytes(
     blob = bucket.blob(path)
     blob.metadata = provenance(raw, {**metadata, 'encrypted': str(encrypted).lower()})
     with owner_storage_write_gate(uid, bucket):
+        if (
+            metadata.get('custody_schema') == 'audio_custody_v1'
+            and metadata.get('conversation_id')
+            and conversation_tombstones.is_deleted(uid, str(metadata['conversation_id']))
+        ):
+            raise audio_packs.CaptureDeleted('audio custody refused by conversation deletion intent')
         try:
             blob.upload_from_string(
                 payload, content_type='application/octet-stream', if_generation_match=0, timeout=10, retry=None

@@ -72,6 +72,13 @@ CONV2 = 'conv-at-2'
 T0 = 1_700_000_000.0
 
 
+@pytest.fixture(autouse=True)
+def emergency_timeline_baseline(monkeypatch):
+    # This suite compares the historical timeline placement algorithms.
+    # Custody's default-on fault matrix lives in test_audio_durable_outbox.py.
+    monkeypatch.setenv('AUDIO_DURABLE_OUTBOX_ENABLED', 'false')
+
+
 @pytest.fixture
 def anyio_backend():
     return 'asyncio'
