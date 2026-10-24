@@ -128,11 +128,16 @@ describe('PlansSheet pending cancellation', () => {
     expect(onOpenChange).not.toHaveBeenCalledWith(false);
   });
 
-  it('surfaces a 409 and any other checkout failure', async () => {
+  it('surfaces a checkout 409 as an existing subscription, and any other checkout failure', async () => {
     createCheckoutSession.mockRejectedValueOnce(new Error('API error: 409 Conflict'));
     renderSheet();
     fireEvent.click(await screen.findByRole('button', { name: 'Resubscribe' }));
-    expect(await screen.findByText('Resubscribe first to change plans.')).toBeTruthy();
+    expect(
+      await screen.findByText(
+        'You already have a subscription. Manage your existing subscription instead of starting a new checkout.',
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText('Resubscribe first to change plans.')).toBeNull();
 
     createCheckoutSession.mockRejectedValueOnce(new Error('network down'));
     fireEvent.click(screen.getByRole('button', { name: 'Resubscribe' }));

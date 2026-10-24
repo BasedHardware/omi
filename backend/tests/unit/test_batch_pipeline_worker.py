@@ -13,6 +13,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 
+from config import stt_cap_dispatch as cap_policy
 from config.batch_pipeline import worker_silence_disposition_enabled
 from config.batch_pipeline_providers import ProviderConfig, provider_config
 from diarizer import batch_pipeline, batch_pipeline_models
@@ -789,12 +790,18 @@ def test_worker_missing_authority_does_not_spend_at_cap(monkeypatch):
     assert not words.calls and not saved
 
 
+@pytest.mark.parametrize('scope', ['legacy', 'offline'])
 @pytest.mark.parametrize('enforce', [False, True])
 @pytest.mark.parametrize('recovery_allowed', [False, True])
-def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, enforce, recovery_allowed):
+def test_full_capture_retry_rechecks_cap_and_counts_actual_padding(monkeypatch, scope, enforce, recovery_allowed):
     from utils.batch_pipeline.contracts import HeldWork
 
-    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce))
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', str(enforce if scope == 'legacy' else False))
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', str(enforce if scope == 'offline' else False))
+    if scope == 'offline':
+        # Exercise the new boundary with both legacy selection fences closed.
+        monkeypatch.setenv('STT_CAP_DISPATCH_COHORT', 'off')
+        monkeypatch.setattr(cap_policy, '_BATCH_LANE_READY', False)
     calls, checks = [], []
 
     class Model:
@@ -1083,3 +1090,21 @@ def test_gpu_batch_outside_lane_does_not_require_cap_authority(monkeypatch, lane
     worker, words, saved, _, _, failures = setup_worker()
     worker.process_batch([item('a', 2)])
     assert words.calls == [[2]] and set(saved) == {'a'} and not failures
+
+
+@pytest.mark.parametrize('kill', [False, True])
+@pytest.mark.parametrize('authorized', [False, True])
+def test_offline_default_rechecks_gpu_spend_outside_legacy_scope(monkeypatch, kill, authorized):
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if kill else 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
+    worker, words, saved, _, _, failures = setup_worker()
+    authorize = Mock(side_effect=lambda ids: ids if authorized else set())
+    result = worker.process_batch([item('a', 2)], authorize_dispatch=authorize)
+    if kill or authorized:
+        assert words.calls == [[2]] and set(saved) == {'a'}
+    else:
+        assert words.calls == [] and not saved
+        assert result == [batch_pipeline.HeldWork('a')]
+    assert not failures
+    assert authorize.call_count == int(not kill)

@@ -20,7 +20,7 @@ void main() {
       cancelPendingPurchase(cancelAtPeriodEnd: false, currentPriceId: 'price_plus_month', priceId: 'price_plus_year'),
       CancelPendingPurchase.proceed,
     );
-    expect(isPendingCancelConflict(409), isTrue);
-    expect(isPendingCancelConflict(400), isFalse);
+    expect(isUpgradePendingCancelConflict(409), isTrue);
+    expect(isUpgradePendingCancelConflict(400), isFalse);
   });
 }

@@ -31,7 +31,7 @@ from PIL import Image
 from database.screen_frames import get_conversation_screen_frames, own_frames
 from database.users import get_meeting_note_screenshots_enabled
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-from utils.conversations.meeting_context import is_ai_agent_tile_name
+from utils.conversations.meeting_context import is_ai_agent_tile_name, strip_leading_tile_glyphs
 from utils.conversations.meeting_participants import looks_like_ai_agent_name
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.other.storage import configured_screen_frames_bucket, download_screen_frame_bytes
@@ -107,7 +107,10 @@ def load_screen_frame_evidence(uid: str, conversation_id: Optional[str]) -> tupl
 
 def _clean_name(raw: str, *, agents: bool = False) -> Optional[str]:
     """A human tile name, or with ``agents`` an AI-agent tile the roster also classifies as one."""
-    name = ' '.join(_NAME_DECORATION.sub('', raw).split()).strip(' •|*·-—')
+    # Tile-name OCR here comes from the same call UI as the OCR rows: the
+    # speaking-indicator glyph strip applies, or one screenshot's "IllNik
+    # Shevchenko" enters the roster beside the recovered "Nik Shevchenko".
+    name = ' '.join(_NAME_DECORATION.sub('', strip_leading_tile_glyphs(raw)).split()).strip(' •|*·-—')
     tokens = name.split()
     if not 1 <= len(tokens) <= 5 or len(name) > 60 or '@' in name or any(ch.isdigit() for ch in name):
         return None

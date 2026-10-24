@@ -333,7 +333,7 @@ def _update_subscription_from_session(uid: str, session: stripe.checkout.Session
 @fresh_reader
 def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     """
-    Attempts to reactivate a canceled subscription if possible.
+    Admit fresh checkout only after ruling out an existing Stripe subscription.
 
     When the local Firestore row is missing or stale (no ``stripe_subscription_id``),
     fall back to Stripe as the source of truth so a pending-cancellation
@@ -341,7 +341,8 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
     dropping into a fresh-checkout flow.
 
     Returns:
-        dict with reactivation details if successful, None otherwise
+        Reactivation details, or None when fresh checkout is safe. An existing
+        nonterminal subscription raises 409; an inconclusive check raises 503.
     """
     current_subscription = users_db.get_user_subscription(uid)
     recovered_from_stripe = False
@@ -362,13 +363,30 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
             )
             return None
 
+    # Organization grants store a one-time PaymentIntent in this legacy field;
+    # it is not a recurring subscription and must not be retrieved as one.
+    if current_subscription.stripe_subscription_id.startswith('pi_'):
+        return None
+
     try:
         # Retrieve current subscription from Stripe to check status
-        stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id)
+        try:
+            stripe_sub = stripe.Subscription.retrieve(current_subscription.stripe_subscription_id)
+        except stripe.InvalidRequestError as exc:
+            # Only a definitive absence from *retrieve* permits new checkout.
+            # A timeout, bad credentials, or a failed modify is not that proof.
+            if exc.code == 'resource_missing' and exc.http_status == 404:
+                return None
+            raise
         stripe_sub_dict = stripe_sub.to_dict()
+        status = stripe_sub_dict['status']
+        if not isinstance(status, str) or not status:
+            raise ValueError('Missing subscription status')
+        if status in stripe_utils.TERMINAL_SUBSCRIPTION_STATUSES:
+            return None
 
         # Check if subscription is active but scheduled to cancel
-        if stripe_sub_dict['status'] == 'active' and stripe_sub_dict.get('cancel_at_period_end') == True:
+        if status == 'active' and stripe_sub_dict.get('cancel_at_period_end') == True:
             current_price_id = stripe_sub_dict['items']['data'][0]['price']['id']
 
             # If resubscribing to the same plan, just remove cancellation
@@ -401,20 +419,22 @@ def _try_reactivate_subscription(uid: str, target_price_id: str) -> dict | None:
                     "message": f"Your subscription has been reactivated! No charge now - your plan will automatically renew on {next_billing}.",
                     "next_billing_date": stripe_sub_dict['current_period_end'],
                 }
-    except Exception as e:
-        logger.error(f"Error checking for reactivation: {e}")
-
-    if recovered_from_stripe:
-        record_fallback(
-            component='other',
-            from_mode='firestore_subscription',
-            to_mode='stripe_subscription',
-            reason='local_heal',
-            outcome='exhausted',
-            log=logger,
+        # Nonterminal Stripe state takes precedence over the projected Free
+        # plan, even when the root customer ID or local billing period is stale.
+        # Plan changes belong on the existing upgrade/management rail.
+        raise HTTPException(
+            status_code=409,
+            detail='You already have a subscription. Manage your existing subscription instead of starting a new checkout.',
         )
-
-    return None
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Provider errors may contain account data. Log only the failure type.
+        logger.error('Checkout subscription verification failed (%s)', type(exc).__name__)
+        raise HTTPException(
+            status_code=503,
+            detail="We couldn't verify your existing subscription. Please try again before starting checkout.",
+        ) from exc
 
 
 @router.get('/v1/payments/available-plans', response_model=AvailablePlansResponse)
