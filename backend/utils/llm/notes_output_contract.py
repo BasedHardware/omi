@@ -293,6 +293,7 @@ OUTPUT_RULES = '''OUTPUT CONTRACT
 - Return a specific title of at most 70 characters and 10 words. Never put the account owner's name in it.
 - Lead with a non-owner counterpart's name only when confident speaker evidence identifies them; otherwise lead
   with the topic. Likely identities are hedged in the body, never stated as certain in the title.
+- Return exactly one emoji that represents the conversation.
 - Title, overview, section bodies, participants, tasks and events use the packet's output_language.
 - Use the packet's LENGTH range; density is guidance, never permission to pad unsupported facts.
 - Every section body is a bullet list. Nest supporting details. Commitments belong only in action_items.

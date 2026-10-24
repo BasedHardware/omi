@@ -228,6 +228,8 @@ env:
     value: "300"
   - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
     value: "30"
+  - name: FSR_USAGE_MONTH_TOTAL_EPOCH
+    value: "v1"
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS

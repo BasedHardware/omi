@@ -67,18 +67,24 @@ async function openMonthly(): Promise<void> {
 }
 
 describe('PlanUsageTab checkout errors', () => {
-  it('maps a 409 to the resubscribe-first line', async () => {
-    const conflict = Object.assign(new Error('conflict'), {
-      response: { status: 409, data: { detail: 'pending cancellation' } }
-    })
-    startCheckout.mockRejectedValue(conflict)
+  it('shows resubscribe-first for an upgrade blocked by a pending cancellation', async () => {
+    startCheckout.mockResolvedValue({ kind: 'blocked' })
     await openMonthly()
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith('Checkout failed', {
-        tone: 'error',
-        body: 'Resubscribe first to change plans.'
-      })
+      expect(toast).toHaveBeenCalledWith('Resubscribe first to change plans.', { tone: 'error' })
     )
+  })
+
+  it('shows the existing-subscription line when checkout reports one', async () => {
+    startCheckout.mockResolvedValue({ kind: 'existing_subscription' })
+    await openMonthly()
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        'You already have a subscription. Manage your existing subscription instead of starting a new checkout.',
+        { tone: 'error' }
+      )
+    )
+    expect(toast).not.toHaveBeenCalledWith('Resubscribe first to change plans.', expect.anything())
   })
 
   it('shows the error message for any other checkout failure', async () => {

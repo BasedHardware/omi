@@ -15,9 +15,13 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
     private var recordingGeneration = UUID()
     private var archiveSessionID = ""
     private var isStarting = false
+    private var hasInputTap = false
     private var lastCapturedUptime: TimeInterval = 0
     private var captureHealthTimer: Timer?
     private var interruptionObserver: NSObjectProtocol?
+    private let permissionRequestOverride: ((@escaping (Bool) -> Void) -> Void)?
+    private let activateSessionOverride: (() throws -> Void)?
+    private let deactivateSession: () throws -> Void
 
 
     var session: WCSession
@@ -36,8 +40,18 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
     private var bufferStartTime: Date?
     private let bufferDuration: TimeInterval = 1.5 // 1.5 second chunks
     
-    init(session: WCSession = .default) {
+    init(
+        session: WCSession = .default,
+        permissionRequest: ((@escaping (Bool) -> Void) -> Void)? = nil,
+        activateSession: (() throws -> Void)? = nil,
+        deactivateSession: @escaping () throws -> Void = {
+            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        }
+    ) {
         self.session = session
+        self.permissionRequestOverride = permissionRequest
+        self.activateSessionOverride = activateSession
+        self.deactivateSession = deactivateSession
         super.init()
         self.session.delegate = self
         let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -62,10 +76,18 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         let attempt = UUID()
         recordingGeneration = attempt
 
-        // Check microphone permissions and setup audio session
-        checkMicrophonePermissionAndSetup { [weak self] success in
+        // Permission alone never activates the mic: first validate the admitted attempt and owner.
+        checkMicrophonePermission { [weak self] success in
             guard let self, self.isStarting, self.recordingGeneration == attempt else { return }
-            defer { self.isStarting = false }
+            defer {
+                self.isStarting = false
+                if !self.isRecording {
+                    self.releaseCaptureResources()
+                    do { try self.archive?.finish() }
+                    catch { self.recoveryError = String(localized: "watch.recovery.storageError") }
+                    self.drainRecoveryTransfers()
+                }
+            }
 
             if success {
                 let now = Date()
@@ -78,8 +100,12 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
                 do {
                     guard let archive = self.archive else { throw WatchRecordingError.storageFull }
                     self.archiveSessionID = try archive.begin(ownerUID: owner, startedAt: CheckedIntegerConversion.epochMs(now) / 1000)
+                    do { try self.activateAudioSession() }
+                    catch {
+                        self.recoveryError = String(localized: "watch.recovery.captureError")
+                        return
+                    }
                     guard self.setupAudioStreaming() else {
-                        try archive.finish()
                         self.recoveryError = String(localized: "watch.recovery.captureError")
                         return
                     }
@@ -112,6 +138,7 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         guard isRecording else {
             isStarting = false
             recordingGeneration = UUID()
+            releaseCaptureResources()
             return
         }
 
@@ -122,16 +149,7 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         isStreaming = false
         recordingGeneration = UUID()
 
-        // Stop audio streaming
-        inputNode?.removeTap(onBus: 0)
-        audioEngine?.stop()
-        inputNode = nil
-        audioEngine = nil
-
-        // Clean up resampling resources
-        audioConverter = nil
-        targetFormat = nil
-        detectedSampleRate = 0.0
+        releaseCaptureResources()
 
         // Send any remaining buffered data and final chunk
         sendFinalAudioChunk()
@@ -144,6 +162,26 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         catch { recoveryError = String(localized: "watch.recovery.storageError") }
         drainRecoveryTransfers()
         session.sendMessage(["method": "stopRecording"], replyHandler: nil)
+    }
+
+    /// End microphone ownership independently of pending file transfers. This
+    /// also runs after cancelled permission requests and failed engine setup.
+    private func releaseCaptureResources() {
+        if hasInputTap { inputNode?.removeTap(onBus: 0) }
+        hasInputTap = false
+        audioEngine?.stop()
+        inputNode = nil
+        audioEngine = nil
+        inputFormat = nil
+        audioConverter = nil
+        targetFormat = nil
+        detectedSampleRate = 0
+        isStreaming = false
+        do {
+            try deactivateSession()
+        } catch {
+            print("Watch microphone session deactivation failed: \(error)")
+        }
     }
 
     private func bufferAndSendAudioData(_ audioData: Data) {
@@ -217,27 +255,27 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         
     }
 
-    private func checkMicrophonePermissionAndSetup(completion: @escaping (Bool) -> Void) {
+    private func checkMicrophonePermission(completion: @escaping (Bool) -> Void) {
+        if let permissionRequestOverride {
+            permissionRequestOverride(completion)
+            return
+        }
         let audioSession = AVAudioSession.sharedInstance()
         
         let permissionStatus = audioSession.recordPermission
         
         switch permissionStatus {
         case .granted:
-            setupAudioSessionAfterPermission(completion: completion)
+            completion(true)
             
         case .denied:
             completion(false)
             
         case .undetermined:
             // Request permission
-            audioSession.requestRecordPermission { [weak self] granted in
+            audioSession.requestRecordPermission { granted in
                 DispatchQueue.main.async {
-                    if granted {
-                        self?.setupAudioSessionAfterPermission(completion: completion)
-                    } else {
-                        completion(false)
-                    }
+                    completion(granted)
                 }
             }
             
@@ -246,18 +284,14 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
         }
     }
     
-    private func setupAudioSessionAfterPermission(completion: @escaping (Bool) -> Void) {
-        let audioSession = AVAudioSession.sharedInstance()
-        
-        do {
-            try audioSession.setCategory(.playAndRecord, 
-                                       mode: .default,
-                                       options: [.mixWithOthers, .allowBluetooth])
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-            completion(true)
-        } catch {
-            completion(false)
+    private func activateAudioSession() throws {
+        if let activateSessionOverride {
+            try activateSessionOverride()
+            return
         }
+        let audioSession = AVAudioSession.sharedInstance()
+        try audioSession.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .allowBluetooth])
+        try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
     }
 
     func requestMicrophonePermissionOnly() {
@@ -348,14 +382,13 @@ class WatchAudioRecorderViewModel: NSObject, WatchRecorderControlling {
                 }
             }
 
+            hasInputTap = true
             try audioEngine?.start()
             isStreaming = true
             chunkIndex = 0
             return true
 
         } catch {
-            inputNode?.removeTap(onBus: 0)
-            audioEngine?.stop()
             print("Error details: \(error.localizedDescription)")
             return false
         }
