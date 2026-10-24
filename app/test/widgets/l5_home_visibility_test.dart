@@ -23,6 +23,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:visibility_detector/visibility_detector.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 import '../support/typed_conversation_screen.dart';
 import '../support/refactor_flag_adapter.dart';
 
@@ -55,7 +56,7 @@ Future<void> _loadFonts() async {
   ]) {
     final loader = FontLoader(family);
     for (final weight in ['REGULAR', 'MEDIUM', 'BOLD']) {
-      loader.addFont(rootBundle.load('assets/fonts/SFPRODISPLAY$weight.OTF'));
+      loader.addFont(sfProFont('SFPRODISPLAY$weight.OTF'));
     }
     await loader.load();
   }

@@ -118,3 +118,18 @@ def test_backend_registered_redis_scripts_are_rebound_to_fake(client, fake_redis
     redis_db._RATE_LIMIT_LUA(keys=['e2e:script-client-guard'], args=[60])
 
     assert fake_redis.get('e2e:script-client-guard') == b'1'
+
+
+def test_firestore_root_delete_preserves_children_without_recreating_root(fake_firestore):
+    user = fake_firestore.collection('users').document('root-delete-harness-check')
+    child = user.collection('conversations').document('kept')
+    user.set({'id': user.id})
+    child.set({'status': 'completed'})
+    user.delete()
+    assert not user.get().exists
+    assert child.get().to_dict() == {'status': 'completed'}
+    user.delete()  # Repeat deletion still preserves children without a root.
+    assert not user.get().exists
+    assert child.get().to_dict() == {'status': 'completed'}
+    child.delete()
+    user.delete()

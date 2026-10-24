@@ -221,9 +221,8 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     } else if (attentionWals.isNotEmpty) {
       title = l.syncCardNeedsAttention(groupRecordingBlocks(attentionWals).length);
       titleColor = Colors.orangeAccent;
-      // Only a recording whose retry budget is spent can still upload; the
-      // others are terminal, and a plain Sync skipped both kinds. Offer the
-      // button only when it can do something.
+      // A deliberate retry re-arms spent budgets and retained request refusals.
+      // Missing files and permanent audio/lookback verdicts stay excluded.
       if (p.retryableAttentionWals.isNotEmpty) {
         action = KeyedSubtree(
           key: const Key('offline_sync_card_retry_attention'),
@@ -634,7 +633,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
   /// go, Delete removes a recording nothing can move forward. Mixed or healthy blocks open.
   Widget _blockTrailing(RecordingBlock block, WalSyncDisplayState state) {
     if (state == WalSyncDisplayState.syncing) return const OmiSpinner(size: OmiSpinnerSize.small);
-    if (state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
+    if (block.wals.any((w) =>
+        !w.onDeviceOnly &&
+        (isRetryableSyncState(w.syncDisplayState) || w.syncDisplayState == WalSyncDisplayState.retrying))) {
       return OmiButton.secondary(
         label: context.l10n.tryAgain,
         size: OmiButtonSize.compact,
@@ -642,7 +643,9 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
           final sync = context.read<SyncProvider>();
           for (final wal in block.wals) {
             final s = wal.syncDisplayState;
-            if (s == WalSyncDisplayState.failed || s == WalSyncDisplayState.retrying) await sync.syncWal(wal);
+            if (!wal.onDeviceOnly && (isRetryableSyncState(s) || s == WalSyncDisplayState.retrying)) {
+              await sync.syncWal(wal);
+            }
           }
         },
       );
@@ -826,7 +829,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     if (state == WalSyncDisplayState.syncing) {
       return const OmiSpinner(size: OmiSpinnerSize.small);
     }
-    if (state == WalSyncDisplayState.failed || state == WalSyncDisplayState.retrying) {
+    if (!wal.onDeviceOnly && (isRetryableSyncState(state) || state == WalSyncDisplayState.retrying)) {
       return OmiButton.secondary(
         label: context.l10n.tryAgain,
         size: OmiButtonSize.compact,
@@ -846,14 +849,12 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
     return FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 12);
   }
 
-  /// Terminal states no upload can resolve. [WalSyncDisplayState.failed] is
-  /// deliberately absent: its retry budget is spent but a deliberate retry can
-  /// still succeed, so that row keeps its Retry.
+  /// Confirmed audio/window verdicts no upload can resolve. Spent budgets and
+  /// request refusals deliberately remain outside this set: they keep Retry.
   static bool _isUnsyncableState(WalSyncDisplayState state) =>
       state == WalSyncDisplayState.corrupted ||
       state == WalSyncDisplayState.outsideRecoveryWindow ||
-      state == WalSyncDisplayState.unsupportedAudio ||
-      state == WalSyncDisplayState.uploadRejected;
+      state == WalSyncDisplayState.unsupportedAudio;
 
   Future<void> _confirmDeleteWals(List<Wal> wals) async {
     final syncProvider = context.read<SyncProvider>();
