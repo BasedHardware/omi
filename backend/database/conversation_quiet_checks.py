@@ -92,7 +92,7 @@ def arm_quiet_check(
                     },
                 )
                 transaction.update(job_ref, {'quiet_timeout_seconds': quiet_timeout(timeout)})
-            return job | {'job_id': job_id, 'quiet_timeout_seconds': quiet_timeout(timeout), 'arm_outcome': 'reused'}
+            return job | {'job_id': job_id, 'quiet_timeout_seconds': quiet_timeout(timeout)}
         generation = int(job.get('dispatch_generation') or 0) + 1
         updated = {
             'kind': QUIET_CHECK_KIND,
@@ -114,16 +114,20 @@ def arm_quiet_check(
             },
         )
         transaction.set(job_ref, updated)
-        return updated | {'job_id': job_id, 'arm_outcome': 'rearmed' if job else 'created'}
+        return updated | {'job_id': job_id}
 
     return arm(client.transaction())
 
 
 def evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any = None) -> dict[str, Any]:
     try:
-        return _evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
-    finally:
+        result = _evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
+    except Exception:
         ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
+        raise
+    if result['status'] == 'stale':
+        ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
+    return result
 
 
 def _evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any = None) -> dict[str, Any]:

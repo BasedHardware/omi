@@ -412,7 +412,8 @@ def test_reconciler_owns_quiet_wakes_and_reports_failures(monkeypatch, fails):
     monkeypatch.setattr(quiet, 'run', run)
     result = service.reconcile_listen_finalization_jobs()
     run.assert_called_once_with('quiet-synthetic', 1, firestore_client=None)
-    assert result['enqueue_failed'] == int(fails)
+    assert result['error'] == int(fails)
+    assert result['enqueue_failed'] == 0
     assert result['requeued'] == 0
     assert result['advanced'] == int(not fails)
 
@@ -641,8 +642,6 @@ def test_replay_backoff_cannot_overwrite_newer_generation(store, monkeypatch):
 def test_repeated_arm_reuses_one_conversation_obligation(store):
     first = checks.arm_quiet_check('synthetic', 'old', 120, firestore_client=store)
     second = checks.arm_quiet_check('synthetic', 'old', 120, firestore_client=store)
-    assert first['arm_outcome'] == 'created'
-    assert second['arm_outcome'] == 'reused'
     assert first['job_id'] == second['job_id']
     assert _job(store)['dispatch_generation'] == 1
     assert 'arm_outcome' not in _job(store)

@@ -1,3 +1,6 @@
+from contextvars import ContextVar
+from threading import Barrier, Lock
+
 import pytest
 from unittest import mock
 from services import conversation_finalization
@@ -6,6 +9,9 @@ from services.conversation_finalization import reconcile_listen_finalization_job
 
 @pytest.fixture
 def mock_dependencies(monkeypatch):
+    monkeypatch.setattr(
+        conversation_finalization.quiet_checks_db, 'ensure_quiet_check_progress', mock.Mock(return_value=False)
+    )
     monkeypatch.setattr(
         conversation_finalization.jobs_db,
         'get_finalization_replay_oldest_overdue_age_seconds',
@@ -60,6 +66,7 @@ def test_reconcile_listen_finalization_jobs_disabled(mock_dependencies):
         'no_progress': 0,
         'retired': 0,
         'advanced': 0,
+        'error': 0,
     }
     mock_dependencies["publish_metrics"].assert_called_once()
     mock_dependencies["get_candidates"].assert_not_called()
@@ -96,6 +103,7 @@ def test_reconcile_listen_finalization_jobs_skips_invalid_job_id(mock_dependenci
         'no_progress': 0,
         'retired': 0,
         'advanced': 0,
+        'error': 0,
     }
     mock_dependencies["claim_replay"].assert_not_called()
     mock_dependencies["publish_metrics"].assert_called_once()
@@ -115,6 +123,7 @@ def test_reconcile_listen_finalization_jobs_claim_fails(mock_dependencies):
         'no_progress': 0,
         'retired': 0,
         'advanced': 0,
+        'error': 0,
     }
     mock_dependencies["publish_metrics"].assert_called_once()
 
@@ -136,6 +145,7 @@ def test_reconcile_listen_finalization_jobs_claim_not_queued(mock_dependencies):
         'no_progress': 0,
         'retired': 0,
         'advanced': 0,
+        'error': 0,
     }
     assert mock_dependencies["claim_replay"].call_count == 2
     mock_dependencies["enqueue_job"].assert_not_called()
@@ -157,6 +167,7 @@ def test_reconcile_listen_finalization_jobs_enqueue_fails(mock_dependencies):
         'no_progress': 0,
         'retired': 0,
         'advanced': 0,
+        'error': 0,
     }
     mock_dependencies["record_reconciliation"].assert_called_once_with('enqueue_failed')
     mock_dependencies["record_fallback"].assert_called_once()
@@ -177,6 +188,7 @@ def test_reconcile_listen_finalization_jobs_success(mock_dependencies):
         'no_progress': 0,
         'retired': 0,
         'advanced': 0,
+        'error': 0,
     }
     mock_dependencies["claim_replay"].assert_called_once_with("job1", stale_after="stale_after", firestore_client=None)
     mock_dependencies["enqueue_job"].assert_called_once_with("job1", 1)
@@ -203,6 +215,7 @@ def test_reconcile_skips_generation_already_dispatched_by_another_tick(mock_depe
         'no_progress': 0,
         'retired': 0,
         'advanced': 0,
+        'error': 0,
     }
     mock_dependencies['enqueue_job'].assert_not_called()
 
@@ -226,7 +239,10 @@ def test_quiet_replay_counts_actual_outcome(mock_dependencies, monkeypatch, outc
     result = reconcile_listen_finalization_jobs()
     assert result[key] == 1
     assert sum(result.values()) == 1
-    conversation_finalization.jobs_db.defer_finalization_replay.assert_called_once()
+    if key in {'stale', 'no_progress'}:
+        conversation_finalization.jobs_db.defer_finalization_replay.assert_called_once()
+    else:
+        conversation_finalization.jobs_db.defer_finalization_replay.assert_not_called()
 
 
 def test_replay_limit_environment_is_bounded(mock_dependencies, monkeypatch):
@@ -249,3 +265,41 @@ def test_explicit_limit_is_operator_rollback(mock_dependencies, monkeypatch):
     monkeypatch.setenv('LISTEN_FINALIZATION_RECONCILE_LIMIT', '2000')
     reconcile_listen_finalization_jobs(limit=100)
     mock_dependencies['get_candidates'].assert_called_once_with(limit=100, firestore_client=None)
+
+
+def test_quiet_replay_parallelism_is_bounded_and_preserves_context(mock_dependencies, monkeypatch):
+    monkeypatch.setenv('LISTEN_QUIET_REPLAY_CONCURRENCY', '2')
+    mock_dependencies['get_candidates'].return_value = [
+        {'job_id': f'quiet-{i}', 'kind': 'listen_quiet_check', 'dispatch_generation': 1} for i in range(4)
+    ]
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db, 'get_finalization_job', mock.Mock(return_value={'dispatch_generation': 2})
+    )
+    context = ContextVar('quiet_replay_test_context', default=None)
+    token = context.set('owner-context')
+    barrier = Barrier(2)
+    lock = Lock()
+    active = peak = 0
+    observed = []
+
+    def run(*args, **kwargs):
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            observed.append(context.get())
+        try:
+            barrier.wait(timeout=30)
+            return 'deferred'
+        finally:
+            with lock:
+                active -= 1
+
+    monkeypatch.setattr(conversation_finalization.quiet_finalization, 'run', run)
+    try:
+        result = reconcile_listen_finalization_jobs()
+    finally:
+        context.reset(token)
+    assert result['advanced'] == 4
+    assert peak == 2
+    assert observed == ['owner-context'] * 4

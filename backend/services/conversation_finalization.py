@@ -13,6 +13,7 @@ import os
 import time
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from google.api_core.exceptions import InvalidArgument
@@ -23,6 +24,7 @@ from database import conversation_quiet_checks as quiet_checks_db
 from database._client import is_document_size_limit_error
 from services.conversation_selfheal import STALE_AFTER, run_selfheal_tick
 from utils.conversations import quiet_finalization
+from utils.executors import submit_with_context
 from utils.cloud_tasks import (
     enqueue_listen_finalization_job,
     get_listen_finalization_tasks_max_attempts,
@@ -121,6 +123,42 @@ def reconcile_stale_in_progress_conversations(*, firestore_client: Any = None) -
     return combined
 
 
+def _reconcile_quiet_candidate(candidate: dict[str, Any], *, firestore_client: Any = None) -> str:
+    """One independent transaction/admission chain; no shared executor children."""
+    job_id = candidate['job_id']
+    outcome = 'error'
+    try:
+        status = quiet_finalization.run(
+            job_id, int(candidate['dispatch_generation']), firestore_client=firestore_client
+        )
+        if status == 'stale':
+            outcome = 'stale'
+        elif status in {'done', 'disabled', 'account_fenced', 'empty_deleted', quiet_finalization.DOCUMENT_SIZE_LIMIT}:
+            outcome = 'retired'
+        elif status == 'queued':
+            outcome = 'requeued'
+        else:
+            current = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
+            if current is None or current.get('status') == 'quiet_done':
+                outcome = 'retired'
+            elif current.get('dispatch_generation') != candidate.get('dispatch_generation'):
+                outcome = 'advanced'
+            else:
+                outcome = 'no_progress'
+    except Exception:
+        logger.exception('quiet finalization reconciliation failed')
+        try:
+            quiet_checks_db.ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
+        except Exception:
+            logger.exception('quiet finalization progress repair failed')
+    if outcome in {'stale', 'no_progress', 'error'}:
+        try:
+            jobs_db.defer_finalization_replay(candidate, firestore_client=firestore_client)
+        except Exception:
+            logger.exception('quiet finalization replay backoff failed')
+    return outcome
+
+
 def reconcile_listen_finalization_jobs(
     limit: int | None = None, *, firestore_client: Any = None
 ) -> dict[str, int | float]:
@@ -133,6 +171,7 @@ def reconcile_listen_finalization_jobs(
         'no_progress': 0,
         'retired': 0,
         'advanced': 0,
+        'error': 0,
     }
     try:
         recovery = jobs_db.recover_stranded_byok_jobs(firestore_client=firestore_client)
@@ -171,6 +210,32 @@ def reconcile_listen_finalization_jobs(
         _publish_job_metrics(firestore_client=firestore_client)
         return result | {'error': 1}
 
+    quiet_candidates = [
+        candidate
+        for candidate in candidates
+        if candidate.get('kind') == 'listen_quiet_check'
+        and isinstance(candidate.get('job_id'), str)
+        and candidate['job_id']
+    ]
+    if quiet_candidates:
+        try:
+            concurrency = max(1, min(16, int(os.getenv('LISTEN_QUIET_REPLAY_CONCURRENCY', '16'))))
+        except ValueError:
+            concurrency = 16
+        # The synchronous FSR callback owns one db_executor slot. Its bounded
+        # leaf pool never submits to that shared pool, so saturated shared DB
+        # workers cannot deadlock this fan-out. Joining drains all in-flight
+        # checks before the pass releases its FSR admission.
+        with ThreadPoolExecutor(
+            max_workers=min(concurrency, len(quiet_candidates)), thread_name_prefix='quiet-replay'
+        ) as pool:
+            futures = [
+                submit_with_context(pool, _reconcile_quiet_candidate, candidate, firestore_client=firestore_client)
+                for candidate in quiet_candidates
+            ]
+            for future in futures:
+                result[future.result()] += 1
+
     for candidate in candidates:
         try:
             job_id = candidate.get('job_id')
@@ -188,28 +253,6 @@ def reconcile_listen_finalization_jobs(
                     result['enqueue_failed'] += 1
                 continue
             if candidate.get('kind') == 'listen_quiet_check':
-                try:
-                    outcome = quiet_finalization.run(
-                        job_id, int(candidate['dispatch_generation']), firestore_client=firestore_client
-                    )
-                    current = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
-                    if outcome == 'stale':
-                        result['stale'] += 1
-                    elif current is None or current.get('status') == 'quiet_done':
-                        result['retired'] += 1
-                    elif outcome == 'queued':
-                        result['requeued'] += 1
-                    elif current.get('dispatch_generation') != candidate.get('dispatch_generation'):
-                        result['advanced'] += 1
-                    else:
-                        result['no_progress'] += 1
-                except Exception:
-                    logger.exception('quiet finalization reconciliation failed')
-                    try:
-                        quiet_checks_db.ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
-                    except Exception:
-                        logger.exception('quiet finalization progress repair failed')
-                    result['enqueue_failed'] += 1
                 continue
             try:
                 claimed = jobs_db.claim_finalization_replay(
@@ -243,7 +286,11 @@ def reconcile_listen_finalization_jobs(
             record_capture_finalization_reconciliation('requeued')
             LISTEN_FINALIZATION_RETRIES_TOTAL.inc()
         finally:
-            if isinstance(candidate.get('job_id'), str) and candidate['job_id']:
+            if (
+                candidate.get('kind') != 'listen_quiet_check'
+                and isinstance(candidate.get('job_id'), str)
+                and candidate['job_id']
+            ):
                 try:
                     jobs_db.defer_finalization_replay(candidate, firestore_client=firestore_client)
                 except Exception:

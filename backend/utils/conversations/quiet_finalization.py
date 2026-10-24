@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 from google.api_core.exceptions import InvalidArgument
-from prometheus_client import Counter
 
 from config.listen_quiet_finalization import enabled
 from database import conversation_quiet_checks as checks_db
@@ -24,11 +23,6 @@ from utils.observability.fallback import record_fallback
 logger = logging.getLogger(__name__)
 
 DOCUMENT_SIZE_LIMIT = 'document_size_limit'
-QUIET_CHECK_ARMS = Counter(
-    'listen_quiet_check_arms_total',
-    'Quiet check arm calls by committed conversation obligation outcome; compare with omi_listen_session_policy_total',
-    ['outcome'],
-)
 
 
 def _dispatch(check: dict[str, Any]) -> None:
@@ -59,12 +53,10 @@ def arm(
     uid: str, conversation_id: str, timeout: float, *, requires_byok: bool = False, firestore_client: Any = None
 ) -> None:
     if not enabled():
-        QUIET_CHECK_ARMS.labels(outcome='disabled').inc()
         return
     check = checks_db.arm_quiet_check(
         uid, conversation_id, timeout, requires_byok=requires_byok, firestore_client=firestore_client
     )
-    QUIET_CHECK_ARMS.labels(outcome=check.get('arm_outcome', 'unknown') if check is not None else 'ineligible').inc()
     if check is not None:
         _dispatch(check)
 
