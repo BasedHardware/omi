@@ -23,6 +23,7 @@ class FinalizationFailureReason(str, Enum):
 
     memory_fence = 'memory_fence'
     memory_config = 'memory_config'
+    byok_provider = 'byok_provider'
     provider = 'provider'
     stale = 'stale'
     processing = 'processing'
@@ -84,6 +85,12 @@ def classify_finalization_failure(error: BaseException) -> FinalizationFailureRe
             return FinalizationFailureReason.memory_fence
         if error.status_code == 503 and detail in _MEMORY_CONFIG_DETAILS:
             return FinalizationFailureReason.memory_config
+        # The composition boundary already classified this failure as the
+        # user's own provider account state (detail code byok_*). Dashboards
+        # and alerts must be able to exclude it from server-fault counts.
+        detail_code = detail.get('code') if isinstance(detail, dict) else None
+        if isinstance(detail_code, str) and detail_code.startswith('byok_'):
+            return FinalizationFailureReason.byok_provider
 
     if (
         type(error).__name__ == 'ConversationFinalizationError'

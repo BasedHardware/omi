@@ -111,6 +111,7 @@ _SYS_MODULE_NAMES = [
     "utils",
     "utils.model_text",
     "utils.user_clock",
+    "utils.speaker_display",
     "utils.notifications",
     "utils.byok",
     "utils.llm",
@@ -282,6 +283,9 @@ sys.modules["utils.llm"].__path__ = [str(BACKEND_DIR / "utils" / "llm")]
 _stub_package("utils.conversations")
 _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
 _load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
+# models.transcript_segment imports SpeakerLabeler at module scope; the stubbed
+# utils package has an empty __path__, so load the real stdlib-only module first.
+_load_module_from_file("utils.speaker_display", BACKEND_DIR / "utils" / "speaker_display.py")
 
 # Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")

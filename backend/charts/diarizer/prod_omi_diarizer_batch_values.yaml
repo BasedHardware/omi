@@ -15,8 +15,10 @@ gateway:
 # Replace the inherited embedding affinity entirely. Both label and taint
 # isolate batch capacity from existing embedding and other GPU workloads.
 affinity: null
+# No cloud.google.com/gke-nodepool pin: diarizer-batch-pool and its Spot
+# sibling share the service/env labels and omi.ai taints, so the autoscaler
+# can place replicas on Spot first while the on-demand pool stays the fallback.
 nodeSelector:
-  cloud.google.com/gke-nodepool: diarizer-batch-pool
   service: diarizer-batch
   env: prod
 tolerations:

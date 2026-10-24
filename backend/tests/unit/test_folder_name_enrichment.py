@@ -218,12 +218,12 @@ class TestAddSpeakerNames:
             {'transcript_segments': [{'text': 'hi', 'is_user': False, 'person_id': 'unknown_p', 'speaker_id': 3}]}
         ]
         render.populate_speaker_names('uid1', conversations)
-        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 3'
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker A'
 
     def test_no_person_id_no_is_user_falls_back_to_speaker_id(self, render):
         conversations = [{'transcript_segments': [{'text': 'hi', 'speaker_id': 2}]}]
         render.populate_speaker_names('uid1', conversations)
-        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker 2'
+        assert conversations[0]['transcript_segments'][0]['speaker_name'] == 'Speaker A'
 
     def test_missing_speaker_id_renders_unknown_speaker(self, render):
         conversations = [{'transcript_segments': [{'text': 'hi'}]}]

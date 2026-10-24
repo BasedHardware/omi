@@ -39,6 +39,7 @@ from database import action_items as action_items_db
 from database import episodes as episodes_db
 from database import notifications as notification_db
 from database import users as users_db
+from database.auth import get_user_name
 from utils.episodes import moment_render, boundary_runtime
 from utils.episodes.output_language import resolved_invoke
 from utils.episodes import client_gate, incremental, metrics, policy
@@ -63,6 +64,7 @@ class Collaborators:
     firestore_client: Any = None
     saved_tasks: Optional[Callable[[str, str], list[dict]]] = None
     people_names: Optional[Callable[[str, list[str]], dict[str, str]]] = None
+    owner_name: Optional[Callable[[str], Optional[str]]] = None
     now: Optional[Callable[[], datetime]] = None
     extras: dict[str, Any] = field(default_factory=dict)
 
@@ -111,6 +113,17 @@ def _named_segments(uid: str, segments: Sequence[Mapping[str, Any]], c: Collabor
         except Exception as error:
             logger.warning('event=episode_moment people_lookup_failed exception_type=%s', type(error).__name__)
     return moment_render.name_segments(segments, names)
+
+
+def _owner_name(uid: str, c: Collaborators) -> Optional[str]:
+    """The owner's display name for moment dialogue labels; never blocks a moment."""
+    if c.owner_name is not None:
+        return c.owner_name(uid)
+    try:
+        return get_user_name(uid, use_default=False)
+    except Exception as error:
+        logger.warning('event=episode_moment owner_name_failed exception_type=%s', type(error).__name__)
+        return None
 
 
 def _empty_episode(moment: MomentInput, now: datetime) -> dict[str, Any]:
@@ -463,7 +476,9 @@ def _record_moment_once(uid: str, moment: MomentInput, c: Collaborators) -> str:
         applied_until = float((episode.get('applied') or {}).get(moment.conversation_id, -1.0))
     segments = [s for s in moment.segments if _segment_end(s) > applied_until and str(s.get('text') or '').strip()]
     named = _named_segments(uid, segments, c)
-    text = incremental.render_moment(named, uid=uid, conversation_id=moment.conversation_id)
+    text = incremental.render_moment(
+        named, uid=uid, conversation_id=moment.conversation_id, owner_name=_owner_name(uid, c)
+    )
     if text.words == 0:
         metrics.record_moment_update(trigger=moment.trigger, outcome='skipped_applied')
         return 'skipped_applied'
