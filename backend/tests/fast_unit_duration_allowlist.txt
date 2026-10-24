@@ -528,3 +528,13 @@ tests/unit/test_task_sync_cloud_export_dedup.py::test_batch_cloud_sync_isolates_
 # drop/install machinery in the call phase. Assertions passed; same boundary shape as
 # the entries above.
 tests/unit/test_memory_import_isolation_order_independence.py::test_drop_then_install_stubs_a_module_that_was_imported_first
+# PR #23504 shard 6 (run 40118527240, 10-24, f4165e1b): 1.64/1.44/1.29s CPU and
+# the prior run's shard 6 (40115474313, 444a17bc): 1.95/1.77/1.62s CPU vs the
+# 1.00s fail limit. The file landed on main by direct train push (612b01861b,
+# #23416) without the fast-unit CPU guard ever measuring it; the first test of
+# the file amortizes the payment router/app import graph under file isolation
+# and the 402-snapshot cases build full subscription/stripe objects. Assertions
+# pass; same boundary shape as the entries above.
+tests/unit/test_payment_declined_proration.py::test_declined_proration_card_error_returns_402_and_preserves_paid_plan
+tests/unit/test_payment_declined_proration.py::test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic
+tests/unit/test_payment_declined_proration.py::test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify
