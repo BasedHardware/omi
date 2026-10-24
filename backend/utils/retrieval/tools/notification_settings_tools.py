@@ -23,21 +23,26 @@ except ImportError:
 def _agent_config() -> Optional[Dict[str, Any]]:
     """Retrieve the agent config dict from the context var, or None if unset."""
     try:
-        return agent_config_context.get()
-    except LookupError:
+        val = agent_config_context.get()
+        return val if isinstance(val, dict) else None
+    except (LookupError, AttributeError):
         return None
 
 
-def _format_hour(hour: int) -> str:
+def _format_hour(hour: Any) -> str:
     """Convert 24-hour format to friendly 12-hour format."""
-    if hour == 0:
+    try:
+        h = int(hour)
+    except (TypeError, ValueError):
+        h = 22
+    if h == 0:
         return "12:00 AM (midnight)"
-    elif hour == 12:
+    elif h == 12:
         return "12:00 PM (noon)"
-    elif hour < 12:
-        return f"{hour}:00 AM"
+    elif h < 12:
+        return f"{h}:00 AM"
     else:
-        return f"{hour - 12}:00 PM"
+        return f"{h - 12}:00 PM"
 
 
 @tool
@@ -82,7 +87,7 @@ def manage_daily_summary_tool(
     cfg: Optional[Dict[str, Any]] = cast(Optional[Dict[str, Any]], config)
     if cfg is None:
         cfg = _agent_config()
-    if cfg is None:
+    if cfg is None or not isinstance(cfg, dict):
         return "Error: Configuration not available"
 
     try:
@@ -91,53 +96,66 @@ def manage_daily_summary_tool(
             configurable: Dict[str, Any] = cast(Dict[str, Any], raw_configurable)
             uid = configurable.get('user_id')
         else:
-            uid = None
+            uid = cfg.get('user_id')
     except (KeyError, TypeError):
         return "Error: Configuration not available"
 
     if not uid:
         return "Error: User ID not found"
 
+    if not action or not isinstance(action, str):
+        return "Error: Action must be specified. Use 'enable', 'disable', 'set_time', or 'get_settings'."
+
     action = action.lower().strip()
 
-    if action == "enable":
-        notification_db.set_daily_summary_enabled(uid, True)
-        _hour = notification_db.get_daily_summary_hour_local(uid)
-        current_hour = 22 if _hour is None else _hour
-        hour_str = _format_hour(current_hour)
-        return f"Daily summary notifications enabled. You'll receive them at {hour_str}."
-
-    elif action == "disable":
-        notification_db.set_daily_summary_enabled(uid, False)
-        return "Daily summary notifications disabled."
-
-    elif action == "set_time":
-        if hour is None:
-            return "Error: Please specify the hour (0-23). Example: 22 for 10 PM, 9 for 9 AM."
-
-        if not (0 <= hour <= 23):
-            return f"Error: Hour must be between 0 and 23. You provided {hour}."
-
-        notification_db.set_daily_summary_hour_local(uid, hour)
-        hour_str = _format_hour(hour)
-
-        # Also enable if currently disabled
-        if not notification_db.get_daily_summary_enabled(uid):
+    try:
+        if action == "enable":
             notification_db.set_daily_summary_enabled(uid, True)
-            return f"Daily summary time changed to {hour_str} and notifications enabled."
+            _hour = notification_db.get_daily_summary_hour_local(uid)
+            current_hour = 22 if _hour is None else _hour
+            hour_str = _format_hour(current_hour)
+            return f"Daily summary notifications enabled. You'll receive them at {hour_str}."
 
-        return f"Daily summary time changed to {hour_str}."
+        elif action == "disable":
+            notification_db.set_daily_summary_enabled(uid, False)
+            return "Daily summary notifications disabled."
 
-    elif action == "get_settings":
-        enabled = notification_db.get_daily_summary_enabled(uid)
-        _hour = notification_db.get_daily_summary_hour_local(uid)
-        current_hour = 22 if _hour is None else _hour
-        hour_str = _format_hour(current_hour)
+        elif action == "set_time":
+            if hour is None:
+                return "Error: Please specify the hour (0-23). Example: 22 for 10 PM, 9 for 9 AM."
 
-        if enabled:
-            return f"Daily summary is enabled, scheduled for {hour_str} daily."
+            try:
+                parsed_hour = int(hour)
+            except (TypeError, ValueError):
+                return f"Error: Hour must be between 0 and 23. You provided {hour}."
+
+            if not (0 <= parsed_hour <= 23):
+                return f"Error: Hour must be between 0 and 23. You provided {hour}."
+
+            notification_db.set_daily_summary_hour_local(uid, parsed_hour)
+            hour_str = _format_hour(parsed_hour)
+
+            # Also enable if currently disabled
+            if not notification_db.get_daily_summary_enabled(uid):
+                notification_db.set_daily_summary_enabled(uid, True)
+                return f"Daily summary time changed to {hour_str} and notifications enabled."
+
+            return f"Daily summary time changed to {hour_str}."
+
+        elif action == "get_settings":
+            enabled = notification_db.get_daily_summary_enabled(uid)
+            _hour = notification_db.get_daily_summary_hour_local(uid)
+            current_hour = 22 if _hour is None else _hour
+            hour_str = _format_hour(current_hour)
+
+            if enabled:
+                return f"Daily summary is enabled, scheduled for {hour_str} daily."
+            else:
+                return f"Daily summary is currently disabled. Last set time was {hour_str}."
+
         else:
-            return f"Daily summary is currently disabled. Last set time was {hour_str}."
+            return f"Unknown action: {action}. Use 'enable', 'disable', 'set_time', or 'get_settings'."
 
-    else:
-        return f"Unknown action: {action}. Use 'enable', 'disable', 'set_time', or 'get_settings'."
+    except Exception as e:
+        logger.error(f"Error in manage_daily_summary_tool: {e}", exc_info=True)
+        return "Failed to update notification settings. Please try again."
