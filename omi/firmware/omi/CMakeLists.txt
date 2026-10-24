@@ -26,6 +26,7 @@ endif()
 file(GLOB core_sources
     src/lib/core/config.h
     src/lib/core/codec.c
+    src/lib/core/custody.c
     src/lib/core/transport.c
     src/lib/core/button.c
     src/lib/core/monitor.c

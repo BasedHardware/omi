@@ -1,6 +1,7 @@
 #include "lib/core/sd_card.h"
 
 #include <errno.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <zephyr/device.h>
@@ -8,11 +9,15 @@
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/pm/device.h>
+#include <zephyr/random/random.h>
 #include <zephyr/storage/disk_access.h>
 #include <zephyr/sys/atomic.h>
 #include <zephyr/sys/byteorder.h>
+#include <zephyr/sys/crc.h>
 #include <zephyr/sys/util.h>
 
+#include "lib/core/custody.h"
+#include "lib/core/storage.h"
 #include "rtc.h"
 
 LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
@@ -33,7 +38,9 @@ LOG_MODULE_REGISTER(sd_card, CONFIG_LOG_DEFAULT_LEVEL);
 
 #define RAW_META_MAGIC 0x4F4D4952U
 #define RAW_BATCH_MAGIC 0x4F4D4942U
+#define RAW_META_VERSION 2U
 #define RAW_LAYOUT_VERSION 1U
+#define RAW_BATCH_VERSION 2U
 
 #define ERROR_THRESHOLD 5
 
@@ -48,6 +55,9 @@ struct raw_meta_record {
     uint64_t read_seq;
     uint64_t write_seq;
     uint64_t dropped_packets;
+    uint64_t ring_id;
+    uint64_t data_id;
+    uint32_t crc32;
     uint32_t reserved1;
 };
 
@@ -57,8 +67,8 @@ struct raw_batch_header {
     uint16_t packet_count;
     uint64_t generation;
     uint64_t start_seq;
-    uint32_t reserved0;
-    uint32_t reserved1;
+    uint32_t data_id_lo;
+    uint32_t data_id_hi;
 };
 
 struct read_resp {
@@ -124,6 +134,8 @@ typedef struct {
         struct {
             uint8_t buf[MAX_WRITE_SIZE];
             size_t len;
+            uint32_t live_session;
+            uint16_t live_index;
         } write;
         struct {
             uint64_t start_seq;
@@ -133,6 +145,8 @@ typedef struct {
         } read;
         struct {
             uint64_t new_read_seq;
+            uint64_t ring_id;
+            bool check_id;
             struct status_resp *resp;
         } advance;
         struct {
@@ -172,7 +186,9 @@ static uint32_t disk_sector_count;
 static uint32_t data_batch_count;
 static uint32_t meta_next_slot;
 static uint64_t meta_generation;
+static uint64_t recovery_generation;
 static sd_ring_info_t ring_state;
+static uint64_t ring_data_id;
 
 static uint8_t current_batch[RAW_BATCH_BYTES];
 static uint8_t batch_read_buffer[RAW_BATCH_BYTES];
@@ -184,8 +200,14 @@ static struct raw_batch_header cached_read_batch_header;
 static bool current_batch_loaded;
 static bool current_batch_dirty;
 static bool cached_read_batch_valid;
-static int64_t last_batch_activity_ms;
+static int64_t batch_dirty_since_ms;
 static uint8_t writing_error_counter;
+static uint32_t sd_write_drop_count;
+
+static uint32_t batch_live_session[RAW_PACKETS_PER_BATCH];
+static uint16_t batch_live_index[RAW_PACKETS_PER_BATCH];
+static uint16_t live_eval_count;
+static omi_live_mark_t live_mark_state;
 
 static uint32_t write_drop_packets;
 static uint32_t write_drop_bytes;
@@ -198,6 +220,7 @@ static uint32_t compat_saved_offset;
 static void sd_worker_thread(void);
 static void sd_set_io_low_power(bool enable);
 static int flush_current_batch(bool sync_media);
+static void live_mark_eval_committed(void);
 
 static void invalidate_read_batch_cache(void)
 {
@@ -254,6 +277,9 @@ static uint32_t batch_sector_for_base_seq(uint64_t base_seq)
 static void start_empty_batch(uint64_t base_seq)
 {
     memset(current_batch, 0, sizeof(current_batch));
+    memset(batch_live_session, 0, sizeof(batch_live_session));
+    memset(batch_live_index, 0, sizeof(batch_live_index));
+    live_eval_count = 0;
     current_batch_base_seq = base_seq;
     current_batch_packets = 0;
     current_batch_loaded = true;
@@ -265,13 +291,45 @@ static int sync_media(void)
     return disk_access_ioctl(DISK_DRIVE_NAME, DISK_IOCTL_CTRL_SYNC, NULL);
 }
 
+static int ring_generate_id(uint64_t *out)
+{
+    if (!out) {
+        return -EINVAL;
+    }
+
+    for (int attempt = 0; attempt < 4; attempt++) {
+        uint64_t id = 0;
+        int ret = sys_csrand_get(&id, sizeof(id));
+        if (ret == 0 && id != 0U) {
+            *out = id;
+            return 0;
+        }
+    }
+
+    LOG_ERR("hardware RNG failed: cannot mint ring_id");
+    return -EIO;
+}
+
+static uint32_t meta_record_crc(const struct raw_meta_record *record)
+{
+    return crc32_ieee((const uint8_t *) record, offsetof(struct raw_meta_record, crc32));
+}
+
 static bool meta_record_valid(const struct raw_meta_record *record)
 {
     if (!record) {
         return false;
     }
 
-    if (record->magic != RAW_META_MAGIC || record->version != RAW_LAYOUT_VERSION) {
+    if (record->magic != RAW_META_MAGIC) {
+        return false;
+    }
+
+    if (record->version == RAW_META_VERSION) {
+        if (record->ring_id == 0U || record->data_id == 0U || record->crc32 != meta_record_crc(record)) {
+            return false;
+        }
+    } else if (record->version != RAW_LAYOUT_VERSION) {
         return false;
     }
 
@@ -286,13 +344,26 @@ static bool meta_record_valid(const struct raw_meta_record *record)
     return true;
 }
 
+static uint64_t batch_header_data_id(const struct raw_batch_header *header)
+{
+    return ((uint64_t) header->data_id_hi << 32) | header->data_id_lo;
+}
+
 static bool batch_header_valid(const struct raw_batch_header *header)
 {
     if (!header) {
         return false;
     }
 
-    if (header->magic != RAW_BATCH_MAGIC || header->version != RAW_LAYOUT_VERSION) {
+    if (header->magic != RAW_BATCH_MAGIC) {
+        return false;
+    }
+
+    if (header->version != RAW_LAYOUT_VERSION && header->version != RAW_BATCH_VERSION) {
+        return false;
+    }
+
+    if (header->version == RAW_BATCH_VERSION && ring_data_id != 0U && batch_header_data_id(header) != ring_data_id) {
         return false;
     }
 
@@ -307,16 +378,19 @@ static bool batch_header_valid(const struct raw_batch_header *header)
     return true;
 }
 
-static int persist_ring_metadata(void)
+static int write_journal_record(const sd_ring_info_t *state, uint64_t data_id)
 {
     struct raw_meta_record record = {
         .magic = RAW_META_MAGIC,
-        .version = RAW_LAYOUT_VERSION,
+        .version = RAW_META_VERSION,
         .generation = ++meta_generation,
-        .read_seq = ring_state.read_seq,
-        .write_seq = ring_state.write_seq,
-        .dropped_packets = ring_state.dropped_packets,
+        .read_seq = state->read_seq,
+        .write_seq = state->write_seq,
+        .dropped_packets = state->dropped_packets,
+        .ring_id = state->ring_id,
+        .data_id = data_id,
     };
+    record.crc32 = meta_record_crc(&record);
 
     memset(sector_buffer, 0, sizeof(sector_buffer));
     memcpy(sector_buffer, &record, sizeof(record));
@@ -332,46 +406,192 @@ static int persist_ring_metadata(void)
     return 0;
 }
 
+static bool pending_commit_valid;
+static sd_ring_info_t pending_commit_state;
+static uint64_t pending_commit_data_id;
+static bool pending_commit_clear;
+
+static void publish_committed_state(const sd_ring_info_t *state, uint64_t data_id, bool is_clear)
+{
+    ring_state = *state;
+    ring_data_id = data_id;
+
+    if (is_clear) {
+        compat_current_name[0] = '\0';
+        compat_saved_name[0] = '\0';
+        compat_saved_offset = 0;
+        invalidate_read_batch_cache();
+        omi_live_mark_reset(&live_mark_state);
+        start_empty_batch(0);
+    }
+}
+
+static int resolve_pending_commit(void)
+{
+    int ret = sync_media();
+    if (ret != 0) {
+        LOG_ERR("pending metadata media sync retry failed: %d", ret);
+        return -EIO;
+    }
+
+    bool finalize_batch = !pending_commit_clear && current_batch_dirty &&
+                          pending_commit_state.write_seq == current_batch_base_seq + current_batch_packets;
+
+    pending_commit_valid = false;
+    publish_committed_state(&pending_commit_state, pending_commit_data_id, pending_commit_clear);
+
+    if (finalize_batch) {
+        current_batch_dirty = false;
+        invalidate_read_batch_cache();
+        writing_error_counter = 0;
+        live_mark_eval_committed();
+        if (current_batch_packets >= RAW_PACKETS_PER_BATCH) {
+            start_empty_batch(ring_state.write_seq);
+        }
+    }
+    return 0;
+}
+
+static int ensure_pending_resolved(void)
+{
+    if (!pending_commit_valid) {
+        return 0;
+    }
+    return resolve_pending_commit();
+}
+
+static int commit_ring_state(const sd_ring_info_t *state, uint64_t data_id, bool is_clear)
+{
+    if (pending_commit_valid) {
+        return -EBUSY;
+    }
+
+    int ret = write_journal_record(state, data_id);
+    if (ret < 0) {
+        return ret;
+    }
+
+    ret = sync_media();
+    if (ret != 0) {
+        LOG_ERR("metadata media sync failed: %d", ret);
+        pending_commit_state = *state;
+        pending_commit_data_id = data_id;
+        pending_commit_clear = is_clear;
+        pending_commit_valid = true;
+        return -EIO;
+    }
+
+    publish_committed_state(state, data_id, is_clear);
+    return 0;
+}
+
+static bool meta_slot_all_zero(const struct raw_meta_record *record)
+{
+    const uint8_t *bytes = (const uint8_t *) record;
+    for (size_t i = 0; i < sizeof(*record); i++) {
+        if (bytes[i] != 0U) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static int load_ring_metadata(void)
 {
     struct raw_meta_record best_record = {0};
     bool found = false;
     uint32_t best_slot = 0;
+    uint64_t torn_gen_max = 0;
+    uint64_t damaged_slots = 0;
 
     for (uint32_t slot = 0; slot < RAW_META_SECTORS; slot++) {
         int ret = disk_access_read(DISK_DRIVE_NAME, sector_buffer, slot, 1);
         if (ret != 0) {
             LOG_WRN("metadata read failed at slot %u: %d", slot, ret);
+            damaged_slots |= BIT64(slot);
             continue;
         }
 
         struct raw_meta_record record;
         memcpy(&record, sector_buffer, sizeof(record));
-        if (!meta_record_valid(&record)) {
+
+        if (meta_record_valid(&record)) {
+            if (!found || record.generation > best_record.generation) {
+                best_record = record;
+                best_slot = slot;
+                found = true;
+            }
             continue;
         }
 
-        if (!found || record.generation > best_record.generation) {
-            best_record = record;
-            best_slot = slot;
-            found = true;
+        if (record.magic == RAW_META_MAGIC) {
+            if (record.generation >= torn_gen_max) {
+                torn_gen_max = record.generation;
+            }
+            continue;
+        }
+
+        if (!meta_slot_all_zero(&record)) {
+            damaged_slots |= BIT64(slot);
         }
     }
+
+    bool suspect = false;
+    if (found) {
+        uint32_t next_slot = (best_slot + 1U) % RAW_META_SECTORS;
+        suspect = (torn_gen_max >= best_record.generation) || ((damaged_slots & BIT64(next_slot)) != 0U);
+    }
+
+    recovery_generation = found ? best_record.generation : 0;
 
     if (!found) {
         ring_state.read_seq = 0;
         ring_state.write_seq = 0;
         ring_state.dropped_packets = 0;
+        ring_state.ring_id = 0;
+        ring_data_id = 0;
         meta_generation = 0;
         meta_next_slot = 0;
-        return persist_ring_metadata();
+    } else {
+        ring_state.read_seq = best_record.read_seq;
+        ring_state.write_seq = best_record.write_seq;
+        ring_state.dropped_packets = best_record.dropped_packets;
+        meta_generation = best_record.generation;
+        meta_next_slot = (best_slot + 1U) % RAW_META_SECTORS;
+
+        if (best_record.version == RAW_META_VERSION && !suspect) {
+            ring_state.ring_id = best_record.ring_id;
+            ring_data_id = best_record.data_id;
+            return 0;
+        }
+
+        ring_data_id = (best_record.version == RAW_META_VERSION) ? best_record.data_id : 0U;
+        ring_state.ring_id = 0;
     }
 
-    ring_state.read_seq = best_record.read_seq;
-    ring_state.write_seq = best_record.write_seq;
-    ring_state.dropped_packets = best_record.dropped_packets;
-    meta_generation = best_record.generation;
-    meta_next_slot = (best_slot + 1U) % RAW_META_SECTORS;
+    int ret = ring_generate_id(&ring_state.ring_id);
+    if (ret < 0) {
+        return ret;
+    }
+
+    if (ring_data_id == 0U) {
+        ret = ring_generate_id(&ring_data_id);
+        if (ret < 0) {
+            return ret;
+        }
+    }
+
+    ret = write_journal_record(&ring_state, ring_data_id);
+    if (ret < 0) {
+        return ret;
+    }
+
+    ret = sync_media();
+    if (ret != 0) {
+        LOG_ERR("metadata media sync failed: %d", ret);
+        return -EIO;
+    }
+
     return 0;
 }
 
@@ -394,13 +614,20 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
     int ret = disk_access_read(DISK_DRIVE_NAME, buffer, sector, RAW_BATCH_SECTORS);
     if (ret != 0) {
         LOG_ERR("batch read failed at sector %u: %d", sector, ret);
+        if (buffer == batch_read_buffer) {
+            cached_read_batch_valid = false;
+        }
         return -EIO;
     }
 
     memcpy(header, buffer, sizeof(*header));
+    if (buffer == batch_read_buffer) {
+        cached_read_batch_valid = false;
+    }
+
     if (!batch_header_valid(header)) {
         LOG_ERR("invalid batch header for seq %llu", (unsigned long long) seq);
-        return -EIO;
+        return -EBADMSG;
     }
 
     if (header->start_seq != base_seq) {
@@ -408,9 +635,10 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
             ((header->start_seq - base_seq) % ring_state.capacity_packets) == 0U) {
             uint64_t overwritten_end_seq = base_seq + RAW_PACKETS_PER_BATCH;
             if (ring_state.read_seq < overwritten_end_seq) {
-                ring_state.dropped_packets += overwritten_end_seq - ring_state.read_seq;
-                ring_state.read_seq = overwritten_end_seq;
-                (void) persist_ring_metadata();
+                sd_ring_info_t next = ring_state;
+                next.dropped_packets += overwritten_end_seq - ring_state.read_seq;
+                next.read_seq = overwritten_end_seq;
+                (void) commit_ring_state(&next, ring_data_id, false);
             }
 
             LOG_WRN("stale read window for seq %llu: slot now holds batch %llu, advancing read_seq to %llu",
@@ -424,7 +652,7 @@ static int load_batch_for_seq(uint64_t seq, uint8_t *buffer, struct raw_batch_he
                 (unsigned long long) seq,
                 (unsigned long long) header->start_seq,
                 (unsigned long long) base_seq);
-        return -EIO;
+        return -EBADMSG;
     }
 
     if (buffer != batch_read_buffer) {
@@ -449,23 +677,42 @@ static int restore_tail_batch(void)
     struct raw_batch_header header;
     int ret = load_batch_for_seq(base_seq, current_batch, &header);
     if (ret < 0) {
-        LOG_WRN("dropping incomplete tail batch after recovery error: %d", ret);
-        ring_state.write_seq = base_seq;
-        if (ring_state.read_seq > ring_state.write_seq) {
-            ring_state.read_seq = ring_state.write_seq;
+        if (ret == -EIO) {
+            return ret;
         }
-        (void) persist_ring_metadata();
+        LOG_WRN("dropping incomplete tail batch after recovery error: %d", ret);
+        sd_ring_info_t next = ring_state;
+        next.write_seq = base_seq;
+        if (next.read_seq > next.write_seq) {
+            next.read_seq = next.write_seq;
+        }
+        int id_ret = ring_generate_id(&next.ring_id);
+        if (id_ret < 0) {
+            return id_ret;
+        }
+        int commit_ret = commit_ring_state(&next, ring_data_id, false);
+        if (commit_ret < 0) {
+            return commit_ret;
+        }
         start_empty_batch(ring_state.write_seq);
-        return ret;
+        return 0;
     }
 
     if (header.packet_count != partial_packets) {
         LOG_WRN("tail packet count mismatch, truncating tail from %u to %u", partial_packets, header.packet_count);
-        ring_state.write_seq = header.start_seq + header.packet_count;
-        if (ring_state.read_seq > ring_state.write_seq) {
-            ring_state.read_seq = ring_state.write_seq;
+        sd_ring_info_t next = ring_state;
+        next.write_seq = header.start_seq + header.packet_count;
+        if (next.read_seq > next.write_seq) {
+            next.read_seq = next.write_seq;
         }
-        (void) persist_ring_metadata();
+        int id_ret = ring_generate_id(&next.ring_id);
+        if (id_ret < 0) {
+            return id_ret;
+        }
+        int commit_ret = commit_ring_state(&next, ring_data_id, false);
+        if (commit_ret < 0) {
+            return commit_ret;
+        }
     }
 
     current_batch_base_seq = header.start_seq;
@@ -475,8 +722,103 @@ static int restore_tail_batch(void)
     return 0;
 }
 
+static int mount_continuity_check(void)
+{
+    if (ring_data_id == 0U || data_batch_count == 0U) {
+        return 0;
+    }
+
+    invalidate_read_batch_cache();
+
+    uint64_t salvage_end = ring_state.write_seq;
+    bool found_newer = false;
+    uint64_t base_seq = ring_state.write_seq - (ring_state.write_seq % RAW_PACKETS_PER_BATCH);
+    uint64_t probe_limit = ring_state.write_seq + ring_state.capacity_packets;
+
+    for (; base_seq < probe_limit; base_seq += RAW_PACKETS_PER_BATCH) {
+        uint32_t sector = batch_sector_for_base_seq(base_seq);
+        if (disk_access_read(DISK_DRIVE_NAME, batch_read_buffer, sector, RAW_BATCH_SECTORS) != 0) {
+            LOG_ERR("continuity probe read failed at sector %u", sector);
+            return -EIO;
+        }
+
+        struct raw_batch_header header;
+        memcpy(&header, batch_read_buffer, sizeof(header));
+        if (header.magic != RAW_BATCH_MAGIC || header.version != RAW_BATCH_VERSION ||
+            batch_header_data_id(&header) != ring_data_id || header.start_seq != base_seq ||
+            header.packet_count == 0U || header.packet_count > RAW_PACKETS_PER_BATCH) {
+            break;
+        }
+        if (header.generation <= recovery_generation) {
+            break;
+        }
+
+        LOG_WRN("batch at seq %llu is newer than metadata, salvaging %u records",
+                (unsigned long long) base_seq,
+                header.packet_count);
+        found_newer = true;
+        salvage_end = base_seq + header.packet_count;
+        if (header.packet_count < RAW_PACKETS_PER_BATCH) {
+            break;
+        }
+    }
+
+    if (!found_newer) {
+        return 0;
+    }
+
+    sd_ring_info_t next = ring_state;
+    next.write_seq = salvage_end;
+    if (next.write_seq - next.read_seq > next.capacity_packets) {
+        uint64_t new_read = next.write_seq - next.capacity_packets;
+        next.dropped_packets += new_read - next.read_seq;
+        next.read_seq = new_read;
+    }
+    if (next.read_seq > next.write_seq) {
+        next.read_seq = next.write_seq;
+    }
+
+    int ret = ring_generate_id(&next.ring_id);
+    if (ret < 0) {
+        return ret;
+    }
+
+    ret = commit_ring_state(&next, ring_data_id, false);
+    if (ret < 0) {
+        return ret;
+    }
+
+    invalidate_read_batch_cache();
+    return restore_tail_batch();
+}
+
+static void live_mark_eval_committed(void)
+{
+    while (live_eval_count < current_batch_packets) {
+        uint16_t idx = live_eval_count;
+        omi_live_mark_note_record(
+            &live_mark_state, current_batch_base_seq + idx, batch_live_session[idx], batch_live_index[idx]);
+        live_eval_count++;
+    }
+
+    uint64_t mark_seq;
+    uint16_t mark_index;
+    uint32_t mark_session;
+    if (omi_live_mark_eval(
+            &live_mark_state, ring_state.write_seq, ring_state.read_seq, &mark_seq, &mark_index, &mark_session)) {
+#ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE
+        (void) storage_queue_live_mark(ring_state.ring_id, mark_seq, mark_index, mark_session);
+#endif
+    }
+}
+
 static int flush_current_batch(bool sync_requested)
 {
+    int pending_ret = ensure_pending_resolved();
+    if (pending_ret < 0) {
+        return pending_ret;
+    }
+
     /* SD is powered off (idle): keep the batch buffered in RAM, do not touch the
      * disk. It will be flushed after the next remount. */
     if (!is_mounted) {
@@ -485,17 +827,26 @@ static int flush_current_batch(bool sync_requested)
 
     if (!current_batch_loaded || !current_batch_dirty || current_batch_packets == 0U) {
         if (sync_requested) {
-            (void) sync_media();
+            int ret = sync_media();
+            return (ret != 0) ? -EIO : 0;
         }
         return 0;
     }
 
+    if (current_batch_base_seq > UINT64_MAX - current_batch_packets) {
+        LOG_ERR("ring seq space exhausted, blocking writes");
+        sd_write_blocked = true;
+        return -EOVERFLOW;
+    }
+
     struct raw_batch_header header = {
         .magic = RAW_BATCH_MAGIC,
-        .version = RAW_LAYOUT_VERSION,
+        .version = RAW_BATCH_VERSION,
         .packet_count = current_batch_packets,
         .generation = meta_generation + 1U,
         .start_seq = current_batch_base_seq,
+        .data_id_lo = (uint32_t) (ring_data_id & UINT32_MAX),
+        .data_id_hi = (uint32_t) (ring_data_id >> 32),
     };
     memcpy(current_batch, &header, sizeof(header));
 
@@ -510,35 +861,39 @@ static int flush_current_batch(bool sync_requested)
         return -EIO;
     }
 
-    uint64_t new_write_seq = current_batch_base_seq + current_batch_packets;
+    ret = sync_media();
+    if (ret != 0) {
+        LOG_ERR("batch media sync failed at sector %u: %d", sector, ret);
+        return -EIO;
+    }
 
-    if (ring_state.write_seq <= current_batch_base_seq && current_batch_base_seq >= ring_state.capacity_packets) {
-        uint64_t overwritten_end_seq = current_batch_base_seq - ring_state.capacity_packets + RAW_PACKETS_PER_BATCH;
-        if (ring_state.read_seq < overwritten_end_seq) {
-            ring_state.dropped_packets += overwritten_end_seq - ring_state.read_seq;
-            ring_state.read_seq = overwritten_end_seq;
+    uint64_t new_write_seq = current_batch_base_seq + current_batch_packets;
+    sd_ring_info_t next = ring_state;
+
+    if (next.write_seq <= current_batch_base_seq && current_batch_base_seq >= next.capacity_packets) {
+        uint64_t overwritten_end_seq = current_batch_base_seq - next.capacity_packets + RAW_PACKETS_PER_BATCH;
+        if (next.read_seq < overwritten_end_seq) {
+            next.dropped_packets += overwritten_end_seq - next.read_seq;
+            next.read_seq = overwritten_end_seq;
         }
     }
 
-    if ((new_write_seq - ring_state.read_seq) > ring_state.capacity_packets) {
-        uint64_t overflow = (new_write_seq - ring_state.read_seq) - ring_state.capacity_packets;
-        ring_state.read_seq += overflow;
-        ring_state.dropped_packets += overflow;
+    if ((new_write_seq - next.read_seq) > next.capacity_packets) {
+        uint64_t overflow = (new_write_seq - next.read_seq) - next.capacity_packets;
+        next.read_seq += overflow;
+        next.dropped_packets += overflow;
     }
-    ring_state.write_seq = new_write_seq;
+    next.write_seq = new_write_seq;
 
-    ret = persist_ring_metadata();
+    ret = commit_ring_state(&next, ring_data_id, false);
     if (ret < 0) {
         return ret;
-    }
-
-    if (sync_requested) {
-        (void) sync_media();
     }
 
     current_batch_dirty = false;
     invalidate_read_batch_cache();
     writing_error_counter = 0;
+    live_mark_eval_committed();
 
     if (current_batch_packets >= RAW_PACKETS_PER_BATCH) {
         start_empty_batch(ring_state.write_seq);
@@ -549,25 +904,30 @@ static int flush_current_batch(bool sync_requested)
 
 static int clear_ring_internal(bool sync_requested)
 {
-    ring_state.read_seq = 0;
-    ring_state.write_seq = 0;
-    ring_state.dropped_packets = 0;
-    compat_current_name[0] = '\0';
-    compat_saved_name[0] = '\0';
-    compat_saved_offset = 0;
-    invalidate_read_batch_cache();
-    start_empty_batch(0);
+    ARG_UNUSED(sync_requested);
 
-    int ret = persist_ring_metadata();
+    int pending_ret = ensure_pending_resolved();
+    if (pending_ret < 0) {
+        return pending_ret;
+    }
+
+    sd_ring_info_t next = ring_state;
+    next.read_seq = 0;
+    next.write_seq = 0;
+    next.dropped_packets = 0;
+
+    int ret = ring_generate_id(&next.ring_id);
     if (ret < 0) {
         return ret;
     }
 
-    if (sync_requested) {
-        (void) sync_media();
+    uint64_t new_data_id;
+    ret = ring_generate_id(&new_data_id);
+    if (ret < 0) {
+        return ret;
     }
 
-    return 0;
+    return commit_ring_state(&next, new_data_id, true);
 }
 
 static int read_packets_internal(uint64_t start_seq,
@@ -585,6 +945,11 @@ static int read_packets_internal(uint64_t start_seq,
 
     if (!is_mounted) {
         return -ENODEV;
+    }
+
+    int pending_ret = ensure_pending_resolved();
+    if (pending_ret < 0) {
+        return pending_ret;
     }
 
     if (current_batch_dirty) {
@@ -643,27 +1008,28 @@ static int read_packets_internal(uint64_t start_seq,
     return 0;
 }
 
-static int advance_read_seq_internal(uint64_t new_read_seq, bool sync_requested)
+static int advance_read_seq_internal(uint64_t new_read_seq, uint64_t ring_id, bool check_id)
 {
-    if (new_read_seq < ring_state.read_seq || new_read_seq > ring_state.write_seq) {
-        return -ERANGE;
+    if (pending_commit_valid) {
+        int ret = resolve_pending_commit();
+        if (ret < 0) {
+            return ret;
+        }
     }
 
-    if (new_read_seq == ring_state.read_seq) {
-        return 0;
-    }
-
-    ring_state.read_seq = new_read_seq;
-    int ret = persist_ring_metadata();
+    int ret = omi_advance_eval(
+        ring_state.read_seq, ring_state.write_seq, ring_state.ring_id, ring_id, check_id, new_read_seq);
     if (ret < 0) {
         return ret;
     }
 
-    if (sync_requested) {
-        (void) sync_media();
+    if (new_read_seq <= ring_state.read_seq) {
+        return 0;
     }
 
-    return 0;
+    sd_ring_info_t next = ring_state;
+    next.read_seq = new_read_seq;
+    return commit_ring_state(&next, ring_data_id, false);
 }
 
 static void process_write_data_req(const sd_req_t *req)
@@ -677,29 +1043,38 @@ static void process_write_data_req(const sd_req_t *req)
         return;
     }
 
-    if (!rtc_is_valid()) {
-        return;
-    }
-
-    uint32_t timestamp = get_utc_time();
-    if (timestamp == 0U || timestamp < 1700000000U) {
-        return;
-    }
+    uint32_t timestamp = omi_record_timestamp(rtc_is_valid(), get_utc_time(), k_uptime_get());
 
     if (!current_batch_loaded) {
         start_empty_batch(ring_state.write_seq);
     }
 
     if (current_batch_packets >= RAW_PACKETS_PER_BATCH) {
-        start_empty_batch(ring_state.write_seq);
+        if (current_batch_dirty) {
+            sd_set_io_low_power(false);
+            (void) flush_current_batch(false);
+            sd_set_io_low_power(true);
+        }
+        if (current_batch_packets >= RAW_PACKETS_PER_BATCH) {
+            if (current_batch_dirty) {
+                sd_write_drop_count++;
+                LOG_ERR("dropping write: full batch still uncommitted");
+                return;
+            }
+            start_empty_batch(ring_state.write_seq);
+        }
     }
 
     size_t dst_offset = RAW_BATCH_HEADER_BYTES + ((size_t) current_batch_packets * RAW_AUDIO_PACKET_BYTES);
     sys_put_be32(timestamp, current_batch + dst_offset);
     memcpy(current_batch + dst_offset + RAW_AUDIO_TIMESTAMP_BYTES, req->u.write.buf, MAX_WRITE_SIZE);
+    batch_live_session[current_batch_packets] = req->u.write.live_session;
+    batch_live_index[current_batch_packets] = req->u.write.live_index;
     current_batch_packets++;
+    if (!current_batch_dirty) {
+        batch_dirty_since_ms = k_uptime_get();
+    }
     current_batch_dirty = true;
-    last_batch_activity_ms = k_uptime_get();
     format_timestamp_name(timestamp, compat_current_name, sizeof(compat_current_name));
 
     bool queue_pressure_high = k_msgq_num_used_get(&sd_msgq) >= (SD_REQ_QUEUE_MSGS / 3);
@@ -710,12 +1085,26 @@ static void process_write_data_req(const sd_req_t *req)
     }
 }
 
-static void drain_pending_write_queue_for_shutdown(void)
+static int drain_pending_write_queue_for_shutdown(void)
 {
     while (1) {
+        if (pending_commit_valid) {
+            int ret = resolve_pending_commit();
+            if (ret < 0) {
+                return ret;
+            }
+        }
+
+        if (current_batch_packets >= RAW_PACKETS_PER_BATCH && current_batch_dirty) {
+            int ret = flush_current_batch(false);
+            if (ret < 0) {
+                return ret;
+            }
+        }
+
         sd_req_t pending_req;
         if (k_msgq_get(&sd_msgq, &pending_req, K_NO_WAIT) != 0) {
-            break;
+            return 0;
         }
 
         if (pending_req.type == REQ_WRITE_DATA) {
@@ -862,7 +1251,20 @@ static int sd_mount(void)
         return ret;
     }
 
-    (void) restore_tail_batch();
+    ret = restore_tail_batch();
+    if (ret < 0) {
+        LOG_ERR("tail recovery could not establish ring continuity: %d", ret);
+        sd_enable_power(false);
+        return ret;
+    }
+
+    ret = mount_continuity_check();
+    if (ret < 0) {
+        LOG_ERR("mount continuity check failed: %d", ret);
+        sd_enable_power(false);
+        return ret;
+    }
+
     is_mounted = true;
 
     LOG_INF("Raw SD ring mounted: sectors=%u, batches=%u, capacity=%u packets",
@@ -875,9 +1277,17 @@ static int sd_mount(void)
 static int sd_unmount(void)
 {
     if (current_batch_dirty) {
-        (void) flush_current_batch(true);
+        int ret = flush_current_batch(true);
+        if (ret < 0) {
+            LOG_ERR("unmount aborted: dirty batch flush failed (%d)", ret);
+            return ret;
+        }
     } else {
-        (void) sync_media();
+        int ret = sync_media();
+        if (ret != 0) {
+            LOG_ERR("unmount aborted: media sync failed (%d)", ret);
+            return -EIO;
+        }
     }
 
     if (is_mounted) {
@@ -934,13 +1344,33 @@ void sd_worker_thread(void)
             goto handle_req;
         }
 
+        if (pending_commit_valid) {
+            sd_set_io_low_power(false);
+            (void) resolve_pending_commit();
+            sd_set_io_low_power(true);
+        }
+
+        if (current_batch_dirty && (k_uptime_get() - batch_dirty_since_ms) >= RAW_FLUSH_INTERVAL_MS) {
+            sd_set_io_low_power(false);
+            (void) flush_current_batch(false);
+            sd_set_io_low_power(true);
+        }
+
+        bool backlog_full = current_batch_packets >= RAW_PACKETS_PER_BATCH && current_batch_dirty;
+        if (backlog_full) {
+            sd_set_io_low_power(false);
+            (void) flush_current_batch(false);
+            sd_set_io_low_power(true);
+            backlog_full = current_batch_packets >= RAW_PACKETS_PER_BATCH && current_batch_dirty;
+        }
+
         k_timeout_t write_wait = ble_connected ? K_MSEC(50) : K_MSEC(250);
+        if (pending_commit_valid || backlog_full) {
+            k_msleep(ble_connected ? 50 : 250);
+            continue;
+        }
+
         if (k_msgq_get(&sd_msgq, &req, write_wait) != 0) {
-            if (current_batch_dirty && (k_uptime_get() - last_batch_activity_ms) >= RAW_FLUSH_INTERVAL_MS) {
-                sd_set_io_low_power(false);
-                (void) flush_current_batch(false);
-                sd_set_io_low_power(true);
-            }
             continue;
         }
 
@@ -960,11 +1390,22 @@ void sd_worker_thread(void)
                  * POWER_ON (that would discard unrelated sync/read prio requests).
                  * The pending POWER_ON stays queued and is a no-op once mounted. */
                 gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
-                (void) sd_mount();
+                if (sd_mount() != 0) {
+                    sd_write_drop_count++;
+                    LOG_ERR("dropping write: SD mount failed");
+                    break;
+                }
             }
             process_write_data_req(&req);
             for (int i = 0; i < WRITE_DRAIN_BURST; i++) {
                 if (k_msgq_num_used_get(&sd_prio_msgq) > 0) {
+                    break;
+                }
+
+                if (pending_commit_valid) {
+                    break;
+                }
+                if (current_batch_packets >= RAW_PACKETS_PER_BATCH && current_batch_dirty) {
                     break;
                 }
 
@@ -980,8 +1421,22 @@ void sd_worker_thread(void)
             break;
 
         case REQ_GET_RING_INFO:
+            if (pending_commit_valid && resolve_pending_commit() < 0) {
+                if (req.u.info.resp) {
+                    req.u.info.resp->res = -EIO;
+                    k_sem_give(&req.u.info.resp->sem);
+                    release_resp_busy(req.u.info.resp->busy_flag);
+                }
+                break;
+            }
             if (current_batch_dirty) {
-                (void) flush_current_batch(false);
+                int flush_ret = flush_current_batch(false);
+                if (req.u.info.resp && flush_ret < 0) {
+                    req.u.info.resp->res = flush_ret;
+                    k_sem_give(&req.u.info.resp->sem);
+                    release_resp_busy(req.u.info.resp->busy_flag);
+                    break;
+                }
             }
             if (req.u.info.resp) {
                 req.u.info.resp->info = ring_state;
@@ -1005,8 +1460,9 @@ void sd_worker_thread(void)
 
         case REQ_ADVANCE_READ: {
             /* Perform the advance regardless; a NULL resp is a fire-and-forget
-             * (async) request from the sync checkpoint that must not block. */
-            int adv_res = advance_read_seq_internal(req.u.advance.new_read_seq, false);
+             * request that must not block the worker. */
+            int adv_res =
+                advance_read_seq_internal(req.u.advance.new_read_seq, req.u.advance.ring_id, req.u.advance.check_id);
             if (req.u.advance.resp) {
                 req.u.advance.resp->res = adv_res;
                 k_sem_give(&req.u.advance.resp->sem);
@@ -1033,23 +1489,31 @@ void sd_worker_thread(void)
             }
             break;
 
-        case REQ_UNMOUNT:
-            drain_pending_write_queue_for_shutdown();
-            res = sd_unmount();
+        case REQ_UNMOUNT: {
+            int drain_res = drain_pending_write_queue_for_shutdown();
+            int unmount_res = (drain_res < 0) ? drain_res : sd_unmount();
+            res = (drain_res < 0) ? drain_res : unmount_res;
             if (req.u.status.resp) {
                 req.u.status.resp->res = res;
                 k_sem_give(&req.u.status.resp->sem);
                 release_resp_busy(req.u.status.resp->busy_flag);
             }
             break;
+        }
 
         case REQ_POWER_OFF:
             /* Idle (mic asleep): flush, unmount and cut SD power to save current.
              * Drain buffered writes first (like the shutdown path) so audio queued
              * just before idle is not lost when we unmount. */
             if (is_mounted) {
-                drain_pending_write_queue_for_shutdown();
-                (void) sd_unmount();
+                if (drain_pending_write_queue_for_shutdown() != 0) {
+                    LOG_ERR("SD power-off aborted: write drain failed");
+                    break;
+                }
+                if (sd_unmount() != 0) {
+                    LOG_ERR("SD power-off aborted: unmount failed");
+                    break;
+                }
                 /* Park the SD chip-select at physical 0 V. The SPI driver otherwise
                  * idles it HIGH, which forward-biases the unpowered card's input
                  * clamp and leaks current. Use *_raw so the driver's active-low
@@ -1256,6 +1720,8 @@ uint32_t write_to_file(uint8_t *data, uint32_t length)
     req.type = REQ_WRITE_DATA;
     memcpy(req.u.write.buf, data, length);
     req.u.write.len = length;
+    req.u.write.live_session = 0;
+    req.u.write.live_index = 0;
 
     int ret = k_msgq_put(&sd_msgq, &req, K_NO_WAIT);
     if (ret != 0) {
@@ -1357,7 +1823,7 @@ int sd_ring_read(uint64_t start_seq, uint8_t *buf, uint32_t max_bytes, uint32_t 
     return resp.res;
 }
 
-int sd_ring_advance(uint64_t new_read_seq)
+static int sd_ring_advance_common(uint64_t ring_id, bool check_id, uint64_t new_read_seq, const char *op_name)
 {
     static struct status_resp resp;
     static atomic_t advance_in_flight = ATOMIC_INIT(0);
@@ -1372,6 +1838,8 @@ int sd_ring_advance(uint64_t new_read_seq)
     sd_req_t req = {0};
     req.type = REQ_ADVANCE_READ;
     req.u.advance.new_read_seq = new_read_seq;
+    req.u.advance.ring_id = ring_id;
+    req.u.advance.check_id = check_id;
     req.u.advance.resp = &resp;
 
     int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
@@ -1381,7 +1849,7 @@ int sd_ring_advance(uint64_t new_read_seq)
         return ret;
     }
 
-    ret = wait_for_sd_worker_response(&resp.sem, 5000, "sd_ring_advance");
+    ret = wait_for_sd_worker_response(&resp.sem, 5000, op_name);
     if (ret < 0) {
         return ret;
     }
@@ -1389,17 +1857,35 @@ int sd_ring_advance(uint64_t new_read_seq)
     return resp.res;
 }
 
-int sd_ring_advance_async(uint64_t new_read_seq)
+int sd_ring_advance(uint64_t new_read_seq)
 {
-    /* Fire-and-forget: queue the advance on the priority queue and return
-     * immediately (no worker round-trip). Used by the sync checkpoint so the
-     * BLE send stream is never stalled. Persist happens in the worker; if it
-     * fails the next checkpoint / the final blocking advance re-persists. */
+    return sd_ring_advance_common(0, false, new_read_seq, "sd_ring_advance");
+}
+
+int sd_ring_advance_id(uint64_t ring_id, uint64_t new_read_seq)
+{
+    return sd_ring_advance_common(ring_id, true, new_read_seq, "sd_ring_advance_id");
+}
+
+uint32_t sd_ring_write_record(const uint8_t *data, uint32_t length, uint32_t live_session, uint16_t live_index)
+{
+    if (!data || length != MAX_WRITE_SIZE || !atomic_get(&sd_boot_ready) || sd_shutdown_in_progress ||
+        sd_write_paused || sd_write_blocked) {
+        return 0;
+    }
+
     sd_req_t req = {0};
-    req.type = REQ_ADVANCE_READ;
-    req.u.advance.new_read_seq = new_read_seq;
-    req.u.advance.resp = NULL;
-    return k_msgq_put(&sd_prio_msgq, &req, K_NO_WAIT);
+    req.type = REQ_WRITE_DATA;
+    memcpy(req.u.write.buf, data, length);
+    req.u.write.len = length;
+    req.u.write.live_session = live_session;
+    req.u.write.live_index = live_index;
+
+    if (k_msgq_put(&sd_msgq, &req, K_NO_WAIT) != 0) {
+        return 0;
+    }
+
+    return length;
 }
 
 int sd_ring_clear(void)
