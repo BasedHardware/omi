@@ -228,6 +228,7 @@ actor SystemCalendarMeetingContextService {
   private let uploader: any DesktopMeetingUploading
   private var requestedAccessThisLaunch = false
   private var uploadedEventIDs = Set<String>()
+  private var activeEventsCache: (at: Date, events: [SystemCalendarEventSnapshot])?
 
   init(
     provider: any SystemCalendarEventProviding = EventKitSystemCalendarProvider(),
@@ -259,6 +260,29 @@ actor SystemCalendarMeetingContextService {
   func syncAuthorizedEvents(overlapping recordingInterval: DateInterval) async {
     guard await provider.authorizationState() == .allowed else { return }
     await sync(interval: Self.queryInterval(overlapping: recordingInterval))
+  }
+
+  /// Local continuity evidence only: never prompts or uploads. Short caching keeps the
+  /// one-second audio probe from repeatedly querying EventKit; end times are checked every call.
+  func activeEventIDs(now: Date = Date(), covering previousCaptureEnd: Date? = nil) async -> Set<String> {
+    guard await provider.authorizationState() == .allowed else {
+      activeEventsCache = nil
+      return []
+    }
+    let events: [SystemCalendarEventSnapshot]
+    if let cache = activeEventsCache, now >= cache.at, now.timeIntervalSince(cache.at) < 15 {
+      events = cache.events
+    } else {
+      events = await provider.events(
+        in: DateInterval(start: now.addingTimeInterval(-1), end: now.addingTimeInterval(1)))
+      activeEventsCache = (now, events)
+    }
+    return Set(
+      events.filter { event in
+        !event.isAllDay && !event.isCanceled && !event.calendarEventID.isEmpty
+          && event.startTime <= now && event.endTime > now
+          && (previousCaptureEnd.map { end in event.startTime <= end && event.endTime > end } ?? true)
+      }.map(\.calendarEventID))
   }
 
   /// A deliberate settings gesture may request Calendar access for the local meeting-brief pilot.

@@ -1363,14 +1363,28 @@ class _BoundedReplayCollection:
         return self.refs[: self.limit_value]
 
 
-def test_replay_candidates_use_a_server_side_bounded_due_query():
+def test_replay_candidates_use_a_server_side_bounded_due_query(monkeypatch):
     collection = _BoundedReplayCollection()
-    client = SimpleNamespace(collection=lambda _name: collection)
+    collection.refs = [_Ref('queued-job', {'status': 'queued'})]
+    orders = []
 
+    def order_by(field):
+        orders.append(field)
+        return collection
+
+    collection.order_by = order_by
+    state_ref = SimpleNamespace(get=lambda: SimpleNamespace(to_dict=lambda: {}))
+    state_collection = SimpleNamespace(document=lambda name: state_ref)
+    client = SimpleNamespace(
+        collection=lambda name: collection if name == jobs.FINALIZATION_JOBS_COLLECTION else state_collection,
+        transaction=lambda: object(),
+    )
+    monkeypatch.setattr(jobs, '_advance_finalization_replay_cursor_txn', lambda *args: True)
+    monkeypatch.setattr(jobs.firestore, 'transactional', lambda fn: fn)
     candidates = jobs.get_finalization_replay_candidates(limit=1000, firestore_client=client)
-
     assert collection.where_calls == [('reconcile_after_at', '<=')]
-    assert collection.limit_value == 100
+    assert collection.limit_value == 1000
+    assert orders == ['reconcile_after_at', '__name__']
     assert candidates == [{'status': 'queued', 'job_id': 'queued-job'}]
 
 

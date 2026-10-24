@@ -518,11 +518,17 @@ class AppState: ObservableObject {
   }
   /// A relaunch mid-meeting splits the call into two conversations; the updater defers on this.
   func publishMeetingCaptureActivity() {
-    UpdateInstallActivity.setMeetingCaptureActive(isLiveCapturing && currentConversationRole == .meeting)
+    UpdateInstallActivity.setMeetingCaptureActive(
+      isTranscribing && currentConversationRole == .meeting
+        && (isLiveCapturing || meetingDetector?.resumeOffAt != nil))
   }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
   var (meetingBoundaryInProgress, meetingBoundaryEvidence) = (false, MeetingBoundaryEvidence())
   var pendingMeetingState: Bool?
+  var pendingMeetingEndedAt: Date?
+  var meetingRelaunchChecked = false
+  var meetingRelaunchCheckGeneration: UInt64?
+  var meetingRelaunchCheckMode: AssistantSettings.AudioRecordingMode?
   /// True while `finishConversation` is rotating the logical conversation.
   /// Serializes ALL rotation callers — `handleMeetingObservation`'s boundary
   /// flag only covers detector edges; the deferred `.meetingEnded` finalizer,
