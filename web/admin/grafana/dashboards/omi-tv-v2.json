@@ -3845,7 +3845,7 @@
     {
       "type": "stat",
       "title": "Variable margin",
-      "description": "Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR \u2212 real monthly cost) \u00f7 MRR. Real monthly cost = the trailing-7-day run rate (\u00d7 30.44) of GCP net of credits with the prepaid Vertex reserved capacity excluded, plus OpenAI, Soniox, Modulate and Stripe fees. It excludes marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). MRR = the FinOps plan book. Settled through D\u22122; the sparkline is the daily trailing-7d series over 60 days. Goal 50%: green at or above, red below. The line below names each cost line's source; a missing or stale vendor line is disclosed there, never silently dropped.",
+      "description": "Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR \u2212 real monthly cost) \u00f7 MRR. Real monthly cost = the trailing-7-day run rate (\u00d7 30.44) of GCP net of credits with only the prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, Soniox, Modulate and Stripe fees. It excludes marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: non-USD paying subscriptions are excluded from the figure and named with their count on the line below. Settled through D\u22122; the sparkline is the daily trailing-7d series over 60 days. Goal 50%: green at or above, red below. When the latest day has no MRR book snapshot the headline shows no value (no MRR book), never the previous day's margin. The line below names each line's source; a missing or stale vendor line is disclosed there, never silently dropped.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
@@ -3879,7 +3879,7 @@
         "defaults": {
           "unit": "percent",
           "decimals": 1,
-          "noValue": "\u2014",
+          "noValue": "no MRR book",
           "color": {
             "mode": "thresholds"
           },
@@ -3902,7 +3902,7 @@
       "options": {
         "reduceOptions": {
           "calcs": [
-            "lastNotNull"
+            "last"
           ],
           "fields": "",
           "values": false
@@ -3937,7 +3937,7 @@
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"
       },
-      "description": "Variable margin's data-through day and the source of each in-scope cost line: GCP net ex reserved, OpenAI, Soniox, Modulate, Stripe fees. A line with no source is named (n/a), a dated estimate carries its read date and goes stale by its own threshold.",
+      "description": "Variable margin's data-through day, the MRR book's source (FinOps plan book, USD-only, non-USD paying subscriptions excluded with their count) and the source of each in-scope cost line: GCP net ex reserved, OpenAI, Soniox, Modulate, Stripe fees. Soniox coverage is aggregated over the whole 7-day window (measured / est. / gap-spread day counts). A line with no source is named (n/a), a dated estimate carries its read date and goes stale by its own threshold.",
       "targets": [
         {
           "refId": "A",
@@ -4003,7 +4003,7 @@
     {
       "type": "timeseries",
       "title": "Cost run rate vs MRR",
-      "description": "The variable margin's two lines: violet = MRR (that day's FinOps book snapshot), blue-grey = real monthly cost (trailing-7-day run rate \u00d7 30.44). Dashed green = the cost level where margin is 50% (\u00bd MRR). Same scope as the Variable margin tile above (GCP net ex prepaid Vertex reserved, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run rate and the excluded prepaid reserved dollars. Settled D\u22122; a day without a book snapshot gaps the MRR line, never borrows a neighbour's.",
+      "description": "The variable margin's two lines: violet = MRR (that day's FinOps book snapshot, USD-only: non-USD paying subscriptions excluded), blue-grey = real monthly cost (trailing-7-day run rate \u00d7 30.44). Dashed green = the cost level where margin is 50% (\u00bd MRR). Same scope as the Variable margin tile above (GCP net ex prepaid Vertex reserved, one-time GCP incidents included, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run rate and the excluded prepaid reserved dollars. Settled D\u22122; a day without a book snapshot gaps the MRR line, never borrows a neighbour's.",
       "datasource": {
         "type": "yesoreyeram-infinity-datasource",
         "uid": "omi-admin-api"

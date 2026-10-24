@@ -349,7 +349,13 @@ def columns():
         (3, variable_margin_stat()),
         (1, variable_margin_status()),
         (4, chart("Cost run rate vs MRR",
-                  "The variable margin's two lines: violet = MRR (that day's FinOps book snapshot), blue-grey = real monthly cost (trailing-7-day run rate × 30.44). Dashed green = the cost level where margin is 50% (½ MRR). Same scope as the Variable margin tile above (GCP net ex prepaid Vertex reserved, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run rate and the excluded prepaid reserved dollars. Settled D−2; a day without a book snapshot gaps the MRR line, never borrows a neighbour's.",
+                  "The variable margin's two lines: violet = MRR (that day's FinOps book snapshot, USD-only: "
+                  "non-USD paying subscriptions excluded), blue-grey = real monthly cost (trailing-7-day run "
+                  "rate × 30.44). Dashed green = the cost level where margin is 50% (½ MRR). Same scope as "
+                  "the Variable margin tile above (GCP net ex prepaid Vertex reserved, one-time GCP incidents "
+                  "included, + OpenAI, Soniox, Modulate, Stripe fees); the tooltip carries each line's run "
+                  "rate and the excluded prepaid reserved dollars. Settled D−2; a day without a book snapshot "
+                  "gaps the MRR line, never borrows a neighbour's.",
                   [target("health", "variableMargin", [DATE, ("costPerMonth", "Cost run rate", "number"),
                                                        ("mrr", "MRR (book)", "number"),
                                                        ("goalCost", "50% target cost", "number"),
@@ -464,27 +470,33 @@ def margin_status():
 
 
 VARIABLE_MARGIN = ("Variable margin (approved 2026-10-24, definition 2026-10-23): (MRR − real monthly cost) ÷ MRR. "
-                   "Real monthly cost = the trailing-7-day run rate (× 30.44) of GCP net of credits with the prepaid "
-                   "Vertex reserved capacity excluded, plus OpenAI, Soniox, Modulate and Stripe fees. It excludes "
-                   "marketing, hardware, SaaS tooling and non-GCP infra (the all-in stack on Health counts those). "
-                   "MRR = the FinOps plan book. Settled through D−2; the sparkline is the daily trailing-7d series "
-                   "over 60 days. Goal 50%: green at or above, red below. The line below names each cost line's "
-                   "source; a missing or stale vendor line is disclosed there, never silently dropped.")
+                   "Real monthly cost = the trailing-7-day run rate (× 30.44) of GCP net of credits with only the "
+                   "prepaid Vertex reserved capacity excluded (a one-time GCP incident stays in), plus OpenAI, "
+                   "Soniox, Modulate and Stripe fees. It excludes marketing, hardware, SaaS tooling and non-GCP "
+                   "infra (the all-in stack on Health counts those). MRR = the FinOps plan book, USD-only: "
+                   "non-USD paying subscriptions are excluded from the figure and named with their count on the "
+                   "line below. Settled through D−2; the sparkline is the daily trailing-7d series over 60 days. "
+                   "Goal 50%: green at or above, red below. When the latest day has no MRR book snapshot the "
+                   "headline shows no value (no MRR book), never the previous day's margin. The line below names "
+                   "each line's source; a missing or stale vendor line is disclosed there, never silently dropped.")
 
 
 def variable_margin_stat():
     """The tile's big number: the latest margin % with the 60-day sparkline
-    behind it (Grafana draws the series history in the stat's background)."""
+    behind it (Grafana draws the series history in the stat's background).
+    The reducer is `last`, NOT `lastNotNull`: a day without an MRR book
+    snapshot nulls that day's margin, and the headline must show that absence
+    (the explicit no-value marker) rather than an older non-null margin."""
     panel = {"type": "stat", "title": "Variable margin", "description": VARIABLE_MARGIN, "datasource": DS,
              "targets": [target("health", "variableMargin", [("marginPct", "Variable margin", "number")])],
-             "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "—",
+             "fieldConfig": {"defaults": {"unit": "percent", "decimals": 1, "noValue": "no MRR book",
                                           # Below the 50% goal is red; at/above is green.
                                           "color": {"mode": "thresholds"},
                                           "thresholds": {"mode": "absolute", "steps": [
                                               {"color": STATUS_BAD, "value": None},
                                               {"color": STATUS_GOOD, "value": 50}]}},
                              "overrides": []},
-             "options": {"reduceOptions": {"calcs": ["lastNotNull"], "fields": "", "values": False},
+             "options": {"reduceOptions": {"calcs": ["last"], "fields": "", "values": False},
                          "textMode": "value", "colorMode": "value", "graphMode": "area",
                          "justifyMode": "center", "orientation": "vertical", "wideLayout": False,
                          "showPercentChange": False,
@@ -494,13 +506,17 @@ def variable_margin_stat():
 
 
 def variable_margin_status():
-    """The tile's disclosure line: data-through day and how every cost line was
-    priced (measured / Mercury cash / dated estimate), with missing or stale
-    lines named — e.g. "Soniox: n/a since …" — never a silent undercount."""
+    """The tile's disclosure line: data-through day, the MRR book's source with
+    its non-USD exclusion count, and how every cost line was priced (measured /
+    Mercury cash / dated estimate), with missing or stale lines named — e.g.
+    "Soniox: n/a since …" — never a silent undercount."""
     panel = data_through()
-    panel["description"] = ("Variable margin's data-through day and the source of each in-scope cost line: GCP net "
-                            "ex reserved, OpenAI, Soniox, Modulate, Stripe fees. A line with no source is named "
-                            "(n/a), a dated estimate carries its read date and goes stale by its own threshold.")
+    panel["description"] = ("Variable margin's data-through day, the MRR book's source (FinOps plan book, USD-only, "
+                            "non-USD paying subscriptions excluded with their count) and the source of each "
+                            "in-scope cost line: GCP net ex reserved, OpenAI, Soniox, Modulate, Stripe fees. "
+                            "Soniox coverage is aggregated over the whole 7-day window (measured / est. / "
+                            "gap-spread day counts). A line with no source is named (n/a), a dated estimate "
+                            "carries its read date and goes stale by its own threshold.")
     panel["targets"] = [target("health", "variableMarginStatus", [("text", "Margin sources", "string")])]
     panel["fieldConfig"]["defaults"]["noValue"] = "Margin sources —"
     return panel

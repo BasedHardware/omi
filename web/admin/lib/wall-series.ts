@@ -935,9 +935,10 @@ export function healthFrames(
     ],
     estimates: estimates.map((e) => ({ ...e, stale: e.stale ? 1 : 0 })),
     // Variable margin (David 2026-10-23): same all-in cost days, the margin's
-    // own scope (GCP ex prepaid Vertex reserved + OpenAI + Soniox + Modulate +
-    // Stripe fees), trailing-7-day run rate against that day's book. MRR comes
-    // from the day's own snapshot — a day without one keeps its cost point and
+    // own scope (GCP ex prepaid Vertex reserved, taken before the all-in
+    // one-time-incident exclusion, + OpenAI + Soniox + Modulate + Stripe
+    // fees), trailing-7-day run rate against that day's book. MRR comes from
+    // the day's own snapshot — a day without one keeps its cost point and
     // nulls the margin, never borrowing a neighbour's book.
     variableMargin: variable.map((p) => ({
       date: ts(p.date),
@@ -959,6 +960,9 @@ export function healthFrames(
           now,
           soniox: vendor.sonioxBalance,
           feesUnavailable,
+          nonUsdPaying: variable.at(-1)
+            ? legs.finops?.nonUsdPaying[variable.at(-1)!.date] ?? null
+            : null,
         }).join(" · "),
       },
     ],

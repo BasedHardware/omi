@@ -22,6 +22,7 @@ import {
   modulateReconciliation,
   oneTimeExcess,
   SAAS_MONTHLY_USD,
+  MARGIN_DAYS_PER_MONTH,
   SONIOX_GAP_FLAG,
   sonioxBalanceInputs,
   sonioxSeriesBroken,
@@ -1082,11 +1083,24 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
   const cash = Object.fromEntries(
     marginDays.map((x) => [x.date, { modulate: 20 }])
   );
-  const monthly = (perDay: number) => perDay * (365.25 / 12);
+  /** The run-rate month scale is the contract's exact 30.44 (Luna r3 P3), not
+   * the all-in calendar 365.25/12 the per-day constants divide by. */
+  const monthly = (perDay: number) => perDay * MARGIN_DAYS_PER_MONTH;
+  const runScale = MARGIN_DAYS_PER_MONTH / 7;
+  /** A dated monthly constant is priced per day at the calendar month and then
+   * scaled by the run-rate factor, so it re-enters the month slightly off its
+   * face value (× 30.44/30.4375). */
+  const toMonth = (monthlyUsd: number) =>
+    (monthlyUsd / (365.25 / 12)) * MARGIN_DAYS_PER_MONTH;
   /** The margin scope per day: GCP ex reserved + OpenAI + Soniox console est.
    * + Modulate cash + Stripe-fee baseline est. */
   const dayUsd =
-    1_500 + 100 - 95 + 250 + STT_MONTHLY_USD / (365.25 / 12) + 20 +
+    1_500 +
+    100 -
+    95 +
+    250 +
+    STT_MONTHLY_USD / (365.25 / 12) +
+    20 +
     STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
   const run = (vendor = {}, coverage = {}, feesCash?: Record<string, number>) =>
     variableMarginSeries(
@@ -1108,9 +1122,9 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
     expect(last.costPerMonth).toBeCloseTo(
       last.gcpPerMonth +
         monthly(250) +
-        STT_MONTHLY_USD +
+        toMonth(STT_MONTHLY_USD) +
         monthly(20) +
-        STRIPE_FEES_MONTHLY_USD,
+        toMonth(STRIPE_FEES_MONTHLY_USD),
       0
     );
     expect(
@@ -1122,7 +1136,10 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
     const last = run({ sttCash: cash }).at(-1)!;
     expect(last.mrr).toBe(60_000);
     expect(last.costPerMonth).toBeCloseTo(monthly(dayUsd), 0);
-    expect(last.marginPct).toBeCloseTo((100 * (60_000 - monthly(dayUsd))) / 60_000, 4);
+    expect(last.marginPct).toBeCloseTo(
+      (100 * (60_000 - monthly(dayUsd))) / 60_000,
+      4
+    );
     expect(last.goalCost).toBeCloseTo(60_000 * (1 - VARIABLE_MARGIN_TARGET), 6);
   });
 
@@ -1158,7 +1175,7 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
     ]);
   });
 
-  it("excludes one-time incident excess, as every wall run rate does", () => {
+  it("keeps a one-time GCP incident in the margin; only the wall excludes it", () => {
     const spiked = marginDays.map((x) =>
       x.date === d(12)
         ? {
@@ -1171,21 +1188,41 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
           }
         : x
     );
-    const clean = run({ sttCash: cash }).at(-1)!;
     const dirty = variableMarginSeries(
       allInCost(spiked, {}, { sttCash: cash }).daily,
       () => 60_000
-    ).at(-1)!;
-    // Only the excess is excluded, so a one-time incident never moves the
-    // run rate — checked on the window that contains it (d(8)..d(14)) and on
-    // one that does not.
-    const dirty14 = variableMarginSeries(
-      allInCost(spiked, {}, { sttCash: cash }).daily,
-      () => 60_000
-    ).find((p) => p.date === d(14))!;
-    const clean14 = run({ sttCash: cash }).find((p) => p.date === d(14))!;
-    expect(dirty.costPerMonth).toBeCloseTo(clean.costPerMonth, 5);
-    expect(dirty14.costPerMonth).toBeCloseTo(clean14.costPerMonth, 5);
+    );
+    const clean = run({ sttCash: cash });
+    // The margin's GCP input is taken BEFORE the all-in wall's one-time-incident
+    // exclusion (Luna r3 P1): its only GCP exclusion is the prepaid Vertex
+    // reserved SKU, so a window containing the incident (d(8)..d(14)) carries
+    // the full excess in its run rate — one spike day inside the 7-day window,
+    // so the increment scales by 30.44/7, not by a full month.
+    const dirty14 = dirty.find((p) => p.date === d(14))!;
+    const clean14 = clean.find((p) => p.date === d(14))!;
+    expect(dirty14.gcpPerMonth).toBeCloseTo(
+      clean14.gcpPerMonth + 13_800 * runScale,
+      0
+    );
+    expect(dirty14.costPerMonth).toBeCloseTo(
+      clean14.costPerMonth + 13_800 * runScale,
+      0
+    );
+    // A window past the incident is untouched…
+    expect(dirty.at(-1)!.costPerMonth).toBeCloseTo(
+      clean.at(-1)!.costPerMonth,
+      5
+    );
+    // …and the Health/all-in wall keeps its existing treatment: the same spike
+    // is still excluded from that day's all-in total.
+    const spikedDay = allInCost(spiked, {}, { sttCash: cash }).daily.find(
+      (x) => x.date === d(12)
+    )!;
+    const cleanDay = allInCost(marginDays, {}, { sttCash: cash }).daily.find(
+      (x) => x.date === d(12)
+    )!;
+    expect(spikedDay.oneTime).toBe(13_800);
+    expect(spikedDay.total).toBeCloseTo(cleanDay.total, 5);
   });
 
   it("names a missing vendor line instead of silently undercounting it", () => {
@@ -1226,7 +1263,8 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
         soniox: bal,
       }).join(" · ")
     ).toContain(`Soniox: n/a since ${d(8)} — console est.`);
-    // While the series covers every window day the line is measured.
+    // While the series covers every window day with a clean row, the line is
+    // measured.
     const covered = {
       ...bal,
       lastDay: d(21),
@@ -1240,7 +1278,86 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
         now: new Date("2026-10-23T00:00Z"),
         soniox: covered,
       }).join(" · ")
-    ).toContain("Soniox: measured $5,327/mo"); // 175/day × 30.4375
+    ).toContain("Soniox: measured $5,327/mo"); // 175/day × 30.44
+  });
+
+  it("labels a mixed Soniox window instead of calling it measured", () => {
+    // The series covers every window day, but d(15) never published a row: it
+    // falls back to the console constant. The latest day is measured, yet the
+    // run rate blends sources — a window-end-only flag would hide that
+    // (Luna r3 P2), so the flags aggregate over all seven days.
+    const bal = {
+      ready: true,
+      firstDay: d(1),
+      lastDay: d(21),
+      asOf: d(21),
+      spend: Object.fromEntries(marginDays.slice(15).map((x) => [x.date, 175])),
+      flags: {} as Record<string, string>,
+    };
+    const point = run({ sonioxBalance: bal, sttCash: cash }).at(-1)!;
+    expect(point.sonioxEstimateDays).toBe(1);
+    expect(point.sonioxGapSpreadDays).toBe(0);
+    expect(point.sonioxMeasured).toBe(false);
+    const text = variableMarginLineStatus(point, {
+      now: new Date("2026-10-23T00:00Z"),
+      soniox: bal,
+    }).join(" · ");
+    expect(text).toContain("Soniox: $5,323/mo — 1/7 days est.");
+    expect(text).not.toContain("Soniox: measured $5,323/mo"); // never "measured"
+  });
+
+  it("carries the Soniox gap_spread flag through an otherwise measured window", () => {
+    // A gap_spread row has a non-null spend, but those dollars are an
+    // even-spread assumption over a snapshot gap, not a per-day measurement:
+    // the flag survives and the window is disclosed as gap-spread (Luna r3 P2).
+    const bal = {
+      ready: true,
+      firstDay: d(1),
+      lastDay: d(21),
+      asOf: d(21),
+      spend: Object.fromEntries(marginDays.map((x) => [x.date, 175])),
+      flags: { [d(18)]: "gap_spread" } as Record<string, string>,
+    };
+    const point = run({ sonioxBalance: bal, sttCash: cash }).at(-1)!;
+    expect(point.sonioxEstimateDays).toBe(0);
+    expect(point.sonioxGapSpreadDays).toBe(1);
+    expect(point.sonioxMeasured).toBe(false);
+    expect(
+      variableMarginLineStatus(point, {
+        now: new Date("2026-10-23T00:00Z"),
+        soniox: bal,
+      }).join(" · ")
+    ).toContain("Soniox: measured $5,327/mo — 1/7 days gap-spread");
+  });
+
+  it("discloses the MRR source and its non-USD exclusion with the count", () => {
+    const last = run({ sttCash: cash }).at(-1)!;
+    const counted = variableMarginLineStatus(last, {
+      now: new Date("2026-10-23T00:00Z"),
+      nonUsdPaying: 33,
+    }).join(" · ");
+    expect(counted).toContain(
+      "MRR: FinOps plan book $60,000/mo — 33 non-USD paying subs excluded"
+    );
+    // A legacy table without the count column still names the partial caveat.
+    const uncounted = variableMarginLineStatus(last, {
+      now: new Date("2026-10-23T00:00Z"),
+      nonUsdPaying: null,
+    }).join(" · ");
+    expect(uncounted).toContain(
+      "MRR: FinOps plan book $60,000/mo — non-USD paying subs excluded (count n/a)"
+    );
+    // A missing book snapshot is named on the status line too — the headline
+    // shows no value, and the line says why.
+    const noBook = variableMarginSeries(
+      allInCost(marginDays, {}, { sttCash: cash }).daily,
+      (day) => (day === d(21) ? null : 60_000)
+    ).at(-1)!;
+    expect(
+      variableMarginLineStatus(noBook, {
+        now: new Date("2026-10-23T00:00Z"),
+      }).join(" · ")
+    ).toContain("MRR: n/a (no book snapshot that day)");
   });
 
   it("uses measured fees, then Mercury fee cash, before the dated baseline", () => {
@@ -1262,7 +1379,10 @@ describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () 
 
     const estimate = run(vendor).at(-1)!;
     expect(estimate.feeSource).toBe("estimate");
-    expect(estimate.feesPerMonth).toBeCloseTo(STRIPE_FEES_MONTHLY_USD, 6);
+    expect(estimate.feesPerMonth).toBeCloseTo(
+      toMonth(STRIPE_FEES_MONTHLY_USD),
+      4
+    );
     // The baseline goes stale by its own threshold, named on the disclosure.
     const fresh = variableMarginLineStatus(estimate, {
       now: new Date("2026-10-23T00:00Z"),

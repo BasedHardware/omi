@@ -269,14 +269,19 @@ class WallV2Contract(unittest.TestCase):
         self.assertEqual(tile["targets"][0]["url"].rsplit("/", 1)[1], "health")
         self.assertEqual(tile["targets"][0]["root_selector"], "frames.variableMargin")
         self.assertEqual(tile["options"]["graphMode"], "area")
-        self.assertEqual(tile["options"]["reduceOptions"]["calcs"], ["lastNotNull"])
+        # The reducer is `last`, never `lastNotNull`: a day without an MRR book
+        # snapshot nulls that day's margin, and the headline must show the
+        # explicit no-value marker, not an older non-null margin (Luna r3 P2).
+        self.assertEqual(tile["options"]["reduceOptions"]["calcs"], ["last"])
+        self.assertNotIn("lastNotNull", tile["options"]["reduceOptions"]["calcs"])
+        self.assertEqual(tile["fieldConfig"]["defaults"]["noValue"], "no MRR book")
         self.assertEqual(tile["fieldConfig"]["defaults"]["unit"], "percent")
         steps = tile["fieldConfig"]["defaults"]["thresholds"]["steps"]
         self.assertEqual([s["value"] for s in steps], [None, 50])
         self.assertEqual(steps[1]["color"], STATUS_GOOD)
         # The definition is on the wall, not in a separate doc.
         for phrase in ("MRR − real monthly cost", "Vertex reserved", "OpenAI, Soniox, Modulate and Stripe fees",
-                       "Goal 50%", "60 days"):
+                       "Goal 50%", "60 days", "non-USD paying subscriptions", "no MRR book"):
             self.assertIn(phrase, tile["description"])
         # The secondary chart: cost run rate vs MRR with the 50% target marked.
         chart_panel = next(p for p in board["panels"] if p["title"] == "Cost run rate vs MRR")
@@ -288,11 +293,14 @@ class WallV2Contract(unittest.TestCase):
         target_line = styled["50% target cost"]
         self.assertEqual(target_line["color"]["fixedColor"], STATUS_GOOD)
         self.assertEqual(target_line["custom.lineStyle"]["dash"], [6, 4])  # a goal, not a series
-        # Missing/stale vendor lines are named on the tile's own status line.
+        # Missing/stale vendor lines are named on the tile's own status line,
+        # which also carries the MRR source and its non-USD exclusion count.
         status = next(p for p in board["panels"]
                       if p["targets"][0]["root_selector"] == "frames.variableMarginStatus")
         self.assertEqual(status["gridPos"]["h"], 1)
         self.assertIn("named", status["description"])
+        self.assertIn("non-USD", status["description"])
+        self.assertIn("7-day window", status["description"])
 
     def test_cost_estimates_are_dated_like_the_api(self):
         import re
