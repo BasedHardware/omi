@@ -44,12 +44,16 @@ def test_cpu_fp32_loader_keeps_pins_and_real_adapter_composition(monkeypatch):
     assert ('restore', 'checkpoint', 'cpu') in calls
     assert ('pyannote', 1, 'cpu') in calls
     assert ('checkpoint', 'nvidia/parakeet-tdt-0.6b-v3', 'parakeet-tdt-0.6b-v3.nemo', startup.ASR_REVISION) in calls
+    centroid_extractor = worker['centroid_extractor']
+    assert isinstance(centroid_extractor, startup.LocalCentroidEmbedding)
+    assert centroid_extractor.device == 'cpu'
     assert worker == dict(
         fetch_audio=artifacts.fetch_audio,
         persist_result=artifacts.persist_result,
         vad_model=vad,
         parakeet_model=asr,
         pyannote_model=diarizer,
+        centroid_extractor=centroid_extractor,
     )
 
 
