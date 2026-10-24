@@ -36,13 +36,15 @@ from utils.mcp_client import (
     register_oauth_client,
     build_authorization_url,
     exchange_oauth_code,
-    refresh_oauth_token,
     discover_mcp_tools,
     fetch_brandfetch_logo,
     create_mcp_oauth_state,
     consume_mcp_oauth_state,
     generate_pkce_pair,
 )
+
+from models.mcp_client import McpCredentialError
+from utils.mcp_token_refresh import refresh_mcp_access_token
 
 from database.apps import (
     change_app_approval_status,
@@ -2209,40 +2211,20 @@ async def refresh_mcp_tools(app_id: str, uid: str = Depends(auth.get_current_use
     access_token = oauth_tokens.get('access_token') if oauth_tokens else None
 
     try:
-        tools = await discover_mcp_tools(server_url, access_token)
-    except PermissionError:
-        # Try token refresh
-        if oauth_tokens and oauth_tokens.get('refresh_token'):
-            new_tokens = await refresh_oauth_token(
-                oauth_tokens['token_endpoint'],
-                oauth_tokens['refresh_token'],
-                oauth_tokens['client_id'],
-                oauth_tokens.get('client_secret'),
-            )
-            oauth_tokens['access_token'] = new_tokens['access_token']
-            if new_tokens.get('refresh_token'):
-                oauth_tokens['refresh_token'] = new_tokens['refresh_token']
-
-            tools = await discover_mcp_tools(server_url, new_tokens['access_token'])
-
-            update_dict = {
-                'id': app_id,
-                'external_integration': {
-                    'mcp_server_url': server_url,
-                    'mcp_oauth_tokens': oauth_tokens,
-                },
-                'chat_tools': _serialize_chat_tools_for_firestore(tools),
-            }
-            await run_blocking(db_executor, update_app_in_db, update_dict)
-            await run_blocking(db_executor, delete_app_cache_by_id, app_id)
-
-            return {'tools_count': len(tools), 'tool_names': [t.name for t in tools]}
-        raise HTTPException(status_code=401, detail='MCP server requires re-authorization')
+        try:
+            tools = await discover_mcp_tools(server_url, access_token)
+        except PermissionError:
+            if not oauth_tokens:
+                raise HTTPException(status_code=401, detail='MCP server requires re-authorization')
+            access_token = await refresh_mcp_access_token(app_id, server_url, oauth_tokens, access_token)
+            tools = await discover_mcp_tools(server_url, access_token)
+    except (McpCredentialError, PermissionError):
+        raise HTTPException(status_code=401, detail='MCP server requires re-authorization') from None
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"Failed to discover tools: {e}")
-        raise HTTPException(status_code=502, detail='Failed to discover tools')
+    except Exception as error:
+        logger.error('Failed to discover MCP tools app=%s cause=%s', app_id, type(error).__name__)
+        raise HTTPException(status_code=502, detail='Failed to discover tools') from None
 
     update_dict = {
         'id': app_id,

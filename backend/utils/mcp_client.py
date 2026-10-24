@@ -13,14 +13,14 @@ import base64
 import hashlib
 import json
 import secrets
-import time
-from typing import Any, Optional, cast
+from typing import Any, Awaitable, Callable, Optional, cast
 from urllib.parse import urlencode, urljoin, urlparse
 
 import httpx
 
 from database import redis_db
 from models.app import ChatTool
+from models.mcp_client import McpCredentialError
 from utils.log_sanitizer import sanitize
 import logging
 
@@ -381,6 +381,8 @@ async def _sse_send_and_receive_inner(
                                     headers=post_headers,
                                     follow_redirects=False,
                                 )
+                                if post_response.status_code == 401:
+                                    raise PermissionError("MCP server returned 401 Unauthorized")
                                 if 300 <= post_response.status_code < 400:
                                     raise httpx.HTTPStatusError(
                                         f'SSE endpoint redirected with {post_response.status_code}',
@@ -506,6 +508,8 @@ async def discover_mcp_tools(server_url: str, access_token: Optional[str] = None
 
             logger.info(f"[MCP Discovery] Success via Streamable HTTP at {url}, found {len(mcp_tools)} tools")
             return _build_chat_tools(mcp_tools, url, transport="streamable_http")
+        except PermissionError:
+            raise
         except Exception as e:
             logger.error(f"[MCP Discovery] Streamable HTTP failed at {url}: {e}")
             errors.append(f"HTTP {url}: {e}")
@@ -522,6 +526,8 @@ async def discover_mcp_tools(server_url: str, access_token: Optional[str] = None
 
             logger.info(f"[MCP Discovery] Success via SSE at {url}, found {len(mcp_tools)} tools")
             return _build_chat_tools(mcp_tools, url, transport="sse")
+        except PermissionError:
+            raise
         except Exception as e:
             logger.error(f"[MCP Discovery] SSE failed at {url}: {e}")
             errors.append(f"SSE {url}: {e}")
@@ -597,23 +603,25 @@ async def _initialize_session(server_url: str, access_token: Optional[str] = Non
     return session_id
 
 
+RefreshAccessToken = Callable[[Optional[str]], Awaitable[str]]
+
+
 async def call_mcp_tool(
     server_url: str,
     tool_name: str,
     arguments: dict[str, Any],
     access_token: Optional[str] = None,
-    oauth_tokens: Optional[dict[str, Any]] = None,
     transport: str = "streamable_http",
+    refresh_access_token: Optional[RefreshAccessToken] = None,
 ) -> str:
-    """Call an MCP tool and return the text result.
+    """Call a tool, refreshing once through the caller's durable credential owner on 401.
 
-    Supports both Streamable HTTP and SSE transports.
-    If a 401 is received and oauth_tokens are available, attempts a token refresh and retries once.
+    The callback must save rotated credentials before returning an access token.
+    Transport code never refreshes a detached token dictionary on its own.
     """
     if transport == "sse":
-        return await _call_mcp_tool_sse(server_url, tool_name, arguments, access_token, oauth_tokens)
-
-    return await _call_mcp_tool_http(server_url, tool_name, arguments, access_token, oauth_tokens)
+        return await _call_mcp_tool_sse(server_url, tool_name, arguments, access_token, refresh_access_token)
+    return await _call_mcp_tool_http(server_url, tool_name, arguments, access_token, refresh_access_token)
 
 
 async def _call_mcp_tool_http(
@@ -621,56 +629,47 @@ async def _call_mcp_tool_http(
     tool_name: str,
     arguments: dict[str, Any],
     access_token: Optional[str] = None,
-    oauth_tokens: Optional[dict[str, Any]] = None,
+    refresh_access_token: Optional[RefreshAccessToken] = None,
 ) -> str:
-    """Call an MCP tool via Streamable HTTP transport."""
-    req = _jsonrpc_request(
-        "tools/call",
-        params={"name": tool_name, "arguments": arguments},
-        req_id=3,
-    )
-
-    candidates = _resolve_mcp_url(server_url)
+    req = _jsonrpc_request("tools/call", params={"name": tool_name, "arguments": arguments}, req_id=3)
     last_error = None
-
-    for url in candidates:
+    refreshed = False
+    for url in _resolve_mcp_url(server_url):
         try:
             session_id = await _initialize_session(url, access_token)
             resp, _ = await _mcp_post(url, req, access_token, session_id)
-            break
+            return _extract_tool_result(resp)
         except PermissionError:
-            if oauth_tokens and oauth_tokens.get("refresh_token"):
-                new_tokens = await refresh_oauth_token(
-                    oauth_tokens["token_endpoint"],
-                    oauth_tokens["refresh_token"],
-                    oauth_tokens["client_id"],
-                    oauth_tokens.get("client_secret"),
-                )
-                oauth_tokens["access_token"] = new_tokens["access_token"]
-                if new_tokens.get("refresh_token"):
-                    oauth_tokens["refresh_token"] = new_tokens["refresh_token"]
-                if new_tokens.get("expires_in"):
-                    oauth_tokens["expires_at"] = time.time() + new_tokens["expires_in"]
-
-                session_id = await _initialize_session(url, new_tokens["access_token"])
-                resp, _ = await _mcp_post(url, req, new_tokens["access_token"], session_id)
-                break
-            else:
-                return "Error: MCP server returned 401 Unauthorized and no refresh token available."
-        except httpx.HTTPStatusError as e:
-            if 300 <= e.response.status_code < 400:
+            if refreshed or refresh_access_token is None:
+                return "Error: MCP server requires re-authorization."
+            try:
+                access_token = await refresh_access_token(access_token)
+            except McpCredentialError as error:
+                return f"Error: {error}"
+            except Exception:
+                return "Error: MCP authorization could not be refreshed. Reconnect the integration."
+            refreshed = True
+            try:
+                session_id = await _initialize_session(url, access_token)
+                resp, _ = await _mcp_post(url, req, access_token, session_id)
+                return _extract_tool_result(resp)
+            except PermissionError:
+                return "Error: MCP server requires re-authorization."
+            except httpx.HTTPStatusError as error:
+                if 300 <= error.response.status_code < 400:
+                    raise
+                last_error = error
+            except Exception as error:
+                last_error = error
+        except httpx.HTTPStatusError as error:
+            if 300 <= error.response.status_code < 400:
                 raise
-            last_error = e
-            continue
-        except Exception as e:
-            last_error = e
-            continue
-    else:
-        if last_error:
-            return f"Error calling MCP tool: {last_error}"
-        return f"Error: Failed to connect to MCP server at {server_url}"
-
-    return _extract_tool_result(resp)
+            last_error = error
+        except Exception as error:
+            last_error = error
+    if last_error:
+        return f"Error calling MCP tool: {type(last_error).__name__}"
+    return "Error: Failed to connect to MCP server."
 
 
 async def _call_mcp_tool_sse(
@@ -678,35 +677,29 @@ async def _call_mcp_tool_sse(
     tool_name: str,
     arguments: dict[str, Any],
     access_token: Optional[str] = None,
-    oauth_tokens: Optional[dict[str, Any]] = None,
+    refresh_access_token: Optional[RefreshAccessToken] = None,
 ) -> str:
-    """Call an MCP tool via SSE transport."""
     try:
-        resp = await _call_tool_via_sse(server_url, tool_name, arguments, access_token)
+        try:
+            resp = await _call_tool_via_sse(server_url, tool_name, arguments, access_token)
+        except PermissionError:
+            if refresh_access_token is None:
+                return "Error: MCP server requires re-authorization."
+            try:
+                access_token = await refresh_access_token(access_token)
+            except McpCredentialError as error:
+                return f"Error: {error}"
+            except Exception:
+                return "Error: MCP authorization could not be refreshed. Reconnect the integration."
+            resp = await _call_tool_via_sse(server_url, tool_name, arguments, access_token)
     except PermissionError:
-        if oauth_tokens and oauth_tokens.get("refresh_token"):
-            new_tokens = await refresh_oauth_token(
-                oauth_tokens["token_endpoint"],
-                oauth_tokens["refresh_token"],
-                oauth_tokens["client_id"],
-                oauth_tokens.get("client_secret"),
-            )
-            oauth_tokens["access_token"] = new_tokens["access_token"]
-            if new_tokens.get("refresh_token"):
-                oauth_tokens["refresh_token"] = new_tokens["refresh_token"]
-            if new_tokens.get("expires_in"):
-                oauth_tokens["expires_at"] = time.time() + new_tokens["expires_in"]
-
-            resp = await _call_tool_via_sse(server_url, tool_name, arguments, new_tokens["access_token"])
-        else:
-            return "Error: MCP server returned 401 Unauthorized and no refresh token available."
-    except httpx.HTTPStatusError as e:
-        if 300 <= e.response.status_code < 400:
+        return "Error: MCP server requires re-authorization."
+    except httpx.HTTPStatusError as error:
+        if 300 <= error.response.status_code < 400:
             raise
-        return f"Error calling MCP tool via SSE: {e}"
-    except Exception as e:
-        return f"Error calling MCP tool via SSE: {e}"
-
+        return f"Error calling MCP tool via SSE: HTTP {error.response.status_code}"
+    except Exception as error:
+        return f"Error calling MCP tool via SSE: {type(error).__name__}"
     return _extract_tool_result(resp)
 
 
