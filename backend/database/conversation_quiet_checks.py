@@ -141,7 +141,7 @@ def _evaluate_quiet_check(job_id: str, generation: int, *, firestore_client: Any
         job = job_ref.get(transaction=transaction).to_dict() or {}
         if job.get('kind') != QUIET_CHECK_KIND or job.get('status') != QUIET_CHECK_STATUS:
             return {'status': 'stale'}
-        if job.get('dispatch_generation') != generation:
+        if isinstance(job.get('dispatch_generation'), bool) or job.get('dispatch_generation') != generation:
             return {'status': 'stale'}
         now = _now()
         row_ref = (

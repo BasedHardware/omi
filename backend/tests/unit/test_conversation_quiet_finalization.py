@@ -389,6 +389,14 @@ def test_kill_switch_restores_legacy_admission_for_a_stamped_long_quiet_window(s
 
 @pytest.mark.parametrize('fails', [False, True])
 def test_reconciler_owns_quiet_wakes_and_reports_failures(monkeypatch, fails):
+    monkeypatch.setattr(service.jobs_db, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **kw: 0)
+    monkeypatch.setattr(
+        service.jobs_db,
+        'get_finalization_job',
+        lambda *args, **kw: {'status': 'waiting_quiet', 'dispatch_generation': 2},
+    )
+    monkeypatch.setattr(service.jobs_db, 'defer_finalization_replay', lambda *args, **kw: False)
+    monkeypatch.setattr(checks, 'ensure_quiet_check_progress', lambda *args, **kw: False)
 
     monkeypatch.setattr(service.jobs_db, 'recover_stranded_byok_jobs', lambda **kw: {'blocked': 0, 'errors': 0})
     monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
@@ -405,7 +413,8 @@ def test_reconciler_owns_quiet_wakes_and_reports_failures(monkeypatch, fails):
     result = service.reconcile_listen_finalization_jobs()
     run.assert_called_once_with('quiet-synthetic', 1, firestore_client=None)
     assert result['enqueue_failed'] == int(fails)
-    assert result['requeued'] == int(not fails)
+    assert result['requeued'] == 0
+    assert result['advanced'] == int(not fails)
 
 
 def test_fast_and_legacy_sweeps_have_independent_cursors(store):
