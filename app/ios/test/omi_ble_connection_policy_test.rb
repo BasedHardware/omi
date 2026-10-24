@@ -27,6 +27,9 @@ class OmiBleConnectionPolicyTest < Minitest::Test
                 intent.configure(saved, enabled: true)
                 // A remote disconnect owes a request immediately, irrespective of capture.
                 precondition(intent.action(saved, poweredOn: true, state: .disconnected) == .connect)
+                // applicationWillTerminate cleanup must preserve saved OS requests
+                // without turning termination into a durable manual disconnect.
+                precondition(intent.terminationTargets([saved, other]) == [other])
                 // Kill/relaunch without Flutter or a restored peripheral: scan until found.
                 intent = OmiSavedReconnectIntent(defaults: defaults)
                 precondition(intent.action(saved, poweredOn: true, state: nil) == .scan)
@@ -47,6 +50,7 @@ class OmiBleConnectionPolicyTest < Minitest::Test
                 precondition(intent.action(saved, poweredOn: true, state: .disconnected) == .connect)
                 // Explicit suppression survives a new process and stale restoration.
                 intent.suppress(saved)
+                precondition(intent.terminationTargets([saved, other]) == [saved, other])
                 intent = OmiSavedReconnectIntent(defaults: defaults)
                 precondition(intent.action(saved, poweredOn: true, state: .connecting) == .suppressed)
                 precondition(intent.action(saved, poweredOn: true, state: .connected) == .suppressed)

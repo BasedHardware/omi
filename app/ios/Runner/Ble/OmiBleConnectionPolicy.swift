@@ -122,6 +122,12 @@ struct OmiSavedReconnectIntent {
         try? SafeDefaults.store(.array(blocked.sorted().map { .string($0) }), forKey: Self.blockedKey, in: defaults)
     }
 
+    /// Process teardown is not a user disconnect. Keep saved OS requests eligible
+    /// for CoreBluetooth restoration; only unsaved/blocked owners are retired.
+    func terminationTargets(_ known: Set<String>) -> Set<String> {
+        known.subtracting(saved.subtracting(blocked))
+    }
+
     enum Action { case waitForAdapter, suppressed, scan, connect, keepPending, connected }
     func action(_ uuid: String, poweredOn: Bool, state: CBPeripheralState?) -> Action {
         guard saved.contains(uuid), !blocked.contains(uuid) else { return .suppressed }

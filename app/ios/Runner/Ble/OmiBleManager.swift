@@ -627,9 +627,15 @@ final class OmiBleManager: NSObject {
         centralManager.cancelPeripheralConnection(peripheral)
     }
 
+    /// Called only by applicationWillTerminate. Saved requests remain owned by
+    /// CoreBluetooth; durable user suppression belongs to disconnectPeripheral.
     func disconnectAllPeripherals() {
-        for uuid in Set(peripherals.keys).union(savedReconnect) {
-            disconnectPeripheral(uuid: uuid)
+        for uuid in reconnectIntent.terminationTargets(Set(peripherals.keys)) {
+            guard let peripheral = peripherals[uuid] else { continue }
+            manuallyDisconnected.insert(uuid) // Process-local callback fence only.
+            finishReadyRequest(uuid: uuid)
+            logBle(uuid: uuid, event: "connect_cancelled", detail: "process_termination_unsaved")
+            centralManager.cancelPeripheralConnection(peripheral)
         }
     }
 
