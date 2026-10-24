@@ -20,7 +20,7 @@ class _Messages extends ChangeNotifier implements MessageProvider {
   void add(String id, String text, MessageSender sender) {
     messages = [
       ...messages,
-      ServerMessage(id, DateTime.now(), text, sender, MessageType.text, null, false, [], [], [])
+      ServerMessage(id, DateTime.now(), text, sender, MessageType.text, null, false, [], [], []),
     ];
     notifyListeners();
   }
@@ -55,8 +55,7 @@ Widget _step(DeviceOnboardingProvider provider, _Messages chat) {
   );
 }
 
-/// Starts the tutorial and answers the question step the way the pendant path does: two presses,
-/// then the question and Omi's answer arrive in chat.
+/// Starts the tutorial and answers the question step through the tutorial outcome callback.
 Future<(DeviceOnboardingProvider, _Messages)> _answered(WidgetTester tester) async {
   final provider = DeviceOnboardingProvider()
     ..startOnboarding()
@@ -67,9 +66,7 @@ Future<(DeviceOnboardingProvider, _Messages)> _answered(WidgetTester tester) asy
     ..onButtonEvent(1)
     ..onButtonEvent(1);
   await tester.pump();
-  chat
-    ..add('q1', 'What is on my calendar today?', MessageSender.human)
-    ..add('a1', 'A design review at 2 pm.', MessageSender.ai);
+  provider.onVoiceResponseReceived('A design review at 2 pm.', question: 'What is on my calendar today?');
   await tester.pump(const Duration(milliseconds: 300));
   expect(find.text('A design review at 2 pm.'), findsOneWidget);
   return (provider, chat);
@@ -126,5 +123,72 @@ void main() {
       ..goToStep(DeviceOnboardingProvider.voiceReplyStep)
       ..startOnboarding();
     expect(provider.reviewingFromSummary, isFalse);
+  });
+
+  testWidgets('unrelated chat traffic does not complete the tutorial question step (#23385)', (tester) async {
+    final provider = DeviceOnboardingProvider()
+      ..startOnboarding()
+      ..advanceStep();
+    final chat = _Messages();
+    await tester.pumpWidget(_step(provider, chat));
+
+    provider
+      ..onButtonEvent(1)
+      ..onButtonEvent(1);
+    await tester.pump();
+
+    chat
+      ..add('unrelated-q', 'Unrelated typed question', MessageSender.human)
+      ..add('unrelated-a', 'Unrelated chat reply', MessageSender.ai);
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('Unrelated chat reply'), findsNothing);
+    expect(find.text('Continue'), findsNothing);
+    expect(find.textContaining('Processing'), findsOneWidget);
+  });
+
+  testWidgets('renders localized retry and limit explanations for terminal voice failures (#23385)', (tester) async {
+    final provider = DeviceOnboardingProvider()
+      ..startOnboarding()
+      ..advanceStep();
+    final chat = _Messages();
+    await tester.pumpWidget(_step(provider, chat));
+
+    // Quota failure shows the localized monthly limit message.
+    provider
+      ..onButtonEvent(1)
+      ..onButtonEvent(1)
+      ..onVoiceQuestionFailed(failure: VoiceQuestionFailure.quota);
+    await tester.pump();
+    expect(
+      find.text("You've hit your monthly limit. Upgrade to keep chatting with Omi without restrictions."),
+      findsOneWidget,
+    );
+
+    // Offline failure on retry shows the localized offline explanation.
+    provider
+      ..onButtonEvent(1)
+      ..onButtonEvent(1)
+      ..onVoiceQuestionFailed(failure: VoiceQuestionFailure.offline);
+    await tester.pump();
+    expect(find.text('Unable to connect. Check your connection and try again.'), findsOneWidget);
+
+    // Codec failure on retry shows the localized generic retry explanation.
+    provider
+      ..onButtonEvent(1)
+      ..onButtonEvent(1)
+      ..onVoiceQuestionFailed(failure: VoiceQuestionFailure.codecFailed);
+    await tester.pump();
+    expect(find.text("Omi couldn't reply. Check your connection and try again."), findsOneWidget);
+
+    // Subsequent retry succeeds and shows the answer + Continue button.
+    provider
+      ..onButtonEvent(1)
+      ..onButtonEvent(1)
+      ..onVoiceResponseReceived('Here is your answer.', question: 'Can you hear me now?');
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('Can you hear me now?'), findsOneWidget);
+    expect(find.text('Here is your answer.'), findsOneWidget);
+    expect(find.text('Continue'), findsOneWidget);
   });
 }

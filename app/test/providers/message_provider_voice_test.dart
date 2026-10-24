@@ -11,6 +11,7 @@ import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
 ServerMessage _voiceRow(String id, MessageSender sender, String text) =>
@@ -19,11 +20,19 @@ ServerMessage _voiceRow(String id, MessageSender sender, String text) =>
 /// What `/v2/voice-messages` streams for an answered pendant question: the transcribed
 /// question, the answer text, then the saved answer.
 Stream<ServerMessageChunk> _answeredVoiceQuestion() async* {
-  yield ServerMessageChunk('question', '', MessageChunkType.message,
-      message: _voiceRow('question', MessageSender.human, 'What did I promise Sam?'));
+  yield ServerMessageChunk(
+    'question',
+    '',
+    MessageChunkType.message,
+    message: _voiceRow('question', MessageSender.human, 'What did I promise Sam?'),
+  );
   yield ServerMessageChunk('answer', 'Call him on Friday.', MessageChunkType.data);
-  yield ServerMessageChunk('answer', '', MessageChunkType.done,
-      message: _voiceRow('answer', MessageSender.ai, 'Call him on Friday.'));
+  yield ServerMessageChunk(
+    'answer',
+    '',
+    MessageChunkType.done,
+    message: _voiceRow('answer', MessageSender.ai, 'Call him on Friday.'),
+  );
 }
 
 class _TestEnvFields implements EnvFields {
@@ -84,7 +93,7 @@ void main() {
 
     await provider.sendVoiceMessageStreamToServer(
       [
-        <int>[1, 2, 3]
+        <int>[1, 2, 3],
       ],
       codec: BleAudioCodec.opus,
       onNoSpeech: () async => failureHaptics++,
@@ -108,7 +117,7 @@ void main() {
     provider.chatSessionId = 'past';
     provider.messages = [prior];
     await provider.sendVoiceMessageStreamToServer([
-      <int>[1]
+      <int>[1],
     ], codec: BleAudioCodec.opus);
     expect(provider.messages, [prior]);
     expect(provider.messages.single.text, 'Past thread');
@@ -131,10 +140,13 @@ void main() {
     final mentorTip = ServerMessage.empty(appId: 'mentor')..text = 'Mentor tip';
     provider.messages = [mentorTip];
 
-    await provider.sendVoiceMessageStreamToServer([
-      <int>[1]
+    final outcome = await provider.sendVoiceMessageStreamToServer([
+      <int>[1],
     ], codec: BleAudioCodec.opus);
 
+    expect(outcome.isAnswered, isTrue);
+    expect(outcome.question, 'What did I promise Sam?');
+    expect(outcome.answer, 'Call him on Friday.');
     expect(provider.messages, [mentorTip]);
     expect(provider.showTypingIndicator, isFalse);
     expect(provider.canSwitchChat, isTrue);
@@ -155,13 +167,14 @@ void main() {
     provider.messages = [earlier];
 
     await provider.sendVoiceMessageStreamToServer([
-      <int>[1]
+      <int>[1],
     ], codec: BleAudioCodec.opus);
 
-    expect(
-      provider.messages.map((m) => m.text).toList(),
-      ['Earlier answer', 'What did I promise Sam?', 'Call him on Friday.'],
-    );
+    expect(provider.messages.map((m) => m.text).toList(), [
+      'Earlier answer',
+      'What did I promise Sam?',
+      'Call him on Friday.',
+    ]);
   });
 
   test('voice reply timeout clears the re-entry guard for the next question', () async {
@@ -178,10 +191,10 @@ void main() {
     );
 
     await provider.sendVoiceMessageStreamToServer([
-      <int>[1]
+      <int>[1],
     ], codec: BleAudioCodec.opus);
     await provider.sendVoiceMessageStreamToServer([
-      <int>[2]
+      <int>[2],
     ], codec: BleAudioCodec.opus);
 
     expect(streamCalls, 2);
@@ -189,4 +202,56 @@ void main() {
     await stalled.close();
     provider.dispose();
   });
+
+  test(
+    'returns typed VoiceQuestionOutcome across fresh chat, quota, audio-save, and stream failures (#23385)',
+    () async {
+      final provider = MessageProvider(
+        voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
+        voiceReplyStreamer: (_, {language}) => _answeredVoiceQuestion(),
+      );
+      addTearDown(provider.dispose);
+
+      // Fresh chat session keeps messages isolated while still returning the answered outcome.
+      provider.isFreshChat = true;
+      final freshOutcome = await provider.sendVoiceMessageStreamToServer([
+        <int>[1, 2],
+      ], codec: BleAudioCodec.opus);
+      expect(freshOutcome.isAnswered, isTrue);
+      expect(freshOutcome.question, 'What did I promise Sam?');
+      expect(freshOutcome.answer, 'Call him on Friday.');
+      expect(provider.messages, isEmpty);
+
+      // Quota error chunk surfaces VoiceQuestionFailure.quota.
+      final quotaProvider = MessageProvider(
+        voiceAudioFileSaver: (_, __, ___) async => File('/tmp/unused-voice-question.opus'),
+        voiceReplyStreamer: (_, {language}) async* {
+          yield ServerMessageChunk(
+            'quota-id',
+            '{"detail": {"error": "quota_exceeded"}}',
+            MessageChunkType.error,
+            errorCode: 'quota_exceeded',
+          );
+        },
+      );
+      addTearDown(quotaProvider.dispose);
+      final quotaOutcome = await quotaProvider.sendVoiceMessageStreamToServer([
+        <int>[1],
+      ], codec: BleAudioCodec.opus);
+      expect(quotaOutcome.isAnswered, isFalse);
+      expect(quotaOutcome.failure, VoiceQuestionFailure.quota);
+
+      // Audio save failure surfaces VoiceQuestionFailure.audioSaveFailed.
+      final saveFailProvider = MessageProvider(
+        voiceAudioFileSaver: (_, __, ___) async => throw const FileSystemException('disk full'),
+        voiceReplyStreamer: (_, {language}) => _answeredVoiceQuestion(),
+      );
+      addTearDown(saveFailProvider.dispose);
+      final saveFailOutcome = await saveFailProvider.sendVoiceMessageStreamToServer([
+        <int>[1],
+      ], codec: BleAudioCodec.opus);
+      expect(saveFailOutcome.isAnswered, isFalse);
+      expect(saveFailOutcome.failure, VoiceQuestionFailure.audioSaveFailed);
+    },
+  );
 }

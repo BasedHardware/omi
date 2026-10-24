@@ -40,8 +40,13 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
       identical(other.episodeProvider, episodeProvider);
 
   @override
-  int get hashCode => Object.hash(identityHashCode(conversationProvider), identityHashCode(messageProvider),
-      identityHashCode(peopleProvider), identityHashCode(usageProvider), identityHashCode(episodeProvider));
+  int get hashCode => Object.hash(
+        identityHashCode(conversationProvider),
+        identityHashCode(messageProvider),
+        identityHashCode(peopleProvider),
+        identityHashCode(usageProvider),
+        identityHashCode(episodeProvider),
+      );
 
   @override
   bool? get isOutOfCredits => usageProvider.isOutOfCredits;
@@ -53,7 +58,7 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
   }
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionOutcome> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
@@ -108,8 +113,13 @@ class ProviderCaptureExternalActions implements CaptureExternalActions {
 
   @override
   Future<bool> assignSpeaker(String conversationId, List<String> segmentIds, String personId, {int? speakerId}) =>
-      assignBulkConversationTranscriptSegments(conversationId, segmentIds,
-          isUser: personId == 'user', personId: personId == 'user' ? null : personId, speakerId: speakerId);
+      assignBulkConversationTranscriptSegments(
+        conversationId,
+        segmentIds,
+        isUser: personId == 'user',
+        personId: personId == 'user' ? null : personId,
+        speakerId: speakerId,
+      );
 
   @override
   Future<void> refreshPeople() {

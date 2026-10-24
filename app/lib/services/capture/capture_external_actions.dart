@@ -5,12 +5,39 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
 
+enum VoiceQuestionFailure {
+  noSpeech,
+  quota,
+  busy,
+  deviceUnavailable,
+  codecFailed,
+  audioSaveFailed,
+  offline,
+  timeout,
+  server,
+  notSignedIn,
+  incomplete,
+  unknown,
+}
+
+class VoiceQuestionOutcome {
+  final String? question;
+  final String? answer;
+  final VoiceQuestionFailure? failure;
+
+  const VoiceQuestionOutcome.answered({required String this.answer, this.question}) : failure = null;
+
+  const VoiceQuestionOutcome.failed(VoiceQuestionFailure this.failure, {this.question}) : answer = null;
+
+  bool get isAnswered => failure == null && answer != null && answer!.trim().isNotEmpty;
+}
+
 abstract interface class CaptureExternalActions {
   bool? get isOutOfCredits;
 
   String? get topConversationId;
 
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionOutcome> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
@@ -66,13 +93,14 @@ class NoopCaptureExternalActions implements CaptureExternalActions {
   String? get topConversationId => null;
 
   @override
-  Future<void> sendVoiceMessageStreamToServer(
+  Future<VoiceQuestionOutcome> sendVoiceMessageStreamToServer(
     List<List<int>> data, {
     required VoidCallback onFirstChunkRecived,
     required Future<void> Function() onNoSpeech,
     required BleAudioCodec codec,
     required bool playResponseAudio,
-  }) async {}
+  }) async =>
+      const VoiceQuestionOutcome.failed(VoiceQuestionFailure.unknown);
 
   @override
   void addProcessingConversation(ServerConversation conversation) {}
