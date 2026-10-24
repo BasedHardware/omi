@@ -19,6 +19,15 @@ Int16List _decodeTestOpusFrame(Uint8List frame, int sampleRate, int channels) {
   throw const FormatException('Corrupt Opus frame');
 }
 
+// Top-level tear-off so it crosses compute() isolate boundaries in headless flutter test VM
+// where opus_flutter has no native libopus FFI binary to load.
+Int16List _testOpusDecoder(Uint8List frame, int sampleRate, int channels) {
+  if (frame.isNotEmpty && frame[0] == 0xFF) {
+    throw StateError('Simulated corrupted Opus frame');
+  }
+  return Int16List.fromList(frame.map((b) => b * 256 + b).toList());
+}
+
 void main() {
   late AudioPlayerUtils player;
 
@@ -299,6 +308,50 @@ void main() {
       final onDevice = Wal(timerStart: 3000, codec: BleAudioCodec.pcm16, seconds: 10, storage: WalStorage.disk);
 
       expect(await player.writeRecordingWav([onDevice], outputPath: '${dir.path}/out.wav'), isNull);
+    });
+
+    test('decodes Opus frames in background isolate and skips corrupt frames via Logger.debug', () async {
+      player.debugOpusFrameDecoder = _testOpusDecoder;
+      final name = 'audio_opus_2600.bin';
+      final validFrame1 = Uint8List.fromList([1, 2]);
+      final corruptFrame = Uint8List.fromList([0xFF, 0x00]);
+      final validFrame2 = Uint8List.fromList([3, 4]);
+      final bytes = BytesBuilder();
+      for (final f in [validFrame1, corruptFrame, validFrame2]) {
+        bytes.add((ByteData(4)..setUint32(0, f.length, Endian.little)).buffer.asUint8List());
+        bytes.add(f);
+      }
+      await File('${dir.path}/$name').writeAsBytes(bytes.takeBytes());
+      final opusWal = Wal(
+        timerStart: 2600,
+        codec: BleAudioCodec.opus,
+        seconds: 10,
+        filePath: name,
+        storage: WalStorage.disk,
+        device: 'omi',
+      );
+
+      final out = await player.writeRecordingWav([opusWal], outputPath: '${dir.path}/opus_out.wav');
+      expect(out, isNotNull);
+      final wav = await out!.readAsBytes();
+      expect(String.fromCharCodes(wav.sublist(0, 4)), 'RIFF');
+      expect(ByteData.sublistView(wav).getUint32(40, Endian.little), 8);
+      expect(wav.sublist(44), [1, 1, 2, 2, 3, 3, 4, 4]);
+      expect(player.lastWorkerIsolateName, equals('writeRecordingWav'));
+      expect(player.lastWorkerIsolateName, isNot(equals(Isolate.current.debugName)));
+    });
+
+    test('skips unreadable WAV part via WavCombiner Logger.debug in background isolate', () async {
+      final valid = await pcmFile(2700, [9, 9, 10, 10]);
+      final badRaw = await pcmFile(2710, [1, 2]);
+      final cachedPath = await player.ensureAudioFileExists(badRaw);
+      await File(cachedPath!).writeAsBytes([0x00, 0x01, 0x02]);
+
+      final out = await player.writeRecordingWav([valid, badRaw], outputPath: '${dir.path}/combined_skip.wav');
+      expect(out, isNotNull);
+      final wav = await out!.readAsBytes();
+      expect(wav.sublist(44), [9, 9, 10, 10]);
+      expect(player.lastWorkerIsolateName, equals('writeRecordingWav'));
     });
   });
 }

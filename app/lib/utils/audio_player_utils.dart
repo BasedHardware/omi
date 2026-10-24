@@ -46,6 +46,8 @@ List<Uint8List> parseLengthPrefixedFrames(Uint8List data) {
 @visibleForTesting
 typedef OpusFrameDecoder = Int16List Function(Uint8List frame, int sampleRate, int channels);
 
+typedef OpusFrameDecoder = Int16List Function(Uint8List frame, int sampleRate, int channels);
+
 class AudioPlayerUtils extends ChangeNotifier {
   // Singleton pattern
   static final AudioPlayerUtils _instance = AudioPlayerUtils._internal();
