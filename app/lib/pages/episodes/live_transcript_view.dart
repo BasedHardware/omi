@@ -174,7 +174,8 @@ class _LiveTranscriptViewState extends State<LiveTranscriptView> {
       // list, while its old delegate still has the previous itemCount. Keep one
       // membership snapshot for that delegate, its names and decorations.
       _timelineSegments = List<TranscriptSegment>.of(provider.segments);
-      _timelineNames = SpeakerNames.forSegments(_timelineSegments!, people: people, l10n: context.l10n);
+      _timelineNames =
+          SpeakerNames.forSegments(_timelineSegments!, people: people, l10n: context.l10n, deferShortVoices: true);
       _timelineDecorations = LiveTranscriptDecorations.of(widget.episode, conversationId, _timelineSegments!);
       _timelinePhotos = List<ConversationPhoto>.from(provider.photos)
         ..sort((a, b) => a.createdAt.compareTo(b.createdAt));

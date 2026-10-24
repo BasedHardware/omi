@@ -188,8 +188,10 @@ def test_live_moments_keep_the_episode_order_and_bound_the_ledger(monkeypatch):
     from utils.episodes import incremental
 
     monkeypatch.setattr(incremental, 'shadow_or_serve', lambda *_a: False)
-    first = incremental.render_moment([row(378), row(379)], conversation_id='c', voice_order=[])
-    second = incremental.render_moment([row(379)], conversation_id='c', voice_order=first.voice_order)
+    first = incremental.render_moment(
+        [dict(row(378), end=5), dict(row(379), end=5)], conversation_id='c', voice_order=[]
+    )
+    second = incremental.render_moment([dict(row(379), end=5)], conversation_id='c', voice_order=first.voice_order)
     assert second.text == 'Speaker B: hello'
     assert first.voice_order == second.voice_order
     flooded = incremental.render_moment(
