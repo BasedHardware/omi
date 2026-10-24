@@ -3,6 +3,8 @@ import 'dart:developer';
 import 'dart:io';
 
 import 'package:omi/backend/http/api_result.dart';
+import 'package:omi/backend/http/http_pool_manager.dart';
+import 'package:http/http.dart' as http;
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
@@ -408,26 +410,35 @@ String appSetupUrlWithUid(String url, String uid) {
   return '${head.substring(0, queryIndex)}?${[...kept, uidParam].join('&')}$fragment';
 }
 
-Future<bool> isAppSetupCompleted(String? url) async {
+Future<bool> isAppSetupCompleted(String? url, {ApiSend? send, String? uid}) async {
   if (url == null || url.isEmpty) return true;
-  Logger.debug('isAppSetupCompleted: $url');
-  var response = await makeApiCall(
-    url: appSetupUrlWithUid(url, SharedPreferencesUtil().uid),
-    method: 'GET',
-    headers: {},
-    body: '',
+  final target = Uri.tryParse(url);
+  final omi = send == null ? Uri.tryParse(Env.apiBaseUrl ?? '') : null;
+  final isOmiOrigin = target != null &&
+      omi != null &&
+      omi.host.isNotEmpty &&
+      target.scheme == omi.scheme &&
+      target.host == omi.host &&
+      target.port == omi.port;
+  // Plugin capabilities are the vendor authority. Never forward Omi's Firebase
+  // bearer token, refresh the Omi session on a vendor 401, or log signed URLs.
+  final ApiSend? transport = send ??
+      (isOmiOrigin
+          ? null
+          : (request) => HttpPoolManager.instance.send(() => http.Request(request.method, Uri.parse(request.url)),
+              timeout: const Duration(seconds: 15), retries: 0));
+  final account = uid ?? SharedPreferencesUtil().uid;
+  final result = await executeApi<bool>(
+    canSend: send == null ? () => SharedPreferencesUtil().uid == account : null,
+    request: ApiRequest(url: appSetupUrlWithUid(url, account), method: 'GET'),
+    send: transport,
+    decode: (body) {
+      final data = jsonDecode(body);
+      if (data is! Map || data['is_setup_completed'] is! bool) throw const FormatException('Invalid setup status');
+      return data['is_setup_completed'] == true;
+    },
   );
-  try {
-    final data = jsonDecode(response?.body ?? '{}') as Map<String, dynamic>;
-    Logger.debug(data);
-    return data['is_setup_completed'] ?? false;
-  } on FormatException catch (e) {
-    Logger.debug('Response not a valid json: $e');
-    return false;
-  } catch (e) {
-    Logger.debug('Error triggering request at endpoint: $e');
-    return false;
-  }
+  return result is ApiSuccess<bool> && result.data;
 }
 
 Future<(bool, String, String?)> submitAppServer(File file, Map<String, dynamic> appData) async {
@@ -573,13 +584,13 @@ Future<Map<String, dynamic>?> getAppDetailsServer(String appId) async {
   var response = await makeApiCall(url: '${Env.apiBaseUrl}v1/apps/$appId', headers: {}, body: '', method: 'GET');
   try {
     if (response == null || response.statusCode != 200) return null;
-    log('getAppDetailsServer: ${response.body}');
+    Logger.debug('getAppDetailsServer: ${response.statusCode}');
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     wire.GeneratedApp.fromJson(data);
     return data;
   } catch (e, stackTrace) {
-    Logger.debug(e.toString());
-    PlatformManager.instance.crashReporter.reportCrash(e, stackTrace);
+    Logger.debug('getAppDetailsServer decode failed: ${e.runtimeType}');
+    PlatformManager.instance.crashReporter.reportCrash(StateError('App details decode failed'), stackTrace);
     return null;
   }
 }

@@ -483,6 +483,16 @@ retains the pending item for reconnect replay; buffers are cleared only after th
 send completes. Finalization opcode `104` carries the durable job id and dispatch
 generation, and Pusher claims that Firestore-owned job before processing.
 
+The opt-in pCloud backup completion (#20213/#20498) uses finalized conversation
+fanout, not the live UID-only raw-audio webhook. Registered transports sign the
+account, destination path and redacted payload, preserving existing idempotency
+and SSRF pinning. The standalone service acknowledges only durable admission,
+then exports consented files through leased, per-file-checkpointed jobs. Audio
+reads use canonical saved-audio identity and recheck account/app/conversation
+access; no independent buffer may guess conversation boundaries or retain a
+discarded recording for the next conversation. Architecture, unprovisioned
+runtime bindings and release checklist: [`plugin-transport.md`](plugin-transport.md).
+
 After a finalization lease is acquired, `finalizer.py` may admit a Parakeet
 **shadow** pass before canonical processing. Admission schedules a tracked task
 on the finalizer host: the pusher GKE pod for live WebSocket handoff, or

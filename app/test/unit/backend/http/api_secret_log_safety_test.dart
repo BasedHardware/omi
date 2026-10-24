@@ -32,6 +32,17 @@ final _responses = <String, Object>{
   ],
   '/v1/apps/mcp:POST': {'app_id': 'mcp-1', 'requires_oauth': true, 'auth_url': 'https://idp.invalid/a?state=$_secret'},
   '/v1/phone/token:POST': {'access_token': _secret, 'identity': 'user-1', 'ttl': 3600},
+  '/v1/apps/app-1:GET': {
+    'id': 'app-1',
+    'name': 'Backup',
+    'author': 'Omi',
+    'description': 'Backup fixture',
+    'category': 'productivity',
+    'image': '',
+    'capabilities': ['external_integration'],
+    'external_integration': {'auth_steps': [], 'app_home_url': 'https://plugin.invalid/setup?omi_token=$_secret'},
+  },
+  '/plugin/status:GET': {'is_setup_completed': true},
 };
 
 /// Runs [body] while capturing every channel a log line can leave through: the app's [Logger]
@@ -107,5 +118,34 @@ void main() {
   test('a minted phone call token never reaches the logs', () async {
     final logs = await _captureLogs(() async => expect((await getPhoneCallToken()).token, isNotNull));
     expect(logs, isNot(contains(_secret)));
+  });
+
+  test('fresh app details return the launch grant without logging it', () async {
+    Map<String, dynamic>? detail;
+    final logs = await _captureLogs(() async => detail = await getAppDetailsServer('app-1'));
+    expect((detail?['external_integration'] as Map)['app_home_url'], contains(_secret));
+    expect(logs, contains('getAppDetailsServer: 200'));
+    expect(logs, isNot(contains(_secret)));
+  });
+
+  test('vendor completion uses the real HTTP pool without forwarding an Omi bearer or logging the grant', () async {
+    final vendor = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    String? authorization;
+    vendor.listen((request) async {
+      authorization = request.headers.value(HttpHeaders.authorizationHeader);
+      expect(request.uri.queryParameters['omi_token'], _secret);
+      request.response.headers.contentType = ContentType.json;
+      request.response.write('{"is_setup_completed":true}');
+      await request.response.close();
+    });
+    try {
+      final logs = await _captureLogs(() async => expect(
+          await isAppSetupCompleted('http://${vendor.address.host}:${vendor.port}/plugin/status?omi_token=$_secret'),
+          isTrue));
+      expect(authorization, isNull);
+      expect(logs, isNot(contains(_secret)));
+    } finally {
+      await vendor.close(force: true);
+    }
   });
 }

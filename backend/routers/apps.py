@@ -31,6 +31,8 @@ from utils.http_client import (
     safe_request_targets,
 )
 from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
+from utils.plugin_transport import authorize_app_setup, plugin_transport, strip_launch_credentials
+from utils.plugin_backup_audio import backup_audio_manifest
 from utils.mcp_client import (
     discover_oauth_metadata,
     register_oauth_client,
@@ -1150,6 +1152,7 @@ def update_app(
 
     # Backfill app_home_url from auth steps; explicit null clears the integration, non-dicts fail validation.
     if isinstance(data.get('external_integration'), dict):
+        strip_launch_credentials(app_id, data['external_integration'])
         backfill_app_home_url_from_auth_steps(data['external_integration'])
         _set_instructions_url_flag(data['external_integration'])
 
@@ -1292,7 +1295,19 @@ def get_app_details(app_id: str, uid: str = Depends(auth.get_current_user_uid)):
     if app.thumbnails:
         app.thumbnail_urls = [get_app_thumbnail_url(thumbnail_id) for thumbnail_id in app.thumbnails]
 
-    return app
+    try:
+        return authorize_app_setup(app, uid)
+    except ValueError:
+        raise HTTPException(
+            status_code=503, detail='This app connection is not configured correctly. Please try later.'
+        )
+
+
+@router.get('/v1/apps/{app_id}/backup-audio/{conversation_id}', include_in_schema=False)
+@router.head('/v1/apps/{app_id}/backup-audio/{conversation_id}', include_in_schema=False)
+def get_plugin_backup_audio(app_id: str, conversation_id: str, request: Request, authorization: str = Header('')):
+    """Internal, conversation-scoped plugin read; never accepts a query UID."""
+    return backup_audio_manifest(app_id, conversation_id, authorization, include_audio=request.method == 'GET')
 
 
 @router.get('/v1/app-categories', tags=['v1'], response_model=List[AppSelectOption])
@@ -2322,6 +2337,14 @@ async def enable_app_endpoint(app_id: str, request: Request, uid: str = Depends(
         if app.external_integration.setup_completed_url:
             client = get_pinned_delivery_client()
             setup_url = app.external_integration.setup_completed_url
+            try:
+                transport = plugin_transport(app.id)
+                if transport:
+                    setup_url = transport.setup_url(setup_url, uid, 'status')
+            except ValueError:
+                raise HTTPException(
+                    status_code=503, detail='This app connection is not configured correctly. Please try later.'
+                )
             # Developer-controlled URL: validate and pin it exactly like the OAuth setup check.
             # Resolve once, reject private/loopback/reserved targets, then connect to the resolved
             # IP while presenting the original Host/SNI, so a DNS record swapped between check and
