@@ -238,41 +238,27 @@ def export_conversations(
 
         md_content = conversation_to_markdown(conv)
 
+        # Always disambiguate against paths used in this batch to prevent
+        # same-batch collisions regardless of the 'overwrite' flag.
+        counter = 1
+        while filepath in used_paths:
+            counter += 1
+            filepath = output_dir / f"{base_name}_{counter}.md"
+
         if overwrite:
-            # ``overwrite`` replaces files that already exist on disk from an
-            # earlier run, but a name this batch has already written belongs to
-            # a different conversation: reusing it would silently discard that
-            # conversation and return the same path twice. Only names claimed
-            # by this batch are disambiguated, so a pre-existing file is still
-            # replaced as documented.
-            counter = 1
-            while filepath in used_paths:
-                counter += 1
-                filepath = output_dir / f"{base_name}_{counter}.md"
             used_paths.add(filepath)
             filepath.write_text(md_content, encoding="utf-8")
         else:
-            # Claim the path with an atomic exclusive create. Checking
-            # exists() first and writing afterwards leaves a window in which a
-            # concurrent export (or the user) can create that file, and the
-            # subsequent write_text() would then truncate it despite
-            # overwrite=False. Opening with "x" is atomic: if the path already
-            # exists we get FileExistsError and can pick a fresh name instead
-            # of destroying what is there.
-            counter = 1
+            # Claim the path with an atomic exclusive create.
             while True:
                 try:
                     with filepath.open("x", encoding="utf-8") as fh:
                         fh.write(md_content)
+                    used_paths.add(filepath)
                     break
                 except FileExistsError:
                     counter += 1
                     filepath = output_dir / f"{base_name}_{counter}.md"
-                    # Never hand out a name we already used in this batch.
-                    while filepath in used_paths:
-                        counter += 1
-                        filepath = output_dir / f"{base_name}_{counter}.md"
-            used_paths.add(filepath)
 
         print(f"Exported: {filepath}")
         exported_paths.append(filepath)
