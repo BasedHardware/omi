@@ -270,3 +270,35 @@ def test_allocator_reuses_owner_and_person_speaker_id_across_sync_scopes():
     assert sync_chunk_2_owner['speaker_id'] == 10
     assert sync_chunk_2_alice['speaker_id'] == 11
     assert sync_chunk_2_unknown['speaker_id'] == 12
+
+
+def test_persisted_scope_binding_wins_over_a_later_owner_hint():
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate(
+        [
+            {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'live:0', 'speaker_id': 4, 'is_user': True},
+            {'speaker': 'SPEAKER_01', 'speaker_id_scope': 'sync:old', 'speaker_id': 8},
+        ]
+    )
+    replay = {'speaker': 'SPEAKER_01', 'speaker_id_scope': 'sync:old', 'is_user': True}
+    allocator.assign(replay)
+    assert replay['speaker_id'] == 8
+    assert allocator.lookup('sync:old', 'SPEAKER_01') == replay['speaker_id']
+
+
+def test_batch_owner_hint_cannot_bypass_an_abstained_acoustic_link():
+    allocator = ConversationSpeakerIdAllocator()
+    first = {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:first', 'is_user': True}
+    second = {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:second', 'is_user': True}
+    allocator.assign(first)
+    allocator.assign(second)
+    assert first['speaker_id'] != second['speaker_id']
+
+
+def test_persisted_acoustic_binding_wins_over_legacy_identity_reuse():
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate([{'speaker': 'SPEAKER_00', 'speaker_id_scope': 'live:0', 'speaker_id': 1, 'is_user': True}])
+    allocator.hydrate([{'speaker': 'SPEAKER_02', 'speaker_id_scope': 'final:batch:new', 'speaker_id': 5}])
+    segment = {'speaker': 'SPEAKER_02', 'speaker_id_scope': 'final:batch:new', 'is_user': True}
+    allocator.assign(segment)
+    assert segment['speaker_id'] == 5

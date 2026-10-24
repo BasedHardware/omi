@@ -622,3 +622,41 @@ async def test_empty_cut_cannot_acknowledge_a_fully_suppressed_job(coordinator, 
     cut.assert_awaited_once()
     assert len(state.vad_seen) == 1 and len(state.processed) == 1
     assert state.outcomes[-1].value == 'success'  # Only after actual VAD/STT intake.
+
+
+def test_unknown_fuzzy_match_requires_compatible_duration():
+    text = 'Please bring the blue notebook to our planning meeting'
+    live = [dict(segment(text, T, duration=18), person_id=None, is_user=False)]
+    incoming = [dict(segment(text, T, duration=2), person_id=None, is_user=False)]
+    assert dedupe_segments_for_merge(T, live, incoming, fuzzy_live_overlap=True, estimated_offset_seconds=0) == incoming
+
+
+def test_unknown_repeated_occurrences_are_not_chosen_arbitrarily():
+    text = 'Please bring the blue notebook to our planning meeting'
+    live = [dict(segment(text, T + shift), person_id=None, is_user=False) for shift in (0, 1)]
+    incoming = [dict(segment(text, T + 0.5), person_id=None, is_user=False)]
+    assert dedupe_segments_for_merge(T, live, incoming, fuzzy_live_overlap=True, estimated_offset_seconds=0) == incoming
+
+
+def test_anonymous_live_window_requires_a_shared_scoped_voice():
+    from utils.sync.merge_dedupe import _live_windows
+
+    first = dict(
+        text='first half of a synthetic utterance',
+        abs_start=T,
+        duration=4,
+        members=(0,),
+        speaker_id=1,
+        speaker_id_scope='live:a',
+    )
+    other = dict(
+        text='second half of a synthetic utterance',
+        abs_start=T + 4,
+        duration=4,
+        members=(1,),
+        speaker_id=2,
+        speaker_id_scope='live:a',
+    )
+    assert len(_live_windows([first, other])) == 2
+    same = dict(other, speaker_id=1)
+    assert len(_live_windows([first, same])) == 3

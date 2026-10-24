@@ -132,16 +132,18 @@ class ConversationSpeakerIdAllocator:
             speaker = f'SPEAKER_{segment["speaker_id"]}'
         speaker = canonical_speaker_label(str(speaker or 'SPEAKER_00'))
         key = (str(scope), speaker)
-        if segment.get('is_user') is True and self._owner_speaker_id is not None:
-            speaker_id = self._owner_speaker_id
-            self._speaker_ids.setdefault(key, speaker_id)
-        elif (person_id := segment.get('person_id')) and str(person_id) in self._person_speaker_ids:
-            speaker_id = self._person_speaker_ids[str(person_id)]
-            self._speaker_ids.setdefault(key, speaker_id)
-        else:
-            speaker_id = self._speaker_ids.get(key)
+        # A persisted scope/acoustic binding is authority; a later label hint
+        # must never renumber it or disagree with lookup(). Batch voices require
+        # their acoustic registry decision, including its explicit abstentions.
+        speaker_id = self._speaker_ids.get(key)
+        if speaker_id is None:
+            reuse_identity = str(scope).startswith('sync:') and segment.get('speaker_label_source') != 'carried'
+            if reuse_identity and segment.get('is_user') is True and self._owner_speaker_id is not None:
+                speaker_id = self._owner_speaker_id
+            elif reuse_identity and (person_id := segment.get('person_id')):
+                speaker_id = self._person_speaker_ids.get(str(person_id))
             if speaker_id is None:
                 speaker_id = self._allocate()
-                self._speaker_ids[key] = speaker_id
+            self._speaker_ids[key] = speaker_id
         self._remember_identity(segment, speaker_id)
         segment['speaker_id'] = speaker_id

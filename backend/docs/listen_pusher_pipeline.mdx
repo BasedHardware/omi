@@ -166,6 +166,13 @@ survival for a held answer returned earlier. Forced releases remain included in
 
 During live `/v4/listen` sessions on flaky connections, mid-session reconnects to the same STT provider retain the session's active `SpeakerProviderEpoch` and connection scope across successor sockets (`same_provider=True`). This guarantees that `ConversationSpeakerIdAllocator` preserves mapped speaker numbers (e.g. SPEAKER_0, SPEAKER_1) across reconnects without renumbering speakers. Successor replay duplicates and straddling segments are deduplicated against the session timeline's `last_end` in the session callback, while successor windowed sockets count stream seconds from their own 0.0 boundary without premature `last_emitted_end` truncation.
 
+Persisted scoped IDs outrank later identity hints. Known-person ID reuse applies
+only to new legacy `sync:` scopes; `final:batch:` units retain the acoustic
+registry's link or abstention, and carried labels never authorize reuse.
+Anonymous live windows join only within one persisted voice; anonymous replay
+removal also requires compatible duration and an unambiguous occurrence. These
+lexical checks never rewrite capture clocks or prove audio recovery.
+
 ## Demand-driven live provider lane
 
 The `/v4/listen` runtime owns the dark-by-default live-demand policy. Existing
