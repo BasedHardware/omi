@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 """Universal Candidate lifecycle contracts for task and workstream proposals."""
 
 from datetime import datetime
@@ -42,6 +44,13 @@ class SummaryTaskReference(BaseModel):
     action_item_index: int = Field(ge=0)
     expected_description: str = Field(min_length=1, max_length=4096)
 
+    @model_validator(mode='after')
+    def validate_non_blank_description(self):
+        self.expected_description = self.expected_description.strip()
+        if not self.expected_description:
+            raise ValueError('expected_description cannot be blank')
+        return self
+
 
 class CandidateAcceptanceRequest(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -55,6 +64,16 @@ class WorkstreamProposal(BaseModel):
     title: str = Field(min_length=1, max_length=256)
     objective: str = Field(min_length=1, max_length=2048)
     anchor_task: TaskCreatePayload
+
+    @model_validator(mode='after')
+    def validate_non_blank_strings(self):
+        self.title = self.title.strip()
+        if not self.title:
+            raise ValueError('title cannot be blank')
+        self.objective = self.objective.strip()
+        if not self.objective:
+            raise ValueError('objective cannot be blank')
+        return self
 
 
 class CandidateCompatibilityMetadata(BaseModel):
@@ -174,7 +193,7 @@ class CandidateCreate(RootModel[CandidateCreateUnion]):
         return getattr(self.root, 'task_id', None)
 
     @property
-    def task_change(self) -> Optional[TaskCreatePayload | TaskChangePayload]:
+    def task_change(self) -> Optional[Union[TaskCreatePayload, TaskChangePayload]]:
         return getattr(self.root, 'task_change', None)
 
     @property
@@ -216,7 +235,7 @@ class CandidateRecord(BaseModel):
     subject_kind: CandidateSubjectKind
     proposed_action: CandidateAction
     task_id: Optional[StableId] = None
-    task_change: Optional[TaskCreatePayload | TaskChangePayload] = None
+    task_change: Optional[Union[TaskCreatePayload, TaskChangePayload]] = None
     workstream_proposal: Optional[WorkstreamProposal] = None
     capture_confidence: float = Field(ge=0, le=1)
     ownership_confidence: float = Field(ge=0, le=1)
