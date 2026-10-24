@@ -806,12 +806,24 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             modify_params = {
                 'items': [{'id': current_item_id, 'price': request.price_id}],
                 'proration_behavior': 'always_invoice',
+                'payment_behavior': 'error_if_incomplete',
                 'metadata': {'uid': uid, 'sub_type': target_plan.value},
             }
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+
+            # Guard against status degeneration (e.g. past_due): if proration payment was not
+            # collected, do not update database or clear locks, preserving current paid plan.
+            if updated_sub.get('status') not in ('active', 'trialing'):
+                logger.error(
+                    f"Subscription modification resulted in non-active status '{updated_sub.get('status')}' for user {uid}"
+                )
+                raise HTTPException(
+                    status_code=400,
+                    detail="Upgrade payment could not be completed. Your current plan remains active.",
+                )
 
             # Update our database immediately
             new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
@@ -892,9 +904,20 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     except HTTPException:
         raise
+    except stripe.error.CardError as e:
+        logger.warning(f"Stripe card error during subscription change for user {uid}: {sanitize(str(e))}")
+        detail = _stripe_client_error_detail(e, "Your card was declined.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Upgrade payment failed: {detail} Your current plan remains active.",
+        )
     except stripe.error.InvalidRequestError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
-        detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)
+        detail = _stripe_client_error_detail(e, "Invalid subscription update request.")
+        raise HTTPException(status_code=400, detail=detail)
+    except stripe.error.StripeError as e:
+        logger.error(f"Stripe error during subscription change: {sanitize(str(e))}")
+        detail = _stripe_client_error_detail(e, "Payment processing error.")
         raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
