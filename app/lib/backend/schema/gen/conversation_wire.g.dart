@@ -1296,7 +1296,7 @@ class GeneratedProjectedStructure {
 
   const GeneratedProjectedStructure({
     this.category = "other",
-    this.emoji = "\ud83d\udcac",
+    this.emoji = "",
     this.events,
     this.overview = "",
     this.sections,
@@ -1306,7 +1306,7 @@ class GeneratedProjectedStructure {
   factory GeneratedProjectedStructure.fromJson(Map<String, dynamic> json) {
     return GeneratedProjectedStructure(
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "other"), "category"),
-      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: "\ud83d\udcac"), "emoji"),
+      emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: ""), "emoji"),
       events: _readFieldValue<List<GeneratedProjectedEvent>>(_readField(json, const ["events"]), "events", (value) => _readObjectList(value, GeneratedProjectedEvent.fromJson), requiredField: false, nullable: true),
       overview: _required(_readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString, requiredField: false, nullable: false, defaultValue: ""), "overview"),
       sections: _readFieldValue<List<GeneratedProjectedSection>>(_readField(json, const ["sections"]), "sections", (value) => _readObjectList(value, GeneratedProjectedSection.fromJson), requiredField: false, nullable: true),
