@@ -2,6 +2,8 @@
 
 The firmware for the OMI consumer version.
 
+New here? Read [How the Omi pendant works](https://docs.omi.me/doc/hardware/how-the-pendant-works) first. It explains where audio goes, the device states and the main failure modes.
+
 ## Install
 
 Use https://docs.omi.me/doc/developer/firmware/Compile_firmware as the reference with these specifications.

@@ -2,6 +2,8 @@
 
 Component guide for `omi/firmware/`. General engineering rules: root `AGENTS.md`.
 
+Human on-ramp: the visual guide at `docs/doc/hardware/how-the-pendant-works.mdx`, with source in `omi/hardware/consumer/explainer/`. If you change capture routing, LED states, AAD, or storage behavior, update the matching card in `pendant-guide.src.html` and rebuild.
+
 ## Release Workflow
 
 Firmware releases are manual via `.github/workflows/firmware_release.yml`:
