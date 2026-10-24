@@ -189,6 +189,12 @@ def _load_payment_router() -> Any:
     return payment_router
 
 
+@pytest.fixture
+def payment_router():
+    """Build isolated IO fakes before measuring the endpoint call CPU budget."""
+    return _load_payment_router()
+
+
 def test_upgrade_sets_error_if_incomplete_payment_behavior_in_source():
     source = _read_source(PAYMENT_SOURCE)
     upgrade_start = source.index("def upgrade_subscription_endpoint")
@@ -203,8 +209,8 @@ def test_upgrade_sets_error_if_incomplete_payment_behavior_in_source():
     assert card_pos < generic_pos
 
 
-def test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify():
-    router = _load_payment_router()
+def test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify(payment_router):
+    router = payment_router
     current_sub = router.Subscription(
         plan=router.PlanType.plus,
         status=router.SubscriptionStatus.active,
@@ -260,8 +266,8 @@ def test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify():
     assert written_sub["plan"] == router.PlanType.unlimited
 
 
-def test_declined_proration_card_error_returns_402_and_preserves_paid_plan():
-    router = _load_payment_router()
+def test_declined_proration_card_error_returns_402_and_preserves_paid_plan(payment_router):
+    router = payment_router
     current_sub = router.Subscription(
         plan=router.PlanType.plus,
         status=router.SubscriptionStatus.active,
@@ -312,11 +318,11 @@ def test_declined_proration_card_error_returns_402_and_preserves_paid_plan():
     router.clear_fair_use_on_upgrade.assert_not_called()
 
 
-def test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic():
+def test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic(payment_router):
     """If Stripe ever returns a past_due or pending_update subscription from modify,
     the endpoint must reject with 402 rather than projecting past_due -> Basic (Free)
     and overwriting the subscriber's paid plan in Firestore."""
-    router = _load_payment_router()
+    router = payment_router
     current_sub = router.Subscription(
         plan=router.PlanType.plus,
         status=router.SubscriptionStatus.active,
