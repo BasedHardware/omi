@@ -49,8 +49,20 @@ build as a different app and revokes Screen Recording and microphone consent eve
 Omi app on the machine. A stable identity is the only reason the grants stick.
 
 The same fact is why shipping an update is not routine: an update replaces the signed bundle, so a
-release signed with a different certificate than the one before it revokes every user's permissions
-at once, silently. See [`docs/releasing.md`](docs/releasing.md).
+release whose signing requirement no longer matches the installed app can invalidate its permissions.
+See [`docs/releasing.md`](docs/releasing.md).
+
+System-audio cached answers are scoped to the certificate-signed app's **designated requirement**,
+not its per-build cdhash. Matching signed updates and relaunches keep both consent and spent-prompt
+records; ad-hoc builds remain scoped to their cdhash. This follows Apple's
+[code identity contract](https://developer.apple.com/library/archive/technotes/tn2206/_index.html).
+Legacy cdhash records migrate only if they match the running binary; an unrecognizable legacy
+record may require one confirmation after updating. macOS still owns all actual grants, and a tap
+refusal still overrides the cache. No permission dialog is triggered just to inspect the cache.
+
+An unchanged signing identity does not prove a TCC grant is valid. On an isolated Mac, verify granted and denied states
+across quit/relaunch, reboot, a same-identity signed update, and explicit revocation in Settings.
+These OS transitions cannot be validated by the Linux portable-core tests.
 
 ## Updates
 
