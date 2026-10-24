@@ -163,20 +163,21 @@ jobs:
   backend-unit-shard:
     name: Backend unit shard ${{ matrix.shard }}/6
     runs-on: ubuntu-latest
-    # This ceiling covers runner SETUP plus the 720s step budget, unlike the
-    # step budget it must leave room for: setup measured 73-92s typical but
+    # This ceiling covers runner SETUP plus the step regression budget, unlike
+    # the step budget it must leave room for: setup measured 73-92s typical but
     # 227s worst (run 39741901310 attempt 2, 2026-10-22: checkout 72s, apt
     # 155s), and 227s + 720s = 947s > the old 900s line, so the job timeout
     # cancelled shards mid-run while their test step was still inside budget
     # (conclusion 'cancelled' → gate "backend unit shards result was
     # 'cancelled'"; four such 917-920s walls in the week to 2026-10-22:
-    # 39741901310, 39739120103, 39676205452, 39668020536). 25m holds the
-    # 720s budget plus worst-plausible setup with the apt step capped at 10m
-    # (72s worst checkout + ~90s toolchain + ~570s apt cold allowance,
-    # 2026-10-23) and teardown; slow TEST steps still fail loudly through
-    # the step's own 720s budget check, so this ceiling stays a hang bound,
-    # not the gate.
-    timeout-minutes: 25
+    # 39741901310, 39739120103, 39676205452, 39668020536). 30m holds the
+    # 900s step budget (2026-10-24 recalibration, see the env comment) plus
+    # worst-plausible setup with the apt step capped at 10m (72s worst
+    # checkout + ~90s toolchain + ~570s apt cold allowance, 2026-10-23) and
+    # teardown — 72+90+570+900 = 1632s, leaving 168s inside the line; slow
+    # TEST steps still fail loudly through the step's own budget check, so
+    # this ceiling stays a hang bound, not the gate.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -234,8 +235,8 @@ jobs:
         # azure.archive.ubuntu.com. Cold downloads use Ubuntu's official
         # HTTPS archives via step-local sources, never the runner mirrorlist.
         # Slice downloads only: killing an install can interrupt dpkg.
-        # 7m + 72s checkout + 90s toolchain + 720s test budget leaves 198s
-        # inside the 25m job for cache save and post-job cleanup.
+        # 7m + 72s checkout + 90s toolchain + 900s test budget leaves 318s
+        # inside the 30m job for cache save and post-job cleanup.
         timeout-minutes: 7
         run: |
           COLD_BUDGET=300
@@ -306,12 +307,19 @@ jobs:
         env:
           # Regression budget: a shard carries ~1/6 of the selection
           # and includes preflight/typecheck plus per-file sessions.
-          # Setup is outside this timer. Main shard walls run 420-540s and
-          # one fully green shard took 602s against the old 600s line, so
-          # 720s holds that worst observed wall with 118s (19.6%) headroom
-          # without assuming exactly which files grew. Raise only with
-          # measured evidence.
-          BACKEND_UNIT_STEP_BUDGET_SECONDS: "720"
+          # Setup is outside this timer. 2026-10-24 recalibration: the full
+          # selection grew 1727 -> ~2270 files since the six-shard rebalance
+          # (#21259, 2026-10-11) put ~288 files per shard under the 720s line
+          # set on 2026-10-03, so shards now carry ~378 and their walls
+          # drifted past it on unrelated PRs — breaches 725/727/727/735/753s
+          # (runs 40066874798 s1, 40061077340 s4, 40042164324 s4, 40065443584
+          # s6, 40066103575 s6; near-misses 695/712/716s same day). 900s holds
+          # that 753s worst observed wall with 147s (19.5%) headroom, the same
+          # policy that set 720 over the then-worst 602s. No single file
+          # regressed; the per-file session cost is unchanged and the drift
+          # tracks selection growth, so raise only again with measured
+          # evidence or rebalance shards.
+          BACKEND_UNIT_STEP_BUDGET_SECONDS: "900"
         run: |
           step_started=$SECONDS
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
