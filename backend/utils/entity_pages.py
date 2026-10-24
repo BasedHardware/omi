@@ -7,6 +7,7 @@ so no migration is needed. Summaries are a derived dream cache only.
 
 from datetime import datetime, timezone
 from uuid import uuid4
+from dateutil.parser import isoparse
 
 from fastapi import HTTPException
 from google.cloud.firestore_v1.base_query import FieldFilter
@@ -165,7 +166,7 @@ def _facts(
                 kind='conversation',
                 label=_title(conversation),
                 conversation_id=source_id,
-                at=conversation.get('started_at') or row.created_at,
+                at=_coerce_utc_datetime(conversation.get('started_at') or row.created_at),
             )
         else:
             source_type = evidence[0].get('source_type', '') if evidence and isinstance(evidence[0], dict) else ''
@@ -182,6 +183,18 @@ def _facts(
         if data.get('predicate') == 'decision' or data.get('category') == 'decision':
             decisions.append(fact)
     return facts[:MAX_RELATED], decisions[:MAX_RELATED], visible_conversation_ids
+
+
+def _coerce_utc_datetime(val) -> datetime:
+    if isinstance(val, str):
+        try:
+            parsed = isoparse(val)
+            return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError, OverflowError):
+            return datetime(1970, 1, 1, tzinfo=timezone.utc)
+    if isinstance(val, datetime):
+        return val.astimezone(timezone.utc) if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    return datetime(1970, 1, 1, tzinfo=timezone.utc)
 
 
 def _title(conversation: dict) -> str:
@@ -331,9 +344,11 @@ def get_entity_page(uid: str, entity_id: str) -> EntityPage:
         conversation = conversation_cache.get(cid)
         if not conversation or not conversations.is_visible_conversation(conversation):
             continue
-        start = conversation.get('started_at') or conversation.get('created_at')
-        end = conversation.get('finished_at') or start
-        if start:
+        start_val = conversation.get('started_at') or conversation.get('created_at')
+        end_val = conversation.get('finished_at') or start_val
+        if start_val:
+            start = _coerce_utc_datetime(start_val)
+            end = _coerce_utc_datetime(end_val)
             recent.append(
                 ConversationRef(
                     conversation_id=cid,
