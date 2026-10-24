@@ -310,6 +310,12 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   }
 
   Future<void> setConnectedDevice(BtDevice? device) async {
+    if (device != null) {
+      final alias = SharedPreferencesUtil().deviceAlias(device.id);
+      if (alias.isNotEmpty) {
+        device = device.copyWith(name: alias);
+      }
+    }
     final generation = _sessionGeneration;
     final endedDevice = device == null ? (pairedDevice ?? connectedDevice) : null;
     final sessionStartedAt = _deviceSessionStartedAt;
@@ -436,13 +442,21 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       if (!_isCurrent(generation)) return;
       pairedDevice = await connectedDevice?.getDeviceInfo(connection);
       if (!_isCurrent(generation)) return;
+      if (pairedDevice != null) {
+        final alias = SharedPreferencesUtil().deviceAlias(pairedDevice!.id);
+        if (alias.isNotEmpty) {
+          pairedDevice = pairedDevice!.copyWith(name: alias);
+        }
+      }
       _persistPairedDevice();
     } else {
       if (!_isCurrent(generation)) return;
       if (SharedPreferencesUtil().btDevice.id.isEmpty) {
         pairedDevice = BtDevice.empty();
       } else {
-        pairedDevice = SharedPreferencesUtil().btDevice;
+        final stored = SharedPreferencesUtil().btDevice;
+        final alias = SharedPreferencesUtil().deviceAlias(stored.id);
+        pairedDevice = alias.isNotEmpty ? stored.copyWith(name: alias) : stored;
       }
     }
     if (!_isCurrent(generation)) return;
@@ -465,6 +479,34 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   /// persisted pairing no longer names it.
   bool _readoptPairMovedOn(String deviceId) =>
       _readoptExpectedPair == deviceId && SharedPreferencesUtil().btDevice.id != deviceId;
+
+  /// Sets a local user-defined alias for the device, persisting it to preferences.
+  Future<bool> renameDevice(String newName, {String? deviceId}) async {
+    final targetId = deviceId ?? (connectedDevice ?? pairedDevice)?.id;
+    if (targetId == null || targetId.isEmpty) return false;
+
+    final normalized = newName.trim();
+    if (normalized.isEmpty) return false;
+
+    final saved = await SharedPreferencesUtil().saveDeviceAlias(targetId, normalized);
+    if (!saved) return false;
+
+    if (connectedDevice?.id == targetId) {
+      connectedDevice = connectedDevice!.copyWith(name: normalized);
+    }
+    if (pairedDevice?.id == targetId) {
+      pairedDevice = pairedDevice!.copyWith(name: normalized);
+    }
+
+    final targetDevice = (pairedDevice?.id == targetId ? pairedDevice : null) ??
+        (connectedDevice?.id == targetId ? connectedDevice : null);
+    if (targetDevice != null) {
+      await SharedPreferencesUtil().btDeviceSet(targetDevice.copyWith(name: normalized));
+    }
+    SharedPreferencesUtil().deviceName = normalized;
+    notifyListeners();
+    return true;
+  }
 
   /// Hardware find-device LED. Not account publication; left unfenced.
   Future<bool> findDevice() {
