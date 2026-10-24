@@ -183,8 +183,9 @@ async def test_batch_pressure_reuses_bounded_client_until_shutdown(monkeypatch):
 
     async def refresh(_host, _replicas, client):
         used.append(client)
-        if len(used) == 2:
+        if len(used) == 5:
             refreshed_twice.set()
+        return True
 
     monkeypatch.setattr(pressure_module.httpx, 'AsyncClient', Client)
     monkeypatch.setattr(pressure, '_refresh', refresh)
@@ -192,7 +193,7 @@ async def test_batch_pressure_reuses_bounded_client_until_shutdown(monkeypatch):
     try:
         await asyncio.wait_for(refreshed_twice.wait(), 1)
         assert len(created) == 1
-        assert used[:2] == [created[0], created[0]]
+        assert used[:5] == [created[0]] * 5
         assert created[0].options['timeout'] == 3.0
         assert created[0].options['trust_env'] is False
         limits = created[0].options['limits']
