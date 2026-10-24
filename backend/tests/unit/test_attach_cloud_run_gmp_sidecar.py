@@ -1419,6 +1419,10 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_stt_cap_cohort_percent',
         'omi_held_recovery_pacing_intents_total',
         'omi_held_recovery_pacing_audio_seconds_total',
+        # #23388 cap enforcement: the watch readout for finite allowances
+        # (stt-cap-dispatch.md) — decisions and metered provider audio.
+        'omi_stt_cap_dispatch_decisions_total',
+        'omi_stt_cap_provider_audio_seconds_total',
     ):
         assert kept(name), name
     for component in ('sync', 'summary_delivery', 'storage'):
