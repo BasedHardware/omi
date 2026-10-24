@@ -559,3 +559,31 @@ def test_target_fails_closed_on_an_address_it_cannot_read() -> None:
 
     assert not report.ok
     assert "cannot read" in report.summary
+
+
+def test_target_fails_closed_on_malformed_url_and_invalid_ports() -> None:
+    """Regression test for #23481: unhandled ValueError on malformed IPv6 and invalid ports."""
+    # Malformed IPv6 URL
+    report_bad_ipv6 = webhook_target.inspect_target("https://[::1/hook", resolver=lambda _: ["93.184.216.34"])
+    assert not report_bad_ipv6.ok
+    assert "cannot parse URL" in report_bad_ipv6.summary
+
+    # Out of range port (> 65535)
+    report_bad_port = webhook_target.inspect_target("https://example.com:99999/hook", resolver=lambda _: ["93.184.216.34"])
+    assert not report_bad_port.ok
+    assert "invalid port" in report_bad_port.summary
+
+    # Port 0 (reserved / invalid)
+    report_zero_port = webhook_target.inspect_target("https://example.com:0/hook", resolver=lambda _: ["93.184.216.34"])
+    assert not report_zero_port.ok
+    assert "invalid port" in report_zero_port.summary
+
+    # Non-integer port string
+    report_alpha_port = webhook_target.inspect_target("https://example.com:abc/hook", resolver=lambda _: ["93.184.216.34"])
+    assert not report_alpha_port.ok
+    assert "invalid port" in report_alpha_port.summary
+
+    # Valid custom port (1-65535)
+    report_valid_port = webhook_target.inspect_target("https://example.com:8443/hook", resolver=lambda _: ["93.184.216.34"])
+    assert report_valid_port.ok
+    assert "resolves to 93.184.216.34" in report_valid_port.summary
