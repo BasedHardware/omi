@@ -31,6 +31,7 @@ export function Rewind(): React.JSX.Element {
   // separate mode/route). A non-empty query IS "searching".
   const [query, setQuery] = useState('')
   const searching = query.trim().length > 0
+  const highlightQuery = searching ? r.normalizedQuery : query
   // The query whose results are on screen — set only when a search resolves, so
   // "still loading" is a pure derivation (no setState-in-effect).
   const [resolvedQuery, setResolvedQuery] = useState('')
@@ -84,9 +85,9 @@ export function Rewind(): React.JSX.Element {
   // drill-down mini-timeline (macOS search-result markers).
   const markerTimes = useMemo(() => {
     if (!group) return []
-    const terms = highlightTerms(query)
+    const terms = highlightTerms(highlightQuery)
     return group.frames.filter((f) => lineTextMatches(f.ocrText, terms)).map((f) => f.ts)
-  }, [group, query])
+  }, [group, highlightQuery])
 
   return (
     <div ref={pageRef} data-testid="rewind-page" className="flex h-full min-h-0 flex-col gap-3 p-4">
@@ -97,9 +98,10 @@ export function Rewind(): React.JSX.Element {
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
             <input
               ref={inputRef}
+              data-testid="rewind-search"
               value={query}
               onChange={(e) => changeQuery(e.target.value)}
-              placeholder="Search what was on screen…"
+              placeholder="Search “meeting notes yesterday”…"
               className="w-full rounded-control border border-line bg-white/[0.07] py-1.5 pl-8 pr-8 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-line-strong"
             />
             {searching && (
@@ -152,7 +154,11 @@ export function Rewind(): React.JSX.Element {
             <ChevronLeft className="h-4 w-4" />
             Back to results
           </button>
-          <RewindPlayer frames={group.frames} cursorTs={r.cursorTs} highlightQuery={query} />
+          <RewindPlayer
+            frames={group.frames}
+            cursorTs={r.cursorTs}
+            highlightQuery={highlightQuery}
+          />
           <RewindTimelineBar
             frames={group.frames}
             bounds={null}
@@ -165,7 +171,7 @@ export function Rewind(): React.JSX.Element {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <SearchResultsFilmstrip
             groups={r.results}
-            query={query}
+            query={highlightQuery}
             loading={searchLoading}
             onSelect={openGroup}
           />
