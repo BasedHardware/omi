@@ -268,8 +268,13 @@ def create_app_tool(
                     db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_MCP_TOOL
                 )
                 await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
-                logger.error(f"Error calling MCP tool {app_tool.name}: {e}", exc_info=True)
-                return f"Error calling MCP tool {app_tool.name}. Please try again later."
+                logger.error(
+                    "Error calling MCP tool %s (%s)",
+                    app_tool.name,
+                    type(e).__name__,
+                    exc_info=True,
+                )
+                return f"Error calling {app_tool.name}: An unexpected error occurred."
 
         return StructuredTool(
             name=tool_name,
@@ -459,8 +464,13 @@ async def _call_tool_endpoint(
             db_executor, record_app_webhook_failure, app_id, 0, type(e).__name__, ENDPOINT_CHAT_TOOL
         )
         await run_blocking(db_executor, _handle_app_webhook_disable, app_id, action, type(e).__name__)
-        logger.error(f"Error calling {app_tool.name}: {e}", exc_info=True)
-        return f"Error calling {app_tool.name}. Please try again later."
+        logger.error(
+            "Error calling app tool %s (%s)",
+            app_tool.name,
+            type(e).__name__,
+            exc_info=True,
+        )
+        return f"Error calling {app_tool.name}: An unexpected error occurred."
 
 
 def load_app_tools(uid: str) -> List[BaseTool]:
