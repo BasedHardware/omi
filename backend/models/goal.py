@@ -107,6 +107,12 @@ class GoalCreate(BaseModel):
             raise ValueError('title cannot be blank')
         if self.desired_outcome is None:
             self.desired_outcome = self.title
+        if self.why_it_matters is not None:
+            self.why_it_matters = self.why_it_matters.strip()
+            if not self.why_it_matters:
+                raise ValueError('why_it_matters cannot be blank')
+        if self.unit is not None:
+            self.unit = self.unit.strip() or None
         if self.status == GoalStatus.focused:
             raise ValueError('create the goal first, then focus it explicitly')
         self.success_criteria = [criterion.strip() for criterion in self.success_criteria if criterion.strip()]
@@ -156,6 +162,12 @@ class GoalUpdate(BaseModel):
             self.desired_outcome = self.desired_outcome.strip()
             if not self.desired_outcome:
                 raise ValueError('desired_outcome cannot be blank')
+        if self.why_it_matters is not None:
+            self.why_it_matters = self.why_it_matters.strip()
+            if not self.why_it_matters:
+                raise ValueError('why_it_matters cannot be blank')
+        if self.unit is not None:
+            self.unit = self.unit.strip() or None
         return self
 
 
@@ -164,6 +176,18 @@ class GoalFocusRequest(BaseModel):
 
     replacement_goal_id: Optional[StableId] = None
     focus_rank: Optional[int] = Field(default=None, ge=0, le=4)
+
+    @field_validator('replacement_goal_id', mode='before')
+    @classmethod
+    def _validate_replacement_goal_id(cls, v: object) -> object:
+        if v is None:
+            return v
+        if not isinstance(v, str):
+            raise ValueError('replacement_goal_id must be a string')
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError('replacement_goal_id cannot be blank')
+        return cleaned
 
 
 class GoalLifecycleRequest(BaseModel):
@@ -194,6 +218,16 @@ class GoalProgressEventCreate(BaseModel):
     evidence_refs: list[EvidenceRef] = Field(default_factory=list, max_length=50)
     metric: Optional[GoalMetric] = None
 
+    @field_validator('summary', mode='before')
+    @classmethod
+    def _validate_summary(cls, v: object) -> object:
+        if not isinstance(v, str):
+            raise ValueError('summary must be a string')
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError('summary cannot be blank')
+        return cleaned
+
 
 class GoalProgressEvent(BaseModel):
     model_config = ConfigDict(extra='forbid')
@@ -206,6 +240,16 @@ class GoalProgressEvent(BaseModel):
     evidence_refs: list[EvidenceRef] = Field(default_factory=list, max_length=50)
     metric: Optional[GoalMetric] = None
     created_at: datetime
+
+    @field_validator('summary', mode='before')
+    @classmethod
+    def _validate_summary(cls, v: object) -> object:
+        if not isinstance(v, str):
+            raise ValueError('summary must be a string')
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError('summary cannot be blank')
+        return cleaned
 
 
 class GoalResponse(BaseModel):
