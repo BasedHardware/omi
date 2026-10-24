@@ -546,6 +546,10 @@ def test_hourly_usage_and_fair_use_are_once_only_with_completion_replay(lane):
     assert row['transcription_seconds'] == 4 and row['speech_seconds'] == 4
     assert row['plan_usage']['pro']['speech_seconds'] == 4
     assert batch.ledger.get().to_dict()['usage_committed_at'] is not None
+    total = list(lane.user.collection('monthly_usage_totals').stream())
+    assert len(total) == 1
+    assert total[0].to_dict()['totals']['speech_seconds'] == 4
+    assert total[0].to_dict()['totals']['transcription_seconds'] == 4
 
 
 def test_leading_silence_preserves_absolute_capture_and_playback_clock(lane):

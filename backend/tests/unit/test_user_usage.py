@@ -227,20 +227,23 @@ def test_monthly_usage_since_observes_every_scanned_hourly_document(mock_db, mon
 
 
 def test_hourly_transcription_writer_keeps_plan_and_missing_cost_explicit(mock_db, monkeypatch):
+    from tests.unit.fixtures.shadow_usage_firestore import Store
+
     monkeypatch.setattr(user_usage, 'resolve_usage_plan_id', lambda *_args, **_kwargs: 'plus')
-    hourly_ref = MagicMock()
-    mock_db.collection.return_value.document.return_value.collection.return_value.document.return_value = hourly_ref
+    store = Store({'users/uid': {'synthetic': True}})
 
     user_usage.update_hourly_usage(
         'uid',
         datetime(2026, 6, 23, 10, tzinfo=timezone.utc),
         {'transcription_seconds': 12},
+        firestore_client=store,
     )
 
-    update = hourly_ref.set.call_args.args[0]
-    assert getattr(update['plan_usage']['plus']['transcription_seconds'], '_value', None) == 12
-    assert getattr(update['plan_usage']['plus']['_metadata']['cost_status_counts']['missing'], '_value', None) == 1
-    assert all('cost_usd' not in key for key in update)
+    update = store.docs['users/uid/hourly_usage/2026-06-23-10']
+    assert store.writes == 2 and store.reads == 3
+    assert update['plan_usage']['plus']['transcription_seconds'] == 12
+    assert update['plan_usage']['plus']['_metadata']['cost_status_counts']['missing'] == 1
+    assert 'cost_usd' not in update['plan_usage']['plus']
 
 
 def test_usage_by_plan_joins_chat_and_hourly_rows_without_cost_zero(monkeypatch):

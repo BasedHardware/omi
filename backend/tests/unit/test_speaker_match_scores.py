@@ -809,7 +809,7 @@ def test_manual_merge_retains_bounded_donor_scores(monkeypatch, score_merge_modu
     failures = []
     monkeypatch.setattr(merge.conversations_db, 'get_conversation', lambda uid, cid: sources[cid])
     monkeypatch.setattr(merge, '_collect_all_photos', lambda *a: [])
-    monkeypatch.setattr(merge, '_copy_audio_chunks_for_merge', lambda *a: [])
+    monkeypatch.setattr(merge, '_copy_audio_chunks_for_merge', lambda *a, **_kw: [])
     monkeypatch.setattr(
         merge.lifecycle_service, 'create_processing_conversation', lambda uid, data: captured.append(data)
     )
