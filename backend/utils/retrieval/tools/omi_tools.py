@@ -63,7 +63,7 @@ def get_omi_product_info_tool(query: Optional[str] = None) -> str:
         Returns documentation about firmware updates and device management
     """
     # Keep the tool schema typed as text while validating untrusted direct callers.
-    if not isinstance(cast(object, query), str) or not query.strip():
+    if query is None or not isinstance(cast(object, query), str) or not query.strip():
         return "Error: Please provide a non-empty question or query about the Omi/Friend product."
 
     # Fetch the product docs. A network or GitHub API failure must not break the chat turn, so fail
