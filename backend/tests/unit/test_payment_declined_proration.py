@@ -190,8 +190,8 @@ def _load_payment_router() -> Any:
 
 
 @pytest.fixture
-def payment_router(restore_module_stubs):
-    """Build a fresh isolated router before timing the endpoint behavior."""
+def payment_router():
+    """Build isolated IO fakes before measuring the endpoint call CPU budget."""
     return _load_payment_router()
 
 
