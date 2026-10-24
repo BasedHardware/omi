@@ -210,6 +210,7 @@ def list_people(
     include_dismissed: bool = False,
     limit: Optional[int] = None,
     memoize: bool = False,
+    transaction: Any = None,
 ) -> list[dict[str, Any]]:
     """List people; only audited, read-only context callers may opt into reuse.
 
@@ -218,7 +219,7 @@ def list_people(
     always read live. Stored bytes contain only this raw result, never a learning
     projection. Each hit decodes its own copy, preserving Firestore value types.
     """
-    memo = _people_scan_memo.get()
+    memo = _people_scan_memo.get() if transaction is None else None
     key = (uid, include_dismissed, limit)
     generation = None
     if memo is not None:
@@ -243,7 +244,14 @@ def list_people(
     if limit is not None:
         people_ref = people_ref.limit(limit)
     result = []
-    for person in people_ref.stream():
+    if transaction is not None:
+        try:
+            rows = people_ref.stream(transaction=transaction)
+        except TypeError:
+            rows = people_ref.stream()
+    else:
+        rows = people_ref.stream()
+    for person in rows:
         data = person.to_dict()
         if not include_dismissed and data.get('is_dismissed') is True:
             continue
@@ -271,7 +279,13 @@ def list_people(
     return result
 
 
-def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] | None:
+def find_person_by_name(
+    db_client: Any,
+    uid: str,
+    name: str,
+    *,
+    transaction: Any = None,
+) -> dict[str, Any] | None:
     """Find the first active owner-scoped person with this display name, ignoring case.
 
     An exact match costs one indexed query. Firestore has no case-insensitive equality,
@@ -280,7 +294,14 @@ def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] |
 
     people_ref = db_client.collection('users').document(uid).collection('people')
     query = people_ref.where(filter=FieldFilter('name', '==', name))
-    for person in query.stream():
+    if transaction is not None:
+        try:
+            rows = query.stream(transaction=transaction)
+        except TypeError:
+            rows = query.stream()
+    else:
+        rows = query.stream()
+    for person in rows:
         data = person.to_dict()
         if data.get('is_dismissed') is True:
             continue
@@ -290,7 +311,7 @@ def find_person_by_name(db_client: Any, uid: str, name: str) -> dict[str, Any] |
     if wanted is None:
         return None
     folded = wanted.casefold()
-    for data in list_people(db_client, uid):
+    for data in list_people(db_client, uid, transaction=transaction):
         stored = normalized_person_alias(data.get('name'))
         if stored is not None and stored.casefold() == folded:
             return data

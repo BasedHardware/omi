@@ -620,20 +620,7 @@ def get_or_create_person(data: CreatePerson, uid: str = Depends(auth.get_current
     This enables backward compatibility: old apps can call this API and get the
     same person that backend already created, preventing duplicates.
     """
-    # Check if person with same name already exists
-    existing_person = get_person_by_name(uid, data.name)
-    if existing_person:
-        return existing_person
-
-    # Create new person
-    person_data = {
-        'id': str(uuid.uuid4()),
-        'name': data.name,
-        'created_at': datetime.now(timezone.utc),
-        'updated_at': datetime.now(timezone.utc),
-    }
-    result = create_person(uid, person_data)
-    return result
+    return users_db.get_or_create_person(uid, data.name)
 
 
 @router.get('/v1/users/people/{person_id}', tags=['v1'], response_model=Person)

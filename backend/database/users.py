@@ -14,7 +14,7 @@ from typing import Any, Literal, Optional, TypedDict
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
-from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client
+from ._client import db, delete_collection_recursive, document_id_from_seed, get_firestore_client, run_transactional
 from ._client import get_data_plane_firestore_client
 from database.account_deletion_marker import (
     account_deletion_collection,
@@ -973,6 +973,45 @@ def create_person(uid: str, data: dict):
     people_ref = db.collection('users').document(uid).collection('people')
     people_ref.document(data['id']).set({**data, 'is_user_created': True})
     return data
+
+
+def get_or_create_person(
+    uid: str,
+    name: str,
+    *,
+    person_data: Optional[dict] = None,
+    firestore_client: Any = None,
+) -> dict:
+    """Atomically find an existing person by name or create a new one (#22438).
+
+    Uses a Firestore transaction so concurrent requests for the same name
+    cannot race and create duplicate person documents.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    people_ref = client.collection('users').document(uid).collection('people')
+
+    @transactional
+    def _txn_get_or_create(transaction: Any) -> dict:
+        existing = find_person_by_name(client, uid, name, transaction=transaction)
+        if existing is not None:
+            return existing
+
+        now = datetime.now(timezone.utc)
+        payload = dict(person_data or {})
+        person_id = payload.get('id') or str(uuid.uuid4())
+        payload['id'] = person_id
+        payload['name'] = name
+        payload.setdefault('created_at', now)
+        payload.setdefault('updated_at', now)
+        payload['is_user_created'] = True
+
+        doc_ref = people_ref.document(person_id)
+        transaction.set(doc_ref, payload)
+        return payload
+
+    result = run_transactional(client, _txn_get_or_create, transient=True)
+    return project_person_learning(uid, result, firestore_client=client)
+
 
 
 def get_person(uid: str, person_id: str, *, include_dismissed: bool = False):
