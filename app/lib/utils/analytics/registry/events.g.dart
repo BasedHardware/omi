@@ -2430,7 +2430,8 @@ enum PaywallOpenedSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  appOpenReask("app_open_reask");
   const PaywallOpenedSource(this.wireName);
   final String wireName;
 }
@@ -2866,7 +2867,8 @@ enum PaywallVariantShownSource {
   screenContextGate("screen_context_gate"),
   mcpDailyCap("mcp_daily_cap"),
   budget80("budget_80"),
-  onboarding("onboarding");
+  onboarding("onboarding"),
+  appOpenReask("app_open_reask");
   const PaywallVariantShownSource(this.wireName);
   final String wireName;
 }
