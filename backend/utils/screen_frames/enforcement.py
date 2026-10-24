@@ -83,6 +83,46 @@ def _frame_doc(frame: NewPersistedFrame, bucket: Optional[str] = None) -> Dict[s
     }
 
 
+_UTC_MIN = datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _coerce_captured_at(val: Any) -> datetime:
+    """Coerce string, numeric, or naive/aware datetime to UTC-aware datetime.
+
+    Falls back to _UTC_MIN for absent or malformed values so sorting remains total
+    and non-crashing across mixed schema generations.
+    """
+    if isinstance(val, datetime):
+        return val if val.tzinfo is not None else val.replace(tzinfo=timezone.utc)
+    if isinstance(val, (int, float)):
+        try:
+            return datetime.fromtimestamp(val, tz=timezone.utc)
+        except (ValueError, OSError, OverflowError):
+            return _UTC_MIN
+    if isinstance(val, str):
+        try:
+            dt = datetime.fromisoformat(val.replace('Z', '+00:00'))
+            return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+        except (ValueError, TypeError):
+            return _UTC_MIN
+    return _UTC_MIN
+
+
+def _frame_captured_at_sort_key(item: Any) -> tuple[datetime, str]:
+    """Total sort key by (captured_at, id) tolerant of dicts, models, and corrupt timestamps."""
+    if isinstance(item, dict):
+        d_item: dict[str, Any] = item
+        raw: Any = d_item.get('captured_at')
+        item_id: str = str(d_item.get('id') or '')
+    elif hasattr(item, 'captured_at'):
+        raw = getattr(item, 'captured_at', None)
+        item_id = str(getattr(item, 'id', ''))
+    else:
+        raw = None
+        item_id = ''
+    return (_coerce_captured_at(raw), item_id)
+
+
 def _apply_cap_and_roles(
     existing: List[Dict[str, Any]], new_docs: List[Dict[str, Any]], max_persisted: int
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -95,7 +135,7 @@ def _apply_cap_and_roles(
     by_id: Dict[str, Dict[str, Any]] = {}
     for doc in [*existing, *new_docs]:
         by_id[doc['id']] = doc
-    pool = sorted(by_id.values(), key=lambda d: d['captured_at'])
+    pool = sorted(by_id.values(), key=_frame_captured_at_sort_key)
 
     if len(pool) > max_persisted:
         evicted = pool[: len(pool) - max_persisted]
@@ -112,7 +152,7 @@ def _apply_cap_and_roles(
             banner_id = doc['id']
             best = suitability
 
-    strip_candidates = sorted((d for d in survivors if d['id'] != banner_id), key=lambda d: d['captured_at'])
+    strip_candidates = sorted((d for d in survivors if d['id'] != banner_id), key=_frame_captured_at_sort_key)
     strip_candidates = strip_candidates[:STRIP_MAX]
     strip_rank = {d['id']: rank for rank, d in enumerate(strip_candidates)}
 
@@ -144,7 +184,7 @@ def _to_api_frame(uid: str, conversation_id: str, doc: Dict[str, Any]) -> Conver
     ground_data = doc.get('ground') or _NEUTRAL_GROUND_FALLBACK
     return ConversationScreenFrame(
         id=frame_id,
-        captured_at=doc['captured_at'],
+        captured_at=_coerce_captured_at(doc.get('captured_at')),
         role=doc.get('role') or 'strip',
         rank=int(doc.get('rank') or 0),
         caption=doc.get('caption') or '',
@@ -194,7 +234,7 @@ def build_frame_set_response(uid: str, conversation_id: str) -> ConversationScre
             banner = api_frame
         else:
             strip.append(api_frame)
-    strip.sort(key=lambda f: f.captured_at)
+    strip.sort(key=_frame_captured_at_sort_key)
     adjudicated_at = screen_frames_db.get_conversation_screen_frames_adjudicated_at(uid, conversation_id, bucket=bucket)
     selection_fingerprint = screen_frames_db.get_conversation_screen_frames_selection_fingerprint(
         uid, conversation_id, bucket=bucket
