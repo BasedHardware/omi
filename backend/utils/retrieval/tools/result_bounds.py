@@ -30,7 +30,7 @@ T = TypeVar("T")
 MAX_RESULT_CHARS = 60000
 
 
-def cap_items_for_llm(items: List[T], max_items: int) -> Tuple[List[T], int, bool]:
+def cap_items_for_llm(items: List[T] | None, max_items: int) -> Tuple[List[T], int, bool]:
     """Keep at most ``max_items`` rows for the chat model.
 
     Callers pass rows in their chosen order, so this keeps a prefix without inferring relevance.
@@ -49,7 +49,7 @@ def cap_items_for_llm(items: List[T], max_items: int) -> Tuple[List[T], int, boo
 
 
 def bounded_result(
-    result: str,
+    result: object,
     truncated: bool,
     noun: str = "results",
     *,
