@@ -1,10 +1,29 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/schema/chat_session.dart';
 import 'package:omi/backend/schema/message.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/utils/off_ui_isolate.dart';
+
+/// Session pages at or above this size decode on a background isolate.
+const chatSessionRowsBackgroundParseBytes = 64 * 1024;
+
+/// The explicit-session message row decoder; tests swap it to prove where it runs.
+@visibleForTesting
+ServerMessage Function(Map<String, dynamic>) chatSessionMessageRowDecoder = ServerMessage.fromGeneratedWireJson;
+
+/// A 100-message history with markdown is ~120 KB: decode it off the UI isolate
+/// (it lands as the chat opens and as older history pages in). [decode] must be
+/// a static or top-level function so it can cross isolates.
+Future<ApiResult<List<T>>> _decodeRowsOffUi<T>(String body, T Function(Map<String, dynamic>) decode) => offUiIsolate(
+      () => decodeApiRows<T>(body, decode),
+      size: body.length,
+      threshold: chatSessionRowsBackgroundParseBytes,
+      debugName: 'chat_session_parse',
+    );
 
 /// Uses the existing session endpoints. Errors stay distinct from an empty history.
 class ChatSessionsApi {
@@ -27,12 +46,19 @@ class ChatSessionsApi {
     );
     return switch (response) {
       ApiFailure(:final problem) => ApiFailure(problem),
-      ApiSuccess(:final data, :final truncated) => switch (decodeApiRows(data, decode, fallback: fallback)) {
-          ApiSuccess(:final data, :final rejectedRows) =>
-            ApiSuccess(data, rejectedRows: rejectedRows, truncated: truncated),
+      ApiSuccess(:final data, :final truncated) => switch (await _decodeRowsOffUi(data, decode)) {
+          ApiSuccess(:final data, :final rejectedRows) => _kept(data, rejectedRows, truncated),
           ApiFailure(:final problem) => ApiFailure(problem),
         },
     };
+  }
+
+  ApiResult<List<T>> _kept<T>(List<T> rows, int rejectedRows, bool truncated) {
+    // decodeApiRows' partial-decode report, raised here: [fallback] cannot cross isolates.
+    if (rejectedRows > 0) {
+      fallback(const ApiFallbackEvent(reason: ApiFallbackReason.partialDecode, outcome: ApiFallbackOutcome.degraded));
+    }
+    return ApiSuccess(rows, rejectedRows: rejectedRows, truncated: truncated);
   }
 
   /// The backend orders default Omi sessions newest first. App conversations stay separate.
@@ -57,8 +83,8 @@ class ChatSessionsApi {
       );
 
   /// Reads the explicit session even when it is not the server-current conversation.
-  Future<ApiResult<List<ServerMessage>>> messages(String id, {int offset = 0, int limit = 100}) => _rows('v2/messages',
-      {'chat_session_id': id, 'offset': '$offset', 'limit': '$limit'}, ServerMessage.fromGeneratedWireJson);
+  Future<ApiResult<List<ServerMessage>>> messages(String id, {int offset = 0, int limit = 100}) => _rows(
+      'v2/messages', {'chat_session_id': id, 'offset': '$offset', 'limit': '$limit'}, chatSessionMessageRowDecoder);
 
   Future<ApiResult<String>> title(String id, List<ServerMessage> messages) => executeApi(
         request: ApiRequest(
