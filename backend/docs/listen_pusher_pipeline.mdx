@@ -6397,6 +6397,41 @@ no scan or redrive; applying any private plan requires separate authorization.
 
 ## Durable mono pendant/phone quiet checks
 
+### Episode lifecycle and overdue quiet recovery
+
+Retained live speech advances episode `last_activity_at` (coalesced to at most
+one activity write per minute per process/conversation, plus moment/session-end flushes) independently of the
+moment word budget, rate limit and notes provider. Running notes consume unplaced
+segment IDs after a successful compare-and-swap (`audio_alignment=unplaced`,
+`start=end=-1`). Persistence keeps these IDs separate: sentinel timestamps do not
+prove adjacency and must not merge a new segment into an already-consumed ID.
+Retries and later audio placement of a consumed unplaced ID
+do not feed it again. Failures leave IDs unapplied for retry/finalization. Legacy
+offset-only episodes retain their placed-segment cursor; it never excludes
+unplaced IDs. Placed segments may still extend their text/end under the same ID.
+No audio coordinate is synthesized for unplaced moments.
+
+Closing the current episode atomically records `episode_links/last_closed` while
+clearing `episode_links/current`. `GET /v1/episodes/live` can return the additive
+`last_closed_episode` field, including alongside a newer live episode; its
+existing `episode` field remains live-only. `GET /v1/episodes/{episode_id}` reads
+the retained recap within the authenticated account and existing episode channel
+gate. Conversation links and closed notes survive while member finalization is
+pending. Clients must use this closed recap field for recovery navigation; a
+capture timer alone is not evidence of healthy running notes. Older closed
+episodes remain reachable by their conversation/episode IDs; no historical
+pointer backfill is performed.
+
+Quiet member-conversation recovery uses the shared outbox replay authority:
+its persisted rotating cursor and bounded concurrency prevent an overdue prefix
+from monopolizing replay. Retirement, successor repair, per-row backoff, outcome
+counters and arm counters remain owned by that path. There is no independent
+quiet due query or additional Firestore index. Processing admission still
+requires configured durable dispatch, an expired recording lease, account
+permission and the normal lifecycle fences. Missing dispatch reserves a future
+successor without admitting processing; restoring dispatch lets replay recover
+the member exactly once, including after its episode has closed.
+
 `LISTEN_QUIET_FINALIZATION_ENABLED=true` is the default. Mono `omi` and `phone`
 recordings arm one opaque `quiet-*` check in `conversation_finalization_jobs`
 on session setup and every socket exit (including drain/network failure).
