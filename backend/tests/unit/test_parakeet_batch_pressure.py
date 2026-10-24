@@ -163,7 +163,8 @@ async def test_batch_pressure_poller_off_configuration_does_no_work(monkeypatch)
 
 
 @pytest.mark.asyncio
-async def test_batch_pressure_reuses_bounded_client_until_shutdown(monkeypatch):
+@pytest.mark.parametrize('intermittent_failure', [False, True])
+async def test_batch_pressure_reuses_bounded_client_until_shutdown(monkeypatch, intermittent_failure):
     pressure = pressure_module.BatchPressure()
     pressure.REFRESH_SECONDS = 0.01
     created = []
@@ -186,7 +187,7 @@ async def test_batch_pressure_reuses_bounded_client_until_shutdown(monkeypatch):
         used.append(client)
         if len(used) == 5:
             refreshed_twice.set()
-        return True
+        return not intermittent_failure or len(used) % 2 == 0
 
     monkeypatch.setattr(pressure_module.httpx, 'AsyncClient', Client)
     monkeypatch.setattr(pressure, '_refresh', refresh)
@@ -537,8 +538,12 @@ async def test_prod_admission_retains_conservative_boundaries_and_quorum(fleet, 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('dns_failure', [False, True])
-async def test_default_grace_is_bounded_by_sample_age_not_failed_sweeps(fleet, monkeypatch, dns_failure):
-    monkeypatch.delenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS')
+@pytest.mark.parametrize('max_age', [30, 60])
+async def test_grace_is_bounded_by_configured_sample_age_not_failed_sweeps(fleet, monkeypatch, dns_failure, max_age):
+    if max_age == 60:
+        monkeypatch.delenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS')
+    else:
+        monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS', str(max_age))
     fallback = []
     monkeypatch.setattr(pressure_module, 'record_fallback', lambda **kw: fallback.append(kw))
     async with httpx.AsyncClient(transport=fleet.transport) as client:
@@ -546,10 +551,10 @@ async def test_default_grace_is_bounded_by_sample_age_not_failed_sweeps(fleet, m
         fleet.failed.update(fleet.ips)
         if dns_failure:
             fleet.lookup.side_effect = OSError('synthetic DNS fault')
-        for age in (16, 30, 60, 60.001, 3600):
+        for age in (16, max_age - 1, max_age, max_age + 0.001, 3600):
             fleet.clock[0] = 100 + age
             assert not await fleet.pressure._refresh('synthetic.invalid', 2, client)
-            assert fleet.pressure.allows('synthetic.invalid', 2) is (age <= 60)
+            assert fleet.pressure.allows('synthetic.invalid', 2) is (age <= max_age)
             assert WINDOW_PRESSURE_REPLICAS.labels(state='fresh')._value.get() == 0
             assert all(sample.observed_at == 100 for sample in fleet.pressure._samples.values())
     assert len(fallback) == 3
