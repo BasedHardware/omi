@@ -168,7 +168,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
             if (provider.userQuestion != null && provider.userQuestion!.isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                '"$provider.userQuestion"',
+                provider.userQuestion!,
                 style: TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontStyle: FontStyle.italic),
                 textAlign: TextAlign.center,
                 maxLines: 2,

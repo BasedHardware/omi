@@ -63,14 +63,15 @@ Future<void> flush(WidgetTester tester) async {
   // Event-loop turns for real Futures, without waiting for the animated graphic to settle.
   for (var i = 0; i < 10; i++) {
     await tester.pump(const Duration(milliseconds: 20));
+    // SDK stream cancellation may return a completed Future created outside
+    // FakeAsync. Drain that root-zone continuation before asserting the UI.
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
   }
 }
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() {
-    OmiVoicePlaybackService.instance.debugHooks = const VoicePlaybackDebugHooks();
-    addTearDown(() => OmiVoicePlaybackService.instance.debugHooks = null);
     try {
       Env.init(_Env());
     } catch (_) {}
@@ -79,6 +80,7 @@ void main() {
         (call) async => {'appName': 'omi', 'packageName': 'com.omi.test', 'version': '0.0.0', 'buildNumber': '1'});
   });
   setUp(() async {
+    OmiVoicePlaybackService.instance.debugHooks = const VoicePlaybackDebugHooks();
     SharedPreferences.setMockInitialValues({'deviceIdHash': 'fixture', 'voiceResponseMode': 0});
     await SharedPreferencesUtil.init();
     SharedPreferencesUtil().voiceResponseMode = 0;
@@ -191,7 +193,7 @@ void main() {
     response.add(ServerMessageChunk('a', '', MessageChunkType.done, message: row('a', 'Own answer', MessageSender.ai)));
     await flush(tester);
     expect(find.text('Own answer'), findsOneWidget);
-    await response.close();
+    await tester.runAsync(() => response.close());
     await tester.pumpWidget(const SizedBox());
     h.dispose();
     await tester.pump();
@@ -214,7 +216,7 @@ void main() {
     expect(h.tutorial.aiResponse, isNull);
     expect(find.text('Old answer'), findsNothing);
     expect(h.tutorial.voiceSessionActive, isFalse);
-    await response.close();
+    await tester.runAsync(() => response.close());
     await tester.pumpWidget(const SizedBox());
     h.dispose();
     await tester.pump();
@@ -274,7 +276,7 @@ void main() {
         .add(ServerMessageChunk('a', '', MessageChunkType.done, message: row('a', 'Auto answer', MessageSender.ai)));
     await flush(tester);
     expect(find.text('Auto answer'), findsOneWidget);
-    await response.close();
+    await tester.runAsync(() => response.close());
     await tester.pumpWidget(const SizedBox());
     h.dispose();
     await tester.pump();
