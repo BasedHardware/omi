@@ -96,6 +96,9 @@ class Pump:
         self._maintenance = asyncio.Lock()
         self.shadow = shadow
         self._normal_flights = 0
+        # StagedAudio's stream/language cache is keyed by segment, not token.
+        # A retry may be leased while a stale GPU attempt is still draining.
+        self._flight_segments: dict[str, int] = {}
 
     async def run(self, stop_event: asyncio.Event) -> None:
         """SIGTERM sets stop_event; in-flight chains drain with heartbeats intact."""
@@ -272,6 +275,10 @@ class Pump:
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
         prepared = None
+        segments = {lease.item.segment_id for lease in leases}
+        duplicate_decode = any(segment in self._flight_segments for segment in segments)
+        for segment in segments:
+            self._flight_segments[segment] = self._flight_segments.get(segment, 0) + 1
         try:
             if self.shadow is not None:
                 try:
@@ -321,10 +328,12 @@ class Pump:
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
             prepare = getattr(self.worker, 'prepare_batch', None)
-            if callable(prepare) and self._gpu.locked():
+            if callable(prepare) and self._gpu.locked() and not duplicate_decode:
                 # Reserve read-ahead only for a waiting flight. Preparing the
                 # active flight can monopolize the budget before it consumes
                 # its first item, leaving its waiting sibling nothing to overlap.
+                # Re-leased IDs keep in-flight decoding: read-ahead must not
+                # overwrite a stale attempt's still-unconsumed context cache.
                 prepared = prepare([v.item for v in leases])
                 if prepared is not None:
                     dispatch_kwargs['prepared'] = prepared
@@ -402,6 +411,12 @@ class Pump:
                     # Keep renewal alive until IO drains; never block the event loop.
                     await run_blocking(storage_executor, prepared.close)
             finally:
+                for segment in segments:
+                    remaining = self._flight_segments[segment] - 1
+                    if remaining:
+                        self._flight_segments[segment] = remaining
+                    else:
+                        del self._flight_segments[segment]
                 self._normal_flights -= 1
                 done.set()
                 await renew

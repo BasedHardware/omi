@@ -220,6 +220,71 @@ def results_for(segment):
 
 
 @pytest.mark.asyncio
+async def test_released_segment_retry_cannot_consume_stale_attempt_context(monkeypatch):
+    monkeypatch.setattr(pump_module, 'HEARTBEAT_SECONDS', 0.01)
+    model = Model(scale=0.01)
+    entered, release = threading.Event(), threading.Event()
+    metadata, decoded = {}, []
+
+    def decode(unit):
+        samples = model.decode(unit)
+        # Model the destructive per-segment metadata seam in StagedAudio.
+        metadata[unit.segment_id] = 'en'
+        decoded.append(unit.segment_id)
+        return samples
+
+    def vad(samples):
+        if not entered.is_set():
+            entered.set()
+            assert release.wait(5)
+        return model.vad(samples)
+
+    worker = model.worker(
+        3, decode_concurrency=2, decode=decode, vad=vad, language_of=lambda unit: metadata.pop(unit.segment_id, None)
+    )
+    store = MemoryStore()
+    scheduler = Scheduler(store)
+    scheduler.enqueue(replace(item('s0'), duration_seconds=41), time.time())
+    pump = Pump(
+        scheduler,
+        SynchronizedWorker(worker, synchronize=lambda: None),
+        capacity=lambda: PoolCapacity(time.time(), 1),
+        flights=2,
+    )
+    first = asyncio.create_task(pump.run_once(maintain=False))
+    second = None
+    try:
+        for _ in range(500):
+            if entered.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert entered.is_set() and decoded == ['s0']
+        old_token = store.rows['jobs', 's0']['token']
+        assert scheduler.defer('s0', old_token, time.time(), 1)
+        await asyncio.sleep(1.05)
+        scheduler.recover(time.time())
+        second = asyncio.create_task(pump.run_once(maintain=False))
+        for _ in range(500):
+            if pump._flight_segments.get('s0') == 2:
+                break
+            await asyncio.sleep(0.01)
+        assert pump._flight_segments['s0'] == 2
+        await asyncio.sleep(0.05)
+        assert decoded == ['s0']  # Replacement must not overwrite the old cache.
+        release.set()
+        await asyncio.gather(first, second)
+        assert decoded == ['s0', 's0'] and not worker.counts['failed']
+        assert store.rows['jobs', 's0']['state'] == 'committed'
+        assert len([key for key in store.rows if key[0] == 'results']) == 1
+        assert not scheduler.complete(results_for('s0'), old_token, time.time())
+        assert not pump._flight_segments and worker.decode_ahead.items == 0
+    finally:
+        release.set()
+        await asyncio.gather(first, *([second] if second is not None else []), return_exceptions=True)
+        worker._io.shutdown(wait=True)
+
+
+@pytest.mark.asyncio
 async def test_paired_latency_model_preserves_payloads_and_reports_capacity():
     """Illustrative IO-latency model, not an L4 capacity qualification."""
     baseline_saved = None
