@@ -14,6 +14,7 @@ try:
     from utils.model_text import truncation_note
 except ModuleNotFoundError:
     import importlib.util as _importlib_util
+    import sys as _sys
     from pathlib import Path as _Path
 
     _mt_spec = _importlib_util.spec_from_file_location(
@@ -22,6 +23,9 @@ except ModuleNotFoundError:
     )
     assert _mt_spec is not None and _mt_spec.loader is not None
     _mt_mod = _importlib_util.module_from_spec(_mt_spec)
+    # Register before exec (the load_module_fresh recipe): a dataclass in the
+    # loaded module resolves its annotations through sys.modules[cls.__module__].
+    _sys.modules["utils.model_text"] = _mt_mod
     _mt_spec.loader.exec_module(_mt_mod)
     truncation_note = _mt_mod.truncation_note
 
@@ -30,14 +34,14 @@ T = TypeVar("T")
 MAX_RESULT_CHARS = 60000
 
 
-def cap_items_for_llm(items: List[T] | None, max_items: int) -> Tuple[List[T], int, bool]:
+def cap_items_for_llm(items: List[T], max_items: int) -> Tuple[List[T], int, bool]:
     """Keep at most ``max_items`` rows for the chat model.
 
     Callers pass rows in their chosen order, so this keeps a prefix without inferring relevance.
     Returns ``(capped_list, total_found, truncated)`` where ``truncated`` is True when some rows
     were dropped.
     """
-    if items is None:
+    if items is None:  # type: ignore[reportUnnecessaryComparison]  # defensive runtime guard for untyped callers (#23410)
         return [], 0, False
     items_list = list(items)
     total_found = len(items_list)
@@ -49,7 +53,7 @@ def cap_items_for_llm(items: List[T] | None, max_items: int) -> Tuple[List[T], i
 
 
 def bounded_result(
-    result: object,
+    result: str,
     truncated: bool,
     noun: str = "results",
     *,
@@ -62,15 +66,18 @@ def bounded_result(
     The note deliberately does not state a total count: callers may pass an already-paginated
     page whose length is not the true total, so claiming a total would mislead (cubic on #8527).
     """
-    rendered = result if isinstance(result, str) else "" if result is None else str(result)
+    if result is None:  # type: ignore[reportUnnecessaryComparison]  # defensive runtime guard for untyped callers (#23410)
+        result = ""
+    elif not isinstance(result, str):  # type: ignore[reportUnnecessaryIsInstance]  # defensive runtime guard for untyped callers (#23410)
+        result = str(result)
 
-    if len(rendered) > MAX_RESULT_CHARS:
-        rendered = rendered[:MAX_RESULT_CHARS]
+    if len(result) > MAX_RESULT_CHARS:
+        result = result[:MAX_RESULT_CHARS]
         truncated = True
     if truncated:
         # Generic callers may not know the row count, so report the number of rendered lines.
         # Callers that do know how many records survived the cap should pass that count.
-        shown_count = max(0, int(shown)) if shown is not None else len(rendered.splitlines())
+        shown_count = max(0, int(shown)) if shown is not None else len(result.splitlines())
         unit = noun if shown is not None else "result lines"
         next_step = "Ask for a narrower topic or date range, or page with the offset, for the rest."
         if order:
@@ -86,5 +93,5 @@ def bounded_result(
             note = note.replace(
                 "more were omitted, not absent.", "more may exist; omitted data is not evidence of absence."
             )
-        rendered += "\n\n" + note
-    return rendered
+        result += "\n\n" + note
+    return result

@@ -99,7 +99,10 @@ def _compute_conversation_duration(conv: Conversation) -> float:
     """Compute conversation duration in seconds."""
     # Try to get duration from transcript segments
     if conv.transcript_segments:
-        max_end = max(filter(None, (seg.end for seg in conv.transcript_segments)), default=0)
+        max_end = max(
+            (seg.end for seg in conv.transcript_segments if seg.end is not None),  # type: ignore[reportUnnecessaryComparison]  # defensive: legacy rows may predate the required-float validation
+            default=0,
+        )
         if max_end > 0:
             return max_end
 
