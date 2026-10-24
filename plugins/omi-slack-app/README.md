@@ -107,6 +107,9 @@ SLACK_CLIENT_SECRET=your_client_secret
 # OAuth Redirect URL
 OAUTH_REDIRECT_URL=http://localhost:8000/auth/callback
 
+# Secret used to sign the omi_slack_settings cookie (required for settings writes)
+SLACK_SETTINGS_SECRET=your_random_secret
+
 # OpenAI API Key (for AI channel matching & message extraction)
 OPENAI_API_KEY=your_openai_key
 
