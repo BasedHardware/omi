@@ -17,10 +17,12 @@ class AddMcpServerPage extends StatefulWidget {
       {super.key,
       this.addServer = addMcpServer,
       this.appDetailsLoader = getAppDetailsServer,
+      this.authorizeServer = authorizeMcpServer,
       this.probeTimeout = const Duration(seconds: 20),
       this.waitTimeout = const Duration(minutes: 5)});
   final Future<Map<String, dynamic>?> Function(String, String, {String? description}) addServer;
   final Future<Map<String, dynamic>?> Function(String) appDetailsLoader;
+  final Future<String?> Function(String appId) authorizeServer;
   final Duration probeTimeout;
   final Duration waitTimeout;
 
@@ -43,6 +45,11 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
   /// explicit Connect on that exact URL for that account reuses one; it is never the
   /// active state, so a late response for a retired attempt cannot touch the current one.
   final _registrations = <(String, String), _Registration>{};
+
+  /// Per account and URL: the order registrations were requested in, and the newest
+  /// one cached. A late reply for an older request never replaces a newer cached one.
+  final _registrationRequests = <(String, String), int>{};
+  final _cachedRequest = <(String, String), int>{};
 
   /// The one connect attempt allowed to act on this page. Each Connect press mints a
   /// new one; editing the URL, an account change or disposal retires it. Every await
@@ -114,10 +121,13 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
     final attempt = _beginAttempt(url, uid);
     final cached = _registrations[(uid, url)];
     if (cached != null) {
-      // An explicit retry on the URL the registration was made for reuses it.
-      await _continueRegistration(attempt, cached);
+      // An explicit retry on the URL the registration was made for reuses it. Its first
+      // authorization state is single-use and expires, so the retry asks for a fresh one.
+      await _continueRegistration(attempt, cached, freshAuthorization: true);
       return;
     }
+    final key = (uid, url);
+    final request = _registrationRequests[key] = (_registrationRequests[key] ?? 0) + 1;
     setState(() => _isLoading = true);
     try {
       final result = await widget
@@ -140,7 +150,10 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
       // without touching whichever attempt is active now.
       final authUrl = result['auth_url'];
       final registration = _Registration(id, result['requires_oauth'] == true, authUrl is String ? authUrl : null);
-      _registrations[(uid, url)] = registration;
+      if (request > (_cachedRequest[key] ?? 0)) {
+        _registrations[key] = registration;
+        _cachedRequest[key] = request;
+      }
       if (!_owns(attempt)) return;
       await _continueRegistration(attempt, registration);
     } catch (_) {
@@ -152,12 +165,14 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> with WidgetsBinding
     }
   }
 
-  Future<void> _continueRegistration(_ConnectAttempt attempt, _Registration registration) async {
+  Future<void> _continueRegistration(_ConnectAttempt attempt, _Registration registration,
+      {bool freshAuthorization = false}) async {
     if (!registration.requiresOAuth) {
       await _navigateToAppDetail(registration.appId, attempt);
       return;
     }
-    final authUrl = registration.authUrl;
+    final authUrl = freshAuthorization ? await widget.authorizeServer(registration.appId) : registration.authUrl;
+    if (!_owns(attempt)) return;
     if (authUrl == null || !await launchIntegrationOAuth(() async => authUrl, isCurrent: () => _owns(attempt))) {
       if (mounted && _owns(attempt)) _showError(context.l10n.mcpConnectionFailed);
       return;

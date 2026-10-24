@@ -191,6 +191,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final provider = context.read<IntegrationProvider>();
     final wait = ConnectionWait(
       isCurrent: () => mounted && SharedPreferencesUtil().uid == uid,
+      // A probe waits for every integration's status read; it must outlive their shared budget.
+      probeTimeout: provider.statusTimeout + const Duration(seconds: 5),
       probe: () async {
         await provider.loadFromBackend(forceRefresh: true, silent: true);
         if (provider.hasStatusError(app)) return ConnectionProbe.failed;

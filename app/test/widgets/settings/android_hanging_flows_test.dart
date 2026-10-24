@@ -196,6 +196,35 @@ void main() {
     expect(provider.selectedApp, TaskIntegrationApp.todoist);
   });
 
+  testWidgets('a status read that answers inside its own 45s budget still completes authorization', (tester) async {
+    var authorized = false;
+    final defaults = <String>[];
+    final provider = TaskIntegrationProvider(fetchStatus: () async {
+      if (!authorized) return TaskIntegrationsResponse(integrations: {});
+      await Future<void>.delayed(const Duration(seconds: 30)); // slower than the old 20s probe
+      return TaskIntegrationsResponse(integrations: {
+        'todoist': {'app_key': 'todoist', 'connected': true}
+      });
+    }, setDefaultTaskIntegrationFn: (key) async {
+      defaults.add(key);
+      return true;
+    });
+    addTearDown(provider.dispose);
+    provider.clearUserData();
+    await pumpPage(tester,
+        ChangeNotifierProvider.value(value: provider, child: TaskIntegrationsPage(authenticate: (_) async => true)));
+    await tester.tap(find.text('Todoist'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    authorized = true;
+    await tester.pump(const Duration(seconds: 3));
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pumpAndSettle();
+    expect(defaults, ['todoist']);
+    expect(provider.selectedApp, TaskIntegrationApp.todoist);
+  });
+
   testWidgets('choosing another task app retires the earlier pending authorization selection', (tester) async {
     var connected = false;
     final defaults = <String>[];

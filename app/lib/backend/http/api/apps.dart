@@ -808,6 +808,25 @@ Future<bool> migrateAppOwnerId(String oldId, String sourceToken) async {
 
 /// Add an MCP server as a private app with chat tools.
 /// Returns {app_id, requires_oauth, auth_url?, tools_count?, tool_names?}
+/// Fresh OAuth authorization for an existing MCP registration. The original URL's state
+/// is single-use and expires, so an explicit retry needs a new one. Null on any failure.
+Future<String?> authorizeMcpServer(String appId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/apps/${Uri.encodeComponent(appId)}/mcp/authorize',
+    headers: {},
+    body: '',
+    method: 'POST',
+  );
+  // The body carries a state token; log only the status.
+  Logger.debug('authorizeMcpServer: ${response?.statusCode}');
+  if (response == null || response.statusCode != 200) return null;
+  try {
+    return wire.GeneratedMcpAuthorizeResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).authUrl;
+  } catch (_) {
+    return null;
+  }
+}
+
 Future<Map<String, dynamic>?> addMcpServer(String name, String serverUrl, {String? description}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/apps/mcp',

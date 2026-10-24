@@ -204,6 +204,8 @@ class _TaskIntegrationsPageState extends State<TaskIntegrationsPage> with Widget
     late final ConnectionWait wait;
     wait = ConnectionWait(
       isCurrent: () => isCurrent() && _pendingAuthApp == pending,
+      // A probe is one provider status read; it must outlive that read's own budget.
+      probeTimeout: provider.statusTimeout + const Duration(seconds: 5),
       probe: () async {
         await provider.loadFromBackend(forceRefresh: true, silent: true);
         if (provider.hasLoadError) return ConnectionProbe.failed;

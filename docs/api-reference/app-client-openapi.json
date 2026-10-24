@@ -20846,6 +20846,19 @@
         "title": "McpApiKeyCreated",
         "type": "object"
       },
+      "McpAuthorizeResponse": {
+        "properties": {
+          "auth_url": {
+            "title": "Auth Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "auth_url"
+        ],
+        "title": "McpAuthorizeResponse",
+        "type": "object"
+      },
       "McpCreateActionItem": {
         "properties": {
           "completed": {
@@ -44147,6 +44160,93 @@
           }
         ],
         "summary": "Delete Api Key",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/apps/{app_id}/mcp/authorize": {
+      "post": {
+        "description": "Issue fresh OAuth authorization for an existing MCP server registration.\n\nAuthorization state is single-use and expires, so retrying a connection needs a new\nstate and PKCE pair for the same registration rather than the original URL. Only the\nstored code verifier changes; an earlier URL then fails its token exchange.",
+        "operationId": "authorize_mcp_server_v1_apps__app_id__mcp_authorize_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "app_id",
+            "required": true,
+            "schema": {
+              "title": "App Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/McpAuthorizeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Authorize Mcp Server",
         "tags": [
           "v1"
         ]

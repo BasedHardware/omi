@@ -16,7 +16,14 @@ import '../support/test_browser.dart';
 
 void main() {
   late TestBrowser browser;
+  final reauthorized = <String>[];
+  Future<String?> reauthorize(String appId) async {
+    reauthorized.add(appId);
+    return 'https://provider.test/fresh-$appId-${reauthorized.length}';
+  }
+
   setUp(() async {
+    reauthorized.clear();
     SharedPreferences.setMockInitialValues({});
     await SharedPreferencesUtil.init();
     browser = TestBrowser()..install();
@@ -40,6 +47,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) async {
               creates++;
               return {'app_id': 'mcp-1', 'requires_oauth': true, 'auth_url': 'https://provider.test/auth'};
@@ -76,6 +84,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) {
               created.add(url);
               return created.length == 1
@@ -108,6 +117,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) async {
               created.add(url);
               final id = created.length == 1 ? 'a' : 'b';
@@ -146,6 +156,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) async => oauthRegistration('server-a'),
             appDetailsLoader: (id) async {
               reads.add(id);
@@ -175,6 +186,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) async {
               creates++;
               return oauthRegistration('server-a');
@@ -213,6 +225,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) async => {'app_id': 'server-a', 'requires_oauth': false},
             appDetailsLoader: (_) => read.future));
     await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
@@ -246,6 +259,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) async {
               creates++;
               return oauthRegistration('server-a');
@@ -317,6 +331,7 @@ void main() {
     await pumpWithProviders(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) async => {'app_id': 'server-a', 'requires_oauth': false},
             appDetailsLoader: (_) async => appData('server-a', enabled: false)),
         provider);
@@ -339,6 +354,7 @@ void main() {
       await pumpWithProviders(
           tester,
           AddMcpServerPage(
+              authorizeServer: reauthorize,
               addServer: (name, url, {description}) => (registrations[url] = Completer<Map<String, dynamic>?>()).future,
               appDetailsLoader: (id) async {
                 reads.add(id);
@@ -381,6 +397,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) {
               created.add(url);
               return created.length == 1 ? first.future : Future.value(oauthRegistration('server-b'));
@@ -404,13 +421,94 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
     expect(created, hasLength(2), reason: 'URL A reuses its registration');
-    expect(browser.launches.map((l) => l.$1).last, 'https://provider.test/auth-server-a');
+    expect(reauthorized, ['server-a'], reason: 'its retry asks for fresh authorization of registration A');
+    expect(browser.launches.map((l) => l.$1).last, 'https://provider.test/fresh-server-a-1');
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a late first registration never replaces the newer same-URL registration', (tester) async {
+    final first = Completer<Map<String, dynamic>?>();
+    var registrations = 0;
+    await pump(
+        tester,
+        AddMcpServerPage(
+            authorizeServer: reauthorize,
+            addServer: (name, url, {description}) {
+              registrations++;
+              return registrations == 1 ? first.future : Future.value(oauthRegistration('new-registration'));
+            },
+            appDetailsLoader: (_) async => {'status': 'pending_mcp_auth'},
+            probeTimeout: const Duration(milliseconds: 100),
+            waitTimeout: const Duration(milliseconds: 300)));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await editUrl(tester, 'https://other.example.test/mcp');
+    await editUrl(tester, 'https://mcp.example.test/mcp');
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    first.complete(oauthRegistration('old-registration'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(registrations, 2);
+    expect(reauthorized, ['new-registration'], reason: 'the retry belongs to the newer registration');
+    expect(browser.launches.map((l) => l.$1).last, 'https://provider.test/fresh-new-registration-1');
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a retry never reopens the original single-use authorization', (tester) async {
+    var creates = 0;
+    String? Function(String) authorizer = (id) => 'https://provider.test/fresh-$id';
+    await pump(
+        tester,
+        AddMcpServerPage(
+            authorizeServer: (id) async {
+              reauthorized.add(id);
+              return authorizer(id);
+            },
+            addServer: (name, url, {description}) async {
+              creates++;
+              return oauthRegistration('server-a');
+            },
+            appDetailsLoader: (_) async => {'status': 'pending_mcp_auth'},
+            probeTimeout: const Duration(milliseconds: 100),
+            waitTimeout: const Duration(milliseconds: 300)));
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 600));
+    // The first state was consumed or expired: the retry gets a new one for the same registration.
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(creates, 1);
+    expect(browser.launches.map((l) => l.$1),
+        ['https://provider.test/auth-server-a', 'https://provider.test/fresh-server-a']);
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(milliseconds: 600));
+    // If fresh authorization is unavailable, nothing is launched and the user sees the failure.
+    authorizer = (_) => null;
+    await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(browser.launches, hasLength(2), reason: 'never falls back to the consumed URL');
+    expect(reauthorized, ['server-a', 'server-a']);
     await tester.pumpWidget(const SizedBox());
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('malformed MCP creation never claims success and releases the button', (tester) async {
-    await pump(tester, AddMcpServerPage(addServer: (name, url, {description}) async => {'requires_oauth': false}));
+    await pump(
+        tester,
+        AddMcpServerPage(
+            authorizeServer: reauthorize, addServer: (name, url, {description}) async => {'requires_oauth': false}));
     await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
     await tester.pump(const Duration(milliseconds: 200));
     await tester.pump();
@@ -424,6 +522,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) async =>
                 {'app_id': 'mcp-1', 'requires_oauth': true, 'auth_url': 'https://provider.test/auth'},
             appDetailsLoader: (_) => read.future));
@@ -442,6 +541,7 @@ void main() {
     await pump(
         tester,
         AddMcpServerPage(
+            authorizeServer: reauthorize,
             addServer: (name, url, {description}) async => {'app_id': 'mcp-1', 'requires_oauth': false},
             appDetailsLoader: (_) => read.future));
     await tester.tap(find.widgetWithText(OmiButton, 'Connect'));
@@ -496,6 +596,7 @@ void main() {
             localizationsDelegates: AppLocalizations.localizationsDelegates,
             supportedLocales: const [Locale('en')],
             home: AddMcpServerPage(
+                authorizeServer: reauthorize,
                 addServer: (name, url, {description}) async =>
                     {'app_id': 'mcp-1', 'requires_oauth': true, 'auth_url': 'https://provider.test/auth'},
                 appDetailsLoader: (_) async => data()))));
