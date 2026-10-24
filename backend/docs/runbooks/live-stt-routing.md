@@ -399,13 +399,20 @@ through dev: dev shares production Redis/Firestore.
 
 ## Static-routing cohort ramp (stage 1)
 
-This sequence supersedes the historical router-on expansion above. Production
-listen stage 1 uses `STT_ROUTING_MODE=on`, `STT_ROUTING_ON_PERCENT=90`: the
-complementary approximately 10% of managed accounts use static selection. Keep
+This sequence supersedes the historical router-on expansion above. Since
+2026-10-24 (T3b, two-lane lead) the static-cohort expansion is **rolled
+back**: production listen serves `STT_ROUTING_MODE=on`,
+`STT_ROUTING_ON_PERCENT=100` (full cost-router admission; no static cohort).
+The abort step for a router-arm regression is back to `on/90` (the
+approximately 10% static cohort this section describes), with the same image,
+through the normal listen configuration workflow. Keep
 `PARAKEET_WINDOW_ALLOCATION_PERCENT=100`, `PARAKEET_WINDOW_MAX_SESSIONS=16`,
 `STT_FAILOVER_RECOVERY_ENABLED=true`, and `STT_NO_TEXT_RESCUE_ENABLED=true`.
 There is no provider, endpoint, GPU-pool, or admission-limit change. Custom STT,
 BYOK, and multi-channel sessions remain outside the managed cohort.
+
+The stage table below is the historical procedure record for the expansion
+that stage 1 began at `STT_ROUTING_ON_PERCENT=90`; stages 2-4 are not planned.
 
 Ship the instrumented binary with `STT_ROUTING_MODE=on` and
 `STT_ROUTING_ON_PERCENT=100` first. Let that image serve on/100 for at least
@@ -474,10 +481,12 @@ HOLDs, not automatic serving rollback. Watch the whole fleet and each serving
 zone as well as the two arms. LB 101 share has a broad 403/429-inclusive request
 denominator and is supporting evidence, not an exact session-open success SLI.
 
-Rollback for this **static expansion** is `STT_ROUTING_MODE=on` and
+The rollback direction above (on/90 → on/100) was executed on 2026-10-24
+(T3b): prod listen now serves `STT_ROUTING_MODE=on` and
 `STT_ROUTING_ON_PERCENT=100`, with the same image, through the normal listen
-configuration workflow. Keep chart, prod overlay and generated runtime manifest
-aligned. This direction differs from aborting the historical router-on ramp.
+configuration workflow. Chart, prod overlay and generated runtime manifest
+stay aligned. From on/100 the remaining abort step is back to on/90; this
+differs from aborting the historical router-on ramp.
 Do not set global mode off for a partial ramp: it ignores the on percentage and
 also suppresses shared health evidence. Keeping mode on preserves health
 collection even in the complementary static cohort; a later global evidence-off
