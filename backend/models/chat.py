@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Literal, Optional, Union
@@ -557,6 +557,23 @@ class UndoChatReceiptResponse(BaseModel):
     block: EditReceiptBlock
 
 
+def _coerce_message_datetime(dt_val: Any) -> datetime:
+    """Coerce string, naive datetime, or missing timestamp to a timezone-aware UTC datetime."""
+    if isinstance(dt_val, datetime):
+        if dt_val.tzinfo is None:
+            return dt_val.replace(tzinfo=timezone.utc)
+        return dt_val.astimezone(timezone.utc)
+    if isinstance(dt_val, str):
+        try:
+            parsed = datetime.fromisoformat(dt_val.replace('Z', '+00:00'))
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except (ValueError, TypeError):
+            pass
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
 class Message(BaseModel):
     id: str
     text: str
@@ -662,7 +679,10 @@ class Message(BaseModel):
         include_file_info: bool = False,
         app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
-        sorted_messages = sorted(messages, key=lambda m: m.created_at)
+        sorted_messages = sorted(
+            messages,
+            key=lambda m: (_coerce_message_datetime(getattr(m, 'created_at', None)), str(getattr(m, 'id', ''))),
+        )
         app_name_by_id: Dict[str, Optional[str]] = {}
 
         formatted_messages = []
@@ -673,7 +693,8 @@ class Message(BaseModel):
                 app_name_by_id=app_name_by_id,
                 app_name_resolver=app_name_resolver,
             )
-            msg_text = f"({message.created_at.strftime('%d %b %Y at %H:%M UTC')}) {sender_name}: {message.text}"
+            msg_dt = _coerce_message_datetime(getattr(message, 'created_at', None))
+            msg_text = f"({msg_dt.strftime('%d %b %Y at %H:%M UTC')}) {sender_name}: {message.text}"
 
             # Add file info if requested and files exist
             if include_file_info and message.files_id and len(message.files_id) > 0:
@@ -692,7 +713,10 @@ class Message(BaseModel):
         include_file_info: bool = False,
         app_name_resolver: Optional[AppNameResolver] = None,
     ) -> str:
-        sorted_messages = sorted(messages, key=lambda m: m.created_at)
+        sorted_messages = sorted(
+            messages,
+            key=lambda m: (_coerce_message_datetime(getattr(m, 'created_at', None)), str(getattr(m, 'id', ''))),
+        )
         app_name_by_id: Dict[str, Optional[str]] = {}
 
         formatted_messages = []
@@ -716,8 +740,9 @@ class Message(BaseModel):
                     '<attachments>' + ''.join(f"<file>{file.name}</file>" for file in message.files) + '</attachments>'
                 )
 
+            msg_dt = _coerce_message_datetime(getattr(message, 'created_at', None))
             msg = f"""<message>
-<created_at>{message.created_at.strftime('%d %b %Y at %H:%M UTC')}</created_at>
+<created_at>{msg_dt.strftime('%d %b %Y at %H:%M UTC')}</created_at>
 <sender>{Message._resolve_sender_name(message, use_plugin_name_if_available=use_plugin_name_if_available, app_name_by_id=app_name_by_id, app_name_resolver=app_name_resolver)}</sender>
 <content>{message.text}</content>
 {file_section}
