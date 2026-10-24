@@ -409,7 +409,15 @@ class Pump:
                 if prepared is not None:
                     # A stopped or revoked flight can have unconsumed read-ahead.
                     # Keep renewal alive until IO drains; never block the event loop.
-                    await run_blocking(storage_executor, prepared.close)
+                    closing = asyncio.create_task(run_blocking(storage_executor, prepared.close))
+                    try:
+                        await asyncio.shield(closing)
+                    except asyncio.CancelledError:
+                        # Cancellation cannot stop a running storage leaf. Keep
+                        # renewal and the per-segment context exclusion until
+                        # that leaf has actually quiesced.
+                        await closing
+                        raise
             finally:
                 for segment in segments:
                     remaining = self._flight_segments[segment] - 1

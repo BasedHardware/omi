@@ -220,6 +220,76 @@ def results_for(segment):
 
 
 @pytest.mark.asyncio
+async def test_cancellation_during_discard_keeps_context_exclusion_until_io_drains(monkeypatch):
+    monkeypatch.setattr(pump_module, 'HEARTBEAT_SECONDS', 0.01)
+    model = Model(scale=0)
+    decoded, closing, release = threading.Event(), threading.Event(), threading.Event()
+
+    def decode(unit):
+        decoded.set()
+        assert release.wait(5)
+        return model.decode(unit)
+
+    worker = model.worker(3, decode_concurrency=2, decode=decode)
+    prepare = worker.prepare_batch
+
+    def prepare_batch(items):
+        handle = prepare(items)
+        close = handle.close
+
+        def discard():
+            closing.set()
+            close()
+
+        handle.close = discard
+        return handle
+
+    worker.prepare_batch = prepare_batch
+    store = MemoryStore()
+    scheduler = Scheduler(store)
+    scheduler.enqueue(replace(item('s0'), duration_seconds=41), time.time())
+    pump = Pump(
+        scheduler,
+        SynchronizedWorker(worker, synchronize=lambda: None),
+        capacity=lambda: PoolCapacity(time.time(), 1),
+        flights=2,
+    )
+    stop = asyncio.Event()
+    await pump._gpu.acquire()  # Simulate a preceding flight owning the device.
+    task = asyncio.create_task(pump.run_once(maintain=False, stop_event=stop))
+    try:
+        for _ in range(500):
+            if decoded.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert decoded.is_set()
+        stop.set()
+        pump._gpu.release()
+        for _ in range(500):
+            if closing.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert closing.is_set()
+        task.cancel()
+        await asyncio.sleep(0.05)
+        assert not task.done()
+        assert pump._flight_segments == {'s0': 1} and worker.decode_ahead.items == 1
+        release.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert not pump._flight_segments and worker.decode_ahead.items == 0
+        assert store.rows['jobs', 's0']['state'] == 'retry'
+        assert ('results', 's0') not in store.rows
+    finally:
+        stop.set()
+        release.set()
+        if pump._gpu.locked():
+            pump._gpu.release()
+        await asyncio.gather(task, return_exceptions=True)
+        worker._io.shutdown(wait=True)
+
+
+@pytest.mark.asyncio
 async def test_released_segment_retry_cannot_consume_stale_attempt_context(monkeypatch):
     monkeypatch.setattr(pump_module, 'HEARTBEAT_SECONDS', 0.01)
     model = Model(scale=0.01)
