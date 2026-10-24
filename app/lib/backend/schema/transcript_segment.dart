@@ -45,7 +45,8 @@ class TranscriptSegment {
     int? speakerId,
   }) {
     final parts = speaker?.split('_') ?? [];
-    this.speakerId = speakerId ?? (parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0);
+    this.speakerId =
+        speakerId ?? (parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0);
   }
 
   @override
@@ -65,7 +66,9 @@ class TranscriptSegment {
     return TranscriptSegment.fromGenerated(generated);
   }
 
-  factory TranscriptSegment.fromGenerated(wire.GeneratedTranscriptSegment generated) {
+  factory TranscriptSegment.fromGenerated(
+    wire.GeneratedTranscriptSegment generated,
+  ) {
     return TranscriptSegment(
       id: generated.id ?? '',
       text: generated.text,
@@ -128,7 +131,9 @@ class TranscriptSegment {
     }
 
     // remaining
-    return updateSegments.where((segment) => updateSegmentMap.containsKey(segment.id)).toList();
+    return updateSegments
+        .where((segment) => updateSegmentMap.containsKey(segment.id))
+        .toList();
   }
 
   static combineSegments(
@@ -149,13 +154,18 @@ class TranscriptSegment {
 
     var joinedSimilarSegments = <TranscriptSegment>[];
     for (var newSegment in newSegments) {
-      // TODO: bad edge case because of using deepgram
-      // - previous segments before ws2 is switched on the backend, (duration of speech profile) will not be assigned.
       bool isNotEmpty = joinedSimilarSegments.isNotEmpty;
-      bool isSameUser = isNotEmpty && joinedSimilarSegments.last.isUser == newSegment.isUser;
-      bool isSameSpeaker = isNotEmpty && joinedSimilarSegments.last.speaker == newSegment.speaker;
+      bool isSameUser =
+          isNotEmpty && joinedSimilarSegments.last.isUser == newSegment.isUser;
+      bool isSameSpeaker =
+          isNotEmpty &&
+          joinedSimilarSegments.last.speaker == newSegment.speaker;
+      bool isSameProfile =
+          isNotEmpty &&
+          joinedSimilarSegments.last.speechProfileProcessed ==
+              newSegment.speechProfileProcessed;
 
-      if (isNotEmpty && isSameSpeaker && isSameUser) {
+      if (isNotEmpty && isSameSpeaker && isSameUser && isSameProfile) {
         joinedSimilarSegments.last.text += ' ${newSegment.text}';
         joinedSimilarSegments.last.end = newSegment.end;
       } else {
@@ -166,11 +176,22 @@ class TranscriptSegment {
     if (joinedSimilarSegments.isEmpty) return;
 
     bool isNotEmpty = segments.isNotEmpty;
-    bool isSameUser = isNotEmpty && segments.last.isUser == joinedSimilarSegments[0].isUser;
-    bool isSameSpeaker = isNotEmpty && segments.last.speaker == joinedSimilarSegments[0].speaker;
-    bool withinThreshold = isNotEmpty && (joinedSimilarSegments[0].start - segments.last.end < 30);
+    bool isSameUser =
+        isNotEmpty && segments.last.isUser == joinedSimilarSegments[0].isUser;
+    bool isSameSpeaker =
+        isNotEmpty && segments.last.speaker == joinedSimilarSegments[0].speaker;
+    bool withinThreshold =
+        isNotEmpty && (joinedSimilarSegments[0].start - segments.last.end < 30);
+    bool isSameProfile =
+        isNotEmpty &&
+        segments.last.speechProfileProcessed ==
+            joinedSimilarSegments[0].speechProfileProcessed;
 
-    if (isNotEmpty && isSameSpeaker && isSameUser && withinThreshold) {
+    if (isNotEmpty &&
+        isSameSpeaker &&
+        isSameUser &&
+        withinThreshold &&
+        isSameProfile) {
       segments.last.text += ' ${joinedSimilarSegments[0].text}';
       segments.last.end = joinedSimilarSegments[0].end;
       joinedSimilarSegments.removeAt(0);
@@ -203,9 +224,12 @@ class TranscriptSegment {
       unresolved: unresolved,
     );
     final buffer = StringBuffer();
-    includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
+    includeTimestamps =
+        includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
     for (final segment in segments) {
-      final timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
+      final timestampStr = includeTimestamps
+          ? '[${segment.getTimestampString()}]'
+          : '';
       final name = names.forSegment(segment);
       final label = name.isEmpty ? '' : '$name: ';
       buffer.write('$timestampStr $label${segment.text.trim()} ');
@@ -217,7 +241,8 @@ class TranscriptSegment {
   static bool canDisplaySeconds(List<TranscriptSegment> segments) {
     for (var i = 0; i < segments.length; i++) {
       for (var j = i + 1; j < segments.length; j++) {
-        if (segments[i].start > segments[j].end || segments[i].end > segments[j].start) {
+        if (segments[i].start > segments[j].end ||
+            segments[i].end > segments[j].start) {
           return false;
         }
       }
@@ -231,7 +256,10 @@ class TranscriptSegment {
   /// [SpeakerNames]): canonical ids keep their gaps (provider restarts allocate new identities),
   /// the display does not. Assigning a person keeps everyone's number; tagging a speaker as the
   /// owner removes them from the count.
-  static int getDisplaySpeakerId(int speakerId, List<TranscriptSegment> segments) {
+  static int getDisplaySpeakerId(
+    int speakerId,
+    List<TranscriptSegment> segments,
+  ) {
     final ordinals = SpeakerNames.denseOrdinals(segments);
     return ordinals[speakerId] ?? ordinals.length + 1;
   }
