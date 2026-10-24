@@ -675,7 +675,7 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     # subscriber promised something this checkout cannot give, so refuse rather than charge at once.
     if request.trial_days and existing_customer_id:
         raise HTTPException(status_code=400, detail="trial_unavailable")
-    trial_period_days = request.trial_days or None
+    trial_period_days = None if resolved_checkout_promo_id else (request.trial_days or None)
     try:
         session = stripe_utils.create_subscription_checkout_session(
             uid,
@@ -811,7 +811,24 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
 
-            updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+            try:
+                updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+            except stripe.error.InvalidRequestError as e:
+                if resolved_promo_id and ('minimum amount' in str(e).lower() or 'minimum_amount' in str(e).lower()):
+                    try:
+                        promo_obj = stripe.PromotionCode.retrieve(resolved_promo_id, expand=['coupon'])
+                        coupon_id = promo_obj.coupon.id if hasattr(promo_obj.coupon, 'id') else promo_obj.coupon
+                        modify_params['discounts'] = [{"coupon": coupon_id}]
+                        updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+                        try:
+                            if getattr(promo_obj, 'max_redemptions', None) == 1:
+                                stripe.PromotionCode.modify(resolved_promo_id, active=False)
+                        except Exception:
+                            pass
+                    except Exception:
+                        raise e
+                else:
+                    raise
 
             # Update our database immediately
             new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
@@ -852,30 +869,69 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             from_subscription=stripe_sub['id'],
         )
 
-        updated_schedule = stripe.SubscriptionSchedule.modify(
-            schedule.id,
-            phases=[
-                {
-                    'items': [
-                        {
-                            'price': current_price_id,
-                            'quantity': 1,
-                        }
-                    ],
-                    'start_date': stripe_sub['current_period_start'],
-                    'end_date': stripe_sub['current_period_end'],
-                },
-                {
-                    'items': [
-                        {
-                            'price': request.price_id,
-                        }
-                    ],
-                    **({'discounts': [{'promotion_code': resolved_promo_id}]} if resolved_promo_id else {}),
-                },
-            ],
-            metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
-        )
+        try:
+            updated_schedule = stripe.SubscriptionSchedule.modify(
+                schedule.id,
+                phases=[
+                    {
+                        'items': [
+                            {
+                                'price': current_price_id,
+                                'quantity': 1,
+                            }
+                        ],
+                        'start_date': stripe_sub['current_period_start'],
+                        'end_date': stripe_sub['current_period_end'],
+                    },
+                    {
+                        'items': [
+                            {
+                                'price': request.price_id,
+                            }
+                        ],
+                        **({'discounts': [{'promotion_code': resolved_promo_id}]} if resolved_promo_id else {}),
+                    },
+                ],
+                metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
+            )
+        except stripe.error.InvalidRequestError as e:
+            if resolved_promo_id and ('minimum amount' in str(e).lower() or 'minimum_amount' in str(e).lower()):
+                try:
+                    promo_obj = stripe.PromotionCode.retrieve(resolved_promo_id, expand=['coupon'])
+                    coupon_id = promo_obj.coupon.id if hasattr(promo_obj.coupon, 'id') else promo_obj.coupon
+                    updated_schedule = stripe.SubscriptionSchedule.modify(
+                        schedule.id,
+                        phases=[
+                            {
+                                'items': [
+                                    {
+                                        'price': current_price_id,
+                                        'quantity': 1,
+                                    }
+                                ],
+                                'start_date': stripe_sub['current_period_start'],
+                                'end_date': stripe_sub['current_period_end'],
+                            },
+                            {
+                                'items': [
+                                    {
+                                        'price': request.price_id,
+                                    }
+                                ],
+                                'discounts': [{"coupon": coupon_id}],
+                            },
+                        ],
+                        metadata={'uid': uid, 'upgrade_type': f'{current_plan.value}_{target_interval}'},
+                    )
+                    try:
+                        if getattr(promo_obj, 'max_redemptions', None) == 1:
+                            stripe.PromotionCode.modify(resolved_promo_id, active=False)
+                    except Exception:
+                        pass
+                except Exception:
+                    raise e
+            else:
+                raise
 
         logger.info(f"Scheduled interval change for user {uid}: {current_plan.value} monthly -> {target_interval}")
 
