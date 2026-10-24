@@ -60,7 +60,19 @@ class EpisodeProvider extends ChangeNotifier {
   // A live endpoint returning null does not delete the episode or its members. Keep the
   // last snapshot reachable while its authoritative conversation lookup catches up.
   Episode? _previous;
-  Episode? get previous => _ownerUid == SharedPreferencesUtil().uid ? _previous : null;
+
+  /// "Open previous" is the shortcut to the episode just closed, not a standing bookmark:
+  /// past this window from the episode's last activity its members are ordinary history
+  /// rows again, so Home's link retires instead of pointing at yesterday.
+  static const previousExpiry = Duration(hours: 12);
+
+  Episode? get previous {
+    final episode = _ownerUid == SharedPreferencesUtil().uid ? _previous : null;
+    if (episode == null) return null;
+    final closedAt = episode.stateUpdatedAt ?? episode.lastActivityAt;
+    return _clock().difference(closedAt) < previousExpiry ? episode : null;
+  }
+
   String _ownerUid = SharedPreferencesUtil().uid;
 
   void _ensureOwner() {
@@ -72,6 +84,7 @@ class EpisodeProvider extends ChangeNotifier {
     _pendingSince = null;
     _live = null;
     _previous = null;
+    _recoveryAttemptedAt = null;
     _lastLiveRead = null;
     _waitingSince = _clock();
     _captureId = null;
@@ -113,7 +126,9 @@ class EpisodeProvider extends ChangeNotifier {
 
   void _remember(Episode episode) {
     if (_ownerUid != SharedPreferencesUtil().uid ||
-        (_previous != null && episode.startedAt.isBefore(_previous!.startedAt))) return;
+        (_previous != null && episode.startedAt.isBefore(_previous!.startedAt))) {
+      return;
+    }
     _previous = episode;
     _savePointer('previousEpisodeConversation', episode);
   }
@@ -153,6 +168,26 @@ class EpisodeProvider extends ChangeNotifier {
   }
 
   final Set<String> _recovering = {};
+
+  /// Pointer recovery is how a cold Home finds the episode that closed while nothing was
+  /// watching. Without a brake, every quiet poll (10–30 s) would re-read both pointers for
+  /// as long as they resolve to nothing; once per window is enough, and an episode closing
+  /// on screen still recovers at once through [_acceptLive] and the Home link.
+  static const recoveryRetryInterval = Duration(minutes: 5);
+  DateTime? _recoveryAttemptedAt;
+
+  void _recoverFromPointers() {
+    if (_previous != null && _live != null) return;
+    final now = _clock();
+    if (_recoveryAttemptedAt != null && now.difference(_recoveryAttemptedAt!) < recoveryRetryInterval) return;
+    _recoveryAttemptedAt = now;
+    if (_previous == null) unawaited(recoverPrevious());
+    if (_live != null) return;
+    final uid = SharedPreferencesUtil().uid;
+    if (uid.isNotEmpty) {
+      unawaited(recoverPrevious(SharedPreferencesUtil().getString('lastLiveEpisodeConversation:$uid')));
+    }
+  }
 
   void _acceptLive(Episode? episode, {bool recover = true}) {
     final old = _live;
@@ -212,13 +247,7 @@ class EpisodeProvider extends ChangeNotifier {
         _enabled = data.enabled;
         final episode = data.episode;
         _acceptLive(episode);
-        if (_previous == null) unawaited(recoverPrevious());
-        if (_live == null) {
-          final uid = SharedPreferencesUtil().uid;
-          if (uid.isNotEmpty) {
-            unawaited(recoverPrevious(SharedPreferencesUtil().getString('lastLiveEpisodeConversation:$uid')));
-          }
-        }
+        _recoverFromPointers();
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         _enabled = false;
         _live = null;

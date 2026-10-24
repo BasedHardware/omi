@@ -28,6 +28,7 @@ void main() {
       conversationIds: const ['still-in-progress'],
     );
     final episodes = EpisodeProvider(
+      clock: () => now,
       fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
       lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: closed)),
     )..debugSetLive(closed);

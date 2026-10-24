@@ -344,6 +344,7 @@ void main() {
       );
       final capture = _LiveCapture();
       final episodes = EpisodeProvider(
+        clock: () => _now,
         fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
         lookup: (_) {
           if (firstRead) {

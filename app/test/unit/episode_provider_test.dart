@@ -34,6 +34,7 @@ void main() {
     first.dispose();
     final ids = <String>[];
     final restored = EpisodeProvider(
+      clock: () => _t0,
       fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
       lookup: (id) async {
         ids.add(id);
@@ -162,6 +163,7 @@ void main() {
   test('a null live response retains the snapshot and refreshes closure through its member', () async {
     Episode? live = _episode();
     final provider = EpisodeProvider(
+      clock: () => _t0,
       fetchLive: () async => ApiSuccess(EpisodeRead(enabled: true, episode: live)),
       lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode(live: false))),
     );
@@ -206,6 +208,7 @@ void main() {
 
   test('a slow old closure lookup cannot replace a newer previous episode', () async {
     final provider = EpisodeProvider(
+      clock: () => _t0,
       lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: _episode(live: false))),
     );
     addTearDown(provider.dispose);
@@ -213,6 +216,55 @@ void main() {
     provider.debugSetLive(newer);
     await provider.recoverPrevious('c1');
     expect(provider.previous?.id, 'newer');
+  });
+
+  test('the previous link retires once the closed episode is stale', () async {
+    final staleAt = _t0.subtract(EpisodeProvider.previousExpiry + const Duration(hours: 1));
+    var serving = Episode(
+      id: 'stale',
+      live: false,
+      startedAt: staleAt,
+      lastActivityAt: staleAt,
+      conversationIds: const ['c1'],
+    );
+    final provider = EpisodeProvider(
+      clock: () => _t0,
+      lookup: (_) async => ApiSuccess(EpisodeRead(enabled: true, episode: serving)),
+    );
+    addTearDown(provider.dispose);
+    await provider.recoverPrevious('c1');
+    expect(provider.previous, isNull, reason: 'a long-closed episode is not offered from Home');
+
+    serving = _episode(live: false);
+    await provider.recoverPrevious('c2');
+    expect(provider.previous?.id, 'ep1', reason: 'a recently closed one still is');
+  });
+
+  test('a quiet live poll does not re-read the recovery pointers every time', () async {
+    SharedPreferencesUtil().uid = 'account-a';
+    await SharedPreferencesUtil().saveString('lastLiveEpisodeConversation:account-a', 'c2');
+    var time = _t0;
+    var lookups = 0;
+    final provider = EpisodeProvider(
+      clock: () => time,
+      fetchLive: () async => const ApiSuccess(EpisodeRead(enabled: true)),
+      lookup: (_) async {
+        lookups++;
+        return const ApiSuccess(EpisodeRead(enabled: true));
+      },
+    );
+    addTearDown(provider.dispose);
+    await provider.refreshLive();
+    await Future<void>.delayed(Duration.zero);
+    expect(lookups, 1);
+    await provider.refreshLive();
+    await provider.refreshLive();
+    await Future<void>.delayed(Duration.zero);
+    expect(lookups, 1, reason: 'pointer recovery is throttled while quiet');
+    time = time.add(EpisodeProvider.recoveryRetryInterval);
+    await provider.refreshLive();
+    await Future<void>.delayed(Duration.zero);
+    expect(lookups, 2);
   });
 
   test('a recovered snapshot cannot hide finalization when member details open', () async {
