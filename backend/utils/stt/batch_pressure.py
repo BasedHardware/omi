@@ -133,6 +133,9 @@ class BatchPressure:
                             # with a new client. Cached timestamps are untouched.
                             break
                         await asyncio.sleep(self.REFRESH_SECONDS)
+                # A reset still observes the polling cadence, including N=1.
+                # Otherwise fast failures/config errors can spin new clients.
+                await asyncio.sleep(self.REFRESH_SECONDS)
             except Exception:
                 self._unavailable()
                 await asyncio.sleep(self.REFRESH_SECONDS)

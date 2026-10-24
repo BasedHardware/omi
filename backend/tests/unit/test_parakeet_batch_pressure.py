@@ -618,14 +618,25 @@ def test_quorum_math_counts_busy_and_unknown_conservatively(ready, minimum):
 
 
 @pytest.mark.asyncio
-async def test_failed_sweeps_replace_client_and_rediscover_before_cache_expires(fleet, monkeypatch):
+@pytest.mark.parametrize('reset_after', [1, 2])
+async def test_failed_sweeps_replace_client_and_rediscover_before_cache_expires(fleet, monkeypatch, reset_after):
     monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS', '60')
-    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES', '2')
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES', str(reset_after))
     fleet.pressure.REFRESH_SECONDS = 0.01
     real_client = httpx.AsyncClient
     clients = []
     recovered = asyncio.Event()
     attempts = []
+    sleeps = []
+    sleeps_at_creation = []
+
+    async def sleep(seconds):
+        sleeps.append(seconds)
+        await asyncio.sleep(seconds)
+
+    sampler_asyncio = SimpleNamespace(**vars(asyncio))
+    sampler_asyncio.sleep = sleep
+    monkeypatch.setattr(pressure_module, 'asyncio', sampler_asyncio)
 
     def make_client(**kwargs):
         broken = not clients
@@ -639,6 +650,7 @@ async def test_failed_sweeps_replace_client_and_rediscover_before_cache_expires(
 
         client = real_client(transport=httpx.MockTransport(handle), **kwargs)
         clients.append(client)
+        sleeps_at_creation.append(len(sleeps))
         return client
 
     monkeypatch.setattr(pressure_module.httpx, 'AsyncClient', make_client)
@@ -653,8 +665,9 @@ async def test_failed_sweeps_replace_client_and_rediscover_before_cache_expires(
         assert fleet.pressure.allows('synthetic.invalid', 2)
         assert len(clients) == 2
         assert clients[0].is_closed
-        assert fleet.lookup.call_count == 3
-        assert sum(number == 1 for number, _ in attempts) == 2 * len(fleet.ips)
+        assert fleet.lookup.call_count == reset_after + 1
+        assert sleeps_at_creation[1] >= reset_after
+        assert sum(number == 1 for number, _ in attempts) == reset_after * len(fleet.ips)
     finally:
         await fleet.pressure.stop()
     assert all(client.is_closed for client in clients)
