@@ -13,7 +13,13 @@ void main() {
     directory = await Directory.systemTemp.createTemp('boot-journal-');
     journal = BootJournal(documents: () async => directory);
   });
-  tearDown(() async => directory.delete(recursive: true));
+  tearDown(() async {
+    if (await directory.exists()) {
+      try {
+        await directory.delete(recursive: true);
+      } catch (_) {}
+    }
+  });
 
   test('serializes concurrent writes, caps history, and atomically replaces the file', () async {
     await Future.wait(List.generate(40, (index) => journal.record('stage_$index', 'completed')));
