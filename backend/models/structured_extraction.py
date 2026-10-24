@@ -4,6 +4,7 @@ from typing import Any, ClassVar, Dict, List, Literal, Optional, Tuple, Type
 
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
+from models.conversation_emoji import fallback_emoji
 from models.conversation_enums import CategoryEnum
 from models.structured import ActionItem, Event, Insight, MeetingType, Participant, Section, Structured
 
@@ -344,7 +345,9 @@ class StructuredExtraction(BaseModel):
         return Structured(
             title=self.title,
             overview=self.overview,
-            emoji=self.emoji,
+            # The schema default (🧠) means the model never chose; persist the
+            # category's emoji instead, exactly like the v2 NotesOutput path.
+            emoji=fallback_emoji(self.emoji, self.category),
             category=self.category,
             sections=[section.to_section() for section in self.sections],
             action_items=[item.to_action_item() for item in self.action_items],
@@ -407,7 +410,7 @@ class RichStructuredExtraction(StructuredExtraction):
         structured = Structured(
             title=self.title,
             overview=self.overview,
-            emoji=self.emoji,
+            emoji=fallback_emoji(self.emoji, self.category),
             category=self.category,
             sections=[section.to_section() for section in self.sections],
             action_items=[item.to_action_item() for item in self.action_items],
