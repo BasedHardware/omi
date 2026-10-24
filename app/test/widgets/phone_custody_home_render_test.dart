@@ -18,6 +18,7 @@ import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import '../support/custody_test_helpers.dart';
 import '../support/typed_conversation_screen.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 
 class _EnvFields implements EnvFields {
   const _EnvFields();
@@ -48,7 +49,7 @@ Future<void> _loadFonts() async {
   ]) {
     final loader = FontLoader(family);
     for (final weight in ['REGULAR', 'MEDIUM', 'BOLD']) {
-      loader.addFont(rootBundle.load('assets/fonts/SFPRODISPLAY$weight.OTF'));
+      loader.addFont(sfProFont('SFPRODISPLAY$weight.OTF'));
     }
     await loader.load();
   }

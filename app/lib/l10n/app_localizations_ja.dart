@@ -4353,6 +4353,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get continueText => '続ける';
 
   @override
+  String get checkoutExistingSubscription => 'すでにサブスクリプションがあります。新規契約ではなく、現在のサブスクリプションを管理してください。';
+
+  @override
   String get resubscribeFirstToChangePlans => 'プランを変更するには、先に再購読してください。';
 
   @override

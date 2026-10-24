@@ -17,13 +17,66 @@ from models.structured_extraction import (
     SALIENCE_DESCRIPTION,
 )
 
+# A submission that never chose an emoji must not silently store the pydantic
+# default: every conversation served with the v2 contract would pin 🧠 (the
+# 2026-10-23 rollout). The category's emoji is the cheap deterministic stand-in;
+# 🧠 remains only when the category has no mapping.
+DEFAULT_EMOJI = '🧠'
+
+CATEGORY_EMOJI = {
+    'personal': '🙂',
+    'education': '📚',
+    'health': '🩺',
+    'finance': '💰',
+    'legal': '⚖️',
+    'philosophy': '🤔',
+    'spiritual': '🧘',
+    'science': '🔬',
+    'entrepreneurship': '🚀',
+    'parenting': '👶',
+    'romantic': '❤️',
+    'travel': '✈️',
+    'inspiration': '💡',
+    'technology': '💻',
+    'business': '💼',
+    'social': '👥',
+    'work': '🧑‍💻',
+    'sports': '⚽',
+    'politics': '🏛️',
+    'literature': '📖',
+    'history': '🏺',
+    'architecture': '🏗️',
+    'music': '🎵',
+    'weather': '⛅',
+    'news': '📰',
+    'entertainment': '🎬',
+    'psychology': '💭',
+    'real': '🌍',
+    'design': '🎨',
+    'family': '🏡',
+    'economics': '📊',
+    'environment': '🌿',
+}
+
+
+def fallback_emoji(emoji: str, category: Any) -> str:
+    """The submitted emoji, or the category's emoji when none arrived.
+
+    Agentic submissions are round-tripped through ``model_dump`` before the
+    final validation, so a defaulted emoji is indistinguishable from one the
+    model chose: the default value itself is the signal.
+    """
+    if emoji and emoji.strip() and emoji != DEFAULT_EMOJI:
+        return emoji
+    return CATEGORY_EMOJI.get(getattr(category, 'value', category)) or DEFAULT_EMOJI
+
 
 class NotesOutput(BaseModel):
     """One schema, independent of the legacy parser's subtype-coercing validators."""
 
     title: str = ''
     overview: str = ''
-    emoji: str = '🧠'
+    emoji: str = Field(description='An emoji to represent the conversation', default=DEFAULT_EMOJI)
     category: CategoryEnum = CategoryEnum.other
     sections: list[ExtractedRichSection] = Field(default_factory=list)
     action_items: list[ExtractedActionItem] = Field(default_factory=list)
@@ -84,7 +137,7 @@ class NotesOutput(BaseModel):
         structured = Structured(
             title=self.title,
             overview=self.overview,
-            emoji=self.emoji,
+            emoji=fallback_emoji(self.emoji, self.category),
             category=cast(
                 Any, self.category
             ),  # SDK and backend enums share values; Pydantic converts at this boundary.

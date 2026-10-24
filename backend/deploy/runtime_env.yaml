@@ -33,6 +33,7 @@ environments:
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
           DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -368,6 +369,7 @@ environments:
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
           DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -669,6 +671,7 @@ environments:
         FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
         DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
         FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+        FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
         FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
         FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
         FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -824,6 +827,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -1093,6 +1097,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -1379,6 +1384,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -1652,6 +1658,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -1825,6 +1832,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -1891,6 +1899,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -1967,6 +1976,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -2032,6 +2042,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -2088,6 +2099,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -2179,6 +2191,7 @@ environments:
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
           DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -2593,6 +2606,7 @@ environments:
           FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
           DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
           FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+          FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
           FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
           FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -2836,6 +2850,7 @@ environments:
         FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
         DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
         FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+        FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
         FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
         FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
         FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -3021,6 +3036,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -3383,6 +3399,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -3755,6 +3772,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -4110,6 +4128,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -4317,6 +4336,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -4378,6 +4398,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -4452,6 +4473,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -4517,6 +4539,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}
@@ -4572,6 +4595,7 @@ environments:
             FSR_LEADER_LEASE_TTL_SECONDS: {value: '0', category: rollout}
             DELETION_WIPE_RECONCILE_INTERVAL_SECONDS: {value: '300', category: rollout}
             FSR_DELETION_NEGATIVE_TTL_SECONDS: {value: '30', category: rollout}
+            FSR_USAGE_MONTH_TOTAL_EPOCH: {value: v1, category: rollout}
             FSR_USAGE_MONTH_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SUBSCRIPTION_TTL_SECONDS: {value: '60', category: rollout}
             FSR_SERVING_CONFIG_TTL_SECONDS: {value: '60', category: rollout}

@@ -15,8 +15,10 @@ class TurnRefs:
     seen: set[tuple[str, str]] = field(default_factory=set)
 
 
-def initialize_turn_refs(configurable: dict) -> TurnRefs:
+def initialize_turn_refs(configurable: Any) -> TurnRefs:
     refs = TurnRefs()
+    if not isinstance(configurable, dict):
+        return refs
     scope = configurable.get('chat_scope') or {}
     target = scope.get('conversation_id')
     if isinstance(target, str) and target:
@@ -25,8 +27,10 @@ def initialize_turn_refs(configurable: dict) -> TurnRefs:
     return refs
 
 
-def register_record_ref(configurable: dict, collection: str, record_id: Any) -> None:
+def register_record_ref(configurable: Any, collection: str, record_id: Any) -> None:
     """Read producers call this only for owned records admitted to model output."""
+    if not isinstance(configurable, dict):
+        return
     refs = configurable.get('turn_refs')
     if isinstance(refs, TurnRefs) and isinstance(record_id, str) and record_id:
         refs.seen.add((collection, record_id))
@@ -37,7 +41,7 @@ def tool_error(code: str, message: str, **details: Any) -> str:
 
 
 def resolve_edit_ref(
-    configurable: dict,
+    configurable: Any,
     collection: str,
     record_id: Optional[str],
     *,
@@ -45,6 +49,8 @@ def resolve_edit_ref(
     default_to_attachment: bool = False,
 ) -> tuple[Optional[str], Optional[str]]:
     """Resolve a default target and enforce attached-chat addressability for any ID tool."""
+    if not isinstance(configurable, dict):
+        configurable = {}
     scope = configurable.get('chat_scope') or {}
     attached = scope.get('conversation_id')
     target = record_id

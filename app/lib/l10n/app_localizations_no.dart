@@ -4424,6 +4424,10 @@ class AppLocalizationsNo extends AppLocalizations {
   String get continueText => 'Fortsett';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Du har allerede et abonnement. Administrer det nåværende abonnementet i stedet for å starte et nytt.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Abonner på nytt først for å bytte abonnement.';
 
   @override

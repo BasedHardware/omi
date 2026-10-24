@@ -1044,26 +1044,39 @@ def test_completion_transaction_accepts_success_and_expected_silence():
 
 
 def test_hourly_usage_increment_and_ledger_marker_share_one_transaction():
+    from tests.unit.fixtures.shadow_usage_firestore import Store
+
     transaction = _Transaction()
     marker_ref = _Ref({'status': 'processing'})
-    usage_ref = _Ref()
+    store = Store({'users/uid': {'synthetic': True}})
+    user_ref = store.collection('users').document('uid')
+    usage_ref = user_ref.collection('hourly_usage').document('2026-10-23-15')
+    update = {'id': '2026-10-23-15', 'transcription_seconds': firestore.Increment(5)}
 
     recorded = user_usage._update_hourly_usage_once_transaction.to_wrap(
         transaction,
         marker_ref,
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
     duplicate = user_usage._update_hourly_usage_once_transaction.to_wrap(
         _Transaction(),
         _Ref({'usage_committed_at': datetime.now(timezone.utc)}),
         usage_ref,
-        {'transcription_seconds': 5},
+        update,
+        firestore_client=store,
     )
 
     assert recorded is True
-    assert len(transaction.writes) == 2
+    assert len(transaction.writes) == 3
     assert transaction.writes[0][1].get('usage_committed_at') is not None
+    assert transaction.writes[1][0] is usage_ref
+    total_ref, total_update, total_merge = transaction.writes[2]
+    assert total_ref.path == 'users/uid/monthly_usage_totals/2026-10'
+    assert total_update['totals']['transcription_seconds'] is update['transcription_seconds']
+    assert total_update['days']['23']['transcription_seconds'] is update['transcription_seconds']
+    assert total_merge is True
     assert duplicate is False
 
 

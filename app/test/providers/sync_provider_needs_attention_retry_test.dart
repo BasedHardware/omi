@@ -66,6 +66,7 @@ void main() {
 
   late Directory tempDir;
   late List<List<String>> uploads;
+  Object? uploadFailure;
   late SyncUploadGate gate;
   late LocalWalSyncImpl localSync;
   SyncProvider? provider;
@@ -86,6 +87,7 @@ void main() {
     await WalFileManager.init();
 
     uploads = [];
+    uploadFailure = null;
     gate = SyncUploadGate(
       limiter: SyncRateLimiter.instance,
       uploader: (files,
@@ -98,6 +100,7 @@ void main() {
           claimLiveCapture = false,
           geolocation}) async {
         uploads.add([for (final file in files) file.uri.pathSegments.last]);
+        if (uploadFailure != null) throw uploadFailure!;
         return UploadFilesResult.queued('job-${uploads.length}');
       },
       fairUseStatusLoader: () async => {'stage': 'none'},
@@ -178,5 +181,52 @@ void main() {
 
     expect(uploads, isEmpty);
     expect(tooOld.status, WalStatus.outsideRecoveryWindow);
+  });
+
+  test('an explicit retry recovers a persisted upload refusal without touching permanent audio verdicts', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final rejected = (await diskWal('audio_refused.bin', timerStart: now - 600))..markUploadRejected();
+    final restored = Wal.fromJson(rejected.toJson());
+    final tooOld = (await diskWal('audio_expired.bin', timerStart: now - 900))..markOutsideRecoveryWindow();
+    final localOnly = (await diskWal('audio_private.bin', timerStart: now - 1200))
+      ..markUploadRejected()
+      ..onDeviceOnly = true;
+    final unsupported = (await diskWal('audio_unsupported.bin', timerStart: now - 1500))..markUnsupportedAudio();
+    final syncProvider = await start([restored, tooOld, localOnly, unsupported]);
+
+    await syncProvider.syncWals();
+    expect(uploads, isEmpty, reason: 'automatic wakes must not re-arm historical refusals');
+    expect(syncProvider.retryableAttentionWals, [restored]);
+    await syncProvider.retryNeedsAttentionWals();
+
+    expect(uploads, [
+      ['audio_refused.bin']
+    ]);
+    expect(restored.status, WalStatus.uploaded);
+    expect(restored.timerStart, rejected.timerStart);
+    expect(tooOld.status, WalStatus.outsideRecoveryWindow);
+    expect(localOnly.status, WalStatus.uploadRejected);
+    expect(unsupported.status, WalStatus.unsupportedAudio);
+    expect(File('${tempDir.path}/audio_refused.bin').existsSync(), isTrue);
+  });
+
+  test('the error card retry re-arms the upload refusal it reports', () async {
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final wal = await diskWal('audio_card_retry.bin', timerStart: now - 600);
+    final syncProvider = await start([wal]);
+    uploadFailure = const SyncUploadHttpException(400, 'request refused');
+    await syncProvider.syncWals();
+    expect(wal.status, WalStatus.uploadRejected);
+    expect(syncProvider.syncState.hasError, isTrue);
+
+    uploadFailure = null;
+    await syncProvider.retrySync();
+
+    expect(uploads, [
+      ['audio_card_retry.bin'],
+      ['audio_card_retry.bin']
+    ]);
+    expect(wal.status, WalStatus.uploaded);
+    expect(File('${tempDir.path}/audio_card_retry.bin').existsSync(), isTrue);
   });
 }

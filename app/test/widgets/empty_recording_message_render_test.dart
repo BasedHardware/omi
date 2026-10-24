@@ -10,6 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/ui/ui.dart';
+import '../helpers/sfpro_font_fixtures.dart';
 
 /// Home empty state after a recording that did not become a conversation.
 /// `--dart-define=OMI_EMPTY_RECORDING_UI_EVIDENCE_DIR=<dir>` writes 393×852 @3x PNGs.
@@ -88,13 +89,10 @@ void main() {
 
 Future<void> _loadEvidenceFonts() async {
   final fonts = jsonDecode(await rootBundle.loadString('FontManifest.json')) as List<dynamic>;
-  final sfAssets = <String>{};
   for (final entry in fonts) {
     final loader = FontLoader(entry['family'] as String);
     for (final font in entry['fonts'] as List<dynamic>) {
-      final asset = font['asset'] as String;
-      if (asset.contains('SFPRODISPLAY')) sfAssets.add(asset);
-      loader.addFont(rootBundle.load(asset));
+      loader.addFont(rootBundle.load(font['asset'] as String));
     }
     await loader.load();
   }
@@ -107,8 +105,8 @@ Future<void> _loadEvidenceFonts() async {
     'FlutterTest',
   ]) {
     final loader = FontLoader(family);
-    for (final asset in sfAssets) {
-      loader.addFont(rootBundle.load(asset));
+    for (final font in ['REGULAR', 'MEDIUM', 'BOLD']) {
+      loader.addFont(sfProFont('SFPRODISPLAY$font.OTF'));
     }
     await loader.load();
   }
