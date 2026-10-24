@@ -40,6 +40,12 @@ logger = logging.getLogger(__name__)
 _PERMANENT_FAILURE_CODES = frozenset({'UNREGISTERED', 'INVALID_REGISTRATION_TOKEN', 'NOT_FOUND'})
 _QUOTA_ERROR_NAMES = frozenset({'RateLimitError'})
 
+# Stable provider wordings for spent-account states that surface as 400/402 on
+# the user's own key; see utils/llm/gateway_error_contract.py for the same
+# markers at the conversation-processing composition boundary.
+_ANTHROPIC_QUOTA_MARKERS = ('credit balance is too low', 'reached your specified api usage limits')
+_OPENROUTER_CREDIT_MARKERS = ('requires more credits', 'openrouter_credits')
+
 # Firebase Admin SDK rejects messaging.send_each() with more than 500 messages.
 _FCM_SEND_EACH_LIMIT = 500
 
@@ -64,6 +70,12 @@ def classify_byok_llm_error(error: Exception) -> Optional[str]:
     if status_code == 429 or error_name in _QUOTA_ERROR_NAMES:
         if 'insufficient_quota' in error_text or 'quota' in error_text:
             return 'quota'
+    # Direct-lane providers answer a spent account as a plain 400/402; the
+    # SDK status alone is not enough, the provider's stable wording is.
+    if status_code == 400 and any(marker in error_text for marker in _ANTHROPIC_QUOTA_MARKERS):
+        return 'quota'
+    if status_code == 402 and any(marker in error_text for marker in _OPENROUTER_CREDIT_MARKERS):
+        return 'quota'
     return None
 
 
@@ -80,20 +92,36 @@ def handle_llm_error(
     uid = get_byok_uid()
     status_code = _get_status_code(error)
 
-    logger.error(
-        'LLM error source=%s provider=%s feature=%s model=%s operation=%s uid=%s status_code=%s reason=%s '
-        'error_type=%s error=%s',
-        source,
-        provider or 'unknown',
-        feature or 'unknown',
-        model or 'unknown',
-        operation,
-        uid or 'unknown',
-        status_code or 'unknown',
-        reason or 'unknown',
-        type(error).__name__,
-        sanitize(str(error)),
-    )
+    if source == 'byok' and reason:
+        # The user's own provider account is in a state only they can fix
+        # (quota, rejected key, denied permission). One structured WARNING —
+        # never ERROR, no provider error body, no traceback — so severity>=ERROR
+        # keeps counting only Omi-side faults.
+        failure_class = {'quota': 'byok_quota', 'invalid': 'byok_invalid_key', 'permission': 'byok_invalid_key'}[reason]
+        logger.warning(
+            'byok provider failure is user account state, not a server fault: byok=true failure_class=%s '
+            'provider=%s route=llm/%s operation=%s uid=%s',
+            failure_class,
+            provider or 'unknown',
+            feature or 'unknown',
+            operation,
+            uid or 'unknown',
+        )
+    else:
+        logger.error(
+            'LLM error source=%s provider=%s feature=%s model=%s operation=%s uid=%s status_code=%s reason=%s '
+            'error_type=%s error=%s',
+            source,
+            provider or 'unknown',
+            feature or 'unknown',
+            model or 'unknown',
+            operation,
+            uid or 'unknown',
+            status_code or 'unknown',
+            reason or 'unknown',
+            type(error).__name__,
+            sanitize(str(error)),
+        )
 
     if source == 'byok' and uid and provider and reason:
         _send_byok_llm_error_notification(uid, provider, reason)

@@ -594,7 +594,7 @@ def test_segments_as_string_uses_configured_user_name():
 
     assert "Stephen: Hi, this is me." in rendered
     assert "User:" not in rendered
-    assert "Speaker 1: Nice to meet you." in rendered
+    assert "Speaker A: Nice to meet you." in rendered
 
 
 def test_segments_as_string_defaults_to_user_when_name_missing():

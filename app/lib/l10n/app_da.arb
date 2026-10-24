@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Tjek din forbindelse, og prøv igen.",
     "useFreePlan": "Brug gratis abonnement",
     "continueText": "Fortsæt",
+    "checkoutExistingSubscription": "Du har allerede et abonnement. Administrer dit nuværende abonnement i stedet for at starte et nyt.",
     "resubscribeFirstToChangePlans": "Gentilmelding først for at skifte abonnement.",
     "resubscribe": "Gentilmeld",
     "couldNotOpenPaymentSettings": "Kunne ikke åbne betalingsindstillinger. Prøv igen.",

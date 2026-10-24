@@ -10,7 +10,8 @@
         "condition": {
           "age": 30,
           "matchesPrefix": ["chunks/"],
-          "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"]
+          "matchesStorageClass": ["STANDARD", "MULTI_REGIONAL"],
+          "matchesSuffix": [".batch.enc", ".batch.bin"]
         }
       }
     ]

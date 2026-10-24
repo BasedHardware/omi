@@ -1641,6 +1641,7 @@
     "resetToDefault": "Atstatyti į numatytąją",
     "responseSchema": "Atsakymo schema",
     "restartDeviceToComplete": "Paleiskite {deviceName} iš naujo, kad užbaigtumėte atnaujinimą.",
+    "checkoutExistingSubscription": "Jau turite prenumeratą. Užuot pradėję naują, tvarkykite esamą prenumeratą.",
     "resubscribeFirstToChangePlans": "Norėdami pakeisti planą, pirmiausia užsiprenumeruokite iš naujo.",
     "resubscribe": "Persiregistruoti",
     "result": "Rezultatas:",

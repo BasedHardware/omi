@@ -15,10 +15,13 @@ from typing import Callable, NotRequired, TypedDict
 
 from config.conversation_smart_merge import smart_merge_flatten_chain_repair_enabled, smart_merge_flatten_enabled
 from config import merge_ancestry
+from config import sync_operation_snapshot
+from config.firestore_read_levers import lever_enabled
 from config.sync_finalize import sync_finalize_target_recovery_enabled
 from utils.conversations.smart_merge_policy import user_managed as _policy_user_managed
 from database.action_item_refresh import RefreshConversationUnavailable
 from database import conversations as conversations_db
+from database.firestore_read_origin import read_origin
 from database.legal_holds import (
     DestructiveOperationInProgress,
     LegalHoldActive,
@@ -129,10 +132,14 @@ def _bridge_source_defect(
     return 'chain_broken'
 
 
+@read_origin('job:sync_operation_snapshot')
 def finish_sync_bridges(
     uid: str, conversation_id: str, *, audio_source_id: str | None = None, silent: bool = False
 ) -> str:
     recovery = sync_finalize_target_recovery_enabled()
+    # The legacy hydrated reader can do photo/correction IO after its document
+    # snapshot, so only the existing metadata-only path permits this fast path.
+    reuse = sync_operation_snapshot.enabled() and lever_enabled('backfill_task_reads', uid)
     visited: set[str] = set()
     while True:
         if conversation_id in visited or len(visited) >= 16:
@@ -154,6 +161,7 @@ def finish_sync_bridges(
             return sources[source_id]
 
         redirected = False
+        effects_started = False
         for source_id in lineage:
             source = load(source_id)
             kind = _bridge_source_defect(source, conversation_id, lineage, load) if flatten else None
@@ -176,6 +184,7 @@ def finish_sync_bridges(
             # preserves that durable cleanup debt for a later normal append.
             cleanup_deferred = bool(silent and needs_cleanup)
             if needs_cleanup and not silent:
+                effects_started = True
                 _record_bridge_retraction('attempted')
                 logger.info('event=sync_bridge outcome=attempted uid=%s source_id=%s', uid, source_id)
                 try:
@@ -232,6 +241,7 @@ def finish_sync_bridges(
                         log=logger,
                     )
             if needs_copy:
+                effects_started = True
                 # Invalidate an older copy receipt before late audio copying:
                 # if copying fails, a retry without this worker's source hint
                 # must still see pending audio work.
@@ -242,6 +252,7 @@ def finish_sync_bridges(
             if cleanup_deferred:
                 continue
             if needs_cleanup or needs_copy:
+                effects_started = True
                 if not mark_sync_bridge_cleaned(uid, source_id, revision, audio_target):
                     raise RuntimeError('sync bridge completion revision changed')
                 if needs_cleanup:
@@ -249,7 +260,14 @@ def finish_sync_bridges(
                     logger.info('event=sync_bridge outcome=converged uid=%s source_id=%s', uid, source_id)
         if redirected:
             continue
-        current = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
+        # Only the no-lineage fast path has no intervening donor reads or
+        # effects. Recheck after a lineage traversal, even if cleanup was done,
+        # so a redirect during donor reads still updates the returned target.
+        if reuse and not effects_started and not lineage:
+            current = row
+            sync_operation_snapshot.avoided('bridge_no_effect')
+        else:
+            current = read_metadata(conversations_db, uid, conversation_id, operation='bridge')
         if current and current.get('sync_merged_into'):
             conversation_id = current['sync_merged_into']
             continue

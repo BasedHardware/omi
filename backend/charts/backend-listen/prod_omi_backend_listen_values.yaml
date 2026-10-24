@@ -228,6 +228,8 @@ env:
     value: "300"
   - name: FSR_DELETION_NEGATIVE_TTL_SECONDS
     value: "30"
+  - name: FSR_USAGE_MONTH_TOTAL_EPOCH
+    value: "v1"
   - name: FSR_USAGE_MONTH_TTL_SECONDS
     value: "60"
   - name: FSR_SUBSCRIPTION_TTL_SECONDS
@@ -812,7 +814,7 @@ startupProbe:
 # This section is for setting up autoscaling more information can be found here: https://kubernetes.io/docs/concepts/workloads/autoscaling/
 autoscaling:
   enabled: true
-  minReplicas: 40
+  minReplicas: 30
   maxReplicas: 60
   behavior:
     scaleDown:

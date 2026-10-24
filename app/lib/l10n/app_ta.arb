@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "உங்களிடம் ஏற்கனவே சந்தா உள்ளது. புதியதைத் தொடங்குவதற்குப் பதிலாக தற்போதைய சந்தாவை நிர்வகிக்கவும்.",
     "resubscribeFirstToChangePlans": "திட்டத்தை மாற்ற முதலில் மீண்டும் சந்தா செய்யவும்.",
     "resubscribe": "மீண்டும் சந்தா செய்யவும்",
     "@resubscribe": {

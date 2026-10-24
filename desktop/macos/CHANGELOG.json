@@ -2,6 +2,14 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.529",
+      "date": "2026-10-23",
+      "changes": [
+        "Starting a new checkout while you already have a subscription now says so, instead of telling you to resubscribe",
+        "Fixed \"Load older conversations\" skipping a conversation after deleting or unstarring a loaded row"
+      ]
+    },
+    {
       "version": "0.12.528",
       "date": "2026-10-23",
       "changes": [
