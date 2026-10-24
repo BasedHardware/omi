@@ -104,36 +104,32 @@ def naming_decisions(diarization, snapshot, *, owner_id, privacy_generation):
 def competing_owner_claim_indices(segments, receipt=None, *, canonical_ids=False):
     """Conservatively arbitrate independent accepts, honoring winning receipts.
 
-    Use canonical IDs only after the conversation allocator. A registry may
-    unify one voice across multiple scopes; that is one claim. Before allocation
-    a provider-local integer has meaning only within its scope. Excerpt labels
-    do not reserve a whole voice, and a newer non-owner receipt beats stale flags.
+    Use canonical IDs only for server-produced final:batch scopes after the
+    conversation allocator. That producer always allocates before persistence;
+    legacy sync captures can retain colliding raw integers across scopes. A
+    registry may unify one batch voice across scopes; that is one claim. Before
+    allocation every provider-local integer has meaning only within its scope.
+    Excerpt labels do not reserve a whole voice, and a newer non-owner receipt beats stale flags.
     """
     receipt = receipt or {}
     owners, automatic = set(), set()
     for index, segment in enumerate(segments):
-        scope = segment.get('speaker_id_scope') or ''
-        if not scope.startswith(('sync:', 'final:batch:')):
-            continue
+        speaker_id = segment.get('speaker_id')
         decision = manual_assignment_decision(segment, receipt)
         if decision is not None:
-            is_owner = decision.get('is_user') and not decision.get('segment_only')
-        else:
-            is_owner = segment.get('is_user')
-        if not is_owner:
+            # A winning whole-voice receipt reserves its conversation-local ID
+            # even on historical/manual rows without a current capture scope.
+            if decision.get('is_user') and not decision.get('segment_only'):
+                owners.add(speaker_id)
             continue
-        speaker_id = segment.get('speaker_id')
-        owners.add(speaker_id if canonical_ids else (scope, speaker_id))
-        if (
-            decision is None
-            and segment.get('speaker_label_source') not in ('manual', 'carried')
-            and (
-                (segment.get('speaker_match_source') == 'sync_embedding' and scope.startswith('sync:'))
-                or (
-                    segment.get('speaker_match_source') == 'final_centroid:batch-v1'
-                    and scope.startswith('final:batch:')
-                )
-            )
+        scope = segment.get('speaker_id_scope') or ''
+        if not segment.get('is_user') or not scope.startswith(('sync:', 'final:batch:')):
+            continue
+        allocated_batch = canonical_ids and scope.startswith('final:batch:')
+        owners.add(speaker_id if allocated_batch else (scope, speaker_id))
+        if segment.get('speaker_label_source') not in ('manual', 'carried') and (
+            (segment.get('speaker_match_source') == 'sync_embedding' and scope.startswith('sync:'))
+            or (segment.get('speaker_match_source') == 'final_centroid:batch-v1' and scope.startswith('final:batch:'))
         ):
             automatic.add(index)
     return automatic if len(owners) > 1 else set()

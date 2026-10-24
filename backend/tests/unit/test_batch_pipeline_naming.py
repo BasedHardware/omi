@@ -2,7 +2,7 @@
 
 from types import SimpleNamespace
 from dataclasses import replace
-from utils.stt.batch_naming import NamingSnapshot, naming_decisions, snapshot_voiceprints
+from utils.stt.batch_naming import NamingSnapshot, naming_decisions, snapshot_voiceprints, competing_owner_claim_indices
 from utils.batch_pipeline.contracts import ProjectionBinding
 
 
@@ -656,3 +656,51 @@ def test_repeated_provider_intervals_do_not_double_count_clean_pcm():
     for index, (start, end) in enumerate(selected):
         assert end <= 12 or start >= 15
         assert all(end <= other_start or start >= other_end for other_start, other_end in selected[:index])
+
+
+def test_owner_equivalence_requires_the_server_allocated_batch_id_contract():
+    # final:batch is emitted by projection and assigned conversation-local IDs
+    # before persistence. Historical sync records can reuse raw zero across
+    # independent scopes, and must retain the original conservative withdrawal.
+    segments = [
+        {
+            'speaker_id_scope': f'final:batch:{unit}',
+            'speaker_id': 0,
+            'is_user': True,
+            'speaker_match_source': 'final_centroid:batch-v1',
+            'speaker_label_source': 'auto',
+        }
+        for unit in ('a', 'b')
+    ]
+    assert competing_owner_claim_indices(segments, canonical_ids=True) == set()
+    assert competing_owner_claim_indices(segments, canonical_ids=False) == {0, 1}
+    sync = [
+        {**s, 'speaker_id_scope': f'sync:{i}', 'speaker_match_source': 'sync_embedding'} for i, s in enumerate(segments)
+    ]
+    assert competing_owner_claim_indices(sync, canonical_ids=True) == {0, 1}
+    assert competing_owner_claim_indices([sync[0], segments[1]], canonical_ids=True) == {0, 1}
+
+
+@pytest.mark.parametrize('manual_scope', [None, 'external:legacy', 'sync:legacy'])
+def test_transaction_callback_honors_whole_voice_receipts_outside_batch_scopes(monkeypatch, manual_scope):
+    session = object.__new__(ProjectionSession)
+    session._naming_guard_snapshots = {'user': {}}
+    session.binding = ProjectionBinding('owner', 'job', 'content', ('unit',))
+    monkeypatch.setattr(session, 'guard', lambda *_: None)
+    segments = [
+        {'id': 'manual', 'speaker_id_scope': manual_scope, 'speaker_id': 5, 'is_user': False},
+        {
+            'id': 'automatic',
+            'speaker_id_scope': 'final:batch:new',
+            'speaker_id': 6,
+            'is_user': True,
+            'speaker_match_source': 'final_centroid:batch-v1',
+            'speaker_label_source': 'auto',
+        },
+    ]
+    receipt = {'speakers': {'5': {'is_user': True}}}
+    assert competing_owner_claim_indices(segments, receipt, canonical_ids=True) == {1}
+    planned = {'id': 'conversation', 'transcript_segments': segments, 'manual_speaker_assignments': receipt}
+    session.validate_plan(None, planned)
+    assert [s['is_user'] for s in planned['transcript_segments']] == [True, False]
+    assert planned['transcript_segments'][0]['speaker_label_source'] == 'manual'
