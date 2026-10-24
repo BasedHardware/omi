@@ -1,0 +1,11 @@
+#include "Base.xcconfig"
+
+ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon
+OMI_TIER =
+SWIFT_OPTIMIZATION_LEVEL = -O
+SWIFT_COMPILATION_MODE = wholemodule
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+SWIFT_TREAT_WARNINGS_AS_ERRORS = YES
+
+// Per-developer overrides (gitignored), see Secrets.xcconfig.example.
+#include? "Secrets.xcconfig"
