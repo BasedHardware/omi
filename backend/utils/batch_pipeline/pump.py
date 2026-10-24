@@ -321,8 +321,10 @@ class Pump:
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
             prepare = getattr(self.worker, 'prepare_batch', None)
-            if callable(prepare):
-                # CPU-only bounded submission, outside the exclusive GPU chain.
+            if callable(prepare) and self._gpu.locked():
+                # Reserve read-ahead only for a waiting flight. Preparing the
+                # active flight can monopolize the budget before it consumes
+                # its first item, leaving its waiting sibling nothing to overlap.
                 prepared = prepare([v.item for v in leases])
                 if prepared is not None:
                     dispatch_kwargs['prepared'] = prepared

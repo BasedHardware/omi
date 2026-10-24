@@ -27,23 +27,22 @@ class DecodeAhead:
         prepared = PreparedDecode(self)
         if self.executor is None:
             return prepared
-        try:
-            for item in items:
-                seconds = item.duration_seconds
-                with self._lock:
-                    if self.items >= self.limit or self.seconds + seconds > MAX_AHEAD_SECONDS:
-                        break  # Long units use the existing bounded in-flight decode.
-                    self.items += 1
-                    self.seconds += seconds
-                try:
-                    future = self.executor.submit(self.decode, item)
-                except BaseException:
-                    self.release(seconds)
-                    raise
-                prepared.pending[item.segment_id] = (future, seconds)
-        except BaseException:
-            prepared.close()
-            raise
+        for item in items:
+            seconds = item.duration_seconds
+            with self._lock:
+                if self.items >= self.limit or self.seconds + seconds > MAX_AHEAD_SECONDS:
+                    break  # Long units use the existing bounded in-flight decode.
+                self.items += 1
+                self.seconds += seconds
+            try:
+                future = self.executor.submit(self.decode, item)
+            except Exception:
+                self.release(seconds)
+                # Keep earlier submissions in the handle for normal drain.
+                # Never block the event loop by settling futures here. The
+                # existing in-flight IO path still surfaces an unavailable pool.
+                break
+            prepared.pending[item.segment_id] = (future, seconds)
         return prepared
 
     def release(self, seconds):
