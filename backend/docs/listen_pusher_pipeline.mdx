@@ -6596,3 +6596,10 @@ Both one-shot and agentic notes mounts receive cohort-gated owner-involved task
 rules, authenticated identity and matching cache identity. Exact-reference stale
 capture policy still lacks its producer binding/CAS lifecycle adapter; no fuzzy
 or historical task cancellation is performed.
+# Batch projection ambiguity custody
+
+The batch generation fence retains unresolved text as a durable quarantined
+part receipt and advances the owner watermark only with the final assignment
+receipt transaction. Successors can drain while held uploads stay incomplete
+and outside completion retention. See [owner repair](runbooks/batch-projection-repair.md)
+for the dry-run operator tool, 15-minute obligation metric, and lead-only recovery.
