@@ -5381,6 +5381,9 @@ unmarked historical rows or change record-projection completion semantics.
 
 [Batch pipeline worker](batch-pipeline-worker.md) defines a separate default-off
 pull queue with 64 owner-hash scheduler shards and per-owner ordered result log.
+Its [stage profiler](batch-pipeline-worker.md#stage-profiling-metrics-only) exposes
+content-free worker/IO/model and lease wall times, enabled by default in dev;
+profiling changes no admission, ordering, model precision or result semantics.
 The sync route selects it only with `BATCH_PIPELINE_ENABLED` plus owner
 allowlist/percentage; an atomic content-ledger protocol seal prevents a legacy
 twin. Admission rollback leaves accepted work draining with 20s heartbeats.

@@ -245,7 +245,8 @@ Pump-side stages: `pump_cycle` (one full maintain+flight pass), `maintenance`
 transition: defer/fail/complete/release), `ordered_merge` (per-owner commits),
 `projection` (pending projection and on-committed callbacks), and
 `worker_flight` (executor wait plus the whole GPU chain, including its CUDA
-quiescence `cuda_sync` and, with pipeline depth >1, GPU chain-lock wait).
+quiescence `cuda_sync`). The pump's GPU-slot wait precedes `worker_flight`
+and is included only in its parent `pump_cycle`, not the worker timer.
 Worker-chain leaves: `fetch_decode` (download+decrypt+decode of one unit),
 `vad`, `windows` (speech window assembly), `asr` (batched `transcribe_batch`),
 `asr_recovery` (the padded retry, including cap-dispatch callbacks),
