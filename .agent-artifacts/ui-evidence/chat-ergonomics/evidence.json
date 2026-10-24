@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-chat-video-poster-and-stop.png",
+      "platform": "mobile-ios",
+      "description": "Chat while Omi answers: a sent video shows its poster tile with play badge and length; the empty composer offers Stop",
+      "captured_by": "agent",
+      "source": "visual-audit"
+    }
+  ]
+}

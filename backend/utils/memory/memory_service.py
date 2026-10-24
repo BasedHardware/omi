@@ -34,6 +34,7 @@ from pydantic import ValidationError
 import database.memories as memories_db
 from database import memory_source_index
 import database.vector_db as vector_db
+from utils.mcp_memory_reads import collect_filtered_mcp_memories
 from utils.memory.index_window import (
     MemoryIndexWindowLimit,
     position_cursor,
@@ -44,6 +45,7 @@ from utils.memory.index_window import (
 from config import firestore_read_levers
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
+from database.released_memory_projection import projected_stream_list
 from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
 from database.memory_ledger import purge_source_replacement_receipts_for_memories
 from database.legal_holds import (
@@ -80,7 +82,6 @@ from utils.other.list_budget import (
     ListReadBudget,
     ListReadBudgetExhausted,
     budgeted_get_all,
-    budgeted_stream_list,
     indexed_list_reads_enabled,
 )
 from utils.other.portability_read import check_portability_read
@@ -267,12 +268,8 @@ class ExternalMemoryWriteContext:
 
 @dataclass(frozen=True)
 class UniversalMemoryListPage:
-    """One mixed-view page plus an opaque continuation cursor.
-
-    ``truncated`` is True only when the request's list-read budget ended the
-    scan early (#11831); a truncated page carries no continuation cursor
-    because its cursor state would not cover every consumed scan position.
-    """
+    """A mixed page; budget-truncated pages have no cursor because consumed
+    scan positions cannot all be proven."""
 
     memories: List[MemoryDB]
     next_cursor: Optional[str]
@@ -1093,7 +1090,7 @@ class HistoricalMemoryAdapter:
         del uid, limit, scan_offset, device_scope_request
         raise RuntimeError("historical offset scan is retired; use read_updated_scan_page / read_created_scan_page")
 
-    def _adapt_scan_payloads(
+    def adapt_scan_payloads(
         self,
         uid: str,
         payloads: List[Dict[str, Any]],
@@ -1143,7 +1140,7 @@ class HistoricalMemoryAdapter:
             **self._firestore_kwargs(),
         )
         return (
-            self._adapt_scan_payloads(
+            self.adapt_scan_payloads(
                 uid,
                 payloads,
                 cursors,
@@ -1178,7 +1175,7 @@ class HistoricalMemoryAdapter:
             raise
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
-        slots = self._adapt_scan_payloads(
+        slots = self.adapt_scan_payloads(
             uid,
             payloads,
             cursors,
@@ -1213,7 +1210,7 @@ class HistoricalMemoryAdapter:
             raise
         except Exception as exc:
             raise MemoryBackingStoreUnavailable("Historical memory unavailable", stream="historical") from exc
-        slots = self._adapt_scan_payloads(
+        slots = self.adapt_scan_payloads(
             uid,
             payloads,
             cursors,
@@ -2577,7 +2574,7 @@ class MemoryService:
                 refs = [client.document(f'{collection}/{memory_id}') for memory_id in missing_ids]
                 try:
                     query = client.collection(collection).where(filter=FieldFilter('__name__', 'in', refs))
-                    snapshots = budgeted_stream_list(query, budget)
+                    snapshots = projected_stream_list(query, budget, surface='status_pairs')
                     if not snapshots and budget is not None:
                         budget.charge(1)  # Empty-query billing floor.
                 except ListReadBudgetExhausted:
@@ -3080,6 +3077,13 @@ class MemoryService:
         return None
 
     @resilient_memory_read
+    def read_mcp_filtered(
+        self, uid: str, *, filters: Dict[str, Any], budget: Optional[ListReadBudget] = None, max_candidates: int = 5000
+    ) -> Tuple[List[Dict[str, Any]], int]:
+        """Complete bounded MCP candidate read under the universal row policies."""
+        return collect_filtered_mcp_memories(self, uid, filters=filters, budget=budget, max_candidates=max_candidates)
+
+    @resilient_memory_read
     def read_page(
         self,
         uid: str,
@@ -3094,13 +3098,9 @@ class MemoryService:
         view: str = 'released',
         as_of: Optional[datetime] = None,
     ) -> UniversalMemoryListPage:
-        """Page the mixed newest-first view with an opaque composite cursor.
-
-        Legacy offset paging remains on ``read``. This path advances independent
-        canonical and historical positions, walks through suppressed historical
-        rows without emitting them, and refuses scope/archive authority changes
-        midstream via the signed cursor claims. Canonical continuation uses a
-        bounded Firestore keyset scan — never a full-set reload.
+        """Merge bounded canonical/historical keysets under signed scope/archive claims.
+        Suppressed rows advance without emission; legacy offset paging stays on read.
+        Canonical continuation never reloads the full set.
         """
         sort_key = (
             window_sort_key

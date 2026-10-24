@@ -33,6 +33,9 @@ class Ref:
             raise AlreadyExists('synthetic existing tombstone')
         self.rows[self.path] = data
 
+    def delete(self):
+        self.rows.pop(self.path, None)
+
 
 @pytest.mark.parametrize('retry', [False, True])
 def test_tombstone_precedes_batch_cleanup_and_failure_is_retryable(monkeypatch, retry):
@@ -131,3 +134,13 @@ def test_account_purge_erases_cohort_membership_and_retries_failures(monkeypatch
     data_plane.collection.return_value.document.return_value.delete.side_effect = RuntimeError('retry')
     with pytest.raises(RuntimeError, match='retry'):
         purge_user_subtree('synthetic', client, recursive)
+
+
+def test_from_segments_ttl_policy_is_separately_reviewable_and_defaults_do_not_expand_batch_scope():
+    from pathlib import Path
+
+    policy = Path(__file__).resolve().parents[2] / 'deploy' / 'from-segments-retention.json'
+    assert ttl_resources('demo-synthetic', policy_path=policy) == [
+        'projects/demo-synthetic/databases/(default)/collectionGroups/from_segments_chunks/fields/expires_at'
+    ]
+    assert len(ttl_resources('demo-synthetic')) == 14

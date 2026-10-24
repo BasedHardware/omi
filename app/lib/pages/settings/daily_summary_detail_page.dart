@@ -9,7 +9,11 @@ import 'package:share_plus/share_plus.dart';
 import 'package:omi/backend/http/api/conversations.dart' as conversations_api;
 import 'package:omi/backend/http/api/users.dart'
     show deleteDailySummary, getDailySummary, regenerateDailySummary, setDailySummaryVisibility;
+import 'package:omi/backend/http/api/conversations.dart' show ConversationApi;
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/env/env.dart';
+import 'package:omi/pages/conversations/background_conversations.dart';
 import 'package:omi/pages/action_items/day_tasks_page.dart';
 import 'package:omi/pages/conversation_detail/maps_util.dart';
 import 'package:omi/pages/conversations/day_conversations_page.dart';
@@ -50,6 +54,9 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   bool _isSharing = false;
   bool _isDeleting = false;
   bool _isRegenerating = false;
+
+  /// The day's background conversations: Home leaves them out, so the recap lists them.
+  List<ServerConversation> _background = const [];
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -80,6 +87,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
         date: widget.summary!.date,
         source: 'direct',
       );
+      _loadBackground(widget.summary!);
       return;
     }
 
@@ -97,6 +105,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           date: summary.date,
           source: 'api_fetch',
         );
+        _loadBackground(summary);
       }
     }
   }
@@ -354,6 +363,7 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
                     _buildKnowledgeNuggetsSection(summary),
                   ],
                   if (summary.locations.isNotEmpty) ...[const SizedBox(height: 32), _buildLocationsMap(summary)],
+                  if (_background.isNotEmpty) ...[const SizedBox(height: 32), _buildBackgroundSection()],
                 ]),
               ),
             ),
@@ -799,6 +809,72 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
           );
         }),
       ],
+    );
+  }
+
+  Future<void> _loadBackground(DailySummary summary) async {
+    final day = parseRecapDate(summary.date);
+    if (day == null) return;
+    final (start, end) = dayDateBounds(day);
+    final fetch =
+        widget.dayConversationsFetcher ?? fetchDayConversations(ConversationApi(baseUrl: Env.apiBaseUrl ?? ''));
+    try {
+      final result = await fetch(startDate: start, endDate: end);
+      if (!mounted || !result.ok) return;
+      setState(() => _background = result.items.where(leftToDailyRecap).toList());
+    } catch (_) {
+      // The section is a convenience; the recap reads fine without it.
+    }
+  }
+
+  Widget _buildBackgroundSection() {
+    final l10n = context.l10n;
+    return Column(
+      key: const ValueKey('recap_background_section'),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionTitle(l10n.recapInTheBackground),
+        const SizedBox(height: 12),
+        Container(
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+          child: Column(
+            children: [
+              for (var i = 0; i < _background.length; i++)
+                _buildBackgroundRow(_background[i], last: i == _background.length - 1),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildBackgroundRow(ServerConversation conversation, {required bool last}) {
+    final seconds = conversation.getDurationInSeconds();
+    final length = OmiDuration.compact(seconds < 60 ? seconds : (seconds ~/ 60) * 60, context.l10n);
+    final title = conversation.structured.title.trim();
+    return InkWell(
+      onTap: () => routeToPage(context, ConversationDetailPage(conversation: conversation)),
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 48),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          border: last ? null : Border(bottom: BorderSide(color: OmiColors.border, width: 0.5)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(length, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+          ],
+        ),
+      ),
     );
   }
 

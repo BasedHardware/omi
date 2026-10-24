@@ -1406,6 +1406,13 @@ def test_sync_scrape_retains_exporter_and_direct_sentinel_consumers():
         'omi_firestore_billed_reads_by_origin_total',
         'omi_firestore_caller_label_overflow_total',
         'omi_fsr_leader_lease_total',
+        # Legacy dark: drain_census and the soak gates (contract (h)).
+        'omi_legacy_sync_mode',
+        'omi_legacy_sync_admissions_total',
+        'omi_legacy_dark_ack_total',
+        'omi_legacy_sync_mode_read_total',
+        # A2 job-store shadow: lane 12 parity_read.sh (the A2 sample gate).
+        'omi_jobstore_shadow_parity_total',
         # Held-audio recovery gates: narrowing state, cohort resolution and pacing decisions.
         'omi_stt_cap_recovery_cohort_narrowed',
         'omi_stt_cap_cohort_source',

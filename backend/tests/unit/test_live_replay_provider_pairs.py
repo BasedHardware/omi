@@ -8,7 +8,7 @@ import pytest
 
 from tests.unit.test_parakeet_window_live import runtime, receiver, Client  # noqa: F401
 from tests.unit.test_live_cost_router import controls  # noqa: F401
-from config.live_stt_replay import ReplayLimits
+from config.live_stt_replay import DEFAULT_LIVE_TAIL_CATCHUP_RATE, DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS, ReplayLimits
 from routers.listen.receiver import ListenReceiver
 from utils.stt import (
     parakeet_window as window,
@@ -36,6 +36,13 @@ from tests.unit.fixtures.replay_clock import virtual_clock  # noqa: F401
 @pytest.fixture(autouse=True)
 def _stt_failover_recovery_on(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv('STT_FAILOVER_RECOVERY_ENABLED', 'true')
+
+
+# A full-ring prefix under shipped defaults: the 20s wall less the margin held
+# back so 1x delivery lands inside it, in bytes and 16 KiB replay packets.
+PREFIX_SECONDS = 20.0 - DEFAULT_REPLAY_PREFIX_MARGIN_SECONDS
+PREFIX_BYTES = int(PREFIX_SECONDS * 32000)
+PREFIX_PACKETS = -(-PREFIX_BYTES // 16384)
 
 
 class Transport:
@@ -589,26 +596,37 @@ async def test_slow_consumer_full_ring_paced_budget_and_realtime_live_order(monk
     try:
         assert await task
         replay_wall = virtual_clock.now
-        assert 19 <= replay_wall <= 20 + 3 * 0.512 + 0.001
+        assert PREFIX_SECONDS - 0.1 <= replay_wall <= 20 + 3 * 0.512 + 0.001
         await ingestion
-        expected = original[115 * 32000 :] + b''.join(tail)
+        expected = original[-PREFIX_BYTES:] + b''.join(tail)
         await until(lambda: raws[-1]._ws.byte_count == len(expected))
         transport = raws[-1]._ws
         assert transport.pcm == expected
         assert raws[-1]._send_queue.high_water <= 2
         assert not raws[-1].is_connection_dead
-        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == 115
-        assert REPLAY_AUDIO.labels(**labels)._value.get() - audio_before == pytest.approx(20)
+        assert REPLAY_SKIPPED.labels(**labels)._value.get() - skipped_before == pytest.approx(135 - PREFIX_SECONDS)
+        assert REPLAY_AUDIO.labels(**labels)._value.get() - audio_before == pytest.approx(PREFIX_SECONDS)
         assert REPLAY_CLOSED.labels(**labels)._value.get() == closed_before
-        # For every replay admission interval: <=1x audio plus one bounded packet.
+        # Replay admissions stay at <=1x audio plus one bounded packet. Once
+        # the live tail is behind, the pump drains it at the catch-up rate, so
+        # cumulative delivery may run ahead of 1x but never past the
+        # successor's catch-up ceiling plus one packet.
         packets = [(data, at) for data, at in zip(transport.sent, transport.sent_at) if isinstance(data, bytes)]
+        catchup_rate = actual.stt_socket.pacer.catchup_rate
+        assert catchup_rate == DEFAULT_LIVE_TAIL_CATCHUP_RATE
         delivered = 0.0
-        for data, at in packets:
+        for n, (data, at) in enumerate(packets):
             delivered += len(data) / 32000
-            assert delivered <= at + 0.512 + 0.001
-        live_times = [at for _, at in packets[40:]]  # ceil(640000 / 16384) replay packets
+            if n < PREFIX_PACKETS:
+                assert delivered <= at + 0.512 + 0.001
+            assert delivered <= at * catchup_rate + 0.512 + 0.001
+        live_times = [at for _, at in packets[PREFIX_PACKETS:]]
         assert len(live_times) == len(captured)
         assert max(at - born for at, born in zip(live_times, captured)) <= 20.532 + 3 * 0.512
+        # The capture held through the 19 s prefix is drained at 1.5x rather
+        # than carried for the rest of the leg: the last live packet lands
+        # well inside the ~19 s lag the exact-rate tail used to keep.
+        assert live_times[-1] - captured[-1] <= 21.0 / catchup_rate + 1.0
         assert sum(len(packet.data) for packet in actual.stt_socket.tail) <= 21 * 32000
     finally:
         task.cancel()
@@ -662,7 +680,7 @@ async def test_adopted_live_tail_drains_before_eos_after_client_departure(monkey
     monkeypatch.setattr(replay_delivery, 'REPLAY_PREFIX_SECONDS', 20.0)
     actual, _, raws, legs, observations = await setup_receiver(monkeypatch, ['parakeet-window', successor])
     actual.stt_socket.raw.fail('first_text_deadline')
-    original = b''.join(data for _, data in actual._window_ring().snapshot())[-640000:]
+    original = b''.join(data for _, data in actual._window_ring().snapshot())[-PREFIX_BYTES:]
     monkeypatch.setattr(actual, '_capture', lambda *args, **kwargs: None)
     task = asyncio.create_task(actual._failover_stt_socket())
     try:

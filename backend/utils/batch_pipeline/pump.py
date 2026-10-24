@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from config.batch_pipeline import MAX_PUBLISH_CONCURRENCY, publish_concurrency as configured_publish_concurrency
-from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.batch_pipeline.contracts import (
     BatchWorker,
     HEARTBEAT_SECONDS,

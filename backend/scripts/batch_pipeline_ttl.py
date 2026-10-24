@@ -14,10 +14,10 @@ from pathlib import Path
 POLICY = Path(__file__).resolve().parents[1] / 'deploy' / 'batch-pipeline' / 'retention.json'
 
 
-def ttl_resources(project: str, database: str = '(default)') -> list[str]:
+def ttl_resources(project: str, database: str = '(default)', *, policy_path: Path = POLICY) -> list[str]:
     if not project or '/' in project or not database or '/' in database:
         raise ValueError('explicit project and database identifiers required')
-    policy = json.loads(POLICY.read_text())
+    policy = json.loads(policy_path.read_text())
     return [
         f'projects/{project}/databases/{database}/collectionGroups/{group}/fields/{policy["field"]}'
         for group in policy['collection_groups']
@@ -29,8 +29,11 @@ def main():
     parser.add_argument('--project', required=True)
     parser.add_argument('--database', default='(default)')
     parser.add_argument('--apply', action='store_true')
+    parser.add_argument(
+        '--policy', type=Path, default=POLICY, help='Reviewed retention declaration (default: batch completion)'
+    )
     args = parser.parse_args()
-    resources = ttl_resources(args.project, args.database)
+    resources = ttl_resources(args.project, args.database, policy_path=args.policy)
     if not args.apply:
         print(json.dumps({'mode': 'plan', 'field_mask': ['ttl_config'], 'enable_ttl': resources}, indent=2))
         return

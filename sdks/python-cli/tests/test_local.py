@@ -323,6 +323,40 @@ def test_search_screen_no_results_is_structured_in_json(config_path: Path, cli_r
     assert payload["suggested_screenshot_ids"] == ["42"]
 
 
+@pytest.mark.parametrize(
+    "response",
+    [
+        (
+            "Omi has 12 screenshot(s), but they are not ready to search yet. "
+            "Use get_work_context for recent work, or SQL only for counts and exact structured checks."
+        ),
+        'No screenshots found matching "Discord" in the last 7 day(s). Local status could not be read: database is locked',
+    ],
+)
+def test_search_screen_unindexed_and_stats_error_empty_messages_are_structured_in_json(
+    config_path: Path, cli_runner, response: str
+) -> None:
+    """Every empty-result message from Desktop's ``emptySemanticSearchMessage``
+    must produce a structured ``results: []`` JSON payload with ``reason`` and
+    ``suggestions`` rather than falling through to a raw ``text`` object."""
+    _configure_local_profile(config_path)
+    with respx.mock(base_url=FAKE_LOCAL_URL, assert_all_called=True) as router:
+        router.post("/v1/local/tool").mock(
+            side_effect=[
+                httpx.Response(200, json=_tool_response(response)),
+                httpx.Response(200, json=_tool_response("No results")),
+            ]
+        )
+        result = cli_runner.invoke(app, ["--json", "local", "search-screen", "Discord"])
+
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.stdout)
+    assert payload["results"] == []
+    assert payload["reason"] == response
+    assert payload["suggestions"]
+    assert "text" not in payload
+
+
 def test_search_screen_exact_fallback_constrains_app_filter(config_path: Path, cli_runner) -> None:
     _configure_local_profile(config_path)
     response = 'No matching screen-history results for "Discord" in the last 1 day(s) with app filter "Discord".'

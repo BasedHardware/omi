@@ -22,6 +22,7 @@ from database.conversations import claim_record_lane_owner
 from database.batch_pipeline_intake import admit
 from database.batch_pipeline_privacy import BatchPrivacyBlocked
 from database.batch_pipeline_store import FirestoreStore
+from database.batch_pipeline_shadow_hook import shadow_from_env
 from utils.batch_pipeline.artifact_policy import create_artifact_store
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
 from utils.batch_pipeline.scheduler import owner_key
@@ -67,7 +68,7 @@ def register_recording(uid: str, conversation: dict, *, store=None, now=None) ->
         return False
     if not conversation.get('private_cloud_sync_enabled'):
         return False
-    store = store or FirestoreStore(f'batch_pipeline_{current_stage()}')
+    store = store or shadow_from_env(FirestoreStore(f'batch_pipeline_{current_stage()}'))
     now = time.time() if now is None else now
     content, segment = record_identity(uid, conversation['id'])
     # The immutable native owner is main's earlier admission receipt. A later

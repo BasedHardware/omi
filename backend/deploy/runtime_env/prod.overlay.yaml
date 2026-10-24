@@ -53,6 +53,8 @@ overlay:
           value: based-hardware-batch-pipeline-staging
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -226,6 +228,8 @@ overlay:
         FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
         AUDIO_ARCHIVE_PERCENT:
           value: '100'
+        AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+          value: '0'
         AUDIO_ARCHIVE_UID_ALLOWLIST:
           value: ''
         LIVE_CAPTURE_WINDOW_MERGE_UNION:
@@ -468,6 +472,8 @@ overlay:
             value: syncing-local
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -541,7 +547,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '5'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -743,6 +749,7 @@ overlay:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -778,6 +785,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
@@ -853,7 +862,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '5'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1101,6 +1110,7 @@ overlay:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -1124,6 +1134,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           SYNC_BACKFILL_RETIRE_EXPIRED_AT_CLAIM:
             value: 'false'
             category: rollout
@@ -1199,7 +1211,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '5'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'
@@ -1422,6 +1434,7 @@ overlay:
         forbidden_env:
         - DEEPGRAM_SELF_HOSTED_ENABLED
         - DEEPGRAM_SELF_HOSTED_URL
+        - DEEPGRAM_API_KEY
         - BASIC_TIER_MINUTES_LIMIT_PER_MONTH
         - BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
@@ -1466,6 +1479,8 @@ overlay:
             value: based-hardware-batch-pipeline-staging
           AUDIO_ARCHIVE_PERCENT:
             value: '100'
+          AUDIO_ARCHIVE_STOP_PCM_PERCENT:
+            value: '0'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
           HOSTED_SPEAKER_EMBEDDING_API_URL:
@@ -1482,7 +1497,7 @@ overlay:
             value: paid
             category: rollout
           DREAM_AGENT_PAID_PERCENT:
-            value: '5'
+            value: '100'
             category: rollout
           DREAM_AGENT_CONCURRENCY:
             value: '8'

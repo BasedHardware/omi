@@ -23,13 +23,20 @@ on:
         description: Type cutover-sync-ledger-fence
         required: true
         type: string
+      break_glass_lock:
+        description: 'Break-glass: skip the shared prod-train lock (still serialized on the backend stack lock)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
-# Share the Cloud Run/queue mutation domain with normal backend deployments.
+# Share the Cloud Run/queue mutation domain with normal backend deployments. B5: prod backend
+# deploys serialize on the shared prod-train lock, so the prod cutover takes it too (M3 review);
+# break-glass falls back to the backend stack lock, like gcp_backend.yml.
 concurrency:
-  group: deploy-backend-stack-${{ github.event.inputs.environment }}
+  group: ${{ github.event.inputs.environment == 'prod' && github.event.inputs.break_glass_lock != 'true' && 'prod-train' || format('deploy-backend-stack-{0}', github.event.inputs.environment) }}
   cancel-in-progress: false
 
 env:

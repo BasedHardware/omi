@@ -14,6 +14,7 @@ import config.speaker_match_scores as match_scores
 import utils.stt.speaker_match as match_policy
 
 from config.speaker_prior import pinned_speaker_prior_enabled
+from utils.speakers.context import name_only_allowed
 from database import users as users_db
 from database.auth import get_user_name
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment
@@ -336,6 +337,9 @@ def identify_speakers_for_segments(
         for seg in segments:
             detected_name = detect_speaker_from_text(seg.text, language=language)
             if detected_name:
+                # refactor: superseded by utils.speakers.context when SPEAKER_EVIDENCE_MODE=serve
+                if not name_only_allowed(uid):
+                    continue
                 person = users_db.get_person_by_name(uid, detected_name)
                 if person and person.get('id'):
                     text_assignments.extend(

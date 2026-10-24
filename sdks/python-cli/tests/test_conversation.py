@@ -10,6 +10,7 @@ from pathlib import Path
 import pytest
 
 from omi_cli.main import app, main
+from omi_cli.models import CONVERSATION_TEXT_MAX_LENGTH, CONVERSATION_TITLE_MAX_LENGTH
 
 
 def test_conversation_list_renders(authed_profile, respx_mock, cli_runner) -> None:
@@ -40,6 +41,38 @@ def test_conversation_create_posts_text(authed_profile, respx_mock, cli_runner) 
     body = json.loads(route.calls.last.request.content)
     assert body["text"].startswith("the weather")
     assert body["language"] == "en"
+
+
+def test_conversation_create_rejects_oversize_text_without_sending(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/conversations").respond(
+        json={"id": "c1", "status": "completed", "discarded": False}
+    )
+    oversize = "x" * (CONVERSATION_TEXT_MAX_LENGTH + 1)
+    result = cli_runner.invoke(app, ["conversation", "create", "--text", oversize])
+    assert result.exit_code == 1  # EXIT_USAGE
+    assert "too long" in result.stderr.lower()
+    # The point of the check: the write budget is not spent on a doomed request.
+    assert not route.called
+
+
+def test_conversation_create_accepts_text_at_the_limit(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/conversations").respond(
+        json={"id": "c1", "status": "completed", "discarded": False}
+    )
+    at_limit = "x" * CONVERSATION_TEXT_MAX_LENGTH
+    result = cli_runner.invoke(app, ["conversation", "create", "--text", at_limit])
+    assert result.exit_code == 0, result.stderr
+    assert len(json.loads(route.calls.last.request.content)["text"]) == CONVERSATION_TEXT_MAX_LENGTH
+
+
+def test_conversation_update_rejects_oversize_title_without_sending(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.patch("/v1/dev/user/conversations/c1").respond(json={"id": "c1"})
+    result = cli_runner.invoke(
+        app, ["conversation", "update", "c1", "--title", "t" * (CONVERSATION_TITLE_MAX_LENGTH + 1)]
+    )
+    assert result.exit_code == 1  # EXIT_USAGE
+    assert "too long" in result.stderr.lower()
+    assert not route.called
 
 
 def test_conversation_get_includes_transcript_param(authed_profile, respx_mock, cli_runner) -> None:

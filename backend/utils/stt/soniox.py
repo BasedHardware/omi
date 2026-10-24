@@ -857,6 +857,7 @@ async def process_audio_soniox(
     *,
     profile: LiveLanguageProfile | None = None,
     idle_budget: SonioxIdleBudget | None = None,
+    uid: str | None = None,
 ) -> STTSocket:
     api_key = os.getenv('SONIOX_API_KEY')
     if not api_key:
@@ -907,13 +908,21 @@ async def process_audio_soniox(
             rejected,
         )
 
+    from utils.stt.vocabulary import apply_context
+
+    await apply_context(config, uid)
     url = SONIOX_WS_URL
 
     async def connect(callback: Any) -> SafeSonioxSocket:
         return await _open_soniox(config, url, callback, preseconds)
 
     sock = await connect(stream_transcript)
+    # The receiver-owned budget already resolved the uid-hash cohort against the
+    # global knobs; a bare call (no budget) keeps the global read. The global
+    # kill switch is re-read per leg so SONIOX_IDLE_CLOSE_SECONDS=0 stays hot.
     seconds = idle_close_seconds()
+    if seconds and idle_budget is not None:
+        seconds = idle_budget.close_seconds
     if seconds:
         return IdleSonioxSocket(sock, connect, stream_transcript, sample_rate, seconds, idle_budget=idle_budget)
     return sock

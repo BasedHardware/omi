@@ -15,7 +15,7 @@ _MUTATE = reprocess._mutate
 
 @pytest.fixture
 def state(monkeypatch):
-    from utils.sync import enrichment_scan
+    from utils.enrichment import scan as enrichment_scan
 
     rows, tasks = {}, []
 
@@ -1051,8 +1051,13 @@ def test_pipeline_only_receipts_a_rule_discard_after_persistence(pipeline, monke
     monkeypatch.setattr(pipeline, 'fragment_rule', lambda *_: ('discard', 'synthetic-rule'))
     monkeypatch.setattr(pipeline, 'is_user_curated', lambda *_: False)
     monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
-    monkeypatch.setattr(pipeline.lifecycle_service, 'discard_by_relevance', lambda *a, **k: persisted)
-    monkeypatch.setattr(pipeline, 'record_conversation_relevance', Mock())
+    monkeypatch.setattr(
+        pipeline.lifecycle_service,
+        'rule_discard_outcome',
+        lambda *a, **k: 'discarded' if persisted else 'refused',
+    )
+    relevance = Mock()
+    monkeypatch.setattr(pipeline, 'record_conversation_relevance', relevance)
     context = {}
     token = pipeline.PROCESS_CONTEXT.set(context)
     try:
@@ -1060,6 +1065,76 @@ def test_pipeline_only_receipts_a_rule_discard_after_persistence(pipeline, monke
     finally:
         pipeline.PROCESS_CONTEXT.reset(token)
     assert context.get('discarded', False) == persisted
+    assert relevance.call_count == int(persisted)
+
+
+@pytest.mark.parametrize('with_context', [False, True])
+def test_pipeline_receipts_an_intake_discarded_fragment_without_a_second_write(pipeline, monkeypatch, with_context):
+    # The read predicate shows every uncurated review row as discarded, so the
+    # callback cannot tell a stored discard apart from an unpersisted one; only
+    # the write's own outcome can.
+    monkeypatch.setattr(
+        pipeline.conversations_db,
+        'get_conversation',
+        lambda *_: {
+            'status': 'completed',
+            'sync_relevance': 'review',
+            'discarded': True,
+            'sync_content_revision': 3,
+            'transcript_segments': [],
+        },
+    )
+    monkeypatch.setattr(pipeline, 'fragment_rule', lambda *_: ('discard', 'synthetic-rule'))
+    monkeypatch.setattr(pipeline, 'is_user_curated', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
+    outcome, relevance = Mock(return_value='already_discarded'), Mock()
+    monkeypatch.setattr(pipeline.lifecycle_service, 'rule_discard_outcome', outcome)
+    monkeypatch.setattr(pipeline, 'record_conversation_relevance', relevance)
+    context = {} if with_context else None
+    token = pipeline.PROCESS_CONTEXT.set(context)
+    try:
+        assert pipeline._reprocess_conversation_after_update('u', 'c', 'en') is None
+    finally:
+        pipeline.PROCESS_CONTEXT.reset(token)
+    # The stored discard owes no summary and is not a new rule decision; the
+    # receipt is what stops reprocess.run from raising FirstSummaryCallbackPending.
+    assert (context or {}).get('discarded', False) == with_context
+    assert outcome.call_args.kwargs['expected_sync_content_revision'] == 3
+    relevance.assert_not_called()
+
+
+def test_intake_discarded_fragment_settles_admitted_obligation_instead_of_callback_pending(
+    state, pipeline, monkeypatch
+):
+    rows, tasks = state
+    monkeypatch.setenv('FIRST_SUMMARY_DEADLINE_ENABLED', 'true')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', '')
+    monkeypatch.setenv('FIRST_SUMMARY_UID_ALLOWLIST', 'u')
+    monkeypatch.setenv('FIRST_SUMMARY_PRESERVE_ADMITTED_ENABLED', 'true')
+    reprocess.mark('u', 'c', 'en', now=0)
+    key, token = reprocess.key('u', 'c'), tasks[-1]['task_token']
+    monkeypatch.setattr(
+        pipeline.conversations_db,
+        'get_conversation',
+        lambda *_: {'status': 'completed', 'sync_relevance': 'review', 'discarded': True, 'transcript_segments': []},
+    )
+    monkeypatch.setattr(pipeline, 'fragment_rule', lambda *_: ('discard', 'synthetic-rule'))
+    monkeypatch.setattr(pipeline, 'is_user_curated', lambda *_: False)
+    monkeypatch.setattr(pipeline, 'repair_fenced', lambda *_: False)
+    monkeypatch.setattr(pipeline.lifecycle_service, 'rule_discard_outcome', Mock(return_value='already_discarded'))
+    monkeypatch.setattr(pipeline, 'record_conversation_relevance', Mock())
+
+    def callback(uid, conversation_id, language):
+        # The freshly loaded pipeline module carries its own PROCESS_CONTEXT
+        # object; bridge run()'s context into it the way the request path shares one.
+        token = pipeline.PROCESS_CONTEXT.set(reprocess.summary_delivery.PROCESS_CONTEXT.get())
+        try:
+            return pipeline._reprocess_conversation_after_update(uid, conversation_id, language)
+        finally:
+            pipeline.PROCESS_CONTEXT.reset(token)
+
+    assert reprocess.run(key, token, callback, now=120) == 'processed'
+    assert key not in rows
 
 
 @pytest.mark.parametrize('preserve', [False, True])

@@ -44,6 +44,7 @@ def test_inventory_separates_generated_backed_adapters_from_raw_manual_dtos():
     assert 'app/lib/backend/schema/action_item.dart' not in remaining_manual_paths
     assert 'app/lib/backend/schema/folder.dart' not in remaining_manual_paths
     assert 'app/lib/backend/schema/bt_device/bt_device.dart' in local_non_rest_paths
+    assert 'app/lib/backend/schema/capture_committed_event.dart' in local_non_rest_paths
     assert (
         'POST',
         '/v1/conversations/search',

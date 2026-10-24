@@ -104,23 +104,6 @@ rules:
           namespace: { resource: "namespace" }
           pod: { resource: "pod" }
           service: { resource: "service" }
-    - name:
-        as: "engine_to_api_pod_ratio"
-      seriesQuery: 'kube_deployment_labels{label_app="deepgram-engine"}'
-      metricsQuery: '(sum(kube_deployment_status_replicas and on(deployment) kube_deployment_labels{label_app="deepgram-engine"})) / (sum(kube_deployment_status_replicas and on(deployment) kube_deployment_labels{label_app="deepgram-api"}))'
-      resources:
-        overrides:
-          namespace: { resource: "namespace" }
-          pod: { resource: "pod" }
-    # Average GPU utilization (%) for autoscaling
-    - name:
-        as: "engine_avg_gpu_utilization"
-      seriesQuery: 'DCGM_FI_DEV_GPU_UTIL{container="deepgram-engine"}'
-      metricsQuery: 'avg(avg_over_time(DCGM_FI_DEV_GPU_UTIL{container="deepgram-engine"}[1m]))'
-      resources:
-        overrides:
-          namespace: { resource: "namespace" }
-          pod: { resource: "pod" }
     - metricsQuery: histogram_quantile(0.99, sum(rate(parakeet_request_duration_seconds_bucket{<<.LabelMatchers>>}[2m])) by (le))
       name:
         as: parakeet_request_latency_p99

@@ -13,13 +13,26 @@ from contextvars import ContextVar
 from functools import wraps
 from typing import Any, Callable, Literal, TypeVar, cast
 
-from prometheus_client import Counter
+from prometheus_client import REGISTRY, Counter
 
 MAX_ORIGINS = 400
-FIRESTORE_ORIGIN_LABEL_OVERFLOW = Counter(
-    'omi_firestore_origin_label_overflow_total',
-    'Firestore read origin observations folded into overflow because the origin cap is full.',
-)
+
+
+def _origin_label_overflow_counter() -> Counter:
+    # Import isolation evicts modules while the process-wide registry survives.
+    try:
+        return Counter(
+            'omi_firestore_origin_label_overflow_total',
+            'Firestore read origin observations folded into overflow because the origin cap is full.',
+        )
+    except ValueError:
+        return cast(
+            Counter,
+            REGISTRY._names_to_collectors['omi_firestore_origin_label_overflow_total'],  # type: ignore[attr-defined]
+        )
+
+
+FIRESTORE_ORIGIN_LABEL_OVERFLOW = _origin_label_overflow_counter()
 _known_origins: set[str] = set()
 _origin_lock = threading.Lock()
 _JOB_NAME = re.compile(r'^(job|task):[A-Za-z_][A-Za-z0-9_.:-]{0,119}$')

@@ -1,19 +1,9 @@
 """Model-free process fencing shared by the worker and lease coordinator."""
 
-WORKER_VALIDATION_STAGES = frozenset({'vad_windows', 'word_clocks', 'assemble_words', 'asr_recovery'})
-WORKER_VALIDATION_REASONS = frozenset(
-    {
-        'word_shape',
-        'word_clock',
-        'word_sequence',
-        'vad_nonfinite',
-        'vad_order',
-        'vad_bounds',
-        'empty_asr',
-        'no_owned_words',
-        'unsupported_language',
-    }
-)
+from utils.observability.reasons import WorkerValidationReason, WorkerValidationStage, reason_values
+
+WORKER_VALIDATION_STAGES = reason_values(WorkerValidationStage)
+WORKER_VALIDATION_REASONS = reason_values(WorkerValidationReason)
 
 
 def validate_worker_failure(failure):

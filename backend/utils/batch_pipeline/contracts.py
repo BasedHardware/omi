@@ -8,6 +8,7 @@ from typing import Protocol, Sequence
 from config.batch_pipeline import Priority
 from utils.batch_pipeline.capacity import PoolCapacity as PoolCapacity
 from utils.batch_pipeline.errors import validate_worker_failure
+from utils.observability.reasons import WorkerValidationReason, WorkOutcome, reason_values
 
 MAX_PROJECTION_PARTS = 128
 
@@ -98,6 +99,10 @@ class LeasedWork:
     lease_until: float
 
 
+WORK_OUTCOMES = reason_values(WorkOutcome)
+EMPTY_WORKER_REASONS = frozenset({WorkerValidationReason.EMPTY_ASR.value, WorkerValidationReason.NO_OWNED_WORDS.value})
+
+
 @dataclass(frozen=True)
 class WorkResult:
     segment_id: str
@@ -107,7 +112,7 @@ class WorkResult:
     def __post_init__(self):
         if not self.segment_id or len(self.segment_id) > 128 or '/' in self.segment_id:
             raise ValueError('segment_id must be a bounded opaque document ID')
-        if self.outcome not in {'success', 'silence', 'no_recoverable_speech'}:
+        if self.outcome not in WORK_OUTCOMES:
             raise ValueError('unsupported batch result outcome')
         if not self.result_uri or len(self.result_uri.encode()) > 2048:
             raise ValueError('result_uri must be a bounded durable encrypted reference')
@@ -129,7 +134,7 @@ class RecoveryWork:
     reason: str = 'empty_asr'
 
     def __post_init__(self):
-        if self.reason not in {'empty_asr', 'no_owned_words'}:
+        if self.reason not in EMPTY_WORKER_REASONS:
             raise ValueError('closed empty worker reason required')
         if self.padded_retry is None and self.padded_retry_empty:
             object.__setattr__(self, 'padded_retry', 'empty')

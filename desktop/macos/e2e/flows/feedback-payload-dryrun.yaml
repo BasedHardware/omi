@@ -1,7 +1,7 @@
 version: 2
 name: feedback-payload-dryrun
 tier: 2
-description: SET-02 — assemble the feedback report payload via the shared builders without submitting to Sentry
+description: SET-02 — assemble the feedback report payload via the shared builders without submitting anywhere
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/FeedbackView.swift
@@ -13,15 +13,15 @@ preconditions:
 
 steps:
   - id: S1
-    name: Dry-run uses the privacy-safe report title, no Sentry capture
+    name: Dry-run uses the privacy-safe report title, no cloud submission
     bridge.action:
       name: dump_feedback_payload_dryrun
       params:
         message: "[[MARKER:set02-dryrun]]"
     expect:
-      result.detail.sentry_message: "User Report"
-      result.detail.sentry_capture_invoked: "false"
-      result.detail.would_submit_to_sentry: "false"
+      result.detail.report_title: "User Report"
+      result.detail.cloud_submission_invoked: "false"
+      result.detail.would_submit_to_cloud: "false"
       result.detail.diagnostics_filename: "desktop_diagnostics.json"
 
   - id: S2
@@ -29,12 +29,13 @@ steps:
     bridge.action:
       name: dump_feedback_payload_dryrun
     expect:
-      result.detail.sentry_message: "User Report"
-      result.detail.sentry_capture_invoked: "false"
+      result.detail.report_title: "User Report"
+      result.detail.cloud_submission_invoked: "false"
+      result.detail.would_submit_to_cloud: "false"
 
   - id: S3
     name: No real feedback submission was logged
     log.expect:
       absent:
-        - "User report submitted to Sentry"
+        - "User report saved locally"
         - "DesktopAutomationBridge: failed"

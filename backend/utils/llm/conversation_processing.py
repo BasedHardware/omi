@@ -1,3 +1,4 @@
+from dataclasses import replace
 import asyncio
 import json
 import logging
@@ -39,9 +40,7 @@ if TYPE_CHECKING:
 
 from utils.llm.conversation_notes_prompts import (
     ACTION_ITEM_EXTRACTION_RULES,
-    conversation_notes_volatile_instructions as _conversation_notes_volatile_instructions,
     conversation_notes_static_instructions as _conversation_notes_static_instructions,
-    conversation_note_density,
 )
 from utils.conversations.wake_word import (
     WAKE_WORD_DISCARD_PROMPT_RULES,
@@ -52,7 +51,6 @@ from utils.conversations.relevance_rules import KEEP_WORD_COUNT, transcript_word
 from utils.conversations.summary_selection import render_sections_markdown
 from utils.llm.action_item_normalization import normalize_action_item_due_dates as _normalize_action_item_due_dates
 from utils.llm.meeting_notes_rich_prompts import NotesFrameImage, rich_static_instructions, screen_frames_message
-from utils.llm.meeting_notes_rich_prompts import rich_volatile_instructions
 from utils.llm.conversation_title_people import general_title_static_instructions, title_people_block
 from utils.llm.meeting_notes_presentation import (
     enforce_conversation_note_presentation,
@@ -65,7 +63,12 @@ from utils.llm.meeting_notes_validation import (
     validate_rich_meeting_notes,
     validate_structured_source_segment_ids,
 )
+from config.refactor_modes import serving_for
+from utils.llm.notes_packet import PACKET_RULES, select_notes_packet, _local_started_at_iso
+from utils.llm.notes_output_contract import finish_notes_contract, OUTPUT_RULES
+from utils.llm.notes_output import NotesOutput
 from utils.llm.notes_observability import current_run, observe_notes
+from utils.llm.notes_effort import bind_notes_effort
 
 try:
     from utils.llm.notes_agent_serving import agentic_notes_payload as _serve_agentic_notes
@@ -269,21 +272,6 @@ Content:
 # =============================================
 
 
-def _local_started_at_iso(started_at: datetime, tz: Optional[str]) -> str:
-    """Render the capture time as the user's local wall-clock for prompt date context (#4773).
-
-    The LLM is unreliable at converting UTC to the user's timezone, which mislabels the time of day
-    in titles and overviews. Convert deterministically here instead. Naive datetimes are treated as
-    UTC; a missing or invalid timezone falls back to UTC.
-    """
-    try:
-        user_tz = ZoneInfo(tz) if tz else timezone.utc
-    except Exception:  # noqa: BLE001 - any unknown/invalid tz falls back to UTC
-        user_tz = timezone.utc
-    aware = started_at if started_at.tzinfo is not None else started_at.replace(tzinfo=timezone.utc)
-    return aware.astimezone(user_tz).replace(tzinfo=None).isoformat()
-
-
 # Notes must use the foreground structure budget, not the gateway's background
 # first-byte deadline. The owning feature route declares it in model_config.
 CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
@@ -316,6 +304,9 @@ CONVERSATION_STRUCTURE_TIMEOUT_SECONDS = FOREGROUND_REQUEST_TIMEOUT_SECONDS
 # at two attempts plus one inter-attempt delay bound (3x).
 NOTES_LOOP_DEADLINE_SECONDS = 3 * CONVERSATION_STRUCTURE_TIMEOUT_SECONDS
 # Screen-OCR rows already parsed from the context are a follow-up; this gate counts frames only.
+# The gate counts approved frames available (`screen_frame_count` from the wiring),
+# never the attached-image budget: MAX_NOTES_FRAME_IMAGES caps attached images at
+# four, so counting images alone kept this >=5 threshold unreachable.
 _NOTES_TIER_MIN_WORDS = 1500
 _NOTES_TIER_MIN_SCREEN_FRAMES = 5
 
@@ -449,12 +440,17 @@ def _get_shaped_conversation_notes(
     context = prefix.shaped_context or ('FULL TRANSCRIPT\n' + prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     words = _word_count(context)
     rich_mode = kwargs.get('rich_context_enabled', False)
-    screen_count = len(frames)
+    # Approved-frame volume, not attached images: reads can fail or hit the budget
+    # cap, and the escalation gate must still see the screen-heavy meeting.
+    screen_count = max(kwargs.get('screen_frame_count') or 0, len(frames))
     escalated, escalation_reason = _shaped_notes_tier(words, screen_count)
     _record_shaped_notes_tier(escalated, escalation_reason, words, screen_count)
     if not prefix.has_usable_content and not frames:
         return Structured()
     mount = notes_mount()
+    from utils.llm.action_item_v2 import instructions_for
+
+    mount = replace(mount, instructions=instructions_for(uid, mount.instructions))
     evidence = [
         {
             'role': 'user',
@@ -467,6 +463,10 @@ def _get_shaped_conversation_notes(
                     'account_owner_name': prefix.account_owner_name or next(iter(prefix.owner_names), None),
                     'open_tasks': kwargs.get('existing_action_items') or [],
                     'capture_evidence': context,
+                    # The background pack plus owner-confirmed corrections the agentic
+                    # writer gets as `background`; without this key the one-shot path
+                    # silently dropped both whenever the agent lane was unavailable.
+                    **({'meeting_context': kwargs['meeting_context']} if kwargs.get('meeting_context') else {}),
                     **({'known_spellings': prefix.known_spellings} if prefix.known_spellings else {}),
                     **({'title_people': title_people_block(prefix)} if not rich_mode else {}),
                 },
@@ -475,6 +475,13 @@ def _get_shaped_conversation_notes(
             ),
         }
     ]
+    legacy_packet = json.loads(evidence[0]['content'])
+    packet = select_notes_packet(
+        legacy_packet, prefix=prefix, uid=uid, capture_evidence=context, words=words, inputs=kwargs
+    )
+    if serving_for('NOTES_PACKET_V2_MODE', uid):
+        evidence[0]['content'] = json.dumps(packet, ensure_ascii=False, default=str)
+        mount = replace(mount, instructions=mount.instructions + '\n\n' + PACKET_RULES + '\n\n' + OUTPUT_RULES)
     if frames:
         evidence.append(screen_frames_message(frames))
     # The notes lane can be Anthropic (main default); it rejects both
@@ -489,12 +496,22 @@ def _get_shaped_conversation_notes(
     )
     if agent_payload is not None:
         return _finish_shaped_notes(
-            AgentNotesSubmission.model_validate(agent_payload).to_structured(), prefix, rich_mode, kwargs['tz']
+            (NotesOutput if serving_for('NOTES_PACKET_V2_MODE', uid) else AgentNotesSubmission)
+            .model_validate(agent_payload)
+            .to_structured(),
+            prefix,
+            rich_mode,
+            kwargs['tz'],
+            uid=uid,
+            words=words,
+            inputs=kwargs,
         )
-    extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
+    extraction_parser = PydanticOutputParser(
+        pydantic_object=NotesOutput if serving_for('NOTES_PACKET_V2_MODE', uid) else StructuredExtraction
+    )
     format_instructions = extraction_parser.get_format_instructions()
     static_instructions = mount.instructions + '\n\n' + format_instructions
-    if not rich_mode:
+    if not rich_mode and not serving_for('NOTES_PACKET_V2_MODE', uid):
         static_instructions = general_title_static_instructions(mount.instructions, format_instructions)
     mount = Mount(
         instructions=static_instructions,
@@ -503,14 +520,9 @@ def _get_shaped_conversation_notes(
 
     async def invoke():
         async with isolated_notes_model(model) as isolated_model:
-            # After isolation so the cloner still sees the notes model. Unsupported
-            # models stay unbound and keep their own options. Lazy import: the
-            # episode writer module is heavy and some file-loading test harnesses
-            # exec this module with stubbed dependencies.
+            # Isolate first so the cloner sees the notes model; unsupported models keep their options.
             if escalated:
-                from utils.llm.episode_writer import bind_episode_effort
-
-                call_model = bind_episode_effort(isolated_model, 'xhigh')
+                call_model = bind_notes_effort(isolated_model, 'xhigh')
             else:
                 call_model = isolated_model
 
@@ -524,16 +536,23 @@ def _get_shaped_conversation_notes(
             return await run_loop(mount, evidence, model_turn)
 
     result = asyncio.run(invoke())
-    structured = StructuredExtraction.model_validate(result.value).to_structured()
-    return _finish_shaped_notes(structured, prefix, rich_mode, kwargs['tz'])
+    output_schema = NotesOutput if serving_for('NOTES_PACKET_V2_MODE', uid) else StructuredExtraction
+    structured = output_schema.model_validate(result.value).to_structured()
+    return _finish_shaped_notes(structured, prefix, rich_mode, kwargs['tz'], uid=uid, words=words, inputs=kwargs)
 
 
 def _finish_shaped_notes(
-    structured: Structured, prefix: ConversationPromptPrefix, rich_mode: bool, tz: Optional[str]
+    structured: Structured,
+    prefix: ConversationPromptPrefix,
+    rich_mode: bool,
+    tz: Optional[str],
+    *,
+    uid: Optional[str] = None,
+    words: int = 0,
+    inputs: Optional[dict] = None,
 ) -> Structured:
-    # A one-turn mount cannot buy the legacy presentation revision call.
-    enforce_static_conversation_note_presentation(
-        structured, prefix.transcript_segment_ids, title_people=() if rich_mode else prefix.title_people
+    structured = finish_notes_contract(
+        structured, prefix=prefix, uid=uid, words=words, rich_mode=rich_mode, inputs=inputs or {}
     )
     now = datetime.now(timezone.utc)
     try:
@@ -638,97 +657,10 @@ Task: {app.memory_prompt}'''
     return content
 
 
-class SuggestedAppsSelection(BaseModel):
-    suggested_apps: List[str] = Field(
-        description='List of up to 3 app IDs that are most suitable for processing this conversation, ordered by relevance. Empty list if none are suitable.'
-    )
-    reasoning: str = Field(
-        description='Brief explanation of why these apps were selected based on the conversation content.'
-    )
-
-
 class BestAppSelection(BaseModel):
     app_id: str = Field(
         description='The ID of the best app for processing this conversation, or an empty string if none are suitable.'
     )
-
-
-def get_suggested_apps_for_conversation(conversation: Conversation, apps: List[App]) -> Tuple[List[str], str]:
-    """
-    Get top 3 suggested apps for the given conversation based on its structured content
-    and the specific task/outcome each app provides.
-    Returns tuple of (suggested_app_ids, reasoning)
-    """
-    if not apps:
-        return [], "No apps available"
-
-    if not conversation.structured:
-        return [], "No structured content available"
-
-    structured_data = conversation.structured
-    conversation_details = f"""
-    Title: {structured_data.title or 'N/A'}
-    Category: {structured_data.category.value if structured_data.category else 'N/A'}
-    Overview: {structured_data.overview or 'N/A'}
-    Action Items: {ActionItem.actions_to_string(structured_data.action_items) if structured_data.action_items else 'None'}
-    Events Mentioned: {Event.events_to_string(structured_data.events) if structured_data.events else 'None'}
-    """
-
-    apps_xml = "<apps>\n"
-    for app in apps:
-        apps_xml += f"""  <app>
-    <id>{app.id}</id>
-    <name>{app.name}</name>
-    <description>{app.description}</description>
-    <memory_prompt>{app.memory_prompt}</memory_prompt>
-  </app>\n"""
-    apps_xml += "</apps>"
-
-    prompt = f"""
-    You are an expert app recommendation system. Your goal is to suggest the top 3 most suitable apps for processing the given conversation based on the conversation's structured content and each app's specific capabilities.
-
-    <conversation_details>
-    {conversation_details.strip()}
-    </conversation_details>
-
-    <available_apps>
-    {apps_xml.strip()}
-    </available_apps>
-
-    Task:
-    1. Analyze the conversation's structured content: title, category, overview, action items, and events.
-    2. For each app, evaluate how well its description and memory_prompt align with the conversation's content and themes.
-    3. Consider the potential value and relevance of each app's output for this specific conversation.
-    4. Select up to 3 apps that would provide the most meaningful and valuable analysis, ordered by relevance (most relevant first).
-
-    Selection Criteria:
-    - **Content Alignment**: App's purpose should directly relate to the conversation's topics, category, or themes
-    - **Value Potential**: App should be able to extract meaningful insights from this specific conversation
-    - **Specificity**: Prefer apps with specific, targeted functionality over generic ones
-    - **Actionability**: Prioritize apps that can provide actionable insights or useful analysis
-
-    Quality Standards:
-    - Only suggest apps that have clear relevance to the conversation content
-    - If fewer than 3 apps are truly suitable, suggest only the relevant ones
-    - If no apps are genuinely suitable, return an empty list
-    - Do not force matches - quality over quantity
-
-    Provide your suggestions with brief reasoning explaining why these apps are most suitable for this conversation.
-    """
-
-    try:
-        with_parser = get_llm('conv_app_select').with_structured_output(SuggestedAppsSelection)
-        response: SuggestedAppsSelection = cast(SuggestedAppsSelection, with_parser.invoke(prompt))
-
-        # Validate that suggested app IDs exist in the available apps
-        valid_app_ids = {app.id for app in apps}
-        suggested_apps = [app_id for app_id in response.suggested_apps if app_id in valid_app_ids]
-
-        return suggested_apps, response.reasoning
-
-    except Exception as e:
-        logger.error(f"Error getting suggested apps: {e}")
-        return [], f"Error in app suggestion: {str(e)}"
 
 
 def select_best_app_for_conversation(conversation: Conversation, apps: List[App]) -> Optional[App]:

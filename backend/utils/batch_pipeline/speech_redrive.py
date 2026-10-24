@@ -1,5 +1,7 @@
 """One explicit operator-paid epoch, with create-only output reconciliation."""
 
+from utils.observability.stt_cap_dispatch import DispatchPath, DispatchReason, record_decision
+
 from dataclasses import fields
 import time
 
@@ -21,6 +23,7 @@ from utils.batch_pipeline.recovery_disposition import (
     padded_empty,
     padded_skipped,
 )
+from utils.batch_pipeline.admission import admitted_as_byok
 from utils.stt_cap_dispatch import sync_allowed, funded_allowance
 from utils.observability.fallback import record_fallback
 from utils.observability.stt_cap_dispatch import record_audio
@@ -35,6 +38,7 @@ def redrive_one(
     expected_recovery,
     *,
     server_flags,
+    silent=False,
     clock=time.time,
     stt=transcribe,
     gpu_padded_retry_empty=False
@@ -53,7 +57,7 @@ def redrive_one(
         return 'disabled'
     protocol = SpeechRedriveStore(store, server_flags=server_flags)
     job = protocol.prepare(
-        sid, uid, plan_digest, expected_recovery, clock(), gpu_padded_retry_empty=gpu_padded_retry_empty
+        sid, uid, plan_digest, expected_recovery, clock(), gpu_padded_retry_empty=gpu_padded_retry_empty, silent=silent
     )
     marker = job['speech_redrive']
     token = marker['token']
@@ -86,7 +90,9 @@ def redrive_one(
     _, _, spans = inspect_audio(item, audio)
     if not spans:
         raise RecoveryFailure('strict_vad', 'no_speech')
-    if not sync_allowed(uid, item.duration_seconds, 'modulate', lane='batch'):
+    if admitted_as_byok(job):
+        record_decision(DispatchPath.SPEECH_REDRIVE, True, DispatchReason.BYOK)
+    elif not sync_allowed(uid, item.duration_seconds, 'modulate', lane='batch', path=DispatchPath.SPEECH_REDRIVE):
         return 'allowance_held'
     # Check deployment dependencies before spending the sole intent. No fallback
     # to Parakeet is permitted if the alternate provider is unconfigured.

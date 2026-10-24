@@ -720,7 +720,9 @@ def test_asgi_disabled_recovery_is_retryable_without_spending_intent(setup, monk
     response = TestClient(app).post(
         '/v2/batch-pipeline/recover-quarantine', json={'stage': 'prod', 'segment_id': 'bad'}
     )
-    assert response.status_code == 503
+    # Contract (d): retryable means 409 retry (Cloud Tasks retries any non-2xx); 503 throttles the queue.
+    assert response.status_code == 409
+    assert response.json() == {'status': 'retry', 'reason': 'kill_switch_off'}
     assert row(client)['recovery_state'] == 'prepared'
     stt.assert_not_called()
     artifacts.fetch_audio.assert_not_called()
@@ -1534,3 +1536,25 @@ def test_lost_base_charge_lands_after_a_newer_partial_step(setup, monkeypatch):
     assert projector.complete_held(binding) is not None
     assert ledger_row(client, binding)['usage_steps'] == [0.0, 3, 5]
     assert landed == {'content': 3000, 'content:3000': 2000}
+
+
+@pytest.mark.parametrize('access', ['capped', 'byok', 'reviewer', 'paid', 'kill_off'])
+def test_default_on_quarantine_allowance_preserves_custody_and_funding(setup, monkeypatch, access):
+    from utils import stt_cap_dispatch as cap
+
+    client, store, binding, artifacts, stt, recovery = setup
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if access == 'kill_off' else 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('LADDER_V1_BUDGET_ENFORCEMENT_ENABLED', 'false')
+    if access == 'byok':
+        row(client)['policy'] = {'provider_reason': 'byok'}
+    resolver = Mock(
+        return_value=SimpleNamespace(managed=access in {'reviewer', 'paid'}, reason='plan_allowance_exhausted')
+    )
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+    result = recovery.recover('bad', binding.owner_id)
+    assert stt.call_count == (0 if access == 'capped' else 1)
+    if access == 'capped':
+        assert result == 'held' and row(client)['recovery_state'] == 'prepared'
+    if access in {'byok', 'kill_off'}:
+        resolver.assert_not_called()

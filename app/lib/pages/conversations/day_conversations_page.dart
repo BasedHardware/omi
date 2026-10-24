@@ -23,6 +23,22 @@ typedef DayConversationsFetcher = Future<({List<ServerConversation> items, bool 
   int offset,
 });
 
+/// The server's conversations for a day, decoded row by row: one malformed conversation must not
+/// hide every other valid row behind an error. Rejected rows surface as partial data instead.
+DayConversationsFetcher fetchDayConversations(ConversationApi api) =>
+    ({required endDate, limit = 50, offset = 0, required startDate}) async {
+      final result =
+          await api.list(limit: limit, offset: offset, includeDiscarded: false, startDate: startDate, endDate: endDate);
+      return switch (result) {
+        ApiSuccess(:final data, :final truncated, :final rejectedRows) => (
+            items: data,
+            ok: true,
+            truncated: truncated || rejectedRows > 0,
+          ),
+        ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false),
+      };
+    };
+
 (DateTime start, DateTime end) dayDateBounds(DateTime day) {
   final start = DateTime(day.year, day.month, day.day);
   return (start, DateTime(day.year, day.month, day.day + 1).subtract(const Duration(microseconds: 1)));
@@ -57,23 +73,7 @@ class _DayConversationsPageState extends State<DayConversationsPage> {
 
   late final ConversationApi _api = ConversationApi(baseUrl: Env.apiBaseUrl ?? '');
 
-  DayConversationsFetcher get _fetch =>
-      widget.fetchConversations ??
-      ({required endDate, limit = 50, offset = 0, required startDate}) async {
-        // Row-by-row decode: one malformed conversation must not hide every
-        // other valid row for the day behind an error. Rejected rows surface
-        // as partial data instead.
-        final result = await _api.list(
-            limit: limit, offset: offset, includeDiscarded: false, startDate: startDate, endDate: endDate);
-        return switch (result) {
-          ApiSuccess(:final data, :final truncated, :final rejectedRows) => (
-              items: data,
-              ok: true,
-              truncated: truncated || rejectedRows > 0,
-            ),
-          ApiFailure() => (items: <ServerConversation>[], ok: false, truncated: false),
-        };
-      };
+  DayConversationsFetcher get _fetch => widget.fetchConversations ?? fetchDayConversations(_api);
 
   @override
   void initState() {

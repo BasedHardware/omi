@@ -155,4 +155,31 @@ describe('useConversations', () => {
     expect(result.current.loading).toBe(false);
     expect(getConversations).toHaveBeenCalledTimes(2);
   });
+
+  it("clears the previous filter's conversations when switching to an uncached filter", async () => {
+    const { result, rerender } = renderHook(
+      ({ folderId }: { folderId: string }) => useConversations({ limit: 50, folderId }),
+      { initialProps: { folderId: 'home' } },
+    );
+    await waitFor(() => expect(result.current.conversations).toHaveLength(50));
+
+    let rejectWork!: (error: Error) => void;
+    vi.mocked(getConversations).mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectWork = reject;
+        }) as never,
+    );
+
+    rerender({ folderId: 'work' });
+    expect(result.current.conversations).toEqual([]);
+    expect(result.current.loading).toBe(true);
+
+    await act(async () => {
+      rejectWork(new Error('Network error'));
+    });
+
+    expect(result.current.error).toBe('Network error');
+    expect(result.current.conversations).toEqual([]);
+  });
 });

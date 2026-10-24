@@ -8,6 +8,7 @@ Policy handovers do not consume transport-failure episode allowances.
 import asyncio
 
 from config.live_demand import resolve_live_demand
+from config.live_stt_replay import replay_prefix_margin_seconds
 from config.rollout_cohorts import warm_rollout_cohorts
 from utils.observability.fallback import record_fallback
 from utils.stt.live_failure import PendingLiveFailover, live_stt_socket_is_dead, live_stt_terminal_reason
@@ -121,6 +122,10 @@ async def switch_live_demand(receiver, lane: str) -> bool:
         replay = ring.snapshot() if ring is not None else ()
         replay_seconds = sum(len(data) for _, data in replay) / (2 * host.request.sample_rate)
         prefix_budget = min(replay_delivery.REPLAY_PREFIX_SECONDS, candidate_recovery.remaining() or 0)
+        # A handover replays the whole unanswered ring uncut, so the same
+        # margin the failure path holds back from its snapshot bounds what a
+        # healthy source may hand over; past it, keep serving rather than cut.
+        prefix_budget = max(0.0, prefix_budget - replay_prefix_margin_seconds())
         if replay_seconds > prefix_budget * limits.rate:
             raw.retire_for_replay()
             await abort_replay_socket(raw)

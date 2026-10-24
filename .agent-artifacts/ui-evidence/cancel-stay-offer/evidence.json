@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-cancel-stay-offer.png",
+      "platform": "mobile-ios",
+      "description": "Last cancel step with the stay offer: $14.99 a month for 3 months, Stay for 50% off as the primary button (simulator, sample offer)",
+      "captured_by": "agent",
+      "source": "screencapture"
+    }
+  ]
+}

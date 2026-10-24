@@ -31,7 +31,7 @@ typedef UploadTelemetryEmitter = void Function(String eventName, Map<String, dyn
 typedef UploadAttemptIdFactory = String Function();
 typedef UploadClock = DateTime Function();
 
-/// Account-global admission gate for every `/v2/sync-local-files` upload.
+/// Account-global admission gate for every `custody upload` upload.
 ///
 /// Uploads are serialized so independent WAL, live-capture, and Transcribe
 /// Later loops cannot race past a newly established cooldown. Persisted fair-

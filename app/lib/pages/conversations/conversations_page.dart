@@ -13,10 +13,10 @@ import 'package:omi/pages/held_audio/held_audio_views.dart';
 import 'package:omi/pages/on_device/on_device_queue_banner.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banner.dart';
-import 'package:omi/pages/conversations/widgets/speaker_tag_prompt_card.dart';
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
-import 'package:omi/backend/schema/pending_work.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
+import 'live_episode_visibility.dart';
+import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -30,6 +30,8 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/backend/http/api_presentation.dart';
 import 'package:omi/backend/http/conversation_api_contract.dart';
 import 'package:omi/pages/conversations/widgets/conversations_group_widget.dart';
+import 'package:omi/pages/conversations/background_conversations.dart';
+import 'package:omi/pages/conversations/widgets/processing_conversation_row.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
@@ -48,7 +50,7 @@ String _conversationDateRangeLabel(BuildContext context, DateTime start, DateTim
   return '${dates.date(start)} – ${dates.date(end)}';
 }
 
-enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, conversation, recording, groupSpacer }
+enum _ConversationListRowKind { topSpacer, dateHeader, liveEpisode, processing, conversation, recording, groupSpacer }
 
 typedef _ConversationListRow = ({
   _ConversationListRowKind kind,
@@ -254,18 +256,39 @@ List<_ConversationListRow> _withTodayRow(List<_ConversationListRow> rows, DateTi
   ];
 }
 
-/// Conversations offline sync is still adding audio to, with how much: the server's pending sync
-/// jobs that name their target conversation.
-Map<String, int> _fillingSeconds(List<PendingWorkItem> pending) {
-  final filling = <String, int>{};
-  for (final item in pending) {
-    if (item.kind != 'sync_job' || item.state == 'summarizing' || item.conversationIds.length != 1) continue;
-    final seconds = item.durationSeconds ?? 0;
-    if (seconds <= 0) continue;
-    filling.update(item.conversationIds.single, (v) => v + seconds, ifAbsent: () => seconds);
-  }
-  return filling;
+/// One row per conversation still processing, right under Today's live row: the conversation the
+/// person just ended (Wrap up, a pendant double-tap) shows at once, then turns into its own row.
+List<_ConversationListRow> _withProcessingRows(
+    List<_ConversationListRow> rows, List<ServerConversation> processing, DateTime now) {
+  if (processing.isEmpty) return rows;
+  final marked = _withTodayRow(rows, now, _ConversationListRowKind.processing);
+  final at = marked.indexWhere((r) => r.kind == _ConversationListRowKind.processing);
+  if (at < 0) return rows;
+  final slot = marked[at];
+  return [
+    ...marked.take(at),
+    for (var i = 0; i < processing.length; i++)
+      (
+        kind: _ConversationListRowKind.processing,
+        date: slot.date,
+        isFirst: slot.isFirst && i == 0,
+        conversation: processing[i],
+        recording: null,
+        conversationIndex: -1,
+      ),
+    ...marked.skip(at + 1),
+  ];
 }
+
+/// [byDate] without the conversations Home leaves to the daily recap (background notes,
+/// David 2026-10-23). Days left empty drop out when the rows are built.
+Map<DateTime, List<ServerConversation>> _withoutBackground(Map<DateTime, List<ServerConversation>> byDate) => {
+      for (final entry in byDate.entries)
+        entry.key: [
+          for (final c in entry.value)
+            if (!leftToDailyRecap(c)) c
+        ],
+    };
 
 bool _isLockedRow(List<_ConversationListRow> rows, int index) =>
     index >= 0 &&
@@ -542,13 +565,16 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
     final episodesOn = episodes?.enabled == true;
     final streaming = context.select<CaptureProvider, bool>((c) => EpisodePresentation.streamingSource(c) != null);
     final episodeLive = episodesOn && streaming;
-    final hiddenByLive = episodeLive ? episodes!.liveConversationIds : const <String>{};
-    final filling = episodesOn ? _fillingSeconds(_pendingWork.pending) : const <String, int>{};
+    final filling = episodesOn ? fillingSeconds(_pendingWork.pending) : const <String, int>{};
     return Selector2<ConversationProvider, LocalRecordingsProvider, _ConversationPageSnapshot>(
       selector: (_, conversationProvider, recordingsProvider) =>
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
+        final hiddenByLive = episodeLive
+            ? hiddenLiveConversations(episodes!.liveConversationIds, snapshot.conversations,
+                serving: ClientRefactorFlags.serving)
+            : const <String>{};
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
@@ -592,13 +618,19 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                       if (!hiddenByLive.contains(c.id)) c
                   ],
               };
+        // Episodes beta, default view: background conversations live in the day's recap, not on Home.
+        final hidingBackground = episodesOn && showRecordings && !convoProvider.isSelectionModeActive;
         final builtRows = _buildConversationListRows(
           dates: mergedDates,
-          conversationsByDate: conversationsByDate,
+          conversationsByDate: hidingBackground ? _withoutBackground(conversationsByDate) : conversationsByDate,
           recordingsByDate: recordingsByDate,
         );
-        final conversationRows =
+        final withLive =
             episodeLive ? _withTodayRow(builtRows, DateTime.now(), _ConversationListRowKind.liveEpisode) : builtRows;
+        // Only the default view: a search or folder shows what it matched.
+        final conversationRows = showRecordings && !convoProvider.isSelectionModeActive
+            ? _withProcessingRows(withLive, snapshot.processingConversations, DateTime.now())
+            : withLive;
 
         return RefreshIndicator(
           onRefresh: () async {
@@ -631,7 +663,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
               // Review absorbs the voice prompts; the old card shows only while Review is off.
-              const SliverToBoxAdapter(child: ReviewEntryCard(fallback: SpeakerTagPromptCard())),
+              const SliverToBoxAdapter(child: ReviewEntryCard()),
               SliverToBoxAdapter(
                 child: widget.loadRecaps == null
                     ? HomeDailyRecaps(key: _recapsKey)
@@ -747,6 +779,15 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           children: [
                             if (row.isFirst) DateListItem(date: row.date, isFirst: true),
                             const LiveEpisodeRow(),
+                          ],
+                        );
+                      case _ConversationListRowKind.processing:
+                        return Column(
+                          key: ValueKey('processing_${row.conversation!.id}'),
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            if (row.isFirst) DateListItem(date: row.date, isFirst: true),
+                            ProcessingConversationRow(conversation: row.conversation!),
                           ],
                         );
                       case _ConversationListRowKind.conversation:

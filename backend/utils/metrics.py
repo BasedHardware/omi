@@ -762,6 +762,11 @@ MEETING_NOTES_EVIDENCE_WAIT_TOTAL = Counter(
     ['outcome'],
 )
 
+CONVERSATION_ORPHANED_UNFINALIZED = Counter(
+    'omi_conversation_orphaned_unfinalized',
+    'Quiet content-bearing conversations observed without a finalization job and with no live recording lease',
+)
+
 LISTEN_FINALIZATION_RETRIES_TOTAL = Counter(
     'listen_finalization_retries_total',
     'Durable listen finalization jobs replayed by the reconciler',
@@ -937,6 +942,12 @@ OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL = Counter(
     'omi_sync_transcription_job_total',
     'Terminal semantic outcomes for sync transcription jobs',
     ['provider', 'model', 'lane', 'outcome', 'deployment_version'],
+)
+
+OMI_SYNC_EMPTY_SUCCESS_GUARD_TOTAL = Counter(
+    'omi_sync_empty_success_guard_total',
+    'Zero-word sync segment dispositions at the silence decision, by provider and reason',
+    ['provider', 'reason'],
 )
 
 OMI_SYNC_BRIDGE_RETRACTION_TOTAL = Counter(

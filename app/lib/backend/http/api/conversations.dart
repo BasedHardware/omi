@@ -1348,3 +1348,17 @@ Future<MergeConversationsResponse?> mergeConversations(List<String> conversation
     return null;
   }
 }
+
+/// Creates the "Get Started with Omi" conversation that opens the `pocket` onboarding's Home.
+/// Idempotent on the server; false on any failure (Home then simply starts empty).
+Future<bool> seedOnboardingConversation() async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/onboarding/seed-conversation',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null) return false;
+  Logger.debug('seedOnboardingConversation: ${response.statusCode}');
+  return response.statusCode == 200 || response.statusCode == 201;
+}

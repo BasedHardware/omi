@@ -53,8 +53,11 @@ import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_continuity_monitor.dart';
 import 'package:omi/services/capture/empty_recording_notice.dart';
+import 'package:omi/services/capture/live_finalize_gate.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/capture/speaker_suggestions.dart';
+import 'package:omi/backend/schema/capture_committed_event.dart';
+import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/services/capture/manual_live_labels.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
@@ -97,6 +100,7 @@ import 'package:omi/backend/schema/message_event.dart'
         SegmentsDeletedEvent,
         SttCapLiveHeldEvent;
 
+part 'capture_speaker_events.dart';
 part 'capture_uplink_policy.dart';
 part 'capture_live_recovery.dart';
 part 'capture_continuity_watch.dart';
@@ -968,6 +972,7 @@ class CaptureController extends ChangeNotifier
   int _voiceCommandSubmissionGeneration = 0;
   bool _voiceCommandStartedDuringOnboarding = false;
   bool _isProcessingButtonEvent = false; // Guard to prevent overlapping button operations
+  final LiveFinalizeGate _finalizeGate = LiveFinalizeGate();
   Timer? _voiceCommandTimeoutTimer; // 15s auto-end timer for voice questions
   static const Duration _voiceCommandAutoSubmitGrace = Duration(seconds: 2);
 
@@ -2059,8 +2064,10 @@ class CaptureController extends ChangeNotifier
         }
       } else {
         // End conversation and process (default)
+        if (!_finalizeGate.allowsDoubleTap) return;
         Logger.debug("Double tap: processing conversation");
         PlatformManager.instance.analytics.omiDoubleTap(feature: 'process_conversation');
+        HapticFeedback.lightImpact(); // The tap's only feedback on the phone until the processing row.
         forceProcessingCurrentConversation();
       }
       return;
@@ -2377,7 +2384,7 @@ class CaptureController extends ChangeNotifier
         _capture.stagedReadModel.callActive) {
       return;
     }
-    await _wal.getSyncs().phone.onAudioCodecChanged(codec, deviceInfo: (id: deviceId, model: device.modelNumber));
+    await _wal.getSyncs().phone.configureDeviceAudio(codec, deviceId, device);
     await _saveNativeBleStreamConfig(device, codec);
     if (_deviceIdentityStale(deviceRevision) || !_capture.stagedReadModel.pendantOwns) return;
     await _setIngressAuthorized(!_preferences.capturePolicy.muted);
@@ -3694,6 +3701,14 @@ class CaptureController extends ChangeNotifier
       return;
     }
 
+    if (event is CaptureCommittedEvent) {
+      final phone = _wal.getSyncs().phone;
+      if (phone is LocalWalSyncImpl)
+        unawaited(phone.recordCaptureCommitted(event).catchError((Object _) {
+          Logger.debug('event=refactor_shadow lane=L5 check=custody_commit outcome=error');
+        }));
+      return;
+    }
     if (event is SpeakerLabelSuggestionEvent) {
       _handleSpeakerLabelSuggestionEvent(event);
       return;
@@ -3786,6 +3801,8 @@ class CaptureController extends ChangeNotifier
     // Add the placeholder before reset so a concurrent rebuild cannot drop it.
     final placeholderOwner = ++_processingPlaceholderOwner;
     externalActions.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
+    _finalizeGate.markFinalized();
+    externalActions.onLiveFinalized(); // The live episode closes; the next counts from now.
 
     await phoneSync.finalizeCurrentSession();
     if (lifetime.isClosed ||
@@ -4150,47 +4167,6 @@ class CaptureController extends ChangeNotifier
     taggingSegmentIds.removeWhere((id) => event.segmentIds.contains(id));
     hasTranscripts = segments.isNotEmpty;
     _segmentsPhotosVersion++;
-    notifyListeners();
-  }
-
-  void _handleSpeakerLabelSuggestionEvent(SpeakerLabelSuggestionEvent event) {
-    switch (reconcileSpeakerSuggestion(event, segments, taggingSegmentIds, suggestionsBySegmentId)) {
-      case SpeakerSuggestionDisposition.ignored:
-        return;
-      case SpeakerSuggestionDisposition.retained:
-        notifyListeners();
-        return;
-      case SpeakerSuggestionDisposition.assignment:
-        break;
-    }
-
-    // Add backend-created person to local cache for UI display (backward compatibility)
-    final isUser = event.personId == 'user';
-    if (!isUser && event.personId.isNotEmpty && _preferences.getPersonById(event.personId) == null) {
-      _preferences.addCachedPerson(
-        Person(id: event.personId, name: event.personName, createdAt: DateTime.now(), updatedAt: DateTime.now()),
-      );
-      _peopleRefreshFuture ??= externalActions.refreshPeople().whenComplete(() {
-        _peopleRefreshFuture = null;
-      }).catchError((Object error, StackTrace stack) {
-        Logger.debug('People cache refresh failed: ${error.runtimeType}');
-        return _reportDetachedCaptureError('capture_people_refresh_suggestion', error, stack);
-      });
-    }
-
-    // Auto-apply assignment if backend provided personId (speaker_auto_assign=enabled)
-    if (event.personId.isNotEmpty) {
-      for (var seg in segments) {
-        if (seg.speakerId == event.speakerId &&
-            !seg.isUser &&
-            seg.personId == null &&
-            !taggingSegmentIds.contains(seg.id)) {
-          seg.isUser = isUser;
-          seg.personId = isUser ? null : event.personId;
-        }
-      }
-      _segmentsPhotosVersion++; // Trigger UI rebuild after auto-apply
-    }
     notifyListeners();
   }
 

@@ -79,6 +79,7 @@ def _build_fakes() -> dict[str, ModuleType]:
         return str(uuid.UUID(bytes=seed_hash[:16], version=4))
 
     client_mod.document_id_from_seed = _document_id_from_seed
+    client_mod.run_transactional = MagicMock()
     add("database._client", client_mod)
 
     vector_db = add("database.vector_db", AutoMockModule("database.vector_db"))
@@ -227,7 +228,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     for attr in [
         "get_app_result",
         "should_discard_conversation",
-        "get_suggested_apps_for_conversation",
         "assign_conversation_to_folder",
         "get_conversation_notes",
         "validate_structured_source_segment_ids",
@@ -994,7 +994,7 @@ def _make_mock_app(app_id, name="TestApp"):
     return app
 
 
-def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, available_apps=None):
+def _setup_trigger_apps_mocks(preferred_app_id=None, available_apps=None):
     """Set up the module-level mocks needed by trigger_conversation_apps."""
     import sys
 
@@ -1009,9 +1009,8 @@ def _setup_trigger_apps_mocks(preferred_app_id=None, default_apps=None, availabl
 
     llm_conv_mod = llm_conv
     llm_conv_mod.get_app_result = MagicMock(return_value="App result content")
-    llm_conv_mod.get_suggested_apps_for_conversation = MagicMock(return_value=(["suggested-app"], "reasoning"))
 
-    return llm_conv_mod, default_apps or []
+    return llm_conv_mod
 
 
 def _make_trigger_conversation(suggested_apps=None):
@@ -1025,64 +1024,53 @@ def _make_trigger_conversation(suggested_apps=None):
     return conv
 
 
-def _trigger_apps_context(default_apps=None, availability_app=None):
-    """Context manager that patches all external dependencies of trigger_conversation_apps.
+def _trigger_apps_context(availability_app=None):
+    """Context managers that patch the external dependencies of trigger_conversation_apps.
 
     `availability_app` stands in for `get_available_app_model_by_id` — the
     set-preferred route's availability authority (#10074): None models a
     deleted/inaccessible app; an app object models one the setter admitted even
     though it is outside the enabled-installed slice.
     """
-    suggestion_mock = MagicMock(return_value=(["suggested-app"], "reasoning"))
     app_result_mock = MagicMock(return_value="App result content")
     record_mock = MagicMock()
     return (
-        suggestion_mock,
         app_result_mock,
-        patch.object(process_conversation, "get_default_conversation_summarized_apps", return_value=default_apps or []),
         patch.object(process_conversation, "get_available_apps", return_value=[]),
-        patch.object(process_conversation, "get_suggested_apps_for_conversation", suggestion_mock),
         patch.object(process_conversation, "get_app_result", app_result_mock),
         patch.object(process_conversation, "record_app_usage", record_mock),
         patch.object(process_conversation, "get_available_app_model_by_id", return_value=availability_app),
     )
 
 
-def test_trigger_apps_uses_preferred_app_skips_llm_suggestion():
-    """When user has a valid preferred app, use it and skip the suggestion LLM call."""
+def test_trigger_apps_uses_preferred_app():
+    """When the user has a valid preferred app, it runs."""
     preferred = _make_mock_app("preferred-app-1", "PreferredApp")
     _setup_trigger_apps_mocks(preferred_app_id="preferred-app-1", available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
     # Override get_available_apps to return the preferred app
     p2 = patch.object(process_conversation, "get_available_apps", return_value=[preferred])
 
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps("user-preferred", conv)
 
-    # The suggestion LLM call must NOT have been invoked
-    suggestion_mock.assert_not_called()
     # The preferred app should have been executed
     app_result_mock.assert_called_once()
     # The app result should be stored on the conversation
     assert len(conv.apps_results) == 1
 
 
-def test_trigger_apps_opt_in_only_skips_default_and_suggestion(monkeypatch):
-    """Notes v2 leaves the canonical note as the only default summary path.
-
-    Apps-opt-in is derived from the pipeline mode, not separately configured, so this drives
-    the one rollout switch rather than a second boolean."""
-    suggestion_app = _make_mock_app('suggested-app', 'SuggestedApp')
+def test_trigger_apps_without_preferred_app_runs_nothing(monkeypatch):
+    """Summarization apps are opt-in: with no preferred app, nothing runs automatically."""
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(default_apps=[suggestion_app])
-    with p1, p2, p3, p4, p5, p6:
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps('user-opt-in-only', conv)
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_not_called()
     assert conv.apps_results == []
 
@@ -1092,8 +1080,8 @@ def test_trigger_apps_counts_a_successful_explicit_reprocess_selection(monkeypat
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    with p1, p2, p3, p4, p5 as record_usage, p6:
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
+    with p2, p4, p5 as record_usage, p6:
         process_conversation.trigger_conversation_apps(
             'user-explicit',
             conv,
@@ -1103,7 +1091,6 @@ def test_trigger_apps_counts_a_successful_explicit_reprocess_selection(monkeypat
             usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
         )
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     record_usage.assert_called_once_with(
         'user-explicit',
@@ -1119,9 +1106,9 @@ def test_trigger_apps_does_not_count_non_user_reprocessing(is_reprocess):
     _setup_trigger_apps_mocks(preferred_app_id=preferred.id, available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
-    with p1, p2, p3, p4, p5 as record_usage, p6:
+    with p2, p4, p5 as record_usage, p6:
         process_conversation.trigger_conversation_apps(
             'user-non-selection',
             conv,
@@ -1129,7 +1116,6 @@ def test_trigger_apps_does_not_count_non_user_reprocessing(is_reprocess):
             usage_attribution=process_conversation.AppUsageAttribution.NON_USER_REPROCESS,
         )
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     record_usage.assert_not_called()
 
@@ -1140,12 +1126,11 @@ def test_trigger_apps_opt_in_preferred_app_still_auto_runs(monkeypatch):
     _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps('user-preferred-opt-in', conv)
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     assert len(conv.apps_results) == 1
 
@@ -1156,9 +1141,9 @@ def test_trigger_apps_explicit_selection_execution_failure_is_fail_closed(monkey
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
     app_result_mock.side_effect = RuntimeError('LLM unavailable')
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
             process_conversation.trigger_conversation_apps(
                 'user-explicit',
@@ -1169,7 +1154,6 @@ def test_trigger_apps_explicit_selection_execution_failure_is_fail_closed(monkey
                 usage_attribution=process_conversation.AppUsageAttribution.EXPLICIT_SELECTION,
             )
 
-    suggestion_mock.assert_not_called()
     assert conv.apps_results == []
 
 
@@ -1179,9 +1163,9 @@ def test_trigger_apps_explicit_selection_empty_content_is_fail_closed(monkeypatc
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
     app_result_mock.return_value = '   '
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
             process_conversation.trigger_conversation_apps(
                 'user-explicit',
@@ -1229,8 +1213,8 @@ def test_replace_mode_keeps_other_apps_and_puts_the_selected_result_first():
     conv = _make_trigger_conversation()
     conv.apps_results = _prior_results()
 
-    _suggestion, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    with p1, p2, p3, p4, p5, p6:
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
+    with p2, p4, p5, p6:
         _run_explicit_replace(conv, selected)
 
     app_result_mock.assert_called_once()
@@ -1246,8 +1230,8 @@ def test_legacy_mode_still_wipes_other_apps_results():
     conv = _make_trigger_conversation()
     conv.apps_results = _prior_results()
 
-    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    with p1, p2, p3, p4, p5, p6:
+    _app_result, p2, p4, p5, p6 = _trigger_apps_context()
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps(
             'user-explicit',
             conv,
@@ -1268,12 +1252,12 @@ def test_replace_mode_failure_keeps_every_prior_result_and_fails_closed(failure)
     conv = _make_trigger_conversation()
     conv.apps_results = _prior_results()
 
-    _suggestion, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
     if failure == 'raises':
         app_result_mock.side_effect = RuntimeError('LLM unavailable')
     else:
         app_result_mock.return_value = '   '
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         with pytest.raises(process_conversation.ExplicitAppSelectionFailedError):
             _run_explicit_replace(conv, selected)
 
@@ -1286,8 +1270,8 @@ def test_replace_mode_without_any_app_clears_results_so_the_omi_summary_shows():
     conv = _make_trigger_conversation()
     conv.apps_results = _prior_results()
 
-    _suggestion, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    with p1, p2, p3, p4, p5, p6:
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps(
             'user-plain', conv, is_reprocess=True, replace_selected_result=True
         )
@@ -1305,9 +1289,9 @@ def test_replace_mode_preferred_app_leads_and_keeps_other_results():
         process_conversation.AppResult(app_id='preferred-app', content='OLD PREFERRED'),
     ]
 
-    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    _app_result, p2, p4, p5, p6 = _trigger_apps_context()
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps(
             'user-preferred', conv, is_reprocess=True, replace_selected_result=True
         )
@@ -1352,15 +1336,14 @@ def test_first_party_only_never_runs_or_reads_the_preferred_app():
     conv = _make_trigger_conversation()
     conv.apps_results = _prior_results()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps(
             'user-omi', conv, is_reprocess=True, replace_selected_result=True, first_party_only=True
         )
 
     app_result_mock.assert_not_called()
-    suggestion_mock.assert_not_called()
     sys.modules["database.redis_db"].get_user_preferred_app.assert_not_called()
     # Omi becomes the canonical summary for released clients (first non-empty app result wins).
     assert conv.apps_results == []
@@ -1370,8 +1353,8 @@ def test_first_party_only_rejects_an_explicit_app():
     selected = _make_mock_app('selected-app', 'SelectedApp')
     _setup_trigger_apps_mocks(preferred_app_id=None)
     conv = _make_trigger_conversation()
-    _suggestion, _app_result, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
-    with p1, p2, p3, p4, p5, p6:
+    _app_result, p2, p4, p5, p6 = _trigger_apps_context()
+    with p2, p4, p5, p6:
         with pytest.raises(ValueError):
             process_conversation.trigger_conversation_apps(
                 'user-omi', conv, app_id=selected.id, explicit_app=selected, first_party_only=True
@@ -1459,10 +1442,10 @@ def test_trigger_apps_automatic_app_failure_stays_fail_open(monkeypatch):
     _setup_trigger_apps_mocks(preferred_app_id='preferred-app', available_apps=[preferred])
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context()
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context()
     app_result_mock.side_effect = RuntimeError('LLM unavailable')
     p2 = patch.object(process_conversation, 'get_available_apps', return_value=[preferred])
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps('user-automatic', conv)
 
     app_result_mock.assert_called_once()
@@ -1477,12 +1460,11 @@ def test_trigger_apps_preferred_app_outside_installed_slice_is_still_used():
     _setup_trigger_apps_mocks(preferred_app_id="template-app-1")
     conv = _make_trigger_conversation()
 
-    suggestion_mock, app_result_mock, p1, p2, p3, p4, p5, p6 = _trigger_apps_context(availability_app=preferred)
+    app_result_mock, p2, p4, p5, p6 = _trigger_apps_context(availability_app=preferred)
 
-    with p1, p2, p3, p4, p5, p6:
+    with p2, p4, p5, p6:
         process_conversation.trigger_conversation_apps("user-template", conv)
 
-    suggestion_mock.assert_not_called()
     app_result_mock.assert_called_once()
     assert len(conv.apps_results) == 1
 

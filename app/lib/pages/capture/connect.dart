@@ -25,10 +25,13 @@ Future<void> openOmiStore({Future<bool> Function(Uri)? launcher}) async {
 }
 
 class ConnectDevicePage extends StatefulWidget {
-  const ConnectDevicePage({super.key, this.onConnected});
+  const ConnectDevicePage({super.key, this.onConnected, this.onSkip});
 
   /// Onboarding returns to its completion owner before Home can be entered.
   final VoidCallback? onConnected;
+
+  /// Onboarding's "Not now". Home passes nothing, so Home shows no skip.
+  final VoidCallback? onSkip;
 
   @override
   State<ConnectDevicePage> createState() => _ConnectDevicePageState();
@@ -96,7 +99,8 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                   // Back to the Home already underneath, not a second Home on top of it.
                   HomeNavigation.returnHome(context);
                 },
-                includeSkip: false,
+                includeSkip: widget.onSkip != null,
+                onSkip: widget.onSkip,
               ),
             ],
           );

@@ -50,6 +50,7 @@ def _common_patches(stack_build, mock_enqueue, mock_unavailable, mock_unavailabl
         patch.object(routers_sync, 'get_playback_artifact_signed_url', return_value=None),
         patch.object(routers_sync, 'get_conversation_playback_signed_url', return_value=None),
         patch.object(routers_sync, 'compute_audio_files_fingerprint', return_value='fp-1'),
+        patch.object(routers_sync.playback_build, 'get_conversation_playback_manifest', return_value=None),
         patch.object(routers_sync, 'enqueue_audio_merge_job_deferred', mock_enqueue),
         patch.object(routers_sync, 'mark_playback_unavailable', mock_unavailable),
         patch.object(routers_sync, 'mark_conversation_playback_unavailable', mock_unavailable_v2),
@@ -67,7 +68,7 @@ async def _run(patches, coro_factory):
         return await coro_factory()
 
 
-V1 = {'uid': 'user-1', 'conversation_id': 'conv-1', 'audio_file_id': 'file-1', 'timestamps': [100.0]}
+V1 = {'uid': 'user-1', 'conversation_id': 'conv-1', 'audio_file_id': 'f1', 'timestamps': [100.0]}
 V2 = {'schema_version': 2, 'uid': 'user-1', 'conversation_id': 'conv-1', 'fingerprint': 'fp-1'}
 
 
@@ -107,8 +108,10 @@ async def test_v2_fence_defers_even_on_final_attempt(stage):
     )
     patches = _common_patches(
         [
-            patch.object(routers_sync.sync_playback, 'build_conversation_playback_artifact', build),
-            patch.object(routers_sync, 'upload_conversation_playback_artifact', MagicMock(side_effect=_fence())),
+            patch.object(routers_sync.playback_build, 'build_conversation_playback_artifact', build),
+            patch.object(
+                routers_sync.playback_build, 'upload_conversation_playback_artifact', MagicMock(side_effect=_fence())
+            ),
             patch.object(routers_sync.conversations_db, 'update_conversation', MagicMock()),
         ],
         enqueue,
@@ -191,4 +194,4 @@ def test_deferred_task_name_and_schedule(monkeypatch):
     cloud_tasks.enqueue_audio_merge_job_deferred({**V1, 'destructive_deferrals': 1}, 60)
 
     assert calls[0][0][2] == 'amc-conv-1-fp-1-dd2' and calls[0][1]['schedule_at'] == 1240
-    assert calls[1][0][2] == 'am-conv-1-file-1-dd1' and calls[1][1]['schedule_at'] == 1060
+    assert calls[1][0][2] == 'am-conv-1-f1-dd1' and calls[1][1]['schedule_at'] == 1060

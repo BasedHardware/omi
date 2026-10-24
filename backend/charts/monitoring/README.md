@@ -965,7 +965,6 @@ backend/charts/monitoring/
 │   │   └── plugins.json
 │   ├── gke/                             # Matches Grafana "GKE" folder
 │   │   ├── backend-listen.json
-│   │   ├── deepgram-self-hosted.json
 │   │   ├── diarizer.json
 │   │   ├── pusher.json
 │   │   └── vad.json

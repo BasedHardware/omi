@@ -3,11 +3,67 @@
 `STT_CAP_DISPATCH_ENFORCEMENT` is a default-off backend rollout switch. Its
 approved activation is a small cohort and live only. The shared cohort/lane
 scope below also applies when only ladder budget execution is enabled. Outside
-that scope the existing behavior stays unchanged.
+that scope live behavior stays unchanged. Sync/batch allowance refusal instead
+ships on by default under the kill switch described next.
+
+## Offline allowance enforcement (default on)
+
+`STT_CAP_OFFLINE_ENFORCEMENT` is a kill switch, default **true**. Sync v1/v2,
+ordinary sync segments, language probes, confirmation retries and multilingual
+recovery check the existing funded allowance before cloud spend. A denial uses
+the existing encrypted cap-hold path, preserves raw intake and excludes held audio
+from usage. A late multilingual denial is a custody outcome, not a provider error.
+No allowance, pricing, entitlement or paid-through rule changes.
+
+Batch vendor STT explicitly uses `lane=batch`, including its recheck after audio
+inspection. GPU queue admission and every worker ASR microbatch/recovery require
+backend allowance authorization even when the legacy batch readiness fence is
+closed or batch is absent from the legacy lane/cohort selection. A refusal leaves
+the lease/intent retryable without a provider-failure attempt. Immutable
+admission-time `policy.provider_reason=byok` / provider-route BYOK snapshots remain
+exempt from keyless rechecks; a request key never exempts an Omi-funded alternative.
+Reviewers and valid paid-through accounts retain the existing resolver decision.
+Offline admission uses non-provisioning subscription and desktop-trial lookups:
+an allowance check must not create a default subscription or restore a missing
+user root. Existing usage-publication erasure fences remain authoritative.
+
+This audio-only predicate does **not** widen live listen, generic LLM/generated
+processing, held-backlog consent, or recovery rollout membership. Existing holds
+outside the recovery cohort stay in custody until their recovery scope is enabled.
+PTT voice-message allowance enforcement is a separate follow-up.
+
+Release owner: subscription session merges; deployment lead deploys. Offline
+refusal ships at 100% on the first approved release, independently of the existing
+`rollout_cohorts/stt-cap-dispatch` ramp. No new default-off cohort is introduced.
+Keep live cohort/lane configuration unchanged. Deploy the same switch value to
+sync/API policy hosts and GPU workers so both queued and per-microbatch checks agree.
+
+Rollback: set `STT_CAP_OFFLINE_ENFORCEMENT=false` on those hosts and drain the
+previous revision. This restores the prior lane/cohort behavior; legacy-selected
+admission remains enforced. Preserve all holds/receipts and keep custody cleanup
+running. Accepted in-flight work may finish. This is a configuration plan, not a
+production change made by the implementation PR.
+
+Watch `omi_stt_cap_dispatch_decisions_total{path,outcome,reason}`. The closed paths
+are `sync_v1`, `sync_v2`, `sync_segment`, `sync_language_probe`, `sync_empty_retry`,
+`sync_multilingual`, `batch_gpu`, `batch_provider`, `batch_speech_redrive`, and
+`batch_quarantine`. Outcomes are `allowed|held`; reasons are `scope_disabled`,
+`consent_denied`, `allowance_exhausted`, `budget_exhausted`,
+`allowance_unavailable`, `access_denied`, `entitled`, and `byok`. These count
+boundary decisions, not unique uploads, saved dollars or additional usage.
+No owner, session, content or raw error labels are accepted.
+
+At the first release, the lead checks a complete 15-minute post-revision window:
+held decisions should be visible per exercised path; a capped synthetic canary
+must make zero provider calls; entitled/BYOK canaries must still complete.
+Watch the held/decision ratio, existing `omi_stt_cap_provider_audio_seconds_total`,
+sync/provider errors and queue age against the preceding comparable window.
+Unexpected entitlement denials, lost custody, a stuck funded backlog or elevated
+errors trigger rollback and investigation before the release is accepted.
 
 ## Cohort and lane rollout (David 2026-10-18)
 
-Execution admission requires **both** an admission switch and a selected owner /
+Legacy live/recovery execution admission requires **both** an admission switch and a selected owner /
 original lane. `STT_CAP_DISPATCH_ENFORCEMENT` remains default false.
 `LADDER_V1_BUDGET_ENFORCEMENT_ENABLED` alone uses the same scope; it cannot widen
 STT execution to the fleet. `STT_CAP_DISPATCH_COHORT` unset or empty admits nobody.
@@ -24,11 +80,13 @@ or whitespace-only values select **live only**. Unknown tokens or empty tokens
 inside a list (for example `live,` or `live,,sync`) disable the whole selection.
 Unknown call-site lanes are never mapped to a permitted lane.
 
-Batch is additionally fenced off by the code-owned `_BATCH_LANE_READY = False`,
+Legacy batch rollout selection is additionally fenced off by the code-owned `_BATCH_LANE_READY = False`,
 for both admission switches and every cohort, even with explicit `batch` and
 `all`. Before that constant can change, lane8 must write `provider_reason=byok`
 into `binding.policy` at batch admission. This is a source readiness condition,
-not an environment flag. A valid lane list containing batch emits one static
+not an environment flag. The default-on offline spend boundary above bypasses
+this selection fence to refuse exhausted allowance, retaining the recorded BYOK
+funding exception. A valid lane list containing batch emits one static
 warning per process; it does not prevent explicit live/sync selection. Thus
 `live,batch` selects only live and `batch` selects nothing while the fence is
 closed. No UID or configuration data is included in the warning.
@@ -184,7 +242,7 @@ advance only with no unexplained regression and a synthetic consented live hold
 recovering across instance replacement. Dazheng owns each expansion and the
 **2026-10-27** completion checkpoint (runtime ramp brief, 2026-10-20); a missed checkpoint or an incomplete
 three-hour soak is a blocker to report, never authority to skip a stage. Keep
-`STT_CAP_DISPATCH_LANES=live` throughout. Sync and batch require the separate
+`STT_CAP_DISPATCH_LANES=live` throughout. The original sync/batch rollout required the separate
 batch-authorize-outside-GPU-lock change (blocked by Nemotron **#22352**) and explicit
 approved widening. Batch also requires the lane8 binding-policy readiness change
 above before its code-owned fence can open; configuration alone cannot enable
@@ -384,7 +442,21 @@ The original full audio remains retained throughout.
 `process_segment` explicitly reports `provider_called`, set immediately before
 `prerecorded`, never inferred from an error class. A known non-call atomically
 removes its intent (or reverts an unspent second attempt). The next claim retries
-normally. If a call may have happened, the piece waits 30 minutes. Then:
+normally. A reply the provider completed with **no words** is fenced into the
+receipt as `provider_empty` with `provider_completed_at`; recovery settles that
+piece as `transcribed` with no content, zero seconds and no usage charge
+(`settled_empty`), whether the same pass observes the checkpoint or a later pass
+resumes a `dispatched` receipt that carries it. It is never re-dispatched. A hold
+whose pieces all settle empty finalizes, settles its content ledger and purges
+like any fully successful recovery. Only a validated success-shaped reply earns
+that checkpoint: the prerecorded adapters raise on a 2xx body that is not the
+provider's success shape (Parakeet without both `text` and `segments`; Modulate
+without an `utterances` list, or with an empty one and neither `text` as a
+string nor `duration_ms` as a number beside it), so a JSON error envelope or
+partial payload is a provider failure with no completion checkpoint, and the
+dispatch stays ambiguous.
+If a call may have happened but no completion
+checkpoint exists, the piece waits 30 minutes. Then:
 
 1. A proof written in the **same transaction as conversation ingestion** identifies
    the hold, piece and deterministic conversation lineage. Recovery marks that
@@ -411,7 +483,7 @@ application TTL or is silently erased. Ordinary fully successful recovery delete
 source and frozen pieces only after content/usage settlement.
 
 `omi_stt_cap_recovery_reconciliation_total{outcome}` counts `cleared_noncall`,
-`reconciled_ingested`, `redispatched`, and `failed`. Structured
+`reconciled_ingested`, `redispatched`, `failed`, and `settled_empty`. Structured
 `event=stt_cap_recovery_reconciliation` logs include hold id and piece name, never
 content. Metric labels contain no uid, hold id or piece name. New recovery and
 its signals are inert when both dispatch and ladder enforcement are off. WS-only and inactive

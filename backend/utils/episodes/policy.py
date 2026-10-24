@@ -24,9 +24,9 @@ from config.episodes import (
     PROVISIONAL_MATCH_THRESHOLD,
 )
 
-CloseReason = Literal['user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on']
+CloseReason = Literal['user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on', 'boundary']
 CLOSE_REASONS: frozenset[str] = frozenset(
-    {'user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on'}
+    {'user', 'gap', 'idle', 'hard_cap', 'source_change', 'calendar_boundary', 'moved_on', 'boundary'}
 )
 
 CONTINUE = 'continue'

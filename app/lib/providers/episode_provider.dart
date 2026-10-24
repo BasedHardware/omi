@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:omi/backend/http/api/episodes.dart' as api;
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/utils/live_start_anchor.dart';
 
 typedef EpisodeLiveFetcher = Future<ApiResult<EpisodeRead>> Function();
 typedef EpisodeLookupFetcher = Future<ApiResult<EpisodeRead>> Function(String conversationId);
@@ -38,6 +39,17 @@ class EpisodeProvider extends ChangeNotifier {
   /// How often a watcher (Home's live row, the live page) re-reads the live episode.
   static const pollInterval = Duration(seconds: 30);
 
+  /// Until a live episode shows up, a watcher re-reads sooner: the server opens one at the first
+  /// words, and the row should switch to it (and hide its fragments) within seconds, not half a minute.
+  static const pendingPollInterval = Duration(seconds: 10);
+
+  /// The quick re-reads stop after this long without an episode (a pendant worn in silence), so
+  /// quiet wear costs the normal cadence; an episode closing re-arms them for the next stretch.
+  static const pendingPollWindow = Duration(minutes: 3);
+
+  /// One stable start for every surface's running length (Home row, live page, device page).
+  final LiveStartAnchor liveAnchor = LiveStartAnchor();
+
   bool _enabled = false;
   bool get enabled => _enabled;
 
@@ -52,24 +64,51 @@ class EpisodeProvider extends ChangeNotifier {
   bool _wrappingUp = false;
   bool get wrappingUp => _wrappingUp;
 
+  /// Episodes the person ended. Until the server closes one at once, it can still read as live for
+  /// a few minutes; it must never come back as the live row.
+  final Set<String> _ended = {};
+
   DateTime now() => _clock();
 
   /// Re-reads the live episode. A failed read keeps what was shown; a 404 means no episodes here.
   Future<void> refreshLive() async {
     final generation = ++_generation;
     final result = await _fetchLive();
-    if (generation != _generation) return;
+    if (generation != _generation || _disposed) return;
     switch (result) {
       case ApiSuccess(:final data):
         _enabled = data.enabled;
-        _live = data.episode;
+        final episode = data.episode;
+        _live = episode != null && _ended.contains(episode.id) ? null : episode;
       case ApiFailure(:final problem) when problem.kind == ApiProblemKind.notFound:
         _enabled = false;
         _live = null;
       case ApiFailure():
         return;
     }
+    _reschedule();
     notifyListeners();
+  }
+
+  DateTime? _pendingSince;
+  bool _disposed = false;
+
+  Duration get _interval {
+    if (!_enabled || _live != null) {
+      _pendingSince = null;
+      return pollInterval;
+    }
+    final since = _pendingSince ??= _clock();
+    return _clock().difference(since) < pendingPollWindow ? pendingPollInterval : pollInterval;
+  }
+
+  Duration? _scheduled;
+
+  void _reschedule() {
+    if (_disposed || _watchers == 0 || _scheduled == _interval) return;
+    _poll?.cancel();
+    _scheduled = _interval;
+    _poll = Timer.periodic(_interval, (_) => unawaited(refreshLive()));
   }
 
   /// The conversations a live episode stands for on Home; they reappear as rows once it closes.
@@ -99,7 +138,8 @@ class EpisodeProvider extends ChangeNotifier {
     _watchers++;
     if (_watchers == 1) {
       unawaited(refreshLive());
-      _poll = Timer.periodic(pollInterval, (_) => unawaited(refreshLive()));
+      _scheduled = _interval;
+      _poll = Timer.periodic(_interval, (_) => unawaited(refreshLive()));
     }
   }
 
@@ -109,6 +149,7 @@ class EpisodeProvider extends ChangeNotifier {
     if (_watchers == 0) {
       _poll?.cancel();
       _poll = null;
+      _scheduled = null;
     }
   }
 
@@ -130,6 +171,24 @@ class EpisodeProvider extends ChangeNotifier {
       _wrappingUp = false;
       notifyListeners();
     }
+  }
+
+  /// The person ended the live conversation (Wrap up, a pendant double-tap, Finish): the live
+  /// episode closes at once and the next one counts from now. The ended conversation shows as a
+  /// processing row; its notes and items still reach the closed episode on the server.
+  void onLiveFinalized() {
+    final now = _clock();
+    liveAnchor.restart(now);
+    final episode = _live;
+    if (episode != null) {
+      _ended.add(episode.id);
+      _live = null;
+      // Without a conversation id the server closes the episode immediately; a repeat is a no-op.
+      unawaited(_wrapUp(episode.id));
+    }
+    _pendingSince = null;
+    _reschedule();
+    notifyListeners();
   }
 
   /// Undo on a captured item: hidden at once, dismissed on the server; restored if that fails.
@@ -162,6 +221,7 @@ class EpisodeProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _poll?.cancel();
     super.dispose();
   }

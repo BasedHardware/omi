@@ -29,7 +29,7 @@ from utils.speaker_permissions import named_speaker_prompts_allowed
 from utils.speaker_sample import download_sample_audio
 from utils.speaker_sample_migration import maybe_migrate_person_samples
 from utils.manual_speaker_assignments import manual_owner_reserved, manual_rejected_speakers
-from utils.stt.conversation_speakers import VOICE_MATCH_THRESHOLD
+from utils.speakers.policy import CROSS_EPOCH
 from utils.stt.owner_profile import load_owner_embedding, validated_embedding
 from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 from utils.stt.speaker_match import (
@@ -1448,7 +1448,7 @@ class SpeakerMatcher:
                     if all(
                         self._voice_scopes.get(peer)
                         and self._voice_scopes[peer] != scope
-                        and compare_embeddings(centroid, self._voice_centroids[peer]) < VOICE_MATCH_THRESHOLD
+                        and compare_embeddings(centroid, self._voice_centroids[peer]) < CROSS_EPOCH.distance
                         for peer in peers
                     ):
                         group = representative

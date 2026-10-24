@@ -8,7 +8,7 @@ without importing the FastAPI router.
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, NamedTuple, Optional
@@ -42,12 +42,14 @@ def persisted_started_seconds(started_at: Any) -> Optional[float]:
         return None
     if hasattr(started_at, 'timestamp'):
         try:
+            if isinstance(started_at, datetime) and started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
             return float(started_at.timestamp())
         except (TypeError, ValueError, OverflowError):
             return None
     if isinstance(started_at, str):
         try:
-            return datetime.fromisoformat(started_at).timestamp()
+            return persisted_started_seconds(datetime.fromisoformat(started_at))
         except ValueError:
             return None
     # bool is an int subclass in Python; a stray True/False must not be read
