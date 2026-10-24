@@ -52,7 +52,7 @@ from utils.encryption import decrypt, encrypt
 logger = logging.getLogger(__name__)
 
 USER_VOICE_CACHE_TTL_SECONDS = 7 * 24 * 3600
-USER_VOICE_PROFILE_VERSION = 2
+USER_VOICE_PROFILE_VERSION = 3
 
 # Below this many of the user's own lines a profile is noise; the prompt block
 # then says so instead of inventing a style.
@@ -68,6 +68,19 @@ USER_VOICE_MAX_TYPED_MESSAGES = 200
 USER_VOICE_MAX_LINES = 150
 USER_VOICE_MAX_EXAMPLES = 5
 USER_VOICE_MAX_EXAMPLE_CHARS = 140
+
+# Real exchanges (their message -> the user's reply) kept for few-shot examples.
+USER_VOICE_MAX_EXCHANGES = 120
+USER_VOICE_MAX_EXCHANGE_CHARS = 200
+# Examples shown per draft: the ones closest to what they just said, plus the newest.
+USER_VOICE_SHOTS = 8
+USER_VOICE_RECENT_SHOTS = 3
+# Lines of the open thread shown with the draft.
+USER_VOICE_MAX_THREAD = 8
+# A short line the user sends this person again and again ("okk", "Yes yes").
+STOCK_REPLY_MAX_CHARS = 14
+STOCK_REPLY_MIN_COUNT = 2
+USER_VOICE_MAX_STOCK = 6
 
 # An ending the user uses less often than this (percent) counts as "never".
 RARE_ENDING_PERCENT = 5
@@ -107,6 +120,11 @@ _ENDING_WORDS = {
 }
 
 
+class VoiceExchange(BaseModel):
+    them: str
+    me: str
+
+
 class UserVoiceProfile(BaseModel):
     version: int = USER_VOICE_PROFILE_VERSION
     person_id: str
@@ -132,6 +150,10 @@ class UserVoiceProfile(BaseModel):
     p90_chars: int = 0
     greetings: list[str] = Field(default_factory=list)
     examples: list[str] = Field(default_factory=list)
+    # How the user answered this person before, oldest first (written source only).
+    exchanges: list[VoiceExchange] = Field(default_factory=list)
+    reply_median_chars: int = 0
+    stock_replies: list[str] = Field(default_factory=list)
 
     @property
     def is_reliable(self) -> bool:
@@ -148,8 +170,11 @@ class PolishResult(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+_ATTACHMENT_RE = re.compile(r'\[(image|photo|video|attachment)[^\]]*\]|[\ufffc\ufffd]', re.IGNORECASE)
+
+
 def _clean(text: Any) -> str:
-    return ' '.join(_URL_RE.sub('', str(text or '')).split())
+    return ' '.join(_ATTACHMENT_RE.sub('', _URL_RE.sub('', str(text or ''))).split())
 
 
 def line_ending(text: str) -> Optional[str]:
@@ -205,6 +230,7 @@ def build_profile(
     typed_lines: Iterable[str],
     *,
     written_lines: Iterable[str] = (),
+    exchanges: Iterable[tuple[str, str]] = (),
     now: Optional[datetime] = None,
 ) -> UserVoiceProfile:
     """Build the profile from the user's own lines, oldest first."""
@@ -270,7 +296,53 @@ def build_profile(
         if len(examples) == USER_VOICE_MAX_EXAMPLES:
             break
     profile.examples = examples
+
+    kept = []
+    for them, me in exchanges:
+        them, me = _clean(them), _clean(me)
+        if them and me and len(me) <= USER_VOICE_MAX_EXCHANGE_CHARS:
+            kept.append(VoiceExchange(them=them[:USER_VOICE_MAX_EXCHANGE_CHARS], me=me))
+    profile.exchanges = kept[-USER_VOICE_MAX_EXCHANGES:]
+    if profile.exchanges:
+        profile.reply_median_chars = _quantile(sorted(len(e.me) for e in profile.exchanges), 0.5)
+
+    short = Counter()
+    form: dict[str, str] = {}
+    # Replies when there are exchanges (the same lines, each once), else everything written to them.
+    for line in [e.me for e in profile.exchanges] or personal:
+        if len(line) <= STOCK_REPLY_MAX_CHARS and line_ending(line) != '?':
+            key = line.casefold().rstrip('.!！。')
+            short[key] += 1
+            form[key] = line  # the newest spelling
+    profile.stock_replies = [form[k] for k, n in short.most_common(USER_VOICE_MAX_STOCK) if n >= STOCK_REPLY_MIN_COUNT]
     return profile
+
+
+def _grams(text: str) -> set[str]:
+    """Character bigrams, case-folded: works the same for Latin and Han text."""
+    t = ''.join(ch for ch in text.casefold() if ch.isalnum() or ch == ' ')
+    return {t[i : i + 2] for i in range(len(t) - 1)} if len(t) > 1 else {t} if t else set()
+
+
+def pick_shots(profile: UserVoiceProfile, incoming: str = '', k: int = USER_VOICE_SHOTS) -> list[VoiceExchange]:
+    """Past exchanges to show: the closest to what they just said, plus the newest; oldest first."""
+    pool = profile.exchanges
+    if not pool:
+        return []
+    chosen = set(range(max(0, len(pool) - USER_VOICE_RECENT_SHOTS), len(pool)))
+    wanted = _grams(incoming)
+    if wanted:
+        def score(i: int) -> float:
+            have = _grams(pool[i].them)
+            return len(wanted & have) / (len(wanted | have) or 1)
+
+        for i in sorted(range(len(pool)), key=score, reverse=True):
+            if len(chosen) >= k:
+                break
+            chosen.add(i)
+    else:
+        chosen = set(range(max(0, len(pool) - k), len(pool)))
+    return [pool[i] for i in sorted(chosen)]
 
 
 # ---------------------------------------------------------------------------
@@ -290,8 +362,15 @@ def allowed_exclamations(profile: Optional[UserVoiceProfile]) -> int:
     return 2 if profile.exclamations_per_line > 1.2 else 1
 
 
-def profile_prompt_block(profile: Optional[UserVoiceProfile]) -> str:
-    """Instructions for the drafting model; empty when there is no profile."""
+def profile_prompt_block(
+    profile: Optional[UserVoiceProfile], incoming: str = '', thread: Iterable[dict] = ()
+) -> str:
+    """Instructions for the drafting model; empty when there is no profile.
+
+    ``thread`` is the open conversation with this person, oldest first, as
+    ``{'is_user': bool, 'text': str}`` (written source only); ``incoming`` is what
+    they said last, used to pick the closest past exchanges.
+    """
     if profile is None:
         return ''
     name = profile.person_name
@@ -322,7 +401,10 @@ def profile_prompt_block(profile: Optional[UserVoiceProfile]) -> str:
     if profile.lowercase_start_rate >= 60:
         lines.append(f'- starts lines lowercase ({profile.lowercase_start_rate}%)')
     if profile.stretch_rate >= 10:
-        lines.append(f'- stretches words like "okk" or "heyyy" in {profile.stretch_rate}% of lines')
+        lines.append(
+            f'- stretches a word ("okk", "heyyy") in {profile.stretch_rate}% of lines; most lines have none, '
+            'so at most one stretched word and only where the replies below would'
+        )
     lines.append(
         f'- length: usually about {profile.median_chars} characters (90% under {profile.p90_chars}); '
         'as short as the user would send it, often a fragment, never padded with extra pleasantries'
@@ -334,6 +416,27 @@ def profile_prompt_block(profile: Optional[UserVoiceProfile]) -> str:
     if profile.examples:
         quoted = ' / '.join(f'"{e}"' for e in profile.examples)
         lines.append(f'- the user\'s own recent lines (style only, never copy facts from them): {quoted}')
+    if profile.stock_replies:
+        quoted = ' / '.join(f'"{e}"' for e in profile.stock_replies)
+        lines.append(f'- short replies the user sends {name} again and again: {quoted}')
+    shots = pick_shots(profile, incoming)
+    if shots:
+        lines.append(
+            f'- how the user actually answered {name} before (copy the wording, slang, spelling, '
+            'length and language of these replies; never their facts):'
+        )
+        lines.extend(f'    {name}: {e.them}  ->  user: {e.me}' for e in shots)
+    tail = [t for t in thread if isinstance(t, dict) and _clean(t.get('text'))][-USER_VOICE_MAX_THREAD:]
+    if tail:
+        lines.append('- the open thread, oldest first (reply to the last message):')
+        lines.extend(f"    {'user' if t.get('is_user') else name}: {_clean(t.get('text'))}" for t in tail)
+    target = profile.reply_median_chars or profile.median_chars
+    lines.append(
+        "- the user's request gives the MEANING, not the words: its wording is an assistant's, so do not "
+        f'reuse it; say it the way the user would to {name}, with the plain everyday words, slang and '
+        f'spelling of the replies above, about {target} characters, nothing added (no explanations, '
+        'no extra pleasantries, no "already"/"just"/"really" padding)'
+    )
     return '\n'.join(lines)
 
 
@@ -455,6 +558,20 @@ def user_written_lines(uid: str, person: dict) -> list[str]:
     return []
 
 
+def user_written_exchanges(uid: str, person: dict) -> list[tuple[str, str]]:
+    """Past (their message, the user's reply) pairs with this person, oldest first.
+
+    Same source and rules as ``user_written_lines``: empty unless the platform can
+    read the user's sent messages, and never text the assistant drafted.
+    """
+    return []
+
+
+def user_written_thread(uid: str, person: dict) -> list[dict]:
+    """The open thread with this person, oldest first, as ``{'is_user', 'text'}``; empty by default."""
+    return []
+
+
 def _cache_key(uid: str, person_id: str) -> str:
     return f'user_voice:{uid}:{person_id}'
 
@@ -494,6 +611,7 @@ def get_user_voice_profile(uid: str, person: dict) -> UserVoiceProfile:
         user_lines_with_person(conversations, person_id),
         typed_user_lines(messages),
         written_lines=user_written_lines(uid, person),
+        exchanges=user_written_exchanges(uid, person),
     )
     _write_cached(uid, profile)
     return profile
@@ -541,10 +659,22 @@ def annotate_contacts_with_voice(uid: str, result: dict) -> dict[str, UserVoiceP
         if person is None:
             continue
         profile = get_user_voice_profile(uid, person)
-        contact['user_voice'] = profile_prompt_block(profile)
+        thread = user_written_thread(uid, person)
+        incoming = ' / '.join(_clean(t.get('text')) for t in _last_run(thread))
+        contact['user_voice'] = profile_prompt_block(profile, incoming, thread)
         for key in _contact_handles(contact):
             voices[key] = profile
     return voices
+
+
+def _last_run(thread: list[dict]) -> list[dict]:
+    """Their messages since the user last wrote."""
+    run: list[dict] = []
+    for item in reversed(thread or []):
+        if not isinstance(item, dict) or item.get('is_user'):
+            break
+        run.insert(0, item)
+    return run
 
 
 def profile_for_recipients(voices: dict[str, UserVoiceProfile], to: Iterable[str]) -> Optional[UserVoiceProfile]:
