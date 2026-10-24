@@ -235,6 +235,38 @@ class CreateIssueTeamResolutionTests(unittest.TestCase):
         self.assertIsNone(response.error)
         self.assertEqual(captured['variables']['input']['teamId'], 'uuid-design')
 
+    def test_invalid_saved_default_never_mutates(self):
+        defaults = ({}, {'id': None}, {'id': 123}, {'id': ''}, {'id': '   '},
+                    {'id': 'ENG'}, {'id': 'Engineering'}, {'id': 'removed-uuid'}, 'uuid-eng')
+        for default in defaults:
+            with self.subTest(default=default):
+                response, captured, _ = self.run_create({'title': 'hi'}, default=default)
+                self.assertIsNotNone(response.error)
+                self.assertIn('saved default team', response.error.lower())
+                self.assertNotIn('variables', captured, 'invalid defaults must never reach issueCreate')
+
+    def test_stale_default_does_not_fall_back_to_single_team(self):
+        response, captured, _ = self.run_create(
+            {'title': 'hi'}, teams=[TEAMS[0]], default={'id': 'removed-uuid'})
+        self.assertIsNotNone(response.error)
+        self.assertIn('saved default team', response.error.lower())
+        self.assertNotIn('variables', captured)
+
+    def test_default_requires_an_unambiguous_available_id(self):
+        for teams in ([], [TEAMS[0], TEAMS[0]]):
+            with self.subTest(teams=teams):
+                response, captured, _ = self.run_create(
+                    {'title': 'hi'}, teams=teams, default={'id': 'uuid-eng'})
+                self.assertIsNotNone(response.error)
+                self.assertIn('saved default team', response.error.lower())
+                self.assertNotIn('variables', captured)
+
+    def test_explicit_team_overrides_stale_default(self):
+        response, captured, _ = self.run_create(
+            {'title': 'hi', 'team': 'DES'}, default={'id': 'removed-uuid'})
+        self.assertIsNone(response.error)
+        self.assertEqual(captured['variables']['input']['teamId'], 'uuid-design')
+
     def test_team_key_resolves_to_uuid(self):
         response, captured, module = self.run_create({'title': 'hi', 'team': 'MKT'})
         self.assertIsNone(response.error)
