@@ -335,12 +335,12 @@ class Projector:
         store: FirestoreStore,
         load_result: Callable[[WorkItem, str], dict],
         *,
+        projection_store=None,
+        assign_conversation: Callable | None = None,
         publish: Callable = publish_client_completion,
         playback: Callable | None = None,
         fetch_audio: Callable[[WorkItem], bytes] | None = None,
         clock: Callable[[], float] = time.time,
-        projection_store=None,
-        assign_conversation: Callable | None = None,
     ):
         self.store = projection_store if projection_store is not None else ProjectionStore(store)
         self.assign_conversation = assign_conversation
