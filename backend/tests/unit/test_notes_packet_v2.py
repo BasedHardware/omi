@@ -386,6 +386,69 @@ def test_agent_and_one_shot_have_the_same_schema():
     assert submit_tool()['function']['parameters'] == NotesOutput.model_json_schema()
 
 
+def test_every_v2_path_asks_for_an_emoji():
+    from langchain_core.output_parsers import PydanticOutputParser
+
+    from utils.llm.notes_agent_prompt import INSTRUCTIONS, SUBMIT_SCHEMA
+    from utils.llm.notes_output import submit_tool
+
+    # One-shot arm: the parser's format instructions carry the legacy ask.
+    format_instructions = PydanticOutputParser(pydantic_object=NotesOutput).get_format_instructions()
+    assert 'An emoji to represent the conversation' in format_instructions
+    # Agentic arm: the model-visible submit tool and the contract mount's schema agree.
+    for schema in (submit_tool()['function']['parameters'], SUBMIT_SCHEMA['function']['parameters']):
+        assert schema['properties']['emoji']['description'] == 'An emoji to represent the conversation'
+    assert 'emoji' in contract.OUTPUT_RULES
+    assert 'one emoji that represents the conversation' in INSTRUCTIONS
+
+
+def test_a_submission_without_a_usable_emoji_never_stores_the_default():
+    stored = NotesOutput.model_validate({'title': 'Weekly sync', 'category': 'work'}).to_structured()
+    assert stored.emoji == '🧑‍💻'
+    # Agentic submissions are re-validated from a model_dump, so the defaulted
+    # value — not fields_set — is the only remaining missing-emoji signal.
+    dumped = NotesOutput.model_validate({'title': 'Weekly sync', 'category': 'work'}).model_dump(mode='json')
+    assert NotesOutput.model_validate(dumped).to_structured().emoji == '🧑‍💻'
+    blank = NotesOutput.model_validate({'title': 'Checkup', 'category': 'health', 'emoji': '  '}).to_structured()
+    assert blank.emoji == '🩺'
+    chosen = NotesOutput.model_validate({'title': 'Pitch', 'category': 'business', 'emoji': '🎯'}).to_structured()
+    assert chosen.emoji == '🎯'
+    # Nothing else is derivable for an unmapped category: the default survives.
+    unmapped = NotesOutput.model_validate({'title': 'Misc', 'category': 'other'}).to_structured()
+    assert unmapped.emoji == '🧠'
+
+
+def test_served_one_shot_output_without_an_emoji_uses_the_category_fallback(monkeypatch):
+    from contextlib import asynccontextmanager
+
+    from utils.llm import conversation_processing as notes
+
+    monkeypatch.setenv(packet.FLAG, 'serve')
+
+    class Model:
+        async def ainvoke(self, messages):
+            return SimpleNamespace(
+                content=json.dumps(
+                    {
+                        'title': 'Workshop volunteer schedule',
+                        'category': 'education',
+                        'sections': [{'heading': 'Topic', 'body_markdown': 'A grounded synthetic statement.'}],
+                    }
+                )
+            )
+
+    @asynccontextmanager
+    async def isolated(model):
+        yield model
+
+    monkeypatch.setattr(notes, 'get_llm', lambda *_args, **_kwargs: Model())
+    monkeypatch.setattr(notes, 'agentic_notes_payload', lambda **_kwargs: None)
+    monkeypatch.setattr(notes, 'isolated_notes_model', isolated)
+    source = prefix(shaped_context='FULL TRANSCRIPT\nA synthetic workshop discussion.')
+    output = notes._get_shaped_conversation_notes(source, uid='synthetic-account', **inputs())
+    assert output.emoji == '📚'
+
+
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
 def test_real_one_shot_path_uses_one_model_call_and_only_cohort_gets_v2_repairs(monkeypatch, mode, processing):
     from utils.llm import conversation_processing as notes

@@ -4446,6 +4446,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get continueText => 'Folytatás';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Már van előfizetésed. Új indítása helyett kezeld a meglévő előfizetésedet.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Csomagváltáshoz először fizess elő újra.';
 
   @override

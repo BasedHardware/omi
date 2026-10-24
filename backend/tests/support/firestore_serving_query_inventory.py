@@ -35,7 +35,13 @@ def is_serving_query_inventory_path(path: str) -> bool:
 def _query_call(call: ast.Call, collection_names: set[str]) -> bool:
     func = call.func
     if isinstance(func, ast.Name):
-        return func.id in {'budgeted_stream_iter', 'budgeted_stream_list', 'mcp_auth_stream'}
+        return func.id in {
+            'budgeted_stream_iter',
+            'budgeted_stream_list',
+            'mcp_auth_stream',
+            'projected_stream_list',
+            'projected_stream_iter',
+        }
     if not isinstance(func, ast.Attribute):
         return False
     if func.attr in BUILDERS:

@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Kiểm tra kết nối rồi thử lại.",
     "useFreePlan": "Sử dụng gói miễn phí",
     "continueText": "Tiếp tục",
+    "checkoutExistingSubscription": "Bạn đã có gói đăng ký. Hãy quản lý gói hiện tại thay vì bắt đầu gói mới.",
     "resubscribeFirstToChangePlans": "Hãy đăng ký lại trước để đổi gói.",
     "resubscribe": "Đăng ký lại",
     "couldNotOpenPaymentSettings": "Không thể mở cài đặt thanh toán. Vui lòng thử lại.",

@@ -4390,6 +4390,9 @@ class AppLocalizationsHe extends AppLocalizations {
   String get continueText => 'המשך';
 
   @override
+  String get checkoutExistingSubscription => 'כבר יש לך מנוי. אפשר לנהל את המנוי הקיים במקום להתחיל מנוי חדש.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'הירשמו מחדש קודם כדי לשנות תוכנית.';
 
   @override

@@ -91,11 +91,54 @@ class IOSChecks(unittest.TestCase):
             "APP_STORE_CONNECT_PRIVATE_KEY": "test-key",
         }
         with patch.dict(promote.os.environ, credentials), patch.object(promote, "check_live_ios_version"), patch.object(
-            promote, "cli_json", side_effect=[build, {"attributes": {"version": "1.2.4"}}]
-        ) as lookup:
+            promote, "check_no_ios_version_in_review"
+        ), patch.object(promote, "cli_json", side_effect=[build, {"attributes": {"version": "1.2.4"}}]) as lookup:
             with self.assertRaisesRegex(promote.PromotionError, "marketing version"):
                 promote.prepare_ios("1.2.3", "23")
             self.assertEqual(lookup.call_count, 2)
+
+    def _versions_by_state(self, held):
+        def lookup(*args):
+            state = args[args.index("--state") + 1]
+            return {"data": [{"attributes": {"versionString": v}} for v, s in held if s == state]}
+
+        return lookup
+
+    def test_a_version_with_apple_blocks_a_newer_submission_before_any_build_lookup(self):
+        for state in promote.IOS_REVIEW_HOLD_STATES:
+            with self.subTest(state=state), patch.object(
+                promote, "cli_json", side_effect=self._versions_by_state([("1.2.3", state)])
+            ):
+                with self.assertRaisesRegex(promote.PromotionError, "never withdraw"):
+                    promote.check_no_ios_version_in_review("1.2.4")
+
+    def test_prepare_ios_refuses_while_another_version_is_in_review(self):
+        credentials = {
+            "APP_STORE_CONNECT_ISSUER_ID": "test-issuer",
+            "APP_STORE_CONNECT_KEY_IDENTIFIER": "test-id",
+            "APP_STORE_CONNECT_PRIVATE_KEY": "test-key",
+        }
+        calls = []
+
+        def lookup(*args):
+            calls.append(args)
+            if args[:2] == ("apps", "app-store-versions"):
+                state = args[args.index("--state") + 1]
+                return {"data": [{"attributes": {"versionString": "1.2.3"}}] if state == "WAITING_FOR_REVIEW" else []}
+            raise AssertionError(f"unexpected lookup {args}")
+
+        with patch.dict(promote.os.environ, credentials), patch.object(promote, "check_live_ios_version"), patch.object(
+            promote, "cli_json", side_effect=lookup
+        ):
+            with self.assertRaisesRegex(promote.PromotionError, "1.2.3 WAITING_FOR_REVIEW"):
+                promote.prepare_ios("1.2.4", "24")
+        self.assertTrue(all(c[:2] == ("apps", "app-store-versions") for c in calls))  # no build was selected
+
+    def test_same_version_in_review_or_nothing_in_flight_is_allowed(self):
+        with patch.object(promote, "cli_json", side_effect=self._versions_by_state([("1.2.4", "WAITING_FOR_REVIEW")])):
+            promote.check_no_ios_version_in_review("1.2.4")
+        with patch.object(promote, "cli_json", side_effect=self._versions_by_state([])):
+            promote.check_no_ios_version_in_review("1.2.4")
 
     def test_submission_identifies_existing_build_and_does_not_upload(self):
         with patch.object(promote.subprocess, "run") as command:
