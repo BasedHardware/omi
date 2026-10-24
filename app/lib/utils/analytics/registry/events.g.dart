@@ -1701,7 +1701,8 @@ enum ConversationActionAction {
   open("open"),
   select("select"),
   copyConversationId("copy_conversation_id"),
-  testPrompt("test_prompt");
+  testPrompt("test_prompt"),
+  exportTranscript("export_transcript");
   const ConversationActionAction(this.wireName);
   final String wireName;
 }
