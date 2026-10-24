@@ -189,13 +189,11 @@ def _coerce_utc_datetime(val) -> datetime:
     if isinstance(val, str):
         try:
             parsed = isoparse(val)
-            if parsed.tzinfo is None:
-                return parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
         except (ValueError, TypeError, OverflowError):
             return datetime.min.replace(tzinfo=timezone.utc)
     if isinstance(val, datetime):
-        return val.replace(tzinfo=timezone.utc) if val.tzinfo is None else val.astimezone(timezone.utc)
+        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
     return datetime.min.replace(tzinfo=timezone.utc)
 
 
