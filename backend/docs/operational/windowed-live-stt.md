@@ -147,12 +147,13 @@ the fallback chain. Keep the merged 5% allocation for this code release; a later
 configuration rollout advances it only after the gates below pass.
 
 The headless Service selects ready Parakeet pods. `utils/stt/batch_pressure.py`
-polls each replica every five seconds with its own one-second HTTP and wall-clock
-deadline. A failed fetch does not discard the other responses: each replica
+polls each replica every five seconds with its own three-second wall-clock
+deadline and two-second HTTP phase budgets. A failed fetch does not discard the other responses: each replica
 keeps its last valid sample and original timestamp for **at most 15 seconds**.
-Departed replicas are removed. DNS failure immediately stands down; admission
-never performs DNS or HTTP. Poll/cache fan-out is bounded at **64 ready pods**,
-well above the seven-pod HPA maximum; fleets above that bound still stand down.
+Departed replicas are removed. DNS failure retains the last discovery only for
+the bounded admission grace below; admission
+never performs DNS or HTTP. Poll/cache fan-out is bounded at **64 ready pods**;
+fleets above that bound still stand down.
 
 Fresh telemetry must cover **both** `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` and a
 strict majority (`floor(ready / 2) + 1`) of the current ready pool. Pressure is
@@ -168,6 +169,8 @@ not. Small two-pod pools retain the conservative one-hot-pod stand-down.
 | `PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA` | `4` | Busy when live pending reaches this count |
 | `PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS` | `0.75` | Busy when oldest live queue wait reaches this many seconds |
 | `PARAKEET_BATCH_PRESSURE_BUSY_REPLICA_SHARE` | `0.5` | Stand down when busy plus unknown reaches this ready-pool share |
+| `PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS` | `60` | Maximum age of each last-good observation used at admission, configurable from `15` through `60` seconds; set `15` to restore strict freshness/DNS behavior |
+| `PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES` | `3` | Consecutive sweeps without a newly received quorum before closing/recreating the HTTP pool and rediscovering |
 
 Invalid configuration stands down. Invalid, negative, non-finite or old-revision
 responses leave that replica's timestamp unchanged; it becomes unknown after
@@ -176,7 +179,36 @@ its cached sample expires. Refusal labels stay `unconfigured`, `missing`,
 failed fetches, including when the remaining pressure decision stands down;
 quorum loss is `unavailable`. The bounded gauge
 `omi_stt_window_batch_pressure_replicas{state="fresh"|"ready"}` exposes coverage.
-A stalled poller still stands down after 15 seconds.
+Freshness stays at 15 seconds for telemetry. If strict freshness/discovery fails,
+admission may use the retained discovery and per-replica observations up to the
+configured age (inclusive). The same minimum, majority and busy-plus-unknown math
+still applies. Failed sweeps never renew an observation, and newer busy samples
+override older healthy values. Cold start without a quorum still refuses; data
+older than 60 seconds cannot supply headroom. Grace also requires a previously
+usable fresh quorum; disjoint partial cold-start sweeps cannot bootstrap it.
+Grace admissions emit shared
+`omi_fallback_total{component="stt_selection",reason="timeout",outcome="degraded"}`.
+
+Repeated fetch failures used to leave the same HTTP client alive indefinitely,
+with no recorded failure cause. The sampler now replaces it after three failed
+sweeps, even while old cache entries remain fresh, and resolves discovery again.
+Cold HTTP setup has a bounded three-second budget rather than one second. This
+removes the reproducible retry trap for requests taking longer than one second;
+the original incident's exact transport trigger was not captured by the old
+telemetry. `omi_stt_window_batch_pressure_fetch_failures_total{cause}` separates
+`connect_timeout`, `pool_timeout`, `read_timeout`, `deadline`, `transport`,
+`http_status`, `invalid_sample` and `other` without logging
+response bodies or addresses. Refresh outcome `reset_client` counts pool repair.
+
+The default-on `omi-stt-pressure-sampler-stuck` alert in the monitoring chart's
+live-STT exports fires per namespace/pod when `fresh == 0` continuously for five
+minutes, without an admission-volume floor. The progress timestamp (sampler start
+or last valid response) also detects a stalled loop with a frozen positive gauge
+after 15 seconds plus five minutes. Critical delivery adds the existing 30-second
+Telegram grouping wait. Provision the alert through the existing authorized
+monitoring workflow; source changes alone do not install it. Inspect failure
+causes and resets, check discovery/network health, and ask the rollout lead to
+replace affected pods if automatic repair does not restore samples.
 
 Using a pool share follows the scheduler: live requests have priority at each
 dispatch, with one aged backfill turn after four live batches. An isolated wait

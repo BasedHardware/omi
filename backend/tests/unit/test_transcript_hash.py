@@ -582,13 +582,13 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
     assert padded_alice.person_id == 'alice'
     assert alice.person_id == 'alice'
     assert _render(alice) == _render(padded_alice) == 'Alice: approved transfer'
-    assert 'Speaker 0:' not in _render(padded_alice)
+    assert 'Speaker' not in _render(padded_alice)
 
     padded_slot = _store({'text': _RENDER_TEXT, 'speaker': '  SPEAKER_07  '})
     clean_slot = _store({'text': _RENDER_TEXT, 'speaker': 'SPEAKER_07'})
     assert padded_slot.speaker == 'SPEAKER_07'
     assert padded_slot.speaker_id == 7
-    assert _render(padded_slot) == _render(clean_slot) == 'Speaker 7: approved transfer'
+    assert _render(padded_slot) == _render(clean_slot) == 'Speaker A: approved transfer'
 
     # Contrapositive: different rendered attribution ⇒ different digest.
     distinct = [
@@ -599,15 +599,17 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
         _store({'text': _RENDER_TEXT, 'speaker_id': 7}),
         _store({'text': '', 'speaker': 'SPEAKER_07'}),
     ]
-    rendered = [_render(segment) for segment in distinct]
+    # One transcript render keeps distinct voices on distinct dense labels while
+    # each segment's digest still binds its raw numeric speaker_id.
+    rendered = _render_transcript(distinct).split('\n\n')
     digests = [transcript_sha256([segment]) for segment in distinct]
     assert rendered == [
         'Alice: approved transfer',
         'Bob: approved transfer',
         'You: approved transfer',
-        'Speaker 0: approved transfer',
-        'Speaker 7: approved transfer',
-        'Speaker 7:',
+        'Speaker A: approved transfer',
+        'Speaker B: approved transfer',
+        'Speaker B:',
     ]
     assert len(set(rendered)) == 6
     assert len(set(digests)) == 6
@@ -626,11 +628,11 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
     assert transcript_sha256_for_binding(approved_plus_empty) == APPROVED_PLUS_EMPTY_07_DIGEST
     rendered_approved = _render_transcript(approved)
     rendered_plus = _render_transcript(approved_plus_empty)
-    assert rendered_approved == 'Speaker 0: approved transfer'
-    assert rendered_plus == 'Speaker 0: approved transfer\n\nSpeaker 7:'
+    assert rendered_approved == 'Speaker A: approved transfer'
+    assert rendered_plus == 'Speaker A: approved transfer\n\nSpeaker B:'
     assert rendered_approved != rendered_plus
-    assert 'Speaker 7:' not in rendered_approved
-    assert 'Speaker 7:' in rendered_plus
+    assert 'Speaker B:' not in rendered_approved
+    assert 'Speaker B:' in rendered_plus
 
 
 def test_from_segments_persists_canonical_segment_not_raw_request_fields() -> None:

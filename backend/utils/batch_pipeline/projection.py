@@ -26,11 +26,13 @@ from config.batch_pipeline import (
     sweep_owner_chain_enabled,
 )
 from database.batch_pipeline_projection import ProjectionBlocked, ProjectionReplay, ProjectionStore
+from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
 from database.batch_pipeline_projection_protocol import ProjectionPredecessorPending
 from database.batch_pipeline_projection_protocol import normalized_binding
 from database.batch_pipeline_quarantine_recovery import held_candidates
 from database.batch_pipeline_store import PROJECTION_ASSIGNMENT_STATES, PROJECTION_FINISH_STATES, FirestoreStore
 from utils.batch_pipeline.projection_discovery import ProjectionDiscovery
+from utils.batch_pipeline.projection_disposition import persist_disposition, mirror_assignment
 from utils.batch_pipeline.projection_index import ProjectionIndex
 from database import conversations as conversations_db
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem, projection_speech_spans
@@ -339,10 +341,12 @@ class Projector:
         playback: Callable | None = None,
         fetch_audio: Callable[[WorkItem], bytes] | None = None,
         clock: Callable[[], float] = time.time,
+        require_lineage_fence: bool = False,
     ):
         self.store = ProjectionStore(store)
         self.load_result, self.publish, self.playback, self.clock = load_result, publish, playback, clock
         self.fetch_audio = fetch_audio
+        self.require_lineage_fence = require_lineage_fence
         self.followups = None
         self.has_async_followups = False
         # Async rows a sweep walk persisted. Handed to the follow-up queue
@@ -662,19 +666,12 @@ class Projector:
             self._mirror_assignment(session)
 
     def _mirror_assignment(self, session) -> None:
-        # A2 shadow: the assignment transaction writes the owner watermark and predecessor results outside
-        # Store.run. A strict no-op unless shadow mode; idempotent (re-copies current state); never raises.
-        try:
-            mirror = getattr(self.store, 'mirror_assignment', None)
-            if mirror is not None:
-                mirror(session)
-        except Exception:
-            logger.warning('event=jobstore_shadow op=refresh outcome=hook_error site=projection_assignment')
+        mirror_assignment(self.store, session)
 
     def assign_parts(self, item, entry, binding, *, finish=True, policy=None, hint=None):
         policy = policy or self.store.policy(item.segment_id)
         from database.conversations import get_closest_conversation_to_timestamps
-        from utils.batch_pipeline.context import ResolvedContext, resolve_context
+        from utils.batch_pipeline.context import ResolvedContext, resolve_context, require_repair_manifest
         from utils.batch_pipeline.projection_parts import split_result
 
         with projection_phase('load_result', policy):
@@ -706,6 +703,7 @@ class Projector:
                     manifest = prefetched.manifest
                 else:
                     manifest = read_context(self.fetch_audio(item))
+        require_repair_manifest(item, binding, manifest, self.require_lineage_fence)
         receipts = entry.get('projection_parts') or {}
         for index, (part, part_payload) in enumerate(parts):
             if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
@@ -733,7 +731,14 @@ class Projector:
                 context = ResolvedContext(binding.target_conversation_id)
                 if manifest is not None and item.requires_compute_admission:
                     with projection_phase('context', policy):
-                        context = resolve_context(item, binding, manifest, self.store.client, projection_item=part)
+                        context = resolve_context(
+                            item,
+                            binding,
+                            manifest,
+                            self.store.client,
+                            projection_item=part,
+                            require_lineage_fence=self.require_lineage_fence,
+                        )
                 if not part_payload['words']:
                     receipt = session.persist_empty()
                 else:
@@ -756,6 +761,8 @@ class Projector:
                         incoming['_batch_require_live_target'] = True
                     if context.binding_reason is not None and context.target_id:
                         incoming['_sync_lineage_binding'] = context.binding_reason
+                    if context.lineage_eligible:
+                        incoming['_sync_lineage_eligible'] = True
                     from utils.capture.batch_coverage import admit_projection, record_projection
 
                     admit_projection(binding.owner_id, incoming, manifest, capture_at=item.capture_at)
@@ -792,6 +799,7 @@ class Projector:
                             )
                         finally:
                             self._mirror_assignment(session)
+                        incoming.pop('_sync_lineage_eligible', None)
                         record_projection(
                             binding.owner_id,
                             incoming,
@@ -806,6 +814,8 @@ class Projector:
                             log_sync_lineage_stamp_gap_refused()
             except ProjectionReplay as replay:
                 receipt = replay.receipt
+            except ProjectionGenerationAmbiguous:
+                receipt = persist_disposition(session, quarantined=True)
             except SyncAssignmentSuperseded:
                 receipt = self.supersede(session)
             except Exception as error:
@@ -820,19 +830,11 @@ class Projector:
                 self.finish_part(item, binding, receipt, index, policy=policy)
 
     def supersede(self, session):
-        # Assignment wrote no content. Recheck binding, ledger ownership, ordering
-        # and privacy in a fresh transaction before acknowledging this part. A
-        # competing assignment receipt wins; never replace it with a no-op.
-        try:
-            receipt = session.persist_empty(superseded=True)
-        except ProjectionReplay as replay:
-            return replay.receipt
-        logger.info('event=batch_projection action=assignment outcome=superseded')
-        return receipt
+        return persist_disposition(session)
 
     def finish_part(self, item, binding, receipt, index, *, policy=None):
         policy = policy or self.store.policy(item.segment_id)
-        if receipt['state'] == 'ready':
+        if receipt['state'] in {'ready', 'quarantined'}:
             return
         if receipt.get('conversation_id'):
             from utils.sync.bridge import finish_sync_bridges

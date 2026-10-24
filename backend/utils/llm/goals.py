@@ -109,14 +109,29 @@ def _get_goal_context(uid: str, goal_title: str) -> Dict[str, str]:
     }
 
 
+def _safe_float_field(value: Any, default: float) -> float:
+    """Coerce an individual suggestion numeric field to float, falling back per-field."""
+    if value is None or isinstance(value, bool):
+        return float(default)
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
 def suggest_goal(uid: str) -> Dict[str, Any]:
     """Generate an AI-suggested goal based on user's memories and conversations."""
     try:
         # Get user's memories for context
         memories = [m.dict() for m in MemoryService(db_client=firestore_db).read(uid, limit=100, offset=0)]
 
-        if not memories:
-            # Default suggestion when no memories
+        # Prepare memory context for AI — exclude locked memories
+        memory_texts = [
+            cast(str, m.get('content', '')) for m in memories[:50] if m.get('content') and not m.get('is_locked')
+        ]
+
+        if not memories or not memory_texts:
+            # Default suggestion when no unlocked memories are available
             return {
                 'suggested_title': 'Learn something new every day',
                 'suggested_type': 'scale',
@@ -126,10 +141,6 @@ def suggest_goal(uid: str) -> Dict[str, Any]:
                 'reasoning': 'Start tracking your daily learning progress!',
             }
 
-        # Prepare memory context for AI — exclude locked memories
-        memory_texts = [
-            cast(str, m.get('content', '')) for m in memories[:50] if m.get('content') and not m.get('is_locked')
-        ]
         memory_context = '\n'.join(memory_texts[:20])  # Limit context size
 
         prompt = f"""Based on the user's memories and interests, suggest ONE meaningful personal goal they could track.
@@ -161,9 +172,17 @@ Make the goal specific, measurable, and relevant to their interests."""
         json_match = re.search(r'\{[^{}]*\}', response, re.DOTALL)
         if json_match:
             suggestion = json.loads(json_match.group())
-            # Ensure min/max are present, default if not
-            suggestion['suggested_min'] = suggestion.get('suggested_min', 0)
-            suggestion['suggested_max'] = suggestion.get('suggested_max', suggestion.get('suggested_target', 10))
+            suggestion['suggested_target'] = _safe_float_field(suggestion.get('suggested_target'), 10.0)
+            suggestion['suggested_min'] = _safe_float_field(suggestion.get('suggested_min'), 0.0)
+            suggestion['suggested_max'] = _safe_float_field(
+                suggestion.get('suggested_max'), suggestion['suggested_target']
+            )
+            if not suggestion.get('suggested_title'):
+                suggestion['suggested_title'] = 'Track your daily progress'
+            if suggestion.get('suggested_type') not in ('boolean', 'scale', 'numeric'):
+                suggestion['suggested_type'] = 'scale'
+            if not suggestion.get('reasoning'):
+                suggestion['reasoning'] = 'A simple goal to get you started!'
             return suggestion
 
         # Fallback if parsing fails
@@ -270,8 +289,10 @@ def extract_and_update_goal_progress(
             if not goal_id:
                 continue
             goal_title = goal.get('title', '')
-            current_value = goal.get('current_value', 0)
-            target_value = goal.get('target_value', 10)
+            raw_curr = goal.get('current_value')
+            current_value = raw_curr if raw_curr is not None else 0
+            raw_targ = goal.get('target_value')
+            target_value = raw_targ if raw_targ is not None else 10
             goal_type = goal.get('goal_type', 'numeric')
             goals_list.append(
                 f'- id: "{goal_id}", title: "{goal_title}", type: {goal_type}, progress: {current_value}/{target_value}'
@@ -327,7 +348,8 @@ Only include a goal if you're confident the message is about that SPECIFIC goal.
                 # Validate: reject NaN, inf, and negative values
                 if new_value != new_value or new_value == float('inf') or new_value == float('-inf') or new_value < 0:
                     continue
-                old_value = goal.get('current_value', 0)
+                raw_old = goal.get('current_value')
+                old_value = raw_old if raw_old is not None else 0
                 if new_value != old_value:
                     if idempotency_key_prefix is None:
                         goals_db.update_goal_progress(uid, goal_id, new_value)
