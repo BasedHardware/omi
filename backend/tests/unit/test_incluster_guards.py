@@ -488,6 +488,20 @@ def render(environment='prod', *extra):
     }
 
 
+def render_docs(environment='prod', *extra, overlay=True):
+    command = [
+        'helm',
+        'template',
+        f'{environment}-omi-incluster-guards',
+        str(CHART),
+        '--namespace',
+        f'{environment}-omi-backend',
+    ]
+    if overlay:
+        command += ['-f', str(CHART / f'{environment}_omi_incluster_guards_values.yaml')]
+    return [obj for obj in yaml.safe_load_all(subprocess.check_output([*command, *extra], text=True)) if obj]
+
+
 @pytest.mark.parametrize('environment', ['dev', 'prod'])
 def test_helm_rbac_and_cpu_placement(environment):
     objs = render(environment)
@@ -547,9 +561,37 @@ def test_helm_rbac_and_cpu_placement(environment):
 
 def test_cloud_run_gate_refuses_unapproved_identity_or_namespace():
     with pytest.raises(subprocess.CalledProcessError):
-        render('prod', '--set', 'batch.gcpServiceAccount=wrong@example.com')
+        render('prod', '--set', 'batch.enabled=true', '--set', 'batch.gcpServiceAccount=wrong@example.com')
     with pytest.raises(subprocess.CalledProcessError):
         render('dev', '--set', 'batch.cloudRunRollbackEnabled=true')
+
+
+BATCH_GUARD_OBJECTS = frozenset(
+    {
+        ('ServiceAccount', 'prod-omi-incluster-guards-batch'),
+        ('ConfigMap', 'prod-omi-incluster-guards-batch-state'),
+        ('Role', 'prod-omi-incluster-guards-batch'),
+        ('RoleBinding', 'prod-omi-incluster-guards-batch'),
+        ('CronJob', 'prod-omi-incluster-guards-batch'),
+    }
+)
+
+
+def test_prod_overlay_defers_batch_guard_objects_until_deployer_rbac_and_producer_exist():
+    # Deploy run 40126547763: the prod deployer's name-scoped RBAC refuses to
+    # create the -batch objects, so the prod overlay keeps batch.enabled=false
+    # until that access change is approved (David) and g2's producer exists.
+    rendered = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod')}
+    assert not rendered & BATCH_GUARD_OBJECTS
+    assert ('PodMonitor', 'prod-omi-incluster-guards-batch') in rendered  # Predates the batch guard; stays live.
+    assert ('CronJob', 'prod-omi-incluster-guards') in rendered
+    # The default toggle stays on: re-enabling in prod needs only this flip.
+    reenabled = {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', '--set', 'batch.enabled=true')}
+    assert BATCH_GUARD_OBJECTS <= reenabled
+    # Default values alone render no batch objects, exactly as before the toggle.
+    assert (
+        not {(doc['kind'], doc['metadata']['name']) for doc in render_docs('prod', overlay=False)} & BATCH_GUARD_OBJECTS
+    )
 
 
 def test_run_persists_three_blind_observations_and_trips():
@@ -1097,23 +1139,7 @@ def test_identity_change_resets_window(tmp_path, monkeypatch):
 
 
 def test_helm_dedicated_identity_state_only_rbac_and_cpu_placement():
-    docs = list(
-        yaml.safe_load_all(
-            subprocess.check_output(
-                [
-                    'helm',
-                    'template',
-                    'prod-omi-incluster-guards',
-                    str(CHART),
-                    '--namespace',
-                    'prod-omi-backend',
-                    '-f',
-                    str(CHART / 'prod_omi_incluster_guards_values.yaml'),
-                ],
-                text=True,
-            )
-        )
-    )
+    docs = render_docs('prod', '--set', 'batch.enabled=true')
     resources = {d['kind']: d for d in docs if d and d['metadata']['name'] == 'prod-omi-incluster-guards-batch'}
     assert resources['ServiceAccount']['metadata']['annotations'] == {
         'iam.gke.io/gcp-service-account': 'omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com'
