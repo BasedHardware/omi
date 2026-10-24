@@ -100,6 +100,15 @@ def test_privacy_erasure_bypasses_hold_including_unknown_provenance(cleanup):
     store.client.collection.assert_not_called()
 
 
+@pytest.mark.parametrize('value', [False, None, 'false', 'true', 1, {}])
+def test_only_explicit_boolean_privacy_authority_can_bypass_hold(cleanup, value):
+    run, _, _, _ = cleanup
+    artifact = row(erasure_requested=value, capture_at=None)
+    count, delete = run([artifact])
+    assert count == 0
+    delete.assert_not_called()
+
+
 def test_hold_kill_switch_and_delete_failure_keep_original_reference(cleanup, monkeypatch):
     run, _, _, _ = cleanup
     monkeypatch.setenv('AUDIO_CLEANUP_HOLD_ENABLED', 'false')

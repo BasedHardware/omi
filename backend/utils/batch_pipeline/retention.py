@@ -291,6 +291,7 @@ def cleanup_completed_artifacts(
     try:
         for artifact in queries.due_artifacts(store.client, store.namespace, now, limit):
             data = artifact.to_dict() or {}
+            erasure_requested = data.get('erasure_requested') is True
             uri = data.get('uri')
             if not isinstance(uri, str) or not uri.strip():
                 # A malformed/previously cleaned receipt is not delete authority.
@@ -310,7 +311,7 @@ def cleanup_completed_artifacts(
                     pass
                 logger.warning('event=batch_cleanup outcome=retained reason=missing_uri')
                 continue
-            if not data.get('erasure_requested'):
+            if not erasure_requested:
                 capture_at, duration = data.get('capture_at'), data.get('duration_seconds')
                 if capture_at is None or duration is None:
                     job = (
@@ -342,7 +343,7 @@ def cleanup_completed_artifacts(
             touched.append(('artifacts', artifact.id))
             # Deletion races must never recreate a purged metadata document.
             try:
-                if data.get('erasure_requested') or data.get('shadow'):
+                if erasure_requested or data.get('shadow'):
                     artifact.reference.delete()
                     cleaned += 1
                     continue

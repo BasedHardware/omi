@@ -271,6 +271,7 @@ def test_incident_hold_and_uri_less_receipt_do_not_block_unrelated_or_privacy_cl
         }
     )
     table.document('erasure').set({**base, 'uri': 'gs://synthetic/erase#42', 'erasure_requested': True})
+    table.document('false-erasure').set({**base, 'erasure_requested': 'false'})
     erased = []
     assert cleanup_completed_artifacts(store, now, delete_uri=lambda owner, uri: erased.append(uri)) == 2
     assert set(erased) == {'gs://synthetic/good#42', 'gs://synthetic/erase#42'}
@@ -279,6 +280,7 @@ def test_incident_hold_and_uri_less_receipt_do_not_block_unrelated_or_privacy_cl
     missing = table.document('missing').get().to_dict()
     assert missing['cleanup_error'] == 'missing_uri' and 'cleanup_after' not in missing
     assert not table.document('erasure').get().exists
+    assert table.document('false-erasure').get().to_dict()['cleanup_hold'] == 'capture_window'
 
 
 def test_real_firestore_update_precondition_preserves_a_newer_privacy_erasure(state, monkeypatch):
