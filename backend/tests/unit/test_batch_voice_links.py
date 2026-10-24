@@ -262,3 +262,38 @@ def test_native_unsafe_manual_remap_never_commits_unapplied_voice_anchors():
     assert result['transcript_segments'][0]['id'] == 'old'
     assert result['transcript_segments'][0]['is_user']
     assert result['transcript_segments'][0]['speaker'].startswith('BATCH_UNASSIGNED_')
+
+
+@pytest.mark.parametrize('segment_only,is_user', [(True, True), (True, False), (False, False)])
+def test_local_or_nonowner_receipt_does_not_contend_with_automatic_owner(segment_only, is_user):
+    segments = [
+        {'id': 'manual', 'speaker_id': 1, 'is_user': True},
+        {'id': 'automatic', 'speaker_id': 2, 'is_user': True},
+    ]
+    receipt = {'segments': {'manual': {'is_user': is_user, 'segment_only': segment_only}}}
+    result = arbitrate_linked_owner_claims(segments, receipt)
+    assert result == segments
+
+
+@pytest.mark.parametrize('replacement', [False, True])
+def test_batch_assignment_preserves_excerpt_and_another_automatic_owner(replacement):
+    store = StrictFirestore()
+    current = recording(source='omi', client_device_id='pendant')
+    current['transcript_segments'][0].update(is_user=True, speaker='SPEAKER_00', speaker_id_scope='final:batch:old')
+    current['manual_speaker_assignments'] = {
+        'segments': {'old': {'is_user': True, 'segment_only': True, 'generation': 1}}
+    }
+    store.rows[('users', 'u', 'conversations', 'record')] = current
+    value = chunk('next', 103, text='Another synthetic owner turn.')
+    value['transcript_segments'][0].update(
+        id='automatic', is_user=True, speaker='SPEAKER_00', speaker_id_scope='final:batch:next'
+    )
+    value['_batch_voice_evidence'] = evidence('next', {'SPEAKER_00': [0.0, 1.0]})
+    if replacement:
+        value['_batch_replace_live'] = {'start': 103, 'end': 112.5}
+    result, _, _ = intake(store, value, target_id='record')
+    by_id = {s['id']: s for s in result['transcript_segments']}
+    assert by_id['old']['is_user']
+    assert by_id['automatic']['is_user']
+    assert by_id['old']['speaker_id'] != by_id['automatic']['speaker_id']
+    assert result['manual_speaker_assignments']['segments']['old']['segment_only']

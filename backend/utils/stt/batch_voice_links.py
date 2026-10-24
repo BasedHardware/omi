@@ -222,12 +222,16 @@ def arbitrate_linked_owner_claims(segments, receipt):
     """Distinct automatic voices may not simultaneously claim the owner."""
     from utils.manual_speaker_assignments import manual_assignment_decision
 
-    manual = set()
+    manual, owners = set(), set()
     for segment in segments:
         decision = manual_assignment_decision(segment, receipt)
         if decision and decision.get('is_user') and not decision.get('segment_only'):
             manual.add(segment.get('speaker_id'))
-    owners = {s.get('speaker_id') for s in segments if s.get('is_user')}
+        elif not decision and segment.get('is_user'):
+            owners.add(segment.get('speaker_id'))
+    # Winning excerpt decisions do not reserve a whole voice. Other manual
+    # decisions also supersede stale automatic owner labels before projection.
+    owners.update(manual)
     if len(owners) <= 1 and not (manual and owners - manual):
         return segments
 
