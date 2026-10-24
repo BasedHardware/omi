@@ -1,6 +1,81 @@
 part of 'transcript.dart';
 
 extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
+  void _captureCurrentPosition({String? layoutIdentity}) {
+    if (!_scrollController.hasClients) return;
+
+    final currentScroll = _scrollController.offset;
+    final isAtBottom = _scrollController.position.maxScrollExtent - currentScroll <= 24;
+    _userHasScrolled = !isAtBottom;
+    if (isAtBottom && !_isUserScrolling) {
+      // Settled at the live edge: resume follow. Do not clear this during an
+      // active drag — a reader who has only moved a few pixels must still win.
+      _userInterruptedAutoScroll = false;
+    }
+    final scrollState = widget.scrollState;
+    if (scrollState != null) {
+      String? anchorId;
+      var anchorIndex = 0;
+      var anchorViewportOffset = 0.0;
+      if (!isAtBottom) {
+        var closestTop = double.infinity;
+        for (final index in _builtSegmentIndices()) {
+          final segment = widget.segments[index];
+          final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
+          if (renderObject is! RenderBox) continue;
+          final viewport = RenderAbstractViewport.of(renderObject);
+          final top = viewport.getOffsetToReveal(renderObject, 0).offset - currentScroll;
+          final bottom = top + renderObject.size.height;
+          if (bottom > 0 && top < _scrollController.position.viewportDimension && top < closestTop) {
+            closestTop = top;
+            anchorId = segment.id;
+            anchorIndex = index;
+            anchorViewportOffset = top;
+          }
+        }
+      }
+      scrollState.update(
+        offset: currentScroll,
+        isAtBottom: isAtBottom,
+        anchorSegmentId: anchorId,
+        anchorSegmentIndex: anchorIndex,
+        anchorViewportOffset: anchorViewportOffset,
+        layoutIdentity: layoutIdentity ?? widget.layoutIdentity,
+      );
+    }
+    _setIsAtBottom(isAtBottom);
+  }
+
+  /// Rows in the sliver's layout/cache window, excluding headings and spacing.
+  /// Scroll updates must not probe a GlobalKey for every line in the recording:
+  /// a saved conversation can have thousands of lines but only a few mounted.
+  Iterable<int> _builtSegmentIndices() sync* {
+    final root = _listKey.currentContext?.findRenderObject();
+    if (root == null) return;
+    RenderSliverMultiBoxAdaptor? sliver;
+    void findSliver(RenderObject object) {
+      if (sliver != null) return;
+      if (object is RenderSliverMultiBoxAdaptor) {
+        sliver = object;
+      } else {
+        object.visitChildren(findSliver);
+      }
+    }
+
+    findSliver(root);
+    final rows = sliver;
+    if (rows == null) return;
+    var child = rows.firstChild;
+    while (child != null) {
+      final itemIndex = (child.parentData! as SliverMultiBoxAdaptorParentData).index;
+      if (itemIndex != null) {
+        final segmentIndex = itemIndex - widget.leadingItems.length - 1;
+        if (segmentIndex >= 0 && segmentIndex < widget.segments.length) yield segmentIndex;
+      }
+      child = rows.childAfter(child);
+    }
+  }
+
   /// Scrolls the playback follow target into the top third. Triggered only on a
   /// new target id or a new explicit request — never on position ticks.
   void _followPlaybackTarget() {
@@ -100,11 +175,9 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
   int _locateDirection(int segmentIndex) {
     var minBuilt = widget.segments.length;
     var maxBuilt = -1;
-    for (var i = 0; i < widget.segments.length; i++) {
-      if (_segmentKeys[widget.segments[i].id]?.currentContext != null) {
-        if (i < minBuilt) minBuilt = i;
-        if (i > maxBuilt) maxBuilt = i;
-      }
+    for (final i in _builtSegmentIndices()) {
+      if (i < minBuilt) minBuilt = i;
+      if (i > maxBuilt) maxBuilt = i;
     }
     if (segmentIndex < minBuilt) return -1;
     if (segmentIndex > maxBuilt) return 1;
@@ -183,7 +256,8 @@ extension _TranscriptPlaybackScrolling on _TranscriptWidgetState {
     TranscriptSegment? topSegment;
     var closestTop = double.infinity;
     final currentScroll = _scrollController.offset;
-    for (final segment in widget.segments) {
+    for (final index in _builtSegmentIndices()) {
+      final segment = widget.segments[index];
       final renderObject = _segmentKeys[segment.id]?.currentContext?.findRenderObject();
       if (renderObject is! RenderBox) continue;
       final viewport = RenderAbstractViewport.of(renderObject);

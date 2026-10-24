@@ -504,6 +504,16 @@ tests/unit/test_dream_capacity_retry.py::test_heavy_pass_zero_cost_retries_do_no
 # --all shards and locally. Same boundary shape as the Dream retry entries above; the decode is the
 # test's real work, so keep it in the unit lane via the allowlist rather than a global threshold bump.
 tests/unit/test_batch_audio_language.py::test_admitted_short_false_permission_cannot_bypass_worker_barrier[zh-clean_speech-6s-pcm16]
+# 2026-10-22 #23358 regression proving the batch retry policy stays off Cloud Tasks: walks the
+# batch-pipeline-worker closure twice (first_party_import_closure + third_party_dependency_modules
+# over the same 109-module AST walk). Measured 0.98-1.15s CPU on four consecutive CI shard runs of
+# the same code (#23358 head shard 2, 0.98s pass then 1.07s fail; main-merge run 39876683920 shard 2
+# 1.13s; PR #23356 run 39878478985 shard 3, 1.15s; 10-22/23) vs the 1.0s guard -- right on the
+# budget, flaking by 0.02s margins; 0.28s on a quiet host. Both walks are the assertion's real
+# contract work (same shape as the closure-walk entries above), not sleeps or hidden setup.
+# Assertions passed in every run; keep the test in the unit lane via the allowlist rather than a
+# global threshold bump.
+tests/unit/test_runtime_image_contracts.py::test_gpu_batch_retry_cap_does_not_reach_cloud_tasks
 # PR #22861 shard 2: the production callback drives LiveChainSession.connect, which
 # imports dream vocabulary and builds a VAD gate in the call phase. Measured 3.99s
 # then 6.63s CPU vs the 1.00s fail limit (two CI runs, 10-23). The assertions are
@@ -513,3 +523,8 @@ tests/unit/test_live_speaker_renumber_dedup.py::test_production_callback_dedupli
 # runner. Same boundary shape as the other PR-shard overruns above.
 tests/unit/test_task_sync_cloud_export_dedup.py::test_retried_cloud_sync_does_not_create_a_second_external_task
 tests/unit/test_task_sync_cloud_export_dedup.py::test_batch_cloud_sync_isolates_a_failing_item_from_the_rest
+# Main run 40063148564 shard 5 (10-24, 4b4e35fdc9d6): 1.04s CPU vs the 1.00s fail limit.
+# First test of its file; pays the file-isolation import amortization plus importlib
+# drop/install machinery in the call phase. Assertions passed; same boundary shape as
+# the entries above.
+tests/unit/test_memory_import_isolation_order_independence.py::test_drop_then_install_stubs_a_module_that_was_imported_first

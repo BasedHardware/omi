@@ -16,6 +16,7 @@ import database.users as users_db
 from utils.agent_capabilities.errors import TRANSCRIPT_EDIT_HTTP_ERRORS
 from database import conversation_tombstones
 from database.firestore_read_metrics import FirestoreReadSite
+from utils.list_version_check import ListVersionCheck
 from database.vector_db import (
     delete_action_item_vector,
     delete_action_item_vectors_batch,
@@ -160,11 +161,8 @@ def _get_valid_conversation_by_id(uid: str, conversation_id: str, *, follow_sync
     if conversations_db.is_soft_deleted(conversation):
         if not follow_sync_bridge or not conversation.get('sync_merged_into'):
             raise HTTPException(status_code=404, detail="Conversation not found")
-        survivor_id = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
-        if not survivor_id:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        conversation = conversations_db.get_conversation(
-            uid, survivor_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
+        conversation = conversations_db.get_sync_redirected_conversation(
+            uid, conversation_id, read_site=FirestoreReadSite.CONVERSATIONS_VALID_BY_ID
         )
         if not conversation or conversations_db.is_soft_deleted(conversation):
             raise HTTPException(status_code=404, detail="Conversation not found")
@@ -988,6 +986,10 @@ def get_conversations(
     _reject_oversized_filter(status_filter, "statuses")
     _reject_oversized_filter(source_list, "sources")
 
+    version_check = ListVersionCheck.start(request, uid, 'conversations')
+    if version_check.not_modified is not None:
+        return version_check.not_modified
+
     # Request-scoped budget: the server-side offset is charged before the
     # query and the page stream runs under the derived per-RPC timeout, so a
     # deep page cannot consume the whole HTTP_GET_TIMEOUT (#11831).
@@ -1012,6 +1014,11 @@ def get_conversations(
     if budget.truncated and response is not None:
         response.headers[OMI_LIST_TRUNCATED_HEADER] = OMI_LIST_TRUNCATED_VALUE
     budget.observe('truncated' if budget.truncated else 'complete')
+    # Paid lock recovery depends on the current allowance (including rollover)
+    # and must run on every locked-page read, even without a source mutation.
+    version_check.finish(
+        response, truncated=budget.truncated, cacheable=not any(row.get('is_locked') for row in conversations)
+    )
     return conversations
 
 

@@ -222,3 +222,30 @@ def test_queued_authorization_uses_owner_and_batch_scope(monkeypatch, ladder, co
     assert allowance.call_count == int(held)
     if held:
         allowance.assert_called_once_with('synthetic-owner', lane='batch')
+
+
+@pytest.mark.parametrize('access', ['capped', 'byok', 'reviewer', 'paid', 'kill_off'])
+def test_default_on_gpu_allowance_is_independent_of_batch_readiness(monkeypatch, access):
+    from config import stt_cap_dispatch as policy
+    from utils import stt_cap_dispatch as cap
+
+    store, queue, lease, reserve = setup(monkeypatch, fresh=True)
+    monkeypatch.setenv('STT_CAP_OFFLINE_ENFORCEMENT', 'false' if access == 'kill_off' else 'true')
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
+    monkeypatch.setattr(policy, '_BATCH_LANE_READY', False)
+    if access == 'byok':
+        store.rows['jobs', 'segment']['policy'] = {'provider_reason': 'byok'}
+    resolver = Mock(
+        return_value=SimpleNamespace(managed=access in {'reviewer', 'paid'}, reason='plan_allowance_exhausted')
+    )
+    monkeypatch.setattr(cap, 'funded_allowance', resolver)
+    receipt = admission.authorize(store, tokens(lease), now=1)
+    assert receipt['allowed'] == ([] if access == 'capped' else ['segment'])
+    if access == 'capped':
+        assert 'compute_admission_token' not in store.rows['jobs', 'segment']
+        assert queue.defer('segment', lease.token, 1, 60)
+        assert store.rows['jobs', 'segment']['attempt'] == 0
+    if access in {'byok', 'kill_off'}:
+        resolver.assert_not_called()
+    reserve.assert_not_called()

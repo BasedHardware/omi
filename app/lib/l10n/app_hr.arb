@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "Već imate pretplatu. Upravljajte postojećom pretplatom umjesto pokretanja nove.",
     "resubscribeFirstToChangePlans": "Prvo se ponovno pretplati da promijeniš plan.",
     "resubscribe": "Ponovo se pretplati",
     "@resubscribe": {

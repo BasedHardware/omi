@@ -146,8 +146,9 @@ from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
 from utils.speaker_learning_jobs import schedule_person_voice_learning_retries
 from utils.stt.voiceprints import usable_person_voiceprint
-from config.stt_cap_dispatch import execution_admission_enabled as cap_enabled, recovery_admission_enabled, LANES
-from utils.stt_cap_dispatch import sync_allowed, funded_allowance
+from config.stt_cap_dispatch import offline_admission_enabled as cap_enabled, recovery_admission_enabled, LANES
+from utils.stt_cap_dispatch import sync_allowed, funded_allowance, CapAllowanceDenied
+from utils.observability.stt_cap_dispatch import DispatchPath
 from utils.observability.stt_cap_dispatch import record_audio as record_cap_audio
 from utils.stt.pre_recorded import (
     get_prerecorded_service,
@@ -1037,14 +1038,14 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
     conversation_data = conversations_db.get_conversation(uid, conversation_id)
     context = PROCESS_CONTEXT.get()
     if conversation_data and conversation_data.get('deleted') and conversation_data.get('sync_merged_into'):
-        canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
         if context is not None:
+            canonical = conversations_db.resolve_sync_conversation_redirect(uid, conversation_id)
             # The outbox transfers custody atomically before acknowledging this donor.
             context['redirect_to' if canonical else 'defer_reason'] = canonical or 'redirect_unresolved'
             return
-        if canonical:
-            conversation_id = canonical
-            conversation_data = conversations_db.get_conversation(uid, canonical)
+        conversation_data = conversations_db.get_sync_redirected_conversation(uid, conversation_id)
+        if conversation_data:
+            conversation_id = conversation_data['id']
     if not conversation_data or conversation_data.get('deleted'):
         if context is not None:
             if conversation_data and conversation_data.get('deleted'):
@@ -1283,8 +1284,10 @@ def _recover_empty_segment(
             # Positive VAD after multilingual double-empty is unresolved;
             # buying the same call again is not independent recovery.
             raise TranscriptionFailure(TranscriptionOutcome.EMPTY_UNEXPECTED, provider=provider)
-        if cap_enabled(uid, cap_dispatch_lane) and not sync_allowed(uid, lane=cap_dispatch_lane):
-            raise TranscriptionFailure(TranscriptionOutcome.UPSTREAM_ERROR, provider='modulate')
+        if cap_enabled(uid, cap_dispatch_lane) and not sync_allowed(
+            uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.MULTILINGUAL
+        ):
+            raise CapAllowanceDenied()
 
     def multilingual_once(audio: bytes, **kwargs: Any):
         def dispatch():
@@ -1428,6 +1431,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
     attempt_ref: str | None = None,
     source_position_map: tuple[dict, int] | None = None,
     lineage_binding: Optional[str] = None,
+    lineage_eligible: bool = False,
     cap_recovery: bool = False,
     cap_content_id: str | None = None,
     cap_recovery_service: tuple[str, str | None, str] | None = None,
@@ -1515,7 +1519,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                     language,
                     path,
                     selector=get_prerecorded_service,
-                    before_probe=lambda: not cap_enforced() or sync_allowed(uid, lane=cap_dispatch_lane),
+                    before_probe=lambda: not cap_enforced()
+                    or sync_allowed(uid, provider='modulate', lane=cap_dispatch_lane, path=DispatchPath.LANGUAGE_PROBE),
                     cohort_key=uid,
                 ),
             )
@@ -1559,7 +1564,17 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         speech_offset = 0.0
         while True:
             phase = 'provider_call'
-            if cap_recovery and not cap_enforced() or cap_enforced() and not sync_allowed(uid, lane=cap_dispatch_lane):
+            if (
+                cap_recovery
+                and not cap_enforced()
+                or cap_enforced()
+                and not sync_allowed(
+                    uid,
+                    provider=provider,
+                    lane=cap_dispatch_lane,
+                    path=DispatchPath.EMPTY_RETRY if empty_retried else DispatchPath.SYNC_SEGMENT,
+                )
+            ):
                 return hold_for_cap()
             if cap_enforced() and cap_recovery and deferred_outcome is not None:
                 # Explicit request-boundary signal survives later cap denial,
@@ -1757,6 +1772,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
         annotate_identity(incoming, client_device_id, recording_session_id)
         if lineage_binding is not None and target_conversation_id:
             incoming['_sync_lineage_binding'] = lineage_binding
+        if lineage_eligible:
+            incoming['_sync_lineage_eligible'] = True
         phase = 'persistence'
         conversation_turns.append(conversation_turn_lease.acquire(uid, candidate_id, sync_lane))
         from utils.conversations.lifecycle import ingest_sync_conversation
@@ -1772,6 +1789,7 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
                 else {}
             ),
         )
+        incoming.pop('_sync_lineage_eligible', None)
         if assigned['id'] != candidate_id:
             # Assignment redirected; hold the conversation the bridge will finalize into too.
             conversation_turns.append(conversation_turn_lease.acquire(uid, assigned['id'], sync_lane))
@@ -1849,6 +1867,8 @@ def process_segment(  # pyright: ignore[reportGeneralTypeIssues] — segment pip
             ),
         )
         return True
+    except CapAllowanceDenied:
+        return hold_for_cap()
     except SyncAssignmentSuperseded:
         # Acknowledge user authority without failing the WAL or dropping siblings.
         # False excludes this segment from content usage; the zero-error job still
@@ -2693,6 +2713,7 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     wav_paths,
                     source,
                     receipts=cap_hold_receipts,
+                    dispatch_path=DispatchPath.SYNC_V2,
                     source_frame_maps=source_frame_maps,
                     target_conversation_id=target_conversation_id,
                     client_device_id=client_device_id,
@@ -3116,7 +3137,11 @@ async def _run_full_pipeline_background_async(  # pyright: ignore[reportGeneralT
                     attempt_ref=attempt_ref,
                     source_position_map=segment_source_maps.get(path),
                     recording_session_id=recording_session_id,
-                    **({'lineage_binding': segment_binding_reasons.get(path)} if use_lineage else {}),
+                    **(
+                        {'lineage_binding': segment_binding_reasons.get(path), 'lineage_eligible': True}
+                        if use_lineage
+                        else {}
+                    ),
                     **({'cap_content_id': content_id} if cap_enabled(uid, 'sync') else {}),
                     **({'redrive_mode': redrive_mode} if redrive_mode else {}),
                 )
