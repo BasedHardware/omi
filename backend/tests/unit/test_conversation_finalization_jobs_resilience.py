@@ -256,15 +256,19 @@ def test_abandon_byok_finalization_job_txn_naive_lease():
     assert abandonment["conversation_outcome"] == "closed"
 
 
-def test_get_finalization_replay_candidates_limit_clamp():
+def test_get_finalization_replay_candidates_limit_clamp(monkeypatch):
     """Verify get_finalization_replay_candidates handles invalid limits safely."""
     mock_client = MagicMock()
     mock_col = MagicMock()
     mock_client.collection.return_value = mock_col
     mock_query = MagicMock()
     mock_col.where.return_value = mock_query
+    mock_query.order_by.return_value = mock_query
     mock_query.limit.return_value = mock_query
     mock_query.stream.return_value = []
+    mock_col.document.return_value.get.return_value.to_dict.return_value = {}
+    monkeypatch.setattr(cfj.firestore, 'transactional', lambda fn: fn)
+    monkeypatch.setattr(cfj, '_advance_finalization_replay_cursor_txn', lambda *args: True)
 
     res = cfj.get_finalization_replay_candidates(limit=-10, firestore_client=mock_client)
     assert res == []
