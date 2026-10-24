@@ -147,8 +147,9 @@ inspect every rendered card before presenting the task.
 For an expensive completed run, `--inference-archive /private/archive.json`
 explicitly reuses unchanged original inference after verifying its source commit,
 ordered source hashes, original key, corpus/audio/crop PCM/payload hashes, package
-and model pins, effective provider configuration, and both speech-only/short-single
-worker switches. Missing switch evidence blocks archive reuse. Older receipts
+and model pins, effective provider configuration, and resolved worker switches
+(speech-only, short-single, empty-ASR recovery/disposition, silence/validation
+disposition and long-speech handoff). Missing switch evidence blocks archive reuse. Older receipts
 may append explicitly reconstructed original-launch switch evidence while keeping
 the original hashed settings and key intact. The output retains the
 original receipt and whether configuration was captured or reconstructed from the

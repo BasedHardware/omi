@@ -126,6 +126,14 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path,
 
     monkeypatch.setenv('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'true')
+    for name in (
+        'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED',
+        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED',
+    ):
+        monkeypatch.setenv(name, 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'true')
     profile, people, manifest = tmp_path / 'profile.json', tmp_path / 'people.json', tmp_path / 'corpus.json'
     audio = tmp_path / 'synthetic-audio'
     audio.write_bytes(b'synthetic-only')
@@ -200,6 +208,11 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path,
     for name, value in (
         ('BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED', 'true'),
         ('BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED', 'false'),
+        ('BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED', 'true'),
+        ('BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED', 'true'),
+        ('BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED', 'true'),
+        ('BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED', 'false'),
+        ('BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED', 'false'),
     ):
         previous = len(calls)
         monkeypatch.setenv(name, value)

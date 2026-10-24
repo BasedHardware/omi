@@ -45,6 +45,11 @@ def archive(tmp_path):
         'worker_switches': {
             'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': True,
             'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': False,
+            'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED': False,
+            'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED': False,
+            'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED': False,
+            'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED': True,
+            'BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED': True,
         },
         'worker_switches_evidence': 'reconstructed-original-launch',
         'audio_sha256': file_digest(audio),
@@ -118,3 +123,27 @@ def test_archive_rejects_changed_evidence(tmp_path, mutation):
     private_json(path, document)
     with pytest.raises(ValueError, match='archive_'):
         load_inference(path, **args)
+
+
+@pytest.mark.parametrize(
+    'name',
+    [
+        'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED',
+        'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED',
+        'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED',
+        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED',
+        'BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED',
+    ],
+)
+def test_archive_rejects_each_changed_effective_worker_switch(tmp_path, name):
+    path, document, args = archive(tmp_path)
+    previous_key = document['recordings']['synthetic']['cache_key']
+    args['current_settings']['worker_switches'] = {
+        **args['current_settings']['worker_switches'],
+        name: not args['current_settings']['worker_switches'][name],
+    }
+    with pytest.raises(ValueError, match='archive_effective_configuration_mismatch'):
+        load_inference(path, **args)
+    assert json.loads(path.read_text())['recordings']['synthetic']['cache_key'] == previous_key
