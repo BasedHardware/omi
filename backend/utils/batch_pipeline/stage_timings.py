@@ -66,7 +66,11 @@ class StageTimings:
         if histogram is None:
             yield
             return
-        started = time.perf_counter()
+        try:
+            started = time.perf_counter()
+        except Exception:
+            yield
+            return
         try:
             yield
         finally:

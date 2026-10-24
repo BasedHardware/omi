@@ -264,9 +264,19 @@ one lease: divide a stage's `_sum` rate by the worker-scoped leased-event rate
 (`omi_batch_pipeline_events_total{event="leased"}`) for an amortized
 seconds-per-leased-job view, and use `_count` for per-call means. Model leaves
 measure host-observed wall time, not isolated CUDA kernel occupancy. Speaker
-embedding executes inside pyannote and is not separately timed: the serial
-`diarize` and packed `flight_diarize` adapter seams include embedding plus
-clustering, and splitting them would mean timing inside the model orchestration.
+embedding is timed at pyannote's existing `get_embeddings` hook (`embedding`),
+and at the shared-trunk packed forward (`flight_embedding`). The latter is
+nested inside `embedding` on a speech-only shared-trunk call; never add them.
+Full-unit packed calls may compute `flight_embedding` before cached per-unit
+hook reads. Both are children of diarization, not additional critical-path time.
+The worker also exposes `download_metadata`, `download`, `decrypt`, `decode`,
+`encrypt`, `artifact_register` and `upload` on the actual artifact IO thread.
+Download metadata is a separate GCS request. Encryption/upload/registration are
+children of `persist`; download/decrypt/decode are children of `fetch_decode`.
+Outside the dedicated worker's active context these artifact timers are no-ops.
+Per-call p50/p95 for batched stages are batch percentiles; dividing them by
+batch size does not produce per-lease percentiles. Use the summed-time/leased
+count normalization above for amortized per-lease cost.
 Unattributed worker time includes validation, packing, policy callbacks, the
 live-reuse lookup, silence inspection and left-context assembly. Optional or
 skipped stages (silence units, packed-flight fallbacks, recovery paths not

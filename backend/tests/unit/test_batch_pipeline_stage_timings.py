@@ -145,3 +145,18 @@ def test_broken_telemetry_does_not_lose_persisted_result(monkeypatch):
     worker, _, saved, _, _, failures = setup_worker(timings=timings)
     assert worker.process_batch([item()])[0].segment_id == 'a'
     assert saved and not failures
+
+
+def test_broken_start_clock_preserves_the_operation_and_its_exception(monkeypatch):
+    timings = StageTimings(CollectorRegistry())
+
+    def broken():
+        raise RuntimeError('clock failed')
+
+    monkeypatch.setattr(module.time, 'perf_counter', broken)
+    assert timings.call('asr', lambda: 7) == 7
+    failure = ValueError('model failed')
+    with pytest.raises(ValueError) as raised:
+        with timings.measure('asr'):
+            raise failure
+    assert raised.value is failure

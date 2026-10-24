@@ -34,6 +34,7 @@ from config.batch_pipeline_providers import ProviderConfig
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.sync_live_dedupe import sync_live_dedupe_active_for
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
+from utils.batch_pipeline import leaf_timings
 from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
 from utils.batch_pipeline.diarization_gate import (
     compact as compact_speech,
@@ -527,7 +528,7 @@ class PipelineWorker:
             raise ValueError('shared-live pull exceeds 120 audio seconds; yield between pulls')
         if self.config.pool_kind == 'shared_live' and any(i.unit_kind != 'capture_span' for i in items):
             raise ValueError('shared-live requires explicitly admitted capture spans, never conversation units')
-        with self._lock:
+        with self._lock, leaf_timings.active(self.timings):
             if self._unavailable:
                 raise FatalGpuError('GPU chain unavailable; restart required')
             results, group, seconds = [], [], 0
