@@ -90,7 +90,7 @@ uses decoded PCM duration because archived crop durations can be rounded. Neithe
 the frozen crop nor the reference-word denominator changes.
 
 ```bash
-nice -n 10 env PYTHONPATH=backend backend/.venv-eval/bin/python \
+nice -n 10 env PYTHONPATH=backend /path/to/external-eval-env/bin/python \
   backend/scripts/diarization_eval/run_local.py --manifest /private/corpus.json
 ```
 
