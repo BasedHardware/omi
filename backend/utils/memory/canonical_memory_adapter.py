@@ -1191,10 +1191,11 @@ def _ordered_capture_devices_from_evidence(raw_evidence: List[Payload]) -> tuple
             continue
         created_at = raw.get("created_at")
         if isinstance(created_at, datetime):
-            sort_key = (0, created_at)
+            sort_key = (0, _coerce_scan_updated_at(created_at))
         elif isinstance(created_at, str) and created_at.strip():
             try:
-                sort_key = (0, datetime.fromisoformat(created_at.replace("Z", "+00:00")))
+                parsed_created_at = datetime.fromisoformat(created_at.strip().replace("Z", "+00:00"))
+                sort_key = (0, _coerce_scan_updated_at(parsed_created_at))
             except ValueError:
                 sort_key = (1, index)
         else:
