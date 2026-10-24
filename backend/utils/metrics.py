@@ -777,6 +777,40 @@ LISTEN_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
     'Listen finalization jobs terminalized after their final Cloud Tasks attempt',
 )
 
+FINALIZATION_DEAD_LETTER_CAUSES = (  # closed set; mirror smart_merge._INCOMPLETE_CODES (no import: keep metrics light)
+    'donor_receipt_revision_changed',
+    'refresh_lease_busy',
+    'survivor_changed_before_refresh',
+    'refresh_not_persisted',
+    'survivor_vector_failed',
+    'refresh_completion_fenced',
+    'processing_checkpoint_fenced',
+    'donor_cleanup_deferred',
+    'flatten_cleanup_source_invalid',
+    'processing_failed',
+    'worker_failed',
+    'invalid_job',
+    'recovery_structure_unavailable',
+    'final_attempt_failed',
+    'unknown',
+)
+OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL = Counter(
+    'omi_conversation_finalization_dead_letter_total',
+    'Terminal listen finalization jobs by bounded cause class',
+    ['cause'],
+)
+OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL = Counter(
+    'omi_conversation_finalization_budget_requeues_total',
+    'Attempt-budget exhaustion delayed requeues granted, by bounded cause class',
+    ['cause'],
+)
+
+# Zero-initialize the closed cause set so an idle process exports every
+# series, distinguishing no dead-letters yet from a missing scrape target.
+for _cause in FINALIZATION_DEAD_LETTER_CAUSES:
+    OMI_CONVERSATION_FINALIZATION_DEAD_LETTER_TOTAL.labels(cause=_cause)
+    OMI_CONVERSATION_FINALIZATION_BUDGET_REQUEUES_TOTAL.labels(cause=_cause)
+
 LISTEN_FINALIZATION_STALE_PROCESSING_RECONCILIATIONS_TOTAL = Counter(
     'listen_finalization_stale_processing_reconciliations_total',
     'Stale bare-processing conversation reconciliation outcomes by the crash-orphan sweep',

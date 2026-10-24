@@ -44,7 +44,7 @@ from distinct failing conversations before interpreting an HTTP 500 rate.
 | `queued` | Intent persisted; no worker currently holds the lease. | Cloud Tasks delivery or reconciler replay for platform keys; stale BYOK ownership returns to `blocked_byok`. |
 | `leased` | One pusher/finalizer worker owns the current claim epoch. | A duplicate delivery returns retryable conflict; an expired platform-key lease can be reclaimed with a new epoch; expired BYOK ownership returns to `blocked_byok`. |
 | `completed` | The persisted conversation is terminally completed and the job is acknowledged. | No replay. |
-| `dead_letter` | The configured final Cloud Tasks attempt failed. | Inspect and explicitly replay after resolving the cause. |
+| `dead_letter` | The configured final Cloud Tasks attempt failed, or the one delayed budget requeue was exhausted. | Inspect and explicitly replay after resolving the cause. |
 | `blocked_byok` | The conversation requires request-scoped BYOK credentials. | A user must present valid keys again to resume the inline pusher path. |
 
 The live pusher frame may carry request-scoped BYOK keys, but that frame is
@@ -75,6 +75,7 @@ LISTEN_FINALIZATION_TASKS_INVOKER_SA=<cloud-tasks-invoker-service-account>
 LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS=5
 HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT=1500
 LISTEN_FINALIZATION_RECONCILE_STALE_SECONDS=300
+LISTEN_FINALIZATION_BUDGET_REQUEUE_DELAY_SECONDS=2700
 ```
 
 `SYNC_TASKS_PROJECT` and `SYNC_TASKS_LOCATION` are shared Cloud Tasks client
@@ -129,6 +130,54 @@ Redis current-conversation pointer), `reprocess`, and routes that create a
 conversation while processing request content. Their identity and generation
 contracts need their own durable-admission migration.
 
+## Budget-free delayed requeue and dead-letter observability
+
+When a job's durable attempt budget is exhausted for the first time
+(`attempt_count >= LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS` and
+`budget_requeue_count == 0`), the final-attempt hub grants exactly one delayed
+requeue instead of dead-lettering immediately. The grant transaction writes
+`budget_requeue_count: 1` and `budget_requeued_at`, resets `attempt_count`,
+`worker_claim_count`, and `task_retry_count` to zero (the same reset set as the
+manual replay recipe), and parks `reconcile_after_at` at
+`now + LISTEN_FINALIZATION_BUDGET_REQUEUE_DELAY_SECONDS` (default 2700 s,
+clamped to 300–14400 s). No task is enqueued at grant time: the parked row is
+invisible to the replay candidates query until its `reconcile_after_at` falls
+due, and the existing reconciler then mints the next dispatch generation and
+enqueues it, exactly as for any retryable failure. The exhausted Cloud Tasks
+delivery is acknowledged with `{'status': 'delayed_requeue'}` so the queue does
+not redeliver it into the parked row.
+
+Exactly-once: the `budget_requeue_count >= 1` refusal and the increment live
+inside the same fenced Firestore transaction as the lease check, so a duplicate
+or racing caller gets `conflict`/`already_requeued` and never a second grant.
+A second exhaustion of the requeued life (`budget_requeue_count >= 1`) is
+terminal: dead-letter with the observability emit below, and the reconciler
+closes such a queued row delivery-independently within one pass even if no
+final worker delivery ever arrives.
+
+Refused the requeue (dead-letter immediately, exactly as before this
+mechanism): `requires_byok` rows (the pusher path claims BYOK; a requeue could
+never execute without the user's keys), `invalid_job`, and
+`recovery_structure_unavailable` (the immediate-terminal policies: a retry
+gives the same answer).
+
+Accepted early-attempt surfaces, both bounded by the second budget: a live
+pusher session may claim the parked row before the delay elapses, and if a
+worker dies between the grant commit and the task ACK, Cloud Tasks redelivers
+the un-ACKed exhausted task, which claims the parked row and erodes the park to
+an early attempt. Known gap: budget burn from killed workers raises
+`worker_claim_count` but not a queued row's `attempt_count`, so the reconciler
+side of the terminal can miss that shape; the worker claim-time pre-check
+still closes it on the next delivery, and
+`listen_finalization_oldest_nonterminal_age_seconds` keeps aging visibility.
+
+Every terminal dead-letter now emits one ERROR log line
+(`listen finalization dead_letter terminal=True job_hash=… cause=… source=worker|reconciler`)
+and increments `omi_conversation_finalization_dead_letter_total` by bounded
+cause class; granted requeues increment
+`omi_conversation_finalization_budget_requeues_total`. The pre-existing
+`listen_finalization_dead_letter_total` keeps counting the worker-path subset.
+
 ## Reconciliation and runbook
 
 `reconcile_listen_finalization_jobs()` runs at backend startup and every five
@@ -151,6 +200,8 @@ Operational signals:
 | `listen_finalization_jobs{status="queued"}` / `{status="leased"}` | Alert on sustained backlog, not a single recovery. |
 | `listen_finalization_retries_total` | Investigate a rate increase with queue/worker error rates. |
 | `listen_finalization_dead_letter_total` / `{status="dead_letter"}` | Page for terminal failures; they require explicit replay. |
+| `omi_conversation_finalization_dead_letter_total` | Terminal dead-letters by bounded cause class (worker and reconciler paths). Alert-candidate: the ERROR line `listen finalization dead_letter terminal=True`. |
+| `omi_conversation_finalization_budget_requeues_total` | Attempt-budget exhaustion requeues granted, by cause class. |
 | `omi_fallback_total{component="pusher",reason="enqueue_failed"}` | Investigate task configuration or task API availability. |
 
 To recover a terminal job safely:
@@ -166,7 +217,9 @@ To recover a terminal job safely:
    recovery, fence the exact job/revision in a Firestore transaction before
    transitioning `dead_letter` to `queued`, incrementing its generation and
    clearing its lease and resetting `attempt_count`, `worker_claim_count`, and
-   `task_retry_count` to zero. Record the approved operator action in the incident.
+   `task_retry_count` to zero. `budget_requeue_count` is NOT reset by this
+   recipe (an operator replay is not another automatic requeue life). Record
+   the approved operator action in the incident.
    Enqueue only the opaque new job id/generation and verify the missing effect.
 
 Do not replay `blocked_byok` using Omi credentials. A durable offline BYOK

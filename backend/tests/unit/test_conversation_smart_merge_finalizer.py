@@ -283,3 +283,54 @@ async def test_pusher_finalizer_refreshes_expired_shadow_cohort_before_admission
                 await _finalize()
     assert seen == [True, False]
     assert reads == ['u', 'u']
+
+
+@pytest.mark.asyncio
+async def test_donor_resume_incomplete_surfaces_its_bounded_fence_code(harness, monkeypatch):
+    async def incomplete(*args, **kwargs):
+        raise SmartMergeIncomplete('refresh_lease_busy')
+
+    monkeypatch.setattr(finalizer, 'smart_merge_step', incomplete)
+    with pytest.raises(finalizer.ConversationFinalizationError) as raised:
+        await _finalize()
+    assert raised.value.code == 'refresh_lease_busy'
+
+
+@pytest.mark.asyncio
+async def test_non_smart_merge_failures_still_yield_the_generic_code(harness, monkeypatch):
+    async def provider_failure(*args, **kwargs):
+        raise RuntimeError('provider exploded')
+
+    monkeypatch.setattr(finalizer, 'smart_merge_step', provider_failure)
+    with pytest.raises(finalizer.ConversationFinalizationError) as raised:
+        await _finalize()
+    assert raised.value.code == 'processing_failed'
+
+
+def test_resumed_ok_line_carries_the_job_hash_only(monkeypatch, caplog):
+    import logging
+
+    from utils.observability.finalization import finalization_diagnostic_id
+
+    caplog.set_level(logging.INFO, logger=smart_merge.logger.name)
+    donor = {
+        'deleted': True,
+        'discarded': True,
+        'sync_merged_into': 'p',
+        'smart_merge': {'role': 'donor', 'survivor_id': 'p', 'survivor_revision': 1},
+    }
+
+    def get_conversation(uid, conversation_id, read_site=None):
+        return donor if conversation_id == 'n' else None
+
+    monkeypatch.setattr(smart_merge.conversations_db, 'get_conversation', get_conversation)
+    monkeypatch.setattr(smart_merge, '_cleanup_donor', lambda *args, **kwargs: None)
+    monkeypatch.setattr(smart_merge, '_cleanup_flattened_ancestors', lambda *args, **kwargs: None)
+    monkeypatch.setattr(smart_merge, 'refresh_survivor', lambda *args, **kwargs: None)
+
+    smart_merge.finish_absorb('u', 'n', owner='job-1', resumed=True)
+
+    resumed = [r.getMessage() for r in caplog.records if 'outcome=resumed_ok' in r.getMessage()]
+    assert resumed == [f'event=smart_merge outcome=resumed_ok job_hash={finalization_diagnostic_id("job-1")}']
+    # Closed vocabulary: the raw finalization job id never appears.
+    assert 'job-1' not in resumed[0]
