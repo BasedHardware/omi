@@ -2666,7 +2666,8 @@
             "open",
             "select",
             "copy_conversation_id",
-            "test_prompt"
+            "test_prompt",
+            "export_transcript"
           ]
         },
         "surface": {

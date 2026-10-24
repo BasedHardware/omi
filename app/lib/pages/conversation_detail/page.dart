@@ -561,6 +561,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
 
   static const _overflowActions = {
     'copy_transcript': ConversationActionAction.copyTranscript,
+    'export_transcript': ConversationActionAction.exportTranscript,
     'copy_summary': ConversationActionAction.copySummary,
     'download_audio': ConversationActionAction.shareAudio,
     'test_prompt': ConversationActionAction.testPrompt,
@@ -587,6 +588,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     switch (value) {
       case 'copy_transcript':
         _copyContent(context, provider.conversation.getTranscript(generate: true), context.l10n.transcript);
+        break;
+      case 'export_transcript':
+        await _exportTranscript(provider);
         break;
       case 'copy_summary':
         // Copy the source the reader put on screen (a chip can show Omi while the canonical
@@ -847,6 +851,31 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
     }
   }
 
+  /// Writes the full transcript to a text file, then opens the share sheet with it. The file is
+  /// written first so a failure lands here, not as an unhandled error behind the sheet.
+  Future<void> _exportTranscript(ConversationDetailProvider provider) async {
+    if (_isSharing) return; // one export or share at a time, Try Again included
+    final l10n = context.l10n;
+    final dates = OmiDateFormat.of(context);
+    final origin = shareSheetOrigin(_shareButtonKey);
+    setState(() => _isSharing = true);
+    try {
+      final conversation = provider.conversation;
+      final file = await writeConversationTranscript(conversation, dates: dates, l10n: l10n);
+      if (!mounted) return;
+      setState(() => _isSharing = false);
+      await shareConversationTranscriptFile(file, conversation, sharePositionOrigin: origin);
+    } catch (e) {
+      Logger.debug('Failed to export transcript: $e');
+      if (mounted) {
+        OmiFeedback.error(context, l10n.exportFailedTryAgain,
+            actionLabel: l10n.tryAgain, onAction: () => _exportTranscript(provider));
+      }
+    } finally {
+      if (mounted && _isSharing) setState(() => _isSharing = false);
+    }
+  }
+
   List<PullDownMenuEntry> _menuItems(BuildContext context, ConversationDetailProvider provider) {
     final l10n = context.l10n;
     final showDeveloperTools = conversationDetailShowsDeveloperTools();
@@ -955,6 +984,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage>
         iconWidget: const FaIcon(FontAwesomeIcons.copy, size: 16),
         onTap: () => _handleMenuSelection(context, 'copy_transcript', provider),
       ),
+      if (provider.conversation.transcriptSegments.isNotEmpty)
+        PullDownMenuItem(
+          title: l10n.exportTranscript,
+          iconWidget: const FaIcon(FontAwesomeIcons.fileLines, size: 16),
+          onTap: _isSharing ? null : () => _handleMenuSelection(context, 'export_transcript', provider),
+        ),
       PullDownMenuItem(
         title: l10n.copySummary,
         iconWidget: const FaIcon(FontAwesomeIcons.clone, size: 16),
