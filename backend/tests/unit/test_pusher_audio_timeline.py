@@ -362,6 +362,79 @@ async def test_reconcile_listing_stays_on_after_replay_evidence(env, monkeypatch
     assert PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get() == before_skip
 
 
+async def test_trailing_silent_run_is_stored_at_shutdown(env):
+    """Only a provably-interior all-zero run may be skipped (review r1).
+
+    The discontinuity flush may drop an all-zero run: audio for the same
+    conversation has arrived beyond the gap, so a later object is guaranteed.
+    The recording's last run flushes at shutdown with nothing after it —
+    storing it is the only thing that keeps the recording ending where the
+    client ended it, because a skipped trailing run leaves no gap for the
+    readers to zero-fill.
+    """
+    from utils.metrics import PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL
+
+    before = PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get()
+    real = b'\x0c\x00' * (RATE // 2)
+    keepalive = bytes(RATE * 2 // 100)  # 20 ms of zeros, one keepalive frame
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(600.0, real),
+            _audio(620.0, keepalive),  # 20 s gap closes this run: interior, skippable
+            _audio(640.0, keepalive),  # last run of the recording: stored at shutdown
+        ]
+    )
+
+    await _run(ws)
+
+    assert [chunk['timestamp'] for _cid, chunk in env] == [600.0, 640.0]
+    assert env[1][1]['data'] == keepalive, 'the trailing silent run must be stored, not skipped'
+    assert PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get() == before + 1
+
+
+async def test_conversation_switch_reenables_reconcile_listing(env, monkeypatch):
+    """A rebind retires the old conversation's clean-span exemption (review r1).
+
+    The conversation-id frame resets audio_timeline_last_end, so replay
+    detection for previously committed runs is blind after a rebind; the
+    exemption was proven under that continuity window and must not survive
+    it. The rebound conversation's next upload reconciles again.
+    """
+    from utils.metrics import PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL
+
+    seen = []
+    patched = pusher.upload_audio_chunks_batch
+    before_skip = PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get()
+
+    def capture(chunks, uid, cid, level=None, **kwargs):
+        seen.append((cid, kwargs.get('reconcile_prefix')))
+        return patched(chunks, uid, cid, level, **kwargs)
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', capture)
+
+    pcm = b'\x0d\x00' * (RATE // 2)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(700.0, pcm),
+            _conversation('c2'),
+            _audio(710.0, pcm),
+            _conversation('c1'),
+            _audio(720.0, pcm),
+        ]
+    )
+
+    await _run(ws)
+
+    assert seen == [
+        ('c1', True),  # first upload of the session reconciles
+        ('c2', True),  # c2's first upload reconciles
+        ('c1', True),  # rebind to c1: the switch retired its exemption
+    ], 'a conversation rebound after a switch must reconcile again'
+    assert PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL._value.get() == before_skip
+
+
 @pytest.mark.parametrize('audio_timeline', [None, AUDIO_TIMELINE_PROTOCOL])
 async def test_size_boundary_frame_persists_in_previous_batch(env, monkeypatch, audio_timeline):
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', 0.02)

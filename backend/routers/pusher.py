@@ -242,7 +242,13 @@ async def _websocket_util_trigger(
     # collision). A replay signal re-enables reconciliation for the rest of
     # the session. The exemption is only a cost skip: the create-only write
     # plus identical-content no-op keeps a missed signal correct.
-    v2_reconcile_exempt: set[str] = set()
+    # The exemption is windowed by conversation_generation: the continuity
+    # window that proved a clean span upload dies at every conversation-id
+    # frame (audio_timeline_last_end resets there), so a batch created in a
+    # later window must reconcile again instead of trusting a proof earned
+    # under a window it can no longer see.
+    v2_reconcile_exempt: Dict[str, int] = {}
+    conversation_generation = 0
     v2_replay_seen: set[str] = set()
     record_close_requests: set[str] = set()
     record_owners: dict[str, str] = {}
@@ -321,6 +327,10 @@ async def _websocket_util_trigger(
                 }
                 pending[conv_id] = batch
             batch['data'].extend(chunk_info['data'])
+            # Latest chunk's window wins; a generation change always splits
+            # noncontiguous v2 runs into their own batch first (above), so a
+            # batch never silently mixes windows when the split matters.
+            batch['timeline_generation'] = chunk_info.get('timeline_generation')
             if chunk_end is not None and span:
                 batch['end'] = chunk_end
                 batch['span'] = {
@@ -356,9 +366,14 @@ async def _websocket_util_trigger(
                 chunks_to_upload: List[Dict[str, Any]] = [upload_chunk]
                 # Skip the replay-reconcile listing once this session has
                 # committed a span upload for the conversation with no replay
-                # signal since; the first upload of a session (or any upload
-                # after a replay signal or a failed attempt) reconciles.
-                reconcile_prefix = conv_id in v2_replay_seen or conv_id not in v2_reconcile_exempt
+                # signal since — and only while the batch was buffered under
+                # the same continuity window that earned the exemption: a
+                # conversation-id frame resets that window, so a batch from a
+                # later window reconciles again. The first upload of a
+                # session (or any upload after a replay signal, a window
+                # change, or a failed attempt) reconciles.
+                batch_generation = batch.get('timeline_generation')
+                reconcile_prefix = conv_id in v2_replay_seen or v2_reconcile_exempt.get(conv_id) != batch_generation
                 if not reconcile_prefix:
                     PUSHER_RECONCILE_LISTS_SKIPPED_TOTAL.inc()
                 await run_blocking(
@@ -375,8 +390,9 @@ async def _websocket_util_trigger(
                     reason='with_spans' if batch.get('span') is not None else 'without_spans'
                 ).inc()
                 if batch.get('span') is not None and batch.get('end') is not None:
-                    if conv_id not in v2_replay_seen and len(v2_reconcile_exempt) < 1024:
-                        v2_reconcile_exempt.add(conv_id)
+                    if conv_id not in v2_replay_seen and isinstance(batch_generation, int):
+                        if len(v2_reconcile_exempt) < 1024:
+                            v2_reconcile_exempt[conv_id] = batch_generation
                     # The digest ledger records only runs whose object exists.
                     # Batches are contiguous by construction (discontinuities
                     # close them in `_add_to_batch`), so one entry covers the
@@ -674,6 +690,7 @@ async def _websocket_util_trigger(
         nonlocal speaker_sample_queue
         nonlocal transcript_queue
         nonlocal audio_bytes_queue
+        nonlocal conversation_generation
 
         audiobuffer = bytearray()
         trigger_audiobuffer = bytearray()
@@ -685,7 +702,7 @@ async def _websocket_util_trigger(
         # or after a conversation switch (which flushes the run).
         audio_timeline_last_end: Optional[float] = None
 
-        def _queue_private_cloud_chunk() -> None:
+        def _queue_private_cloud_chunk(*, skip_if_silent: bool = False) -> None:
             nonlocal record_upload_failed
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
                 return
@@ -693,11 +710,19 @@ async def _websocket_util_trigger(
                 # An all-zero run carries no audio information: every reader
                 # zero-fills gaps between objects with these same bytes, so
                 # skipping the run is audio-identical to storing it, without
-                # one sub-1 KB object per silence boundary.
-                PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL.inc()
-                audio_budget.release(len(private_cloud_sync_buffer))
-                _reset_private_cloud_buffer()
-                return
+                # one sub-1 KB object per silence boundary. Only a flush that
+                # a later object for this conversation is guaranteed to follow
+                # (a discontinuity: the post-gap audio itself must land, worst
+                # case at the next terminal flush) may drop it. A flush that
+                # can be the recording's last — shutdown, conversation switch,
+                # process handoff, or a size trigger with nothing after it —
+                # must store the zeros: with no later object there is no gap
+                # to zero-fill, and the recording would end early.
+                if skip_if_silent:
+                    PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL.inc()
+                    audio_budget.release(len(private_cloud_sync_buffer))
+                    _reset_private_cloud_buffer()
+                    return
             if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
                 fail_recording(private_cloud_queue[0]['conversation_id'])
                 logger.warning(
@@ -719,6 +744,9 @@ async def _websocket_util_trigger(
                     'sample_rate': int(sample_rate),
                 }
                 chunk_payload['span'] = span
+            # The continuity window this chunk was buffered under; the upload
+            # path compares it against the conversation's clean-upload window.
+            chunk_payload['timeline_generation'] = conversation_generation
             append_bounded(
                 private_cloud_queue,
                 chunk_payload,
@@ -825,7 +853,11 @@ async def _websocket_util_trigger(
                     current_conversation_id = new_conversation_id
                     episode_session['conversation_id'] = new_conversation_id
                     # A conversation boundary ends the current v2 run: the
-                    # next audio starts a fresh continuity window.
+                    # next audio starts a fresh continuity window. Every
+                    # clean-span exemption was proven under the old window;
+                    # the generation bump retires them all, so a rebound
+                    # conversation's next upload reconciles again.
+                    conversation_generation += 1
                     audio_timeline_last_end = None
                     logger.info(f"Pusher received conversation_id: {current_conversation_id} {uid}")
                     continue
@@ -965,7 +997,13 @@ async def _websocket_util_trigger(
                         if audio_timeline_last_end is not None:
                             delta = run_start - audio_timeline_last_end
                             if delta > AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
-                                _queue_private_cloud_chunk()
+                                # skip_if_silent: audio for this conversation
+                                # has arrived beyond the gap, so a later
+                                # object is guaranteed to follow whatever this
+                                # flush stores (or drops) — the only flush
+                                # where a skipped all-zero run is provably
+                                # interior, never the recording's last.
+                                _queue_private_cloud_chunk(skip_if_silent=True)
                                 _reset_private_cloud_buffer()
                             elif delta < -AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
                                 # Any overlap of already-accepted audio is
