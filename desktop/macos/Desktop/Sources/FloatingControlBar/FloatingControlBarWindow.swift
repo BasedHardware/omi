@@ -67,7 +67,7 @@ extension Duration {
 /// Using a non-activating panel lets the Ask Omi shortcut focus the floating bar
 /// without surfacing the main Omi window when the app is already running.
 class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
-  private static let positionKey = "FloatingControlBarPosition"
+  static let positionKey = "FloatingControlBarPosition"
   private static let sizeKey = "FloatingControlBarSize"
   private static let defaultSize = NSSize(width: 40, height: 14)
   private static let minBarSize = NSSize(width: 40, height: 14)
@@ -714,11 +714,23 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   private func refreshPresentationForDraggableBarPreference() {
     let wasUsingNotchIsland = state.usesNotchIsland
     updateNotchIslandState()
-    guard wasUsingNotchIsland != state.usesNotchIsland,
-      let screen = screenForPlacement
+    guard let screen = screenForPlacement else { return }
+
+    var targetFrame = frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)
+    if ShortcutSettings.shared.draggableBarEnabled,
+      !state.usesNotchIsland,
+      let savedPosition = UserDefaults.standard.string(forKey: FloatingControlBarWindow.positionKey)
+    {
+      let origin = NSPointFromString(savedPosition)
+      let candidateFrame = NSRect(origin: origin, size: targetFrame.size)
+      if let targetScreen = NSScreen.screens.first(where: { $0.visibleFrame.intersects(candidateFrame) }) {
+        targetFrame = FloatingControlBarWindow.clamp(candidateFrame, to: targetScreen.visibleFrame)
+      }
+    }
+
+    guard wasUsingNotchIsland != state.usesNotchIsland || !Self.framesEquivalent(frame, targetFrame)
     else { return }
 
-    let targetFrame = frameForCurrentState(on: screen, usesNotchIsland: state.usesNotchIsland)
     resizeToFrame(
       targetFrame,
       makeResizable: state.showingAIConversation && state.showingAIResponse,
@@ -3704,6 +3716,12 @@ class FloatingControlBarManager {
   /// Hide the floating bar and persist the preference.
   func hide() {
     retract(preferenceMutation: .setEnabled(false))
+  }
+
+  /// Clear any saved floating bar position and return the bar to its default top-center placement.
+  func resetPosition() {
+    UserDefaults.standard.removeObject(forKey: FloatingControlBarWindow.positionKey)
+    window?.resetPosition()
   }
 
   /// Show the floating bar temporarily without changing the user's persisted preference.
