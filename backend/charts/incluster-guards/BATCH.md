@@ -1,9 +1,12 @@
 # Batch admission rollback
 
-Production values install a separate five-minute CronJob,
-`prod-omi-incluster-guards-batch`, using a dedicated KSA with annotation
+With `batch.enabled: true`, production values install a separate five-minute
+CronJob, `prod-omi-incluster-guards-batch`, using a dedicated KSA with
+annotation
 `iam.gke.io/gcp-service-account: omi-batch-rollback-guard@based-hardware.iam.gserviceaccount.com`.
-Development never installs this writer. `batch.cloudRunRollbackEnabled=false`
+Production currently keeps `batch.enabled: false` until the deployer RBAC for
+the `-batch` objects is approved (access change, David) and g2's producer
+exists. Development never installs this writer. `batch.cloudRunRollbackEnabled=false`
 removes the batch resources including its state ConfigMap; save state/audit
 evidence before removing them. `dryRun=true` retains state but suppresses all Cloud Run writes,
 including a previously pending rollback. Check active Jobs when stopping: new
