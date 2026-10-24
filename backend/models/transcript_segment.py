@@ -12,6 +12,7 @@ from models.capture_window_proof import CaptureWindowProof
 from models.other import Person
 from models.speaker_label_provenance import project_source
 from utils.model_text import format_elapsed
+from utils.speaker_display import SpeakerLabeler
 
 # Unicode sentence-ending punctuation used across supported locales.
 # Conservative set: English (.!?), CJK (。！？), Arabic/Urdu (؟۔), Hindi/Sanskrit (।॥)
@@ -360,6 +361,9 @@ class TranscriptSegment(BaseModel):
             user_name = 'User'
         transcript = ''
         people_map = {person.id: person.name for person in people} if people else {}
+        # Dense per-transcript labels: the raw speaker_id is a diarization counter that reaches
+        # the hundreds and must never reach an LLM prompt (#23381).
+        labeler = SpeakerLabeler()
         include_timestamps = include_timestamps and TranscriptSegment.can_display_seconds(segments)
         for segment in segments:
             segment_text = segment.text.strip()
@@ -372,7 +376,9 @@ class TranscriptSegment(BaseModel):
                     speaker_name = people_map[segment.person_id]
                 else:
                     speaker_name = (
-                        f'Speaker {segment.speaker_id}' if segment.speaker_id is not None else 'Unknown speaker'
+                        labeler.label((segment.speaker_id_scope, segment.speaker_id))
+                        if segment.speaker_id is not None
+                        else 'Unknown speaker'
                     )
             transcript += f'{timestamp_str}{speaker_name}: {segment_text}\n\n'
 

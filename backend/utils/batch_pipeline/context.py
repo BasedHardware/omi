@@ -6,6 +6,8 @@ import os
 from typing import Any
 
 from database.batch_pipeline_projection import ProjectionBlocked
+from database.batch_pipeline_projection_protocol import ProjectionGenerationAmbiguous
+from config.sync_live_dedupe import sync_live_dedupe_active_for
 from models.geolocation import Geolocation
 from utils.batch_pipeline.contracts import WorkItem, ProjectionBinding
 
@@ -15,6 +17,12 @@ class ResolvedContext:
     target_id: str | None
     binding_reason: str | None = None
     geolocation: Geolocation | None = None
+    lineage_eligible: bool = False
+
+
+def require_repair_manifest(item, binding, manifest, required):
+    if required and not binding.record_origin and (not item.requires_compute_admission or manifest is None):
+        raise ProjectionBlocked('repair requires authenticated lineage manifest')
 
 
 def resolve_context(
@@ -24,6 +32,7 @@ def resolve_context(
     client: Any,
     *,
     projection_item: WorkItem | None = None,
+    require_lineage_fence: bool = False,
 ) -> ResolvedContext:
     expected = {
         'owner_id': item.owner_id,
@@ -83,6 +92,8 @@ def resolve_context(
         filenames=filenames,
         stage='batch_projection',
     )
+    if require_lineage_fence and (not requested or not sync_live_dedupe_active_for(item.owner_id)):
+        raise ProjectionBlocked('repair requires active proven lineage fence')
     reason = None
     if requested:
         if not isinstance(origin, str):
@@ -103,7 +114,9 @@ def resolve_context(
         )
         target, reason = targets.get(projection_item.segment_id), reasons.get(projection_item.segment_id)
         if ambiguous_binding_pending(item.owner_id, reason):
-            raise ProjectionBlocked('recording generation binding remains ambiguous')
+            raise ProjectionGenerationAmbiguous('recording generation binding remains ambiguous')
+        if require_lineage_fence and (reason not in {'bound', 'stamp_overridden'} or not target):
+            raise ProjectionBlocked('repair requires proven generation disposition')
     elif origin and start is not None and end is not None:
         from utils.sync.recording_session_target import resolve_recording_session_sync_target
 
@@ -117,4 +130,4 @@ def resolve_context(
             end,
             firestore_client=client,
         )
-    return ResolvedContext(target, reason, geo)
+    return ResolvedContext(target, reason, geo, lineage_eligible=requested)

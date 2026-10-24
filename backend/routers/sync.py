@@ -76,7 +76,7 @@ from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
 from routers.listen.contracts import persisted_started_seconds
-from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
+from config.stt_cap_dispatch import offline_admission_enabled as cap_dispatch_enabled
 from utils.sync.cap_hold import hold_capture_if_exhausted
 from utils.sync.admission_responses import sync_content_in_progress_response, sync_finalization_retrying
 from utils.analytics import record_sync_v1_usage as record_usage

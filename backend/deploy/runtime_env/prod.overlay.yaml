@@ -449,6 +449,8 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Enforce funded STT cap dispatch admission (cohort- and lane-gated); the cap cohort is runtime-doc driven.
+          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
@@ -757,6 +759,7 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.

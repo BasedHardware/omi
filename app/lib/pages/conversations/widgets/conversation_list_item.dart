@@ -52,7 +52,19 @@ String conversationRowTitle(BuildContext context, ServerConversation conversatio
 /// A plain-text preview of what was said: the transcript words without timestamps or speaker
 /// prefixes, newest last, trimmed to [maxChars] at a word boundary.
 String conversationSnippet(ServerConversation conversation, {int maxChars = 160}) {
-  final text = conversation.transcriptSegments.map((s) => s.text.trim()).where((t) => t.isNotEmpty).join(' ');
+  // Only collect the visible prefix plus one character to decide whether it
+  // needs an ellipsis. Hydrated/retained conversations can have hours of text;
+  // joining all of it for each scrolling row makes a short preview O(history).
+  final prefix = StringBuffer();
+  for (final segment in conversation.transcriptSegments) {
+    final words = segment.text.trim();
+    if (words.isEmpty) continue;
+    if (prefix.isNotEmpty) prefix.write(' ');
+    final remaining = maxChars + 1 - prefix.length;
+    if (remaining > 0) prefix.write(words.length > remaining ? words.substring(0, remaining) : words);
+    if (prefix.length > maxChars) break;
+  }
+  final text = prefix.toString();
   if (text.length <= maxChars) return text;
   final cut = text.substring(0, maxChars);
   final space = cut.lastIndexOf(' ');
@@ -328,8 +340,13 @@ class _ConversationListItemState extends State<ConversationListItem> {
           visualSignature: _visualSignature(widget.conversation),
           isSelectionMode: provider.isSelectionModeActive,
           isSelected: provider.isConversationSelected(widget.conversation.id),
-          isMerging: provider.isConversationMerging(widget.conversation.id),
-          isEligible: provider.isConversationEligibleForMerge(widget.conversation.id),
+          // The row already has the conversation. The id-based helpers search
+          // the entire history, twice per mounted row on *every* notify, even
+          // when the selector correctly decides not to rebuild the content.
+          isMerging: provider.mergingConversationIds.contains(widget.conversation.id) ||
+              widget.conversation.status == ConversationStatus.merging,
+          isEligible:
+              !widget.conversation.isLocked && !provider.mergingConversationIds.contains(widget.conversation.id),
         ),
         builder: (context, rowState, child) {
           final provider = context.read<ConversationProvider>();

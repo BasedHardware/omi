@@ -9,9 +9,22 @@ from typing import Any, Callable
 from utils.stt.socket import STTSocket
 from utils.stt.live_router import connecting_target
 
-from config.stt_cap_dispatch import enabled, execution_admission_enabled, execution_admission_configured, LANES
+from config.stt_cap_dispatch import (
+    enabled,
+    execution_admission_enabled,
+    execution_admission_configured,
+    offline_enforcement_enabled,
+    offline_admission_enabled,
+    LANES,
+)
 from config.ladder_v1 import budget_enforcement_enabled
-from utils.observability.stt_cap_dispatch import record_audio
+from utils.observability.stt_cap_dispatch import (
+    record_audio,
+    record_decision,
+    record_allowance_decision,
+    DispatchPath,
+    DispatchReason,
+)
 from utils.byok import get_byok_key
 from utils.executors import db_executor, run_blocking
 
@@ -38,9 +51,9 @@ def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESO
     if lane is not None:
         if lane not in LANES:
             raise ValueError('unknown cap dispatch lane')
-        if not execution_admission_enabled(uid, lane):
+        if not offline_admission_enabled(uid, lane):
             return TranscriptionAllowance('managed', None, 'dispatch_scope_disabled', limit_seconds=None)
-    if not enabled() and execution_admission_configured():
+    if not enabled() and not offline_enforcement_enabled(lane) and execution_admission_configured():
         # Ladder-only activation must not activate legacy monthly-seconds
         # dispatch enforcement. A missing/unreadable budget is never permission
         # to spend; match the funded resolver's fail-closed behavior.
@@ -63,24 +76,35 @@ def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESO
         except Exception:
             return TranscriptionAllowance('on_device', 0, 'allowance_unavailable')
     kwargs = {'usage_cache': usage_cache} if usage_cache is not None else {}
+    if offline_enforcement_enabled(lane):
+        kwargs['provision_subscription'] = False
     if subscription is not _UNRESOLVED:
         kwargs['subscription'] = subscription
     return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True, **kwargs)
 
 
-def sync_allowed(uid: str, seconds: float = 0, provider: Any = 'unknown', *, lane: str = 'sync') -> bool:
+class CapAllowanceDenied(Exception):
+    """A spend refusal, handled as durable audio custody rather than STT failure."""
+
+
+def sync_allowed(
+    uid: str, seconds: float = 0, provider: Any = 'unknown', *, lane: str = 'sync', path: DispatchPath | None = None
+) -> bool:
     if lane not in LANES:
         raise ValueError('unknown cap dispatch lane')
-    if not execution_admission_enabled(uid, lane):
-        return True
+    path = path or (DispatchPath.BATCH_GPU if lane == 'batch' else DispatchPath.SYNC_SEGMENT)
+    if not offline_admission_enabled(uid, lane):
+        return record_decision(path, True, DispatchReason.SCOPE_DISABLED)
+    if customer_funded(provider):
+        return record_decision(path, True, DispatchReason.BYOK)
     from utils import funded_processing
 
     if not funded_processing.consent_allows(uid):
-        return False
+        return record_decision(path, False, DispatchReason.CONSENT_DENIED)
     allowance = funded_allowance(uid, lane=lane)
     if not allowance.managed:
-        record_audio('sync', 'held', provider, seconds, allowance.reason == 'plan_allowance_exhausted')
-    return allowance.managed
+        record_audio(lane, 'held', provider, seconds, allowance.reason == 'plan_allowance_exhausted')
+    return record_allowance_decision(path, allowance)
 
 
 HELD_SPAN_MERGE_GAP_SECONDS = 0.5

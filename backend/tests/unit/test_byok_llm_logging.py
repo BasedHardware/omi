@@ -109,14 +109,18 @@ def test_classify_byok_llm_error_ignores_transient_rate_limit():
 def test_handle_llm_error_logs_byok_source(mock_send_notification, mock_get_key, mock_get_uid):
     from utils.llm.byok_errors import handle_llm_error
 
-    with patch('utils.llm.byok_errors.logger.error') as mock_log:
-        handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature='memories', model='gpt-test')
+    # A user-actionable BYOK failure is account state, not a server fault: one
+    # structured WARNING, never ERROR, and never the provider error body.
+    with patch('utils.llm.byok_errors.logger.error') as mock_error:
+        with patch('utils.llm.byok_errors.logger.warning') as mock_warn:
+            handle_llm_error(_HTTPError("insufficient_quota", 429), 'openai', feature='memories', model='gpt-test')
 
-    log_args = mock_log.call_args.args
-    assert 'LLM error source=%s' in log_args[0]
-    assert log_args[1] == 'byok'
-    assert log_args[2] == 'openai'
-    assert log_args[8] == 'quota'
+    mock_error.assert_not_called()
+    warn_args = mock_warn.call_args.args
+    assert 'byok=true' in warn_args[0]
+    assert warn_args[1] == 'byok_quota'
+    assert warn_args[2] == 'openai'
+    assert warn_args[3] == 'memories'
     mock_send_notification.assert_called_once_with('user-1', 'openai', 'quota')
 
 

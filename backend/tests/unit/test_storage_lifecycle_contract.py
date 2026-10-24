@@ -48,6 +48,16 @@ def test_apply_files_declare_exactly_one_coldline_rule_scoped_to_chunks():
         assert rule["condition"]["matchesPrefix"] == ["chunks/"]
 
 
+def test_prod_coldline_rule_is_pinned_to_batch_suffixes():
+    set_class = [r for r in _rules(_load("prod.json")) if r["action"]["type"] == "SetStorageClass"]
+    assert len(set_class) == 1
+    rule = set_class[0]
+    assert rule["condition"]["matchesSuffix"] == [".batch.enc", ".batch.bin"], (
+        "prod Coldline transitions must stay scoped to the large batch artifacts; "
+        "small .opus.enc chunks never pay back Coldline Class A pricing (p76)"
+    )
+
+
 def test_prod_re_declares_the_two_legacy_delete_rules_verbatim():
     for name in ("prod.json", "prod.rollback.json"):
         rules = _rules(_load(name))

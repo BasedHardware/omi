@@ -81,6 +81,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   bool _showLatestJump = false;
   Timer? _latestJumpIdleTimer;
   final List<Timer> _pendingScrollTimers = [];
+  bool _postFrameScrollPending = false;
+  bool _postFrameScrollAnimated = false;
+  bool _postFrameScrollForce = false;
   final List<Timer> _ownedLifecycleTimers = [];
   bool _isProgrammaticScroll = false;
   int _lastObservedMessageCount = 0;
@@ -122,6 +125,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       provider.readAloud.active = true;
       // Listen for quota exceeded from any send path (text or voice)
       provider.addListener(_onMessageProviderChanged);
+      _observeMessagesForAutoScroll(provider);
       // Every entry resumes the current conversation, including while a reply or voice send is active.
       if (provider.messages.isEmpty && !provider.isFreshChat) {
         provider.refreshMessages();
@@ -176,6 +180,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   void _onMessageProviderChanged() {
     final provider = context.read<MessageProvider>();
+    _observeMessagesForAutoScroll(provider);
     if (mounted && provider.isChatQuotaExceeded && !_quotaSheetShown) {
       _quotaSheetShown = true;
       if (provider.chatAtCap == null) _showPlansSheetOnQuotaExceeded();
@@ -256,9 +261,37 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     super.build(context);
 
     return ChatEntrance(
-      child: Consumer2<MessageProvider, ConnectivityProvider>(
-        builder: (context, provider, connectivityProvider, child) {
-          _observeMessagesForAutoScroll(provider);
+      child: Selector2<MessageProvider, ConnectivityProvider, Object>(
+        // Streamed text belongs to its message slot, not the header, composer,
+        // or transcript membership. Keep this key independent of reply text.
+        selector: (_, provider, connectivity) => (
+          provider,
+          provider.messages,
+          provider.messages.length,
+          provider.messages.isEmpty ? null : _chatMessageRowKey(provider.messages.last),
+          provider.isLoadingMessages,
+          provider.hasCachedMessages,
+          provider.isClearingChat,
+          provider.firstTimeLoadingText,
+          provider.historyProblem,
+          provider.hasOlderMessages,
+          provider.loadingOlderMessages,
+          provider.canSwitchChat,
+          provider.chatApps,
+          provider.chatApps.length,
+          provider.chatAtCap,
+          provider.chatMutationInProgress,
+          provider.canStopReply,
+          provider.sendingMessage,
+          provider.isUploadingFiles,
+          provider.selectedFiles.length,
+          // A follow-up is only shown after the reply finishes.
+          provider.chatMutationInProgress || provider.messages.isEmpty ? null : provider.messages.last.followUpQuestion,
+          connectivity.isConnected,
+        ),
+        builder: (context, _, child) {
+          final provider = context.read<MessageProvider>();
+          final connectivityProvider = context.read<ConnectivityProvider>();
           // Empty, the sheet is glass over the blurred page underneath (chat_route.dart); once there
           // is a transcript it turns solid so long answers stay readable.
           final isGlass = provider.messages.isEmpty && !provider.isLoadingMessages && !provider.isClearingChat;
@@ -338,9 +371,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   Widget _buildTranscript(MessageProvider provider) {
+    // Keyboard animation changes constraints, not transcript membership.
+    final messageKeys = [for (final message in provider.messages) _chatMessageRowKey(message)];
     return LayoutBuilder(
       builder: (context, constraints) {
-        final messageKeys = [for (final message in provider.messages) _chatMessageRowKey(message)];
         return Theme(
           data: Theme.of(context).copyWith(
             textSelectionTheme: TextSelectionThemeData(
@@ -836,7 +870,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
     if (_chatScrollMode == ChatScrollMode.followingBottom &&
         (addedMessages || lastMessageChanged || streamedTextChanged || streamedBlocksChanged)) {
-      _scheduleModeAwareScroll(delayMs: 0, animated: streamedTextChanged || streamedBlocksChanged);
+      _schedulePostFrameModeAwareScroll(animated: streamedTextChanged || streamedBlocksChanged);
     }
   }
 
@@ -902,9 +936,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   void _schedulePostFrameModeAwareScroll({bool animated = false, bool force = false}) {
+    _postFrameScrollAnimated = _postFrameScrollAnimated || animated;
+    _postFrameScrollForce = _postFrameScrollForce || force;
+    if (_postFrameScrollPending) return;
+    _postFrameScrollPending = true;
     SchedulerBinding.instance.addPostFrameCallback((_) {
+      _postFrameScrollPending = false;
+      final shouldAnimate = _postFrameScrollAnimated;
+      final shouldForce = _postFrameScrollForce;
+      _postFrameScrollAnimated = false;
+      _postFrameScrollForce = false;
       if (!mounted) return;
-      _scheduleModeAwareScroll(delayMs: 0, animated: animated, force: force);
+      _scheduleModeAwareScroll(delayMs: 0, animated: shouldAnimate, force: shouldForce);
     });
   }
 
@@ -918,6 +961,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   void _cancelPendingScrolls() {
+    _postFrameScrollAnimated = false;
+    _postFrameScrollForce = false;
     for (final timer in _pendingScrollTimers) {
       timer.cancel();
     }
@@ -1262,6 +1307,7 @@ class _StableChatMessageDelegate extends SliverChildBuilderDelegate {
 
   @override
   bool shouldRebuild(covariant _StableChatMessageDelegate oldDelegate) {
+    if (identical(_messageKeys, oldDelegate._messageKeys)) return false;
     final previous = oldDelegate._messageKeys;
     if (_messageKeys.length < previous.length) return true;
     for (var i = 0; i < previous.length; i++) {

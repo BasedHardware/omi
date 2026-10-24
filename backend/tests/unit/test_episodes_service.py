@@ -650,6 +650,10 @@ def test_moment_render_receives_account_and_conversation_and_language_reaches_up
         UID, moment, _collaborators(model, now=T0 + timedelta(minutes=1), store=StrictFirestore())
     )
     assert result == 'applied'
-    assert render.call_args.kwargs == {'uid': UID, 'conversation_id': moment.conversation_id}
+    assert render.call_args.kwargs == {
+        'uid': UID,
+        'conversation_id': moment.conversation_id,
+        'owner_name': None,
+    }
     assert update.call_args.kwargs['conversation_language'] == 'en'
     assert len(model.calls) == 1
