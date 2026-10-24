@@ -1369,6 +1369,7 @@
     "checkConnectionTryAgain": "تحقق من اتصالك وحاول مرة أخرى.",
     "useFreePlan": "استخدام الخطة المجانية",
     "continueText": "متابعة",
+    "checkoutExistingSubscription": "لديك اشتراك بالفعل. يمكنك إدارة اشتراكك الحالي بدلاً من بدء اشتراك جديد.",
     "resubscribeFirstToChangePlans": "أعد الاشتراك أولاً لتغيير الخطط.",
     "resubscribe": "إعادة الاشتراك",
     "couldNotOpenPaymentSettings": "تعذر فتح إعدادات الدفع. يرجى المحاولة مرة أخرى.",
@@ -4421,5 +4422,8 @@
     "pairingPowerOnSubtitle": "اضغط الزر مرة واحدة وأبقه قريبًا من هاتفك.",
     "walkthroughBackgroundRecordingNote": "هذا كل شيء. سيستمر Omi في تسجيل محادثاتك في الخلفية.",
     "noThanks": "لا، شكرًا",
-    "recapInTheBackground": "في الخلفية"
+    "recapInTheBackground": "في الخلفية",
+    "retentionOfferAccept": "ابقَ بخصم {percent}%",
+    "retentionOfferBody": "ابقَ وادفع {price} شهريًا لمدة {months} أشهر قادمة.",
+    "retentionOfferApplied": "تم. خصم {percent}% لمدة {months} أشهر قادمة."
 }

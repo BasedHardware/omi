@@ -4427,6 +4427,10 @@ class AppLocalizationsBn extends AppLocalizations {
   String get continueText => 'চালিয়ে যান';
 
   @override
+  String get checkoutExistingSubscription =>
+      'আপনার ইতিমধ্যেই একটি সাবস্ক্রিপশন আছে। নতুনটি শুরু না করে বর্তমান সাবস্ক্রিপশন পরিচালনা করুন।';
+
+  @override
   String get resubscribeFirstToChangePlans => 'প্ল্যান বদলাতে আগে পুনরায় সাবস্ক্রাইব করুন।';
 
   @override
@@ -14533,4 +14537,19 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'পটভূমিতে';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% ছাড়ে থাকুন';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'থাকুন এবং মাসে $price দিন, পরের $months মাস।';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'হয়ে গেছে। $percent% ছাড়, পরের $months মাস।';
+  }
 }

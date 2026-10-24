@@ -4432,6 +4432,9 @@ class AppLocalizationsVi extends AppLocalizations {
   String get continueText => 'Tiếp tục';
 
   @override
+  String get checkoutExistingSubscription => 'Bạn đã có gói đăng ký. Hãy quản lý gói hiện tại thay vì bắt đầu gói mới.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Hãy đăng ký lại trước để đổi gói.';
 
   @override
@@ -14539,4 +14542,19 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Trong nền';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Ở lại với ưu đãi giảm $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Ở lại và chỉ trả $price mỗi tháng trong $months tháng tới.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Xong. Giảm $percent% trong $months tháng tới.';
+  }
 }

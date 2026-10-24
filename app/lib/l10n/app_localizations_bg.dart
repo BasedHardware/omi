@@ -4435,6 +4435,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get continueText => 'Продължи';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Вече имате абонамент. Управлявайте текущия си абонамент, вместо да започвате нов.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Първо се абонирайте отново, за да смените плана.';
 
   @override
@@ -14589,4 +14593,19 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'На заден план';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Остани с $percent% отстъпка';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Остани и плащай $price на месец за следващите $months месеца.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Готово. $percent% отстъпка за следващите $months месеца.';
+  }
 }

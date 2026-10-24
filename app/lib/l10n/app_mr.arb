@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "तुमच्याकडे आधीपासून सदस्यता आहे. नवीन सदस्यता सुरू करण्याऐवजी सध्याची सदस्यता व्यवस्थापित करा.",
     "resubscribeFirstToChangePlans": "योजना बदलण्यासाठी आधी पुन्हा सदस्यता घ्या.",
     "resubscribe": "पुन्हा सदस्यता घ्या",
     "@resubscribe": {
@@ -11847,5 +11848,8 @@
     "pairingPowerOnSubtitle": "बटण एकदा दाबा आणि फोनजवळ ठेवा.",
     "walkthroughBackgroundRecordingNote": "एवढंच. Omi पार्श्वभूमीत तुमची संभाषणं रेकॉर्ड करत राहील.",
     "noThanks": "नको, धन्यवाद",
-    "recapInTheBackground": "पार्श्वभूमीवर"
+    "recapInTheBackground": "पार्श्वभूमीवर",
+    "retentionOfferAccept": "{percent}% सवलतीसह सुरू ठेवा",
+    "retentionOfferBody": "सुरू ठेवा आणि दरमहा {price} भरा, पुढील {months} महिने.",
+    "retentionOfferApplied": "झाले. {percent}% सवलत, पुढील {months} महिने."
 }

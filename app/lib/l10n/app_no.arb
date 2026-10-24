@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Sjekk tilkoblingen og prøv igjen.",
     "useFreePlan": "Bruk gratis abonnement",
     "continueText": "Fortsett",
+    "checkoutExistingSubscription": "Du har allerede et abonnement. Administrer det nåværende abonnementet i stedet for å starte et nytt.",
     "resubscribeFirstToChangePlans": "Abonner på nytt først for å bytte abonnement.",
     "resubscribe": "Abonner på nytt",
     "couldNotOpenPaymentSettings": "Kunne ikke åpne betalingsinnstillinger. Prøv igjen.",
@@ -4421,5 +4422,8 @@
     "pairingPowerOnSubtitle": "Trykk én gang på knappen og hold den nær telefonen.",
     "walkthroughBackgroundRecordingNote": "Det var alt. Omi fortsetter å ta opp samtalene dine i bakgrunnen.",
     "noThanks": "Nei takk",
-    "recapInTheBackground": "I bakgrunnen"
+    "recapInTheBackground": "I bakgrunnen",
+    "retentionOfferAccept": "Bli med {percent} % rabatt",
+    "retentionOfferBody": "Bli og betal {price} i måneden de neste {months} månedene.",
+    "retentionOfferApplied": "Ferdig. {percent} % rabatt de neste {months} månedene."
 }

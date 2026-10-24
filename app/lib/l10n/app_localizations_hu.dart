@@ -4446,6 +4446,10 @@ class AppLocalizationsHu extends AppLocalizations {
   String get continueText => 'Folytatás';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Már van előfizetésed. Új indítása helyett kezeld a meglévő előfizetésedet.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Csomagváltáshoz először fizess elő újra.';
 
   @override
@@ -14595,4 +14599,19 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'A háttérben';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Maradj $percent% kedvezménnyel';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Maradj, és fizess havi $price összeget a következő $months hónapban.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Kész. $percent% kedvezmény a következő $months hónapban.';
+  }
 }

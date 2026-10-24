@@ -4447,6 +4447,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get continueText => 'Continuar';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Ja tens una subscripció. Gestiona la subscripció actual en lloc de començar-ne una de nova.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Torneu a subscriure-us primer per canviar de pla.';
 
   @override
@@ -14612,4 +14616,19 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'En segon pla';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Queda\'t amb un $percent% de descompte';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Queda\'t i paga $price al mes durant els propers $months mesos.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Fet. $percent% de descompte els propers $months mesos.';
+  }
 }

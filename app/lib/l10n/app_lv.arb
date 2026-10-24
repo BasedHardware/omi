@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Pārbaudiet savienojumu un mēģiniet vēlreiz.",
     "useFreePlan": "Izmantot bezmaksas plānu",
     "continueText": "Turpināt",
+    "checkoutExistingSubscription": "Jums jau ir abonements. Pārvaldiet pašreizējo abonementu, nevis sāciet jaunu.",
     "resubscribeFirstToChangePlans": "Lai mainītu plānu, vispirms abonējiet vēlreiz.",
     "resubscribe": "Atkārtoti abonēt",
     "couldNotOpenPaymentSettings": "Nevarēja atvērt maksājumu iestatījumus. Lūdzu, mēģiniet vēlreiz.",
@@ -4421,5 +4422,8 @@
     "pairingPowerOnSubtitle": "Nospiediet pogu vienreiz un turiet tuvu tālrunim.",
     "walkthroughBackgroundRecordingNote": "Tas arī viss. Omi turpinās ierakstīt jūsu sarunas fonā.",
     "noThanks": "Nē, paldies",
-    "recapInTheBackground": "Fonā"
+    "recapInTheBackground": "Fonā",
+    "retentionOfferAccept": "Palikt ar {percent}% atlaidi",
+    "retentionOfferBody": "Paliec un maksā {price} mēnesī nākamos {months} mēnešus.",
+    "retentionOfferApplied": "Gatavs. {percent}% atlaide nākamos {months} mēnešus."
 }

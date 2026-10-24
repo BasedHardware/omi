@@ -27,7 +27,8 @@ import {
   upgradeSubscription,
   openCustomerPortal,
   OPERATOR_DEPRECATION_FALLBACK_PRICE,
-  RESUBSCRIBE_FIRST
+  RESUBSCRIBE_FIRST,
+  EXISTING_SUBSCRIPTION
 } from '../../../lib/billing'
 import type {
   UserSubscriptionResponse,
@@ -174,6 +175,9 @@ export function PlanUsageTab(): React.JSX.Element {
         case 'blocked':
           toast(RESUBSCRIBE_FIRST, { tone: 'error' })
           return
+        case 'existing_subscription':
+          toast(EXISTING_SUBSCRIPTION, { tone: 'error' })
+          return
         default:
           toast("You're all set", { tone: 'success' })
       }
@@ -181,11 +185,7 @@ export function PlanUsageTab(): React.JSX.Element {
       setSelectedPlanId(null)
       await load()
     } catch (e) {
-      const status = (e as { response?: { status?: number } }).response?.status
-      toast('Checkout failed', {
-        tone: 'error',
-        body: status === 409 ? RESUBSCRIBE_FIRST : apiError(e)
-      })
+      toast('Checkout failed', { tone: 'error', body: apiError(e) })
     } finally {
       setActivePriceId(null)
     }
@@ -194,8 +194,7 @@ export function PlanUsageTab(): React.JSX.Element {
   // Deprecation "Try Pro" + trial "View Plans": select the Operator card
   // (or first available) and scroll the grid into view.
   const jumpToOperator = (): void => {
-    const operator =
-      catalog.find((p) => p.id === 'operator') ?? catalog[0]
+    const operator = catalog.find((p) => p.id === 'operator') ?? catalog[0]
     if (operator) setSelectedPlanId(operator.id)
     plansRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }

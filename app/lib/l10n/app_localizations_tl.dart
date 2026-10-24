@@ -4460,6 +4460,10 @@ class AppLocalizationsTl extends AppLocalizations {
   String get continueText => 'Magpatuloy';
 
   @override
+  String get checkoutExistingSubscription =>
+      'May subscription ka na. Pamahalaan ang kasalukuyan mong subscription sa halip na magsimula ng bago.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Mag-subscribe muna ulit para magpalit ng plan.';
 
   @override
@@ -14652,4 +14656,19 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Sa background';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Manatili nang may $percent% diskwento';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Manatili at magbayad ng $price kada buwan sa susunod na $months buwan.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Tapos na. $percent% diskwento sa susunod na $months buwan.';
+  }
 }
