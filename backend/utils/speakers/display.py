@@ -224,7 +224,10 @@ def display_participants(
             name = (
                 owner_name
                 if field(row, 'is_user', False)
-                else _clean_name(names.get(str(field(row, 'person_id') or '')))
+                else (
+                    _clean_name(names.get(str(field(row, 'person_id') or '')))
+                    or (_clean_name(field(row, 'person_name')) if field(row, 'person_id') else None)
+                )
             )
         if raw == 99:
             name = 'Omi'
@@ -253,19 +256,21 @@ def display_participants(
         raw = field(row, 'speaker_id')
         cluster = clusters.get(field(row, 'id'))
         token = tokens[key]
+        # A segment-bound name is never the fallback for an unbound excerpt.
+        # Live named rows also must not spend anonymous ledger slots.
+        if name and voice_order is not None:
+            continue
         if key not in labels and not (field(row, 'is_user', False) and name) and raw != 99:
             if raw is None and cluster is None:
                 labels[key] = 'Unknown speaker'
             elif (
                 defer_short_voices
-                and key not in protected
+                and not name
                 and (cluster.speech_seconds if cluster else display_seconds.get(key, 0.0)) < MIN_EVIDENCE_SECONDS
             ):
                 labels[key] = 'Unknown speaker'
             elif voice_order is None:
                 labels[key] = labeler.label(token)
-            elif name:
-                labels[key] = name
             else:
                 if token not in order and len(order) <= MAX_UNNAMED_VOICES:
                     order.append(token)

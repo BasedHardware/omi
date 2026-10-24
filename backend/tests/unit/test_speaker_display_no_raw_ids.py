@@ -292,3 +292,21 @@ def test_prompt_prefix_normalizes_legacy_numeric_speaker_maps():
     )
     assert 'spk c0 Ada' in prefix.context and '[first c0]' in prefix.context
     assert '378' not in prefix.context and '379' not in prefix.context
+
+
+def test_live_ledger_never_spreads_segment_bound_names_to_unbound_excerpts():
+    rows = [dict(row(378), id='named', person_id='ada'), dict(row(378), id='unbound')]
+    for defer in (False, True):
+        display = display_participants(rows, names={'ada': 'Ada'}, voice_order=[], defer_short_voices=defer)
+        assert display.label(rows[0]) == 'Ada'
+        assert display.for_segment(rows[1]).name is None
+        assert display.label(rows[1]) == ('Unknown speaker' if defer else 'Speaker A')
+        assert len(display.voice_order) == (0 if defer else 1)
+
+
+def test_live_manual_name_keeps_trusted_episode_projection_without_roster_map():
+    rows = [dict(row(378), speaker_label_source='manual', person_id='ada', person_name='Ada')]
+    display = display_participants(rows, voice_order=[], defer_short_voices=True)
+    assert display.label(rows[0]) == 'Ada'
+    assert display.for_segment(rows[0]).name == 'Ada'
+    assert display.voice_order == ()
