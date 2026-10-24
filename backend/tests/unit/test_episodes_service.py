@@ -323,6 +323,68 @@ def test_fifty_thousand_unplaced_segments_keep_every_document_small_and_never_re
     assert len(model.calls) == calls_before
 
 
+def test_past_the_cap_the_receipt_base_keeps_the_most_recent_ids_for_live_replays():
+    """Past the cap the base holds the most recently consumed ids, not the
+    alphabetically highest: the live tracker re-presents its buffered segments,
+    so a just-consumed id (or its repaired placement) would otherwise be
+    re-fed to the model on the live path."""
+    store = StrictFirestore()
+    model = FakeModel({'title': 'Long unplaced call', 'bullets': ['Notes']}, {'bullets': ['More']})
+    c = _collaborators(model, now=T0 + timedelta(minutes=1), store=store)
+
+    def unplaced(ids, *, minutes):
+        return MomentInput(
+            conversation_id='c1',
+            source='omi',
+            segments=[
+                {
+                    'id': sid,
+                    'text': f'speech {sid} alpha beta',
+                    'start': -1.0,
+                    'end': -1.0,
+                    'audio_alignment': 'unplaced',
+                }
+                for sid in ids
+            ],
+            started_at=T0 + timedelta(minutes=minutes),
+            ended_at=T0 + timedelta(minutes=minutes + 1),
+            trigger='interval',
+        )
+
+    # The late batch sorts below every early id: an alphabetical window archived
+    # exactly these and kept the old ids instead.
+    early = [f'm-{i:05d}' for i in range(episode_receipts.SHARD_SIZE)]
+    late = [f'a-{i:05d}' for i in range(50)]
+    assert service.record_moment(UID, unplaced(early, minutes=1), c) == 'applied'
+    c.now = lambda: T0 + timedelta(minutes=3)
+    assert service.record_moment(UID, unplaced(late, minutes=2), c) == 'applied'
+
+    # The base keeps the most recent SHARD_SIZE ids (every late one included);
+    # only the oldest early ids rolled into the first archive.
+    base = store.rows[('users', UID, 'episode_segment_receipts', 'c1')]
+    assert len(base['ids']) == episode_receipts.SHARD_SIZE
+    assert set(base['ids']) == set(early[50:]) | set(late)
+    assert base['shards'] == 1
+    assert store.rows[('users', UID, 'episode_segment_receipts', 'c1', 's', '0')]['ids'] == early[:50]
+    assert _consumed(store) == (set(early) | set(late), True)
+
+    # The live path dedupes against the base alone: the just-consumed batch
+    # replay (the tracker re-presenting its buffer) and its repaired placement
+    # both cost no model call.
+    calls = len(model.calls)
+    c.now = lambda: T0 + timedelta(minutes=4)
+    assert service.record_moment(UID, unplaced(late, minutes=3), c) == 'skipped_applied'
+    repaired = replace(
+        unplaced(late, minutes=4),
+        segments=[
+            {**s, 'start': 5.0, 'end': 10.0, 'audio_alignment': None} for s in unplaced(late, minutes=4).segments
+        ],
+    )
+    c.now = lambda: T0 + timedelta(minutes=5)
+    assert service.record_moment(UID, repaired, c) == 'skipped_applied'
+    assert len(model.calls) == calls
+
+
 def test_legacy_episode_document_receipts_are_adopted_and_retired():
     """Episodes written before the receipts collection kept consumed ids in the episode
     document: the first post-upgrade write adopts them and retires the in-document list."""

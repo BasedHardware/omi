@@ -12,9 +12,9 @@ tail still dedupes against everything consumed live. They must also never
 bound the episode document's size, so they live under
 ``users/{uid}/episode_segment_receipts/{conversation_id}``:
 
-- the base document holds the most recent ``SHARD_SIZE`` ids;
-- older ids roll into immutable archive documents ``s/{index}`` of
-  ``SHARD_SIZE`` ids each, so no document grows with the conversation.
+- the base document holds the most recent ``SHARD_SIZE`` ids, oldest first;
+- older ids roll into immutable archive documents ``s/{index}`` holding at
+  most ``SHARD_SIZE`` ids each, so no document grows with the conversation.
 
 A live moment dedupes against the base document alone (its segments are
 recent: the tracker buffers at most ``MAX_BUFFERED_SEGMENTS``); the
@@ -34,7 +34,7 @@ from database._client import get_firestore_client
 
 # Ids per receipt document. ~2,000 uuids is ~80 KB: far under the 1 MiB
 # document limit, cheap to read per moment, and 50k consumed segments shard
-# into 25 immutable archives.
+# into ~25 immutable archives.
 SHARD_SIZE = 2_000
 
 _BASE_COLLECTION = 'episode_segment_receipts'
@@ -88,17 +88,27 @@ def plan_write(
 ) -> tuple[dict[str, Any], list[tuple[int, list[str]]]]:
     """The base-document payload and archive writes that record ``add_ids``.
 
-    Pure: the caller applies both inside the episode transaction. Existing ids
-    beyond ``SHARD_SIZE`` roll into the next archive indices; the base document
-    always keeps the most recent window.
+    Pure: the caller applies both inside the episode transaction. ``ids`` is
+    ordered oldest-first: the stored order is preserved and new ids append in
+    the order given, so only the oldest ids spill into the next archive
+    indices and the base document always keeps the most recent ``SHARD_SIZE``
+    window. The live tracker re-presents buffered segments (at most
+    ``MAX_BUFFERED_SEGMENTS``), all far newer than that window.
     """
     at = now or datetime.now(timezone.utc)
-    merged = sorted({str(value) for value in (existing or {}).get('ids') or []} | {str(value) for value in add_ids})
+    merged: list[str] = [str(value) for value in (existing or {}).get('ids') or []]
+    seen = set(merged)
+    for value in add_ids:
+        text = str(value)
+        if text not in seen:
+            seen.add(text)
+            merged.append(text)
     shards = int((existing or {}).get('shards') or 0)
     archives: list[tuple[int, list[str]]] = []
     while len(merged) > SHARD_SIZE:
-        archives.append((shards, merged[:SHARD_SIZE]))
+        spill = len(merged) - SHARD_SIZE
+        archives.append((shards, merged[:spill]))
         shards += 1
-        merged = merged[SHARD_SIZE:]
+        merged = merged[spill:]
     payload: dict[str, Any] = {'ids': merged, 'shards': shards, 'updated_at': at}
     return payload, archives
