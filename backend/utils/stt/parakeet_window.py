@@ -1245,7 +1245,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                     replica = window_replicas.claim(batch_pressure.ready_replicas(), exclude=frozenset(excluded))
                     if replica is None:
                         if not attempt and replica_http.service_snapshot_allows(
-                            batch_pressure, st._parakeet_circuit, window_replicas
+                            batch_pressure, st.parakeet_family_circuit_state(), window_replicas
                         ):
                             return await replica_http.post_service_window(
                                 self._post_window, self.fail, self._without_loops, pcm, dur

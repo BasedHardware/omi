@@ -36,9 +36,9 @@ def parse_window_response(
     return [normalize(segment) for segment in parse_tdt_segments(data, duration)]
 
 
-def service_snapshot_allows(pressure: Any, circuit: Any, replicas: WindowReplicas) -> bool:
+def service_snapshot_allows(pressure: Any, circuit_state: str, replicas: WindowReplicas) -> bool:
     """Use the admission owner's own fresh/grace math; never invent headroom."""
-    if circuit.state != 'closed' or not replicas.service_available():
+    if circuit_state != 'closed' or not replicas.service_available():
         return False
     if pressure.ready_replicas():
         return False  # never use the VIP to bypass quarantined known pods

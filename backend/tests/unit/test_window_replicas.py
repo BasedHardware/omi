@@ -2,26 +2,28 @@
 
 from types import SimpleNamespace
 
+from utils.stt import streaming
 from utils.stt.window_replicas import WindowReplicas, can_route_replicas, service_snapshot_allows
 
 
-def test_service_grace_never_bypasses_family_or_known_pod_benches():
+def test_service_grace_never_bypasses_family_or_known_pod_benches(monkeypatch):
     pressure = SimpleNamespace(ready_replicas=lambda: (), allows=lambda *_args: True)
     circuit = SimpleNamespace(state='closed')
+    monkeypatch.setattr(streaming, '_parakeet_circuit', circuit)
     pool = WindowReplicas()
-    assert service_snapshot_allows(pressure, circuit, pool)
+    assert service_snapshot_allows(pressure, streaming.parakeet_family_circuit_state(), pool)
     circuit.state = 'half_open'
-    assert not service_snapshot_allows(pressure, circuit, pool)
+    assert not service_snapshot_allows(pressure, streaming.parakeet_family_circuit_state(), pool)
     circuit.state = 'open'
-    assert not service_snapshot_allows(pressure, circuit, pool)
+    assert not service_snapshot_allows(pressure, streaming.parakeet_family_circuit_state(), pool)
     circuit.state = 'closed'
     pool.settle(pool.claim(('10.0.0.1',)), failed=True)
     assert pool.claim(()) is None
-    assert not service_snapshot_allows(pressure, circuit, pool)
+    assert not service_snapshot_allows(pressure, streaming.parakeet_family_circuit_state(), pool)
     pool.claim(('10.0.0.1', '10.0.0.2'))
-    assert service_snapshot_allows(pressure, circuit, pool)  # healthy sibling
+    assert service_snapshot_allows(pressure, streaming.parakeet_family_circuit_state(), pool)  # healthy sibling
     pressure.ready_replicas = lambda: ('10.0.0.1',)
-    assert not service_snapshot_allows(pressure, circuit, pool)
+    assert not service_snapshot_allows(pressure, streaming.parakeet_family_circuit_state(), pool)
 
 
 def test_only_default_http_family_with_ready_inventory_can_use_pods():
