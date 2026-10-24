@@ -7,7 +7,6 @@ import 'package:omi/backend/http/api/action_items.dart';
 import 'package:omi/backend/http/api/messages.dart';
 import 'package:omi/backend/http/api_fallback.dart';
 import 'package:omi/backend/http/api_result.dart';
-import 'package:omi/backend/schema/message.dart';
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/utils/off_ui_isolate.dart';
 
