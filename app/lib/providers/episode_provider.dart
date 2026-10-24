@@ -143,12 +143,12 @@ class EpisodeProvider extends ChangeNotifier {
 
   final Set<String> _recovering = {};
 
-  void _acceptLive(Episode? episode) {
+  void _acceptLive(Episode? episode, {bool recover = true}) {
     final old = _live;
     final next = episode != null && episode.live && !_ended.contains(episode.id) ? episode : null;
     if (old != null && old.id != next?.id) {
       _remember(old);
-      if (old.conversationIds.isNotEmpty) unawaited(recoverPrevious(old.conversationIds.last));
+      if (recover && old.conversationIds.isNotEmpty) unawaited(recoverPrevious(old.conversationIds.last));
     }
     if (episode != null && !episode.live) _remember(episode);
     if (next != null && old?.id != next.id) _waitingSince = _clock();
@@ -337,7 +337,7 @@ class EpisodeProvider extends ChangeNotifier {
   @visibleForTesting
   void debugSetLive(Episode? episode, {bool enabled = true, Map<String, Episode?> byConversation = const {}}) {
     _enabled = enabled;
-    _acceptLive(episode);
+    _acceptLive(episode, recover: false);
     _byConversation.addAll(byConversation);
     notifyListeners();
   }
