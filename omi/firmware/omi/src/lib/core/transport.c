@@ -33,6 +33,7 @@
 #include "sd_card.h"
 #include "settings.h"
 #include "storage.h"
+#include "unit_id.h"
 LOG_MODULE_REGISTER(transport, CONFIG_LOG_DEFAULT_LEVEL);
 
 #ifdef CONFIG_OMI_ENABLE_RFSW_CTRL
@@ -1341,6 +1342,12 @@ int transport_start()
 
     // Production-line helper: emit local BLE addresses on UART for fixture parsing.
     log_local_ble_addresses();
+
+    // After settings_load(): expose the immutable per-unit ID as DIS serial (0x2A25).
+    err = unit_id_publish();
+    if (err) {
+        LOG_WRN("Continuing without DIS serial number (err %d)", err);
+    }
 
     if (IS_ENABLED(CONFIG_SHELL_BT_NUS)) {
         err = shell_bt_nus_init();
