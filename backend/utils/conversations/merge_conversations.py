@@ -290,7 +290,7 @@ def perform_merge_async(
         # 3. Generate new conversation ID and copy audio chunks
         checkpoint('target_started')
         new_conversation_id = merge_target_id or str(uuid.uuid4())
-        merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id)
+        merged_audio_files = _copy_audio_chunks_for_merge(uid, sorted_convs, new_conversation_id, skip_existing=True)
 
         # 4. Determine basic fields from source conversations
         # Use earliest conversation's dates. created_at fallback uses

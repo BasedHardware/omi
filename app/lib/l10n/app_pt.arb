@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Verifique sua conexão e tente novamente.",
     "useFreePlan": "Usar plano gratuito",
     "continueText": "Continuar",
+    "checkoutExistingSubscription": "Você já tem uma assinatura. Gerencie sua assinatura atual em vez de iniciar uma nova.",
     "resubscribeFirstToChangePlans": "Assine novamente antes de mudar de plano.",
     "resubscribe": "Assinar novamente",
     "couldNotOpenPaymentSettings": "Não foi possível abrir as configurações de pagamento. Por favor, tente novamente.",
