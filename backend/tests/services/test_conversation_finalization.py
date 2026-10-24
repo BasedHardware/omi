@@ -303,3 +303,16 @@ def test_quiet_replay_parallelism_is_bounded_and_preserves_context(mock_dependen
     assert result['advanced'] == 4
     assert peak == 2
     assert observed == ['owner-context'] * 4
+
+
+def test_serial_rollback_uses_no_additional_thread_pool(mock_dependencies, monkeypatch):
+    monkeypatch.setenv('LISTEN_QUIET_REPLAY_CONCURRENCY', '1')
+    mock_dependencies['get_candidates'].return_value = [
+        {'job_id': f'quiet-{i}', 'kind': 'listen_quiet_check', 'dispatch_generation': 1} for i in range(2)
+    ]
+    monkeypatch.setattr(
+        conversation_finalization, 'ThreadPoolExecutor', mock.Mock(side_effect=AssertionError('serial rollback'))
+    )
+    monkeypatch.setattr(conversation_finalization.quiet_finalization, 'run', mock.Mock(return_value='done'))
+    result = reconcile_listen_finalization_jobs()
+    assert result['retired'] == 2

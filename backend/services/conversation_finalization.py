@@ -226,15 +226,19 @@ def reconcile_listen_finalization_jobs(
         # leaf pool never submits to that shared pool, so saturated shared DB
         # workers cannot deadlock this fan-out. Joining drains all in-flight
         # checks before the pass releases its FSR admission.
-        with ThreadPoolExecutor(
-            max_workers=min(concurrency, len(quiet_candidates)), thread_name_prefix='quiet-replay'
-        ) as pool:
-            futures = [
-                submit_with_context(pool, _reconcile_quiet_candidate, candidate, firestore_client=firestore_client)
-                for candidate in quiet_candidates
-            ]
-            for future in futures:
-                result[future.result()] += 1
+        if concurrency == 1 or len(quiet_candidates) == 1:
+            for candidate in quiet_candidates:
+                result[_reconcile_quiet_candidate(candidate, firestore_client=firestore_client)] += 1
+        else:
+            with ThreadPoolExecutor(
+                max_workers=min(concurrency, len(quiet_candidates)), thread_name_prefix='quiet-replay'
+            ) as pool:
+                futures = [
+                    submit_with_context(pool, _reconcile_quiet_candidate, candidate, firestore_client=firestore_client)
+                    for candidate in quiet_candidates
+                ]
+                for future in futures:
+                    result[future.result()] += 1
 
     for candidate in candidates:
         try:
