@@ -7,6 +7,7 @@ an importable alias. Collection path strings are frozen — only Python symbol n
 from dataclasses import dataclass
 
 RELEASED_MEMORY_CHANGE_HEAD = 'released_memory_changes_v1'
+RELEASED_MEMORY_CHANGE_SCHEMA = 2
 
 
 @dataclass(frozen=True)
