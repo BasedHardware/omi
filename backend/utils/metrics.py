@@ -1079,13 +1079,13 @@ OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
 # (connection_lost, send_failed, ...) or the connect-failure reason that
 # reached the threshold. error_class uses the shared live-reason vocabulary;
 # 'untyped' covers trips whose caller could not name a cause. Re-arming an
-# already-open breaker does not count. The gauge above shows state; this
-# counter answers WHY it tripped (P34 2026-10-21: Parakeet selection breakers
-# tripped on 2-10 of 40 listen pods per 10m with the cause unlogged).
+# already-open breaker does not count. reason groups the bounded cause into
+# auth/quota/5xx/latency/no_text/connect, with capacity/unknown kept explicit.
+# The gauge shows current state; this counter shows why it tripped.
 OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL = Counter(
     'omi_stt_provider_circuit_trip_total',
     'STT provider breaker transitions into open by bounded cause (serve-death or connect-failure reason)',
-    ['provider', 'kind', 'error_class'],
+    ['provider', 'kind', 'error_class', 'reason'],
 )
 
 # Per-provider live-STT connection attempts on every connect path (legacy order
@@ -1373,6 +1373,20 @@ OMI_SUBSCRIPTION_EVENTS = Counter(
     'deliveries, which Stripe may retry, so treat these as an operational trend '
     'signal rather than a billing-grade figure; Stripe remains source of truth.',
     ['event', 'plan', 'interval', 'reason'],
+)
+
+OMI_NEW_BUYER_CHECKOUT_REJECTED = Counter(
+    'omi_new_buyer_checkout_rejected_total',
+    'Single-plan guard outcomes on checkout-session for a buyer with no '
+    'current paid subscription posting a price outside the Omi Pro '
+    "(unlimited_v2) catalog, by reason and the target price's plan. Reasons: "
+    "`non_omi_pro_price` counts rejections on explicitly non-desktop platforms "
+    '(mobile/web); `unknown_platform_allowed` counts legacy prices ALLOWED '
+    'because the platform header is missing/unknown (pre-ruling behaviour '
+    'retained for those callers — an allowance count, not a rejection; do not '
+    'sum reasons blindly). The closed label surfaces and zero-initialization '
+    'live next to the recorder in utils.subscription.',
+    ['reason', 'plan'],
 )
 
 

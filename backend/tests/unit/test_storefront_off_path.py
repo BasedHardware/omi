@@ -29,12 +29,21 @@ def test_v1_response_bytes_do_not_change_with_storefront_flag(
     monkeypatch.setattr(
         payment.users_db,
         'get_user_subscription',
-        lambda uid: Subscription(
+        lambda uid, **kwargs: Subscription(
             plan=PlanType(plan),
             status=SubscriptionStatus.active,
             stripe_subscription_id='sub_fixture' if plan != 'basic' else None,
             cancel_at_period_end=cancel_at_period_end,
         ),
+    )
+    # Catalog filtering reads the period-valid projection (like checkout); this
+    # fixture's records carry no period end, so paid plans project to basic and
+    # the single-plan rule shapes mobile/web the same way in every flag state —
+    # what must not change is the v1 bytes across the storefront flag itself.
+    monkeypatch.setattr(
+        payment.users_db,
+        'get_user_valid_subscription',
+        lambda uid, **kwargs: Subscription(plan=PlanType(plan), status=SubscriptionStatus.active),
     )
     for name in ['UNLIMITED', 'PLUS', 'OPERATOR', 'ARCHITECT', 'UNLIMITED_V2']:
         monkeypatch.setenv(f'STRIPE_{name}_MONTHLY_PRICE_ID', f'price_{name}_month')

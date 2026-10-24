@@ -18,6 +18,11 @@ from models.users import PlanType, Subscription, SubscriptionStatus
 from routers import payment
 
 UID = 'checkout-owner'
+# The default checkout target is the new-buyer single plan (Omi Pro /
+# unlimited_v2): a buyer with no current paid subscription and no platform
+# header may only start on it (2026-10-24 ruling), so the eligibility flows
+# below are exercised through the plan a header-less first-time buyer can
+# actually buy. OTHER_PRICE (Plus) remains a legal plan-change target.
 PRICE = 'price_checkout_current'
 OTHER_PRICE = 'price_checkout_other'
 
@@ -44,7 +49,7 @@ def checkout(monkeypatch):
             'items': {'data': [{'price': {'id': PRICE, 'recurring': {'interval': 'month'}}}]},
         },
     )
-    monkeypatch.setenv('STRIPE_UNLIMITED_MONTHLY_PRICE_ID', PRICE)
+    monkeypatch.setenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID', PRICE)
     monkeypatch.setenv('STRIPE_PLUS_MONTHLY_PRICE_ID', OTHER_PRICE)
     monkeypatch.setattr(payment, 'is_purchasable_price_id', lambda price: price in (PRICE, OTHER_PRICE))
     monkeypatch.setattr(payment.users_db, 'get_user_subscription', lambda uid, **kwargs: state.stored)
@@ -123,6 +128,48 @@ def test_new_buyer_without_a_stored_subscription_id_keeps_checkout(checkout):
     checkout.retrieve.assert_not_called()
 
 
+def test_new_buyer_legacy_price_platform_matrix_at_http_layer(checkout, monkeypatch):
+    """2026-10-24 ruling at the HTTP layer: a buyer with no current paid
+    subscription posting a legacy (Plus) price gets 400 on the explicit
+    non-desktop platforms (mobile/web). A missing platform header keeps the
+    pre-ruling acceptance — every desktop build ever shipped sends the header,
+    but desktop compatibility outranks closing the header-less direct-API gap."""
+    checkout.stored = Subscription(plan=PlanType.basic, status=SubscriptionStatus.active)
+
+    for platform in ('ios', 'android', 'web'):
+        response = checkout.client.post(
+            '/v1/payments/checkout-session',
+            json={'price_id': OTHER_PRICE},
+            headers={'X-App-Platform': platform},
+        )
+        assert response.status_code == 400, platform
+        assert 'Omi Pro' in response.json()['detail'], platform
+    assert_no_new_billing(checkout)
+
+    # Missing header: pre-ruling behaviour — the legacy price is accepted.
+    assert request_checkout(checkout, OTHER_PRICE).status_code == 200
+    checkout.create.assert_called_once()
+
+    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
+    assert (
+        checkout.client.post(
+            '/v1/payments/checkout-session',
+            json={'price_id': OTHER_PRICE},
+            headers={'X-App-Platform': 'ios'},
+        ).status_code
+        == 200
+    )
+
+
+def test_new_buyer_desktop_platform_keeps_legacy_checkout(checkout):
+    checkout.stored = Subscription(plan=PlanType.basic, status=SubscriptionStatus.active)
+    response = checkout.client.post(
+        '/v1/payments/checkout-session', json={'price_id': OTHER_PRICE}, headers={'X-App-Platform': 'macos'}
+    )
+    assert response.status_code == 200
+    checkout.create.assert_called_once()
+
+
 def test_referral_without_stripe_subscription_keeps_checkout(checkout):
     checkout.stored.stripe_subscription_id = None
     checkout.stored.current_period_end = checkout.payload['current_period_end']
@@ -198,6 +245,20 @@ def test_cancel_scheduled_different_price_cannot_fall_through_to_checkout(checko
     assert request_checkout(checkout, OTHER_PRICE).status_code == 409
     assert_no_new_billing(checkout)
     checkout.modify.assert_not_called()
+
+
+def test_cancel_scheduled_legacy_price_reactivation_is_not_blocked_by_single_plan_rule(checkout):
+    """2026-10-24 ruling preserves existing subscribers: a cancel-scheduled
+    subscriber reactivating their own legacy (Plus) price succeeds even from a
+    client with no platform header — the single-plan guard runs after this
+    subscriber escape."""
+    checkout.payload['cancel_at_period_end'] = True
+    checkout.payload['items'] = {'data': [{'price': {'id': OTHER_PRICE, 'recurring': {'interval': 'month'}}}]}
+    response = request_checkout(checkout, OTHER_PRICE)
+    assert response.status_code == 200
+    assert response.json()['status'] == 'reactivated'
+    checkout.modify.assert_called_once_with('sub_existing', cancel_at_period_end=False)
+    assert_no_new_billing(checkout)
 
 
 @pytest.mark.parametrize('failure', ['modify', 'persist', 'modify_missing'])

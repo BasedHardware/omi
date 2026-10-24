@@ -33,6 +33,7 @@ from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.leader import PUMP_RECOVERY, LeaderLease
 from utils.batch_pipeline.pump import Pump
 from utils.batch_pipeline.scheduler import Scheduler
+from utils.batch_pipeline.stage_timings import StageTimings
 from database.batch_pipeline_shadow import ShadowStore
 from utils.batch_pipeline.shadow_worker import ShadowRunner
 from utils.batch_pipeline.shadow_metrics import COLLECTORS as SHADOW_COLLECTORS
@@ -61,11 +62,13 @@ class SynchronizedWorker:
         synchronize: Callable[[], None] = synchronize_gpu,
         on_fatal: Callable[[], None] | None = None,
         memory_probe: Any = None,
+        timings: StageTimings | None = None,
     ):
         self.worker = worker
         self.synchronize = synchronize
         self.on_fatal = on_fatal
         self.memory_probe = memory_probe
+        self.timings = timings or StageTimings()
         self._unavailable = False
 
     def process_batch(self, items, **kwargs):
@@ -78,7 +81,8 @@ class SynchronizedWorker:
             finally:
                 # Python completion is not CUDA completion. Never publish before
                 # quiescence, even for a dedicated GPU with no live reservation.
-                self.synchronize()
+                # Profiling times the existing synchronize; it adds no new one.
+                self.timings.call('cuda_sync', self.synchronize)
                 if self.memory_probe:
                     sample = self.memory_probe.finish(baseline)
                     logger.info(
@@ -189,6 +193,10 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         # Startup models off the event loop. Readiness remains closed until the
         # entire BF16 ASR / FP32 segmentation chain and graph policy are ready.
         worker = await asyncio.to_thread(load_worker, artifacts)
+        # One shared stage-timing instance spans the worker chain, its CUDA
+        # quiescence and the pump; samples land on the worker's own registry.
+        timings = StageTimings(registry)
+        worker.timings = timings
         from utils.batch_pipeline.compute_client import shadow_from_env
 
         # Lazy client creation keeps a dark rollout independent of API config.
@@ -202,8 +210,9 @@ async def run_process(store: Any, artifacts: Any, registry: CollectorRegistry, s
         )
         pump = Pump(
             Scheduler(store, metrics=metrics, pool='batch'),
-            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe()),
+            SynchronizedWorker(worker, on_fatal=fatal, memory_probe=ChainMemoryProbe(), timings=timings),
             metrics=metrics,
+            timings=timings,
             batch_size=config.batch_size,
             flights=worker_pipeline_depth(),
             capacity=lambda: PoolCapacity(

@@ -62,6 +62,7 @@ logger = logging.getLogger(__name__)
 BUFFER_TTL_SECONDS = 2 * 60 * 60
 MAX_BUFFERS = 5_000
 MAX_BUFFERED_SEGMENTS = 400
+ACTIVITY_INTERVAL_SECONDS = 60
 
 
 @dataclass
@@ -184,6 +185,7 @@ class _SessionCounter:
 
     def __init__(self, cap: int = MAX_BUFFERS) -> None:
         self._last: dict[str, list[str]] = {}
+        self._activity: dict[str, dict[str, float]] = {}
         self._cap = cap
         self._lock = threading.Lock()
 
@@ -194,23 +196,42 @@ class _SessionCounter:
             if conversation_id in recent:
                 return False
             recent.append(conversation_id)
+            for stale in recent[: -self.RECENT_PER_USER]:
+                self._activity.get(uid, {}).pop(stale, None)
             del recent[: -self.RECENT_PER_USER]
             while len(self._last) > self._cap:
-                del self._last[next(iter(self._last))]
+                stale_uid = next(iter(self._last))
+                del self._last[stale_uid]
+                self._activity.pop(stale_uid, None)
+            return True
+
+    def activity_due(self, uid: str, conversation_id: str) -> bool:
+        """Coalesce retained batches into a minute clock, independent of notes calls."""
+        now = time.monotonic()
+        with self._lock:
+            times = self._activity.setdefault(uid, {})
+            previous = times.get(conversation_id)
+            if previous is not None and now - previous < ACTIVITY_INTERVAL_SECONDS:
+                return False
+            times[conversation_id] = now
             return True
 
     def clear(self) -> None:
         with self._lock:
             self._last.clear()
+            self._activity.clear()
 
 
 sessions = _SessionCounter()
 
 
-async def _attach_if_client_seen(uid: str, conversation_id: str, source: Optional[str], started_at: datetime) -> str:
-    """A conversation's first speech: open or join the live episode, with no model call."""
+async def _attach_if_client_seen(
+    uid: str, conversation_id: str, source: Optional[str], started_at: datetime, *, first: bool = True
+) -> str:
+    """Retained speech: open/join or advance activity, with no model call."""
     seen = await executors.run_blocking(executors.db_executor, client_gate.client_seen_cached, uid)
-    metrics.record_live_session(seen)
+    if first:
+        metrics.record_live_session(seen)
     if not seen:
         metrics.record_moment_skipped_no_client('attach')
         return 'skipped_no_client'
@@ -242,11 +263,13 @@ async def on_realtime_segments(
         if not episodes_enabled_for(uid):
             return
         spoken = any(str(s.get('text') or '').strip() for s in segments)
-        if conversation_id and spoken and sessions.first_moment(uid, conversation_id):
-            executors.start_background_task(
-                _attach_if_client_seen(uid, conversation_id, source, datetime.now(timezone.utc)),
-                name='episode_attach',
-            )
+        if conversation_id and spoken:
+            first = sessions.first_moment(uid, conversation_id)
+            if sessions.activity_due(uid, conversation_id):
+                executors.start_background_task(
+                    _attach_if_client_seen(uid, conversation_id, source, datetime.now(timezone.utc), first=first),
+                    name='episode_attach',
+                )
         moments = tracker.observe(uid, segments, conversation_id, source)
         if not moments:
             return
