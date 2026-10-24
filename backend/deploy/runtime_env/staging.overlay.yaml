@@ -24,14 +24,11 @@ cloud_run:
     --subnet: omi-us-central1-dev-vpc-1-subnet-1
     --vpc-egress: private-ranges-only
   # Staging scale: prod-shaped code paths, not prod-sized fleets (replica counts are allowlisted).
+  # 2026-10-24 right-sizing (lead's live change, mirrored): every staging service idles at min 0,
+  # including backend-integration's serving loop, which a replay window warms with --warm.
   scale_flags:
     --min-instances: '0'
     --max-instances: '4'
-  # backend-integration runs the batch serving loop (BATCH_PIPELINE_SERVING_ENABLED, like prod, which
-  # keeps 3 warm). At 0 it idles without inbound traffic and nothing reconciles or projects.
-  scale_flags_by_service:
-    backend-integration:
-      --min-instances: '1'
   # Inputs the prod deploy action supplies through env_var entries.
   env_inputs:
     ACCOUNT_DELETION_HANDLER_URL: '{run_url:backend-sync}/v1/users/account-deletion-wipes/run'
