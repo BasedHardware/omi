@@ -184,7 +184,9 @@ admission may use the retained discovery and per-replica observations up to the
 configured age (inclusive). The same minimum, majority and busy-plus-unknown math
 still applies. Failed sweeps never renew an observation, and newer busy samples
 override older healthy values. Cold start without a quorum still refuses; data
-older than 60 seconds cannot supply headroom. Grace admissions emit shared
+older than 60 seconds cannot supply headroom. Grace also requires a previously
+usable fresh quorum; disjoint partial cold-start sweeps cannot bootstrap it.
+Grace admissions emit shared
 `omi_fallback_total{component="stt_selection",reason="timeout",outcome="degraded"}`.
 
 Repeated fetch failures used to leave the same HTTP client alive indefinitely,

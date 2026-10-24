@@ -25,6 +25,7 @@ def seed(pressure, now, busy=False):
     pressure._ready = ('10.0.0.1', '10.0.0.2')
     pressure._samples = {ip: pressure_module.ReplicaPressure(4 if busy else 0, 0.0, now) for ip in pressure._ready}
     pressure._observed_at = now
+    pressure._last_good_at = now
 
 
 @pytest.fixture(autouse=True)
@@ -577,6 +578,21 @@ async def test_grace_obeys_current_pressure_quorum_and_membership(fleet, monkeyp
         await fleet.pressure._refresh('synthetic.invalid', 2, client)
         assert not fleet.pressure.allows('synthetic.invalid', 2)  # Departed samples give no headroom.
         assert not fleet.pressure._samples
+
+
+@pytest.mark.asyncio
+async def test_grace_cannot_bootstrap_from_disjoint_cold_partial_sweeps(fleet, monkeypatch):
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS', '60')
+    async with httpx.AsyncClient(transport=fleet.transport) as client:
+        fleet.failed.update(fleet.ips[3:])
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert not fleet.pressure.allows('synthetic.invalid', 2)
+        fleet.clock[0] += 16
+        fleet.failed.clear()
+        fleet.failed.update(fleet.ips[:3])
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert not fleet.pressure.allows('synthetic.invalid', 2)
+        assert fleet.pressure._last_good_at == 0
 
 
 @pytest.mark.parametrize('ready', [1, 2, 3, 6, 11, 16, 64])

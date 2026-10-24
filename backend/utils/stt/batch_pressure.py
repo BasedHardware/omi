@@ -53,6 +53,7 @@ class BatchPressure:
     def __init__(self) -> None:
         self._task: asyncio.Task[None] | None = None
         self._observed_at = 0.0
+        self._last_good_at = 0.0
         self._ready: tuple[str, ...] = ()
         self._samples: dict[str, ReplicaPressure] = {}
         self._max_pending = self.MAX_LIVE_PENDING_PER_REPLICA
@@ -76,6 +77,7 @@ class BatchPressure:
 
     def _reset(self) -> None:
         self._observed_at = 0.0
+        self._last_good_at = 0.0
         self._ready = ()
         self._samples.clear()
         self._discovery_available = False
@@ -179,7 +181,12 @@ class BatchPressure:
         now = time.monotonic()
         self._publish_counts(now)
         reason = self._reason(min_replicas, now)
-        if reason in ('missing', 'stale') and self._max_snapshot_age > self.STALE_SECONDS:
+        if (
+            reason in ('missing', 'stale')
+            and self._max_snapshot_age > self.STALE_SECONDS
+            and self._last_good_at > 0
+            and now - self._last_good_at <= self._max_snapshot_age
+        ):
             # Re-run the same quorum/pressure math with bounded last-good samples.
             # New busy samples always supersede older healthy observations, and
             # departed pods were pruned by discovery. Never grant blind headroom.
@@ -283,6 +290,10 @@ class BatchPressure:
             WINDOW_PRESSURE_PROGRESS_TIME.set(wall_time())
         self._publish_counts(now)
         reason = self._reason(min_replicas, now)
+        if reason in (None, 'pressure'):
+            # Grace requires a previously usable quorum, including its oldest
+            # observation. Partial cold-start sweeps cannot bootstrap grace.
+            self._last_good_at = min(sample.observed_at for sample in self._fresh(now).values())
         if reason == 'missing':
             outcome = 'unavailable'
         elif received < len(ips):
