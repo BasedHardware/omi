@@ -89,6 +89,12 @@ export const WALL_DEFINITIONS = [
     "Health",
   ],
   ["cost.gross_margin_pct", "Gross margin · goal 60%", "percent", "Revenue"],
+  [
+    "cost.variable_margin_pct",
+    "Variable margin · goal 50%",
+    "percent",
+    "Revenue",
+  ],
   ["health.crash_free", "Crash-free · macOS", "percent", "Health"],
   ["health.thumbs_positive", "Positive answers", "percent", "Health"],
   ["revenue.plan_prepay_usd_week", "Plan prepay sold · cash", "USD", "Revenue"],
@@ -255,6 +261,8 @@ const NULL_REASONS: Partial<Record<MetricId, string>> = {
     "Payer month/lapse history missing; distinct-payer snapshots required",
   "cost.gross_margin_pct":
     "Revenue/cost coverage incomplete; recognized revenue, STT and fees required; 60% is a goal",
+  "cost.variable_margin_pct":
+    "Snapshot stat not built; the wall computes it (health series frame variableMargin): MRR vs the trailing-7d variable-cost run rate, D−2",
   "health.crash_free":
     "Crash reporting coverage unverified; zero crash events cannot prove 100% crash-free",
   "health.thumbs_positive":
