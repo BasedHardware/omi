@@ -4,6 +4,8 @@ Convert Omi conversation JSON exports to clean Markdown notes for Obsidian, Noti
 Usage:
   python conversations_to_markdown.py input.json --output-dir ./notes/
   omi --json conversation list --include-transcript | python conversations_to_markdown.py - --output-dir ./vault/
+
+Failure-Class: new
 """
 
 from __future__ import annotations
