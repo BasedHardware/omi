@@ -25,8 +25,6 @@ def _enabled(monkeypatch):
     # These tests exercise a user whose app shows episodes (test_episodes_client_gate covers the marker).
     monkeypatch.setattr(service.client_gate, 'client_seen', lambda uid: True)
     service.client_gate.reset_for_tests()
-    monkeypatch.setattr(service, 'get_user_name', lambda *_a, **_kw: None)
-    monkeypatch.setattr(service.incremental, 'get_user_name', lambda *_a, **_kw: None)
 
 
 class FakeModel:
@@ -54,6 +52,12 @@ def _collaborators(model, *, now, ask=None, saved=None, store=None):
         people_names=lambda uid, ids: {pid: 'Huong' for pid in ids},
         now=lambda: now,
     )
+
+
+@pytest.fixture(autouse=True)
+def _speaker_names(monkeypatch):
+    monkeypatch.setattr(service, 'get_user_name', lambda *_a, **_kw: None)
+    monkeypatch.setattr(service.incremental, 'get_user_name', lambda *_a, **_kw: None)
 
 
 def test_new_episode_resets_the_bounded_voice_order():
