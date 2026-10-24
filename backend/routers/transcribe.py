@@ -26,6 +26,7 @@ from utils.client_device import (
 )
 from utils.other import endpoints as auth
 from utils.executors import db_executor, run_blocking
+from utils.metrics import record_listen_ws_handshake_failure
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +158,7 @@ async def _listen(
     try:
         await websocket.accept()
     except RuntimeError as error:
+        record_listen_ws_handshake_failure(surface='mobile')
         logger.error('listen accept failed uid=%s error_type=%s', uid, type(error).__name__)
         return
     await _stream_handler(
@@ -253,6 +255,7 @@ async def web_listen_handler(
     try:
         await websocket.accept()
     except RuntimeError as error:
+        record_listen_ws_handshake_failure(surface='web')
         logger.error('web listen accept failed error_type=%s', type(error).__name__)
         return
     try:
