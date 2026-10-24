@@ -4175,12 +4175,19 @@ def assign_sync_conversation(
     converges each conversation once later (``index_sync_assignment``).
     """
     from utils.sync.assignment import assign_in_transaction, run_with_size_limit_backstop
+    from config.sync_lineage import sync_lineage_resolve_enabled
+    from utils.sync.intake_completion import log_sync_lineage_created
+
+    # The coordinator/projection already validated S1 and cohort admission.
+    # Rechecking membership here can refresh its Firestore cache on the hot path.
+    lineage_eligible = incoming.get('_sync_lineage_eligible') is True and sync_lineage_resolve_enabled()
 
     clock = SyncAssignmentClock(logger, enabled=timing)
     client = firestore_client if firestore_client is not None else get_firestore_client()
     user_ref = client.collection('users').document(uid)
 
     live_candidate_ids: tuple[str, ...] = ()
+    live_lookup: dict = {}
     absorbed: list[str] = []
 
     score_snapshots: dict = {}
@@ -4234,6 +4241,7 @@ def assign_sync_conversation(
                 full_ids=full_ids,
                 live_candidate_ids=live_candidate_ids,
                 absorbed=absorbed,
+                **({'live_lookup_complete': live_lookup.get('lookup_complete', False)} if lineage_eligible else {}),
             )
         # Remember the candidate before the transaction commits.
         attempted['canonical'] = planned[0]['id']
@@ -4248,13 +4256,18 @@ def assign_sync_conversation(
             (incoming.get('client_device_id') and live_overlap_enabled()) or shadow_or_serve('CAPTURE_COVERAGE_MODE')
         ):
             with clock.timed('live_overlap'):
-                live_candidate_ids = find_sync_live_overlap_candidates(user_ref, incoming)
+                live_candidate_ids = find_sync_live_overlap_candidates(
+                    user_ref, incoming, **({'diagnostics': live_lookup} if lineage_eligible else {})
+                )
         with clock.timed('transaction'):
             result = run_with_size_limit_backstop(
                 lambda full_ids: run_sync_assignment(client, assign, full_ids, retry_contention=retry_contention),
                 lambda: attempted.get('canonical'),
             )
         conversation = result[0]
+        observation = conversation.pop('_sync_lineage_created', None)
+        if lineage_eligible and observation is not None:
+            log_sync_lineage_created(observation)
         if defer_index is not None:
             # Coalesce the lineage's retryable donor deletes once per flush.
             clock.donors = len(absorbed)
