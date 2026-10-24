@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-mobile-ios-settings-before-light.png",
+      "platform": "mobile-ios",
+      "description": "Settings sheet on main (widget-test render, Free plan): person icon on Account, plain Plan & Usage row with no Upgrade, Referral with a NEW tag beside it, one long group of eight rows",
+      "captured_by": "agent",
+      "source": "manual"
+    },
+    {
+      "file": "002-mobile-ios-settings-after-light.png",
+      "platform": "mobile-ios",
+      "description": "Settings sheet after, iOS simulator (card arm, Free plan, no device): no handle band, Account as name and email, plan card with a full-width Upgrade, Device (Disconnected) / Recording / Notifications / Privacy first",
+      "captured_by": "agent",
+      "source": "manual"
+    }
+  ]
+}

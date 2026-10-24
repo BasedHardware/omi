@@ -42,6 +42,12 @@ class _TestEnvFields implements EnvFields {
 
 class _Device extends ChangeNotifier implements DeviceProvider {
   @override
+  bool get isConnected => false;
+
+  @override
+  int get batteryLevel => -1;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
