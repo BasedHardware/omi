@@ -353,15 +353,12 @@ class Socket:
         self.sent = []
         self.client_state = WebSocketState.CONNECTED
         self.close_code = None
-        self.queued = asyncio.Event()
 
     async def accept(self):
         pass
 
     async def send_bytes(self, data):
         self.sent.append(data)
-        if len(self.sent) == 22:
-            self.queued.set()
 
     async def receive_bytes(self):
         await asyncio.sleep(0)
@@ -386,13 +383,38 @@ async def test_real_pusher_more_than_20_chunks_and_projection_failure_still_has_
     frames.extend(struct.pack('<Id', 101, 1000 + n * 0.01) + pcm for n, pcm in enumerate(payloads))
     sock = Socket(frames)
     # Force a projection flush after each receipt, hold the first hydration,
-    # then fill all 20 queue slots. Frame 22 can commit but cannot enqueue;
-    # the receiver must stop before reading any later frame from its producer.
+    # then fill all 20 queue slots. The next frame can commit but cannot
+    # enqueue; observe actual queue pressure rather than assuming how many
+    # receipts the consumer drained before its first hydration awaited.
     monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_CHUNK_DURATION', 0)
     release = threading.Event()
+    hydration_started = asyncio.Event()
+    pressured = asyncio.Event()
+    loop = asyncio.get_running_loop()
     real_read = pusher.read_pcm
+    real_would_drop = pusher.record_would_drop
+    real_receive = sock.receive_bytes
+    received = 0
+
+    async def gate_after_first_audio():
+        nonlocal received
+        if received == 2:  # Conversation binding plus the first PCM frame.
+            await hydration_started.wait()
+        frame = await real_receive()
+        received += 1
+        return frame
+
+    monkeypatch.setattr(sock, 'receive_bytes', gate_after_first_audio)
+
+    def observe_pressure(stage):
+        real_would_drop(stage)
+        if stage == 'pusher_queue':
+            pressured.set()
+
+    monkeypatch.setattr(pusher, 'record_would_drop', observe_pressure)
 
     def blocked_read(*args):
+        loop.call_soon_threadsafe(hydration_started.set)
         if not release.wait(30):
             raise TimeoutError('test projection release not signalled')
         return real_read(*args)
@@ -400,8 +422,9 @@ async def test_real_pusher_more_than_20_chunks_and_projection_failure_still_has_
     monkeypatch.setattr(pusher, 'read_pcm', blocked_read)
     task = asyncio.create_task(pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1))
     try:
-        await asyncio.wait_for(sock.queued.wait(), 30)
-        assert len(sock.frames) >= 3 and not task.done()
+        await asyncio.wait_for(pressured.wait(), 30)
+        assert 20 < len(sock.sent) < len(payloads) and not task.done()
+        assert len(sock.frames) == len(payloads) - len(sock.sent)
     finally:
         release.set()
     await task
