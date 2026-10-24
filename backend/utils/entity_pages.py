@@ -188,13 +188,12 @@ def _facts(
 def _coerce_utc_datetime(val) -> datetime:
     if isinstance(val, str):
         try:
-            parsed = isoparse(val)
-            return parsed.astimezone(timezone.utc) if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            return isoparse(val).astimezone(timezone.utc)
         except (ValueError, TypeError, OverflowError):
-            return datetime(1970, 1, 1, tzinfo=timezone.utc)
+            return datetime.min.replace(tzinfo=timezone.utc)
     if isinstance(val, datetime):
         return val.astimezone(timezone.utc) if val.tzinfo else val.replace(tzinfo=timezone.utc)
-    return datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return datetime.min.replace(tzinfo=timezone.utc)
 
 
 def _title(conversation: dict) -> str:
