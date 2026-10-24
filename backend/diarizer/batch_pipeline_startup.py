@@ -51,19 +51,19 @@ def _set_batch_size(model, attribute, batch_size, label):
         raise RuntimeError(f'worker failed to pin {label} batch size')
 
 
-def load_pyannote_pair(model_batch_size):
-    """The worker's exact community-1 diarizer + shared-segmentation VAD on cuda:0.
+def load_pyannote_pair(model_batch_size, *, device='cuda:0'):
+    """The worker's exact community-1 diarizer + shared-segmentation VAD.
 
     Also used by the flight-packing L4 qualification so both runs construct
     identical models.
     """
     if torch is None or Pipeline is None or VoiceActivityDetection is None:
-        raise RuntimeError('pyannote pair requires the GPU image')
+        raise RuntimeError('pyannote pair requires the model runtime')
     diarizer = Pipeline.from_pretrained(
         'pyannote/speaker-diarization-community-1',
         revision=DIARIZER_REVISION,
         token=os.getenv('HUGGINGFACE_TOKEN'),
-    ).to(torch.device('cuda:0'))
+    ).to(torch.device(device))
     if model_batch_size is not None:
         _set_batch_size(diarizer, 'segmentation_batch_size', model_batch_size, 'pyannote segmentation')
         _set_batch_size(diarizer, 'embedding_batch_size', model_batch_size, 'pyannote embedding')
@@ -73,13 +73,49 @@ def load_pyannote_pair(model_batch_size):
     # Community-1 powerset segmentation fixes onset/offset at 0.5; they are
     # constants, not tunable pipeline parameters.
     vad.instantiate({'min_duration_on': 0.0, 'min_duration_off': 0.0})
-    vad.to(torch.device('cuda:0'))
+    vad.to(torch.device(device))
     if model_batch_size is not None:
         vad_inference = getattr(vad, '_segmentation', None)
         if vad_inference is None:
             raise RuntimeError('worker VAD no longer exposes segmentation inference')
         _set_batch_size(vad_inference, 'batch_size', model_batch_size, 'VAD')
     return diarizer, vad
+
+
+def load_local_models(*, device='cpu', dtype='float32', model_batch_size: int | None = 1):
+    """Load pinned production models for explicit local numerical qualification.
+
+    CPU FP32 is an evaluation configuration, not CUDA BF16 parity. No hosted
+    provider, alternate checkpoint or automatic device fallback is allowed.
+    Model downloads use the caller's Hugging Face cache and credentials.
+    """
+    if (device, dtype) not in {('cpu', 'float32'), ('cuda:0', 'bfloat16')}:
+        raise ValueError('local models require cpu/float32 or cuda:0/bfloat16')
+    if model_batch_size is not None and (type(model_batch_size) is not int or not 1 <= model_batch_size <= 32):
+        raise ValueError('model_batch_size must be None or an integer in [1, 32]')
+    if torch is None or nemo_asr is None or hf_hub_download is None:
+        raise RuntimeError('local models require the pinned NeMo and pyannote runtime')
+    checkpoint = hf_hub_download('nvidia/parakeet-tdt-0.6b-v3', 'parakeet-tdt-0.6b-v3.nemo', revision=ASR_REVISION)
+    precision = torch.float32 if dtype == 'float32' else torch.bfloat16
+    asr = nemo_asr.models.ASRModel.restore_from(checkpoint, map_location=device).to(precision).eval()
+    diarizer, vad = load_pyannote_pair(model_batch_size, device=device)
+    return asr, diarizer, vad
+
+
+def load_local_worker(artifacts, *, device='cpu', dtype='float32', model_batch_size: int | None = 1):
+    """Compose the real worker adapters with caller-owned filesystem artifacts.
+
+    The caller explicitly configures the dedicated-batch provider policy, just
+    like serving; this helper does not mutate environment or storage policy.
+    """
+    asr, diarizer, vad = load_local_models(device=device, dtype=dtype, model_batch_size=model_batch_size)
+    return create_local_worker(
+        fetch_audio=artifacts.fetch_audio,
+        persist_result=artifacts.persist_result,
+        vad_model=vad,
+        parakeet_model=asr,
+        pyannote_model=diarizer,
+    )
 
 
 def load_worker(artifacts):
@@ -90,16 +126,7 @@ def load_worker(artifacts):
         raise RuntimeError('batch worker requires exactly one visible dedicated CUDA GPU')
     if not torch.cuda.is_bf16_supported():
         raise RuntimeError('batch worker requires BF16 ASR support')
-    checkpoint = hf_hub_download('nvidia/parakeet-tdt-0.6b-v3', 'parakeet-tdt-0.6b-v3.nemo', revision=ASR_REVISION)
-    asr = nemo_asr.models.ASRModel.restore_from(checkpoint, map_location='cuda:0').to(torch.bfloat16).eval()
-    diarizer, vad = load_pyannote_pair(model_batch_size)
-    return create_local_worker(
-        fetch_audio=artifacts.fetch_audio,
-        persist_result=artifacts.persist_result,
-        vad_model=vad,
-        parakeet_model=asr,
-        pyannote_model=diarizer,
-    )
+    return load_local_worker(artifacts, device='cuda:0', dtype='bfloat16', model_batch_size=model_batch_size)
 
 
 def synchronize_gpu():
