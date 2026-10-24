@@ -10,7 +10,7 @@ from dataclasses import replace
 from datetime import datetime, timezone
 
 from database.messaging import MessagingStore, TURN_TIMEOUT_SECONDS
-from utils.messaging.identity import key
+from utils.messaging.identity import coerce_utc_datetime, key
 from models.chat import SendMessageRequest
 from utils.chat_turn import run_chat_turn
 from utils.executors import db_executor, postprocess_executor, run_blocking, start_background_task
@@ -204,9 +204,11 @@ class Gateway:
         path, payload = claimed
         from utils.messaging.metrics import QUEUE_AGE
 
-        QUEUE_AGE.labels(self.adapter.channel).observe(
-            max(0, (datetime.now(timezone.utc) - datetime.fromisoformat(payload['received_at'])).total_seconds())
-        )
+        received_at = coerce_utc_datetime(payload.get('received_at'))
+        if received_at is not None:
+            QUEUE_AGE.labels(self.adapter.channel).observe(
+                max(0, (datetime.now(timezone.utc) - received_at).total_seconds())
+            )
         try:
             async with asyncio.timeout(TURN_TIMEOUT_SECONDS):
                 return await self._process_claimed(path, payload)
@@ -224,11 +226,7 @@ class Gateway:
             # drain, admits it once the surface is free. A wake fault must not
             # replace the turn's own result.
             try:
-                clock = payload.get('received_at')
-                body = payload
-                if isinstance(clock, str):
-                    body = dict(payload, received_at=datetime.fromisoformat(clock))
-                await self._wake_pending(ChannelMessage(**body), skip_path=path)
+                await self._wake_pending(inbox_message(payload), skip_path=path)
             except Exception as error:
                 logging.getLogger(__name__).warning(
                     'Messaging next-head wake failed provider=%s error_type=%s',
@@ -345,11 +343,12 @@ class Gateway:
             try:
                 session = await run_blocking(db_executor, self.store.session, uid, message, link)
                 token = await run_blocking(db_executor, self.store.acquire, uid, session['surface'])
+                received_at = coerce_utc_datetime(message.received_at) or datetime.now(timezone.utc)
                 logging.getLogger(__name__).info(
                     'Messaging phase=lease provider=%s acquired=%s queue_age_ms=%.1f',
                     self.adapter.provider,
                     token is not None,
-                    (datetime.now(timezone.utc) - message.received_at).total_seconds() * 1000,
+                    (datetime.now(timezone.utc) - received_at).total_seconds() * 1000,
                 )
                 if token is None:
                     await run_blocking(db_executor, self.store.retry, path)
