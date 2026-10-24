@@ -6535,6 +6535,11 @@ Post-commit cleanup failures log `quiet_check_retirement outcome=deferred` and
 leave indexed debt for replay. They cannot invalidate a committed processing
 admission, terminal transition or deletion. Delivered replay workers still
 surface their own storage errors for retry.
+Deferred cleanup also emits shared fallback telemetry (`conversation_finalization`,
+`inline` to `durable_queued`, `unavailable`, `degraded`). A successful synchronous
+processing rollback restores an existing quiet obligation in the same transaction
+as `in_progress`, with a new generation and immediate due index. No new obligation
+is invented, and pre-admission deliveries cannot cancel the restored wake.
 
 Reconnects reuse the deterministic conversation key and an earlier/equal waiting
 deadline. `listen_quiet_check_arm_total{outcome="created|rearmed|reused|refused"}`
@@ -6545,6 +6550,7 @@ A terminal/donor arm must be `refused`, with zero waiting rows. Compare
 `created + rearmed` to actual conversation/session lifecycle counts over the same
 window; total arm attempts include reuse and cannot be called new-row inflow.
 These counters measure arms; replay `retired` counts include historical debt.
+Atomic rollback restoration preserves the existing row and is not a live-arm API call.
 
 | Control | Default and bounds | Operational effect |
 | --- | --- | --- |

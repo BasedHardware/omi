@@ -168,15 +168,113 @@ def test_cleanup_failure_preserves_committed_processing_admission(monkeypatch, c
     assert_retired(store)
 
 
-@pytest.mark.parametrize('operation', ['job', 'account'])
+@pytest.mark.parametrize('operation', ['conversation', 'job', 'account'])
 def test_indirect_cleanup_read_failure_is_deferred_after_commit(caplog, operation):
+    from utils.observability.fallback import OMI_FALLBACK_TOTAL
+
+    metric = OMI_FALLBACK_TOTAL.labels(
+        component='conversation_finalization',
+        from_mode='inline',
+        to_mode='durable_queued',
+        reason='unavailable',
+        outcome='degraded',
+    )
+    before = metric._value.get()
+
     class UnavailableClient:
         def collection(self, name):
             raise RuntimeError('synthetic post-commit dependency failure')
 
     client = UnavailableClient()
-    if operation == 'job':
+    if operation == 'conversation':
+        assert not retirement.stop_quiet_check_for_conversation('synthetic', 'capture', firestore_client=client)
+    elif operation == 'job':
         retirement.stop_quiet_checks_for_job('terminal-job', firestore_client=client)
     else:
         retirement.stop_quiet_checks_for_account('synthetic', firestore_client=client)
     assert 'event=quiet_check_retirement outcome=deferred' in caplog.text
+    assert metric._value.get() == before + 1
+    assert 'omi_fallback_event component=conversation_finalization' in caplog.text
+
+
+@pytest.mark.parametrize('cleanup_succeeds', [True, False])
+def test_processing_rollback_restores_index_and_fences_pre_admission_deliveries(monkeypatch, cleanup_succeeds):
+    store = seeded()
+    monkeypatch.setattr(conversations, 'db', store)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *a: None)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
+    with monkeypatch.context() as fault:
+        if not cleanup_succeeds:
+
+            def fail(*args, **kwargs):
+                raise RuntimeError('synthetic deferred admission cleanup')
+
+            fault.setattr(retirement, '_retire', fail)
+        assert conversations.claim_conversation_status(
+            'synthetic', 'capture', ConversationStatus.in_progress, ConversationStatus.processing
+        )
+    assert conversations.claim_conversation_status(
+        'synthetic', 'capture', ConversationStatus.processing, ConversationStatus.in_progress
+    )
+    job = store.rows[JOB]
+    assert store.rows[ROW]['status'] == 'in_progress'
+    assert job['status'] == 'waiting_quiet' and job['dispatch_generation'] == 8
+    assert isinstance(job['reconcile_after_at'], datetime)
+    assert job['due_at'] == job['reconcile_after_at']
+    checks.stop_quiet_check(JOB[-1], 7, firestore_client=store)
+    assert job['status'] == 'waiting_quiet' and job['dispatch_generation'] == 8
+    assert not conversations.claim_conversation_status(
+        'synthetic', 'capture', ConversationStatus.processing, ConversationStatus.in_progress
+    )
+    assert job['dispatch_generation'] == 8
+
+
+def test_processing_rollback_does_not_invent_an_unowed_check(monkeypatch):
+    store = seeded({'status': 'processing'})
+    del store.rows[JOB]
+    monkeypatch.setattr(conversations, 'db', store)
+    monkeypatch.setattr(conversations, 'invalidate_people_stats_cache', lambda *a: None)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', lambda *a: None)
+    assert conversations.claim_conversation_status(
+        'synthetic', 'capture', ConversationStatus.processing, ConversationStatus.in_progress
+    )
+    assert JOB not in store.rows
+
+
+def test_processing_rollback_cannot_commit_live_without_restoring_owed_custody(monkeypatch):
+    store = seeded({'status': 'processing'})
+    store.rows[JOB]['status'] = 'quiet_done'
+    store.rows[JOB].pop('reconcile_after_at')
+    original_collection = store.collection
+
+    def collection(name):
+        if name == 'conversation_finalization_jobs':
+            raise RuntimeError('synthetic rollback custody read failure')
+        return original_collection(name)
+
+    monkeypatch.setattr(conversations, 'db', store)
+    monkeypatch.setattr(store, 'collection', collection)
+    with pytest.raises(RuntimeError, match='rollback custody read'):
+        conversations.claim_conversation_status(
+            'synthetic', 'capture', ConversationStatus.processing, ConversationStatus.in_progress
+        )
+    assert store.rows[ROW]['status'] == 'processing'
+    assert store.rows[JOB]['status'] == 'quiet_done'
+
+
+def test_deferred_cleanup_telemetry_failure_cannot_invalidate_owner_result(monkeypatch, caplog):
+    from utils.observability import fallback
+
+    def fail(**kwargs):
+        raise RuntimeError('synthetic telemetry failure')
+
+    class UnavailableClient:
+        def collection(self, name):
+            raise RuntimeError('synthetic cleanup read failure')
+
+    monkeypatch.setattr(fallback, 'record_fallback', fail)
+    assert not retirement.stop_quiet_check_for_conversation(
+        'synthetic', 'capture', firestore_client=UnavailableClient()
+    )
+    assert 'outcome=telemetry_failed' in caplog.text
+    assert 'outcome=deferred' in caplog.text

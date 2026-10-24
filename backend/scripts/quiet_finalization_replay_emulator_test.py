@@ -65,6 +65,26 @@ def exercise_lifecycle_retirement(client):
         assert not col.document('user-delete').get().exists
         retired(ref)
 
+        ref = seed('processing-rollback')
+        old_generation = ref.get().to_dict()['dispatch_generation']
+        assert conversations.claim_conversation_status(
+            uid, 'processing-rollback', ConversationStatus.in_progress, ConversationStatus.processing
+        )
+        retired(ref)
+        assert conversations.claim_conversation_status(
+            uid, 'processing-rollback', ConversationStatus.processing, ConversationStatus.in_progress
+        )
+        restored = ref.get().to_dict()
+        assert restored['status'] == 'waiting_quiet'
+        assert restored['dispatch_generation'] == old_generation + 1
+        assert restored['reconcile_after_at'] <= datetime.now(timezone.utc)
+        checks.stop_quiet_check(ref.id, old_generation, firestore_client=client)
+        assert ref.get().to_dict()['status'] == 'waiting_quiet'
+        assert conversations.claim_conversation_status(
+            uid, 'processing-rollback', ConversationStatus.in_progress, ConversationStatus.completed
+        )
+        retired(ref)
+
         ref = seed('empty-delete', empty=True)
         assert recording_sessions.tombstone_and_delete_empty_conversation(
             uid, 'empty-delete', None, firestore_client=client
@@ -257,7 +277,7 @@ def exercise_lifecycle_retirement(client):
             )
 
     print(
-        'PASS: user/empty deletion, capture_end, complete/discard/failed, processing persistence/upsert, live reopen, orphan/deferred/oversized/noise fallback, dead-letter/BYOK/meeting terminal, account erasure and multipage cursor, terminal index deletion'
+        'PASS: user/empty deletion, capture_end, complete/discard/failed, processing persistence/upsert, live reopen and atomic processing rollback, orphan/deferred/oversized/noise fallback, dead-letter/BYOK/meeting terminal, account erasure and multipage cursor, terminal index deletion'
     )
 
 

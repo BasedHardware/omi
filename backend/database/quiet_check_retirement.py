@@ -27,6 +27,59 @@ def _retire(transaction: Any, ref: Any, *, failure_code: str | None = None) -> N
     transaction.update(ref, updates)
 
 
+def _record_deferred_retirement(operation: str) -> None:
+    try:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='inline',
+            to_mode='durable_queued',
+            reason='unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+    except Exception:
+        # Telemetry is never allowed to change the committed owner result.
+        logger.warning('event=quiet_check_retirement outcome=telemetry_failed')
+    logger.exception('event=quiet_check_retirement outcome=deferred operation=%s', operation)
+
+
+def restore_quiet_check_in_transaction(
+    transaction: Any, client: Any, uid: str, conversation_id: str, conversation: dict[str, Any]
+) -> None:
+    """Restore existing custody atomically with a processing-to-live rollback.
+
+    The caller has read the owner and supplies its proposed live state.
+    Only a previously owed quiet job is restored; indexed replay picks it up
+    immediately and a new generation fences deliveries from before admission.
+    """
+    if (
+        conversation.get('status') != 'in_progress'
+        or conversation.get('source') not in {'omi', 'phone'}
+        or any(
+            conversation.get(key)
+            for key in ('deleted', 'discarded', 'is_locked', 'sync_merged_into', 'finalization_job_id')
+        )
+    ):
+        return
+    ref = client.collection('conversation_finalization_jobs').document(quiet_check_id(uid, conversation_id))
+    job = ref.get(transaction=transaction).to_dict() or {}
+    if job.get('kind') != 'listen_quiet_check':
+        return
+    now = datetime.now(timezone.utc)
+    transaction.update(
+        ref,
+        {
+            'status': 'waiting_quiet',
+            'dispatch_generation': int(job.get('dispatch_generation') or 0) + 1,
+            'due_at': now,
+            'reconcile_after_at': now,
+            'updated_at': now,
+        },
+    )
+
+
 def stop_quiet_check(
     job_id: str, generation: int, *, failure_code: str | None = None, firestore_client: Any = None
 ) -> None:
@@ -78,7 +131,7 @@ def stop_quiet_check_for_conversation(uid: str, conversation_id: str, *, firesto
     except Exception:
         # Cleanup must not invalidate an already-committed owner transition.
         # Keep the durable index for the independent quiet replay backstop.
-        logger.exception('event=quiet_check_retirement outcome=deferred operation=stop_quiet_check_for_conversation')
+        _record_deferred_retirement('stop_quiet_check_for_conversation')
         return False
 
 
@@ -100,7 +153,7 @@ def stop_quiet_checks_for_job(job_id: str, *, firestore_client: Any = None) -> N
     except Exception:
         # Cleanup must not invalidate an already-committed owner transition.
         # Keep the durable index for the independent quiet replay backstop.
-        logger.exception('event=quiet_check_retirement outcome=deferred operation=stop_quiet_checks_for_job')
+        _record_deferred_retirement('stop_quiet_checks_for_job')
 
 
 def stop_quiet_checks_for_account(uid: str, *, firestore_client: Any = None, page_size: int = 450) -> None:
@@ -132,4 +185,4 @@ def stop_quiet_checks_for_account(uid: str, *, firestore_client: Any = None, pag
     except Exception:
         # Cleanup must not invalidate an already-committed owner transition.
         # Keep the durable index for the independent quiet replay backstop.
-        logger.exception('event=quiet_check_retirement outcome=deferred operation=stop_quiet_checks_for_account')
+        _record_deferred_retirement('stop_quiet_checks_for_account')

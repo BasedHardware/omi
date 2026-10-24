@@ -46,7 +46,7 @@ from utils.manual_speaker_assignments import (
     remap_absorbed_receipt,
 )
 from database.mcp_read_queries import MCP_CONVERSATION_CARD_FIELD_PATHS, MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS
-from database.quiet_check_retirement import stop_quiet_check_for_conversation
+from database.quiet_check_retirement import restore_quiet_check_in_transaction, stop_quiet_check_for_conversation
 from ._client import db, delete_collection_recursive, get_firestore_client, run_transactional
 from database.sync_assignment import SyncAssignmentClock, encode_sync_assignment_plan, run_sync_assignment
 from database.sync_conversation_snapshot import read_redirected, resolve_snapshot
@@ -2750,6 +2750,8 @@ def claim_conversation_status(
                     uid, current, extra_updates, transcript_corrections=corrections
                 )
             )
+        if expected_status == ConversationStatus.processing and claimed_status == ConversationStatus.in_progress:
+            restore_quiet_check_in_transaction(transaction, db, uid, conversation_id, current | updates)
         transaction.update(conversation_ref, updates)
         return True
 
