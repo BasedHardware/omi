@@ -13,6 +13,8 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'quiet_replay_emulator_only_secret_32
 
 from google.cloud import firestore
 from database import conversations, recording_sessions, proactivity, quiet_check_retirement
+from database import oversized_conversation_terminal, stuck_backfill
+from utils.firestore_document_size import FIRESTORE_MAX_DOCUMENT_BYTES, estimate_firestore_document_bytes
 from config import stt_cap_dispatch
 from models.conversation_enums import ConversationStatus
 from database import conversation_finalization_jobs as jobs
@@ -110,6 +112,62 @@ def exercise_lifecycle_retirement(client):
             writer(cid)
             retired(ref)
 
+        # Crash fallback adapters must also pay pre-existing quiet debt.
+        for cid, fields, close in (
+            (
+                'orphan',
+                {'status': 'processing', 'processing_admitted_at': now},
+                lambda cid: jobs.complete_orphan_conversation(
+                    uid, cid, expected_admitted_at=now, firestore_client=client
+                ),
+            ),
+            (
+                'unstampable',
+                {'status': 'processing'},
+                lambda cid: jobs.complete_unstampable_orphan_conversation(
+                    uid, cid, stale_after=timedelta(0), firestore_client=client
+                ),
+            ),
+            (
+                'deferred-failure',
+                {'status': 'processing', 'deferred': False},
+                lambda cid: jobs.recover_deferred_processing_failure(uid, cid, firestore_client=client),
+            ),
+        ):
+            ref = seed(cid)
+            col.document(cid).update(fields)
+            assert close(cid)
+            retired(ref)
+
+        # Use an actual near-ceiling document, with no estimator mock.
+        ref = seed('oversized')
+        row = col.document('oversized').get().to_dict()
+        path = col.document('oversized').path
+        row['oversized_fixture'] = b''
+        size = estimate_firestore_document_bytes(row, path)
+        row['oversized_fixture'] = b'x' * (FIRESTORE_MAX_DOCUMENT_BYTES - size - 40)
+        col.document('oversized').set(row)
+        assert (
+            oversized_conversation_terminal.complete_oversized_in_progress_conversation(
+                uid, 'oversized', quiet_for=timedelta(0), firestore_client=client
+            )
+            == 'closed'
+        )
+        retired(ref)
+
+        ref = seed('noise-close', empty=True)
+        snapshot = col.document('noise-close').get()
+        stuck_backfill.close_noise(
+            uid,
+            'noise-close',
+            expected_revision=stuck_backfill.revision(snapshot),
+            cutoff=datetime.now(timezone.utc),
+            expected_session_revision=None,
+            run_id='synthetic-retirement-test',
+            firestore_client=client,
+        )
+        retired(ref)
+
         # Cleanup from an old closure must preserve a reopened successor, while
         # terminal replay claims must really delete the indexed field in the SDK.
         ref = seed('reopened')
@@ -120,7 +178,7 @@ def exercise_lifecycle_retirement(client):
         jobs.claim_finalization_replay(terminal.id, stale_after=timedelta(seconds=60), firestore_client=client)
         assert 'reconcile_after_at' not in terminal.get().to_dict()
     print(
-        'PASS: user/empty deletion, capture_end, complete/discard/failed, processing persistence/upsert, live reopen, terminal index deletion'
+        'PASS: user/empty deletion, capture_end, complete/discard/failed, processing persistence/upsert, live reopen, orphan/deferred/oversized/noise fallback, terminal index deletion'
     )
 
 
