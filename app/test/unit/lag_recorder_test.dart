@@ -11,7 +11,7 @@ void main() {
   setUp(() {
     events = [];
     now = 1000000;
-    lag = LagRecorder(emit: (type, fields) => events.add((type, fields)), nowUs: () => now);
+    lag = LagRecorder(emit: (type, fields) => events.add((type, fields)), nowUs: () => now)..active = true;
   });
 
   Iterable<Map<String, Object?>> of(String type) => events.where((e) => e.$1 == type).map((e) => e.$2);
@@ -78,6 +78,17 @@ void main() {
     expect(of('mobile_lag_frame').single['interaction'], 'idle');
   });
 
+  test('input is ignored while capture is off, and turning it off forgets a live scroll', () {
+    lag.onScrollStart();
+    lag.active = false;
+    lag.onScrollStart();
+    lag.onPointerDown(Offset.zero);
+    lag.onPointerUp();
+    lag.active = true;
+    lag.observeFrame(buildUs: 50000, rasterUs: 0, totalUs: 50000);
+    expect(of('mobile_lag_frame').single['interaction'], 'idle');
+  });
+
   test('page labels never include route arguments', () {
     final labelled = MaterialPageRoute<void>(builder: (_) => const SizedBox());
     lagRouteLabels[labelled] = 'ConversationDetailPage';
@@ -95,11 +106,14 @@ void main() {
       diagnosticsEnabled: () => diagnostics,
       lag: lag,
     );
+    lag.active = false;
     observer.attach();
     expect(lag.watchdogRunning, isFalse);
+    expect(lag.active, isFalse);
     diagnostics = true;
     observer.setForeground(true);
     expect(lag.watchdogRunning, isTrue);
+    expect(lag.active, isTrue);
     lag.observeFrame(buildUs: 50000, rasterUs: 0, totalUs: 50000);
     observer.setForeground(false);
     expect(lag.watchdogRunning, isFalse);

@@ -46,10 +46,7 @@ void main() {
         expect(p90, lessThan(budget),
             reason: '$name: p90=$p90 ms, budget=$budget ms; '
                 'frames=${score['frame_count']}, jank=${score['jank_percent']}%');
-      },
-          // Production runs with semantics off unless an assistive technology turns it on;
-          // testWidgets defaults it on, adding a semantics pass to every measured frame.
-          semanticsEnabled: Platform.environment['PERF_SEMANTICS'] == '1');
+      });
     }
   });
   group('profile', () {

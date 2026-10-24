@@ -140,3 +140,23 @@ three visits leave `transientCallbackCount` at baseline, and ten list identity
 replacements cost one shell build per mounted row each (20 here; row content
 stays behind its `Selector`). That last number is the current cost of a
 completion landing on Home, not a floor.
+
+## Device lag capture (October 23, 2026)
+
+Host runs cannot raster, run AOT code, or reproduce a phone's data and thermal state. For lag a
+user feels, use the local recorder in `lib/utils/analytics/lag_recorder.dart`. It runs in release
+and TestFlight builds while Settings → Developer → Debug logs is on, and writes only to the local
+debug log. Per surface (the pushed page type or the Home tab) it records:
+
+- frames over 16.7, 33.3 and 100 ms on either thread, split into build-bound and raster-bound;
+- whether each slow frame came while scrolling, just after a tap, or idle;
+- the worst frames, with wall-clock time;
+- tap-to-frame latency, which includes the tap handler's own synchronous work;
+- UI-isolate stalls between frames, from a 250 ms watchdog that runs only while capture is on.
+
+To capture:
+
+1. Turn on Debug logs, then background and reopen the app.
+2. Use the app until it lags, then background it once. This writes `mobile_lag_report`.
+3. Share the log from Developer → Share logs.
+4. Run `python3 app/tool/lag_report.py omi_debug_YYYYMMDD.log`.

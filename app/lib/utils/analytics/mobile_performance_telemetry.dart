@@ -75,6 +75,7 @@ class MobilePerformanceTelemetry extends NavigatorObserver {
     final recorder = lag;
     if (recorder == null) return;
     _lagActive = _attached && _foreground && diagnosticsEnabled?.call() == true;
+    recorder.active = _lagActive;
     if (_lagActive) {
       recorder.startWatchdog();
     } else {

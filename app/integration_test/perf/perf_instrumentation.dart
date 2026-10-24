@@ -1,6 +1,5 @@
 import 'dart:ui';
 import 'dart:developer';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:integration_test/integration_test.dart';
 
@@ -12,12 +11,6 @@ class PerfInstrumentation {
   final Map<String, int> initialBuilds = {};
   final List<Map<String, int>> frameRebuilders = [];
   int idleFrames = 0;
-
-  /// UI-thread time per pipeline phase (BUILD, LAYOUT, PAINT, COMPOSITING,
-  /// SEMANTICS, FINALIZE TREE) over the measured window, from FlutterTimeline.
-  /// Within one run the split is stable even when host wall-clock is not.
-  final Map<String, double> phaseMs = {};
-  bool semanticsEnabled = false;
   int _windowStart = 0;
   int? _windowEnd;
   int _buildCount = 0;
@@ -65,10 +58,6 @@ class PerfInstrumentation {
     initialBuilds.clear();
     frameRebuilders.clear();
     idleFrames = 0;
-    phaseMs.clear();
-    semanticsEnabled = binding.semanticsEnabled;
-    FlutterTimeline.debugCollectionEnabled = true;
-    FlutterTimeline.debugReset();
     _buildCount = 0;
     _windowStart = Timeline.now;
     _windowEnd = null;
@@ -95,21 +84,10 @@ class PerfInstrumentation {
 
   void endWindow() {
     _windowEnd = Timeline.now;
-    _collectPhases();
-  }
-
-  void _collectPhases() {
-    if (!FlutterTimeline.debugCollectionEnabled) return;
-    const phases = {'BUILD', 'LAYOUT', 'PAINT', 'COMPOSITING', 'SEMANTICS', 'FINALIZE TREE'};
-    for (final block in FlutterTimeline.debugCollect().aggregatedBlocks) {
-      if (phases.contains(block.name)) phaseMs[block.name] = block.duration / 1000;
-    }
-    FlutterTimeline.debugCollectionEnabled = false;
   }
 
   void stop(IntegrationTestWidgetsFlutterBinding binding) {
     active = false;
-    _collectPhases();
     binding.removeTimingsCallback(_timings);
     if (_frameCallback != null) binding.cancelFrameCallbackWithId(_frameCallback!);
     debugOnRebuildDirtyWidget = _previous;

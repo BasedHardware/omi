@@ -75,6 +75,21 @@ class LagRecorder {
 
   String get surface => _surface;
 
+  /// Input callbacks return at once unless capture is on (Debug logs). The
+  /// owning [MobilePerformanceTelemetry] sets this with the watchdog.
+  bool get active => _active;
+  bool _active = false;
+  set active(bool value) {
+    if (value == _active) return;
+    _active = value;
+    if (value) return;
+    // Forget an in-flight gesture so a later capture never starts mid-scroll.
+    _scrollDepth = 0;
+    _scrollStartUs = null;
+    _pointerDownUs = null;
+    _pointerDownAt = null;
+  }
+
   /// The page or tab the next frames belong to.
   void setSurface(String surface) {
     if (surface == _surface) return;
@@ -88,10 +103,12 @@ class LagRecorder {
   // ---- input context ------------------------------------------------------
 
   void onScrollStart() {
+    if (!_active) return;
     if (_scrollDepth++ == 0) _scrollStartUs = _nowUs();
   }
 
   void onScrollEnd() {
+    if (!_active) return;
     if (_scrollDepth == 0) return;
     if (--_scrollDepth > 0) return;
     // Frames up to 150 ms after the finger lifts still belong to the gesture.
@@ -103,12 +120,14 @@ class LagRecorder {
   }
 
   void onPointerDown(Offset position) {
+    if (!_active) return;
     _pointerDownUs = _nowUs();
     _pointerDownAt = position;
     _pointerMoved = false;
   }
 
   void onPointerMove(Offset position) {
+    if (!_active) return;
     final start = _pointerDownAt;
     if (start != null && (position - start).distance > kTouchSlop) _pointerMoved = true;
   }
@@ -117,6 +136,7 @@ class LagRecorder {
   /// next frame's UI work, which includes the tap handler's own synchronous
   /// work (this listener sits above the gesture arena, so it runs first).
   void onPointerUp() {
+    if (!_active) return;
     final downUs = _pointerDownUs;
     _pointerDownUs = null;
     if (downUs == null || _pointerMoved || _scrollDepth > 0) return;
@@ -398,12 +418,14 @@ class LagInputScope extends StatelessWidget {
   Widget build(BuildContext context) {
     final recorder = this.recorder;
     if (recorder == null) return child;
+    // omi-perf-allow: global-input-listener -- lag capture needs taps and scrolls on every surface; each callback is O(1) and returns at once unless Debug logs capture is on (lag_recorder_test.dart)
     return Listener(
       behavior: HitTestBehavior.translucent,
       onPointerDown: (e) => recorder.onPointerDown(e.position),
       onPointerMove: (e) => recorder.onPointerMove(e.position),
       onPointerUp: (_) => recorder.onPointerUp(),
       child: NotificationListener<ScrollNotification>(
+        // omi-perf-allow: global-input-listener -- scroll start/end only, O(1), never consumes the notification
         onNotification: (n) {
           if (n is ScrollStartNotification) recorder.onScrollStart();
           if (n is ScrollEndNotification) recorder.onScrollEnd();
