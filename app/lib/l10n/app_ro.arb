@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Verifică conexiunea și încearcă din nou.",
     "useFreePlan": "Folosește planul gratuit",
     "continueText": "Continuă",
+    "checkoutExistingSubscription": "Ai deja un abonament. Gestionează abonamentul actual în loc să începi unul nou.",
     "resubscribeFirstToChangePlans": "Reabonează-te mai întâi ca să schimbi planul.",
     "resubscribe": "Reabonează-te",
     "couldNotOpenPaymentSettings": "Nu s-au putut deschide setările de plată. Vă rugăm să încercați din nou.",
@@ -4421,5 +4422,8 @@
     "pairingPowerOnSubtitle": "Apasă butonul o dată și ține-l aproape de telefon.",
     "walkthroughBackgroundRecordingNote": "Gata. Omi va continua să-ți înregistreze conversațiile în fundal.",
     "noThanks": "Nu, mulțumesc",
-    "recapInTheBackground": "În fundal"
+    "recapInTheBackground": "În fundal",
+    "retentionOfferAccept": "Rămâi cu {percent}% reducere",
+    "retentionOfferBody": "Rămâi și plătești {price} pe lună în următoarele {months} luni.",
+    "retentionOfferApplied": "Gata. {percent}% reducere în următoarele {months} luni."
 }

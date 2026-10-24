@@ -18,6 +18,7 @@ from fake_firestore.document import (
     NotFound,
     apply_transformations,
     get_by_path,
+    set_by_path,
 )
 
 # Module-level singleton — set by conftest.py before backend imports.
@@ -123,7 +124,7 @@ def _patch_delete_field_missing_key_noop():
 
 
 def _patch_document_delete_missing_doc_noop():
-    """Match Firestore: deleting a document that does not exist succeeds."""
+    """Match Firestore: root deletion preserves children; absent delete succeeds."""
     global _original_document_delete
     if _original_document_delete is not None:
         return
@@ -131,10 +132,18 @@ def _patch_document_delete_missing_doc_noop():
     _original_document_delete = FakeDocumentReference.delete
 
     def _delete(self, timeout: Optional[float] = None) -> None:
+        # fake-firestore nests children in the parent's data dict. Real
+        # Firestore deletes only the document's fields, never subcollections.
+        children = {
+            collection.id: deepcopy(get_by_path(self._data, self._path + [collection.id]))
+            for collection in self.collections()
+        }
         try:
             _original_document_delete(self, timeout=timeout)
         except KeyError:
             self._written_docs.discard(tuple(self._path))
+        if children:
+            set_by_path(self._data, self._path, children)
 
     FakeDocumentReference.delete = _delete
 
@@ -312,6 +321,8 @@ def clear_user_data(uid: str):
         "chat_sessions",
         "folders",
         "hourly_usage",
+        "monthly_usage_totals",
+        "sync_content_ledger",
         # Universal memory authority. The E2E store is session-scoped, so
         # omitting these collections leaks apply state and canonical rows from
         # an earlier test into later legacy-compatibility scenarios.
@@ -343,6 +354,15 @@ def clear_user_data(uid: str):
         user_ref.delete()
     except Exception:
         pass
+    # fake-firestore deletes the nested data dict with the root but leaves
+    # descendant existence entries behind. Clear those ghost snapshots too,
+    # including when an erasure test already removed the root before teardown.
+    user_path = ('users', uid)
+    db._written_docs.difference_update({path for path in db._written_docs if path[:2] == user_path})
+    # Account erasure and memory deletion leave authorities outside the user
+    # tree. Neither may leak into the next live-account scenario.
+    for collection in ("account_deletions", "legal_hold_deletion_gates"):
+        db.collection(collection).document(uid).delete()
     # The maintenance inventory is deliberately outside the user document so
     # account cleanup must remove its content-free marker separately.
     try:

@@ -206,7 +206,7 @@ def test_frame_images_keep_screen_roster_identity(processing, monkeypatch):
     conv = SimpleNamespace(
         id='synthetic', source='desktop', external_data={'conversation_role': 'meeting'}, started_at=START
     )
-    roster, _, _, images = wiring.rich_notes_inputs(
+    roster, _, _, images, _frame_count = wiring.rich_notes_inputs(
         'synthetic',
         conv,
         None,

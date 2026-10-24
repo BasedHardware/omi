@@ -4444,6 +4444,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get continueText => 'Continuă';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Ai deja un abonament. Gestionează abonamentul actual în loc să începi unul nou.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Reabonează-te mai întâi ca să schimbi planul.';
 
   @override
@@ -14599,4 +14603,19 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'În fundal';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Rămâi cu $percent% reducere';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Rămâi și plătești $price pe lună în următoarele $months luni.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Gata. $percent% reducere în următoarele $months luni.';
+  }
 }

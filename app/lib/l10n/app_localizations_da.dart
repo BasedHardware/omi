@@ -4411,6 +4411,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get continueText => 'Fortsæt';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Du har allerede et abonnement. Administrer dit nuværende abonnement i stedet for at starte et nyt.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Gentilmelding først for at skifte abonnement.';
 
   @override
@@ -14528,4 +14532,19 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'I baggrunden';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Bliv for $percent% rabat';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Bliv og betal $price om måneden de næste $months måneder.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Færdig. $percent% rabat de næste $months måneder.';
+  }
 }

@@ -6,12 +6,34 @@ class LiveStartAnchor {
   DateTime? _start;
   String? _episodeId;
 
+  /// When the person last ended the live conversation. The next stretch counts from here, including
+  /// once the next episode opens at its first words a little later.
+  DateTime? _restartedAt;
+
+  /// The person ended the live conversation: the running length starts again at 0 from [now].
+  void restart(DateTime now) {
+    _restartedAt = now;
+    _start = now;
+    _episodeId = null;
+  }
+
   DateTime? resolve({
     required Episode? episode,
     required DateTime? captureStart,
     required bool streaming,
     required DateTime now,
   }) {
+    final restartedAt = _restartedAt;
+    if (restartedAt != null) {
+      // Keep counting from the restart: the next episode opens at its first words, and adopting its
+      // later start would make the label jump backwards.
+      if (episode != null) {
+        _episodeId = episode.id;
+        _restartedAt = null;
+      }
+      _start = restartedAt;
+      return _start;
+    }
     if (episode != null) {
       if (_episodeId != episode.id) {
         // Adopted once per episode: the server's start is when the occasion's first words arrived.

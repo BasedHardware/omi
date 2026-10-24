@@ -15,6 +15,7 @@ from database.batch_pipeline_policy import load_stage_policy
 from database.batch_pipeline_shadow_hook import mirror_refresh
 from config.policy import ProjectionPolicy
 from database.fsr_read_cache import writing
+from database.monthly_usage_totals import queue_increment
 from database.batch_pipeline_store import FirestoreStore
 from database.batch_pipeline_privacy import assert_batch_write_allowed
 from database.sync_ledger import (
@@ -270,6 +271,11 @@ class ProjectionStore:
             held = False
             for sibling in binding.segment_ids:
                 job = self.ref('jobs', sibling).get(transaction=transaction).to_dict() or {}
+                result = self.ref('results', sibling).get(transaction=transaction).to_dict() or {}
+                if (result.get('projection') or {}).get('state') == 'quarantined':
+                    if not job.get('projection_binding') or normalized_binding(job['projection_binding']) != binding:
+                        raise ProjectionBlocked('quarantined sibling binding mismatch')
+                    held = True
                 if job.get('state') == 'quarantined':
                     if (
                         not job.get('projection_binding')
@@ -508,6 +514,12 @@ class ProjectionStore:
                 .document(accounting['hour'])
             )
             transaction.set(usage_ref, accounting['updates'], merge=True)
+            queue_increment(
+                transaction,
+                self.client.collection('users').document(binding.owner_id),
+                datetime.strptime(accounting['hour'], '%Y-%m-%d-%H'),
+                accounting['updates'],
+            )
         # Every charge boundary and when it committed, so fair use can re-issue
         # each recent step's once-key: a write lost after any earlier commit
         # still lands on a later attempt while that key is live.

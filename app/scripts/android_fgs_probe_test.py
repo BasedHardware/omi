@@ -14,6 +14,19 @@ FOREGROUND_SERVICE = (
     "    isForeground=true foregroundId=2003 foregroundNoti=Notification(...)\n"
 )
 NO_SERVICE = "ACTIVITY MANAGER SERVICES (dumpsys activity services)\n  (nothing)\n"
+# dumpsys appends the global "Last ANR service" section even when invoked with
+# a package filter; on a CI emulator that record can name a Google Play
+# Services provider that ANR'd mid-run.
+FOREIGN_LAST_ANR_SERVICE = (
+    "  Last ANR service:\n"
+    "ServiceRecord{ffdf3b4 u0 com.google.android.gms/com.google.android.location"
+    ".internal.server.HardwareArProviderService c:android}\n"
+)
+PROBE_LAST_ANR_SERVICE = (
+    "  Last ANR service:\n"
+    "ServiceRecord{1a2b3c u0 com.omi.fgsprobe/com.friend.ios.sync"
+    ".SyncTransferForegroundService c:android}\n"
+)
 WAKE_LOCK_HELD = (
     "Wake Locks: size=1\n"
     "  PARTIAL_WAKE_LOCK 'omi:sync-transfer' ACQ=-1s355ms (uid=10189 pid=4782 ws=null)\n"
@@ -127,6 +140,18 @@ class ProbeRunnerTests(unittest.TestCase):
         device = FakeEmulator("restart", fallback=True)
         result, _ = run(device, "restart")
         self.assertFalse(result["passed"])
+
+    def test_cleanup_scopes_leaked_service_records_to_the_probe_package(self):
+        class NoisyServicesEmulator(FakeEmulator):
+            def __call__(self, *command):
+                if command[:4] == ("shell", "dumpsys", "activity", "services"):
+                    return NO_SERVICE + anr_record
+                return super().__call__(*command)
+
+        for anr_record, expected in ((FOREIGN_LAST_ANR_SERVICE, True), (PROBE_LAST_ANR_SERVICE, False)):
+            with self.subTest(probe_package_in_anr_record=not expected):
+                result, _ = run(NoisyServicesEmulator("empty"), "empty")
+                self.assertEqual(result["passed"], expected)
 
     def test_modes_without_an_active_phase_neither_verify_nor_acknowledge(self):
         for mode in ("empty", "orphan-stop", "background-stop"):

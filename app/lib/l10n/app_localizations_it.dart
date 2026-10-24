@@ -4450,6 +4450,10 @@ class AppLocalizationsIt extends AppLocalizations {
   String get continueText => 'Continua';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Hai già un abbonamento. Gestisci quello attuale invece di attivarne uno nuovo.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Riabbonati prima per cambiare piano.';
 
   @override
@@ -14614,4 +14618,19 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'In sottofondo';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Resta con il $percent% di sconto';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Resta e paga $price al mese per i prossimi $months mesi.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Fatto. $percent% di sconto per i prossimi $months mesi.';
+  }
 }

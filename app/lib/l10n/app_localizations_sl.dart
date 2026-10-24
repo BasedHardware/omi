@@ -4428,6 +4428,9 @@ class AppLocalizationsSl extends AppLocalizations {
   String get continueText => 'Nadaljujte';
 
   @override
+  String get checkoutExistingSubscription => 'Naročnino že imate. Namesto nove upravljajte obstoječo naročnino.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Najprej se ponovno naročite, da zamenjate načrt.';
 
   @override
@@ -14566,4 +14569,19 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'V ozadju';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Ostani s $percent % popustom';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Ostanite in plačujte $price na mesec naslednje $months mesece.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Končano. $percent % popusta naslednje $months mesece.';
+  }
 }

@@ -63,6 +63,8 @@ import {
   FEES_UNAVAILABLE_REASON,
   sonioxBalanceInputs,
   sonioxSeriesBroken,
+  variableMarginLineStatus,
+  variableMarginSeries,
 } from "./wall-cost";
 import { createHash } from "crypto";
 import {
@@ -910,6 +912,12 @@ export function healthFrames(
     });
   }
   const marginByPlan = marginFrames(legs, days, now);
+  // Variable-margin points off the same all-in days (see the return note).
+  const variable = variableMarginSeries(
+    days,
+    (d) => finopsMrr(legs.finops, new Date(ts(d))),
+    { feesCash: vendor.infraStripeFeesCash }
+  );
   return {
     cost,
     costPerMau,
@@ -926,6 +934,38 @@ export function healthFrames(
       },
     ],
     estimates: estimates.map((e) => ({ ...e, stale: e.stale ? 1 : 0 })),
+    // Variable margin (David 2026-10-23): same all-in cost days, the margin's
+    // own scope (GCP ex prepaid Vertex reserved, taken before the all-in
+    // one-time-incident exclusion, + OpenAI + Soniox + Modulate + Stripe
+    // fees), trailing-7-day run rate against that day's book. MRR comes from
+    // the day's own snapshot — a day without one keeps its cost point and
+    // nulls the margin, never borrowing a neighbour's book.
+    variableMargin: variable.map((p) => ({
+      date: ts(p.date),
+      marginPct: round(p.marginPct, 1),
+      costPerMonth: round(p.costPerMonth, 0),
+      mrr: p.mrr == null ? null : round(p.mrr, 0),
+      goalCost: round(p.goalCost, 0),
+      gcpPerMonth: round(p.gcpPerMonth, 0),
+      vertexReservedPerMonth: round(p.vertexReservedPerMonth, 0),
+      openaiPerMonth: round(p.openaiPerMonth, 0),
+      sonioxPerMonth: round(p.sonioxPerMonth, 0),
+      modulatePerMonth: round(p.modulatePerMonth, 0),
+      feesPerMonth: round(p.feesPerMonth, 0),
+      missing: p.missing.length ? p.missing.join("+") : null,
+    })),
+    variableMarginStatus: [
+      {
+        text: variableMarginLineStatus(variable.at(-1), {
+          now,
+          soniox: vendor.sonioxBalance,
+          feesUnavailable,
+          nonUsdPaying: variable.at(-1)
+            ? legs.finops?.nonUsdPaying[variable.at(-1)!.date] ?? null
+            : null,
+        }).join(" · "),
+      },
+    ],
   };
 }
 

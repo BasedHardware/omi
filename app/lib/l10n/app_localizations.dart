@@ -8433,6 +8433,12 @@ abstract class AppLocalizations {
   /// **'Continue'**
   String get continueText;
 
+  /// Checkout is blocked because an existing subscription must be managed, not purchased a second time. Not the pending-cancellation upgrade error.
+  ///
+  /// In en, this message translates to:
+  /// **'You already have a subscription. Manage your current subscription instead of starting a new one.'**
+  String get checkoutExistingSubscription;
+
   /// Why another price is refused while cancellation is pending
   ///
   /// In en, this message translates to:
@@ -25718,6 +25724,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'In the background'**
   String get recapInTheBackground;
+
+  /// Primary button on the last cancel step: keep the subscription with a discount
+  ///
+  /// In en, this message translates to:
+  /// **'Stay for {percent}% off'**
+  String retentionOfferAccept(int percent);
+
+  /// Offer shown on the last cancel step; price is the discounted monthly price
+  ///
+  /// In en, this message translates to:
+  /// **'Stay and pay {price} a month for the next {months} months.'**
+  String retentionOfferBody(String price, int months);
+
+  /// Toast after accepting the stay offer
+  ///
+  /// In en, this message translates to:
+  /// **'Done. {percent}% off your next {months} months.'**
+  String retentionOfferApplied(int percent, int months);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

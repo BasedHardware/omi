@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Controleer je verbinding en probeer het opnieuw.",
     "useFreePlan": "Gratis abonnement gebruiken",
     "continueText": "Doorgaan",
+    "checkoutExistingSubscription": "Je hebt al een abonnement. Beheer je huidige abonnement in plaats van een nieuw te starten.",
     "resubscribeFirstToChangePlans": "Abonneer je eerst opnieuw om van abonnement te wisselen.",
     "resubscribe": "Opnieuw abonneren",
     "couldNotOpenPaymentSettings": "Kon betalingsinstellingen niet openen. Probeer het opnieuw.",
@@ -4421,5 +4422,8 @@
     "pairingPowerOnSubtitle": "Druk één keer op de knop en houd hem bij je telefoon.",
     "walkthroughBackgroundRecordingNote": "Dat is alles. Omi blijft je gesprekken op de achtergrond opnemen.",
     "noThanks": "Nee, bedankt",
-    "recapInTheBackground": "Op de achtergrond"
+    "recapInTheBackground": "Op de achtergrond",
+    "retentionOfferAccept": "Blijf met {percent}% korting",
+    "retentionOfferBody": "Blijf en betaal {price} per maand de komende {months} maanden.",
+    "retentionOfferApplied": "Klaar. {percent}% korting de komende {months} maanden."
 }

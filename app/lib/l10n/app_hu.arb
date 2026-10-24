@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Ellenőrizd a kapcsolatot, és próbáld újra.",
     "useFreePlan": "Ingyenes csomag használata",
     "continueText": "Folytatás",
+    "checkoutExistingSubscription": "Már van előfizetésed. Új indítása helyett kezeld a meglévő előfizetésedet.",
     "resubscribeFirstToChangePlans": "Csomagváltáshoz először fizess elő újra.",
     "resubscribe": "Újra feliratkozás",
     "couldNotOpenPaymentSettings": "Nem sikerült megnyitni a fizetési beállításokat. Kérjük, próbálja újra.",
@@ -4517,5 +4518,8 @@
     "pairingPowerOnSubtitle": "Nyomd meg egyszer a gombot, és tartsd a telefon közelében.",
     "walkthroughBackgroundRecordingNote": "Ennyi. Az Omi a háttérben tovább rögzíti a beszélgetéseidet.",
     "noThanks": "Nem, köszönöm",
-    "recapInTheBackground": "A háttérben"
+    "recapInTheBackground": "A háttérben",
+    "retentionOfferAccept": "Maradj {percent}% kedvezménnyel",
+    "retentionOfferBody": "Maradj, és fizess havi {price} összeget a következő {months} hónapban.",
+    "retentionOfferApplied": "Kész. {percent}% kedvezmény a következő {months} hónapban."
 }

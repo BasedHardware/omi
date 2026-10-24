@@ -223,3 +223,10 @@ def test_sync_v1_intake_outside_scope_retains_unheld_wire(client, monkeypatch, c
     assert response.status_code == 200, response.text
     assert 'held_audio' not in response.json()
     router.hold_capture_if_exhausted.assert_not_called()
+
+
+def test_v1_default_offline_scope_holds_even_with_legacy_enforcement_off(client, monkeypatch):
+    monkeypatch.delenv('STT_CAP_OFFLINE_ENFORCEMENT', raising=False)
+    monkeypatch.setenv('STT_CAP_DISPATCH_ENFORCEMENT', 'false')
+    monkeypatch.setenv('STT_CAP_DISPATCH_LANES', 'live')
+    test_exhausted_upload_acknowledges_only_after_durable_hold(client)

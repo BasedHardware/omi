@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "شما از قبل اشتراک دارید. به‌جای شروع اشتراک جدید، اشتراک فعلی خود را مدیریت کنید.",
     "resubscribeFirstToChangePlans": "برای تغییر طرح، ابتدا دوباره مشترک شوید.",
     "resubscribe": "مجددا مشترک شوید",
     "@resubscribe": {
@@ -11847,5 +11848,8 @@
     "pairingPowerOnSubtitle": "یک بار دکمه را فشار دهید و نزدیک گوشی نگه دارید.",
     "walkthroughBackgroundRecordingNote": "همین. Omi به ضبط مکالمات شما در پس‌زمینه ادامه می‌دهد.",
     "noThanks": "نه، ممنون",
-    "recapInTheBackground": "در پس‌زمینه"
+    "recapInTheBackground": "در پس‌زمینه",
+    "retentionOfferAccept": "با {percent}% تخفیف بمانید",
+    "retentionOfferBody": "بمانید و ماهانه {price} بپردازید، برای {months} ماه آینده.",
+    "retentionOfferApplied": "انجام شد. {percent}% تخفیف برای {months} ماه آینده."
 }
