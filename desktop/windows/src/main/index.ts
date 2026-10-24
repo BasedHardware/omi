@@ -1361,6 +1361,19 @@ app.whenReady().then(async () => {
   // Renderer → tray: reflect the reported listening state on the tray icon/menu.
   ipcMain.on('tray:state', (_e, state) => updateTrayState(state))
 
+  // Renderer → OS notification for prolonged muted recording (#20215). Clicking
+  // the notification surfaces the main window so the user can resume capture.
+  ipcMain.on(
+    'capture:notify-muted-reminder',
+    (_e, payload: { title?: string; body?: string; silent?: boolean } | null | undefined) => {
+      if (!payload || typeof payload.title !== 'string' || typeof payload.body !== 'string') return
+      showBestEffortNotification(payload.title, payload.body, {
+        silent: payload.silent === true,
+        onClick: () => surfaceMainWindow()
+      })
+    }
+  )
+
   // Launch-at-login (writes the HKCU Run key; --hidden → tray-only start).
   // Packaged builds only: in dev process.execPath is the bare electron.exe
   // WITHOUT the app path, so a dev-written Run entry would launch an empty

@@ -4,10 +4,29 @@
 // richer notification path and deliberately not routed through here.)
 import { Notification } from 'electron'
 
-export function showBestEffortNotification(title: string, body: string): void {
+export interface BestEffortNotificationOptions {
+  silent?: boolean
+  onClick?: () => void
+}
+
+export function showBestEffortNotification(
+  title: string,
+  body: string,
+  options?: BestEffortNotificationOptions
+): void {
   try {
     if (!Notification.isSupported()) return
-    new Notification({ title, body }).show()
+    const n = new Notification({ title, body, silent: options?.silent === true })
+    if (typeof options?.onClick === 'function') {
+      n.on('click', () => {
+        try {
+          options.onClick?.()
+        } catch (err) {
+          console.warn('[notify] notification click handler failed:', err)
+        }
+      })
+    }
+    n.show()
   } catch (e) {
     console.warn('[notify] notification failed:', e)
   }

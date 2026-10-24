@@ -649,6 +649,8 @@ const omi: OmiBridgeApi = {
   },
   // --- Tray + lifecycle (Phase 1) ---
   trayReportState: (state) => ipcRenderer.send('tray:state', state),
+  notifyMutedRecordingReminder: (payload) =>
+    ipcRenderer.send('capture:notify-muted-reminder', payload),
   onTrayToggleListening: (cb: () => void) => {
     const listener = (): void => cb()
     ipcRenderer.on('tray:toggle-listening', listener)
