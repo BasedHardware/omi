@@ -6592,7 +6592,10 @@ Firestore reads. Multipart parts retain the original unit scope. Five seconds of
 clean evidence, compatible model/revision provenance, the shared cross-scope
 cosine threshold and a nearest-candidate margin are required. Distinct voices
 from one unit cannot link; competing matches abstain. Manual conflicting names
-veto links, and owner claims are re-arbitrated across resulting voice IDs.
+veto links, as do conflicting accepted acoustic names when no manual authority
+overrides them. Evidence is restricted to the current unit scope before labels
+are compared; equal provider labels in different units are not one voice. Owner
+claims are re-arbitrated across resulting voice IDs.
 
 The registry is always encrypted, including standard-protection conversations,
 and removed at the client read boundary. It has at most 32 voice anchors, 256

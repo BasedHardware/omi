@@ -297,3 +297,29 @@ def test_batch_assignment_preserves_excerpt_and_another_automatic_owner(replacem
     assert by_id['automatic']['is_user']
     assert by_id['old']['speaker_id'] != by_id['automatic']['speaker_id']
     assert result['manual_speaker_assignments']['segments']['old']['segment_only']
+
+
+def test_conflicting_recognized_people_cannot_share_an_acoustic_voice_id():
+    state, first = run({}, 'a', {'SPEAKER_00': [1.0, 0.0]})
+    first[0].update(is_user=True, person_id=None, speaker_label_source='auto')
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate(first)
+    second = [
+        {'speaker': 'SPEAKER_01', 'speaker_id_scope': 'final:batch:b', 'is_user': False, 'person_id': 'other-person'}
+    ]
+    link_unit_voices(state, evidence('b', {'SPEAKER_01': [1.0, 0.0]}), second, allocator, existing=first)
+    allocator.assign(second[0])
+    assert second[0]['speaker_id'] != first[0]['speaker_id']
+
+
+def test_same_provider_label_in_another_scope_cannot_contaminate_incoming_identity():
+    state, first = run({}, 'a', {'SPEAKER_00': [1.0, 0.0]})
+    first[0].update(is_user=True, speaker_label_source='auto')
+    allocator = ConversationSpeakerIdAllocator()
+    allocator.hydrate(first)
+    current = {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:b', 'is_user': True}
+    unrelated = {'speaker': 'SPEAKER_00', 'speaker_id_scope': 'final:batch:other', 'person_id': 'other-person'}
+    link_unit_voices(state, evidence('b', {'SPEAKER_00': [1.0, 0.0]}), [current, unrelated], allocator, existing=first)
+    allocator.assign(current)
+    assert current['speaker_id'] == first[0]['speaker_id']
+    assert 'speaker_id' not in unrelated

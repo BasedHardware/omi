@@ -152,7 +152,11 @@ def link_unit_voices(
             continue
         # Persisted transcript scopes remain authoritative if the registry filled.
         allocated = allocator.lookup(scope, label)
-        samples = [s for s in segments if canonical_speaker_label(str(s.get('speaker'))) == label]
+        samples = [
+            s
+            for s in segments
+            if s.get('speaker_id_scope') == scope and canonical_speaker_label(str(s.get('speaker'))) == label
+        ]
         incoming_names = {_identity(s) for s in samples} - {None}
         incoming_manual = {_identity((receipt.get('segments') or {}).get(s.get('id'))) for s in samples} - {None}
         identities[label] = incoming_manual or incoming_names
@@ -179,6 +183,16 @@ def link_unit_voices(
             manual = _manual_identities(int(sid), receipt, existing)
             if len(manual) > 1 or manual and identities[label] and manual != identities[label]:
                 continue
+            if not manual:
+                recognized = {
+                    _identity(s)
+                    for s in existing
+                    if s.get('speaker_id') == int(sid) and s.get('speaker_label_source') != 'carried'
+                } - {None}
+                if len(recognized) > 1 or recognized and identities[label] and recognized != identities[label]:
+                    # Acoustic similarity cannot erase contradictory accepted
+                    # names and give both people the same correction authority.
+                    continue
             distance = 1 - sum(a * b for a, b in zip(vector, anchor))
             ranked.append((distance, int(sid)))
         ranked.sort()
