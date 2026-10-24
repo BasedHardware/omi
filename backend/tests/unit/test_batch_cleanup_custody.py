@@ -91,6 +91,7 @@ def test_old_receipts_resolve_capture_range_from_job(cleanup):
     run, store, _, _ = cleanup
     artifact = row(capture_at=None, duration_seconds=None)
     store.client.collection.return_value.document.return_value.get.return_value.to_dict.return_value = {
+        'owner_id': 'synthetic',
         'capture_at': datetime(2026, 10, 23, tzinfo=timezone.utc).timestamp(),
         'duration_seconds': 60,
     }
@@ -98,6 +99,23 @@ def test_old_receipts_resolve_capture_range_from_job(cleanup):
     assert count == 0
     delete.assert_not_called()
     store.client.collection.assert_called_once_with('batch_pipeline_prod_jobs')
+
+
+@pytest.mark.parametrize('owner', [None, 'different-synthetic-owner'])
+def test_foreign_or_unowned_job_cannot_supply_a_nonheld_capture_range(cleanup, owner):
+    run, store, _, _ = cleanup
+    artifact = row(capture_at=None, duration_seconds=None)
+    store.client.collection.return_value.document.return_value.get.return_value.to_dict.return_value = {
+        'owner_id': owner,
+        'capture_at': datetime(2026, 10, 24, 8, tzinfo=timezone.utc).timestamp(),
+        'duration_seconds': 60,
+    }
+    count, delete = run([artifact])
+    assert count == 0
+    delete.assert_not_called()
+    update = artifact.reference.update.call_args.args[0]
+    assert update['cleanup_error'] == 'capture_owner_mismatch'
+    assert update['cleanup_after'] is retention.firestore.DELETE_FIELD
 
 
 def test_missing_job_is_held_and_does_not_block_later_rows(cleanup):

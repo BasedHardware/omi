@@ -56,7 +56,9 @@ Before any routine or receipt-driven erasure, the receipt's `owner_key` must
 match the canonical hash of its nonempty `owner_id`. Inconsistent rows are
 flagged `cleanup_error=owner_mismatch`, retain their URI and leave the due
 query. An untrusted erasure flag cannot grant authority to delete another
-owner's data. Direct owner-wide privacy purges remain authoritative.
+owner's data. A fallback job must have the same owner before its capture range
+is trusted; inconsistent associations are flagged `capture_owner_mismatch`.
+Direct owner-wide privacy purges remain authoritative.
 
 Held batch rows retain their URI, lose any receipt TTL and re-enter the due
 queue in one hour. This rotates a held first page so unrelated cleanup keeps

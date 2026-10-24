@@ -278,6 +278,26 @@ def run_retention_transaction(client: Any, operation: Callable[[Any], Any]) -> A
     )
 
 
+def _flag_invalid_cleanup_receipt(artifact: Any, now: datetime, reason: str) -> bool:
+    """Park inconsistent metadata without overwriting a newer privacy request."""
+    updated = False
+    try:
+        artifact.reference.update(
+            {
+                'cleanup_error': reason,
+                'cleanup_flagged_at': now,
+                'cleanup_after': firestore.DELETE_FIELD,
+                'expires_at': firestore.DELETE_FIELD,
+            },
+            option=firestore.LastUpdateOption(artifact.update_time),
+        )
+        updated = True
+    except (NotFound, FailedPrecondition):
+        pass
+    logger.warning('event=batch_cleanup outcome=retained reason=%s', reason)
+    return updated
+
+
 def cleanup_completed_artifacts(
     store: Any,
     now: datetime,
@@ -303,20 +323,8 @@ def cleanup_completed_artifacts(
             if invalid_reason:
                 # A malformed/previously cleaned receipt is not delete authority.
                 # Park and flag it so it cannot starve every subsequent due page.
-                try:
-                    artifact.reference.update(
-                        {
-                            'cleanup_error': invalid_reason,
-                            'cleanup_flagged_at': now,
-                            'cleanup_after': firestore.DELETE_FIELD,
-                            'expires_at': firestore.DELETE_FIELD,
-                        },
-                        option=firestore.LastUpdateOption(artifact.update_time),
-                    )
+                if _flag_invalid_cleanup_receipt(artifact, now, invalid_reason):
                     touched.append(('artifacts', artifact.id))
-                except (NotFound, FailedPrecondition):
-                    pass
-                logger.warning('event=batch_cleanup outcome=retained reason=%s', invalid_reason)
                 continue
             if not erasure_requested:
                 capture_at, duration = data.get('capture_at'), data.get('duration_seconds')
@@ -328,6 +336,10 @@ def cleanup_completed_artifacts(
                         .to_dict()
                         or {}
                     )
+                    if job and job.get('owner_id') != uid:
+                        if _flag_invalid_cleanup_receipt(artifact, now, 'capture_owner_mismatch'):
+                            touched.append(('artifacts', artifact.id))
+                        continue
                     capture_at = job.get('capture_at') if capture_at is None else capture_at
                     duration = job.get('duration_seconds') if duration is None else duration
                 reason = cleanup_hold_reason(capture_at, duration)

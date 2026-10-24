@@ -276,6 +276,16 @@ def test_incident_hold_and_uri_less_receipt_do_not_block_unrelated_or_privacy_cl
     table.document('inconsistent-owner').set(
         {**base, 'owner_key': privacy_owner_key('different-synthetic-owner'), 'erasure_requested': True}
     )
+    store.client.collection(f'{store.namespace}_jobs').document('foreign-job').set(
+        {
+            'owner_id': 'different-synthetic-owner',
+            'capture_at': datetime(2026, 10, 24, 8, tzinfo=timezone.utc).timestamp(),
+            'duration_seconds': 60,
+        }
+    )
+    table.document('foreign-capture-ref').set(
+        {**base, 'segment_id': 'foreign-job', 'capture_at': None, 'duration_seconds': None}
+    )
     erased = []
     assert cleanup_completed_artifacts(store, now, delete_uri=lambda owner, uri: erased.append(uri)) == 2
     assert set(erased) == {'gs://synthetic/good#42', 'gs://synthetic/erase#42'}
@@ -289,6 +299,7 @@ def test_incident_hold_and_uri_less_receipt_do_not_block_unrelated_or_privacy_cl
     inconsistent = table.document('inconsistent-owner').get().to_dict()
     assert inconsistent['cleanup_error'] == 'owner_mismatch'
     assert inconsistent['uri'] == base['uri'] and 'cleanup_after' not in inconsistent
+    assert table.document('foreign-capture-ref').get().to_dict()['cleanup_error'] == 'capture_owner_mismatch'
 
 
 def test_real_firestore_update_precondition_preserves_a_newer_privacy_erasure(state, monkeypatch):
