@@ -89,3 +89,49 @@ struct OmiSavedReconnectTelemetry {
         return true
     }
 }
+
+/// Native reconnect intent must be available before the Flutter engine starts.
+/// Capture authorization and recovery budgets deliberately do not enter this policy.
+struct OmiSavedReconnectIntent {
+    private static let savedKey = "ble_saved_reconnect_targets"
+    private static let blockedKey = "ble_manual_reconnect_blocks"
+    private(set) var saved: Set<String>
+    private(set) var blocked: Set<String>
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        saved = Set(defaults.stringArray(forKey: Self.savedKey) ?? [])
+        blocked = Set(defaults.stringArray(forKey: Self.blockedKey) ?? [])
+    }
+
+    mutating func configure(_ uuid: String, enabled: Bool) {
+        if enabled { saved.insert(uuid) } else { saved.remove(uuid) }
+        try? SafeDefaults.store(.array(saved.sorted().map { .string($0) }), forKey: Self.savedKey, in: defaults)
+    }
+
+    mutating func suppress(_ uuid: String) {
+        blocked.insert(uuid)
+        // Persist the block first: termination between writes cannot resurrect intent.
+        try? SafeDefaults.store(.array(blocked.sorted().map { .string($0) }), forKey: Self.blockedKey, in: defaults)
+        configure(uuid, enabled: false)
+    }
+
+    mutating func resume(_ uuid: String) {
+        blocked.remove(uuid)
+        try? SafeDefaults.store(.array(blocked.sorted().map { .string($0) }), forKey: Self.blockedKey, in: defaults)
+    }
+
+    enum Action { case waitForAdapter, suppressed, scan, connect, keepPending, connected }
+    func action(_ uuid: String, poweredOn: Bool, state: CBPeripheralState?) -> Action {
+        guard saved.contains(uuid), !blocked.contains(uuid) else { return .suppressed }
+        guard poweredOn else { return .waitForAdapter }
+        guard let state else { return .scan }
+        switch state {
+        case .connected: return .connected
+        case .connecting, .disconnecting: return .keepPending
+        case .disconnected: return .connect
+        @unknown default: return .keepPending
+        }
+    }
+}

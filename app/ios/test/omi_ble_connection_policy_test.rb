@@ -18,6 +18,47 @@ class OmiBleConnectionPolicyTest < Minitest::Test
         @main
         struct OmiBleConnectionPolicyTestHarness {
             static func main() {
+                let suite = "omi-reconnect-test-" + UUID().uuidString
+                let defaults = UserDefaults(suiteName: suite)!
+                defer { defaults.removePersistentDomain(forName: suite) }
+                let saved = "00000000-0000-0000-0000-000000000001"
+                let other = "00000000-0000-0000-0000-000000000002"
+                var intent = OmiSavedReconnectIntent(defaults: defaults)
+                intent.configure(saved, enabled: true)
+                // A remote disconnect owes a request immediately, irrespective of capture.
+                precondition(intent.action(saved, poweredOn: true, state: .disconnected) == .connect)
+                // Kill/relaunch without Flutter or a restored peripheral: scan until found.
+                intent = OmiSavedReconnectIntent(defaults: defaults)
+                precondition(intent.action(saved, poweredOn: true, state: nil) == .scan)
+                precondition(intent.action(saved, poweredOn: false, state: nil) == .waitForAdapter)
+                // State restoration retains the pending request rather than timing it out.
+                for _ in 0..<1000 {
+                    precondition(intent.action(saved, poweredOn: true, state: .connecting) == .keepPending)
+                }
+                precondition(intent.action(saved, poweredOn: true, state: .disconnecting) == .keepPending)
+                precondition(intent.action(saved, poweredOn: true, state: .connected) == .connected)
+                precondition(intent.action(other, poweredOn: true, state: .disconnected) == .suppressed)
+                // A capture health denial is not a change to native reconnect intent.
+                let health = OmiCaptureHealth(persist: { _ in true })
+                health.authorize(true, now: 100)
+                health.disconnected(recovering: false, now: 101)
+                health.authorize(false, now: 102)
+                precondition(health.reason == "capture_denied")
+                precondition(intent.action(saved, poweredOn: true, state: .disconnected) == .connect)
+                // Explicit suppression survives a new process and stale restoration.
+                intent.suppress(saved)
+                intent = OmiSavedReconnectIntent(defaults: defaults)
+                precondition(intent.action(saved, poweredOn: true, state: .connecting) == .suppressed)
+                intent.configure(saved, enabled: true)
+                precondition(intent.action(saved, poweredOn: true, state: .disconnected) == .suppressed)
+                intent.resume(saved) // Only explicit manageDevice clears the native user block.
+                precondition(intent.action(saved, poweredOn: true, state: .disconnected) == .connect)
+                intent.configure(saved, enabled: false)
+                intent.configure(other, enabled: true)
+                intent = OmiSavedReconnectIntent(defaults: defaults)
+                precondition(intent.action(saved, poweredOn: true, state: nil) == .suppressed)
+                precondition(intent.action(other, poweredOn: true, state: nil) == .scan)
+
                 var telemetry = OmiSavedReconnectTelemetry()
                 precondition(telemetry.admit("attempted"))
                 for _ in 0..<10000 { precondition(!telemetry.admit("attempted")) }
@@ -144,6 +185,8 @@ class OmiBleConnectionPolicyTest < Minitest::Test
         'swiftc',
         '-parse-as-library',
         POLICY_SOURCE,
+        File.join(IOS_ROOT, 'Runner', 'SafeFoundationSinks.swift'),
+        File.join(IOS_ROOT, 'Runner', 'Ble', 'OmiCaptureHealth.swift'),
         harness,
         '-o',
         binary,
