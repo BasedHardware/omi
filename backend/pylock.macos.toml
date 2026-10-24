@@ -381,9 +381,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/fd/5b/8f0c4a5bb9fd491
 
 [[packages]]
 name = "gitpython"
-version = "3.1.55"
-sdist = { url = "https://files.pythonhosted.org/packages/b2/ab/ba0d29f2fa2277ed6256b2ac09003494045355f3a10bf32f351761287870/gitpython-3.1.55.tar.gz", upload-time = 2026-07-23T02:52:43Z, size = 225071, hashes = { sha256 = "781e3b1624dad81b24e9524bf0297b69786a0706db2cbceec1e2b05c38e5152f" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/20/6a/d3b8208d2f8aac66abe8ccc1c23fa2c89464ec42cc71a601e95d05902428/gitpython-3.1.55-py3-none-any.whl", upload-time = 2026-07-23T02:52:41Z, size = 216590, hashes = { sha256 = "7c9ec1e69c158c081632ab35c41471e302c96db2ae42165036a5d2403378812e" } }]
+version = "3.2.1"
+sdist = { url = "https://files.pythonhosted.org/packages/c0/ff/fee293f1ec3e1b64db6eb270e00964f29c086d769201474cedb8d1608930/gitpython-3.2.1.tar.gz", upload-time = 2026-10-14T12:20:20.589439Z, size = 241688, hashes = { sha256 = "0f1229ec5c057bdabdeeda8bda4f17bda679ab33dbccc00f24e6a480553c8613" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/6b/50/2a923c4dc02522ff9567f07c67ed1deca6d5fa9474f4708168b8088dfa37/gitpython-3.2.1-py3-none-any.whl", upload-time = 2026-10-14T12:20:18.844050Z, size = 231548, hashes = { sha256 = "d66b0832aa8755c1a84892937282df0befb16c97e5a64aeebd68be9c5e323f53" } }]
 
 [[packages]]
 name = "google-ai-generativelanguage"
@@ -1170,9 +1170,9 @@ wheels = [{ url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2
 
 [[packages]]
 name = "pyjwt"
-version = "2.13.0"
-sdist = { url = "https://files.pythonhosted.org/packages/3b/81/58d0ac84e1ef3a3843791d6954d94c0b33d526c75eeb1efbce9d0a4c4077/pyjwt-2.13.0.tar.gz", upload-time = 2026-05-21T19:54:36Z, size = 107515, hashes = { sha256 = "41571c89ca91598c79e8ef18a2d07367d4810fbbd6f637794879baf1b7703423" } }
-wheels = [{ url = "https://files.pythonhosted.org/packages/a3/5e/ecf12fdb62546d64385c158514e9b2b671f7832108ef2ecd2020ce0af2d1/pyjwt-2.13.0-py3-none-any.whl", upload-time = 2026-05-21T19:54:35Z, size = 31274, hashes = { sha256 = "66adcc2aff09b3f1bbd95fc1e1577df8ac8723c978552fd43304c8a290ac5728" } }]
+version = "2.15.1"
+sdist = { url = "https://files.pythonhosted.org/packages/43/ea/5194e52748b0da83d71e082d75496eaec6e58f419f5e184786ded517e6a9/pyjwt-2.15.1.tar.gz", upload-time = 2026-09-28T18:40:42.598678Z, size = 121252, hashes = { sha256 = "4f259e80cdfb6b3fc18a7de51fd1ef9ec79652f25019bae68975ca2468a34df8" } }
+wheels = [{ url = "https://files.pythonhosted.org/packages/50/ca/44de4e75f8aadc457f0634be3b542815078ded46dca30efb960edeecad6e/pyjwt-2.15.1-py3-none-any.whl", upload-time = 2026-09-28T18:40:41.429003Z, size = 33860, hashes = { sha256 = "42d59d631f7768a1028a64c7ff581a9bf7519804daf91fc5b6c56e30eec5e193" } }]
 
 [[packages]]
 name = "pynndescent"
