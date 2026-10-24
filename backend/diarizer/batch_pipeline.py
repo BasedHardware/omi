@@ -7,6 +7,7 @@ chain. Missing results denote retryable failures per the scheduler contract.
 
 from concurrent.futures import Future, ThreadPoolExecutor, wait as wait_futures
 from dataclasses import dataclass
+from copy import deepcopy
 from enum import Enum
 import math
 import logging
@@ -33,6 +34,7 @@ from utils.observability.stt_cap_dispatch import record_audio
 from config.batch_pipeline_providers import ProviderConfig
 from config.stt_provider_policy import PARAKEET_SUPPORTED_LANGUAGES_BY_MODEL
 from config.sync_live_dedupe import sync_live_dedupe_active_for
+from config.policy.kill_switches import kill_switch
 from utils.batch_pipeline.correctness_metrics import record as record_correctness
 from utils.batch_pipeline.contracts import WorkItem, WorkResult, HeldWork, RecoveryWork, ValidationFailureWork
 from utils.batch_pipeline.diarization_gate import (
@@ -47,9 +49,28 @@ from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, r
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.language_metrics import record_route
 from utils.observability.fallback import record_fallback
+from utils.stt.voice_centroids import (
+    COMMUNITY_MODEL_REVISION,
+    EMBEDDING_MODEL,
+    EMBEDDING_REVISION,
+    EMBEDDING_SPACE,
+    select_evidence,
+    pool_centroids,
+)
 
 SAMPLE_RATE = 16000
 _GPU_CHAIN_LOCK = threading.Lock()
+
+
+@dataclass
+class _ArtifactJob:
+    item: WorkItem
+    payload: dict
+    clips: dict
+    silent: bool
+    has_silence_disposition: bool
+
+
 # Audio admitted to fetch/decode ahead of the item currently on the GPU. The
 # next item is always admitted; further items only while their summed duration
 # stays within this budget (~58 MB PCM16 + ~115 MB float32 in transit).
@@ -340,6 +361,7 @@ class PipelineWorker:
         flight_models=None,
         stream_of: Callable | None = None,
         language_of: Callable | None = None,
+        centroid_extractor: Callable | None = None,
     ):
         self.config = config or ProviderConfig()
         # Reject unavailable candidates, never silently select another provider.
@@ -353,6 +375,9 @@ class PipelineWorker:
         # Absent or failed, every item takes the serial vad/diarize calls.
         self.flight: Any = flight_models if self.config.diarizer == 'pyannote' else None
         self._lock = gpu_lock if gpu_lock is not None else _GPU_CHAIN_LOCK
+        # Serialize all work and retained PCM across lock-free artifact stages.
+        self._process_lock = threading.Lock()
+        self.centroid_extractor = centroid_extractor
         self._unavailable = False
         self.counts = {'items': 0, 'reused_live': 0, 'silence': 0, 'failed': 0, 'left_context': 0}
         # Same-owner predecessor tails for units whose speech starts at sample 0.
@@ -516,6 +541,33 @@ class PipelineWorker:
             raise ValueError('shared-live pull exceeds 120 audio seconds; yield between pulls')
         if self.config.pool_kind == 'shared_live' and any(i.unit_kind != 'capture_span' for i in items):
             raise ValueError('shared-live requires explicitly admitted capture spans, never conversation units')
+        enrich = (
+            self.config.diarizer == 'pyannote'
+            and self.centroid_extractor is not None
+            and kill_switch('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED')
+        )
+        with self._process_lock:
+            if enrich:
+                results, group, seconds = [], [], 0
+                for item in items:
+                    if group and seconds + item.duration_seconds > 7200:
+                        with self._lock:
+                            if self._unavailable:
+                                raise FatalGpuError('GPU chain unavailable; restart required')
+                            pending = self._process(group, authorize_dispatch=authorize_dispatch, defer_artifacts=True)
+                        results.extend(self._publish_artifacts(pending))
+                        group, seconds = [], 0
+                    group.append(item)
+                    seconds += item.duration_seconds
+                with self._lock:
+                    if self._unavailable:
+                        raise FatalGpuError('GPU chain unavailable; restart required')
+                    pending = self._process(group, authorize_dispatch=authorize_dispatch, defer_artifacts=True)
+                results.extend(self._publish_artifacts(pending))
+                return results
+            return self._process_without_enrichment(items, authorize_dispatch=authorize_dispatch)
+
+    def _process_without_enrichment(self, items, *, authorize_dispatch=None):
         with self._lock:
             if self._unavailable:
                 raise FatalGpuError('GPU chain unavailable; restart required')
@@ -530,7 +582,159 @@ class PipelineWorker:
             results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
             return results
 
-    def _process(self, items, *, authorize_dispatch=None):
+    @staticmethod
+    def _artifact_job(item, payload, samples, *, silent, has_silence_disposition):
+        diarization = payload['diarization']
+        # A skipped-single turn spans the capture, including silence. Intersect
+        # all turns with already-computed VAD speech before selecting evidence.
+        clean_turns = [
+            {**turn, 'start': max(turn['start'], span['start']), 'end': min(turn['end'], span['end'])}
+            for turn in diarization['turns']
+            for span in payload['speech_spans']
+            if min(turn['end'], span['end']) > max(turn['start'], span['start'])
+        ]
+        selected = select_evidence(
+            clean_turns, diarization.get('overlaps', ()), duration_seconds=len(samples) / SAMPLE_RATE
+        )
+        clips = {}
+        for speaker, bounds in selected.items():
+            # Views retain the existing bounded PCM buffer, never a second decode
+            # or an hours-long concatenation. Finish this group before the next.
+            clips[speaker] = [
+                (samples[int(left * SAMPLE_RATE) : int(right * SAMPLE_RATE)], right - left) for left, right in bounds
+            ]
+        return _ArtifactJob(item, payload, clips, silent, has_silence_disposition)
+
+    @staticmethod
+    def _enrich_artifact(job, centroid_extractor):
+        diarization = job.payload['diarization']
+        centroids, extraction_failed = {}, False
+        for speaker, clips in job.clips.items():
+            vectors = []
+            for samples, seconds in clips:
+                try:
+                    vectors.append((centroid_extractor(samples), seconds))
+                except Exception:
+                    # Embedding failure cannot discard the transcript, grant a
+                    # name or expose provider messages/biometric data in logs.
+                    extraction_failed = True
+            try:
+                centroid = pool_centroids(vectors)
+            except Exception:
+                centroid = None
+            if clips and centroid is None:
+                extraction_failed = True
+            if centroid is not None:
+                centroids[speaker] = centroid
+        if extraction_failed:
+            try:
+                record_fallback(
+                    component='other',
+                    from_mode='speaker_embedding',
+                    to_mode='unlabeled',
+                    reason='other',
+                    outcome='degraded',
+                )
+            except Exception:
+                pass  # Observability cannot invalidate a transcript.
+        diarization.update(
+            centroids=centroids,
+            embedding_space=EMBEDDING_SPACE,
+            centroid_outcome='partial' if extraction_failed else 'complete' if centroids else 'no_clean_evidence',
+        )
+        diarization['provenance'] = {
+            **diarization.get('provenance', {}),
+            'model_revision': COMMUNITY_MODEL_REVISION,
+            'embedding_model': EMBEDDING_MODEL,
+            'embedding_revision': EMBEDDING_REVISION,
+        }
+
+    @classmethod
+    def enrich_result(cls, item, payload, samples, *, centroid_extractor):
+        """Enrich explicitly verified prior inference without rerunning models.
+
+        The caller owns proof of original audio/model/source provenance. This
+        helper checks canonical capture bounds and invokes the exact serving
+        evidence hook; it never restamps the original inference as current code.
+        It returns a copy, so the archived inference artifact stays immutable.
+        """
+        from utils.batch_pipeline.contracts import projection_speech_spans
+
+        if not kill_switch('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED'):
+            return deepcopy(payload)
+        duration = len(samples) / SAMPLE_RATE
+        if (
+            not 0 < duration <= 7200
+            or abs(duration - item.duration_seconds) > 0.01
+            or abs(duration - float(payload['audio_seconds'])) > 0.01
+            or payload['diarization'].get('provenance', {}).get('model_revision') != COMMUNITY_MODEL_REVISION
+        ):
+            raise ValueError('incompatible inference enrichment input')
+        validate_words(payload['words'], duration)
+        projection_speech_spans(payload, duration)
+        enriched = deepcopy(payload)
+        job = cls._artifact_job(item, enriched, samples, silent=False, has_silence_disposition=False)
+        cls._enrich_artifact(job, centroid_extractor)
+        return enriched
+
+    def _publish_artifacts(self, computed):
+        """Enrich+persist leaf jobs after releasing the global model lock.
+
+        Per-worker serialization still owns all PCM. Bound submitted jobs by the
+        existing artifact concurrency; drain every future before the next group.
+        """
+        results, pending = list(computed), []
+
+        def publish(job):
+            self._enrich_artifact(job, self.centroid_extractor)
+            uri = self.persist(job.item, job.payload)
+            if job.has_silence_disposition and not job.item.shadow:
+                try:
+                    record_fallback(
+                        component='stt_selection',
+                        from_mode='batch',
+                        to_mode='none',
+                        reason='other',
+                        outcome='recovered',
+                    )
+                except Exception:
+                    pass  # Observability cannot invalidate a persisted result.
+            return WorkResult(job.item.segment_id, uri, 'silence' if job.silent else 'success')
+
+        def settle(index, future, job):
+            try:
+                results[index] = future.result()
+            except Exception as exc:
+                results[index] = None
+                self.counts['failed'] += 1
+                logger.error(
+                    'event=batch_worker_failed error_class=%s stage=persist reason=unclassified', type(exc).__name__
+                )
+                if self.on_failure:
+                    try:
+                        self.on_failure(job.item, type(exc).__name__)
+                    except Exception:
+                        pass  # Failure callback cannot discard other results.
+
+        for index, job in enumerate(computed):
+            if not isinstance(job, _ArtifactJob):
+                continue
+            if len(pending) >= self.io_concurrency:
+                settle(*pending.pop(0))
+            if self._io is not None:
+                future = self._io.submit(publish, job)
+            else:
+                future = Future()
+                try:
+                    future.set_result(publish(job))
+                except Exception as exc:
+                    future.set_exception(exc)
+            pending.append((index, future, job))
+        for entry in pending:
+            settle(*entry)
+        return [result for result in results if result is not None]
+
+    def _process(self, items, *, authorize_dispatch=None, defer_artifacts=False):
         states, windows, failed, results = {}, [], set(), []
         failure_records = []
         held = set()
@@ -984,6 +1188,17 @@ class PipelineWorker:
                             'admission': 'authorized_compute',
                         }
                     stage = 'persist'
+                    if defer_artifacts:
+                        results.append(
+                            self._artifact_job(
+                                item,
+                                payload,
+                                state['samples'],
+                                silent=state['silence'],
+                                has_silence_disposition=silence is not None,
+                            )
+                        )
+                        continue
                     if self._io is not None:
                         # Encrypt/upload while the GPU diarizes the next item. The
                         # result keeps its admitted position; failures settle below.

@@ -6,6 +6,9 @@ No admission flag is consulted: already accepted work drains after rollback.
 
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.policy import ProjectionPolicy
+from utils.conversations.final_pass_assignment import assign_words, build_turns
+from utils.stt.batch_naming import naming_decisions
+from config.policy.kill_switches import kill_switch
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -161,13 +164,20 @@ def projection_phase(phase: str, policy: ProjectionPolicy | None = None) -> Iter
 
 
 def build_incoming(
-    item: WorkItem, binding, payload: dict, *, geolocation=None, batch_segment_id=None, policy=None
+    item: WorkItem,
+    binding,
+    payload: dict,
+    *,
+    geolocation=None,
+    batch_segment_id=None,
+    policy=None,
+    naming_snapshot=None,
+    speaker_ids=None,
 ) -> dict:
     """Use legacy word alignment, segment grouping and minimum conversation shape."""
     from models.conversation import Conversation, CreateConversation
     from models.conversation_enums import ConversationSource
     from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-    from utils.conversations.final_pass_assignment import assign_words
     from utils.stt.pre_recorded import postprocess_words
     from utils.sync.capture import chunk_identity
 
@@ -201,26 +211,49 @@ def build_incoming(
                 in_gap = False
             prepared.append(word)
         aligned = prepared
-    segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0)
-    if not segments:
-        raise ValueError('successful batch result produced no transcript')
-    # Legacy sync transcribes a VAD-isolated file whose capture timestamp is
-    # already shifted. Batch words cover the full capture; undo the grouper's
-    # first-word normalization to keep absolute speech/playback clocks intact.
-    offset = round(float(words[0]['timestamp'][0]), 2)
-    for index, segment in enumerate(segments):
-        segment.start = round(segment.start + offset, 2)
-        segment.end = round(segment.end + offset, 2)
-        segment.id = str(uuid5(NAMESPACE_URL, f'batch:{item.segment_id}:{index}'))
-        segment.speaker_id_scope = (
-            f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'
+    quality = (
+        kill_switch('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', policy_id=(policy or ProjectionPolicy()).policy_id)
+        and payload.get('recovery_version') != 1
+    )
+    if quality:
+        decisions = naming_decisions(
+            payload['diarization'],
+            naming_snapshot,
+            owner_id=binding.owner_id,
+            privacy_generation=binding.privacy_generation,
         )
-        segment.stt_provider = payload.get('words_provider')
-        if authoritative:
-            abstained = (segment.speaker or '').startswith('BATCH_UNASSIGNED_')
-            segment.is_user, segment.person_id = False, None
-            segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
-            segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
+        segments = build_turns(
+            words,
+            payload['diarization']['turns'],
+            decisions=decisions,
+            scope=f'final:batch:{batch_segment_id or item.segment_id}',
+            id_namespace=f'batch:{item.segment_id}:',
+            speaker_ids=speaker_ids,
+            source='final_centroid:batch-v1' if decisions else 'batch_pyannote',
+        )
+        for segment in segments:
+            segment.stt_provider = payload.get('words_provider')
+    else:
+        segments = postprocess_words([{**word, 'text': word['word']} for word in aligned], 0)
+        if not segments:
+            raise ValueError('successful batch result produced no transcript')
+        # Legacy sync transcribes a VAD-isolated file whose capture timestamp is
+        # already shifted. Batch words cover the full capture; undo the grouper's
+        # first-word normalization to keep absolute speech/playback clocks intact.
+        offset = round(float(words[0]['timestamp'][0]), 2)
+        for index, segment in enumerate(segments):
+            segment.start = round(segment.start + offset, 2)
+            segment.end = round(segment.end + offset, 2)
+            segment.id = str(uuid5(NAMESPACE_URL, f'batch:{item.segment_id}:{index}'))
+            segment.speaker_id_scope = (
+                f'final:batch:{batch_segment_id or item.segment_id}' if authoritative else f'sync:{item.segment_id}'
+            )
+            segment.stt_provider = payload.get('words_provider')
+            if authoritative:
+                abstained = (segment.speaker or '').startswith('BATCH_UNASSIGNED_')
+                segment.is_user, segment.person_id = False, None
+                segment.speaker_identity_status = 'ambiguous' if abstained else 'no_match'
+                segment.speaker_match_source = 'batch_abstention' if abstained else 'batch_pyannote'
     started = datetime.fromtimestamp(item.capture_at, timezone.utc)
     create = CreateConversation(
         started_at=started,
@@ -348,8 +381,13 @@ class Projector:
         playback: Callable | None = None,
         fetch_audio: Callable[[WorkItem], bytes] | None = None,
         clock: Callable[[], float] = time.time,
+        projection_store=None,
+        assign_conversation: Callable | None = None,
+        loaded_naming_snapshot: Callable | None = None,
     ):
-        self.store = ProjectionStore(store)
+        self.store = projection_store if projection_store is not None else ProjectionStore(store)
+        self.assign_conversation = assign_conversation
+        self.loaded_naming_snapshot = loaded_naming_snapshot
         self.load_result, self.publish, self.playback, self.clock = load_result, publish, playback, clock
         self.fetch_audio = fetch_audio
         self.followups = None
@@ -715,6 +753,10 @@ class Projector:
                     manifest = prefetched.manifest
                 else:
                     manifest = read_context(self.fetch_audio(item))
+        speaker_ids = {
+            voice: index
+            for index, voice in enumerate(sorted({t['speaker'] for t in payload['diarization']['turns']}, key=str))
+        }
         receipts = entry.get('projection_parts') or {}
         for index, (part, part_payload) in enumerate(parts):
             if index and hint is not None and hint.deadline is not None and time.monotonic() >= hint.deadline:
@@ -747,6 +789,15 @@ class Projector:
                     receipt = session.persist_empty()
                 else:
                     with projection_phase('build', policy):
+                        naming_snapshot = (
+                            self.loaded_naming_snapshot(item, binding) if self.loaded_naming_snapshot else None
+                        )
+                        if naming_snapshot is None:
+                            snapshot_loader = getattr(session, 'loaded_naming_snapshot', None)
+                            naming_snapshot = snapshot_loader() if callable(snapshot_loader) else None
+                        freeze_naming = getattr(session, 'freeze_naming_snapshot', None)
+                        if callable(freeze_naming):
+                            freeze_naming(naming_snapshot)
                         incoming = build_incoming(
                             part,
                             binding,
@@ -754,6 +805,8 @@ class Projector:
                             geolocation=context.geolocation,
                             batch_segment_id=item.segment_id,
                             policy=policy,
+                            naming_snapshot=naming_snapshot,
+                            speaker_ids=speaker_ids,
                         )
                     session.speaker_scope = incoming['transcript_segments'][0]['speaker_id_scope']
                     if binding.record_origin:
@@ -769,6 +822,7 @@ class Projector:
 
                     admit_projection(binding.owner_id, incoming, manifest, capture_at=item.capture_at)
                     session.incoming_segment_count = len(incoming['transcript_segments'])
+                    session.incoming_segment_ids = {s['id'] for s in incoming['transcript_segments'] if s.get('id')}
                     receipt_box = []
 
                     def persisted(transaction, planned):
@@ -786,7 +840,7 @@ class Projector:
                         receipt = session.persist_empty()
                     else:
                         try:
-                            assigned = conversations_db.assign_sync_conversation(
+                            assigned = (self.assign_conversation or conversations_db.assign_sync_conversation)(
                                 binding.owner_id,
                                 incoming,
                                 target_id=context.target_id,

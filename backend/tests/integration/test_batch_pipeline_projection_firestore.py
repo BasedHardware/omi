@@ -1,7 +1,7 @@
 """Real assignment/ledger/outbox crash boundaries; loopback emulator only."""
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from dataclasses import asdict, replace
 from itertools import permutations
 from types import SimpleNamespace
 from uuid import uuid4
@@ -16,7 +16,7 @@ pytestmark = pytest.mark.integration
 
 
 @pytest.fixture
-def lane(monkeypatch):
+def lane(monkeypatch, request):
     host = os.getenv('FIRESTORE_EMULATOR_HOST', '')
     if not host.startswith(('127.0.0.1:', 'localhost:')):
         pytest.skip('loopback emulator required; no cloud fallback')
@@ -39,6 +39,11 @@ def lane(monkeypatch):
     monkeypatch.setenv('BATCH_PIPELINE_ENABLED', 'true')
     monkeypatch.setenv('SYNC_BACKFILL_ROUTING_ENABLED', 'false')
     monkeypatch.setenv('BATCH_PIPELINE_PERCENT', '100')
+    # PR #23461 gives faithful turns original-unit batch scopes. Exercise the
+    # historical flag-off contract explicitly in replay/order tests as well.
+    local_quality = getattr(request, 'param', True)
+    monkeypatch.setenv('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', str(local_quality).lower())
+    scope_prefix = 'final:batch:' if local_quality else 'sync:'
     monkeypatch.setenv('SYNC_ASSIGNMENT_CONTENTION_RETRY_ENABLED', 'true')
     client = firestore.Client(project=f'demo-pr1-c-{uuid4().hex[:12]}', credentials=AnonymousCredentials())
     store = FirestoreStore(f'batch_pipeline_test_{uuid4().hex}', firestore_client=client)
@@ -146,6 +151,7 @@ def active_rows(lane):
     return result
 
 
+@pytest.mark.parametrize('lane', [False, True], indirect=True, ids=['legacy', 'faithful'])
 def test_replay_has_one_assignment_one_enrichment_version_and_durable_before_client(lane):
     batch = lane.seed()
     lane.finish(batch)
@@ -153,7 +159,7 @@ def test_replay_has_one_assignment_one_enrichment_version_and_durable_before_cli
     row = active_rows(lane)[0]
     assert row['status'] == 'completed' and row['sync_content_revision'] == 1
     assert row['transcript_segments'][0]['text'] == 'We discussed the project.'
-    assert row['transcript_segments'][0]['speaker_id_scope'] == f'sync:{batch.ids[0]}'
+    assert row['transcript_segments'][0]['speaker_id_scope'] == f'{lane.scope_prefix}{batch.ids[0]}'
     assert batch.ledger.get().to_dict()['status'] == 'completed'
     assert lane.projector.status(lane.uid, batch.binding.content_id)['status'] == 'completed'
     assert lane.published == [result]
@@ -374,6 +380,7 @@ def test_assignment_failure_rolls_back_receipt_and_ledger_checkpoint(lane, monke
     assert len(active_rows(lane)) == 1 and len(lane.tasks) == 1
 
 
+@pytest.mark.parametrize('lane', [False, True], indirect=True, ids=['legacy', 'faithful'])
 def test_distinct_same_uid_projections_race_without_reversing_capture_order(lane):
     from database.batch_pipeline_projection import ProjectionBlocked
 
@@ -393,7 +400,9 @@ def test_distinct_same_uid_projections_race_without_reversing_capture_order(lane
         lane.projector.project(sid)
     row = active_rows(lane)[0]
     assert row['sync_content_revision'] == 2
-    assert [s['speaker_id_scope'] for s in row['transcript_segments']] == [f'sync:{sid}' for sid in batch.ids]
+    assert [s['speaker_id_scope'] for s in row['transcript_segments']] == [
+        f'{lane.scope_prefix}{sid}' for sid in batch.ids
+    ]
 
 
 def test_delete_after_assignment_cannot_recreate_reprocess_obligation(lane, monkeypatch):
@@ -404,8 +413,8 @@ def test_delete_after_assignment_cannot_recreate_reprocess_obligation(lane, monk
     lane.finish(batch)
     original = bridge.finish_sync_bridges
 
-    def delete_before_mark(uid, cid):
-        result = original(uid, cid)
+    def delete_before_mark(uid, cid, *, silent=False):
+        result = original(uid, cid, silent=silent)
         lane.client.collection('account_deletions').document(lane.uid).set({'wipe_status': 'queued'})
         return result
 
@@ -1134,9 +1143,18 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
 
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_MODE', 'on')
     monkeypatch.setenv('BATCH_PIPELINE_RECOVERY_ALL_ADMITTED', 'true')
+    from config.policy import resolve_stage_policy
+
     for index in range(12):
+        owner = 'synthetic-first' if index < 10 else 'synthetic-other'
+        # This test isolates pagination of already-pinned scheduler metadata.
+        # Unpinned jobs instead take the real privacy-checked admission path.
         lane.projector.store.ref('jobs', f'held-{index:02d}').set(
-            {'owner_id': 'synthetic-first' if index < 10 else 'synthetic-other', 'recovery_state': 'prepared'}
+            {
+                'owner_id': owner,
+                'recovery_state': 'prepared',
+                'policy_parts': {'recovery': resolve_stage_policy(owner, 'recovery').to_dict()},
+            }
         )
     recovery = QuarantineRecovery(lane.store, Mock())
     recovery.recover = Mock(return_value='held')
@@ -1148,9 +1166,10 @@ def test_global_recovery_sweep_advances_past_held_pages_without_extra_query(lane
     assert query.call_count == 2
     assert query.call_args.kwargs['after_id'] == 'held-09'
     assert recovery.recover.call_args.args == ('held-11', 'synthetic-other')
-    assert recovery.sweep() == {}  # Empty tail resets cursor, without an extra query.
-    assert query.call_count == 3
+    # Match the existing short-page contract exercised by the unit suite:
+    # restart immediately, with no empty-tail discovery query.
     assert recovery.sweep() == {'held': 10}
+    assert query.call_count == 3
     assert query.call_args.kwargs['after_id'] is None
 
 
@@ -1301,6 +1320,10 @@ def test_batch_flag_recovers_real_sdk_read_abort_with_fresh_transaction(lane, mo
                 raise Aborted('synthetic read-time contention')
         return original(request, **kwargs)
 
+    # Pin the new stage-policy receipt before injecting at the projection /
+    # assignment transaction boundary this test qualifies. Bootstrap is owned
+    # by FirestoreStore, not ProjectionStore's opted-in contention wrapper.
+    lane.projector.store.policy(batch.ids[0])
     monkeypatch.setattr(lane.conversations, 'assign_sync_conversation', assignment)
     monkeypatch.setitem(transport._wrapped_methods, transport.batch_get_documents, read)
     result = lane.projector.project(batch.ids[0])
@@ -1524,6 +1547,7 @@ def test_recovery_batch_dispatch_duplicate_start_and_ordered_merge(lane, monkeyp
 
 
 @pytest.mark.parametrize('order', list(permutations(range(3))))
+@pytest.mark.parametrize('lane', [False, True], indirect=True, ids=['legacy', 'faithful'])
 def test_head_wait_commit_order_converges_to_one_conversation(lane, monkeypatch, order):
     """Fix C permutation proof through real batch projection.
 
@@ -1560,7 +1584,9 @@ def test_head_wait_commit_order_converges_to_one_conversation(lane, monkeypatch,
     assert [(entry['segment_id'], bool(entry.get('head_wait_bypass'))) for entry in log] == expected
     rows = active_rows(lane)
     assert len(rows) == 1
-    assert [s['speaker_id_scope'] for s in rows[0]['transcript_segments']] == [f'sync:{sid}' for sid in sids]
+    assert [s['speaker_id_scope'] for s in rows[0]['transcript_segments']] == [
+        f'{lane.scope_prefix}{sid}' for sid in sids
+    ]
     for snapshot in lane.user.collection('conversations').stream():
         row = snapshot.to_dict()
         if row.get('deleted'):
@@ -1568,6 +1594,65 @@ def test_head_wait_commit_order_converges_to_one_conversation(lane, monkeypatch,
             assert row.get('sync_merged_into') == rows[0]['id']
     for unit in units:
         assert unit.ledger.get().to_dict()['status'] == 'completed'
+
+
+@pytest.mark.parametrize('receipt_kind', ['none', 'excerpt', 'nonowner', 'wholeowner'])
+def test_independent_owner_claims_reconcile_in_assignment_transaction(lane, monkeypatch, receipt_kind):
+    from utils.stt.voice_centroids import COMMUNITY_MODEL_REVISION, EMBEDDING_MODEL, EMBEDDING_REVISION, EMBEDDING_SPACE
+
+    # Exercise independent accepts even when composed with PR3's optional linker.
+    monkeypatch.setenv('BATCH_PIPELINE_VOICE_LINKING_ENABLED', 'false')
+    monkeypatch.setenv('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    lane.payload['words'] = [{'word': 'Synthetic.', 'timestamp': [i * 1.5, (i + 1) * 1.5]} for i in range(4)]
+    lane.payload['speech_seconds'] = 6
+    lane.payload['diarization'].update(
+        centroids={'SPEAKER_00': {'embedding': [1, 0], 'evidence_seconds': 6}},
+        embedding_space=EMBEDDING_SPACE,
+        provenance={
+            'model_revision': COMMUNITY_MODEL_REVISION,
+            'embedding_model': EMBEDDING_MODEL,
+            'embedding_revision': EMBEDDING_REVISION,
+        },
+    )
+    first = lane.seed()
+    lane.user.set({'speaker_embedding': [1, 0]}, merge=True)
+    lane.finish(first)
+    lane.projector.project(first.ids[0])
+    row = active_rows(lane)[0]
+    original = row['transcript_segments'][0]
+    assert original['is_user'] is True
+    receipt = {}
+    if receipt_kind == 'excerpt':
+        receipt = {'segments': {original['id']: {'is_user': True, 'segment_only': True, 'generation': 2}}}
+    elif receipt_kind in ('nonowner', 'wholeowner'):
+        receipt = {
+            'speakers': {str(original['speaker_id']): {'is_user': receipt_kind == 'wholeowner', 'generation': 2}}
+        }
+    lane.user.collection('conversations').document(row['id']).update(
+        {
+            'manual_speaker_assignments': receipt,
+            'manual_speaker_assignments_compressed': False,
+        }
+    )
+    second = lane.seed(capture_at=1060)
+    lane.user.set({'speaker_embedding': [1, 0]}, merge=True)
+    binding = replace(second.binding, target_conversation_id=row['id'])
+    lane.projector.store.ref('jobs', second.ids[0]).update({'projection_binding': asdict(binding)})
+    lane.finish(second)
+    lane.projector.project(second.ids[0])
+    segments = active_rows(lane)[0]['transcript_segments']
+    assert len({s['speaker_id_scope'] for s in segments}) == 2
+    expected = (
+        [False, False]
+        if receipt_kind == 'none'
+        else (
+            [False, True]
+            if receipt_kind == 'nonowner'
+            else [True, False] if receipt_kind == 'wholeowner' else [True, True]
+        )
+    )
+    assert [s['is_user'] for s in segments] == expected
 
 
 def test_voice_registry_atomic_restart_replay_and_private_read(lane, monkeypatch):
@@ -1601,3 +1686,59 @@ def test_voice_registry_atomic_restart_replay_and_private_read(lane, monkeypatch
     for segment_id in batch.ids:
         receipt = lane.projector.store.ref('results', segment_id).get().to_dict()['projection']
         assert receipt['conversation_id'] == row['id']
+
+
+def test_fractional_multipart_transcript_seeks_match_original_pcm_and_replay(lane, monkeypatch):
+    """The stored text clock must select the same sample from retained audio."""
+    import io
+    import wave
+    import numpy as np
+    from utils.other import storage
+
+    monkeypatch.setenv('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', 'true')
+    batch = lane.seed(capture_at=1000.125, duration_seconds=160)
+    binding = replace(batch.binding, private_cloud_sync_enabled=True)
+    lane.projector.store.ref('jobs', batch.ids[0]).update({'projection_binding': asdict(binding)})
+    lane.payload.update(
+        audio_seconds=160,
+        speech_seconds=2.25,
+        speech_spans=[{'start': 0.25, 'end': 1.25}, {'start': 150.75, 'end': 152}],
+        words=[
+            {'word': 'First synthetic phrase.', 'timestamp': [0.5, 1]},
+            {'word': 'Later synthetic phrase.', 'timestamp': [151, 151.5]},
+        ],
+        diarization={'turns': [{'start': 0, 'end': 160, 'speaker': 'SPEAKER_00'}]},
+    )
+    # Distinct deterministic samples expose a shift, truncated origin or copied
+    # whole-capture file that silence-only assertions cannot detect.
+    pcm = ((np.arange(160 * 16000, dtype=np.int32) * 7) % 30001).astype('<i2')
+    output = io.BytesIO()
+    with wave.open(output, 'wb') as audio:
+        audio.setparams((1, 2, 16000, 0, 'NONE', 'not compressed'))
+        audio.writeframes(pcm.tobytes())
+    lane.projector.fetch_audio = lambda _: output.getvalue()
+    uploads = []
+    monkeypatch.setattr(
+        storage,
+        'upload_audio_chunk',
+        lambda data, uid, cid, timestamp, protection: uploads.append((cid, timestamp, data)),
+    )
+    lane.finish(batch)
+    lane.projector.project(batch.ids[0])
+    rows = sorted(active_rows(lane), key=lambda row: row['started_at'])
+    assert len(rows) == len(uploads) == 2
+    assert [row['transcript_segments'][0]['text'] for row in rows] == [
+        'First synthetic phrase.',
+        'Later synthetic phrase.',
+    ]
+    for row, source_start in zip(rows, [0.5, 151]):
+        segment = row['transcript_segments'][0]
+        cid, chunk_start, data = next(item for item in uploads if item[0] == row['id'])
+        absolute_word_start = row['started_at'].timestamp() + segment['start']
+        assert absolute_word_start == pytest.approx(batch.items[0].capture_at + source_start)
+        seek_frame = round((absolute_word_start - chunk_start) * 16000)
+        stored = np.frombuffer(data, dtype='<i2')
+        expected_frame = round(source_start * 16000)
+        np.testing.assert_array_equal(stored[seek_frame : seek_frame + 160], pcm[expected_frame : expected_frame + 160])
+    lane.projector.project(batch.ids[0])
+    assert len(uploads) == 2
