@@ -253,6 +253,17 @@ class LiveSttReason(StrEnum):
     NO_TEXT = 'no_text'
 
 
+class ServiceWindowOutcome(StrEnum):
+    """Disposition of one admitted service-VIP window POST (`utils/stt/window_replicas.py`)."""
+
+    UNKNOWN = 'unknown'
+    ERROR = 'service_error'
+    QUEUE_TIMEOUT = 'service_queue_timeout'
+    TEXT = 'service_text'
+    EMPTY = 'service_empty'
+    CANCELLED = 'service_cancelled'
+
+
 class WorkerValidationStage(StrEnum):
     """Worker validation stage tokens."""
 
