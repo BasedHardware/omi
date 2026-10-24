@@ -44,7 +44,8 @@ from utils.sync.live_overlap import choose_live_overlap, compatible_capture, liv
 from utils.sync.assignment_errors import SyncAssignmentConflict, SyncAssignmentSuperseded
 from utils.sync.assignment_errors import SyncAssignmentConflictReason as Reason
 from models.conversation_continuity import intervals_connect
-from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
+from utils.stt.speaker_identity import ConversationSpeakerIdAllocator, canonical_speaker_label
+from utils.stt import batch_voice_links
 
 if TYPE_CHECKING:
     from google.cloud.firestore_v1 import transaction as firestore_transaction
@@ -265,9 +266,8 @@ def assign_in_transaction(
         allocator = ConversationSpeakerIdAllocator()
         allocator.hydrate(current.get('transcript_segments') or [])
         allocator.hydrate_receipt(current.get('manual_speaker_assignments'))
+        registry: dict[str, Any] = {}
         if voice_evidence is not None:
-            from utils.stt import batch_voice_links
-
             registry = batch_voice_links.link_unit_voices(
                 batch_voice_links.decode_registry(target.get(batch_voice_links.FIELD), user_ref.id),
                 voice_evidence,
@@ -280,8 +280,6 @@ def assign_in_transaction(
             )
         result, survivors = replace_record(current, incoming, record_span, allocator=allocator)
         if voice_evidence is not None:
-            from utils.stt.speaker_identity import canonical_speaker_label
-
             persisted_keys = {
                 (s.get('speaker_id_scope'), canonical_speaker_label(str(s.get('speaker')))) for s in survivors
             }
@@ -598,8 +596,6 @@ def assign_in_transaction(
         surviving = {id(segment) for segment in survivors}
         kept = tuple(i for i, segment in indexed_new if id(segment) in surviving)
         if voice_evidence is not None:
-            from utils.stt import batch_voice_links
-
             registry = batch_voice_links.decode_registry((current or {}).get(batch_voice_links.FIELD), user_ref.id)
             registry = batch_voice_links.link_unit_voices(
                 registry,

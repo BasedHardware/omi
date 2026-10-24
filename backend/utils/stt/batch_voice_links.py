@@ -8,6 +8,7 @@ may persist the encrypted registry with the transcript and projection receipt.
 from copy import deepcopy
 import json
 import math
+from typing import Any
 
 from utils.stt.speaker_identity import canonical_speaker_label
 from utils.speakers.policy import CROSS_SCOPE_CLUSTER, MATCH_MARGIN, MIN_EVIDENCE_SECONDS
@@ -59,7 +60,7 @@ def encode_registry(registry, uid):
     return encryption.encrypt(payload, uid)
 
 
-def _vector(value):
+def _vector(value) -> list[float] | None:
     if not isinstance(value, list) or not 1 <= len(value) <= MAX_VECTOR_DIMENSIONS:
         return None
     if any(type(x) not in (float, int) or not math.isfinite(x) for x in value):
@@ -108,7 +109,7 @@ def link_unit_voices(
         return registry
     if type(generation) is not int or generation < 0:
         return registry
-    state = (
+    state: dict[str, Any] = (
         deepcopy(registry)
         if registry.get('privacy_generation') == generation and registry.get('conversation_id') == conversation_id
         else {}
@@ -163,7 +164,7 @@ def link_unit_voices(
         valid = type(seconds) in (float, int) and math.isfinite(seconds) and seconds >= MIN_EVIDENCE_SECONDS
         if enabled and compatible and valid and vector is not None:
             vectors[label] = vector
-        if allocated is not None or label not in vectors:
+        if allocated is not None or label not in vectors or vector is None:
             continue
         occupied = {s.get('speaker_id') for s in existing if s.get('speaker_id_scope') == scope}
         ranked = []
