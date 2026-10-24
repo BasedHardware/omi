@@ -184,6 +184,57 @@ class TestActionItemsToCsv(unittest.TestCase):
         self.assertNotEqual(reader[0][0], "id")
         self.assertEqual(reader[0][0], "act_01_urgent")
 
+    def test_string_completed_values_normalized(self):
+        """String falsy values ('false', '0', 'no') must be treated as open, not completed."""
+        items = [
+            {"id": "t1", "description": "False task", "completed": "false"},
+            {"id": "t2", "description": "Zero task", "completed": "0"},
+            {"id": "t3", "description": "No task", "completed": "no"},
+            {"id": "t4", "description": "True task", "completed": "true"},
+            {"id": "t5", "description": "One task", "completed": "1"},
+            {"id": "t6", "description": "Done task", "completed": "done"},
+        ]
+
+        open_items = ai2csv.filter_and_sort_items(items, status_filter="open")
+        self.assertEqual([it["id"] for it in open_items], ["t1", "t2", "t3"])
+
+        completed_items = ai2csv.filter_and_sort_items(items, status_filter="completed")
+        self.assertEqual([it["id"] for it in completed_items], ["t4", "t5", "t6"])
+
+        # In row output, open string values must render as FALSE
+        row1 = ai2csv.item_to_row(items[0])
+        self.assertEqual(row1[2], "FALSE")
+        row4 = ai2csv.item_to_row(items[3])
+        self.assertEqual(row4[2], "TRUE")
+
+    def test_load_items_data_envelope(self):
+        """load_items must unwrap {'data': [...]} payloads."""
+        payload = {"data": [{"id": "d1", "description": "From data envelope"}]}
+        with tempfile.NamedTemporaryFile("w+", suffix=".json", delete=False) as f:
+            f.write(json.dumps(payload))
+            f.flush()
+            loaded = ai2csv.load_items(f.name)
+            self.assertEqual(len(loaded), 1)
+            self.assertEqual(loaded[0]["id"], "d1")
+
+    def test_surrogates_and_formula_injection_whitespace_bypass(self):
+        """Lone surrogates must be dropped and leading whitespace formula injection escaped."""
+        items = [
+            {"id": 0, "description": "  =SUM(A1:A2)", "completed": False, "conversation_id": 0},
+            {"id": "surr", "description": "hello \ud800 world", "completed": False},
+        ]
+        csv_out = ai2csv.export_csv(items)
+        reader = list(csv.reader(io.StringIO(csv_out)))
+
+        # ID 0 should remain '0', not empty string
+        self.assertEqual(reader[1][0], "0")
+        self.assertEqual(reader[1][6], "0")
+        # Leading whitespace before = formula must be escaped with single quote
+        self.assertEqual(reader[1][1], "'  =SUM(A1:A2)")
+        # Lone surrogate should be dropped without crashing
+        self.assertEqual(reader[2][1], "hello  world")
+
 
 if __name__ == "__main__":
     unittest.main()
+
