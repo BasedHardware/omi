@@ -1284,7 +1284,9 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                         failed = False  # a valid HTTP/model response proves service health
                         WINDOW_REPLICA_ATTEMPTS.labels(outcome='text' if segments else 'empty').inc()
                     except asyncio.CancelledError:
-                        failed = post_attempt.cancelled(deadline_expired=deadline.expired())
+                        failed = post_attempt.cancelled(
+                            deadline_expired=deadline.expired() or self.death_reason == 'first_text_deadline'
+                        )
                         raise
                     except (QueueTimeout, httpx.PoolTimeout):
                         # Local semaphore pressure says nothing about this GPU.

@@ -322,6 +322,41 @@ async def test_replica_retry_reserves_time_inside_the_first_text_deadline(monkey
 
 
 @pytest.mark.asyncio
+async def test_first_text_callback_quarantines_started_post_before_timeout_callback(monkeypatch, replica_pool):
+    started = asyncio.Event()
+    calls = []
+
+    async def post(url, **_kwargs):
+        calls.append(url)
+        if len(calls) == 1:
+            return httpx.Response(500, request=httpx.Request('POST', url))
+        started.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(window, 'get_stt_client', lambda: SimpleNamespace(post=post))
+    monkeypatch.setenv('PARAKEET_WINDOW_POST_TIMEOUT_SECONDS', '30')
+    sock = window.connect_window(lambda _: None, 16000)
+    before = WINDOW_REPLICA_ATTEMPTS.labels(outcome='timeout')._value.get()
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000)
+    sock.finalize()
+    await asyncio.wait_for(started.wait(), timeout=5.0)
+    # Deliver the real socket deadline callback before the timeout context's
+    # callback, as the event loop can do when both timers become due together.
+    loop = asyncio.get_running_loop()
+    real_time = loop.time
+    monkeypatch.setattr(loop, 'time', lambda: real_time() + sock._first_text_deadline)
+    sock._expire_first_text()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+    assert len(calls) == 2
+    assert sock.death_reason == 'first_text_deadline'
+    assert all(state.failures == 1 and not state.probing for state in replica_pool._states.values())
+    assert WINDOW_REPLICA_ATTEMPTS.labels(outcome='timeout')._value.get() == before + 1
+    assert st._parakeet_circuit.state == 'closed'
+    assert window.admission.active == 0
+
+
+@pytest.mark.asyncio
 async def test_scoped_socket_never_returns_to_vip_after_an_earlier_window_attempt(monkeypatch, replica_pool):
     class FailureThenEmpty(Client):
         async def post(self, url, **kwargs):
