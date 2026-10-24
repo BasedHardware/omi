@@ -66,17 +66,31 @@ class CaptureRecord:
         return (-self.duration_seconds, self.conversation_id)
 
 
+def _aware(dt: Any) -> Optional[datetime]:
+    if not dt:
+        return None
+    if isinstance(dt, str):
+        try:
+            dt = datetime.fromisoformat(dt.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            return None
+    if not isinstance(dt, datetime):
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def capture_record(record: Any) -> CaptureRecord | None:
     def field(name):
         return record.get(name) if isinstance(record, Mapping) else getattr(record, name, None)
 
     if field('discarded') or field('status') != 'completed':
         return None
-    start, finish = field('started_at'), field('finished_at')
-    if not isinstance(start, datetime) or not isinstance(finish, datetime):
+    start = _aware(field('started_at'))
+    finish = _aware(field('finished_at'))
+    if start is None or finish is None:
         return None
-    start = start if start.tzinfo else start.replace(tzinfo=timezone.utc)
-    finish = finish if finish.tzinfo else finish.replace(tzinfo=timezone.utc)
     source = getattr(field('source'), 'value', field('source'))
     if finish <= start or not source or not field('id'):
         return None
@@ -239,8 +253,12 @@ def _group_with_overlap_speech(
                     would_join, reason = False, 'different_groups'
                 else:
                     entrant = row if own_group.get('id') else own
-                    for member in existing.get('members') or []:
-                        cid = member['id']
+                    raw_members = existing.get('members')
+                    members_list = [m for m in raw_members if isinstance(m, dict)] if isinstance(raw_members, list) else []
+                    for member in members_list:
+                        cid = member.get('id')
+                        if not cid:
+                            continue
                         if cid in fingerprints:
                             continue
                         member_row, member_fingerprint = load(cid)

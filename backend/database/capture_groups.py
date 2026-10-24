@@ -43,9 +43,27 @@ _CONVERSATIONS = 'conversations'
 
 
 def _aware(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            return None
     if not isinstance(value, datetime):
         return None
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _members_list(group: Optional[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    if not group:
+        return []
+    raw = group.get('members')
+    if not isinstance(raw, list):
+        return []
+    return [m for m in raw if isinstance(m, dict)]
 
 
 def _source(row: Mapping[str, Any]) -> Optional[str]:
@@ -66,13 +84,17 @@ def _member(conversation_id: str, row: Mapping[str, Any], evidence: Optional[dic
 
 
 def _primary_rank(member: Mapping[str, Any]) -> tuple[float, str]:
-    start, finish = member.get('started_at'), member.get('finished_at')
+    start = _aware(member.get('started_at'))
+    finish = _aware(member.get('finished_at'))
     duration = (finish - start).total_seconds() if start and finish else 0.0
-    return (-duration, member['id'])
+    return (-duration, str(member.get('id') or ''))
 
 
 def _record(group_id: str, members: list[dict], revision: int) -> dict:
-    ordered = sorted(members, key=lambda m: (m.get('started_at') or datetime.min.replace(tzinfo=timezone.utc), m['id']))
+    ordered = sorted(
+        members,
+        key=lambda m: (_aware(m.get('started_at')) or datetime.min.replace(tzinfo=timezone.utc), str(m.get('id') or '')),
+    )
     return {
         'id': group_id,
         'primary_id': min(ordered, key=_primary_rank)['id'],
@@ -175,7 +197,7 @@ def join_capture_group(
                     return None
             elif not existing or existing.get('revision') != expected_group_revision:
                 return None
-        member_ids = [m['id'] for m in (existing or {}).get('members', []) if m.get('id') not in rows]
+        member_ids = [m['id'] for m in _members_list(existing) if m.get('id') and m.get('id') not in rows]
         for cid in member_ids:
             rows[cid] = collection.document(cid).get(transaction=transaction).to_dict()
         # A caller may confirm the entrant against every existing group member.
@@ -205,11 +227,11 @@ def join_capture_group(
             return None
         if len(live) > MAX_GROUP_MEMBERS:
             return None
-        if existing and set(live) == {m.get('id') for m in existing.get('members', [])}:
+        if existing and set(live) == {m.get('id') for m in _members_list(existing)}:
             return existing['id']  # already grouped; exclusions checked first
 
         group_id = existing['id'] if existing else str(uuid.uuid4())
-        prior = {m['id']: m for m in (existing or {}).get('members', [])}
+        prior = {m['id']: m for m in _members_list(existing) if m.get('id')}
         members = []
         for cid, row in live.items():
             if cid in prior:
@@ -249,7 +271,7 @@ def leave_capture_group(
             if close and not row.get(CLOSED_FIELD):
                 transaction.update(collection.document(conversation_id), {CLOSED_FIELD: True})
             return False
-        others = [m['id'] for m in group.get('members', []) if m.get('id') and m['id'] != conversation_id]
+        others = [m['id'] for m in _members_list(group) if m.get('id') and m['id'] != conversation_id]
         other_rows = {cid: collection.document(cid).get(transaction=transaction).to_dict() for cid in others}
         remaining = {
             cid: r
@@ -266,7 +288,7 @@ def leave_capture_group(
             for cid in remaining:
                 transaction.update(collection.document(cid), {CAPTURE_GROUP_FIELD: None})
             return True
-        prior = {m['id']: m for m in group.get('members', [])}
+        prior = {m['id']: m for m in _members_list(group) if m.get('id')}
         record = _record(
             group['id'],
             [_member(cid, r, (prior.get(cid) or {}).get('evidence')) for cid, r in remaining.items()],
