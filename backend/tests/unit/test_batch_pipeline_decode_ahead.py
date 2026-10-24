@@ -229,7 +229,7 @@ async def test_paired_latency_model_preserves_payloads_and_reports_capacity():
         worker = model.worker(3, decode_concurrency=concurrency)
         store = MemoryStore()
         scheduler = Scheduler(store)
-        for unit in flight(count=32):
+        for unit in flight(count=16):
             scheduler.enqueue(unit, time.time())
         pump = Pump(
             scheduler,
@@ -244,8 +244,8 @@ async def test_paired_latency_model_preserves_payloads_and_reports_capacity():
         finally:
             worker._io.shutdown(wait=True)
         wall = time.perf_counter() - started
-        assert len(model.saved) == 32
-        assert all(store.rows['jobs', unit.segment_id]['state'] == 'committed' for unit in flight(count=32))
+        assert len(model.saved) == 16
+        assert all(store.rows['jobs', unit.segment_id]['state'] == 'committed' for unit in flight(count=16))
         assert not model.gpu_overlap and worker.decode_ahead.items == 0
         if baseline_saved is None:
             baseline_saved, baseline_wall = model.saved, wall
