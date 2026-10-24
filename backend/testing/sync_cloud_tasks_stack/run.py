@@ -170,7 +170,9 @@ class Stack:
         self.logs_dir = state_dir / 'logs'
         self.evidence_dir = state_dir / 'evidence'
         self.storage_dir = state_dir / 'local-storage'
-        self.gate_dir = state_dir / 'processor-gate' if hold_processor else None
+        # A retained --state-dir may contain an earlier run's entered/release
+        # markers. Keep that evidence, but never treat it as this run's gate.
+        self.gate_dir = state_dir / f'processor-gate-{secrets.token_hex(8)}' if hold_processor else None
         ports = _free_ports(3)
         self.redis_port = ports[0]
         self.admission_port = ports[1]
