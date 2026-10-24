@@ -14,6 +14,7 @@ from typing import Callable
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from utils.batch_pipeline.audio import audio_unit, with_context
+from utils.batch_pipeline import leaf_timings
 from utils.other.raw_audio import decode_capture
 
 MAGIC = b'OMIRECORD1\n'
@@ -30,30 +31,31 @@ def decode_source(raw: bytes, ref: dict, owner_key: bytes) -> bytes:
     if encrypted:
         decoded, offset = bytearray(), 0
         aes = AESGCM(owner_key)
-        while offset < len(raw):
-            if offset + 4 > len(raw):
-                raise ValueError('truncated encrypted audio length')
-            size = struct.unpack_from('>I', raw, offset)[0]
-            offset += 4
-            if not 28 <= size <= MAX_SOURCE_BYTES or offset + size > len(raw):
-                raise ValueError('invalid encrypted audio frame')
-            decoded.extend(aes.decrypt(raw[offset : offset + 12], raw[offset + 12 : offset + size], None))
-            offset += size
+        with leaf_timings.measure('decrypt'):
+            while offset < len(raw):
+                if offset + 4 > len(raw):
+                    raise ValueError('truncated encrypted audio length')
+                size = struct.unpack_from('>I', raw, offset)[0]
+                offset += 4
+                if not 28 <= size <= MAX_SOURCE_BYTES or offset + size > len(raw):
+                    raise ValueError('invalid encrypted audio frame')
+                decoded.extend(aes.decrypt(raw[offset : offset + 12], raw[offset + 12 : offset + size], None))
+                offset += size
         raw = bytes(decoded)
     if path.startswith('raw-live/'):
         if hashlib.sha256(raw).hexdigest() != metadata.get('sha256'):
             raise ValueError('retained capture checksum mismatch')
-        return decode_capture(raw, metadata, 16000)
+        return leaf_timings.call('decode', decode_capture, raw, metadata, 16000)
     if '.opus' in path:
         # Existing legacy chunk codec, shared with playback. Import is lazy in
         # the codec binding; no storage/database/provider SDK is constructed.
         from utils.other.audio_opus import decode_opus_to_pcm
 
-        return decode_opus_to_pcm(raw, sample_rate=16000)
+        return leaf_timings.call('decode', decode_opus_to_pcm, raw, sample_rate=16000)
     rate = int(ref.get('sample_rate', 16000))
     if len(raw) % 2 or not 8000 <= rate <= 48000:
         raise ValueError('invalid retained PCM')
-    return audioop.ratecv(raw, 2, 1, rate, 16000, None)[0] if rate != 16000 else raw
+    return leaf_timings.call('decode', audioop.ratecv, raw, 2, 1, rate, 16000, None)[0] if rate != 16000 else raw
 
 
 def validate_reference(ref: dict, uid: str, conversation_id: str, allowed_buckets: set[str]) -> None:
@@ -72,10 +74,10 @@ def read_reference(client, ref: dict, uid: str, conversation_id: str, allowed_bu
     validate_reference(ref, uid, conversation_id, allowed_buckets)
     generation = int(ref['generation'])
     blob = client.bucket(ref['bucket']).blob(ref['path'], generation=generation)
-    blob.reload(if_generation_match=generation, timeout=30, retry=None)
+    leaf_timings.call('download_metadata', blob.reload, if_generation_match=generation, timeout=30, retry=None)
     if not blob.size or not 0 < blob.size <= MAX_SOURCE_BYTES:
         raise ValueError('retained audio source exceeds size budget')
-    raw = blob.download_as_bytes(if_generation_match=generation, timeout=60, retry=None)
+    raw = leaf_timings.call('download', blob.download_as_bytes, if_generation_match=generation, timeout=60, retry=None)
     return decode_source(raw, ref, key)
 
 

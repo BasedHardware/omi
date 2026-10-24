@@ -86,6 +86,7 @@ def test_relative_refusal_boundary(baseline, delta):
     reading = guard.evaluate(v)
     assert not reading['blind']
     assert reading['refusal_threshold'] == threshold
+    assert reading['refusal_mode'] == 'relative'
     assert ('refusal_fraction' in reading['trips']) == (delta >= 0)
 
 
@@ -171,26 +172,44 @@ def test_first_p95_needs_twenty_first_texts():
         ('refusal_baseline_listener_stale', 121),
     ],
 )
-def test_unqualified_baseline_is_blind_and_retains_other_trips(key, bad):
+def test_unqualified_baseline_uses_absolute_ceiling_and_retains_other_trips(key, bad):
     v = dict(values(), **{key: bad}, first_p95=30)
     reading = guard.evaluate(v)
-    assert 'unqualified_refusal_baseline' in reading['blind']
-    assert reading['refusal_threshold'] is None
-    assert 'first_p95' in reading['trips']
+    assert not reading['blind']
+    assert reading['refusal_threshold'] == guard.REFUSAL_ABSOLUTE_CEILING
+    assert reading['refusal_mode'] == 'absolute_fallback'
+    assert 'first_p95' in reading['trips'] and 'refusal_fraction' not in reading['trips']
+    # Fail-closed on the ceiling: a live 5% refusal still trips.
+    tripped = guard.evaluate(dict(v, refusal_fraction=0.05))
+    assert 'refusal_fraction' in tripped['trips'] and not tripped['blind']
+
+
+def test_unqualified_baseline_alone_never_accumulates_blind_runs():
+    # 2026-10-24 16:05Z shape: refusal_baseline_coverage 0 (series younger than
+    # its 7d offset) with refusal_fraction 0 used to read BLIND on every run
+    # and roll floor 8 back at blind_runs=4; the absolute fallback keeps CLEAN.
     hpa, dep = objects()
+    v = dict(values(), refusal_baseline_coverage=0, refusal_fraction=0.0)
     _, state, _ = guard.decide(hpa, dep, [], v, {}, 0)
-    assert guard.decide(hpa, dep, [], v, state, 900)[0] == 'TRIP'
+    for now in (900, 1200, 1500):
+        verdict, state, reading = guard.decide(hpa, dep, [], v, state, now)
+        assert verdict == 'CLEAN' and state['blind'] == 0
+        assert reading['refusal_mode'] == 'absolute_fallback'
 
 
-def test_missing_baseline_never_becomes_clean_or_implicit_absolute_fallback():
-    hpa, dep = objects()
+def test_missing_baseline_series_falls_back_to_absolute_ceiling():
     v = values()
     del v['refusal_baseline_fraction']
-    _, state, _ = guard.decide(hpa, dep, [], v, {}, 0)
-    for now, expected in ((900, 'BLIND'), (1200, 'TRIP')):
-        verdict, state, reading = guard.decide(hpa, dep, [], v, state, now)
-        assert verdict == expected
-        assert reading['refusal_threshold'] is None
+    reading = guard.evaluate(v)
+    assert not reading['blind']
+    assert reading['refusal_mode'] == 'absolute_fallback'
+    assert reading['refusal_threshold'] == guard.REFUSAL_ABSOLUTE_CEILING
+
+
+def test_current_refusal_data_missing_or_stale_stays_blind_under_fallback():
+    base = dict(values(), refusal_baseline_coverage=0)
+    assert 'missing_or_nonfinite_refusal_fraction' in guard.evaluate(dict(base, refusal_fraction=None))['blind']
+    assert 'admission_stale' in guard.evaluate(dict(base, admission_stale=121))['blind']
 
 
 def test_baseline_queries_use_weekly_history_and_qualified_deployment_only():
@@ -207,11 +226,14 @@ def test_baseline_queries_use_weekly_history_and_qualified_deployment_only():
 
 
 def test_partial_history_does_not_raise_threshold_above_real_baseline():
-    # The review's incomplete-target example: 8% instead of the full 3% baseline
-    # must be BLIND even with abundant admissions, fresh remaining series and 12 GPUs.
+    # The review's incomplete-target example: 8% on partial coverage must not
+    # widen the gate to ~10.5%; the fallback ceiling stays 2% and a 5% live
+    # refusal still trips, harder than the full 3% baseline would.
     row = dict(values(), refusal_baseline_fraction=0.08, refusal_fraction=0.05, refusal_baseline_coverage=0)
     reading = guard.evaluate(row)
-    assert reading['refusal_threshold'] is None and reading['blind']
+    assert reading['refusal_mode'] == 'absolute_fallback'
+    assert reading['refusal_threshold'] == guard.REFUSAL_ABSOLUTE_CEILING
+    assert reading['trips'] == ['refusal_fraction']
     complete = dict(row, refusal_baseline_fraction=0.03, refusal_baseline_coverage=1)
     assert guard.evaluate(complete)['trips'] == ['refusal_fraction']
 
@@ -224,8 +246,15 @@ def test_guard_upgrade_restarts_full_lookback(monkeypatch):
     assert guard.decide(hpa, dep, [], values(), old_state, 900)[0] == 'WARMUP'
 
 
+# Weekly refusal-baseline keys are exempt like first_p95_baseline: an unqualified
+# baseline selects the absolute refusal ceiling (fail-closed), never blindness.
 @pytest.mark.parametrize(
-    'key', [k for k in guard.queries('unused') if k not in ('first_p95_baseline', 'first_count_baseline')]
+    'key',
+    [
+        k
+        for k in guard.queries('unused')
+        if k not in ('first_p95_baseline', 'first_count_baseline') and k not in guard.refusal_baseline_queries('unused')
+    ],
 )
 @pytest.mark.parametrize('bad', [None, float('nan'), float('inf'), -float('inf')])
 def test_missing_nonfinite_never_clean(key, bad):
@@ -420,6 +449,7 @@ class FakeClient:
 def test_run_writes_only_reference_rollback_or_dry_run(dry_run, caplog):
     client = FakeClient()
     assert guard.run(client, dry_run, 0) == 0
+    assert '"refusal_mode": "relative"' in caplog.text
     client.signals['first_p95'] = 30
     assert guard.run(client, dry_run, 900) == 1
     hpa_writes = [patch for path, patch in client.patches if path == 'hpa']

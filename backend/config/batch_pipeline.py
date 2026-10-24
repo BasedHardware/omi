@@ -424,6 +424,22 @@ WORKER_IO_CONCURRENCY_DEFAULT = 3
 WORKER_IO_CONCURRENCY_MAX = 8
 
 
+def stage_profiling_enabled() -> bool:
+    """Dedicated-worker per-stage wall-clock histograms (metrics-only).
+
+    Default on only for the ``dev`` stage; ``prod`` and an unset stage stay off.
+    An explicit ``true``/``false`` (also 1/0, on/off, yes/no) overrides the
+    stage default so local/offline can opt in; malformed values fall back to
+    the stage default rather than failing the worker.
+    """
+    raw = os.getenv('BATCH_PIPELINE_STAGE_PROFILING_ENABLED', '').strip().lower()
+    if raw in {'true', '1', 'on', 'yes'}:
+        return True
+    if raw in {'false', '0', 'off', 'no'}:
+        return False
+    return os.getenv('OMI_ENV_STAGE', '').strip().lower() == 'dev'
+
+
 def worker_io_concurrency() -> int:
     """Bounded artifact fetch/decode and encrypted persistence inside one GPU flight.
 

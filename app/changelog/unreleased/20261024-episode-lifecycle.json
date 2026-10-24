@@ -1,0 +1,3 @@
+{
+  "change": "Keep live episode notes progressing when speech has no audio position, and preserve closed recaps while recordings finish processing"
+}
