@@ -187,8 +187,20 @@ def router():
     modules = dict(sys.modules)
     routers_module = modules.get("routers")
     router_payment = getattr(routers_module, "payment", _MISSING) if routers_module else _MISSING
-    _install_stub_modules()
+    # ``from utils import stripe`` / ``from utils import subscription`` resolve through
+    # the parent package attribute before the ``sys.modules`` submodule fallback, so a
+    # batched session that already imported the real submodules would bind the real
+    # modules into the router. Pin the parent attributes to the stubs for the fixture
+    # window and restore them at teardown (Luna round 1, PR #23537).
+    utils_module = modules.get("utils")
+    utils_attrs = {
+        attr: getattr(utils_module, attr, _MISSING) if utils_module else _MISSING for attr in ("stripe", "subscription")
+    }
     try:
+        _install_stub_modules()
+        if utils_module is not None:
+            utils_module.stripe = sys.modules["utils.stripe"]
+            utils_module.subscription = sys.modules["utils.subscription"]
         if "routers.payment" in sys.modules:
             del sys.modules["routers.payment"]
         live_routers_module = sys.modules.get("routers")
@@ -208,6 +220,12 @@ def router():
             if module_name not in modules:
                 del sys.modules[module_name]
         sys.modules.update(modules)
+        if utils_module is not None:
+            for attr, saved in utils_attrs.items():
+                if saved is _MISSING:
+                    utils_module.__dict__.pop(attr, None)
+                else:
+                    setattr(utils_module, attr, saved)
         if routers_module:
             if router_payment is _MISSING:
                 routers_module.__dict__.pop("payment", None)
