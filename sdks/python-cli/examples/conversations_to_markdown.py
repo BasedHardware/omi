@@ -4,6 +4,8 @@ Convert Omi conversation JSON exports to clean Markdown notes for Obsidian, Noti
 Usage:
   python conversations_to_markdown.py input.json --output-dir ./notes/
   omi --json conversation list --include-transcript | python conversations_to_markdown.py - --output-dir ./vault/
+
+Failure-Class: new
 """
 
 from __future__ import annotations
@@ -68,6 +70,40 @@ def slugify(text: str) -> str:
     return re.sub(r"[-\s]+", "_", text)[:50] or "conversation"
 
 
+def flatten_line(text: str) -> str:
+    """Collapse internal newlines so a value stays on one Markdown line.
+
+    A transcript segment or a note field may carry a multi-line string. Emitting
+    it unchanged after a ``>`` prefix lets the later lines escape the blockquote
+    (they render as ordinary paragraphs), so every run of newlines is collapsed
+    to a single space.
+    """
+    return re.sub(r"\s*[\r\n]+\s*", " ", text).strip()
+
+
+def speaker_label(segment: Dict[str, Any]) -> str:
+    """Resolve the display label for one transcript segment's speaker.
+
+    Exports name the speaker in different ways, so all of them are accepted:
+    a name string under ``speaker`` or ``speaker_name``, or a bare speaker
+    number under ``speaker`` or ``speaker_id``. Speaker ``0`` is a real speaker
+    and must not be treated as missing. ``bool`` is excluded from the number
+    case because ``isinstance(False, int)`` is true, which would otherwise
+    render a ``speaker: False`` segment as "Speaker False".
+    """
+    for key in ("speaker", "speaker_name"):
+        value = segment.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    for key in ("speaker", "speaker_id"):
+        value = segment.get(key)
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            return f"Speaker {value}"
+    return "Speaker"
+
+
 def conversation_to_markdown(conv: Dict[str, Any]) -> str:
     """Convert a single Omi conversation dictionary into formatted Markdown."""
     conv_id = conv.get("id", "unknown")
@@ -84,8 +120,8 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
     overview = structured.get("overview") or ""
     action_items = structured.get("action_items") or []
 
-    # Transcript segments
-    transcript_segments = conv.get("transcript_segments") or []
+    # Transcript segments. An export may carry them under ``segments`` instead.
+    transcript_segments = conv.get("transcript_segments") or conv.get("segments") or []
 
     # Clean date representation normalized to UTC
     date_str = ""
@@ -100,7 +136,7 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         except Exception:
             date_str = started_at
 
-    category_tag = strip_surrogates(category).lower().replace(" ", "-")
+    category_tag = strip_surrogates(str(category)).lower().replace(" ", "-")
 
     # Serialize YAML frontmatter scalars safely using json.dumps to prevent injection and Python 3.10/3.11 SyntaxError
     lines: List[str] = [
@@ -158,16 +194,12 @@ def conversation_to_markdown(conv: Dict[str, Any]) -> str:
         for seg in transcript_segments:
             if not isinstance(seg, dict):
                 continue
-            speaker = seg.get("speaker", "Speaker")
-            if isinstance(speaker, int):
-                speaker_label = f"Speaker {speaker}"
-            else:
-                speaker_label = str(speaker) if speaker else "Speaker"
+            speaker_label_text = speaker_label(seg)
 
             start_time = format_timestamp(seg.get("start"))
-            text = (seg.get("text") or "").strip()
+            text = flatten_line(seg.get("text") or "")
             if text:
-                lines.append(f"> **[{start_time}] {speaker_label}:** {text}")
+                lines.append(f"> **[{start_time}] {speaker_label_text}:** {text}")
                 lines.append(">")
         if lines[-1] == ">":
             lines.pop()
@@ -208,31 +240,27 @@ def export_conversations(
 
         md_content = conversation_to_markdown(conv)
 
+        # Always disambiguate against paths used in this batch to prevent
+        # same-batch collisions regardless of the 'overwrite' flag.
+        counter = 1
+        while filepath in used_paths:
+            counter += 1
+            filepath = output_dir / f"{base_name}_{counter}.md"
+
         if overwrite:
             used_paths.add(filepath)
             filepath.write_text(md_content, encoding="utf-8")
         else:
-            # Claim the path with an atomic exclusive create. Checking
-            # exists() first and writing afterwards leaves a window in which a
-            # concurrent export (or the user) can create that file, and the
-            # subsequent write_text() would then truncate it despite
-            # overwrite=False. Opening with "x" is atomic: if the path already
-            # exists we get FileExistsError and can pick a fresh name instead
-            # of destroying what is there.
-            counter = 1
+            # Claim the path with an atomic exclusive create.
             while True:
                 try:
                     with filepath.open("x", encoding="utf-8") as fh:
                         fh.write(md_content)
+                    used_paths.add(filepath)
                     break
                 except FileExistsError:
                     counter += 1
                     filepath = output_dir / f"{base_name}_{counter}.md"
-                    # Never hand out a name we already used in this batch.
-                    while filepath in used_paths:
-                        counter += 1
-                        filepath = output_dir / f"{base_name}_{counter}.md"
-            used_paths.add(filepath)
 
         print(f"Exported: {filepath}")
         exported_paths.append(filepath)
