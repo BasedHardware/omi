@@ -49,7 +49,7 @@ def created_sync_row_observation(rows: list[dict], result: dict, incoming: dict,
                 complete = False
                 continue
             overlap = overlap or min(b, end) > max(a, start)
-    except (KeyError, TypeError, ValueError, OverflowError, AttributeError):
+    except Exception:  # inside the write transaction: telemetry must never abort it
         complete = False
     bucket = (
         '0'

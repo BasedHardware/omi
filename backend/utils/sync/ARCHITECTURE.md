@@ -67,7 +67,7 @@ Widening procedure. Keep only David listed for 48 h, then widen only if the logs
 
 - `event=sync_lineage_lookup outcome=degraded|lookup_failed`: 0.
 - `outcome=truncated`: at most 2% of decisions; at least 20 `bound` or `split_across_generations` decisions.
-- Zero `event=sync_lineage_resolve stage=assignment outcome=created_overlap` from lineage-admitted, S1-validated uploads (baseline 22 overlapping new rows/day). Report `created_clear|created_overlap|created_unknown` counts; unknown is **unmeasured**, never zero violations, and blocks widening.
+- Zero `event=sync_lineage_resolve stage=assignment outcome=created_overlap` from lineage-admitted, S1-validated uploads (baseline 22 overlapping new rows/day). Report `created_clear|created_overlap|created_unknown` counts; unknown is **unmeasured**, never zero violations, and blocks widening. The live test is deliberately conservative (a bare `recording_session_id` or a missing content revision counts as live, because appended live rows may carry nothing else), so it can over-report: under `CAPTURE_COVERAGE_MODE` serve, sync rows also carry `recording_session_id`. Triage each `created_overlap` before treating it as a violation; it can never under-report.
 - Doubled speech (sync-appended time overlapping live segments by absolute time, from segment timing only) at most 10% of appended sync speech; otherwise widening needs time-range dedupe or David's explicit sign-off after seeing his rows.
 - Live rows whose span grew by more than 5 min on a `stamp_fallback` append: 0.
 - Sync job failure, conflict and fenced rates, and the stale-processing orphan sweep count, within +20% of the 7-day baseline; no rise in backend-listen errors.
