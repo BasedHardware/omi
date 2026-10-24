@@ -16986,6 +16986,17 @@
             "title": "Openai File Id",
             "type": "string"
           },
+          "source_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Url"
+          },
           "thumb_name": {
             "anyOf": [
               {

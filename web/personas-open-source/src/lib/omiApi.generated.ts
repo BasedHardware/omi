@@ -2710,6 +2710,7 @@ export interface FileChat {
   mime_type: string;
   name: string;
   openai_file_id: string;
+  source_url?: string | null;
   thumb_name?: string | null;
   thumbnail?: string | null;
   video?: ChatFileVideo | null;

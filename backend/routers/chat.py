@@ -1487,11 +1487,22 @@ def upload_file_chat(
                 raise HTTPException(status_code=400, detail=str(error))
 
             thumb_name = result.get("thumbnail_name", "")
+            uploaded_url = ""
             if thumb_name != "":
                 thumbnail_path = result.get("thumbnail", "")
                 if thumbnail_path:
                     thumbs_name.append(thumbnail_path)
                     thumb_source_by_name[thumb_name] = thumbnail_path
+
+                # Point the vision lane at a permanent public copy of the full
+                # image instead of re-reading provider-hosted bytes as base64 on
+                # every question. Best effort: a storage failure keeps the
+                # attach response valid and the base64 fallback stays alive.
+                try:
+                    stored = storage.upload_multi_chat_files([str(temp_file)], uid)
+                    uploaded_url = stored.get(str(temp_file), "")
+                except Exception as storage_error:
+                    logger.warning(f"chat file storage upload failed for {safe_suffix}: {type(storage_error).__name__}")
 
             filechat = FileChat(
                 id=str(uuid.uuid4()),
@@ -1500,6 +1511,7 @@ def upload_file_chat(
                 openai_file_id=result.get("file_id", ""),
                 created_at=datetime.now(timezone.utc),
                 thumb_name=thumb_name,
+                source_url=uploaded_url or None,
             )
             files_chat.append(filechat)
         finally:
@@ -1562,11 +1574,21 @@ def upload_file_chat_v1(
                 raise HTTPException(status_code=400, detail=str(error))
 
             thumb_name = result.get("thumbnail_name", "")
+            uploaded_url = ""
             if thumb_name != "":
                 thumbnail_path = result.get("thumbnail", "")
                 if thumbnail_path:
                     thumbs_name.append(thumbnail_path)
                     thumb_source_by_name[thumb_name] = thumbnail_path
+
+                # Mirror the /v2/files behavior: vision lanes prefer a permanent
+                # public storage URL for the full image over per-question base64
+                # re-reads. Best effort, so a storage failure never blocks attach.
+                try:
+                    stored = storage.upload_multi_chat_files([str(temp_file)], uid)
+                    uploaded_url = stored.get(str(temp_file), "")
+                except Exception as storage_error:
+                    logger.warning(f"chat file storage upload failed for {safe_suffix}: {type(storage_error).__name__}")
 
             filechat = FileChat(
                 id=str(uuid.uuid4()),
@@ -1575,6 +1597,7 @@ def upload_file_chat_v1(
                 openai_file_id=result.get("file_id", ""),
                 created_at=datetime.now(timezone.utc),
                 thumb_name=thumb_name,
+                source_url=uploaded_url or None,
             )
             files_chat.append(filechat)
         finally:
