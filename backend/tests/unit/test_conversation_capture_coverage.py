@@ -85,9 +85,11 @@ def test_live_committed_envelope_with_incomplete_lifetime_stays_incomplete():
     assert _conversation_with(envelope).capture_coverage == 'incomplete'
 
 
-def test_receipt_overflow_stub_projects_unknown():
+def test_receipt_overflow_stub_stays_incomplete():
+    # bounded_envelope can replace an oversize sync receipt that is short of
+    # frames with this stub; projecting it away would hide real loss.
     envelope = dict(version=1, capability='unknown', coverage='incomplete', reason='overflow')
-    assert _conversation_with(envelope).capture_coverage == 'unknown'
+    assert _conversation_with(envelope).capture_coverage == 'incomplete'
 
 
 def test_sync_frame_loss_receipt_stays_incomplete():

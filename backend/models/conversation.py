@@ -33,7 +33,7 @@ from pydantic import field_serializer
 from models.other import Person
 from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
-from utils.capture_evidence import evidence_field, ledger_bound_incomplete
+from utils.capture_evidence import ledger_bound_incomplete
 
 # Only locally-defined symbols are exported. Use canonical modules for moved types:
 #   models.conversation_enums, models.structured, models.audio_file, etc.
@@ -523,11 +523,10 @@ class Conversation(BaseModel):
                 evidence.get('coverage') if isinstance(evidence, Mapping) else getattr(evidence, 'coverage', None)
             )
             if coverage == 'incomplete' and ledger_bound_incomplete(evidence):
-                # Clients render 'incomplete' as lost audio. A ledger bound
-                # (evicted proof runs, receipt overflow) observed no loss, so
-                # it must not surface as a partial recording. The overflow
-                # stub carries no positions at all, so it abstains.
-                coverage = 'unknown' if evidence_field(evidence, 'capability') == 'unknown' else 'mapped'
+                # Clients render 'incomplete' as lost audio. A live committed
+                # proof whose only incompleteness is evicted ledger runs
+                # observed no loss, so it must not surface as a partial recording.
+                coverage = 'mapped'
             if coverage in ('unknown', 'incomplete', 'mapped'):
                 return {**data, 'capture_coverage': coverage}
         return data

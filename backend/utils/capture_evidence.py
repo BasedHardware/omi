@@ -205,14 +205,13 @@ def ledger_bound_incomplete(evidence: object) -> bool:
     evicts its oldest runs — runs cap at 30 seconds each and only 32 are
     kept, so a continuous capture grows a new run every 30 seconds and any
     capture beyond ~16 minutes latches the flag even with zero gaps, zero
-    conflicts, and a complete lifetime. The bounded_envelope overflow stub
-    names its bound directly. Observed loss never takes the committed shape:
+    conflicts, and a complete lifetime. Observed loss never takes the committed shape:
     missing claims and conflicting ordinals fail the snapshot to None before
     an envelope exists. Sync receipts keep 'incomplete' meaning real missing
-    frames (intake compares decoded frames against the claimed count).
+    frames (intake compares decoded frames against the claimed count), and the
+    bounded_envelope overflow stub can replace such a sync receipt, so an
+    overflow stub is never treated as a ledger bound.
     """
-    if evidence_field(evidence, 'capability') == 'unknown' and evidence_field(evidence, 'reason') == 'overflow':
-        return True
     lifetime = evidence_field(evidence, 'lifetime')
     lifetime_complete = evidence_field(lifetime, 'complete') if lifetime is not None else None
     return (
