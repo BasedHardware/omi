@@ -1,8 +1,41 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 
 import 'package:omi/ui/omi_tokens.dart';
+
+/// Announces [message] to the screen reader when it changes, instead of marking the whole
+/// [child] subtree `liveRegion: true`. A live region re-announces on every semantics change, so
+/// wrapping a per-second elapsed-time label in one re-announces the whole row every tick. Here
+/// [message] carries only the capture-state transition (e.g. "Live" to "Paused"), not the ticking
+/// elapsed text, so it only fires on a real state change; [child] keeps its own default semantics
+/// so the current elapsed time still reads out when a screen reader user navigates to it.
+class CaptureStateAnnouncement extends StatefulWidget {
+  const CaptureStateAnnouncement({super.key, required this.message, required this.child});
+
+  final String message;
+  final Widget child;
+
+  @override
+  State<CaptureStateAnnouncement> createState() => _CaptureStateAnnouncementState();
+}
+
+class _CaptureStateAnnouncementState extends State<CaptureStateAnnouncement> {
+  late String _lastAnnounced = widget.message;
+
+  @override
+  void didUpdateWidget(CaptureStateAnnouncement oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.message != _lastAnnounced) {
+      _lastAnnounced = widget.message;
+      SemanticsService.sendAnnouncement(View.of(context), widget.message, Directionality.of(context));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
+}
 
 /// A thin arc that circles [child] while background work runs (offline sync, processing). Quiet
 /// by design: no text, no colour, just motion around a glyph that already has a label. The arc

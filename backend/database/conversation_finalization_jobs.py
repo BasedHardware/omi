@@ -7,6 +7,7 @@ No transcript, credential, request header, or raw exception is stored here.
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 from hashlib import sha256
@@ -1851,21 +1852,113 @@ def recover_stranded_byok_jobs(*, limit: int = 50, firestore_client: Any = None)
     return result
 
 
+def _advance_finalization_replay_cursor_txn(
+    transaction: Any, ref: Any, generation: int, cursor: dict[str, Any] | None
+) -> bool:
+    state = ref.get(transaction=transaction).to_dict() or {}
+    if int(state.get('generation', 0)) != generation:
+        return False
+    transaction.set(ref, {'generation': generation + 1, 'cursor': cursor, 'updated_at': _now()})
+    return True
+
+
 def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: Any = None) -> list[dict[str, Any]]:
-    """Return a bounded server-side page of jobs whose replay delay elapsed."""
+    """Rotate a bounded due page even when every selected worker fails to advance.
+
+    Persist the original ordered values, not a document snapshot re-read after
+    mutation. A repaired/deleted last row must not rewind or skip the next page.
+    Freeze each sweep cutoff so recurring successors cannot keep the window
+    full forever. CAS fences competing scans. A crash after reservation delays
+    these rows until bounded wrap; it never removes the durable obligation.
+    """
     client = _client(firestore_client)
-    result: list[dict[str, Any]] = []
-    collection = client.collection(FINALIZATION_JOBS_COLLECTION)
     try:
-        safe_limit = max(1, min(int(limit), 500))
+        safe_limit = max(1, min(int(limit), 2000))
     except (ValueError, TypeError):
         safe_limit = 100
-    query = collection.where('reconcile_after_at', '<=', _now()).limit(max(1, min(safe_limit, 100)))
+    state_ref = client.collection('conversation_recovery_state').document('finalization_replay')
+    state = state_ref.get().to_dict() or {}
+    cursor = state.get('cursor')
+    cutoff = cursor.get('cutoff') if isinstance(cursor, dict) else None
+    if not isinstance(cutoff, datetime):
+        cutoff = _now()
+    query = (
+        client.collection(FINALIZATION_JOBS_COLLECTION)
+        .where('reconcile_after_at', '<=', cutoff)
+        .order_by('reconcile_after_at')
+        .order_by('__name__')
+    )
+    # The SDK only adds implicit name ordering for snapshot cursors. With a
+    # value dict it silently drops name unless that order is explicit.
+    if (
+        isinstance(cursor, dict)
+        and isinstance(cursor.get('reconcile_after_at'), datetime)
+        and isinstance(cursor.get('job_id'), str)
+    ):
+        query = query.start_after(
+            {
+                'reconcile_after_at': cursor['reconcile_after_at'],
+                '__name__': client.collection(FINALIZATION_JOBS_COLLECTION).document(cursor['job_id']),
+            }
+        )
+    snapshots = list(query.limit(safe_limit).stream())
+    next_cursor = None
+    if len(snapshots) == safe_limit:
+        last = snapshots[-1]
+        next_cursor = {
+            'reconcile_after_at': (last.to_dict() or {})['reconcile_after_at'],
+            'job_id': last.id,
+            'cutoff': cutoff,
+        }
+    firestore.transactional(_advance_finalization_replay_cursor_txn)(
+        client.transaction(), state_ref, int(state.get('generation', 0)), next_cursor
+    )
+    logging.getLogger(__name__).info(
+        'event=finalization_replay_page project=%s database=%s selected=%s quiet=%s resumed=%s',
+        getattr(client, 'project', 'injected'),
+        getattr(client, '_database', '(default)'),
+        len(snapshots),
+        sum((snapshot.to_dict() or {}).get('kind') == 'listen_quiet_check' for snapshot in snapshots),
+        bool(cursor),
+    )
+    return [(snapshot.to_dict() or {}) | {'job_id': snapshot.id} for snapshot in snapshots]
+
+
+def get_finalization_replay_oldest_overdue_age_seconds(*, firestore_client: Any = None) -> float:
+    """Measure the true head independently of the rotating replay window."""
+    now = _now()
+    query = (
+        _client(firestore_client)
+        .collection(FINALIZATION_JOBS_COLLECTION)
+        .where('reconcile_after_at', '<=', now)
+        .order_by('reconcile_after_at')
+        .limit(1)
+    )
     for snapshot in query.stream():
-        job = snapshot.to_dict() or {}
-        if job.get('status') in {'queued', 'leased', 'waiting_quiet'}:
-            result.append(job | {'job_id': snapshot.id})
-    return result
+        return max(0.0, (now - (snapshot.to_dict() or {})['reconcile_after_at']).total_seconds())
+    return 0.0
+
+
+def defer_finalization_replay(candidate: dict[str, Any], *, firestore_client: Any = None) -> bool:
+    """Back off only the exact overdue snapshot that failed to make progress."""
+    client = _client(firestore_client)
+    ref = client.collection(FINALIZATION_JOBS_COLLECTION).document(candidate['job_id'])
+
+    @firestore.transactional
+    def defer(transaction: Any) -> bool:
+        current = ref.get(transaction=transaction).to_dict() or {}
+        now = _now()
+        due = current.get('reconcile_after_at')
+        if not isinstance(due, datetime) or due > now:
+            return False
+        if any(
+            current.get(key) != candidate.get(key) for key in ('status', 'dispatch_generation', 'reconcile_after_at')
+        ):
+            return False
+        transaction.update(ref, {'reconcile_after_at': now + timedelta(seconds=60), 'updated_at': now})
+        return True
+
+    return defer(client.transaction())
 
 
 def get_stale_processing_orphan_candidates(
