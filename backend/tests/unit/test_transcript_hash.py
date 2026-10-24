@@ -582,7 +582,7 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
     assert padded_alice.person_id == 'alice'
     assert alice.person_id == 'alice'
     assert _render(alice) == _render(padded_alice) == 'Alice: approved transfer'
-    assert 'Speaker 0:' not in _render(padded_alice)
+    assert 'Speaker' not in _render(padded_alice)
 
     padded_slot = _store({'text': _RENDER_TEXT, 'speaker': '  SPEAKER_07  '})
     clean_slot = _store({'text': _RENDER_TEXT, 'speaker': 'SPEAKER_07'})
@@ -599,7 +599,9 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
         _store({'text': _RENDER_TEXT, 'speaker_id': 7}),
         _store({'text': '', 'speaker': 'SPEAKER_07'}),
     ]
-    rendered = [_render(segment) for segment in distinct]
+    # One transcript render keeps distinct voices on distinct dense labels while
+    # each segment's digest still binds its raw numeric speaker_id.
+    rendered = _render_transcript(distinct).split('\n\n')
     digests = [transcript_sha256([segment]) for segment in distinct]
     assert rendered == [
         'Alice: approved transfer',
