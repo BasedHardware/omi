@@ -1067,6 +1067,9 @@ def _delete_conversation_and_related_data(
         if merged_into:
             raise
         logger.error(f"Error deleting conversation {conversation_id}: {e}")
+        # Source deletion must finish before reporting merge success.
+        # Let the worker preserve the merged target and withhold success.
+        raise
 
 
 def cleanup_failed_merge_target(uid: str, merged_conversation_id: str) -> bool:
