@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "ตรวจสอบการเชื่อมต่อแล้วลองอีกครั้ง",
     "useFreePlan": "ใช้แพ็คเกจฟรี",
     "continueText": "ดำเนินการต่อ",
+    "checkoutExistingSubscription": "คุณมีการสมัครสมาชิกอยู่แล้ว โปรดจัดการการสมัครสมาชิกปัจจุบันแทนการเริ่มใหม่",
     "resubscribeFirstToChangePlans": "สมัครใหม่ก่อนเพื่อเปลี่ยนแผน",
     "resubscribe": "สมัครใหม่",
     "couldNotOpenPaymentSettings": "ไม่สามารถเปิดการตั้งค่าการชำระเงินได้ กรุณาลองอีกครั้ง",
@@ -4421,5 +4422,8 @@
     "pairingPowerOnSubtitle": "กดปุ่มหนึ่งครั้งและวางไว้ใกล้โทรศัพท์",
     "walkthroughBackgroundRecordingNote": "เรียบร้อย Omi จะบันทึกบทสนทนาของคุณต่อไปในพื้นหลัง",
     "noThanks": "ไม่เป็นไร ขอบคุณ",
-    "recapInTheBackground": "ในเบื้องหลัง"
+    "recapInTheBackground": "ในเบื้องหลัง",
+    "retentionOfferAccept": "อยู่ต่อพร้อมส่วนลด {percent}%",
+    "retentionOfferBody": "อยู่ต่อและจ่ายเดือนละ {price} ใน {months} เดือนถัดไป",
+    "retentionOfferApplied": "เรียบร้อย ส่วนลด {percent}% ใน {months} เดือนถัดไป"
 }

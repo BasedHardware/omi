@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Comprova la connexió i torna-ho a provar.",
     "useFreePlan": "Utilitzar pla gratuït",
     "continueText": "Continuar",
+    "checkoutExistingSubscription": "Ja tens una subscripció. Gestiona la subscripció actual en lloc de començar-ne una de nova.",
     "resubscribeFirstToChangePlans": "Torneu a subscriure-us primer per canviar de pla.",
     "resubscribe": "Tornar a subscriure",
     "couldNotOpenPaymentSettings": "No s'han pogut obrir els ajustos de pagament. Si us plau, torna-ho a provar.",
@@ -4421,5 +4422,8 @@
     "pairingPowerOnSubtitle": "Prem el botó un cop i mantén-lo a prop del mòbil.",
     "walkthroughBackgroundRecordingNote": "Ja està. L'Omi continuarà gravant les teves converses en segon pla.",
     "noThanks": "No, gràcies",
-    "recapInTheBackground": "En segon pla"
+    "recapInTheBackground": "En segon pla",
+    "retentionOfferAccept": "Queda't amb un {percent}% de descompte",
+    "retentionOfferBody": "Queda't i paga {price} al mes durant els propers {months} mesos.",
+    "retentionOfferApplied": "Fet. {percent}% de descompte els propers {months} mesos."
 }

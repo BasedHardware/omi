@@ -4432,6 +4432,15 @@ export interface RestoreLegacyConversationItemsResponse {
   status?: string;
 }
 
+export interface RetentionOfferResponse {
+  currency?: string | null;
+  discounted_amount?: number | null;
+  duration_months: number;
+  eligible: boolean;
+  percent_off: number;
+  regular_amount?: number | null;
+}
+
 export interface RetryAllRequest {
   idempotency_key: string;
 }
@@ -6837,6 +6846,7 @@ export interface OmiApiSchemas {
   "ReplyToReviewRequest": ReplyToReviewRequest;
   "ResponseMessage": ResponseMessage;
   "RestoreLegacyConversationItemsResponse": RestoreLegacyConversationItemsResponse;
+  "RetentionOfferResponse": RetentionOfferResponse;
   "RetryAllRequest": RetryAllRequest;
   "ReviewAnswer": ReviewAnswer;
   "ReviewAnswerReceipt": ReviewAnswerReceipt;
@@ -10144,6 +10154,24 @@ export interface OmiApiPaths {
       responses: {
         "200": unknown;
         "401": void;
+      };
+    };
+  };
+  "/v1/payments/retention-offer": {
+    get: {
+      operationId: "get_retention_offer_endpoint_v1_payments_retention_offer_get";
+      responses: {
+        "200": RetentionOfferResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "accept_retention_offer_endpoint_v1_payments_retention_offer_post";
+      responses: {
+        "200": RetentionOfferResponse;
+        "401": void;
+        "422": HTTPValidationError;
       };
     };
   };
@@ -18283,6 +18311,44 @@ export async function get_overage_info_endpoint_v1_payments_overage_info_get(hea
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
+export async function get_retention_offer_endpoint_v1_payments_retention_offer_get(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RetentionOfferResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/retention-offer`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function accept_retention_offer_endpoint_v1_payments_retention_offer_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<RetentionOfferResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/payments/retention-offer`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
 export async function cancel_subscription_endpoint_v1_payments_subscription_delete(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: CancelSubscriptionRequest, init?: OmiApiClientInit): Promise<PaymentStatusMessageResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/payments/subscription`;
@@ -22768,4 +22834,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 523 client methods generated.
+// Total: 525 client methods generated.

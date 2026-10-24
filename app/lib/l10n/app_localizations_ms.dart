@@ -4435,6 +4435,10 @@ class AppLocalizationsMs extends AppLocalizations {
   String get continueText => 'Teruskan';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Anda sudah mempunyai langganan. Urus langganan semasa dan bukannya memulakan yang baharu.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Langgan semula dahulu untuk menukar pelan.';
 
   @override
@@ -14574,4 +14578,19 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Di latar belakang';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Kekal dengan diskaun $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Kekal dan bayar $price sebulan untuk $months bulan akan datang.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Selesai. Diskaun $percent% untuk $months bulan akan datang.';
+  }
 }

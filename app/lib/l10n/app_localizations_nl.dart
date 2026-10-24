@@ -4433,6 +4433,10 @@ class AppLocalizationsNl extends AppLocalizations {
   String get continueText => 'Doorgaan';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Je hebt al een abonnement. Beheer je huidige abonnement in plaats van een nieuw te starten.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Abonneer je eerst opnieuw om van abonnement te wisselen.';
 
   @override
@@ -14576,4 +14580,19 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Op de achtergrond';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Blijf met $percent% korting';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Blijf en betaal $price per maand de komende $months maanden.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Klaar. $percent% korting de komende $months maanden.';
+  }
 }

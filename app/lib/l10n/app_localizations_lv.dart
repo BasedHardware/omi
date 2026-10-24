@@ -4431,6 +4431,10 @@ class AppLocalizationsLv extends AppLocalizations {
   String get continueText => 'Turpināt';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Jums jau ir abonements. Pārvaldiet pašreizējo abonementu, nevis sāciet jaunu.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Lai mainītu plānu, vispirms abonējiet vēlreiz.';
 
   @override
@@ -14569,4 +14573,19 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Fonā';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Palikt ar $percent% atlaidi';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Paliec un maksā $price mēnesī nākamos $months mēnešus.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Gatavs. $percent% atlaide nākamos $months mēnešus.';
+  }
 }

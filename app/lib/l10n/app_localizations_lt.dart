@@ -4421,6 +4421,10 @@ class AppLocalizationsLt extends AppLocalizations {
   String get continueText => 'Tęsti';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Jau turite prenumeratą. Užuot pradėję naują, tvarkykite esamą prenumeratą.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Norėdami pakeisti planą, pirmiausia užsiprenumeruokite iš naujo.';
 
   @override
@@ -14561,4 +14565,19 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Fone';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Likti su $percent% nuolaida';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Likite ir mokėkite $price per mėnesį ateinančius $months mėnesius.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Atlikta. $percent% nuolaida ateinančius $months mėnesius.';
+  }
 }

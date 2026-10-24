@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "Već imate pretplatu. Upravljajte postojećom pretplatom umjesto pokretanja nove.",
     "resubscribeFirstToChangePlans": "Prvo se ponovno pretplati da promijeniš plan.",
     "resubscribe": "Ponovo se pretplati",
     "@resubscribe": {
@@ -11847,5 +11848,8 @@
     "pairingPowerOnSubtitle": "Pritisnite gumb jednom i držite ga blizu telefona.",
     "walkthroughBackgroundRecordingNote": "To je to. Omi će nastaviti snimati vaše razgovore u pozadini.",
     "noThanks": "Ne, hvala",
-    "recapInTheBackground": "U pozadini"
+    "recapInTheBackground": "U pozadini",
+    "retentionOfferAccept": "Ostani uz {percent}% popusta",
+    "retentionOfferBody": "Ostani i plaćaj {price} mjesečno sljedećih {months} mjeseca.",
+    "retentionOfferApplied": "Gotovo. {percent}% popusta sljedećih {months} mjeseca."
 }

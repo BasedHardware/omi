@@ -4457,6 +4457,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get continueText => 'Συνέχεια';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Έχετε ήδη συνδρομή. Διαχειριστείτε την τρέχουσα συνδρομή σας αντί να ξεκινήσετε μια νέα.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Επανεγγραφείτε πρώτα για να αλλάξετε πρόγραμμα.';
 
   @override
@@ -14632,4 +14636,19 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Στο παρασκήνιο';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Μείνε με $percent% έκπτωση';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Μείνε και πλήρωνε $price τον μήνα για τους επόμενους $months μήνες.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Έγινε. $percent% έκπτωση για τους επόμενους $months μήνες.';
+  }
 }

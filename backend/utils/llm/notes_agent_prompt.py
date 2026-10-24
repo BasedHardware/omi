@@ -94,6 +94,7 @@ FORMAT
   `action_items`.
 - title: at most 70 characters and specific. Lead with the counterpart's name when known; never use the owner's
   own name. overview: one or two plain sentences.
+- emoji: exactly one emoji that represents the conversation.
 - salience: "highlight" for any conversation the owner engages in with another person, with real back-and-forth,
   whatever the topic (including chores, errands and casual time at home), and for meetings, calls, plans, ideas
   or tasks. "background" is only for audio the owner is not engaged in: media/TV, ambient chatter, other people
@@ -147,7 +148,7 @@ SUBMIT_SCHEMA = _fn(
     {
         'title': {'type': 'string', 'description': 'At most 70 characters'},
         'overview': _STR,
-        'emoji': _STR,
+        'emoji': {'type': 'string', 'description': 'An emoji to represent the conversation'},
         'category': {'type': 'string', 'enum': [item.value for item in CategoryEnum]},
         'salience': {'type': 'string', 'enum': ['highlight', 'background'], 'description': SALIENCE_DESCRIPTION},
         'participants': {

@@ -4354,6 +4354,9 @@ class AppLocalizationsKo extends AppLocalizations {
   String get continueText => '계속';
 
   @override
+  String get checkoutExistingSubscription => '이미 구독 중입니다. 새 구독을 시작하는 대신 현재 구독을 관리하세요.';
+
+  @override
   String get resubscribeFirstToChangePlans => '플랜을 변경하려면 먼저 다시 구독하세요.';
 
   @override
@@ -14339,4 +14342,19 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get recapInTheBackground => '배경에서';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return '$percent% 할인받고 계속 쓰기';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return '계속 쓰시면 월 $price, 앞으로 $months개월 동안.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return '완료되었습니다. $percent% 할인이 $months개월 동안 적용됩니다.';
+  }
 }

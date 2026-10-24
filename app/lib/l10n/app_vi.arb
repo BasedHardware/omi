@@ -1358,6 +1358,7 @@
     "checkConnectionTryAgain": "Kiểm tra kết nối rồi thử lại.",
     "useFreePlan": "Sử dụng gói miễn phí",
     "continueText": "Tiếp tục",
+    "checkoutExistingSubscription": "Bạn đã có gói đăng ký. Hãy quản lý gói hiện tại thay vì bắt đầu gói mới.",
     "resubscribeFirstToChangePlans": "Hãy đăng ký lại trước để đổi gói.",
     "resubscribe": "Đăng ký lại",
     "couldNotOpenPaymentSettings": "Không thể mở cài đặt thanh toán. Vui lòng thử lại.",
@@ -4421,5 +4422,8 @@
     "pairingPowerOnSubtitle": "Nhấn nút một lần và giữ gần điện thoại.",
     "walkthroughBackgroundRecordingNote": "Xong rồi. Omi sẽ tiếp tục ghi lại các cuộc trò chuyện của bạn ở chế độ nền.",
     "noThanks": "Không, cảm ơn",
-    "recapInTheBackground": "Trong nền"
+    "recapInTheBackground": "Trong nền",
+    "retentionOfferAccept": "Ở lại với ưu đãi giảm {percent}%",
+    "retentionOfferBody": "Ở lại và chỉ trả {price} mỗi tháng trong {months} tháng tới.",
+    "retentionOfferApplied": "Xong. Giảm {percent}% trong {months} tháng tới."
 }

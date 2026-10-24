@@ -4425,6 +4425,10 @@ class AppLocalizationsFi extends AppLocalizations {
   String get continueText => 'Jatka';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Sinulla on jo tilaus. Hallitse nykyistä tilaustasi uuden aloittamisen sijaan.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Tilaa ensin uudelleen, jotta voit vaihtaa pakettia.';
 
   @override
@@ -14542,4 +14546,19 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'Taustalla';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Jatka $percent % alennuksella';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Jatka ja maksa $price kuukaudessa seuraavat $months kuukautta.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Valmis. $percent % alennus seuraavat $months kuukautta.';
+  }
 }

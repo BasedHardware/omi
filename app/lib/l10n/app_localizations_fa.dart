@@ -4423,6 +4423,10 @@ class AppLocalizationsFa extends AppLocalizations {
   String get continueText => 'ادامه';
 
   @override
+  String get checkoutExistingSubscription =>
+      'شما از قبل اشتراک دارید. به‌جای شروع اشتراک جدید، اشتراک فعلی خود را مدیریت کنید.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'برای تغییر طرح، ابتدا دوباره مشترک شوید.';
 
   @override
@@ -14532,4 +14536,19 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'در پس‌زمینه';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'با $percent% تخفیف بمانید';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'بمانید و ماهانه $price بپردازید، برای $months ماه آینده.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'انجام شد. $percent% تخفیف برای $months ماه آینده.';
+  }
 }

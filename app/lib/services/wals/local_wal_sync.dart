@@ -1924,12 +1924,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     final totalFilesToUpload = wals.length;
 
     final attemptedWalIds = <String>{};
+    final isolateAfterRefusal = <String>{};
     String walAttemptKey(Wal wal) => captureEvidenceWalClaimable(wal) ? _durableKey(wal) : wal.id;
     // A conversation whose first batch uploaded unclaimed stays unclaimable for
     // the rest of the drain: the manifest is immutable per conversation, so a
     // later remainder must not claim one covering only part of it.
     final unclaimableConversationIds = <String>{};
     while (true) {
+      if (!_isCurrent(generation)) break;
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
       final batchNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
@@ -1937,8 +1939,9 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           _wals.where((wal) => isAutoUploadEligible(wal) && !attemptedWalIds.contains(walAttemptKey(wal))).toList();
       final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
-      final batch = nextSyncUploadBatch(pending, batchNowSeconds);
+      var batch = nextSyncUploadBatch(pending, batchNowSeconds);
       if (batch.isEmpty) break;
+      if (batch.any((wal) => isolateAfterRefusal.contains(walAttemptKey(wal)))) batch = [batch.first];
       attemptedWalIds.addAll(batch.map(walAttemptKey));
       final batchConversationId = batch.first.conversationId;
       final claimLiveCapture = !unclaimableConversationIds.contains(batchConversationId) &&
@@ -2137,8 +2140,29 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _notifyUpdated(generation);
         continue;
       } on SyncUploadHttpException catch (e) {
-        batchesFailed++;
+        if (!_isCurrent(generation)) return resp;
         final definitive = isDefinitiveUploadRefusal(e);
+        // A request-level 400/413 proves nothing about every member. Try each
+        // retained file once through the same gate before retiring that file.
+        if (definitive && batchWals.length > 1) {
+          for (final wal in batchWals) {
+            final key = walAttemptKey(wal);
+            isolateAfterRefusal.add(key);
+            attemptedWalIds.remove(key);
+            wal.isSyncing = false;
+            wal.syncStartedAt = null;
+            wal.syncEtaSeconds = null;
+          }
+          DebugLogManager.logEvent('local_upload_batch_isolated', {
+            'statusCode': e.statusCode,
+            'walCount': batchWals.length,
+          });
+          await _saveWalsToFile(generation);
+          _notifyUpdated(generation);
+          continue;
+        }
+        batchesFailed++;
+        final authenticationFailed = e.statusCode == 401 || e.statusCode == 403;
         if (definitive) {
           for (final wal in batchWals) {
             wal.markUploadRejected();
@@ -2151,6 +2175,12 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           });
         } else {
           for (final wal in batchWals) {
+            if (authenticationFailed) {
+              // Do not repeat the same denied credentials. A deliberate retry
+              // or connectivity recovery can supply fresh authentication.
+              wal.retryCount = walMaxAutoRetries;
+              wal.lastRetryAt = _now().millisecondsSinceEpoch ~/ 1000;
+            }
             wal.isSyncing = false;
             wal.syncStartedAt = null;
             wal.syncEtaSeconds = null;
@@ -2162,6 +2192,11 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
           'statusCode': e.statusCode,
           'terminal': definitive,
         });
+        if (authenticationFailed) {
+          await _saveWalsToFile(generation);
+          _notifyUpdated(generation);
+          break;
+        }
       } catch (e) {
         Logger.debug('Local WAL upload batch failed: $e, continuing with remaining files');
         batchesFailed++;
@@ -2240,7 +2275,7 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
     // auto-upload budget a previous failure spent. It costs at most one extra
     // upload for a permanently refused recording: the reconciler spends the
     // whole budget again on the same verdict.
-    walToSync.retryCount = 0;
+    walToSync.prepareManualRetry();
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -2392,9 +2427,14 @@ class LocalWalSyncImpl with WidgetsBindingObserver implements LocalWalSync {
         _notifyUpdated(generation);
         return resp;
       }
+      if (e.statusCode == 401 || e.statusCode == 403) {
+        walToSync.retryCount = walMaxAutoRetries;
+        walToSync.lastRetryAt = _now().millisecondsSinceEpoch ~/ 1000;
+      }
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
+      await _saveWalsToFile(generation);
       rethrow;
     } catch (e) {
       walToSync.retryCount++;

@@ -4419,6 +4419,9 @@ class AppLocalizationsSk extends AppLocalizations {
   String get continueText => 'Pokračovať';
 
   @override
+  String get checkoutExistingSubscription => 'Predplatné už máte. Namiesto nového predplatného spravujte to súčasné.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Ak chcete zmeniť plán, najprv sa znova prihláste.';
 
   @override
@@ -14533,4 +14536,19 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'V pozadí';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Zostať so zľavou $percent %';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Zostaňte a plaťte $price mesačne počas ďalších $months mesiacov.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Hotovo. Zľava $percent % na ďalšie $months mesiace.';
+  }
 }

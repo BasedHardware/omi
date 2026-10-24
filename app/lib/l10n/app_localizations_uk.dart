@@ -4427,6 +4427,10 @@ class AppLocalizationsUk extends AppLocalizations {
   String get continueText => 'Продовжити';
 
   @override
+  String get checkoutExistingSubscription =>
+      'У вас уже є підписка. Керуйте поточною підпискою замість оформлення нової.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Спочатку підпишіться знову, щоб змінити план.';
 
   @override
@@ -14568,4 +14572,19 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'У фоні';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Залишитися зі знижкою $percent%';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Залишайтеся і платіть $price на місяць наступні $months місяці.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Готово. Знижка $percent% на наступні $months місяці.';
+  }
 }

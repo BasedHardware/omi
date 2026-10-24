@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "У вас ужо ёсць падпіска. Замест новай падпіскі кіруйце бягучай.",
     "resubscribeFirstToChangePlans": "Спачатку падпішыцеся зноў, каб змяніць план.",
     "resubscribe": "Падпішыцеся яшчэ раз",
     "@resubscribe": {
@@ -11847,5 +11848,8 @@
     "pairingPowerOnSubtitle": "Націсніце кнопку адзін раз і трымайце побач з тэлефонам.",
     "walkthroughBackgroundRecordingNote": "Гатова. Omi будзе запісваць вашы размовы ў фоне.",
     "noThanks": "Не, дзякуй",
-    "recapInTheBackground": "У фоне"
+    "recapInTheBackground": "У фоне",
+    "retentionOfferAccept": "Застацца са зніжкай {percent}%",
+    "retentionOfferBody": "Застаньцеся і плаціце {price} у месяц на працягу {months} месяцаў.",
+    "retentionOfferApplied": "Гатова. Зніжка {percent}% на {months} месяцы."
 }

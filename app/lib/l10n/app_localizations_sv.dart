@@ -4425,6 +4425,10 @@ class AppLocalizationsSv extends AppLocalizations {
   String get continueText => 'Fortsätt';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Du har redan en prenumeration. Hantera din nuvarande prenumeration i stället för att starta en ny.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Prenumerera igen först för att byta plan.';
 
   @override
@@ -14545,4 +14549,19 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get recapInTheBackground => 'I bakgrunden';
+
+  @override
+  String retentionOfferAccept(int percent) {
+    return 'Stanna kvar med $percent % rabatt';
+  }
+
+  @override
+  String retentionOfferBody(String price, int months) {
+    return 'Stanna och betala $price i månaden de kommande $months månaderna.';
+  }
+
+  @override
+  String retentionOfferApplied(int percent, int months) {
+    return 'Klart. $percent % rabatt de kommande $months månaderna.';
+  }
 }

@@ -5128,6 +5128,7 @@
     "@continueText": {
         "description": "Continue button text"
     },
+    "checkoutExistingSubscription": "ನೀವು ಈಗಾಗಲೇ ಚಂದಾದಾರಿಕೆಯನ್ನು ಹೊಂದಿದ್ದೀರಿ. ಹೊಸದನ್ನು ಪ್ರಾರಂಭಿಸುವ ಬದಲು ಪ್ರಸ್ತುತ ಚಂದಾದಾರಿಕೆಯನ್ನು ನಿರ್ವಹಿಸಿ.",
     "resubscribeFirstToChangePlans": "ಯೋಜನೆ ಬದಲಾಯಿಸಲು ಮೊದಲು ಮರುಸದಸ್ಯರಾಗಿ.",
     "resubscribe": "ಮರುಸದಸ್ಯಗೊಳಿಸಿ",
     "@resubscribe": {
@@ -11847,5 +11848,8 @@
     "pairingPowerOnSubtitle": "ಒಮ್ಮೆ ಬಟನ್ ಒತ್ತಿ ಫೋನ್ ಹತ್ತಿರ ಇರಿಸಿ.",
     "walkthroughBackgroundRecordingNote": "ಅಷ್ಟೇ. Omi ಹಿನ್ನೆಲೆಯಲ್ಲಿ ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಲೇ ಇರುತ್ತದೆ.",
     "noThanks": "ಬೇಡ, ಧನ್ಯವಾದ",
-    "recapInTheBackground": "ಹಿನ್ನೆಲೆಯಲ್ಲಿ"
+    "recapInTheBackground": "ಹಿನ್ನೆಲೆಯಲ್ಲಿ",
+    "retentionOfferAccept": "{percent}% ರಿಯಾಯಿತಿಯೊಂದಿಗೆ ಮುಂದುವರಿಸಿ",
+    "retentionOfferBody": "ಮುಂದುವರಿಸಿ ಮತ್ತು ತಿಂಗಳಿಗೆ {price} ಪಾವತಿಸಿ, ಮುಂದಿನ {months} ತಿಂಗಳು.",
+    "retentionOfferApplied": "ಆಯಿತು. {percent}% ರಿಯಾಯಿತಿ, ಮುಂದಿನ {months} ತಿಂಗಳು."
 }
