@@ -12,7 +12,9 @@ void main() {
     SharedPreferences.setMockInitialValues({
       'btDevice': '{"id":"AA:BB"}',
       'deviceName': 'Omi',
+      'singleTapAction': 1,
       'doubleTapAction': 2,
+      'tripleTapAction': 2,
       'showShortConversations': true,
       'uid': 'user-123',
       'givenName': 'Ada',
@@ -26,7 +28,9 @@ void main() {
     final prefs = await SharedPreferences.getInstance();
     expect(prefs.getString('btDevice'), '{"id":"AA:BB"}');
     expect(prefs.getString('deviceName'), 'Omi');
+    expect(prefs.getInt('singleTapAction'), 1);
     expect(prefs.getInt('doubleTapAction'), 2);
+    expect(prefs.getInt('tripleTapAction'), 2);
     expect(prefs.getBool('showShortConversations'), isTrue);
   });
 
