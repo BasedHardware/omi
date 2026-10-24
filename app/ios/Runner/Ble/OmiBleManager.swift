@@ -168,6 +168,11 @@ final class OmiBleManager: NSObject {
 
     private func issueConnect(_ peripheral: CBPeripheral, uuid: String, source: String) {
         if savedReconnect.contains(uuid), connectPendingSince[uuid] == nil {
+            // Native scan/restoration/retry paths need the same bounded GATT
+            // readiness recovery as an explicit Flutter manageDevice request.
+            failedReadyRequests.remove(uuid)
+            readyRequests.insert(uuid)
+            discoveryRetries[uuid] = 0
             savedOutageStarted[uuid] = savedOutageStarted[uuid] ?? Date()
             savedRetryAttempts[uuid, default: 0] += 1
             reportSavedReconnect(uuid, result: "attempted")
@@ -246,7 +251,7 @@ final class OmiBleManager: NSObject {
     /// Monotonic start time of the latest GATT discovery. Retain it on errors so
     /// a late callback cannot clear the retry bound for a newer attempt.
     private var discoveryStartedAt: [String: TimeInterval] = [:]
-    /// One retry is allowed per explicit Flutter connection request.
+    /// One retry is allowed per readiness request, including native saved reconnects.
     private var readyRequests: Set<String> = []
     private var failedReadyRequests: Set<String> = []
     private var discoveryRetries: [String: Int] = [:]
