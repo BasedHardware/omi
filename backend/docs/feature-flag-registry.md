@@ -442,7 +442,6 @@ and an explicit empty literal renders as `''`.
 | `MEMORY_RELEASED_PROJECTION` | Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `MEMORY_UNDECIDED_VISIBLE` | Default on; keep undecided and review Short-term memories visible until an explicit disposition | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `NEW_BUYER_SINGLE_PLAN_ENABLED` | Default on; a buyer with no current paid subscription on an explicit non-desktop platform (mobile or web) is offered only Omi Pro (unlimited_v2) in the v1 catalog, a single-tier Omi Pro v2 storefront sheet and checkout | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
-| `NOTES_IDENTITY_REPAIR_ENABLED` | Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OCCASION_CONVERSATIONS_ENABLED` | Default on unless set off (0/false/off/no); for the episodes cohort with a capable client, a mobile live conversation stays open across lulls and reconnects for 15 min (3 h span cap), one occasion per conversation | backend | env | closed | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_DEV_ACTION_ITEMS_CACHE_NORMALIZE_ENABLED` | Default on unless false; canonicalize equivalent Developer action-item date query instants in cache keys only | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `OMI_DEV_ACTION_ITEMS_FILTERED_LEGACY_PROBE_ENABLED` | Default on unless false; prove owner-wide canonical completion before skipping filtered Developer legacy scans; preserve saturated active-prefix refill | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -474,6 +473,7 @@ and an explicit empty literal renders as `''`.
 | `SCREEN_ACTIVITY_KEYWORD_FALLBACK_ENABLED` | Fallback to keyword search for screen activity | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `SCREEN_TASK_STOP` | Stop screen-task gate and flagged extraction admission; default false; clients poll every 30 seconds with a 55-second lease | backend | env | inverted | — | — | — | — | keep | keep | — | dazheng |
 | `SONIOX_IDLE_CLOSE_SECONDS` | Default on at 45 s; close paid Soniox transports after continuous active-VAD silence or 60 s with no client frames; 0 or off is the kill switch | backend | env | open | — | — | — | — | keep | keep | — | backend |
+| `SPEAKER_IDENTITY_REPAIR_ENABLED` | Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STALE_IN_PROGRESS_RECOVERY_ENABLED` | Incident stop for reconnect stale in-progress recovery; default on | backend | env | open | {value: 'true', category: rollout} | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | true (backend-listen (chart)); {value: 'true', category: rollout} (gke/backend-listen) | — | keep | keep | — | backend listen |
 | `STT_CAP_FINALIZE_FORWARD_ENABLED` | Default on; preserve provider-specific finalize arguments through the funded STT cap proxy | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `STT_CAP_OFFLINE_ENFORCEMENT` | Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -841,7 +841,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEMORY_TYPESENSE_READINESS_REQUIRED` — Require Typesense projection readiness for memory reads (fail: closed)
 - `MEMORY_UNDECIDED_VISIBLE` — Default on; keep undecided and review Short-term memories visible until an explicit disposition (fail: open)
 - `NEW_BUYER_SINGLE_PLAN_ENABLED` — Default on; a buyer with no current paid subscription on an explicit non-desktop platform (mobile or web) is offered only Omi Pro (unlimited_v2) in the v1 catalog, a single-tier Omi Pro v2 storefront sheet and checkout (fail: open)
-- `NOTES_IDENTITY_REPAIR_ENABLED` — Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names (fail: open)
 - `NOTES_PACKET_V2_MODE` — One notes packet, output contract, safe speaker rendering, output language, word floor and recap revisions; default shadow (fail: closed)
 - `NOTES_PACKET_V2_MODE_SERVE_PERCENT` — Serve cohort percentage; default 0 (fail: closed)
 - `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` — Serve cohort SHA256 digests; default empty, never raw identifiers (fail: closed)
@@ -897,6 +896,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SPEAKER_EVIDENCE_MODE_SERVE_UID_SHA256S` — Default empty; SHA256 digests for the explicit speaker evidence serve cohort (fail: closed)
 - `SPEAKER_EVIDENCE_MODE_SHADOW_PERCENT` — Speaker evidence database writes sampled in shadow; default 5 percent, serve cohort always writes (fail: closed)
 - `SPEAKER_GROUPING_CROSS_SCOPE_THRESHOLD` — G2 cross-scope cosine-distance threshold; default 0.60; invalid configuration uses 0.60 (fail: closed)
+- `SPEAKER_IDENTITY_REPAIR_ENABLED` — Default on; repair unsupported notes participant bindings while preserving People-spelled prose mentions and owner names (fail: open)
 - `STOREFRONT_LADDER_V1_ENABLED` — Default-off versioned unified plans presentation; exact true admits v2 only; installed-client endpoints unchanged (fail: closed)
 - `STT_CAP_FINALIZE_FORWARD_ENABLED` — Default on; preserve provider-specific finalize arguments through the funded STT cap proxy (fail: open)
 - `STT_CAP_OFFLINE_ENFORCEMENT` — Default on; enforce existing finite transcription allowance before sync/batch cloud spend independently of legacy live scope (fail: open)
