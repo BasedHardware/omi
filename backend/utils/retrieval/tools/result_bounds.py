@@ -62,18 +62,15 @@ def bounded_result(
     The note deliberately does not state a total count: callers may pass an already-paginated
     page whose length is not the true total, so claiming a total would mislead (cubic on #8527).
     """
-    if result is None:
-        result = ""
-    elif not isinstance(result, str):
-        result = str(result)
+    rendered = result if isinstance(result, str) else "" if result is None else str(result)
 
-    if len(result) > MAX_RESULT_CHARS:
-        result = result[:MAX_RESULT_CHARS]
+    if len(rendered) > MAX_RESULT_CHARS:
+        rendered = rendered[:MAX_RESULT_CHARS]
         truncated = True
     if truncated:
         # Generic callers may not know the row count, so report the number of rendered lines.
         # Callers that do know how many records survived the cap should pass that count.
-        shown_count = max(0, int(shown)) if shown is not None else len(result.splitlines())
+        shown_count = max(0, int(shown)) if shown is not None else len(rendered.splitlines())
         unit = noun if shown is not None else "result lines"
         next_step = "Ask for a narrower topic or date range, or page with the offset, for the rest."
         if order:
@@ -89,5 +86,5 @@ def bounded_result(
             note = note.replace(
                 "more were omitted, not absent.", "more may exist; omitted data is not evidence of absence."
             )
-        result += "\n\n" + note
-    return result
+        rendered += "\n\n" + note
+    return rendered
