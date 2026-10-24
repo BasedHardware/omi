@@ -603,6 +603,17 @@ def _require_valid_session(request: Optional[Request], uid: str) -> None:
         raise HTTPException(status_code=403, detail="Forbidden: valid settings session required")
 
 
+def _is_same_hive_account(existing: Optional[Dict[str, Any]], user_info: Optional[Dict[str, Any]]) -> bool:
+    """True when a freshly verified API key belongs to the Hive user already stored for uid."""
+    if not existing or not user_info:
+        return False
+    stored_user_id = str(existing.get("hive_user_id") or "").strip()
+    verified_user_id = str(user_info.get("user_id") or "").strip()
+    if not stored_user_id or not verified_user_id:
+        return False
+    return hmac.compare_digest(stored_user_id, verified_user_id)
+
+
 def _is_secure_request(request: Optional[Request]) -> bool:
     if request is None:
         return False
@@ -685,9 +696,9 @@ async def connect_api_key(
 
     _require_session_secret()
 
-    # Prevent unauthenticated callers from overwriting an already-connected user's API key
-    if get_hive_credentials(uid) is not None or is_connected(uid):
-        _require_valid_session(request, uid)
+    existing = get_hive_credentials(uid)
+    already_connected = existing is not None or is_connected(uid)
+    has_session = _has_valid_session(request, uid)
 
     # Verify the API key
     user_info = verify_api_key(api_key.strip())
@@ -698,6 +709,12 @@ async def connect_api_key(
             url=f"/?uid={quote(uid, safe='')}&error=Invalid+API+key.+Please+check+and+try+again.",
             status_code=303
         )
+
+    # An already-connected uid can only be rebound by its session holder. A user who
+    # lost the session cookie can recover it by re-entering a key for the same Hive
+    # account that is already connected; a key for any other Hive account is refused.
+    if already_connected and not has_session and not _is_same_hive_account(existing, user_info):
+        raise HTTPException(status_code=403, detail="Forbidden: valid settings session required")
 
     # Store credentials
     store_hive_credentials(
@@ -733,11 +750,17 @@ async def set_default_project(
     return {"success": True, "message": f"Default project set to: {project_name}"}
 
 
-@app.get("/disconnect")
-async def disconnect_hive(uid: str):
-    """Disconnect Hive account."""
+@app.post("/disconnect")
+async def disconnect_hive(uid: str, request: Request = None):
+    """Disconnect Hive account.
+
+    Requires a valid settings session for uid so a caller who only knows the uid
+    cannot delete stored credentials and then bind a different Hive account. This
+    is a POST so the SameSite=Lax session cookie is not sent on cross-site requests.
+    """
+    _require_valid_session(request, uid)
     delete_hive_credentials(uid)
-    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}")
+    return RedirectResponse(url=f"/?uid={quote(uid, safe='')}", status_code=303)
 
 
 # ============================================

@@ -187,14 +187,13 @@ class HiveSettingsSessionAuthTests(unittest.TestCase):
         wrong_user_cookie = hive_main._create_session_token("attacker-uid")
         wrong_user_req = make_request(cookies={hive_main.SESSION_COOKIE_NAME: wrong_user_cookie})
 
-        with patch.object(hive_main, "get_hive_credentials", return_value={"api_key": "victim-key"}), \
-             patch.object(hive_main, "verify_api_key") as verify_mock, \
+        with patch.object(hive_main, "get_hive_credentials", return_value={"api_key": "victim-key", "hive_user_id": "victim-hive"}), \
+             patch.object(hive_main, "verify_api_key", return_value={"user_id": "attacker-hive", "workspace_id": "w-att"}), \
              patch.object(hive_main, "store_hive_credentials") as store_creds:
             for bad_req in (unauthed_req, wrong_user_req):
                 with self.assertRaises(HTTPException) as ctx:
                     asyncio.run(hive_main.connect_api_key(request=bad_req, uid="victim-uid", api_key="attacker-key"))
                 self.assertEqual(ctx.exception.status_code, 403)
-            verify_mock.assert_not_called()
             store_creds.assert_not_called()
 
     def test_connected_user_can_rotate_api_key_with_valid_session(self):
@@ -255,6 +254,78 @@ class HiveSettingsSessionAuthTests(unittest.TestCase):
             self.assertEqual(len(authed_resp.context["projects"]), 1)
             get_projs.assert_called_once_with("victim-uid")
             get_def.assert_called_once_with("victim-uid")
+
+
+    def test_disconnect_requires_valid_session_for_uid(self):
+        attacker_cookie = hive_main._create_session_token("attacker-uid")
+        with patch.object(hive_main, "delete_hive_credentials") as delete_creds:
+            for bad_req in (make_request(), make_request(cookies={hive_main.SESSION_COOKIE_NAME: attacker_cookie})):
+                with self.assertRaises(HTTPException) as ctx:
+                    asyncio.run(hive_main.disconnect_hive("victim-uid", request=bad_req))
+                self.assertEqual(ctx.exception.status_code, 403)
+            delete_creds.assert_not_called()
+
+            valid_cookie = hive_main._create_session_token("victim-uid")
+            resp = asyncio.run(
+                hive_main.disconnect_hive(
+                    "victim-uid",
+                    request=make_request(cookies={hive_main.SESSION_COOKIE_NAME: valid_cookie}),
+                )
+            )
+            self.assertEqual(resp.status_code, 303)
+            delete_creds.assert_called_once_with("victim-uid")
+
+    def test_disconnect_fails_closed_when_session_secret_unconfigured(self):
+        os.environ.pop("SESSION_SECRET", None)
+        with patch.object(hive_main, "delete_hive_credentials") as delete_creds:
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(hive_main.disconnect_hive("victim-uid", request=make_request()))
+            self.assertEqual(ctx.exception.status_code, 503)
+            delete_creds.assert_not_called()
+
+    def test_disconnect_then_rebind_chain_is_blocked(self):
+        store = {"victim-uid": {"api_key": "victim-key", "hive_user_id": "victim-hive", "workspace_id": "w-victim"}}
+
+        def fake_store(uid, api_key, hive_user_id, hive_email=None, workspace_id=None):
+            store[uid] = {"api_key": api_key, "hive_user_id": hive_user_id, "workspace_id": workspace_id}
+
+        with patch.object(hive_main, "get_hive_credentials", side_effect=lambda uid: store.get(uid)), \
+             patch.object(hive_main, "is_connected", side_effect=lambda uid: uid in store), \
+             patch.object(hive_main, "delete_hive_credentials", side_effect=lambda uid: store.pop(uid, None)), \
+             patch.object(hive_main, "verify_api_key", return_value={"user_id": "attacker-hive", "workspace_id": "w-att"}), \
+             patch.object(hive_main, "store_hive_credentials", side_effect=fake_store):
+            # Step 1: attacker tries to wipe the victim's credentials without a session
+            with self.assertRaises(HTTPException) as ctx1:
+                asyncio.run(hive_main.disconnect_hive("victim-uid", request=make_request()))
+            self.assertEqual(ctx1.exception.status_code, 403)
+            # Step 2: attacker tries to bind their own Hive key to the victim uid
+            with self.assertRaises(HTTPException) as ctx2:
+                asyncio.run(hive_main.connect_api_key(request=make_request(), uid="victim-uid", api_key="attacker-key"))
+            self.assertEqual(ctx2.exception.status_code, 403)
+
+        self.assertEqual(store["victim-uid"]["api_key"], "victim-key")
+        self.assertEqual(store["victim-uid"]["hive_user_id"], "victim-hive")
+
+    def test_connected_user_without_cookie_recovers_session_with_same_hive_account(self):
+        with patch.object(hive_main, "get_hive_credentials", return_value={"api_key": "old-key", "hive_user_id": "victim-hive"}), \
+             patch.object(hive_main, "verify_api_key", return_value={"user_id": "victim-hive", "email": "v@b.com", "workspace_id": "w1"}), \
+             patch.object(hive_main, "store_hive_credentials") as store_creds:
+            resp = asyncio.run(hive_main.connect_api_key(request=make_request(), uid="victim-uid", api_key="rotated-key"))
+            self.assertEqual(resp.status_code, 303)
+            store_creds.assert_called_once()
+            cookie = resp.cookies[hive_main.SESSION_COOKIE_NAME]["value"]
+            self.assertTrue(
+                hive_main._has_valid_session(make_request(cookies={hive_main.SESSION_COOKIE_NAME: cookie}), "victim-uid")
+            )
+
+    def test_recovery_refused_when_stored_hive_user_is_unknown(self):
+        with patch.object(hive_main, "get_hive_credentials", return_value={"api_key": "old-key", "hive_user_id": ""}), \
+             patch.object(hive_main, "verify_api_key", return_value={"user_id": "someone", "workspace_id": "w1"}), \
+             patch.object(hive_main, "store_hive_credentials") as store_creds:
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.run(hive_main.connect_api_key(request=make_request(), uid="victim-uid", api_key="any-key"))
+            self.assertEqual(ctx.exception.status_code, 403)
+            store_creds.assert_not_called()
 
 
 if __name__ == "__main__":

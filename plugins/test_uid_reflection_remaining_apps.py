@@ -7,11 +7,11 @@ suite pins the rest (issue class: FC-client-param-reflected-into-html-markup):
   app                site driven                        context
   omi-dropbox-app    GET / (both branches), GET /disconnect   form action, hrefs, redirect
   omi-google-calendar-app  GET / (unconnected), GET /disconnect, POST /update-calendar, callback error page
-  omi-hive-app       POST /disconnect/hive                   redirect
+  omi-hive-app       POST /disconnect (session-gated)        redirect
   omi-ms365-app      GET /setup/microsoft                    redirect target
   omi-shipbob-app    GET /disconnect/shipbob                 redirect
   omi-shopify-app    GET /disconnect/shopify                 redirect
-  omi-linear-app     GET /, GET /disconnect/linear           JSON oauth_url, redirect
+  omi-linear-app     GET /, POST /disconnect (session-gated) JSON oauth_url, redirect
 
 A uid containing a double quote breaks out of an HTML attribute (reflected
 XSS); a bare `&` or `#` corrupts the query handed to the next hop.
@@ -207,10 +207,26 @@ def test_gcal_callback_error_page_escapes_error():
     assert '&lt;b&gt;oops&lt;/b&gt;' in html, 'error not html-escaped'
 
 
+def _call_with_settings_session(module, handler, uid):
+    """Drive a session-gated disconnect handler as the uid's own session holder."""
+    import os
+    saved = os.environ.get('SESSION_SECRET')
+    os.environ['SESSION_SECRET'] = 'uid-reflection-test-secret'
+    try:
+        cookie = module._create_session_token(uid)
+        request = types.SimpleNamespace(cookies={module.SESSION_COOKIE_NAME: cookie}, headers={})
+        return asyncio.run(handler(uid=uid, request=request))
+    finally:
+        if saved is None:
+            os.environ.pop('SESSION_SECRET', None)
+        else:
+            os.environ['SESSION_SECRET'] = saved
+
+
 def test_hive_disconnect_redirect_encodes_uid():
     module = load_app('omi-hive-app')
-    module.delete_hive_api_key = lambda uid: True
-    response = asyncio.run(module.disconnect_hive(uid=HOSTILE_UID))
+    module.delete_hive_credentials = lambda uid: True
+    response = _call_with_settings_session(module, module.disconnect_hive, HOSTILE_UID)
     assert_encoded(response.url, 'hive disconnect redirect')
 
 
@@ -258,7 +274,7 @@ def test_linear_pages_encode_uid():
     assert_encoded(oauth_url, 'linear home oauth_url')
 
     module.delete_linear_tokens = lambda uid: True
-    response = asyncio.run(module.disconnect_linear(uid=HOSTILE_UID))
+    response = _call_with_settings_session(module, module.disconnect_linear, HOSTILE_UID)
     assert_encoded(response.url, 'linear disconnect redirect')
 
 
