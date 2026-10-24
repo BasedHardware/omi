@@ -635,3 +635,24 @@ def test_embedding_factory_is_shared_pinned_and_constructs_only_once(monkeypatch
         assert calls == [((EMBEDDING_MODEL,), {'revision': EMBEDDING_REVISION, 'token': None}), ('device', 'cpu')]
     finally:
         embedding_inference.get_embedding_inference.cache_clear()
+
+
+def test_long_clean_turn_uses_three_distinct_clips_within_existing_budget():
+    selected = select_evidence([{'speaker': 'a', 'start': 0, 'end': 35}])
+    assert selected == {'a': [(0, 10), (10, 20), (20, 30)]}
+    assert sum(end - start for start, end in selected['a']) == 30
+
+
+def test_repeated_provider_intervals_do_not_double_count_clean_pcm():
+    selected = select_evidence(
+        [
+            {'speaker': 'a', 'start': 0, 'end': 20},
+            {'speaker': 'a', 'start': 5, 'end': 25},
+            {'speaker': 'a', 'start': 0, 'end': 20},
+        ],
+        overlaps=[{'start': 12, 'end': 15}],
+    )['a']
+    assert sum(end - start for start, end in selected) == 22
+    for index, (start, end) in enumerate(selected):
+        assert end <= 12 or start >= 15
+        assert all(end <= other_start or start >= other_end for other_start, other_end in selected[:index])

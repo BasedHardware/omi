@@ -6604,7 +6604,10 @@ part's new automatic owner accepts before the manual receipt is reapplied. The c
 transactional authority. A callback may supply already-loaded people only with
 an enrollment revocation fence, paid entitlement, active v3 samples and matching
 privacy generation; absent or incompatible snapshots leave speakers anonymous.
-Names never come from transcript text, a roster or channel numbers.
+Names never come from transcript text, a roster or channel numbers. Overlapping
+same-voice turns are unioned before excerpt selection; unused slots may sample
+disjoint tails of a long clean turn within the existing three-clip/ten-second
+limits. Repeated intervals never count the same PCM twice.
 
 Setting the switch false restores the previous word grouper and stops new
 centroid naming/extraction. This is a live override even for an older pinned

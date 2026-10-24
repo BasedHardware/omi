@@ -39,14 +39,34 @@ def select_evidence(turns, overlaps=(), *, duration_seconds=None):
                 continue
             cuts = [(a, b) for l, r in cuts for a, b in ((l, min(r, start)), (max(l, end), r)) if b > a]
         selected.setdefault(speaker, []).extend((l, r) for l, r in cuts if r - l >= MIN_CLIP_SECONDS)
-    return {
-        speaker: [
-            (l, min(r, l + MAX_CLIP_SECONDS))
-            for l, r in sorted(clips, key=lambda x: x[1] - x[0], reverse=True)[:MAX_CLIPS]
-        ]
-        for speaker, clips in sorted(selected.items())
-        if clips
-    }
+    result = {}
+    for speaker, clips in sorted(selected.items()):
+        # Never count the same PCM twice if a provider repeats an interval.
+        merged = []
+        for left, right in sorted(clips):
+            if merged and left < merged[-1][1]:
+                merged[-1] = (merged[-1][0], max(right, merged[-1][1]))
+            else:
+                merged.append((left, right))
+        ranked = sorted(merged, key=lambda x: x[1] - x[0], reverse=True)
+        chosen, tails = [], []
+        # Preserve longest-first, diverse-turn selection, then spend otherwise
+        # unused slots on disjoint clean PCM from a long continuous turn.
+        for left, right in ranked[:MAX_CLIPS]:
+            end = min(right, left + MAX_CLIP_SECONDS)
+            chosen.append((left, end))
+            if right - end >= MIN_CLIP_SECONDS:
+                tails.append((end, right))
+        while len(chosen) < MAX_CLIPS and tails:
+            left, right = max(tails, key=lambda x: x[1] - x[0])
+            tails.remove((left, right))
+            end = min(right, left + MAX_CLIP_SECONDS)
+            chosen.append((left, end))
+            if right - end >= MIN_CLIP_SECONDS:
+                tails.append((end, right))
+        if chosen:
+            result[speaker] = chosen
+    return result
 
 
 def pool_centroids(vectors):
