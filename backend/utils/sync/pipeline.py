@@ -3703,7 +3703,7 @@ def _stage_files_to_gcs(paths: list):
         upload_syncing_temporal_file(p)
 
 
-def _delete_staged_blobs(blob_paths: list, **custody):
+def _delete_staged_blobs(blob_paths: list[str], **custody: Any) -> int:
     from utils.sync.staging_custody import cleanup_sync_staging
 
     try:
@@ -3713,7 +3713,7 @@ def _delete_staged_blobs(blob_paths: list, **custody):
         return 0
 
 
-async def _delete_staged_blobs_async(blob_paths: list, **custody):
+async def _delete_staged_blobs_async(blob_paths: list[str], **custody: Any) -> int:
     return await run_blocking(storage_executor, _delete_staged_blobs, blob_paths, **custody)
 
 

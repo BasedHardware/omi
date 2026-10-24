@@ -30,7 +30,7 @@ def local_receipt(tmp_path, monkeypatch):
 @pytest.fixture
 def cleanup(local_receipt, monkeypatch):
     from database import _client, sync_ledger
-    from utils.other import storage
+    from utils.other import local_storage, storage
 
     monkeypatch.delenv('AUDIO_CLEANUP_HOLD_ENABLED', raising=False)
     monkeypatch.delenv('AUDIO_CLEANUP_HOLD_WINDOWS', raising=False)
@@ -57,6 +57,7 @@ def cleanup(local_receipt, monkeypatch):
     client = Mock()
     client.bucket.return_value.blob.side_effect = lambda path: blobs[path]
     monkeypatch.setattr(storage, '_get_storage_client', lambda: client)
+    monkeypatch.setattr(local_storage, 'create_storage_client', lambda: client)
     monkeypatch.setattr(storage, 'syncing_local_bucket', 'staging')
     monkeypatch.setattr(storage, 'private_cloud_sync_bucket', 'archive')
     monkeypatch.setattr(storage, 'owner_storage_write_gate', lambda *args: nullcontext())

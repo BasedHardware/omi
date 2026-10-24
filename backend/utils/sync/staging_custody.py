@@ -10,6 +10,8 @@ import hashlib
 import logging
 from pathlib import Path
 import json
+from collections.abc import Iterable, Sequence
+from typing import TypedDict
 
 from utils.audio_cleanup_custody import cleanup_hold_reason
 from utils.request_validation import parse_sync_filename_timestamp
@@ -17,7 +19,24 @@ from utils.request_validation import parse_sync_filename_timestamp
 logger = logging.getLogger(__name__)
 
 
-def _digests(path):
+class OriginalCustody(TypedDict):
+    path: str
+    archive: str
+    sha256: str
+
+
+class StagedCustody(TypedDict):
+    path: str
+    md5: str
+
+
+class StagingCustodyReceipt(TypedDict):
+    version: int
+    originals: list[OriginalCustody]
+    staging: list[StagedCustody]
+
+
+def _digests(path: str) -> tuple[str, str]:
     sha, md5 = hashlib.sha256(), hashlib.md5()
     with open(path, 'rb') as source:
         while chunk := source.read(1024 * 1024):
@@ -26,7 +45,9 @@ def _digests(path):
     return sha.hexdigest(), base64.b64encode(md5.digest()).decode()
 
 
-def make_staging_custody_receipt(uid, raw_paths, archive_paths):
+def make_staging_custody_receipt(
+    uid: str, raw_paths: Sequence[str], archive_paths: Sequence[str]
+) -> StagingCustodyReceipt | None:
     """Bind every source byte to an archive; generated segments are derivatives.
 
     This runs before local cleanup and before the completion ledger commit.
@@ -36,8 +57,8 @@ def make_staging_custody_receipt(uid, raw_paths, archive_paths):
     """
     if not raw_paths or not archive_paths:
         return None
-    originals = []
-    digests = {}
+    originals: list[OriginalCustody] = []
+    digests: dict[str, str] = {}
     for path in raw_paths:
         sha, md5 = _digests(path)
         digests[path] = md5
@@ -55,7 +76,7 @@ def make_staging_custody_receipt(uid, raw_paths, archive_paths):
         if len(candidates) != 1:
             return None
         originals.append({'path': path, 'archive': candidates[0], 'sha256': sha})
-    staging = []
+    staging: list[StagedCustody] = []
     for path in dict.fromkeys(raw_paths):
         if not path.startswith(f'syncing/{uid}/') or any(part in {'.', '..'} for part in path.split('/')):
             return None
@@ -64,7 +85,9 @@ def make_staging_custody_receipt(uid, raw_paths, archive_paths):
     return {'version': 1, 'originals': originals, 'staging': staging}
 
 
-def add_staging_derivatives(uid, receipt, segment_paths):
+def add_staging_derivatives(
+    uid: str, receipt: StagingCustodyReceipt | None, segment_paths: Iterable[str]
+) -> StagingCustodyReceipt | None:
     if not receipt:
         return None
     staging = list(receipt['staging'])
@@ -72,13 +95,15 @@ def add_staging_derivatives(uid, receipt, segment_paths):
         if not path.startswith(f'syncing/{uid}/') or any(part in {'.', '..'} for part in path.split('/')):
             return None
         staging.append({'path': path, 'md5': _digests(path)[1]})
-    result = {**receipt, 'staging': staging}
+    result: StagingCustodyReceipt = {**receipt, 'staging': staging}
     # Custody bookkeeping must not turn a successful long capture into an
     # oversized Firestore completion. Missing proof always retains staging.
     return result if len(json.dumps(result).encode()) <= 128 * 1024 else None
 
 
-def cleanup_sync_staging(paths, *, uid=None, content_id=None, job_id=None):
+def cleanup_sync_staging(
+    paths: Sequence[str], *, uid: str | None = None, content_id: str | None = None, job_id: str | None = None
+) -> int:
     """Fail closed on missing receipts, storage/ledger errors, or held ranges."""
     if not uid or not content_id or not job_id:
         logger.info('event=sync_staging_cleanup outcome=retained reason=missing_receipt')
@@ -86,6 +111,7 @@ def cleanup_sync_staging(paths, *, uid=None, content_id=None, job_id=None):
     from database._client import get_firestore_client
     from database.sync_ledger import is_valid_completed_sync_content_result, sync_content_reference
     from utils.other import storage
+    from utils.other.local_storage import create_storage_client
 
     ledger = sync_content_reference(get_firestore_client(), uid, content_id).get().to_dict() or {}
     result = ledger.get('result') or {}
@@ -127,7 +153,7 @@ def cleanup_sync_staging(paths, *, uid=None, content_id=None, job_id=None):
         if reason:
             logger.info('event=sync_staging_cleanup outcome=held reason=%s', reason)
             return 0
-        blob = storage._get_storage_client().bucket(storage.private_cloud_sync_bucket).blob(archive)
+        blob = storage.get_private_cloud_sync_bucket().blob(archive)
         blob.reload()
         if (blob.metadata or {}).get('sha256') != original['sha256']:
             logger.warning('event=sync_staging_cleanup outcome=retained reason=archive_mismatch')
@@ -136,9 +162,10 @@ def cleanup_sync_staging(paths, *, uid=None, content_id=None, job_id=None):
     from google.api_core.exceptions import NotFound
     import os
 
+    storage_client = create_storage_client()
     for path in paths:
         for name in dict.fromkeys(filter(None, (storage.syncing_local_bucket, os.getenv('BUCKET_AUDIO_DERIVED')))):
-            bucket = storage._get_storage_client().bucket(name)
+            bucket = storage_client.bucket(name)
             blob = bucket.blob(path)
             try:
                 blob.reload()
