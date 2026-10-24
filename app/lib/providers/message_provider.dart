@@ -49,7 +49,8 @@ typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
   ChatPageContext? context,
   String? chatSessionId,
 });
-typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files, {String? language});
+typedef VoiceReplyStreamer = Stream<ServerMessageChunk> Function(List<File> files,
+    {String? language, Future<void>? abort});
 typedef VoiceAudioFileSaver = Future<File> Function(List<List<int>> bytes, int startTime, int frameSize);
 
 class _ChatTelemetryAttempt {
@@ -664,18 +665,25 @@ class MessageProvider extends ChangeNotifier with ChatHistoryState {
   }
 
   // A total response deadline: think/data heartbeats cannot keep a tutorial
-  // question pending forever. Cancelling the iterator closes the HTTP stream.
+  // question pending forever. The deadline aborts the HTTP request and settles at
+  // once: it never waits for upstream cleanup, which can be stalled on body I/O,
+  // and nothing the request produces afterwards is read.
   Stream<ServerMessageChunk> _voiceReplyWithDeadline(File file) async* {
-    final iterator = StreamIterator(_voiceReplyStreamer([file]));
+    final abort = Completer<void>();
+    final iterator = StreamIterator(_voiceReplyStreamer([file], abort: abort.future));
     final deadline = Completer<bool>();
-    final timer = Timer(_voiceReplyTimeout, () => deadline.completeError(TimeoutException('Voice reply deadline')));
+    final timer = Timer(_voiceReplyTimeout, () {
+      if (!abort.isCompleted) abort.complete();
+      deadline.completeError(TimeoutException('Voice reply deadline'));
+    });
     try {
       while (await Future.any([iterator.moveNext(), deadline.future])) {
         yield iterator.current;
       }
     } finally {
       timer.cancel();
-      await iterator.cancel();
+      if (!abort.isCompleted) abort.complete();
+      unawaited(iterator.cancel().catchError((Object _) {}));
     }
   }
 

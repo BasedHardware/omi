@@ -57,7 +57,7 @@ MessageProvider messages(Stream<ServerMessageChunk> Function() stream,
         {Duration timeout = const Duration(seconds: 60)}) =>
     MessageProvider(
         voiceAudioFileSaver: (_, __, ___) async => File('/tmp/synthetic-tutorial.opus'),
-        voiceReplyStreamer: (_, {language}) => stream(),
+        voiceReplyStreamer: (_, {language, abort}) => stream(),
         voiceReplyTimeout: timeout);
 
 Future<void> flush(WidgetTester tester) async {
@@ -230,7 +230,7 @@ void main() {
           if (failSave) throw const FileSystemException('fixture storage unavailable');
           return File('/tmp/synthetic-tutorial.opus');
         },
-        voiceReplyStreamer: (_, {language}) => answered(),
+        voiceReplyStreamer: (_, {language, abort}) => answered(),
       );
       if (failure == 'busy') m.sendingMessage = true;
       if (failure == 'local quota') {

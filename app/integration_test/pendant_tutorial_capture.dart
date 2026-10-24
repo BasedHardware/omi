@@ -45,7 +45,7 @@ class _FixtureState extends State<_Fixture> {
   late final _h = PendantTutorialHarness(MessageProvider(
     voiceReplyTimeout: const Duration(seconds: 3),
     voiceAudioFileSaver: (_, __, ___) async => File('/tmp/synthetic-tutorial.opus'),
-    voiceReplyStreamer: (_, {language}) async* {
+    voiceReplyStreamer: (_, {language, abort}) async* {
       await Future<void>.delayed(const Duration(milliseconds: 300));
       if (_next == 'offline') throw const SocketException('synthetic offline');
       if (_next == 'no_speech') {
