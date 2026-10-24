@@ -139,6 +139,25 @@ def test_privacy_erasure_bypasses_hold_including_unknown_provenance(cleanup):
     store.client.collection.assert_not_called()
 
 
+@pytest.mark.parametrize('uri', [None, '', '   '])
+def test_verified_privacy_erasure_removes_uri_less_metadata_without_object_io(cleanup, uri):
+    run, store, _, _ = cleanup
+    artifact = row(erasure_requested=True, uri=uri, capture_at=None)
+    count, delete = run([artifact])
+    assert count == 1
+    delete.assert_not_called()
+    artifact.reference.delete.assert_called_once()
+    artifact.reference.update.assert_not_called()
+    store.client.collection.assert_not_called()
+
+
+def test_uri_less_erasure_with_inconsistent_owner_cannot_erase_metadata(cleanup):
+    run, _, _, _ = cleanup
+    artifact = row(erasure_requested=True, uri=None, owner_key='different-owner')
+    assert run([artifact])[0] == 0
+    artifact.reference.delete.assert_not_called()
+
+
 @pytest.mark.parametrize('value', [False, None, 'false', 'true', 1, {}])
 def test_only_explicit_boolean_privacy_authority_can_bypass_hold(cleanup, value):
     run, _, _, _ = cleanup

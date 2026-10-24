@@ -315,6 +315,18 @@ def cleanup_completed_artifacts(
             uri = data.get('uri')
             uid = data.get('owner_id')
             if not isinstance(uri, str) or not uri.strip():
+                if (
+                    erasure_requested
+                    and isinstance(uid, str)
+                    and uid
+                    and data.get('owner_key') == privacy_owner_key(uid)
+                ):
+                    # Explicit privacy intent erases metadata too. No URI is
+                    # fabricated and no object outside that intent is touched.
+                    artifact.reference.delete()
+                    touched.append(('artifacts', artifact.id))
+                    cleaned += 1
+                    continue
                 invalid_reason = 'missing_uri'
             elif not isinstance(uid, str) or not uid or data.get('owner_key') != privacy_owner_key(uid):
                 invalid_reason = 'owner_mismatch'

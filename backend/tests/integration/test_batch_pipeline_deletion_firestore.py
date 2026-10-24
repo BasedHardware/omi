@@ -332,6 +332,111 @@ def test_real_firestore_update_precondition_preserves_a_newer_privacy_erasure(st
     assert erased == ['gs://synthetic/race#42'] and not reference.get().exists
 
 
+@pytest.mark.parametrize('scope', ['conversation', 'account'])
+@pytest.mark.parametrize('pending', [False, True])
+@pytest.mark.parametrize('bad_key', [None, 'mismatched-owner-key'])
+@pytest.mark.parametrize('has_uri', [False, True])
+def test_privacy_erases_parked_owner_mismatch_and_finishes_pending_uploads(
+    state, monkeypatch, scope, pending, bad_key, has_uri
+):
+    store, uid, user, purge, _ = state
+    monkeypatch.delenv('AUDIO_CLEANUP_HOLD_ENABLED', raising=False)
+    now = datetime.now(timezone.utc)
+    table = store.client.collection(f'{store.namespace}_artifacts')
+    reference = table.document('mismatched')
+    uri = f'gs://synthetic/syncing/{uid}/accepted-audio#42'
+    data = {
+        'owner_id': uid,
+        'owner_key': bad_key,
+        'conversation_ids': ['source'],
+        'capture_at': datetime(2026, 10, 23, tzinfo=timezone.utc).timestamp(),
+        'cleanup_after': now,
+        'expires_at': now,
+        **({'uri': uri} if has_uri else {}),
+        **({'write_pending_until': now + timedelta(minutes=5)} if pending else {}),
+    }
+    reference.set(data)
+    foreign = table.document('other-owner')
+    foreign.set({'owner_id': 'different-synthetic-owner', 'owner_key': 'other-key', 'uri': 'gs://synthetic/other'})
+    objects, erased = ({uri} if has_uri else set()), []
+
+    def erase(owner, target):
+        assert owner == uid and target == uri
+        objects.discard(target)
+        erased.append(target)
+
+    assert cleanup_completed_artifacts(store, now, delete_uri=erase) == 0
+    assert reference.get().exists and 'cleanup_after' not in reference.get().to_dict()
+    if scope == 'conversation':
+        delete_source(user)
+    assert purge('source' if scope == 'conversation' else None, delete_uri=erase) == 1
+    assert not objects and foreign.get().exists
+    if pending:
+        repaired = reference.get().to_dict()
+        assert repaired['owner_id'] == uid and repaired['owner_key'] == privacy_owner_key(uid)
+        assert repaired['erasure_requested'] is True and 'expires_at' not in repaired
+        if has_uri:
+            objects.add(uri)  # An accepted upload finishes after the first erase.
+        assert cleanup_completed_artifacts(store, repaired['cleanup_after'], delete_uri=erase) == 1
+    assert not reference.get().exists and not objects
+    assert len(erased) == ((2 if pending else 1) if has_uri else 0)
+
+
+def test_conversation_purge_preserves_other_conversation_mismatch_and_uses_segment_binding(state):
+    store, uid, user, purge, erased = state
+    Scheduler(store).enqueue(work(uid), 0)
+    table = store.client.collection(f'{store.namespace}_artifacts')
+    table.document('source-artifact').set(
+        {'owner_id': uid, 'owner_key': 'wrong-key', 'segment_id': 'a', 'uri': 'gs://synthetic/erase'}
+    )
+    keep = table.document('other-conversation')
+    keep.set({'owner_id': uid, 'owner_key': 'wrong-key', 'conversation_ids': ['keep'], 'uri': 'gs://synthetic/keep'})
+    delete_source(user)
+    purge('source')
+    assert not table.document('source-artifact').get().exists
+    assert keep.get().exists and 'gs://synthetic/keep' not in erased
+    assert 'gs://synthetic/erase' in erased
+
+
+@pytest.mark.parametrize('scope', ['conversation', 'account'])
+def test_privacy_mismatch_discovery_refuses_foreign_uri_before_ack_or_metadata_repair(state, monkeypatch, scope):
+    from unittest.mock import Mock
+    from utils.batch_pipeline.retention import delete_batch_object
+
+    store, uid, user, purge, _ = state
+    monkeypatch.setenv('BUCKET_BATCH_PIPELINE', 'synthetic-batch')
+    factory = Mock()
+    monkeypatch.setattr('utils.other.local_storage.create_storage_client', factory)
+    reference = store.client.collection(f'{store.namespace}_artifacts').document('foreign-uri')
+    reference.set(
+        {
+            'owner_id': uid,
+            'owner_key': 'wrong-key',
+            'conversation_ids': ['source'],
+            'uri': 'gs://synthetic-batch/syncing/different-synthetic-owner/audio',
+            'write_pending_until': datetime.now(timezone.utc) + timedelta(minutes=5),
+        }
+    )
+    if scope == 'conversation':
+        delete_source(user)
+    with pytest.raises(ValueError, match='outside configured owner storage'):
+        purge('source' if scope == 'conversation' else None, delete_uri=delete_batch_object)
+    factory.assert_not_called()
+    retained = reference.get().to_dict()
+    assert retained['owner_key'] == 'wrong-key' and 'erasure_requested' not in retained
+
+
+def test_owner_id_artifact_fallback_pages_past_one_hundred_rows(state):
+    store, uid, _, purge, erased = state
+    table = store.client.collection(f'{store.namespace}_artifacts')
+    for index in range(105):
+        table.document(f'parked-{index:03}').set(
+            {'owner_id': uid, 'owner_key': 'wrong-key', 'uri': f'gs://synthetic/accepted-{index}'}
+        )
+    assert purge() == 105
+    assert len(erased) == 105 and not list(table.stream())
+
+
 def test_inflight_object_reference_survives_until_final_erasure(state):
     store, uid, user, purge, _ = state
     queue = Scheduler(store)

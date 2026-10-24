@@ -60,6 +60,20 @@ owner's data. A fallback job must have the same owner before its capture range
 is trusted; inconsistent associations are flagged `capture_owner_mismatch`.
 Direct owner-wide privacy purges remain authoritative.
 
+Privacy erasure also pages artifacts by `owner_id`, using a single-field,
+100-row bounded query. Thus a missing or inconsistent denormalized owner key
+cannot hide a parked receipt from account or conversation erasure. Conversation
+membership still filters each artifact, including segment bindings; other
+owners and conversations are untouched. The configured owner-scoped URI guard
+runs before metadata repair. A foreign reference fails the purge without
+acknowledging deletion or granting another owner cleanup authority.
+
+For an upload still in flight, privacy erasure first removes the current object,
+then retains a canonical owner identity and explicit erasure outbox until the
+bounded upload deadline, removing any receipt TTL. Its next cleanup bypasses the
+hold and erases a late object. A verified URI-less erasure row removes metadata
+without inventing an object path; ordinary URI-less receipts remain flagged.
+
 Held batch rows retain their URI, lose any receipt TTL and re-enter the due
 queue in one hour. This rotates a held first page so unrelated cleanup keeps
 progressing. A URI-less receipt is flagged with `cleanup_error=missing_uri`,
@@ -107,7 +121,7 @@ or unaudited staging target.
 
 ## Privacy precedence and release
 
-`erasure_requested` batch cleanup bypasses the hold. Direct conversation/account
+Explicit boolean `erasure_requested` batch cleanup bypasses the hold. Direct conversation/account
 purges, including owner-scoped all-version GCS erasure, do not call the routine
 hold or the legacy success verifier. Privacy erasure remains immediate and
 retryable, even for incident artifacts or unknown capture timestamps.
