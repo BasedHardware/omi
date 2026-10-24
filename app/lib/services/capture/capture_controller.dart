@@ -817,6 +817,9 @@ class CaptureController extends ChangeNotifier
   /// Persistence completion acknowledges the durable intent, not OS teardown.
   Future<int> _setCaptureMuted(bool muted) async {
     _uplinkSilence.cancel();
+    if (muted && _voiceCommandSession != null && deviceOnboardingProvider?.isOnboardingActive != true) {
+      cancelActiveVoiceSession();
+    }
     if (!muted && silencePaused) await _preferences.saveBool(_silencePausedKey, false);
     final pending = _preferences.setCaptureMuted(muted);
     notifyListeners();
@@ -2078,6 +2081,12 @@ class CaptureController extends ChangeNotifier
     if (buttonState == 1) {
       debugPrint("Single tap detected");
       if (_voiceCommandSession == null) {
+        if (isPaused && deviceOnboardingProvider?.isOnboardingActive != true) {
+          Logger.debug("Single tap: refusing voice question while device recording is muted");
+          unawaited(DebugLogManager.logEvent('pendant_voice_question', {'phase': 'refused_muted'}));
+          unawaited(_playVoiceQuestionFailureHaptic(deviceId));
+          return;
+        }
         final autoSubmittedAt = _lastVoiceCommandAutoSubmitAt;
         if (autoSubmittedAt != null && _now().difference(autoSubmittedAt) <= _voiceCommandAutoSubmitGrace) {
           _recordPendantVoiceQuestionDrop(PendantVoiceQuestionDroppedReason.autoEndGrace);
@@ -2099,6 +2108,9 @@ class CaptureController extends ChangeNotifier
         _startVoiceCommandTimeout(deviceId);
         _playSpeakerHaptic(deviceId, 1);
         unawaited(DebugLogManager.logEvent('pendant_voice_question', {'phase': 'started'}));
+      } else if (isPaused && deviceOnboardingProvider?.isOnboardingActive != true) {
+        Logger.debug("Single tap: cancelling voice question session because device recording is muted");
+        cancelActiveVoiceSession();
       } else {
         debugPrint("Ending voice question session (toggle mode)");
         _endVoiceCommandSession(deviceId);
@@ -2108,6 +2120,12 @@ class CaptureController extends ChangeNotifier
 
     // Legacy support: start long press (for voice commands) - older firmware
     if (buttonState == 3 && _voiceCommandSession == null) {
+      if (isPaused && deviceOnboardingProvider?.isOnboardingActive != true) {
+        Logger.debug("Legacy long press: refusing voice question while device recording is muted");
+        unawaited(DebugLogManager.logEvent('pendant_voice_question', {'phase': 'refused_muted'}));
+        unawaited(_playVoiceQuestionFailureHaptic(deviceId));
+        return;
+      }
       debugPrint("Legacy: Long press start detected");
       _voiceCommandSession = _now();
       _voiceCommandTrigger = _VoiceCommandTrigger.legacyLongPress;
@@ -2123,7 +2141,11 @@ class CaptureController extends ChangeNotifier
     if (buttonState == 5 &&
         _voiceCommandSession != null &&
         _voiceCommandTrigger == _VoiceCommandTrigger.legacyLongPress) {
-      _endVoiceCommandSession(deviceId);
+      if (isPaused && deviceOnboardingProvider?.isOnboardingActive != true) {
+        cancelActiveVoiceSession();
+      } else {
+        _endVoiceCommandSession(deviceId);
+      }
     }
   }
 
@@ -2153,11 +2175,12 @@ class CaptureController extends ChangeNotifier
         bool voiceCommandSupported = _recordingDevice != null
             ? (_recordingDevice?.type == DeviceType.omi || _recordingDevice?.type == DeviceType.openglass)
             : false;
-        // Once Omi button actions are disabled, stop collecting command audio so
-        // a session missed by cancelActiveVoiceSession cannot keep buffering
-        // frames that would be submitted later. Interactive onboarding still
+        // Once Omi button actions are disabled or capture is muted, stop collecting
+        // command audio so a session missed by cancelActiveVoiceSession cannot keep
+        // buffering frames that would be submitted later. Interactive onboarding still
         // receives command audio (its step-1 session runs while disabled).
-        final collectCommandAudio = !_omiButtonActionsDisabled || deviceOnboardingProvider?.isOnboardingActive == true;
+        final collectCommandAudio =
+            (!_omiButtonActionsDisabled && !isPaused) || deviceOnboardingProvider?.isOnboardingActive == true;
         if (_voiceCommandSession != null && voiceCommandSupported && collectCommandAudio) {
           final payload = blePayload ?? source?.getSocketPayload(snapshot) ?? snapshot.sublist(3);
           _commandBytes.add(payload);
