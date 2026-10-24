@@ -26,6 +26,7 @@ from models.other import Person
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.conversations.wake_word import WAKE_WORD_MARKER, escape_spoken_wake_word_marker, find_wake_word_segment_ids
+from utils.speaker_display import SpeakerLabeler
 
 
 class _TranscriptSource(Protocol):
@@ -34,14 +35,18 @@ class _TranscriptSource(Protocol):
     ) -> str: ...
 
 
-def _speaker_label(segment: Any, user_name: str, people_map: dict[str, str]) -> str:
+def _speaker_label(segment: Any, user_name: str, people_map: dict[str, str], labeler: SpeakerLabeler) -> str:
     if segment.is_user:
         return user_name
     speaker_name = people_map.get(segment.person_id) if segment.person_id else None
     if speaker_name:
         return speaker_name
     speaker_id = getattr(segment, 'speaker_id', None)
-    return f'Speaker {speaker_id}' if speaker_id is not None else 'Unknown speaker'
+    return (
+        labeler.label((getattr(segment, 'speaker_id_scope', None), speaker_id))
+        if speaker_id is not None
+        else 'Unknown speaker'
+    )
 
 
 @dataclass(frozen=True)
@@ -148,6 +153,7 @@ def conversation_action_item_speaker_labels(
 
     user_name = get_user_name(uid, use_default=False) or 'User'
     people_map = {person.id: person.name for person in people} if people else {}
+    labeler = SpeakerLabeler()
     labels: list[dict[str, str]] = []
     for segment in getattr(conversation, 'transcript_segments', None) or []:
         if not getattr(segment, 'id', None):
@@ -155,7 +161,7 @@ def conversation_action_item_speaker_labels(
         labels.append(
             {
                 'segment_id': str(segment.id),
-                'speaker_label': _speaker_label(segment, user_name, people_map),
+                'speaker_label': _speaker_label(segment, user_name, people_map, labeler),
                 'speaker_role': 'primary_user' if segment.is_user else 'other',
             }
         )

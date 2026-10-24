@@ -209,7 +209,7 @@ def test_state_is_the_shipped_transcript_and_word_count_without_the_duration_cla
     transcript = relevance_jev.relevance_transcript(_segments())
     state = relevance_jev.relevance_state(transcript)
 
-    assert transcript == 'User: Remind me to call the plumber\n\nSpeaker 1: Tomorrow at nine.'
+    assert transcript == 'User: Remind me to call the plumber\n\nSpeaker A: Tomorrow at nine.'
     assert state == f'Transcript:\n```\n{transcript}\n```\nWord count: 12 words.'
     assert 'duration' not in state.lower() and '2 minutes' not in state
 
