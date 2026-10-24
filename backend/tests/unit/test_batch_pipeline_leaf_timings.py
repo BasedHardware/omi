@@ -4,18 +4,21 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from dataclasses import replace
 import io
+import struct
 from types import SimpleNamespace
 import wave
 
 from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from prometheus_client import CollectorRegistry
 import pytest
 
 from diarizer import batch_pipeline_models as models
 from diarizer.batch_pipeline_flight import FlightPyannote
-from tests.unit.test_batch_pipeline_artifacts import item, setup
+from tests.unit.test_batch_pipeline_artifacts import ObjectClient, item, setup
 from utils.batch_pipeline import leaf_timings
 from utils.batch_pipeline.stage_timings import StageTimings
+from utils.batch_pipeline.source_audio import read_reference
 
 
 @pytest.fixture
@@ -145,3 +148,19 @@ def test_packed_embedding_measures_the_forward_not_cached_feature_reads(profile,
     with leaf_timings.active(timings):
         assert flight.embed_group(['file'], ['segments']) == ['features']
     assert count(registry, 'flight_embedding') == 1
+
+
+def test_retained_source_download_decrypt_and_resample_are_also_profiled(profile):
+    timings, registry = profile
+    client = ObjectClient()
+    key, nonce = b'a' * 32, b'n' * 12
+    pcm = b'\x01\x00' * 8000
+    sealed = nonce + AESGCM(key).encrypt(nonce, pcm, None)
+    path = 'chunks/synthetic-owner/conversation/audio.pcm.enc'
+    client.objects[path] = (1, struct.pack('>I', len(sealed)) + sealed)
+    ref = {'bucket': 'synthetic-batch-bucket', 'path': path, 'generation': 1, 'sample_rate': 8000}
+    with leaf_timings.active(timings):
+        result = read_reference(client, ref, 'synthetic-owner', 'conversation', {'synthetic-batch-bucket'}, key)
+    assert len(result) > len(pcm)
+    for stage in ['download_metadata', 'download', 'decrypt', 'decode']:
+        assert count(registry, stage) == 1

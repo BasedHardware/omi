@@ -275,6 +275,9 @@ The worker also exposes `download_metadata`, `download`, `decrypt`, `decode`,
 Download metadata is a separate GCS request. Encryption/upload/registration are
 children of `persist`; download/decrypt/decode are children of `fetch_decode`.
 Outside the dedicated worker's active context these artifact timers are no-ops.
+Retained-audio manifests also time each generation-pinned source download,
+framed decryption and codec decode/resample. One lease may contain several
+source objects, so these leaf percentiles are per operation, not per lease.
 Per-call p50/p95 for batched stages are batch percentiles; dividing them by
 batch size does not produce per-lease percentiles. Use the summed-time/leased
 count normalization above for amortized per-lease cost.
