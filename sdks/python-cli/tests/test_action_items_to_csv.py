@@ -127,7 +127,10 @@ class TestActionItemsToCsv(unittest.TestCase):
         self.assertEqual(reversed_items[0]["id"], "act_03_undated")
 
     def test_boolean_formatting(self):
-        items = [{"id": "1", "description": "T", "completed": True}, {"id": "2", "description": "F", "completed": False}]
+        items = [
+            {"id": "1", "description": "T", "completed": True},
+            {"id": "2", "description": "F", "completed": False},
+        ]
 
         csv_check = ai2csv.export_csv(items, bool_format="check")
         self.assertIn("[x]", csv_check)
@@ -183,6 +186,75 @@ class TestActionItemsToCsv(unittest.TestCase):
         reader = list(csv.reader(io.StringIO(csv_out)))
         self.assertNotEqual(reader[0][0], "id")
         self.assertEqual(reader[0][0], "act_01_urgent")
+
+    def test_loose_completed_normalization_in_filter_sort_and_export(self):
+        items = [
+            {"id": "f_str", "description": "String false", "completed": "false"},
+            {"id": "f_no", "description": "String no", "completed": "no"},
+            {"id": "f_zero", "description": "String zero", "completed": "0"},
+            {"id": "t_str", "description": "String true", "completed": "true"},
+            {"id": "t_done", "description": "String done", "completed": "done"},
+            {"id": "t_one", "description": "String one", "completed": "1"},
+        ]
+
+        open_items = ai2csv.filter_and_sort_items(items, status_filter="open")
+        self.assertEqual([it["id"] for it in open_items], ["f_str", "f_no", "f_zero"])
+
+        done_items = ai2csv.filter_and_sort_items(items, status_filter="completed")
+        self.assertEqual([it["id"] for it in done_items], ["t_str", "t_done", "t_one"])
+
+        sorted_by_status = ai2csv.filter_and_sort_items(items, sort_by="status")
+        self.assertEqual([it["id"] for it in sorted_by_status[:3]], ["f_str", "f_no", "f_zero"])
+        self.assertEqual([it["id"] for it in sorted_by_status[3:]], ["t_str", "t_done", "t_one"])
+
+        rows = list(csv.reader(io.StringIO(ai2csv.export_csv(items))))[1:]
+        self.assertEqual([r[2] for r in rows], ["FALSE", "FALSE", "FALSE", "TRUE", "TRUE", "TRUE"])
+
+    def test_load_items_unwraps_data_envelope_and_empty_wrappers(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            for key in ("action_items", "items", "data"):
+                p = tmp / f"{key}.json"
+                p.write_text(json.dumps({key: self.sample_items}), encoding="utf-8")
+                self.assertEqual(len(ai2csv.load_items(str(p))), 3)
+
+                p_empty = tmp / f"{key}_empty.json"
+                p_empty.write_text(json.dumps({"id": "envelope_meta", key: []}), encoding="utf-8")
+                self.assertEqual(ai2csv.load_items(str(p_empty)), [])
+
+    def test_surrogates_and_leading_whitespace_formula_defense_and_zero_ids(self):
+        items = [
+            {
+                "id": 0,
+                "description": "hello \ud800 world",
+                "completed": False,
+                "conversation_id": 0,
+            },
+            {
+                "id": "inj_surrogate",
+                "description": "\ud800=cmd|' /C calc'!A0",
+                "completed": False,
+            },
+            {
+                "id": "inj_space",
+                "description": "  =SUM(A1:A2)",
+                "completed": False,
+                "flatten_newlines": False,
+            },
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_file = Path(tmpdir) / "surrogates.csv"
+            csv_out = ai2csv.export_csv(items, output_path=str(out_file), flatten_newlines=False)
+            written = out_file.read_text(encoding="utf-8")
+            self.assertEqual(csv_out, written)
+
+            rows = list(csv.reader(io.StringIO(written)))[1:]
+            self.assertEqual(rows[0][0], "0")
+            self.assertEqual(rows[0][1], "hello  world")
+            self.assertEqual(rows[0][6], "0")
+            self.assertEqual(rows[1][1], "'=cmd|' /C calc'!A0")
+            self.assertEqual(rows[2][1], "'=SUM(A1:A2)")
+            self.assertEqual(ai2csv.sanitize_cell("  =SUM(A1:A2)"), "'  =SUM(A1:A2)")
 
 
 if __name__ == "__main__":
