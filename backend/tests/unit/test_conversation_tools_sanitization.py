@@ -217,6 +217,33 @@ class TestConversationToolsSanitization(unittest.TestCase):
         config = {"configurable": {"user_id": "test_user"}}
         result = conv_tools.get_conversations_tool.func(start_date="not-a-date", config=config)
         self.assertIn("Error: Invalid start_date format", result)
+        self.assertIn("not-a-date", result)
+        self.assertNotIn("ValueError", result)
+        self.assertNotIn("isoformat", result.lower())
+
+    def test_invalid_end_date_returns_validation_error(self):
+        config = {"configurable": {"user_id": "test_user"}}
+        result = conv_tools.get_conversations_tool.func(end_date="not-a-date", config=config)
+        self.assertIn("Error: Invalid end_date format", result)
+        self.assertIn("not-a-date", result)
+        self.assertNotIn("ValueError", result)
+        self.assertNotIn("isoformat", result.lower())
+
+    def test_search_conversations_invalid_start_date_sanitized(self):
+        config = {"configurable": {"user_id": "test_user"}}
+        result = conv_tools.search_conversations_tool.func(query="test", start_date="bad-date", config=config)
+        self.assertIn("Error: Invalid start_date format", result)
+        self.assertIn("bad-date", result)
+        self.assertNotIn("ValueError", result)
+        self.assertNotIn("isoformat", result.lower())
+
+    def test_search_conversations_invalid_end_date_sanitized(self):
+        config = {"configurable": {"user_id": "test_user"}}
+        result = conv_tools.search_conversations_tool.func(query="test", end_date="bad-date", config=config)
+        self.assertIn("Error: Invalid end_date format", result)
+        self.assertIn("bad-date", result)
+        self.assertNotIn("ValueError", result)
+        self.assertNotIn("isoformat", result.lower())
 
     def test_successful_fetch_returns_formatted_string(self):
         fake_convs = [{"id": "conv-1", "transcript_segments": []}]
