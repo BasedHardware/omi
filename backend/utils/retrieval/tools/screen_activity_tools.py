@@ -138,7 +138,12 @@ def _get_uid(config: RunnableConfig) -> Optional[str]:
         configurable = cfg.get('configurable')
         if isinstance(configurable, dict):
             conf: Dict[str, Any] = cast(Dict[str, Any], configurable)
-            return conf.get('user_id')
+            uid = conf.get('user_id')
+            if uid is not None and str(uid).strip():
+                return str(uid).strip()
+        top_uid = cfg.get('user_id')
+        if top_uid is not None and str(top_uid).strip():
+            return str(top_uid).strip()
         return None
     except (KeyError, TypeError):
         return None
@@ -500,9 +505,15 @@ def get_screen_activity_tool(
     sorted_apps: List[Tuple[str, Dict[str, Any]]] = sorted(apps_dict.items(), key=lambda x: x[1]['count'], reverse=True)
 
     if app_filter:
-        sorted_apps = [(name, data) for name, data in sorted_apps if name.lower() == app_filter.lower()]
-        if not sorted_apps:
-            return result + f"No observations for app '{app_filter}' in the summarized rows."
+        clean_filter = str(app_filter).strip().lower()
+        if clean_filter:
+            sorted_apps = [
+                (name, data)
+                for name, data in sorted_apps
+                if str(name or '').strip().lower() == clean_filter
+            ]
+            if not sorted_apps:
+                return result + f"No observations for app '{app_filter}' in the summarized rows."
 
     # Bound how many apps go to the chat model so a wide date range on a busy machine cannot
     # overflow its context (issue #4927). Apps are sorted by observation count.
@@ -700,13 +711,21 @@ def search_screen_activity_tool(
     Returns:
         Matching screen activity entries with timestamps, app names, and text snippets.
     """
+    clean_query = str(query or '').strip()
+    if not clean_query:
+        return "Error: Search query cannot be empty."
+
     logger.info("search_screen_activity_tool called")
 
     uid = _get_uid(config)
     if not uid:
         return "Error: User ID not found in configuration"
 
-    limit = max(1, min(limit, 20))
+    try:
+        clean_limit = int(limit)
+    except (ValueError, TypeError):
+        clean_limit = 10
+    limit = max(1, min(clean_limit, 20))
 
     # Parse optional date filters to unix timestamps. An unreadable date is an error, never a
     # silently unfiltered search.
@@ -726,7 +745,7 @@ def search_screen_activity_tool(
         reason = 'dispatch_disabled'
     else:
         try:
-            query_vector = gemini_embed_query(query)
+            query_vector = gemini_embed_query(clean_query)
         except Exception:
             reason = 'capability_mismatch'
         else:
@@ -747,7 +766,7 @@ def search_screen_activity_tool(
     if not valid_matches:
         if not fallback_enabled:
             return 'Screen vector search unavailable or no matches; keyword fallback is disabled.'
-        valid_matches, scanned = _keyword_fallback(uid, query, start_ts, end_ts, limit, reason or 'none')
+        valid_matches, scanned = _keyword_fallback(uid, clean_query, start_ts, end_ts, limit, reason or 'none')
         if valid_matches is None:
             return 'Screen search unavailable: keyword search could not read screens in the requested window.'
         if not valid_matches:
@@ -763,7 +782,7 @@ def search_screen_activity_tool(
     evidence_references = _evidence_references(config)
     result = (
         count_header(
-            f"Screen activity matches for '{query}'",
+            f"Screen activity matches for '{clean_query}'",
             shown=len(valid_matches),
             order="screen search rank order",
             more_may_exist=len(valid_matches) >= limit,
@@ -850,3 +869,4 @@ def search_screen_activity_tool(
             how_to_get_more="Narrow the date range or use a more specific query to inspect additional matches.",
         )
     return result.strip()
+
