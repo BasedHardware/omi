@@ -29,7 +29,7 @@ def _dispatch(check: dict[str, Any]) -> None:
     # Listen/GKE intentionally retains inline pusher finalization. Its check
     # is still durable; the Cloud Run reconciler owns the indexed wake when
     # this producer has no finalization queue binding.
-    if not is_listen_finalization_dispatch_enabled() or not is_listen_finalization_dispatch_configured():
+    if not is_listen_finalization_dispatch_configured():
         return
     try:
         enqueue_listen_finalization_job(
@@ -66,7 +66,11 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
         # Remove the due index so disabled checks cannot starve normal outbox
         # replay. Session setup/disconnect or the fallback scan can rearm later.
         checks_db.stop_quiet_check(job_id, generation, firestore_client=firestore_client)
+        checks_db.ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
         return 'disabled'
+    if not is_listen_finalization_dispatch_enabled() or not is_listen_finalization_dispatch_configured():
+        checks_db.ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
+        raise lifecycle.FinalizationDispatchUnavailable('quiet finalization dispatch is unavailable')
     check = checks_db.evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
     if check['status'] not in {'ready', 'empty_ready', 'deferred'}:
         return check['status']
@@ -78,22 +82,6 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
     _dispatch(check)
     if check['status'] == 'deferred':
         return 'deferred'
-    # Evaluation must make progress even if this process has lost queue bindings.
-    # Never admit processing without a durable worker; leave the reserved successor
-    # for the reconciler and report the precise pre-admission failure.
-    if not is_listen_finalization_dispatch_enabled() or not is_listen_finalization_dispatch_configured():
-        record_fallback(
-            component='conversation_finalization',
-            from_mode='quiet_check',
-            to_mode='durable_queued',
-            reason='config_incomplete',
-            outcome='degraded',
-            log=logger,
-        )
-        logger.warning(
-            'event=quiet_finalization outcome=dispatch_unavailable job_id=%s generation=%s', job_id, generation
-        )
-        return 'dispatch_unavailable'
     if check['status'] == 'empty_ready':
         deleted = lifecycle.delete_empty_recording_conversation(
             check['uid'],

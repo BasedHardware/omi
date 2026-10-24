@@ -371,72 +371,6 @@ def test_inline_listen_producer_persists_check_without_queue_bindings(store, mon
     assert store.rows[ROW]['finalization_revision'] == 1
 
 
-def test_missing_dispatch_advances_due_check_without_admitting_processing(store, monkeypatch):
-    quiet.arm('synthetic', 'old', 900, firestore_client=store)
-    monkeypatch.setattr(quiet, 'is_listen_finalization_dispatch_configured', lambda: False)
-    _advance(monkeypatch, 2 * 3600)
-    job_id = checks.quiet_check_id('synthetic', 'old')
-    assert quiet.run(job_id, 1, firestore_client=store) == 'dispatch_unavailable'
-    assert _job(store)['dispatch_generation'] == 2
-    assert _job(store)['due_at'] == NOW + timedelta(hours=2, seconds=60)
-    assert store.rows[ROW]['status'] == 'in_progress'
-    assert 'finalization_job_id' not in store.rows[ROW]
-    # Restoring the binding lets the reserved successor recover exactly once.
-    monkeypatch.setattr(quiet, 'is_listen_finalization_dispatch_configured', lambda: True)
-    _advance(monkeypatch, 2 * 3600 + 61)
-    assert quiet.run(job_id, 2, firestore_client=store) == 'queued'
-    assert store.rows[ROW]['status'] == 'processing'
-    assert store.rows[ROW]['finalization_revision'] == 1
-
-
-def test_overdue_generation_one_is_recovered_even_when_shared_replay_page_is_full(store, monkeypatch):
-    quiet.arm('synthetic', 'old', 900, firestore_client=store)
-    _advance(monkeypatch, 2 * 3600)
-    monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
-    monkeypatch.setattr(service, '_publish_job_metrics', lambda **kw: None)
-    monkeypatch.setattr(jobs, 'recover_stranded_byok_jobs', lambda **kw: {'blocked': 0, 'errors': 0})
-    # Query semantics are covered by the serving-query driver. Use the actual
-    # evaluator/admission transactions, without extending the strict fake's query API.
-    monkeypatch.setattr(
-        checks,
-        'get_overdue_quiet_checks',
-        lambda **kw: [dict(_job(store), job_id=checks.quiet_check_id('synthetic', 'old'))],
-    )
-    monkeypatch.setattr(
-        jobs,
-        'get_finalization_replay_candidates',
-        lambda **kw: [{'job_id': f'failed-{i}', 'kind': 'conversation_merge'} for i in range(100)],
-    )
-    monkeypatch.setattr(lifecycle.merge_jobs, 'reconcile', lambda *a, **kw: None)
-    result = service.reconcile_listen_finalization_jobs(firestore_client=store)
-    assert result['enqueue_failed'] == 0
-    assert _job(store)['dispatch_generation'] == 2
-    assert store.rows[ROW]['status'] == 'processing'
-    assert store.rows[ROW]['finalization_revision'] == 1
-    # Another overdue pass observes the admitted row and retires the check.
-    assert service.reconcile_listen_finalization_jobs(firestore_client=store)['enqueue_failed'] == 0
-    assert _job(store)['status'] == 'quiet_done'
-    assert store.rows[ROW]['finalization_revision'] == 1
-
-
-def test_quiet_safety_net_evaluates_even_when_global_dispatch_is_off(store, monkeypatch):
-    quiet.arm('synthetic', 'old', 900, firestore_client=store)
-    _advance(monkeypatch, 2 * 3600)
-    monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: False)
-    monkeypatch.setattr(quiet, 'is_listen_finalization_dispatch_enabled', lambda: False)
-    monkeypatch.setattr(service, '_publish_job_metrics', lambda **kw: None)
-    monkeypatch.setattr(jobs, 'recover_stranded_byok_jobs', lambda **kw: {'blocked': 0, 'errors': 0})
-    monkeypatch.setattr(
-        checks,
-        'get_overdue_quiet_checks',
-        lambda **kw: [dict(_job(store), job_id=checks.quiet_check_id('synthetic', 'old'))],
-    )
-    result = service.reconcile_listen_finalization_jobs(firestore_client=store)
-    assert result['enqueue_failed'] == 1
-    assert _job(store)['dispatch_generation'] == 2
-    assert store.rows[ROW]['status'] == 'in_progress'
-
-
 def test_kill_switch_restores_legacy_admission_for_a_stamped_long_quiet_window(store, monkeypatch):
     quiet.arm('synthetic', 'old', 14400, firestore_client=store)
     monkeypatch.setenv('LISTEN_QUIET_FINALIZATION_ENABLED', 'false')
@@ -455,11 +389,18 @@ def test_kill_switch_restores_legacy_admission_for_a_stamped_long_quiet_window(s
 
 @pytest.mark.parametrize('fails', [False, True])
 def test_reconciler_owns_quiet_wakes_and_reports_failures(monkeypatch, fails):
+    monkeypatch.setattr(service.jobs_db, 'get_finalization_replay_oldest_overdue_age_seconds', lambda **kw: 0)
+    monkeypatch.setattr(
+        service.jobs_db,
+        'get_finalization_job',
+        lambda *args, **kw: {'status': 'waiting_quiet', 'dispatch_generation': 2},
+    )
+    monkeypatch.setattr(service.jobs_db, 'defer_finalization_replay', lambda *args, **kw: False)
+    monkeypatch.setattr(checks, 'ensure_quiet_check_progress', lambda *args, **kw: False)
 
     monkeypatch.setattr(service.jobs_db, 'recover_stranded_byok_jobs', lambda **kw: {'blocked': 0, 'errors': 0})
     monkeypatch.setattr(service, 'is_listen_finalization_dispatch_enabled', lambda: True)
     monkeypatch.setattr(service, '_publish_job_metrics', lambda **kw: None)
-    monkeypatch.setattr(service.quiet_checks_db, 'get_overdue_quiet_checks', lambda **kw: [])
     monkeypatch.setattr(
         service.jobs_db,
         'get_finalization_replay_candidates',
@@ -471,8 +412,10 @@ def test_reconciler_owns_quiet_wakes_and_reports_failures(monkeypatch, fails):
     monkeypatch.setattr(quiet, 'run', run)
     result = service.reconcile_listen_finalization_jobs()
     run.assert_called_once_with('quiet-synthetic', 1, firestore_client=None)
-    assert result['enqueue_failed'] == int(fails)
-    assert result['requeued'] == int(not fails)
+    assert result['error'] == int(fails)
+    assert result['enqueue_failed'] == 0
+    assert result['requeued'] == 0
+    assert result['advanced'] == int(not fails)
 
 
 def test_fast_and_legacy_sweeps_have_independent_cursors(store):
@@ -630,3 +573,107 @@ def test_worker_endpoint_acks_an_oversized_conversation_with_200(store, monkeypa
     assert (first.status_code, first.json()['status']) == (200, 'document_size_limit')
     assert (second.status_code, second.json()['status']) == (200, 'stale')
     assert (successor.status_code, successor.json()['status']) == (200, 'stale')
+
+
+@pytest.mark.parametrize('generation', ['1', 1.0, 2])
+def test_stale_overdue_check_reserves_successor(store, monkeypatch, generation):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _job(store)['dispatch_generation'] = generation
+    _advance(monkeypatch, 361)
+    outcome = checks.evaluate_quiet_check(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert outcome['status'] in {'stale', 'ready'}
+    assert _job(store)['dispatch_generation'] == int(generation) + 1
+    assert _job(store)['reconcile_after_at'] > checks._now()
+
+
+def test_missing_conversation_retires_and_updates_timestamp(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    del store.rows[ROW]
+    _advance(monkeypatch, 361)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'done'
+    assert _job(store)['status'] == 'quiet_done'
+    assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD
+    assert _job(store)['updated_at'] == checks._now()
+
+
+def test_dispatch_unavailable_moves_due_index_forward(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+    monkeypatch.setattr(quiet, 'is_listen_finalization_dispatch_configured', lambda: False)
+    with pytest.raises(lifecycle.FinalizationDispatchUnavailable):
+        quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert _job(store)['dispatch_generation'] == 2
+    assert _job(store)['reconcile_after_at'] > checks._now()
+    assert store.rows[ROW]['status'] == 'in_progress'
+    assert 'finalization_job_id' not in store.rows[ROW]
+    # The shared replay successor recovers once queue bindings return.
+    monkeypatch.setattr(quiet, 'is_listen_finalization_dispatch_configured', lambda: True)
+    _advance(monkeypatch, 422)
+    job_id = checks.quiet_check_id('synthetic', 'old')
+    assert quiet.run(job_id, 2, firestore_client=store) == 'queued'
+    assert store.rows[ROW]['status'] == 'processing'
+    assert store.rows[ROW]['finalization_revision'] == 1
+    assert quiet.run(job_id, 2, firestore_client=store) == 'stale'
+    assert quiet.run(job_id, 3, firestore_client=store) == 'done'
+    assert store.rows[ROW]['finalization_revision'] == 1
+
+
+def test_stale_delivery_preserves_fresh_successor(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _job(store)['dispatch_generation'] = 3
+    expected = dict(_job(store))
+    assert (
+        checks.evaluate_quiet_check(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)['status']
+        == 'stale'
+    )
+    assert _job(store) == expected
+
+
+@pytest.mark.parametrize('generation', [None, 'bad', True, 1.5])
+def test_malformed_quiet_generation_retires(store, monkeypatch, generation):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _job(store)['dispatch_generation'] = generation
+    _advance(monkeypatch, 361)
+    assert checks.ensure_quiet_check_progress(checks.quiet_check_id('synthetic', 'old'), firestore_client=store)
+    assert _job(store)['status'] == 'quiet_done'
+    assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD
+
+
+def test_replay_backoff_cannot_overwrite_newer_generation(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    candidate = dict(_job(store), job_id=checks.quiet_check_id('synthetic', 'old'))
+    _advance(monkeypatch, 361)
+    _job(store)['dispatch_generation'] = 2
+    assert not jobs.defer_finalization_replay(candidate, firestore_client=store)
+    assert _job(store)['reconcile_after_at'] == candidate['reconcile_after_at']
+    _job(store)['dispatch_generation'] = 1
+    assert jobs.defer_finalization_replay(candidate, firestore_client=store)
+    assert _job(store)['reconcile_after_at'] > checks._now()
+
+
+def test_repeated_arm_reuses_one_conversation_obligation(store):
+    first = checks.arm_quiet_check('synthetic', 'old', 120, firestore_client=store)
+    second = checks.arm_quiet_check('synthetic', 'old', 120, firestore_client=store)
+    assert first['job_id'] == second['job_id']
+    assert _job(store)['dispatch_generation'] == 1
+    assert 'arm_outcome' not in _job(store)
+
+
+@pytest.mark.parametrize('checkpoint', [None, 'invalid'])
+def test_waiting_check_without_valid_checkpoint_reserves_wake(store, monkeypatch, checkpoint):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    if checkpoint is None:
+        del _job(store)['reconcile_after_at']
+    else:
+        _job(store)['reconcile_after_at'] = checkpoint
+    assert checks.ensure_quiet_check_progress(checks.quiet_check_id('synthetic', 'old'), firestore_client=store)
+    assert _job(store)['dispatch_generation'] == 2
+    assert _job(store)['reconcile_after_at'] > checks._now()
+
+
+def test_stale_terminal_check_removes_even_future_checkpoint(store):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _job(store)['status'] = 'quiet_done'
+    result = checks.evaluate_quiet_check(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert result['status'] == 'stale'
+    assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD

@@ -158,7 +158,7 @@ def test_canonical_l1_wrapper_keeps_broad_source_aware_candidates_out_of_archive
     assert captured["source_type"] == "voice_transcript"
     assert captured["persist_route_outcomes"] is False
     assert "David:" in captured["text"]
-    assert "Speaker 1:" in captured["text"]
+    assert "Speaker A:" in captured["text"]
 
 
 def test_canonical_l1_wrapper_carries_confirmed_owner_voice_provenance(monkeypatch):
@@ -745,5 +745,5 @@ def test_l1_extraction_receives_untrusted_cluster_render(monkeypatch):
     ]
     extract_canonical_l1_memory_candidates('u', 'c', segments, user_name='David', language='en')
     assert 'UNTRUSTED' in captured['text']
-    assert 'Speaker 0:' in captured['text'] and 'Speaker 1:' in captured['text']
+    assert 'Speaker A:' in captured['text'] and 'Speaker B:' in captured['text']
     assert 'David:' not in captured['text']

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
@@ -480,6 +481,65 @@ void main() {
       // No filled green tile: the live mark is the small breathing dot.
       expect(find.byType(OmiBreathingDot), findsOneWidget);
       expect(find.byType(OmiLiveDot), findsNothing);
+      await _unmount(tester);
+    });
+
+    testWidgets('the ticking elapsed time never re-announces the row, only a real state change does', (tester) async {
+      final capture = _PausableCapture();
+      addTearDown(capture.dispose);
+      final clock = tester.binding.clock;
+      final start = clock.now();
+      final episodes = _episodes(
+        live: Episode(
+            id: 'announce', live: true, startedAt: start.subtract(const Duration(seconds: 10)), lastActivityAt: start),
+        clock: clock.now,
+      );
+      addTearDown(episodes.dispose);
+      final announcements = <String>[];
+      tester.binding.defaultBinaryMessenger.setMockDecodedMessageHandler<Object?>(SystemChannels.accessibility,
+          (message) async {
+        final data = (message as Map)['data'] as Map?;
+        final text = data?['message'] as String?;
+        if (text != null) announcements.add(text);
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockDecodedMessageHandler<Object?>(SystemChannels.accessibility, null));
+
+      await _pump(tester, const Scaffold(body: LiveEpisodeRow()), capture: capture, episodes: episodes);
+      final handle = tester.ensureSemantics();
+
+      // The row's own semantics node must not be a live region: previously it wrapped the whole
+      // "$title, $rest" label (which includes the ticking elapsed time) in `liveRegion: true`, so
+      // assistive tech re-announced the entire row every second it was live.
+      expect(
+        tester
+            .getSemantics(find.byKey(const Key('home_live_episode_row')))
+            .getSemanticsData()
+            .flagsCollection
+            .isLiveRegion,
+        isFalse,
+      );
+
+      // Several ticks go by with the capture still listening: no announcement fires.
+      for (var i = 0; i < 5; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(announcements, isEmpty);
+
+      // A real state change (paused) still gets announced exactly once.
+      capture.paused = true;
+      capture.notifyListeners();
+      await tester.pump();
+      expect(announcements, hasLength(1));
+
+      // Further ticks in the new (paused) state don't repeat the announcement.
+      for (var i = 0; i < 3; i++) {
+        await tester.pump(const Duration(seconds: 1));
+      }
+      expect(announcements, hasLength(1));
+
+      handle.dispose();
       await _unmount(tester);
     });
   });

@@ -249,7 +249,7 @@ def test_topic_title_has_resolved_english_instruction_and_no_chinese_noise(monke
 def test_episode_shadow_has_exact_legacy_text(monkeypatch, mode):
     monkeypatch.setenv(packet.FLAG, mode)
     moment = incremental.render_moment([{'text': 'A synthetic remark', 'is_user': True}], uid='synthetic-account')
-    assert moment.text == 'Owner: A synthetic remark'
+    assert moment.text == 'You: A synthetic remark'
     messages = incremental.build_messages('{}', moment.text, now=START, tz_name='UTC')
     assert messages[0] == ('system', incremental.PROMPT_PREFIX)
 

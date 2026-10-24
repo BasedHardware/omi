@@ -172,6 +172,19 @@ answer returning near expiry; it does not extend the deadline or guarantee
 survival for a held answer returned earlier. Forced releases remain included in
 `omi_stt_window_forced_cuts_total`.
 
+## Pressure sampler recovery
+
+Window admission retains last-good replica observations for at most 60 seconds
+by default, with the existing quorum and conservative unknown-pod accounting.
+`PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS` accepts 15 through 60 seconds;
+setting it to `15` restores strict behavior. Values above 60 fail closed.
+After `PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES` (default 3) sweeps without
+a new quorum, listen recreates the sampler HTTP client and rediscovers the pool.
+Fetches have a three-second deadline; admission performs no pressure network
+requests. The monitoring live-STT rule `omi-stt-pressure-sampler-stuck` detects
+per-pod zero freshness for five minutes and a frozen progress timestamp. Full
+operational contract: [windowed live STT](operational/windowed-live-stt.md).
+
 ## Same-provider speaker scope preservation and successor replay deduplication
 
 During live `/v4/listen` sessions on flaky connections, mid-session reconnects to the same STT provider retain the session's active `SpeakerProviderEpoch` and connection scope across successor sockets (`same_provider=True`). This guarantees that `ConversationSpeakerIdAllocator` preserves mapped speaker numbers (e.g. SPEAKER_0, SPEAKER_1) across reconnects without renumbering speakers. Successor replay duplicates and straddling segments are deduplicated against the session timeline's `last_end` in the session callback, while successor windowed sockets count stream seconds from their own 0.0 boundary without premature `last_emitted_end` truncation.
@@ -6409,28 +6422,15 @@ capture timer alone is not evidence of healthy running notes. Older closed
 episodes remain reachable by their conversation/episode IDs; no historical
 pointer backfill is performed.
 
-The outbox reconciler first queries a separate bounded page of `waiting_quiet`
-jobs ordered by due time (`status == waiting_quiet`, `due_at <= now`, max 100).
-This prevents unrelated failed outbox rows from exhausting its shared replay
-page. Evaluation and successor reservation happen even if dispatch is unavailable;
-processing admission still requires the configured durable worker, an expired
-recording lease, account permission and the normal lifecycle fences. Unavailable
-dispatch emits `event=quiet_finalization outcome=dispatch_unavailable`; recovery
-emits `event=quiet_finalization_reconcile` with the outcome and generation, never
-transcript content. The independent query uses the declared
-`conversation_finalization_quiet_checks_due` index (status, due_at, __name__);
-it must be READY before deploying the consumer. No queue capacity change is needed.
-
-The October 24 RCA found a generation-1 quiet check unchanged for nearly two
-hours. Code exposes two ways to strand evaluation: the old pre-transaction
-dispatch guard (and reconciler-wide disabled-dispatch return), and a shared due
-page monopolized by failed older work. These are reproduced failure modes, not
-an attribution of that production incident. Whether the original wake was
-undispatched, unserved, blocked by dispatch configuration, starved, or failed
-before its transaction remains open: the permitted RCA metadata does not prove
-which. The lead should correlate the dispatched task, reconciler owner/revision,
-query errors and pre-transaction exception around 05:57:45Z before considering
-capacity/config changes. This fix neither reads nor repairs production data.
+Quiet member-conversation recovery uses the shared outbox replay authority:
+its persisted rotating cursor and bounded concurrency prevent an overdue prefix
+from monopolizing replay. Retirement, successor repair, per-row backoff, outcome
+counters and arm counters remain owned by that path. There is no independent
+quiet due query or additional Firestore index. Processing admission still
+requires configured durable dispatch, an expired recording lease, account
+permission and the normal lifecycle fences. Missing dispatch reserves a future
+successor without admitting processing; restoring dispatch lets replay recover
+the member exactly once, including after its episode has closed.
 
 `LISTEN_QUIET_FINALIZATION_ENABLED=true` is the default. Mono `omi` and `phone`
 recordings arm one opaque `quiet-*` check in `conversation_finalization_jobs`
