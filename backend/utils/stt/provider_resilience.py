@@ -631,19 +631,19 @@ class ProviderCircuitBreaker:
 
         return settle, settle
 
-    def refresh_gauge_if_account_bench_elapsed(self) -> None:
-        """Publish the gauges when this breaker's account bench has elapsed.
+    def refresh_gauge_if_bench_elapsed(self) -> None:
+        """Publish the gauges when this breaker's active bench has elapsed.
 
-        Read-only observation of the clock: only an open, account-armed bench
+        Read-only observation of the clock: only an open bench
         whose cooldown has expired republishes (as 0 for both kinds — the next
         ``allow_request`` would admit a probe). Breaker state is never mutated,
         so the periodic refresh below cannot change admit/reject behavior.
         """
 
         with self._lock:
-            if self._account_cooldown is None or self._state != 'open':
+            if self._state != 'open':
                 return
-            if self._clock() - self._opened_at < self._account_cooldown:
+            if self._clock() - self._opened_at < self._active_cooldown():
                 return
         self._publish_state()
 
@@ -699,17 +699,16 @@ def _gauge_refresh_iteration() -> None:
 
 
 def refresh_published_circuit_gauges() -> None:
-    """Re-publish gauges whose account bench has elapsed on the clock alone.
+    """Re-publish gauges whose selection/account bench elapsed on the clock.
 
-    Only elapsed account benches are refreshed: every other state already
-    published the same value at its transition, so re-publishing it cannot
-    change anything. Never raises, and never mutates breaker state — this is
+    An idle, benched target may receive no next dial to refresh either kind.
+    Never raises, and never mutates breaker state — this is
     the read side observing the clock, not a dial.
     """
 
     for breaker in list(_published_breakers):
         try:
-            breaker.refresh_gauge_if_account_bench_elapsed()
+            breaker.refresh_gauge_if_bench_elapsed()
         except Exception:
             continue
 

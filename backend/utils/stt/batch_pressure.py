@@ -160,6 +160,18 @@ class BatchPressure:
         self._max_pending, self._max_oldest, self._busy_share = pending, oldest, share
         self._configured = True
 
+    def ready_replicas(self) -> tuple[str, ...]:
+        """Fresh, DNS-ready identities for live-window direct pod routing."""
+        now = time.monotonic()
+        if (
+            not getattr(self, '_discovery_available', True)
+            or self._observed_at <= 0
+            or now - self._observed_at > self.STALE_SECONDS
+        ):
+            return ()
+        fresh = self._fresh(now)
+        return tuple(ip for ip in self._ready if ip in fresh)
+
     async def _fetch(self, ip: str, client: httpx.AsyncClient) -> ReplicaPressure:
         response = await asyncio.wait_for(
             client.get(f'http://{ip}:8080/batch/metrics', timeout=self.REQUEST_TIMEOUT_SECONDS),

@@ -590,7 +590,41 @@ remain in series; allocation 0 sends no window traffic. Monitor real traffic
 before every increase because local memory headroom does not prove GPU
 throughput or transcript quality.
 
-A 503 or a timeout on an *acquired* POST kills the window leg, releases
+`PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED` defaults on. For the internal HTTP
+family endpoint, each live-window POST selects a fresh DNS-ready GPU IP from
+the existing pressure poller. A 5xx, transport error, malformed response, or
+acquired POST timeout quarantines only that GPU in this listener process for
+120 seconds, then 240, capped at 300. One half-open POST may probe each pod;
+a valid model response heals it. Stale completions cannot heal a newer fault.
+Failed/cancelled probes release their admission. Disappeared DNS identities
+are removed and the table is capped at 64 pods. Account conditions still use
+the existing family/account breaker.
+
+Before vendor failover, one other ready pod may receive the same PCM. The
+first attempt reserves half the original POST budget for this retry; neither
+the eight-second total budget nor the existing first-text deadline expands.
+An empty response gets one alternate-pod retry per empty episode; another
+empty remains visible and never quarantines a GPU. Text resets the empty
+retry allowance. Retries never advance the PCM/replay anchor or emit either
+attempt separately. Queue-timeout capacity refusals, local semaphore waits,
+auth/quota, rate limits, and bad input never retry. No ready unbenched pod
+means normal bounded failover, with no family-wide selection quarantine.
+When fresh discovery alone is unavailable, an already active direct-pod leg
+may make one VIP POST only if the pressure owner's public admission check
+still permits its bounded cached grace. This never routes to stale IPs or
+bypasses known pod quarantines, never retries the VIP, and never renews the
+grace timestamp. `service_*` attempt outcomes expose that degraded transport.
+`omi_stt_window_replica_attempts_total{outcome}` counts actual attempts,
+including failed/empty ones; successful recovery also emits `omi_fallback_total`.
+Monitor these with first-text p95, no-text outcomes and vendor failovers.
+
+Rollback: set `PARAKEET_WINDOW_REPLICA_RECOVERY_ENABLED=false` (also `0/off`).
+New sockets restore service-VIP routing and the historical behavior below.
+TLS/custom endpoints and sockets without a fresh discovery inventory retain
+that behavior; admission still owns whether a window may start. No Modulate
+credential, quota or account-bench settings change.
+
+With replica recovery disabled, a 503 or a timeout on an *acquired* POST kills the window leg, releases
 admission, and opens the Parakeet serve-error circuit (existing default 180
 seconds). A malformed 200, HTTP 413, or a timeout spent waiting on the shared
 STT semaphore is session-local: the leg dies, the process circuit does not.

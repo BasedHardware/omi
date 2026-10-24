@@ -20,6 +20,26 @@ def seed(pressure, now, busy=False):
     pressure._observed_at = now
 
 
+def test_ready_replicas_excludes_stale_or_removed_pods_without_io(monkeypatch):
+    pressure = pressure_module.BatchPressure()
+    now = [100.0]
+    monkeypatch.setattr(pressure_module, 'time', SimpleNamespace(monotonic=lambda: now[0]))
+    assert pressure.ready_replicas() == ()
+    seed(pressure, now[0])
+    pressure._samples['10.0.0.9'] = pressure_module.ReplicaPressure(0, 0, now[0])
+    assert pressure.ready_replicas() == ('10.0.0.1', '10.0.0.2')
+    pressure._samples['10.0.0.1'] = pressure_module.ReplicaPressure(0, 0, 1)
+    assert pressure.ready_replicas() == ('10.0.0.2',)
+    # adm2 preserves cached timestamps for bounded admission grace, while
+    # explicitly marking failed DNS discovery unavailable. Such a snapshot
+    # must never be offered as fresh direct-pod routing authority.
+    monkeypatch.setattr(pressure, '_discovery_available', False, raising=False)
+    assert pressure.ready_replicas() == ()
+    monkeypatch.setattr(pressure, '_discovery_available', True)
+    now[0] += pressure.STALE_SECONDS + 1
+    assert pressure.ready_replicas() == ()
+
+
 @pytest.fixture(autouse=True)
 def settings(monkeypatch):
     monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')

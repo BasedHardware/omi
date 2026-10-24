@@ -20,6 +20,9 @@ import numpy as np
 
 from utils.async_tasks import wait_for_event
 from utils.stt.batch_pressure import BatchPressure
+from config.live_stt_resilience import window_replica_recovery_enabled
+from utils.stt.window_replicas import QueueTimeout, can_route_replicas, post_window, window_replicas
+from utils.stt import window_replicas as replica_http
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.observability.fallback import FirstTextDeadlineDiagnostics, ReplayLagDiagnostics, record_fallback
 from utils.stt import streaming as st
@@ -39,6 +42,7 @@ from utils.stt.live_metrics import (
     WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
     WINDOW_POSTS,
+    WINDOW_REPLICA_ATTEMPTS,
     WINDOW_SESSION_OUTCOME,
     WINDOW_REPLAY_CUT_REQUESTS,
     WINDOW_REPLAY_CUT_PERFORMED,
@@ -54,7 +58,6 @@ from utils.stt.window_anchor import (
     buffer_cap_seconds,
     collapse_decoder_loops,
     decide_window,
-    parse_tdt_segments,
     read_max_context_seconds,
     read_pace_seconds,
 )
@@ -225,10 +228,6 @@ class SessionPcmGain:
         return out
 
 
-class QueueTimeout(TimeoutError):
-    """Deadline expired while waiting for the shared STT semaphore."""
-
-
 @dataclass(frozen=True)
 class _WindowJob:
     pcm: bytes
@@ -282,11 +281,11 @@ batch_pressure = BatchPressure()
 
 
 class WindowedParakeetSocket(ParakeetStreamingSocket):
-    """One in-flight POST, sentence-anchored growing windows, no retries.
+    """One in-flight POST, sentence-anchored windows, bounded replica recovery.
 
     The owner must supply only actively VAD-gated audio. A gate fault kills the
     socket before any raw audio reaches send(). All shutdown paths release admission.
-    Buffer overflow sheds this pod's TDT circuit so new sessions skip the GPU.
+    Pressure and admission caps own local capacity; buffer overflow fails the leg.
     """
 
     def __init__(
@@ -373,6 +372,12 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._beyond_window_repost: int | None = None
         self._agc_peak = 0.0
         self._agc_last_gain = 1.0
+        # Direct pod discovery belongs only to the configured internal HTTP
+        # service. A registry override/TLS endpoint retains its own old circuit.
+        self.replica_scoped = window_replica_recovery_enabled() and can_route_replicas(
+            api_url, os.getenv('HOSTED_PARAKEET_API_URL'), batch_pressure.ready_replicas()
+        )
+        self._empty_replica_retry_used = False
 
     def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
         self._health_success, self._health_close = on_success, on_close
@@ -699,14 +704,24 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             LOCAL_DELIVERY_REPLAY_SEND_STALLED,
         }:
             self._typed_death_reason = reason
+        if self.replica_scoped and reason in {
+            'provider_5xx',
+            'timeout',
+            'connection_lost',
+            'provider_auth_rejected',
+            'provider_budget_exhausted',
+            'provider_rate_limited',
+        }:
+            self._typed_death_reason = reason
         # Observers must see the root cause before they see the dead latch.
         self._dead = True
         self.finish()
 
     def _shed_capacity(self) -> None:
-        st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
-            error_class='capacity_full'
-        )
+        if not self.replica_scoped:
+            st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                error_class='capacity_full'
+            )
         self.fail('capacity_full', capacity_subtype='buffer_cap')
 
     def finish(self) -> None:
@@ -1196,35 +1211,128 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             )
             return self._last_speaker
 
-    async def _post_window(self, pcm: bytes) -> httpx.Response:
+    async def _post_window(
+        self, pcm: bytes, *, url: str | None = None, timeout_seconds: float | None = None
+    ) -> httpx.Response:
         # Snapshot the uniform scale before the first await so a later send
         # cannot change this POST's envelope. Overlapping later POSTs may use a
         # lower gain if the session peak grew; each POST stays internally flat.
         wav = _pcm16_to_wav_bytes(self._normalize_posted_pcm(pcm), self._sample_rate)
-        acquired = False
+        return await post_window(
+            wav,
+            url=url or self._url,
+            budget=self._post_timeout if timeout_seconds is None else timeout_seconds,
+            get_client=get_stt_client,
+            get_semaphore=get_stt_semaphore,
+        )
+
+    async def _post_replicas(self, pcm: bytes, dur: float) -> list[RawSegment]:
+        """At most two pods inside one original POST budget and first-text timer.
+
+        Empty is valid model output, never outage evidence. Retry it once per
+        empty episode on a *different* pod, without advancing any audio anchor.
+        Another empty stays visible to the existing rescue/deadline machinery.
+        """
+        excluded: set[str] = set()
+        retry_reason: str | None = None
+        last_error: Exception | None = None
         try:
-            async with asyncio.timeout(self._post_timeout) as deadline:
-                async with get_stt_semaphore():
-                    acquired = True
-                    when = deadline.when()
-                    remaining = (
-                        max(0.0, when - asyncio.get_running_loop().time()) if when is not None else self._post_timeout
-                    )
-                    remaining = math.floor(remaining * 1000) / 1000
-                    if remaining <= 0:
-                        raise TimeoutError('post budget exhausted at semaphore admission')
-                    return await get_stt_client().post(
-                        self._url,
-                        files={'file': ('audio.wav', wav, 'audio/wav')},
-                        headers={
-                            'X-Omi-STT-Surface': 'live-window',
-                            'X-Omi-STT-Timeout-Seconds': f'{remaining:.3f}',
-                        },
-                    )
-        except (TimeoutError, httpx.TimeoutException):
-            if not acquired:
-                raise QueueTimeout() from None
+            budget = self._post_timeout
+            if self._first_text_timer is not None:
+                budget = min(budget, max(0.001, self._first_text_timer.when() - asyncio.get_running_loop().time()))
+            async with asyncio.timeout(budget) as deadline:
+                for attempt in range(2):
+                    replica = window_replicas.claim(batch_pressure.ready_replicas(), exclude=frozenset(excluded))
+                    if replica is None:
+                        if not attempt and replica_http.service_snapshot_allows(
+                            batch_pressure, st._parakeet_circuit, window_replicas
+                        ):
+                            return await replica_http.post_service_window(
+                                self._post_window, self.fail, self._without_loops, pcm, dur
+                            )
+                        if last_error is not None:
+                            raise last_error
+                        if attempt:
+                            return []  # one empty answer; no distinct pod available
+                        self.fail('capacity_full', capacity_subtype='admission')
+                        raise ParakeetConnectionError('capacity_full', capacity_subtype='admission')
+                    excluded.add(replica.ip)
+                    failed: bool | None = None
+                    segments: list[RawSegment] = []
+                    try:
+                        remaining = (deadline.when() or 0) - asyncio.get_running_loop().time()
+                        # Reserve time for the other pod, even when the first
+                        # accepts a connection and hangs. The queue header is
+                        # reduced to this same attempt budget at the HTTP seam.
+                        budget = max(0.001, remaining / (2 - attempt))
+                        response = await self._post_window(pcm, url=replica.url(self._url), timeout_seconds=budget)
+                        if response.status_code == 503 and response.headers.get('X-Omi-STT-Error') == 'queue_timeout':
+                            # Capacity is not a broken GPU. Preserve the typed
+                            # refusal; do not double-load a pressured fleet.
+                            WINDOW_REPLICA_ATTEMPTS.labels(outcome='queue_timeout').inc()
+                            self.fail('capacity_full', capacity_subtype='queue_timeout')
+                            response.raise_for_status()
+                        response.raise_for_status()
+                        segments = replica_http.parse_window_response(response, dur, self._without_loops)
+                        failed = False  # a valid HTTP/model response proves service health
+                        WINDOW_REPLICA_ATTEMPTS.labels(outcome='text' if segments else 'empty').inc()
+                    except asyncio.CancelledError:
+                        raise
+                    except (QueueTimeout, httpx.PoolTimeout):
+                        # Local semaphore pressure says nothing about this GPU.
+                        raise QueueTimeout() from None
+                    except Exception as error:
+                        if self._dead:
+                            raise
+                        status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
+                        # Auth, quota, 429 and bad input are not pod-local errors.
+                        if status is not None and status < 500:
+                            reason = {
+                                401: 'provider_auth_rejected',
+                                403: 'provider_auth_rejected',
+                                402: 'provider_budget_exhausted',
+                                429: 'provider_rate_limited',
+                            }.get(status, 'provider_5xx')
+                            WINDOW_REPLICA_ATTEMPTS.labels(outcome=reason).inc()
+                            self.fail(reason)
+                            raise
+                        failed = True
+                        retry_reason = (
+                            'timeout' if isinstance(error, (TimeoutError, httpx.TimeoutException)) else 'provider_5xx'
+                        )
+                        WINDOW_REPLICA_ATTEMPTS.labels(outcome=retry_reason).inc()
+                        last_error = error
+                        if attempt:
+                            raise
+                        continue
+                    finally:
+                        window_replicas.settle(replica, failed=failed)
+                    if segments:
+                        self._empty_replica_retry_used = False
+                        if attempt:
+                            record_fallback(
+                                component='stt_selection',
+                                from_mode='parakeet',
+                                to_mode='parakeet',
+                                reason=retry_reason or 'empty_streak',
+                                outcome='recovered',
+                            )
+                        return segments
+                    if attempt or self._empty_replica_retry_used:
+                        return []
+                    self._empty_replica_retry_used = True
+                    retry_reason = 'empty_streak'
+        except QueueTimeout:
+            self.fail('timeout')
             raise
+        except (TimeoutError, httpx.TimeoutException):
+            self.fail('timeout')
+            raise
+        except Exception:
+            if not self._dead:
+                self.fail('provider_5xx')
+            raise
+        return []
 
     async def _post_and_parse(self, pcm: bytes, dur: float) -> list[RawSegment]:
         started = time.monotonic()
@@ -1232,6 +1340,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         self._posts_since_anchor = min(1000000, self._posts_since_anchor + 1)
         self._post_in_flight = True
         try:
+            if self.replica_scoped:
+                try:
+                    segments = await self._post_replicas(pcm, dur)
+                finally:
+                    self._post_in_flight = False
+                outcome = 'success' if segments else 'empty'
+                if not segments:
+                    self._empty_posts_since_anchor = min(1000000, self._empty_posts_since_anchor + 1)
+                self._health_success()
+                return segments
             try:
                 response = await self._post_window(pcm)
             finally:
@@ -1250,11 +1368,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
                 self.fail('provider_5xx')
                 raise ValueError('TDT payload too large')
             response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, dict) or ('text' not in data and 'segments' not in data):
-                self.fail('provider_5xx')
-                raise ValueError('Invalid TDT response')
-            segments = [self._without_loops(seg) for seg in parse_tdt_segments(cast(dict[str, Any], data), dur)]
+            segments = replica_http.parse_window_response(response, dur, self._without_loops)
             outcome = 'success' if segments else 'empty'
             if not segments:
                 self._empty_posts_since_anchor = min(1000000, self._empty_posts_since_anchor + 1)
@@ -1268,9 +1382,10 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             self.fail('timeout')
             raise
         except (TimeoutError, httpx.TimeoutException):
-            st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
-                error_class='timeout'
-            )
+            if not self.replica_scoped:
+                st._parakeet_circuit.record_serve_failure(  # type: ignore[reportPrivateUsage]  # shared circuit owner
+                    error_class='timeout'
+                )
             self.fail('timeout')
             raise
         except Exception:
