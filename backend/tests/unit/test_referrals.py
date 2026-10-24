@@ -369,3 +369,53 @@ async def test_existing_user_auth_does_not_redeem_referral(monkeypatch):
     await auth._generate_custom_token('google', 'provider-token', referral_code=referral_code)
 
     assert claims == []
+
+
+def test_referral_claim_firebase_auth_failure_raises_500(monkeypatch):
+    monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    code = create_referral_code('referrer-123')
+
+    with _loaded_referrals_router() as referrals:
+        monkeypatch.setattr(
+            referrals.firebase_admin.auth,
+            'get_user',
+            lambda _uid: (_ for _ in ()).throw(RuntimeError('Firebase Auth unavailable')),
+        )
+        with pytest.raises(HTTPException) as error:
+            referrals.claim_referral(referrals.ReferralClaimRequest(code=code), 'new-user')
+
+    assert error.value.status_code == 500
+    assert error.value.detail == 'Failed to verify account metadata'
+
+
+def test_referral_claim_transaction_failure_raises_500(monkeypatch):
+    monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+    code = create_referral_code('referrer-123')
+    now_ms = int(datetime.now(timezone.utc).timestamp() * 1000)
+
+    with _loaded_referrals_router() as referrals:
+        monkeypatch.setattr(
+            referrals.firebase_admin.auth,
+            'get_user',
+            lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=now_ms)),
+        )
+        monkeypatch.setattr(
+            referrals,
+            'claim_referral_trial',
+            lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError('Firestore transaction aborted')),
+        )
+        with pytest.raises(HTTPException) as error:
+            referrals.claim_referral(referrals.ReferralClaimRequest(code=code), 'new-user')
+
+    assert error.value.status_code == 500
+    assert error.value.detail == 'Failed to process referral claim'
+
+
+def test_capture_referral_rejects_empty_or_whitespace_code(monkeypatch):
+    monkeypatch.setenv('ENCRYPTION_SECRET', TEST_SECRET.decode())
+
+    with _loaded_referrals_router() as referrals:
+        with pytest.raises(HTTPException) as error:
+            referrals.capture_referral('   ')
+    assert error.value.status_code == 404
+    assert error.value.detail == 'Referral link not found'
