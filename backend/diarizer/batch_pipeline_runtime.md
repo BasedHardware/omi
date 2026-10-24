@@ -64,6 +64,8 @@ also use host RAM; qualify container peak as well as CUDA peak on the exact imag
 
 `1` is the rollback, including malformed/out-of-range env values. Keep it at 1
 until a paired public/synthetic corpus run on dev/staging L4 qualifies N=2,3,4.
+The value is read at worker startup; an env/Helm change replaces the worker
+through the existing Recreate strategy and lease-drain grace period.
 The admission and per-microbatch compute policy checks, lease-token completion,
 privacy fences and owner-ordered merge remain in their existing paths. Failed
 read-ahead surfaces as the ordinary per-item fetch/decode failure. A discarded
