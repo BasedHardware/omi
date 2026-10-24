@@ -15,9 +15,9 @@ _CACHE_TTL = 60  # seconds — in-memory cache for disabled checks
 _SUCCESS_DEBOUNCE = 60  # seconds — min interval between success writes per app
 _CACHE_MAX_SIZE = 10000
 
-ENDPOINT_REALTIME = 'realtime'
-ENDPOINT_CHAT_TOOL = 'chat_tool'
-ENDPOINT_MCP_TOOL = 'mcp_tool'
+ENDPOINT_REALTIME = "realtime"
+ENDPOINT_CHAT_TOOL = "chat_tool"
+ENDPOINT_MCP_TOOL = "mcp_tool"
 _ALL_ENDPOINTS = [ENDPOINT_REALTIME, ENDPOINT_CHAT_TOOL, ENDPOINT_MCP_TOOL]
 
 ACTION_NONE = 0
@@ -168,17 +168,21 @@ def _record_redirect_not_followed(app_id: str, status_code: int, endpoint: str) 
     fix, and it is recoverable, which the auto-disable was not.
     """
     try:
-        notice_key = f'app_webhook_redirect_notice:{app_id}:{endpoint}'
-        health_key = f'app_webhook_health:{app_id}:{endpoint}'
+        notice_key = f"app_webhook_redirect_notice:{app_id}:{endpoint}"
+        health_key = f"app_webhook_health:{app_id}:{endpoint}"
         r.hset(
-            health_key, mapping={'last_redirect_at': str(int(time.time())), 'last_redirect_status': str(status_code)}
+            health_key,
+            mapping={
+                "last_redirect_at": str(int(time.time())),
+                "last_redirect_status": str(status_code),
+            },
         )
         r.expire(health_key, _HEALTH_TTL)
-        if not r.set(notice_key, '1', nx=True, ex=_REDIRECT_NOTICE_INTERVAL):
+        if not r.set(notice_key, "1", nx=True, ex=_REDIRECT_NOTICE_INTERVAL):
             return ACTION_NONE
         return ACTION_REDIRECT_NOT_FOLLOWED
     except Exception as e:
-        logger.warning(f'record_app_webhook_failure redirect path redis error app_id={app_id}: {e}')
+        logger.warning(f"record_app_webhook_failure redirect path redis error app_id={app_id}: {e}")
         return ACTION_NONE
 
 
@@ -192,17 +196,17 @@ def record_app_webhook_failure(app_id: str, status_code: int, error: str, endpoi
     if 300 <= status_code < 400:
         return _record_redirect_not_followed(app_id, status_code, endpoint)
     try:
-        key = f'app_webhook_health:{app_id}:{endpoint}'
+        key = f"app_webhook_health:{app_id}:{endpoint}"
         now_ts = int(time.time())
         script = _get_failure_script()
         action = int(script(keys=[key], args=[now_ts, str(status_code), error[:200], _HEALTH_TTL]))
         if action == ACTION_DISABLE:
-            r.setex(f'app_webhook_disabled:{app_id}', _HEALTH_TTL, '1')
+            r.setex(f"app_webhook_disabled:{app_id}", _HEALTH_TTL, "1")
             with _cache_lock:
                 _set_disabled_state(app_id, True)
         return action
     except Exception as e:
-        logger.warning(f'record_app_webhook_failure redis error app_id={app_id}: {e}')
+        logger.warning(f"record_app_webhook_failure redis error app_id={app_id}: {e}")
         return 0
 
 
@@ -256,14 +260,14 @@ def record_app_webhook_success(app_id: str, endpoint: str = ENDPOINT_REALTIME):
     success (recovery case). Works correctly across multiple pods.
     """
     try:
-        key = f'app_webhook_health:{app_id}:{endpoint}'
+        key = f"app_webhook_health:{app_id}:{endpoint}"
         now_ts = int(time.time())
         script = _get_success_script()
         script(keys=[key], args=[now_ts, _SUCCESS_DEBOUNCE, _HEALTH_TTL])
-        r.hdel(key, 'last_redirect_at', 'last_redirect_status')
-        r.delete(f'app_webhook_redirect_notice:{app_id}:{endpoint}')
+        r.hdel(key, "last_redirect_at", "last_redirect_status")
+        r.delete(f"app_webhook_redirect_notice:{app_id}:{endpoint}")
     except Exception as e:
-        logger.warning(f'record_app_webhook_success redis error app_id={app_id}: {e}')
+        logger.warning(f"record_app_webhook_success redis error app_id={app_id}: {e}")
 
 
 def clear_app_webhook_health(app_id: str):
@@ -271,13 +275,13 @@ def clear_app_webhook_health(app_id: str):
     with _cache_lock:
         _set_disabled_state(app_id, False)
     try:
-        keys_to_delete = [f'app_webhook_disabled:{app_id}']
+        keys_to_delete = [f"app_webhook_disabled:{app_id}"]
         for ep in _ALL_ENDPOINTS:
-            keys_to_delete.append(f'app_webhook_health:{app_id}:{ep}')
-            keys_to_delete.append(f'app_webhook_redirect_notice:{app_id}:{ep}')
+            keys_to_delete.append(f"app_webhook_health:{app_id}:{ep}")
+            keys_to_delete.append(f"app_webhook_redirect_notice:{app_id}:{ep}")
         r.delete(*keys_to_delete)
     except Exception as e:
-        logger.warning(f'clear_app_webhook_health redis error app_id={app_id}: {e}')
+        logger.warning(f"clear_app_webhook_health redis error app_id={app_id}: {e}")
 
 
 def is_app_webhook_disabled(app_id: str) -> bool:
@@ -291,9 +295,9 @@ def is_app_webhook_disabled(app_id: str) -> bool:
                 return value
         pre_gen = cached[2] if cached else 0
     try:
-        key = f'app_webhook_disabled:{app_id}'
+        key = f"app_webhook_disabled:{app_id}"
         val = r.get(key)
-        result = val == b'1'
+        result = val == b"1"
         with _cache_lock:
             cur = _disabled_cache.get(app_id)
             cur_gen = cur[2] if cur else 0
@@ -310,14 +314,14 @@ def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optio
     """Get health state for an app's webhook endpoint(s). Returns None if no data."""
     try:
         if endpoint:
-            key = f'app_webhook_health:{app_id}:{endpoint}'
+            key = f"app_webhook_health:{app_id}:{endpoint}"
             data = cast(Dict[bytes, bytes], r.hgetall(key))
             if not data:
                 return None
             return {k.decode(): v.decode() for k, v in data.items()}
         result: Dict[str, Any] = {}
         for ep in _ALL_ENDPOINTS:
-            key = f'app_webhook_health:{app_id}:{ep}'
+            key = f"app_webhook_health:{app_id}:{ep}"
             data = cast(Dict[bytes, bytes], r.hgetall(key))
             if data:
                 result[ep] = {k.decode(): v.decode() for k, v in data.items()}
@@ -326,25 +330,35 @@ def get_app_webhook_health(app_id: str, endpoint: Optional[str] = None) -> Optio
         return None
 
 
-def disable_app_in_firestore(app_id: str, error: str, failure_hours: int):
-    """Mark an app as disabled in Firestore due to webhook failures."""
-    with _cache_lock:
-        _set_disabled_state(app_id, True)
+def disable_app_in_firestore(app_id: str, error: str, failure_hours: int, *, firestore_client: Any = None) -> bool:
+    """Mark an app as disabled in Firestore due to webhook failures with existence check and client injection."""
+    clean_id = (app_id or "").strip()
+    if not clean_id:
+        return False
     try:
-        apps_collection = 'plugins_data'
-        app_ref = db.collection(apps_collection).document(app_id)
+        client = firestore_client or db
+        apps_collection = "plugins_data"
+        app_ref = client.collection(apps_collection).document(clean_id)
+        doc = app_ref.get()
+        if not getattr(doc, "exists", False):
+            logger.warning(f"Cannot disable non-existent app {clean_id} in Firestore")
+            return False
         app_ref.update(
             {
-                'disabled': True,
-                'disabled_reason': 'webhook_failures',
-                'disabled_at': datetime.now(timezone.utc).isoformat(),
-                'disabled_error': error[:200],
-                'disabled_failure_duration_hours': failure_hours,
+                "disabled": True,
+                "disabled_reason": "webhook_failures",
+                "disabled_at": datetime.now(timezone.utc).isoformat(),
+                "disabled_error": str(error or "")[:200],
+                "disabled_failure_duration_hours": failure_hours,
             }
         )
-        logger.info(f'Auto-disabled app {app_id} in Firestore after {failure_hours}h of webhook failures')
+        with _cache_lock:
+            _set_disabled_state(clean_id, True)
+        logger.info(f"Auto-disabled app {clean_id} in Firestore after {failure_hours}h of webhook failures")
+        return True
     except Exception as e:
-        logger.error(f'Failed to disable app {app_id} in Firestore: {e}')
+        logger.error(f"Failed to disable app {clean_id} in Firestore: {e}")
+        return False
 
 
 # --- Developer webhook health (per-user, per-type) ---
@@ -395,53 +409,62 @@ def _record_dev_webhook_failure_fallback(uid: str, wtype_str: str, status_code: 
     is already disabled, additional failures must not return True again because
     callers use the True transition to send the auto-disable notification.
     """
-    key = f'dev_webhook_health:{uid}:{wtype_str}'
-    already_disabled = r.hget(key, 'disabled')
+    key = f"dev_webhook_health:{uid}:{wtype_str}"
+    already_disabled = r.hget(key, "disabled")
     if isinstance(already_disabled, bytes):
         already_disabled = already_disabled.decode()
-    if already_disabled == '1':
+    if already_disabled == "1":
         return False
 
     try:
-        count = int(r.hincrby(key, 'failure_count', 1))
+        count = int(r.hincrby(key, "failure_count", 1))
     except Exception:
-        current = r.hget(key, 'failure_count')
+        current = r.hget(key, "failure_count")
         if isinstance(current, bytes):
             current = current.decode()
         try:
             count = int(current or 0) + 1
         except (TypeError, ValueError):
             count = 1
-        r.hset(key, 'failure_count', str(count))
+        r.hset(key, "failure_count", str(count))
 
     disabled = count >= _DEV_FAILURE_THRESHOLD
     r.hset(
         key,
         mapping={
-            'last_failure_at': str(int(time.time())),
-            'last_status': str(status_code),
-            'last_error': error[:200],
+            "last_failure_at": str(int(time.time())),
+            "last_status": str(status_code),
+            "last_error": error[:200],
         },
     )
     if disabled:
-        r.hset(key, 'disabled', '1')
+        r.hset(key, "disabled", "1")
     r.expire(key, _HEALTH_TTL)
     return count == _DEV_FAILURE_THRESHOLD
 
 
 def record_dev_webhook_failure(uid: str, wtype: object, status_code: int, error: str) -> bool:
     """Record a developer webhook failure. Returns True if threshold exceeded (should disable)."""
-    wtype_str = getattr(wtype, 'value') if hasattr(wtype, 'value') else str(wtype)
+    wtype_str = getattr(wtype, "value") if hasattr(wtype, "value") else str(wtype)
     try:
-        key = f'dev_webhook_health:{uid}:{wtype_str}'
+        key = f"dev_webhook_health:{uid}:{wtype_str}"
         now_ts = int(time.time())
         script = _get_dev_failure_script()
         result = int(
-            script(keys=[key], args=[now_ts, str(status_code), error[:200], _HEALTH_TTL, _DEV_FAILURE_THRESHOLD])
+            script(
+                keys=[key],
+                args=[
+                    now_ts,
+                    str(status_code),
+                    error[:200],
+                    _HEALTH_TTL,
+                    _DEV_FAILURE_THRESHOLD,
+                ],
+            )
         )
         return result == 1
     except Exception as e:
-        logger.warning(f'record_dev_webhook_failure redis error uid={uid} type={wtype}: {e}')
+        logger.warning(f"record_dev_webhook_failure redis error uid={uid} type={wtype}: {e}")
         # fakeredis and some constrained Redis-compatible stores do not support
         # the Lua script API used in production. Fall back to the same state
         # transition with ordinary commands so hermetic tests and degraded Redis
@@ -450,7 +473,7 @@ def record_dev_webhook_failure(uid: str, wtype: object, status_code: int, error:
             return _record_dev_webhook_failure_fallback(uid, wtype_str, status_code, error)
         except Exception as fallback_error:
             logger.warning(
-                f'record_dev_webhook_failure redis error uid={uid} type={wtype}: {e}; fallback={fallback_error}'
+                f"record_dev_webhook_failure redis error uid={uid} type={wtype}: {e}; fallback={fallback_error}"
             )
             return False
 
@@ -458,23 +481,23 @@ def record_dev_webhook_failure(uid: str, wtype: object, status_code: int, error:
 def record_dev_webhook_success(uid: str, wtype: object):
     """Record a successful developer webhook delivery. Resets failure state."""
     try:
-        wtype_str = getattr(wtype, 'value') if hasattr(wtype, 'value') else str(wtype)
-        key = f'dev_webhook_health:{uid}:{wtype_str}'
+        wtype_str = getattr(wtype, "value") if hasattr(wtype, "value") else str(wtype)
+        key = f"dev_webhook_health:{uid}:{wtype_str}"
         now_ts = int(time.time())
         r.hset(
             key,
             mapping={
-                'failure_count': '0',
-                'last_failure_at': '',
-                'last_success_at': str(now_ts),
-                'last_status': '200',
-                'last_error': '',
-                'disabled': '0',
+                "failure_count": "0",
+                "last_failure_at": "",
+                "last_success_at": str(now_ts),
+                "last_status": "200",
+                "last_error": "",
+                "disabled": "0",
             },
         )
         r.expire(key, _HEALTH_TTL)
     except Exception as e:
-        logger.warning(f'record_dev_webhook_success redis error uid={uid} type={wtype}: {e}')
+        logger.warning(f"record_dev_webhook_success redis error uid={uid} type={wtype}: {e}")
 
 
 _DLQ_TTL = 7 * 86400
@@ -495,16 +518,16 @@ def enqueue_dev_webhook_dlq(
     try:
         key = f'dev_webhook_dlq:{uid or "unknown"}'
         entry = {
-            'webhook_name': webhook_name,
-            'webhook_url': webhook_url[:500],
-            'status_code': status_code,
-            'error': (error or '')[:500],
-            'idempotency_key': idempotency_key,
-            'payload': payload,
-            'failed_at': datetime.now(timezone.utc).isoformat(),
+            "webhook_name": webhook_name,
+            "webhook_url": webhook_url[:500],
+            "status_code": status_code,
+            "error": (error or "")[:500],
+            "idempotency_key": idempotency_key,
+            "payload": payload,
+            "failed_at": datetime.now(timezone.utc).isoformat(),
         }
-        r.lpush(key, json.dumps(entry, separators=(',', ':')))
+        r.lpush(key, json.dumps(entry, separators=(",", ":")))
         r.ltrim(key, 0, _DLQ_MAX - 1)
         r.expire(key, _DLQ_TTL)
     except Exception as e:
-        logger.warning(f'enqueue_dev_webhook_dlq failed name={webhook_name}: {e}')
+        logger.warning(f"enqueue_dev_webhook_dlq failed name={webhook_name}: {e}")
