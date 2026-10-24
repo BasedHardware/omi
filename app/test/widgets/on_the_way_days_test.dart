@@ -110,6 +110,23 @@ void main() {
     );
   });
 
+  testWidgets('a recording stamped before 2024 lists without a time instead of on a bogus day', (tester) async {
+    await _pump(tester, [
+      _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.uploaded),
+      // A pendant clock that was never set: 1985-09-05 16:17 local.
+      _wal(DateTime(1985, 9, 5, 16, 17), 3 * 60, WalStatus.uploaded),
+    ]);
+
+    expect(_row('8:00 AM · 4m'), findsOneWidget);
+    // No 1985 day header, and no time-of-day row for the bogus clock value.
+    expect(_day('1985-09-05'), findsNothing);
+    expect(find.textContaining('1985'), findsNothing);
+    expect(_row('4:17 PM · 3m'), findsNothing);
+    // The recording still lists — undated, like server work without a start:
+    // its row carries only the stage label, so "Transcribing…" appears twice.
+    expect(find.text('Transcribing…'), findsNWidgets(2));
+  });
+
   testWidgets('the summary and day headers total recordings and name only the exceptions', (tester) async {
     await _pump(tester, [
       _wal(DateTime(2026, 10, 18, 8), 4 * 60, WalStatus.uploaded),

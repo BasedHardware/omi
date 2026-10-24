@@ -16,6 +16,7 @@ from models.transcript_segment import TranscriptSegment, strip_grouping_internal
 from utils.conversations.summary_selection import select_primary_summary
 from models.conversation_photo import ConversationPhoto
 from utils.conversations.transcript_for_llm import owner_safe_transcript_segments
+from utils.speaker_display import SpeakerLabeler, voice_key
 from utils.model_text import (
     DisplayClock,
     ELAPSED_LEGEND,
@@ -95,6 +96,9 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
         people_map = {str(p['id']): str(p['name']) for p in people_data}
 
     for conv in conversations:
+        # Dense labels are assigned per conversation: the same diarization id in another
+        # conversation is a different voice, never the same "Speaker A".
+        labeler = SpeakerLabeler()
         segments = cast(List[Dict[str, Any]], conv.get('transcript_segments') or [])
         for seg in segments:
             if seg.get('is_user'):
@@ -103,7 +107,7 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
                 seg['speaker_name'] = people_map[str(seg['person_id'])]
             else:
                 speaker_id = seg.get('speaker_id')
-                seg['speaker_name'] = f"Speaker {speaker_id}" if speaker_id is not None else 'Unknown speaker'
+                seg['speaker_name'] = labeler.label(voice_key(seg)) if speaker_id is not None else 'Unknown speaker'
 
 
 def populate_folder_names(uid: str, conversations: List[Dict[str, Any]]) -> None:

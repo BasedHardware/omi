@@ -37,7 +37,7 @@ def test_user_segments_labeled_you():
 def test_unidentified_speaker_uses_diarization_label():
     conv = _conv([_seg('hello', 0, 6, speaker_id=2)])
     r = build_conversation_analytics(conv, {})
-    assert r.speakers[0].speaker == 'Speaker 2'
+    assert r.speakers[0].speaker == 'Speaker A'
     assert r.speakers[0].person_id is None
 
 
