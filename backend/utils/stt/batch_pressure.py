@@ -185,7 +185,11 @@ class BatchPressure:
             # departed pods were pruned by discovery. Never grant blind headroom.
             if self._reason(min_replicas, now, max_age=self._max_snapshot_age) is None:
                 record_fallback(
-                    component='stt_selection', from_mode='none', to_mode='none', reason='timeout', outcome='degraded'
+                    component='stt_selection',
+                    from_mode='fresh_pressure',
+                    to_mode='cached_pressure',
+                    reason='timeout',
+                    outcome='degraded',
                 )
                 return True
         if reason is not None:
