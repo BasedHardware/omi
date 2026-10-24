@@ -1637,38 +1637,43 @@ def _rejected_price_plan_label(target_price_id: Optional[str]) -> str:
         return 'unknown'
 
 
-def _record_new_buyer_checkout_guard(target_price_id: Optional[str], reason: str) -> None:
-    """Count one single-plan guard outcome, by reason and plan.
+def record_new_buyer_checkout_rejection(target_price_id: Optional[str]) -> None:
+    """Count one checkout rejection under the single-plan rule.
 
     Never raises on the checkout path; the label surfaces are closed by
-    construction (no ids, no exception text).
+    construction (no ids, no exception text). The reason is a literal at the
+    call site — the reason-label contract accepts literals only (a variable
+    needs a reviewed CLOSED_HELPERS helper or debt).
     """
     try:
-        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason=reason, plan=_rejected_price_plan_label(target_price_id)).inc()
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(
+            reason='non_omi_pro_price', plan=_rejected_price_plan_label(target_price_id)
+        ).inc()
     except Exception:
         logger.warning('new-buyer checkout guard metric failed', exc_info=True)
-
-
-def record_new_buyer_checkout_rejection(target_price_id: Optional[str]) -> None:
-    """Count one checkout rejection under the single-plan rule."""
-    _record_new_buyer_checkout_guard(target_price_id, 'non_omi_pro_price')
 
 
 def record_new_buyer_unknown_platform_allowance(target_price_id: Optional[str]) -> None:
     """Count one legacy-price checkout allowed only because the platform is
     missing/unknown (pre-ruling behaviour retained for those callers)."""
-    _record_new_buyer_checkout_guard(target_price_id, 'unknown_platform_allowed')
+    try:
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(
+            reason='unknown_platform_allowed', plan=_rejected_price_plan_label(target_price_id)
+        ).inc()
+    except Exception:
+        logger.warning('new-buyer checkout guard metric failed', exc_info=True)
 
 
 def _zero_initialize_rejection_children() -> None:
     """Create every reachable label child so each series is born at 0.
 
     A Counter child does not exist until its first ``.inc()``, and then reads
-    as a flat 1, invisible to rate()/increase() on a rare counter.
+    as a flat 1, invisible to rate()/increase() on a rare counter. Reasons are
+    literals at each call site (see the recorders above).
     """
-    for reason in NEW_BUYER_CHECKOUT_REJECT_REASONS:
-        for plan in NEW_BUYER_CHECKOUT_REJECT_PLANS:
-            OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason=reason, plan=plan)
+    for plan in NEW_BUYER_CHECKOUT_REJECT_PLANS:
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason='non_omi_pro_price', plan=plan)
+        OMI_NEW_BUYER_CHECKOUT_REJECTED.labels(reason='unknown_platform_allowed', plan=plan)
 
 
 _zero_initialize_rejection_children()
