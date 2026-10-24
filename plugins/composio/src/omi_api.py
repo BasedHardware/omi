@@ -170,7 +170,11 @@ async def create_memories_batch(
 
 
 @router.post("/process-pending-memories/{uid}", status_code=status.HTTP_200_OK)
-async def process_pending_memories(uid: str, limit: int = 10):
+async def process_pending_memories(
+    uid: str,
+    limit: int = 10,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Process pending memories from the database and send to OMI"""
     pending_memories = get_pending_memories(uid, limit)
     results = []
@@ -191,7 +195,12 @@ async def process_pending_memories(uid: str, limit: int = 10):
 
 
 @router.get("/memories/{uid}", status_code=status.HTTP_200_OK)
-async def get_memories(uid: str, limit: int = 100, offset: int = 0):
+async def get_memories(
+    uid: str,
+    limit: int = 100,
+    offset: int = 0,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Get all memories for a user"""
     memories = get_all_memories(uid, limit, offset)
     return {"memories": memories, "count": len(memories)}
