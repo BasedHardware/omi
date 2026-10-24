@@ -1,5 +1,6 @@
 import 'package:omi/models/sync_state.dart';
 import 'package:omi/services/wals/wal.dart';
+import 'package:omi/utils/debug_log_manager.dart';
 
 /// Offline Sync measures work in seconds of audio, never in files.
 ///
@@ -9,6 +10,38 @@ import 'package:omi/services/wals/wal.dart';
 /// jobs. Every number on the page now comes from here, in one unit.
 
 bool walIsOnDevice(Wal wal) => wal.storage == WalStorage.sdcard || wal.storage == WalStorage.flashPage;
+
+/// Earliest plausible recording time, unix seconds: 2024-01-01T00:00:00Z, the
+/// same floor the upload gate enforces on filename timestamps
+/// (backend `utils/request_validation.parse_sync_filename_timestamp`).
+const int walMinPlausibleTimerStartSeconds = 1704067200;
+
+/// Whether a device clock value can name when a recording actually started.
+/// Zero and negative values already read as "unknown"; a positive value before
+/// the floor is a pendant that recorded before its clock was set — the server
+/// refuses that time on upload, so display and range math must refuse it too.
+bool walTimerStartPlausible(int timerStart) => timerStart >= walMinPlausibleTimerStartSeconds;
+
+/// The same floor for server-provided starts (pending work, processing
+/// conversations): a device clock that was never set also reached those records.
+bool recordingStartPlausible(DateTime start) => start.millisecondsSinceEpoch >= walMinPlausibleTimerStartSeconds * 1000;
+
+final Set<String> _reportedImplausibleStarts = {};
+
+/// Logs that a display surface dropped an implausible recording time, once per
+/// source per session — the "device clock was never set" diagnostic outlives the
+/// screen that first noticed it.
+void logImplausibleRecordingStart(String source, String id, int epochSeconds) {
+  final key = '$source/$id';
+  if (!_reportedImplausibleStarts.add(key)) return;
+  if (_reportedImplausibleStarts.length > 500) _reportedImplausibleStarts.clear();
+  DebugLogManager.logEvent('implausible_recording_time', {
+    'source': source,
+    'id': id,
+    'timer_start': epochSeconds,
+    'floor_seconds': walMinPlausibleTimerStartSeconds,
+  });
+}
 
 int walSeconds(Iterable<Wal> wals) => wals.fold(0, (sum, w) => sum + (w.seconds > 0 ? w.seconds : 0));
 

@@ -62,11 +62,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       final callActive = widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active;
       // With the live episode row drawing the streaming capture, this card has no elapsed time.
       final deferred = widget.deferStreamingToEpisode && EpisodePresentation.streamingSource(provider) != null;
-      if (callActive ||
-          (!deferred &&
-              (provider.offlineRecordingStartedAt != null ||
-                  provider.customSttBufferingDuration != null ||
-                  provider.liveCaptureSource != null))) {
+      // The compact streaming pill has no elapsed clock. Rebuilding it each
+      // second changes nothing, and Timer callbacks keep running even when
+      // Home's TickerMode is disabled behind Tasks.
+      if (TickerMode.valuesOf(context).enabled &&
+          (callActive ||
+              (!deferred &&
+                  (provider.offlineRecordingStartedAt != null || provider.customSttBufferingDuration != null)))) {
         setState(() {}); // the elapsed time on the card
       }
       _offlineTick++;
@@ -76,7 +78,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           SharedPreferencesUtil().batchModeEnabled &&
           provider.recordingDevice?.type == DeviceType.limitless) {
         await SharedPreferencesUtil.reload();
-        if (mounted) setState(() {});
+        if (mounted && TickerMode.valuesOf(context).enabled) setState(() {});
       }
     });
   }
