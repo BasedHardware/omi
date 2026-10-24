@@ -152,8 +152,8 @@ deadline. A failed fetch does not discard the other responses: each replica
 keeps its last valid sample and original timestamp for **at most 15 seconds**.
 Departed replicas are removed. DNS failure retains the last discovery only for
 the bounded admission grace below; admission
-never performs DNS or HTTP. Poll/cache fan-out is bounded at **64 ready pods**,
-well above the seven-pod HPA maximum; fleets above that bound still stand down.
+never performs DNS or HTTP. Poll/cache fan-out is bounded at **64 ready pods**;
+fleets above that bound still stand down.
 
 Fresh telemetry must cover **both** `PARAKEET_BATCH_PRESSURE_MIN_REPLICAS` and a
 strict majority (`floor(ready / 2) + 1`) of the current ready pool. Pressure is
