@@ -11,6 +11,7 @@ from database import conversation_finalization_jobs as jobs
 from models.conversation_enums import ConversationStatus
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from tests.unit.test_conversation_finalization_jobs import _Ref, _Transaction
+from utils.metrics import OMI_FALLBACK_TOTAL
 
 NOW = datetime(2026, 10, 24, tzinfo=timezone.utc)
 ROW = ('users', 'synthetic', 'conversations', 'capture')
@@ -170,8 +171,6 @@ def test_cleanup_failure_preserves_committed_processing_admission(monkeypatch, c
 
 @pytest.mark.parametrize('operation', ['conversation', 'job', 'account'])
 def test_indirect_cleanup_read_failure_is_deferred_after_commit(caplog, operation):
-    from utils.observability.fallback import OMI_FALLBACK_TOTAL
-
     metric = OMI_FALLBACK_TOTAL.labels(
         component='conversation_finalization',
         from_mode='inline',
