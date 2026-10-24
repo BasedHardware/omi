@@ -156,7 +156,7 @@ SCAN_ROOT = Path('backend')
 # Tool environments under backend/ (the venv, the OpenAPI runner's venv, ...) are
 # not repository source: they contain third-party code that need not even parse.
 EXCLUDED_DIRS = {'tests', 'testing', 'node_modules', 'site-packages'}
-ALLOWED_FILES = AUTHORITY
+ALLOWED_FILES = {'backend/utils/speaker_display.py'}
 _DYNAMIC_NODES = (ast.Name, ast.Call, ast.Attribute, ast.Subscript, ast.BinOp, ast.IfExp, ast.JoinedStr)
 _SPEAKER_SUFFIX = re.compile(r'(?<![_A-Za-z])Speaker[ \t]*$')
 _FORMAT_TEMPLATE = re.compile(r'(?<![_A-Za-z])Speaker[ \t]*\{')
