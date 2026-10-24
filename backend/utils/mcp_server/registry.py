@@ -93,7 +93,12 @@ _CONVERSATION_CARD_FIELDS: Dict[str, Any] = {
         "items": {
             "type": "object",
             "properties": {
-                "speaker_id": {"type": ["integer", "string", "null"]},
+                "speaker_id": {
+                    "type": ["integer", "string", "null"],
+                    "description": "Legacy nullable field; display voice identity is speaker_key",
+                },
+                "speaker_key": {"type": "string"},
+                "speaker_label": {"type": "string"},
                 "person_id": {"type": ["string", "null"]},
                 "is_user": {"type": "boolean"},
             },
@@ -754,7 +759,12 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                                 "end": {"type": ["number", "null"]},
                                 "start_ms": {"type": ["integer", "null"]},
                                 "end_ms": {"type": ["integer", "null"]},
-                                "speaker_id": {"type": ["integer", "string", "null"]},
+                                "speaker_id": {
+                                    "type": ["integer", "string", "null"],
+                                    "description": "Legacy nullable field; display voice identity is speaker_key",
+                                },
+                                "speaker_key": {"type": "string"},
+                                "speaker_label": {"type": "string"},
                             },
                         },
                     },

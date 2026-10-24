@@ -14664,4 +14664,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Έγινε. $percent% έκπτωση για τους επόμενους $months μήνες.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Άλλοι';
 }

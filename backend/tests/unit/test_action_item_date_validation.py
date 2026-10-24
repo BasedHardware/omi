@@ -114,6 +114,9 @@ _SYS_MODULE_NAMES = [
     "utils.committed_capture",
     "utils.capture_evidence",
     "utils.speaker_display",
+    "utils.speakers",
+    "utils.speakers.display_metrics",
+    "utils.speakers.display",
     "utils.notifications",
     "utils.byok",
     "utils.llm",
@@ -285,14 +288,15 @@ sys.modules["utils.llm"].__path__ = [str(BACKEND_DIR / "utils" / "llm")]
 _stub_package("utils.conversations")
 _load_module_from_file("utils.model_text", BACKEND_DIR / "utils" / "model_text.py")
 _load_module_from_file("utils.user_clock", BACKEND_DIR / "utils" / "user_clock.py")
-# models.conversation imports evidence_field/ledger_bound_incomplete at module
-# scope; the stubbed utils package has an empty __path__, so load the real
-# stdlib-only modules first (capture_evidence imports committed_capture).
+# Load the real pure capture evidence before models.conversation, followed by
+# both speaker presentation boundaries required by the transcript models. The
+# outer utils package stays isolated from provider and database dependencies.
 _load_module_from_file("utils.committed_capture", BACKEND_DIR / "utils" / "committed_capture.py")
 _load_module_from_file("utils.capture_evidence", BACKEND_DIR / "utils" / "capture_evidence.py")
-# models.transcript_segment imports SpeakerLabeler at module scope; the stubbed
-# utils package has an empty __path__, so load the real stdlib-only module first.
 _load_module_from_file("utils.speaker_display", BACKEND_DIR / "utils" / "speaker_display.py")
+_load_module_from_file("utils.speakers", BACKEND_DIR / "utils" / "speakers" / "__init__.py")
+_load_module_from_file("utils.speakers.display_metrics", BACKEND_DIR / "utils" / "speakers" / "display_metrics.py")
+_load_module_from_file("utils.speakers.display", BACKEND_DIR / "utils" / "speakers" / "display.py")
 
 # Stub utils.conversations.render (action_item_tools imports resolve_display_tz, format_local_time)
 _render_stub = _stub_module("utils.conversations.render")

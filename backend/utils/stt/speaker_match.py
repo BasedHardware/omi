@@ -10,11 +10,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from math import isfinite
-from typing import Any, Mapping, Optional, Sequence, TypeVar
+from typing import Any, Callable, Mapping, Optional, Sequence, TypeVar
 
 import numpy as np
 
-from utils.speakers.policy import LIVE, MATCH_MARGIN, MIN_EVIDENCE_SECONDS, MAX_CLIPS, OWNER_NEAR_MISS_DISTANCE
+from utils.speakers.policy import (
+    CROSS_EPOCH,
+    LIVE,
+    MATCH_MARGIN,
+    MIN_EVIDENCE_SECONDS,
+    MAX_CLIPS,
+    OWNER_NEAR_MISS_DISTANCE,
+)
 
 # Named policy entries preserve the live verification operating point.
 SPEAKER_MATCH_THRESHOLD = LIVE.distance
@@ -72,6 +79,59 @@ def select_speaker_match(
         best_distance=best,
         runner_up_distance=runner_up,
     )
+
+
+def group_epoch_voices(
+    centroids: Mapping[int, Any],
+    scopes: Mapping[int, str],
+    evidence_seconds: Mapping[int, float],
+    *,
+    distance: Callable[[Any, Any], float],
+) -> dict[int, int]:
+    """Group live owner competitors, never storage IDs or unnamed display labels.
+
+    Require five extracted seconds on both sides, a clear shared-policy margin,
+    and agreement with every peer. Epoch identity itself supplies no evidence;
+    short owner-continuity accepts cannot merge acoustic competition.
+    """
+    vectors = {}
+    for voice, centroid in centroids.items():
+        try:
+            vector = np.asarray(centroid, dtype=np.float32).reshape(1, -1)
+            if vector.size and np.isfinite(vector).all() and float(np.linalg.norm(vector)) > 0:
+                vectors[voice] = vector
+        except (TypeError, ValueError, OverflowError):
+            continue
+    qualified = {
+        voice
+        for voice, seconds in evidence_seconds.items()
+        if isfinite(seconds) and seconds >= MIN_EVIDENCE_SECONDS and voice in vectors
+    }
+    groups: dict[int, int] = {}
+    members: dict[int, list[int]] = {}
+    for voice in centroids:
+        scope = scopes.get(voice)
+        group = voice
+        if scope and voice in qualified:
+            centroid = vectors[voice]
+            distances = {
+                str(representative): max(
+                    distance(centroid, vectors[peer]) if centroid.size == vectors[peer].size else float('inf')
+                    for peer in peers
+                )
+                for representative, peers in members.items()
+                if all(peer in qualified for peer in peers)
+            }
+            # Nearest, not first acceptable. Even same-scope competitors constrain
+            # the margin, but can never become a merge target.
+            decision = select_speaker_match(distances, threshold=CROSS_EPOCH.distance)
+            if decision.person_id is not None:
+                representative = int(decision.person_id)
+                if all(scopes.get(peer) and scopes[peer] != scope for peer in members[representative]):
+                    group = representative
+        groups[voice] = group
+        members.setdefault(group, []).append(voice)
+    return groups
 
 
 # Calibration-only near-miss sweep on production vectors (five repeated,

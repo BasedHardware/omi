@@ -19,6 +19,7 @@ from utils.llm.shaped_agent import route_for_uid
 from utils.model_text import DisplayClock, format_instant
 
 from utils.llm.conversation_notes_prompts import SHARED_CONVERSATION_PREAMBLE
+from utils.speakers.display import prompt_speaker_map
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,10 @@ class ConversationPromptPrefix:
     account_owner_name: Optional[str] = None
     # Account vocabulary is volatile context, outside the shared cache boundary.
     known_spellings: str = ''
+    # Server-owned identity inputs, outside the rendered/cacheable prompt bytes.
+    speaker_names: tuple[tuple[str, Optional[str]], ...] = ()
+    meeting_names: tuple[str, ...] = ()
+    transcript_body: str = ''
 
     @property
     def cache_key(self) -> str:
@@ -106,7 +111,7 @@ def _one_line(name: str) -> str:
     return ' '.join(''.join(' ' if unicodedata.category(ch) == 'Cc' else ch for ch in name).split())
 
 
-def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+def _title_people(source_map: Optional[Mapping[Any, Optional[str]]]) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Return ``(title_people, owner_names)`` for the general notes path.
 
     Only the hard voice/tag bindings an owner-aware ``SpeakerMap`` (from
@@ -166,7 +171,7 @@ def _title_people(source_map: Optional[Mapping[int, Optional[str]]]) -> tuple[tu
 
 
 def _speaker_metadata_lines(
-    speaker_names: Mapping[int, Optional[str]],
+    speaker_names: Mapping[Any, Optional[str]],
     roster: MeetingRoster,
     desktop_meeting_capture: bool,
 ) -> List[str]:
@@ -202,7 +207,7 @@ def build_conversation_prompt_prefix(
     language_code: str,
     calendar_context: Optional[CalendarMeetingContext] = None,
     photos: Optional[List[ConversationPhoto]] = None,
-    speaker_map: Optional[Mapping[int, Optional[str]]] = None,
+    speaker_map: Optional[Mapping[Any, Optional[str]]] = None,
     transcript_segment_ids: Optional[Iterable[str]] = None,
     roster: Optional[MeetingRoster] = None,
     desktop_meeting_capture: bool = False,
@@ -226,7 +231,8 @@ def build_conversation_prompt_prefix(
     display_clock = DisplayClock.from_name(timezone_name)
     aware_started_at = started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)
     started_at_local = format_instant(aware_started_at, display_clock)
-    speaker_names: dict[int, Optional[str]] = dict(speaker_map) if speaker_map else {}
+    transcript, speaker_names = prompt_speaker_map(transcript, speaker_map or {})
+    source_speaker_names = dict(speaker_names)
     metadata_lines = [
         f'- Captured at: {started_at_local}',
     ]
@@ -307,7 +313,7 @@ def build_conversation_prompt_prefix(
             'started_at': format_instant(started_at, display_clock),
             'timezone': timezone_name,
             'language': language_code,
-            'speaker_map': dict(speaker_map or {}),
+            'speaker_map': source_speaker_names,
             'expected_calendar': None,
             'observed_screen_listing': None,
             'photo_descriptions': photo_descriptions,
@@ -353,4 +359,11 @@ def build_conversation_prompt_prefix(
         owner_names=owner_names,
         account_owner_name=account_owner_name or None,
         known_spellings=known_spellings,
+        speaker_names=tuple(source_speaker_names.items()),
+        meeting_names=(
+            tuple(participant.name for participant in calendar_context.participants if participant.name)
+            if calendar_context
+            else ()
+        ),
+        transcript_body=transcript,
     )

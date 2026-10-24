@@ -14683,4 +14683,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Tapos na. $percent% diskwento sa susunod na $months buwan.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Iba pa';
 }

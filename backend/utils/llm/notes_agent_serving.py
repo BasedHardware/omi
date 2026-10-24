@@ -20,6 +20,7 @@ from utils.llm.meeting_notes_rich_prompts import NotesFrameImage
 from utils.llm.notes_agent import langchain_complete, record_decision, record_run, run_notes_agent
 from config.refactor_modes import serving_for
 from utils.llm.notes_packet import select_notes_packet
+from utils.llm.notes_identity import notes_identity
 from utils.llm.notes_agent_policy import plan_notes_agent
 from utils.llm.notes_lengths import length_guide
 from utils.llm.notes_agent_prompt import (
@@ -79,7 +80,7 @@ def agentic_notes_payload(
     capture_evidence: str,
     words: int,
     frames: Sequence[NotesFrameImage],
-    kwargs: Mapping[str, Any],
+    kwargs: dict[str, Any],
 ) -> Optional[dict[str, Any]]:
     """A validated ``submit_notes`` payload, or None to keep the one-shot path."""
     roster = kwargs.get('roster')
@@ -131,6 +132,8 @@ def agentic_notes_payload(
         packet = select_notes_packet(
             packet, prefix=prefix, uid=uid, capture_evidence=capture_evidence, words=words, inputs=kwargs
         )
+        identity = notes_identity(prefix, kwargs, packet)
+        kwargs['notes_identity'] = identity
         seed = conversation_seed(packet, capture_evidence, explicit_cache=explicit_cache)
         toolbox = NotesToolbox(
             uid=uid,
@@ -139,6 +142,7 @@ def agentic_notes_payload(
             finished_at=finished_at,
             frames=tuple(frames),
             seen_conversations=set(seen),
+            identity=identity,
         )
         # Per-user routing key over the stable bytes only; the gateway scopes it to the owner again.
         cache_key = (
@@ -165,6 +169,7 @@ def agentic_notes_payload(
                     naming_leads=() if serving_for('NOTES_PACKET_V2_MODE', uid) else naming_leads(packet),
                     contract_v2=serving_for('NOTES_PACKET_V2_MODE', uid),
                     transcript_segment_ids=prefix.transcript_segment_ids,
+                    identity=identity,
                 )
 
         result = asyncio.run(invoke())

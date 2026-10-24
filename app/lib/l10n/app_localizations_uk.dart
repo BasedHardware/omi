@@ -14599,4 +14599,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Готово. Знижка $percent% на наступні $months місяці.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Інші';
 }

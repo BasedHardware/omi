@@ -20,6 +20,7 @@ from utils.llm.notes_refactor_metrics import shadow, result
 from utils.observability.fallback import record_fallback
 from utils.llm.notes_lengths import length_ceiling, length_floor
 from utils.llm.shaped_agent import Problem
+from utils.llm.notes_identity import NotesIdentity, notes_identity, repair_identity
 
 # Words that make a heading a task list rather than discussion.
 _ACTION_HEADING = re.compile(
@@ -100,9 +101,22 @@ TITLE_MAX_CHARS = 70
 TITLE_MAX_WORDS = 10
 
 
-def check_notes(submission: Mapping[str, Any], *, transcript_words: int, contract_v2: bool = False) -> NotesCheck:
+def check_notes(
+    submission: Mapping[str, Any],
+    *,
+    transcript_words: int,
+    contract_v2: bool = False,
+    identity: NotesIdentity | None = None,
+) -> NotesCheck:
     """Problems the model should fix itself on its first submission."""
     check = NotesCheck()
+    if identity is not None and repair_identity(submission, identity)[1]:
+        check.add(
+            'evidence',
+            'Unsupported speaker identity: People names and lookup results are spelling data. '
+            'Use a resolved voice binding, conversation calendar/tile roster or user correction; '
+            'otherwise say a speaker, hedge names as heard and lead the title with the topic.',
+        )
     if contract_v2:
         title = str(submission.get('title') or '').strip()
         if not title or len(title) > TITLE_MAX_CHARS or len(title.split()) > TITLE_MAX_WORDS:
@@ -194,6 +208,7 @@ def repair_contract(
     open_tasks: Sequence[Any] = (),
     owner_names: Sequence[str] = (),
     transcript_segment_ids: Iterable[str] = (),
+    identity: NotesIdentity | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Same bounded, model-free repairs for every v2 arm. Never invent missing coverage.
 
@@ -201,6 +216,9 @@ def repair_contract(
     Static repair preserves a grounded short note rather than padding it with fiction.
     """
     repaired, repairs = repair_notes(submission, open_tasks=open_tasks, owner_names=owner_names)
+    if identity is not None:
+        repaired, identity_repairs = repair_identity(repaired, identity)
+        repairs.extend(identity_repairs)
     title = ' '.join(str(repaired.get('title') or '').split()[:TITLE_MAX_WORDS])
     if len(title) > TITLE_MAX_CHARS:
         title = title[:TITLE_MAX_CHARS].rsplit(' ', 1)[0] or title[:TITLE_MAX_CHARS]
@@ -267,25 +285,39 @@ def enforce_output_contract(
     owner_names: Sequence[str] = (),
     open_tasks: Sequence[Any] = (),
     title_people: Sequence[str] = (),
+    identity: NotesIdentity | None = None,
 ) -> NotesCheck:
     """Validate and repair the parsed artifact including visible Markdown citations."""
 
     payload = structured.model_dump(mode='json')
-    check = check_notes(payload, transcript_words=transcript_words, contract_v2=True)
+    check = check_notes(payload, transcript_words=transcript_words, contract_v2=True, identity=identity)
     payload, check.repairs = repair_contract(
         payload,
         transcript_words=transcript_words,
         open_tasks=open_tasks,
         owner_names=owner_names,
         transcript_segment_ids=transcript_segment_ids,
+        identity=identity,
     )
     repaired = Structured.model_validate(payload)
-    for field_name in ('title', 'sections', 'participants', 'action_items', 'events'):
-        setattr(structured, field_name, getattr(repaired, field_name))
+    for field_name in (
+        'title',
+        'overview',
+        'sections',
+        'participants',
+        'action_items',
+        'events',
+        'insights',
+        'note_claims',
+    ):
+        if getattr(structured, field_name) != getattr(repaired, field_name):
+            setattr(structured, field_name, getattr(repaired, field_name))
     enforce_static_conversation_note_presentation(structured, transcript_segment_ids, title_people=title_people)
     # Title people repair can lengthen the title: the shared bounds apply last.
     bounded, _ = repair_contract({'title': structured.title}, transcript_words=transcript_words)
     structured.title = bounded['title']
+    if identity is not None:
+        _finish_identity(structured, None, {'notes_identity': identity})
     return check
 
 
@@ -298,6 +330,8 @@ OUTPUT_RULES = '''OUTPUT CONTRACT
 - Use the packet's LENGTH range; density is guidance, never permission to pad unsupported facts.
 - Every section body is a bullet list. Nest supporting details. Commitments belong only in action_items.
 - Participants contain evidenced non-owner names only; omit unresolved people instead of inventing a name.
+- A People spelling or search_people hit cannot bind a voice: require a resolved speaker binding, a calendar
+  attendee or tile/roster name in this conversation, or the user's correction. Transcript-only names stay hedged.
 - Copy only authoritative transcript IDs into source_segment_ids, never into visible text or links.
 - Speaker bands and the no-guess rule override any naming leads in calendar, contact, screen or background data.'''
 
@@ -328,7 +362,7 @@ def finish_notes_contract(
                     'output_contract',
                     'repaired' if check.repairs else 'accepted_with_problems' if check.findings else 'passed',
                 )
-                return target
+                return _finish_identity(target, prefix, inputs)
         except Exception:
             shadow('output_contract', 'error')
             if serve:
@@ -345,4 +379,36 @@ def finish_notes_contract(
         prefix.transcript_segment_ids,
         title_people=() if rich_mode else prefix.title_people,
     )
+    return _finish_identity(structured, prefix, inputs)
+
+
+def _finish_identity(structured: Any, prefix: Any, inputs: Mapping[str, Any]) -> Any:
+    identity = inputs.get('notes_identity') or notes_identity(prefix, inputs)
+    payload, repairs = repair_identity(structured.model_dump(mode='json'), identity)
+    if repairs:
+        repaired = Structured.model_validate(payload)
+        for field_name in (
+            'title',
+            'overview',
+            'sections',
+            'participants',
+            'action_items',
+            'events',
+            'insights',
+            'note_claims',
+        ):
+            if getattr(structured, field_name) != getattr(repaired, field_name):
+                setattr(structured, field_name, getattr(repaired, field_name))
+        record_identity_repair()
     return structured
+
+
+def record_identity_repair() -> None:
+    result('speaker_identity', 'repaired')
+    record_fallback(
+        component='conversation_notes',
+        from_mode='unsupported_identity',
+        to_mode='supported_labels',
+        reason='local_heal',
+        outcome='degraded',
+    )

@@ -68,7 +68,9 @@ def routes(monkeypatch):
     monkeypatch.setattr(developer, 'authorize_memory_external_default_memory_read', grant)
     monkeypatch.setattr(mcp, 'authorize_memory_external_default_memory_read', grant)
     monkeypatch.setattr(developer, 'check_conversation_transcript_read_limit', lambda *a, **k: calls.transcript_rate())
-    monkeypatch.setattr(developer, 'populate_speaker_names', lambda *a: None)
+    monkeypatch.setattr(
+        developer, 'populate_speaker_names', lambda uid, conversations, *, preserve_api_values=False: None
+    )
     monkeypatch.setattr(developer, 'populate_folder_names', lambda *a: None)
 
     def origin(name):

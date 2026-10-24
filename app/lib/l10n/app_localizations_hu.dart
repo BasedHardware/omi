@@ -14626,4 +14626,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String retentionOfferApplied(int percent, int months) {
     return 'Kész. $percent% kedvezmény a következő $months hónapban.';
   }
+
+  @override
+  String get othersSpeakerLabel => 'Mások';
 }
