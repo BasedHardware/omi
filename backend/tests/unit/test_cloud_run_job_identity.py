@@ -37,4 +37,3 @@ def test_notifications_deploy_strips_the_legacy_key_path_literal():
     workflow = workflow_path.read_text(encoding='utf-8')
 
     assert 'DAILY_SUMMARY_SELECTION_MODE,GOOGLE_APPLICATION_CREDENTIALS,' in workflow
-
