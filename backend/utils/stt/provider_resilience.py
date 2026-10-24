@@ -29,6 +29,8 @@ _CIRCUIT_TRIP_CLASSES: Final = (
     'capacity_full',
     'config_incomplete',
     'connection_lost',
+    'empty_streak',
+    'first_text_deadline',
     'modulate_serve_error',
     'provider_429',
     'provider_5xx',
@@ -40,6 +42,28 @@ _CIRCUIT_TRIP_CLASSES: Final = (
     'timeout',
     'untyped',
 )
+
+
+def circuit_trip_reason(error_class: str) -> str:
+    """Normalize known causes without guessing that capacity is an outage.
+
+    Keep the detailed error_class for existing queries. The reason dimension
+    groups auth/quota, server faults, latency, empty output and connection
+    failures; capacity and unknown remain explicit rather than misclassified.
+    """
+    if error_class in {'auth', 'provider_auth_rejected'}:
+        return 'auth'
+    if error_class in {'quota', 'provider_budget_exhausted', 'provider_rate_limited', 'provider_429'}:
+        return 'quota'
+    if error_class in {'provider_5xx', 'modulate_serve_error'}:
+        return '5xx'
+    if error_class == 'timeout':
+        return 'latency'
+    if error_class in {'first_text_deadline', 'empty_streak', 'no_text'}:
+        return 'no_text'
+    if error_class in {'connection_lost', 'send_failed'}:
+        return 'connect'
+    return 'capacity' if error_class == 'capacity_full' else 'unknown'
 
 
 def initialize_stt_circuit_trip_children() -> None:
@@ -54,7 +78,9 @@ def initialize_stt_circuit_trip_children() -> None:
         for provider in _CIRCUIT_TRIP_PROVIDERS:
             for kind in ('selection', 'account'):
                 for error_class in _CIRCUIT_TRIP_CLASSES:
-                    OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL.labels(provider=provider, kind=kind, error_class=error_class)
+                    OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL.labels(
+                        provider=provider, kind=kind, error_class=error_class, reason=circuit_trip_reason(error_class)
+                    )
     except Exception:
         pass
 
@@ -342,12 +368,14 @@ class ProviderCircuitBreaker:
         if self._provider_label is None or was_open:
             return
         try:
+            bounded_class = (
+                error_class if isinstance(error_class, str) and error_class in LIVE_STT_REASONS else 'untyped'
+            )
             OMI_STT_PROVIDER_CIRCUIT_TRIP_TOTAL.labels(
                 provider=self._provider_label,
                 kind=kind,
-                error_class=(
-                    error_class if isinstance(error_class, str) and error_class in LIVE_STT_REASONS else 'untyped'
-                ),
+                error_class=bounded_class,
+                reason=circuit_trip_reason(bounded_class),
             ).inc()
         except Exception:
             pass

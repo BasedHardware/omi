@@ -801,6 +801,13 @@ headline session-outcome page below.
 - `omi_stt_provider_circuit_open{provider,kind=selection|account}` — per-pod
   mirror of the process-local breakers; sum across the listen job for "pods
   with this provider benched".
+- `omi_stt_provider_circuit_trip_total{provider,kind,error_class,reason}` —
+  actual transitions into open, retaining the detailed bounded `error_class`.
+  `reason` groups causes as `auth|quota|5xx|latency|no_text|connect`; `capacity`
+  and `unknown` prevent pressure or missing evidence being called an outage.
+  Existing queries that sum by provider/kind/error_class continue to work
+  across mixed old/new listener revisions; do not require `reason` until all
+  receiving traffic reports it. Adding the label does not alter admission.
 - `omi_stt_provider_retired{provider}` — deployment config
   (`STT_RETIRED_PROVIDERS`, default `deepgram` per the 2026-09 cost ruling:
   hosted Deepgram is intentionally unfunded). The per-provider budget page
