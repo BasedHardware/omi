@@ -99,7 +99,7 @@ class Renderer:
         # Explicit columns win; inferred columns preserve keys from every row.
         cols = list(columns) if columns else list(dict.fromkeys(key for row in rows for key in row))
 
-        table = Table(title=title, show_lines=False, header_style="bold")
+        table = Table(title=Text(title) if isinstance(title, str) else title, show_lines=False, header_style="bold")
         for col in cols:
             table.add_column(Text(col, style="bold"))
         for row in rows:
@@ -107,7 +107,12 @@ class Renderer:
         self._stdout.print(table)
 
     def _emit_mapping(self, mapping: Mapping[str, Any], *, title: Optional[str]) -> None:
-        table = Table(title=title, show_header=False, show_lines=False, box=None)
+        table = Table(
+            title=Text(title) if isinstance(title, str) else title,
+            show_header=False,
+            show_lines=False,
+            box=None,
+        )
         table.add_column("field", style="bold")
         table.add_column("value")
         for k, v in mapping.items():
@@ -160,7 +165,10 @@ class Renderer:
     def debug(self, message: str) -> None:
         if not self.verbose:
             return
-        self._stderr.print(f"[dim][debug][/dim] {message}")
+        line = Text()
+        line.append("[debug]", style="dim")
+        line.append(f" {message}")
+        self._stderr.print(line)
 
 
 def _stringify(v: Any) -> str:

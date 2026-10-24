@@ -175,3 +175,24 @@ def test_pretty_data_keys_and_matched_tags_are_literal(capsys) -> None:
     output = capsys.readouterr().out
     assert output.count("[key]") == 2
     assert output.count("[bold]keep tags[/bold] :warning:") == 2
+
+
+@pytest.mark.parametrize("title", ["omi app verify https://example.com/[red]/hook", "tool[/bold] :warning:"])
+def test_pretty_table_and_mapping_titles_are_literal(capsys, title) -> None:
+    renderer = Renderer(no_color=True)
+    renderer._stdout.width = 200
+    row = {"id": "x" * 60}
+    renderer.emit([row], title=title)
+    renderer.emit(row, title=title)
+    output = capsys.readouterr().out
+    assert output.count(title) == 2
+
+
+@pytest.mark.parametrize("message", ["GET /v1/dev/user/memories", "Literal [red]tag[/red] and [/bold] :warning:"])
+def test_debug_preserves_prefix_and_literal_message(capsys, message) -> None:
+    renderer = Renderer(verbose=True, no_color=True)
+    renderer._stderr.width = 200
+    renderer.debug(message)
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"[debug] {message}" in captured.err
