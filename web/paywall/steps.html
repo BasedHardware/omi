@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Omi Unlimited</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root { --bg:#fff; --ink:#0b0b0c; --text2:#5a5b62; --text3:#8c8d94; --panel:#f4f4f6; --line:#0000001a; --star:#f5a623; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; overflow:hidden; background:var(--bg); color:var(--ink); font-family:Manrope,-apple-system,BlinkMacSystemFont,system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  button { font:inherit; color:inherit; }
+
+  /* Shown on the plans page only. (The app also draws its own close button over the top-left corner.) */
+  .close { position:fixed; z-index:30; top:calc(env(safe-area-inset-top) + 4px); left:4px; width:48px; height:48px; border:0; background:none; padding:12px; transition:opacity .2s; }
+  .close svg { width:24px; height:24px; display:block; }
+  .close.off { opacity:0; pointer-events:none; }
+  .wordmark { position:fixed; z-index:20; top:calc(env(safe-area-inset-top) + 18px); left:50%; transform:translateX(-50%); height:20px; }
+
+  .pages { position:fixed; inset:0; overflow:hidden; }
+  /* Footer heights: pages 1-2 = button + the line under it; page 3 adds the line and plans above it. */
+  .step { position:absolute; inset:0; display:flex; flex-direction:column; overflow:hidden; padding:calc(env(safe-area-inset-top) + 72px) 24px calc(max(24px, env(safe-area-inset-bottom)) + 120px); transition:transform .35s cubic-bezier(.4,0,.2,1), opacity .35s; }
+  .step.later { transform:translateX(100%); }
+  .step.earlier { transform:translateX(-30%); opacity:0; pointer-events:none; }
+  .step[data-step="2"] { padding-bottom:calc(max(24px, env(safe-area-inset-bottom)) + 336px); }
+  h1 { margin:0; font-size:30px; line-height:1.08; letter-spacing:-1px; font-weight:800; text-align:center; }
+  .lede { margin:10px 0 0; text-align:center; font-size:16px; line-height:1.45; color:var(--text2); }
+
+  /* 1: the pendant hangs from the top edge of the screen, so its cord reads as worn, not cropped */
+  .step[data-step="0"] { padding-top:0; }
+  .hang { position:relative; flex:none; height:min(118vw, 57vh); margin:0 -24px; overflow:visible; }
+  .hang img { position:absolute; left:50%; top:0; height:100%; width:auto; max-width:none; transform:translateX(-50%); }
+  .tagline { flex:1; display:flex; flex-direction:column; justify-content:center; }
+  @keyframes bob { 0%,100% { transform:translateY(0) rotate(var(--r)); } 50% { transform:translateY(-7px) rotate(var(--r)); } }
+  @keyframes rise { from { opacity:0; translate:0 14px; } to { opacity:1; translate:0 0; } }
+  .chip { position:absolute; z-index:1; display:flex; align-items:center; gap:10px; padding:10px 14px 10px 10px; background:#fff; border:1px solid var(--line); border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.12); line-height:1.3; white-space:nowrap; animation:rise .6s ease-out both, bob 4.5s ease-in-out infinite; }
+  .chip i { width:30px; height:30px; border-radius:10px; background:var(--panel); display:flex; align-items:center; justify-content:center; font-style:normal; font-size:15px; font-weight:800; flex:none; }
+  .chip b { display:block; font-size:13px; font-weight:700; }
+  .chip span { color:var(--text2); font-size:12px; }
+  .chip.c1 { --r:-3deg; left:12px; top:calc(env(safe-area-inset-top) + 66px); animation-delay:.2s, 0s; }
+  .chip.c2 { --r:2deg; right:12px; bottom:3%; animation-delay:.5s, -2.2s; }
+  .chip .dot { width:8px; height:8px; border-radius:50%; background:#ff3b30; box-shadow:0 0 0 4px #ff3b3022; }
+
+  /* 2: a phone showing one conversation (drawn in HTML, sized from the space it gets) */
+  .stage { position:relative; flex:1; min-height:320px; margin:18px -24px 14px; container-type:size; }
+  .phone { --s:.92; --x:0px; --r:0deg; position:absolute; left:50%; top:50%; height:calc(100cqh * var(--s)); width:calc(100cqh * var(--s) * .49); transform:translate(-50%,-50%) translateX(var(--x)) rotate(var(--r)); font-size:calc(100cqh * var(--s) / 58); border-radius:5.4em; background:#0b0b0c; padding:1em; box-shadow:0 2.4em 5em rgba(0,0,0,.18), 0 .4em 1.2em rgba(0,0,0,.12); }
+  .screen { position:relative; height:100%; border-radius:4.4em; background:#f2f2f7; overflow:hidden; padding:1.6em 1.8em 0; }
+  .phone.side { --s:.74; }
+  .phone.left { --x:-26cqw; --r:-8deg; }
+  .phone.right { --x:26cqw; --r:8deg; }
+  .phone.front { z-index:2; }
+  .row { display:flex; gap:1em; align-items:center; background:#fff; border-radius:1.4em; padding:1em 1.1em; margin-top:.8em; box-shadow:0 .1em .3em rgba(0,0,0,.04); }
+  .row .em { width:2.1em; height:2.1em; border-radius:.6em; background:#f2f2f7; display:flex; align-items:center; justify-content:center; font-size:1.5em; flex:none; }
+  .row b { display:block; font-size:1.25em; font-weight:700; line-height:1.2; }
+  .row span { font-size:1.05em; color:var(--text3); }
+  .h-big { font-size:2.4em; font-weight:800; letter-spacing:-.03em; margin-top:1em; }
+  .h-sec { font-size:1.15em; font-weight:700; color:var(--text2); margin-top:1.2em; }
+  .bubble { max-width:82%; font-size:1.3em; line-height:1.4; padding:.8em 1em; border-radius:1.2em; margin-top:1em; }
+  .bubble.me { margin-left:auto; background:var(--ink); color:#fff; border-bottom-right-radius:.3em; }
+  .bubble.omi { background:#fff; border-bottom-left-radius:.3em; box-shadow:0 .1em .3em rgba(0,0,0,.05); }
+  .src { display:inline-flex; gap:.4em; align-items:center; margin-top:.6em; font-size:.85em; font-weight:600; color:var(--text2); background:#f2f2f7; border-radius:1em; padding:.3em .7em; }
+  .island { position:absolute; top:1.1em; left:50%; transform:translateX(-50%); width:9em; height:2.6em; border-radius:2em; background:#0b0b0c; }
+  .status { display:flex; justify-content:space-between; align-items:center; height:2.8em; padding:0 1em; font-size:1.25em; font-weight:700; }
+  .status .bars { display:flex; gap:.25em; align-items:flex-end; }
+  .status .bars i { width:.28em; background:var(--ink); border-radius:.1em; }
+  .nav { display:flex; align-items:center; justify-content:space-between; margin-top:1.4em; }
+  .nav svg { width:1.9em; height:1.9em; }
+  .nav .pill { font-size:1.05em; font-weight:600; background:#fff; border-radius:2em; padding:.45em 1em; box-shadow:0 .1em .3em rgba(0,0,0,.06); }
+  .conv-head { display:flex; gap:1.1em; align-items:center; margin-top:1.6em; }
+  .conv-head .emoji { width:2.1em; height:2.1em; border-radius:.6em; background:#fff; display:flex; align-items:center; justify-content:center; font-size:1.9em; box-shadow:0 .1em .3em rgba(0,0,0,.06); flex:none; }
+  .conv-head b { display:block; font-size:1.7em; font-weight:800; letter-spacing:-.02em; line-height:1.15; }
+  .conv-head span { font-size:1.15em; color:var(--text2); }
+  .tabs { display:flex; gap:.4em; margin-top:1.6em; background:#e4e4ea; border-radius:1.2em; padding:.35em; }
+  .tabs span { flex:1; text-align:center; font-size:1.15em; font-weight:600; padding:.55em 0; border-radius:.9em; color:var(--text2); }
+  .tabs span.on { background:#fff; color:var(--ink); box-shadow:0 .1em .3em rgba(0,0,0,.08); }
+  .card { background:#fff; border-radius:1.6em; padding:1.4em 1.5em; margin-top:1.2em; box-shadow:0 .1em .3em rgba(0,0,0,.04); }
+  .card h4 { margin:0 0 .6em; font-size:1.05em; letter-spacing:.08em; text-transform:uppercase; color:var(--text3); font-weight:700; }
+  .card p { margin:0; font-size:1.3em; line-height:1.45; }
+  .todo { display:flex; gap:.9em; align-items:flex-start; font-size:1.3em; line-height:1.35; padding:.5em 0; }
+  .todo + .todo { border-top:1px solid #0000000d; }
+  .todo .box { width:1.25em; height:1.25em; border-radius:50%; border:.12em solid #c7c7cc; flex:none; margin-top:.08em; }
+  .todo.done .box { background:var(--ink); border-color:var(--ink); }
+  .todo.done span { color:var(--text3); text-decoration:line-through; }
+  .todo em { display:block; font-style:normal; font-size:.82em; color:var(--text3); }
+
+  /* 3: plans. Only the perks list scrolls. */
+  .device { display:block; width:50px; height:62px; object-fit:contain; margin:0 auto 6px; flex:none; }
+  .accolades { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:16px; flex:none; }
+  .accolade { display:flex; align-items:center; justify-content:center; gap:8px; height:66px; border:1px solid #e3e5ec; border-radius:16px; background:linear-gradient(180deg,#fbfbfd,#f3f4f8); }
+  .accolade img { height:44px; }
+  .accolade div { text-align:center; font-size:17px; line-height:1.2; font-weight:500; color:#333; }
+  .accolade small { display:block; margin-top:3px; font-size:13px; color:var(--text2); }
+  .accolade .stars { display:flex; gap:2px; justify-content:center; margin-top:5px; }
+  .accolade .stars svg { width:15px; height:15px; }
+  .gets { flex:1; min-height:96px; margin-top:14px; overflow-y:auto; -webkit-overflow-scrolling:touch; background:var(--panel); border-radius:20px; padding:6px 18px 36px; -webkit-mask-image:linear-gradient(180deg,#000 calc(100% - 44px),transparent); mask-image:linear-gradient(180deg,#000 calc(100% - 44px),transparent); }
+  .get { display:flex; gap:12px; align-items:center; font-size:15px; font-weight:600; padding:11px 0; }
+  .get + .get { border-top:1px solid #00000010; }
+  .get i { width:22px; height:22px; border-radius:50%; background:var(--ink); flex:none; display:flex; align-items:center; justify-content:center; }
+  .get i svg { width:12px; height:12px; }
+
+  footer { position:fixed; z-index:20; left:0; right:0; bottom:0; background:var(--bg); padding:12px 16px max(24px, env(safe-area-inset-bottom)); }
+  .promise { display:flex; align-items:center; justify-content:center; gap:8px; font-size:15px; font-weight:600; }
+  .promise svg { width:18px; height:18px; }
+  .extra .promise { padding:2px 0 14px; }
+  .below { height:44px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; }
+  .plans { display:flex; flex-direction:column; gap:10px; margin-bottom:14px; }
+  .plan { position:relative; display:flex; align-items:center; justify-content:space-between; width:100%; min-height:64px; padding:10px 16px; border:1.5px solid var(--line); border-radius:16px; background:#fff; text-align:left; cursor:pointer; }
+  .plan.selected { border:2px solid var(--ink); padding:9.5px 15.5px; }
+  .plan .name { display:block; font-size:16px; font-weight:800; letter-spacing:.4px; text-transform:uppercase; }
+  .plan .sub { display:block; font-size:14px; color:var(--text2); margin-top:2px; }
+  .plan .per { font-size:16px; font-weight:600; }
+  .plan .badge { position:absolute; top:-11px; left:50%; transform:translateX(-50%); background:var(--ink); color:#fff; font-size:11px; font-weight:800; letter-spacing:.6px; padding:3px 10px; border-radius:7px; white-space:nowrap; }
+  .cta { position:relative; overflow:hidden; width:100%; height:60px; border:0; border-radius:999px; background:var(--ink); color:#fff; font-size:18px; font-weight:700; }
+  .cta:disabled { opacity:.35; }
+  @keyframes sweep { 0%,45% { left:-120px; } 100% { left:110%; } }
+  .cta.shiny::after { content:""; position:absolute; top:-20%; bottom:-20%; left:-120px; width:70px; background:linear-gradient(90deg,#fff0,#ffffff52,#fff0); transform:skewX(-20deg); animation:sweep 3.2s linear infinite; pointer-events:none; }
+  .fine { text-align:center; font-size:11px; font-weight:500; color:var(--text3); }
+  .legal { display:flex; gap:16px; justify-content:center; font-size:12px; }
+  .legal a { color:var(--text2); text-decoration:underline; text-underline-offset:2px; }
+  @media (max-height:740px) {
+    .step[data-step="2"] .device { display:none; }
+    .step[data-step="2"] h1 { font-size:26px; }
+    .accolade { height:58px; }
+  }
+  .hidden { display:none !important; }
+</style>
+<script>window.omiTrack = window.omiExposure = function () {}; // replaced by track.js; the page works without it</script>
+<script>window.OMI_PAYWALL_VERSION = 'steps';</script>
+<script src="/track.js"></script>
+</head>
+<body>
+  <button class="close off" id="free" type="button" aria-label="Use Free Plan">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M18 6L6 18" stroke="#0b0b0c" stroke-width="2.2" stroke-linecap="round"/></svg>
+  </button>
+  <img class="wordmark" src="/omi-wordmark.png" alt="omi">
+
+  <div class="pages">
+  <!-- 1: the promise, with the device -->
+  <section class="step" data-step="0">
+    <div class="hang">
+      <img src="/omi-pendant-cord.webp" alt="The Omi pendant on its cord">
+      <div class="chip c1"><i><span class="dot"></span></i><div><b>Listening</b><span>Lunch with Sam · 24 min</span></div></div>
+      <div class="chip c2"><i>✓</i><div><b>3 to-dos caught</b><span>Send the deck by Friday</span></div></div>
+    </div>
+    <div class="tagline">
+      <h1>Never forget a conversation again.</h1>
+      <p class="lede">Omi listens and remembers for&nbsp;you.</p>
+    </div>
+  </section>
+
+  <!-- 2: what you get -->
+  <section class="step later" data-step="1">
+    <h1>What you get</h1>
+    <p class="lede">Notes, to-dos and answers from every&nbsp;conversation.</p>
+    <div class="stage">
+      <div class="phone side left"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span>9:41</span><span class="bars"><i style="height:.45em"></i><i style="height:.65em"></i><i style="height:.85em"></i><i style="height:1.05em"></i></span></div>
+        <div class="h-big">Home</div>
+        <div class="h-sec">Today</div>
+        <div class="row"><span class="em">🚀</span><div><b>Launch plan with Sam</b><span>12:30 PM · 24 min</span></div></div>
+        <div class="row"><span class="em">☕️</span><div><b>Coffee with Priya</b><span>9:10 AM · 18 min</span></div></div>
+        <div class="row"><span class="em">📞</span><div><b>Call with the bank</b><span>8:45 AM · 6 min</span></div></div>
+        <div class="h-sec">Yesterday</div>
+        <div class="row"><span class="em">🧠</span><div><b>Product review</b><span>4:00 PM · 41 min</span></div></div>
+        <div class="row"><span class="em">🍝</span><div><b>Dinner plans</b><span>7:20 PM · 9 min</span></div></div>
+      </div></div>
+      <div class="phone side right"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span>9:41</span><span class="bars"><i style="height:.45em"></i><i style="height:.65em"></i><i style="height:.85em"></i><i style="height:1.05em"></i></span></div>
+        <div class="h-big">Ask Omi</div>
+        <div class="bubble me">What did Sam say about the launch?</div>
+        <div class="bubble omi">Sam wants to ship the new onboarding next Friday. Final designs land Tuesday, and you're updating the launch email.<br><span class="src">🚀 Launch plan with Sam</span></div>
+        <div class="bubble me">Any to-dos for me?</div>
+        <div class="bubble omi">Two: send Sam the launch email draft, and book Thursday's user test.</div>
+      </div></div>
+      <div class="phone front"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span>9:41</span><span class="bars"><i style="height:.45em"></i><i style="height:.65em"></i><i style="height:.85em"></i><i style="height:1.05em"></i></span></div>
+        <div class="nav">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M15 5l-7 7 7 7" stroke="#0b0b0c" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span class="pill">Share</span>
+        </div>
+        <div class="conv-head"><div class="emoji">🚀</div><div><b>Launch plan with Sam</b><span>Today · 12:30 PM · 24 min</span></div></div>
+        <div class="tabs"><span class="on">Summary</span><span>Transcript</span></div>
+        <div class="card"><h4>Overview</h4><p>You and Sam agreed to ship the new onboarding next Friday. Sam shares the final designs on Tuesday, and you update the launch email.</p></div>
+        <div class="card"><h4>Action items</h4>
+          <div class="todo"><span class="box"></span><span>Send the launch email draft to Sam<em>Due Tue</em></span></div>
+          <div class="todo"><span class="box"></span><span>Book a user test for Thursday<em>Due Thu</em></span></div>
+          <div class="todo done"><span class="box"></span><span>Share onboarding designs</span></div>
+        </div>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- 3: plans, with the device -->
+  <section class="step later" data-step="2">
+    <img class="device" src="/omi-pendant-front.webp" alt="">
+    <h1>Unlock Omi Unlimited</h1>
+    <div class="accolades">
+      <div class="accolade"><img src="/laurel-left.svg" alt=""><div>300K+<small>Users</small></div><img src="/laurel-right.svg" alt=""></div>
+      <div class="accolade"><img src="/laurel-left.svg" alt=""><div>4.7 Stars<span class="stars" id="stars"></span></div><img src="/laurel-right.svg" alt=""></div>
+    </div>
+    <div class="gets" id="gets"></div>
+  </section>
+  </div>
+
+  <footer>
+    <div class="extra hidden" id="extra">
+    <div class="promise">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0b0b0c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      No commitment, cancel anytime
+    </div>
+    <div class="plans">
+      <button class="plan" id="yearly" data-interval="year" type="button">
+        <span class="badge hidden" id="yearly-badge"></span>
+        <span><span class="name">Yearly</span><span class="sub" id="yearly-sub"></span></span>
+        <span class="per" id="yearly-per"></span>
+      </button>
+      <button class="plan" id="monthly" data-interval="month" type="button">
+        <span><span class="name">Monthly</span><span class="sub" id="monthly-sub"></span></span>
+        <span class="per" id="monthly-per"></span>
+      </button>
+    </div>
+    </div>
+    <button class="cta" id="cta" type="button"><span id="cta-label">Continue</span>
+    </button>
+    <div class="below">
+      <div class="promise" id="promise">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#0b0b0c" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        No commitment, cancel anytime
+      </div>
+      <div class="fine hidden" id="fine">Billed today. Renews automatically. Cancel anytime.</div>
+      <div class="legal hidden" id="legal"><a href="https://www.omi.me/pages/terms-of-service">Terms of Service</a><a href="https://www.omi.me/pages/privacy">Privacy Policy</a></div>
+    </div>
+  </footer>
+<script>
+(function () {
+  var q = new URLSearchParams(location.search);
+  var step = 0, selected = 'year', stepStarted = Date.now();
+  function $(id) { return document.getElementById(id); }
+  function send(msg) {
+    var channel = window.OmiPaywall;
+    if (channel && channel.postMessage) channel.postMessage(JSON.stringify(msg));
+    else console.log('[OmiPaywall]', JSON.stringify(msg));
+  }
+  function money(minor, currency) {
+    try { return new Intl.NumberFormat(q.get('locale') || 'en-US', { style: 'currency', currency: (currency || 'usd').toUpperCase() }).format(minor / 100); }
+    catch (e) { return '$' + (minor / 100).toFixed(2); }
+  }
+
+  var star = '<svg viewBox="0 0 17 16"><path d="M8.5 1.33l2.06 4.18 4.6.67-3.33 3.25.79 4.58L8.5 11.85l-4.12 2.16.79-4.58L1.83 6.18l4.61-.67L8.5 1.33z" fill="#f5a623" stroke="#f5a623" stroke-width="1.3" stroke-linejoin="round"/></svg>';
+  $('stars').innerHTML = star + star + star + star + star;
+
+  // What Unlimited includes (backend/config/plan_catalog.json, unlimited_v2).
+  var tick = '<i><svg viewBox="0 0 24 24" fill="none"><path d="M5 12.5l4.5 4.5L19 7.5" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/></svg></i>';
+  $('gets').innerHTML = [
+    'Unlimited recording, no monthly cap',
+    'Summaries and to-dos for every conversation',
+    'Up to 1,000 questions a month',
+    'Phone calls, transcribed and recapped',
+    'Unlimited memories and insights'
+  ].map(function (text) { return '<div class="get">' + tick + text + '</div>'; }).join('');
+
+  // Prices come from the app (the plan catalog), never from this page.
+  var year = q.get('year_amount') ? parseInt(q.get('year_amount'), 10) : null;
+  var month = q.get('month_amount') ? parseInt(q.get('month_amount'), 10) : null;
+  var yc = q.get('year_currency'), mc = q.get('month_currency');
+  if (year != null) {
+    $('yearly-sub').textContent = money(year, yc) + '/year';
+    $('yearly-per').textContent = money(Math.round(year / 12), yc) + '/mo';
+    if (month) {
+      var pct = Math.round((1 - year / (month * 12)) * 100);
+      if (pct > 0) { $('yearly-badge').textContent = 'SAVE ' + pct + '%'; $('yearly-badge').classList.remove('hidden'); }
+    }
+  } else { $('yearly').classList.add('hidden'); selected = 'month'; }
+  if (month != null) {
+    $('monthly-sub').textContent = money(month, mc) + '/month';
+    $('monthly-per').textContent = money(month, mc) + '/mo';
+  } else $('monthly').classList.add('hidden');
+  var noPlans = year == null && month == null;
+
+  function render() {
+    document.querySelectorAll('.step').forEach(function (el) {
+      var n = parseInt(el.dataset.step, 10);
+      el.classList.toggle('earlier', n < step);
+      el.classList.toggle('later', n > step);
+    });
+    var last = step === 2;
+    $('free').classList.toggle('off', !last);
+    $('extra').classList.toggle('hidden', !last);
+    $('fine').classList.toggle('hidden', !last);
+    $('legal').classList.toggle('hidden', !last);
+    $('cta').classList.toggle('shiny', last);
+    $('promise').classList.toggle('hidden', last);
+    $('cta-label').textContent = last ? 'Unlock Omi Unlimited' : 'Continue';
+    $('cta').disabled = last && noPlans;
+    if (last && noPlans) $('fine').textContent = 'Unable to load plans';
+    ['yearly', 'monthly'].forEach(function (id) {
+      var el = $(id);
+      el.classList.toggle('selected', el.dataset.interval === selected);
+    });
+  }
+
+  ['yearly', 'monthly'].forEach(function (id) {
+    $(id).addEventListener('click', function () {
+      selected = this.dataset.interval; render();
+      omiTrack('Web Paywall Plan Selected', { interval: selected });
+    });
+  });
+  $('cta').addEventListener('click', function () {
+    if (step < 2) {
+      var spent = Math.round((Date.now() - stepStarted) / 100) / 10;
+      step++; stepStarted = Date.now(); render();
+      omiTrack('Web Paywall Step Viewed', { step: step + 1, seconds_on_previous_step: spent });
+      return;
+    }
+    this.disabled = true;
+    omiTrack('Web Paywall Checkout Tapped', { interval: selected, step: 3 });
+    send({ type: 'checkout', interval: selected });
+  });
+  $('free').addEventListener('click', function () {
+    omiTrack('Web Paywall Dismissed', { step: step + 1 });
+    send({ type: 'free' });
+  });
+  window.OmiPaywallHost = {
+    onCheckout: function (outcome) {
+      omiTrack('Web Paywall Checkout Result', { interval: selected, outcome: outcome });
+      $('cta').disabled = false;
+      // The app shows its own message when checkout fails; "unavailable" means it had no plan to sell.
+      if (outcome === 'unavailable') $('fine').textContent = "Couldn't start checkout. Please try again in a moment.";
+    },
+    onRestore: function () {}
+  };
+  render();
+  Array.prototype.forEach.call(document.querySelectorAll('.legal a'), function (a) {
+    a.addEventListener('click', function () { omiTrack('Web Paywall Legal Tapped', { link: /privacy/.test(a.href) ? 'privacy' : 'terms' }); });
+  });
+  var perksSeen = false;
+  $('gets').addEventListener('scroll', function () {
+    if (perksSeen || this.scrollTop < 20) return;
+    perksSeen = true;
+    omiTrack('Web Paywall Perks Scrolled', {});
+  }, { passive: true });
+  window.omiStep = function () { return step + 1; };
+  omiExposure();
+  omiTrack('Web Paywall Viewed', { has_prices: !noPlans, default_interval: selected, load_ms: Math.round(performance.now()) });
+  omiTrack('Web Paywall Step Viewed', { step: 1 });
+  send({ type: 'ready' });
+})();
+</script>
+</body>
+</html>
