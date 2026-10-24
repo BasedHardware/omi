@@ -572,7 +572,10 @@ async def test_grace_obeys_current_pressure_quorum_and_membership(fleet, monkeyp
             fleet.payloads[ip] = {'live_pending_requests': 4, 'live_oldest_pending_seconds': 0}
         await fleet.pressure._refresh('synthetic.invalid', 2, client)
         assert fleet.pressure.allows('synthetic.invalid', 2)  # 2 busy + 4 cached healthy.
-        fleet.failed.remove(fleet.ips[2])
+        fleet.failed.difference_update(fleet.ips[2:4])
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert fleet.pressure._reason(2, fleet.clock[0]) == 'pressure'  # 2 busy + 2 fresh healthy + 2 unknown.
+        assert fleet.pressure.allows('synthetic.invalid', 2)  # Refreshing healthy samples must not revoke grace.
         fleet.payloads[fleet.ips[2]] = {'live_pending_requests': 4, 'live_oldest_pending_seconds': 0}
         await fleet.pressure._refresh('synthetic.invalid', 2, client)
         assert not fleet.pressure.allows('synthetic.invalid', 2)  # New pressure defeats old healthy cache.
@@ -707,6 +710,8 @@ async def test_cold_http_setup_longer_than_old_one_second_budget_can_complete(fl
     [
         ('MAX_SNAPSHOT_AGE_SECONDS', 'nan'),
         ('MAX_SNAPSHOT_AGE_SECONDS', '14'),
+        ('MAX_SNAPSHOT_AGE_SECONDS', '60.001'),
+        ('MAX_SNAPSHOT_AGE_SECONDS', '300'),
         ('RESET_AFTER_FAILURES', '0'),
         ('RESET_AFTER_FAILURES', '1.5'),
     ],
@@ -717,6 +722,19 @@ async def test_invalid_recovery_configuration_fails_closed(fleet, monkeypatch, n
         assert not await fleet.pressure._refresh('synthetic.invalid', 2, client)
     assert not fleet.pressure.allows('synthetic.invalid', 2)
     assert not fleet.calls
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('max_age', ['60.001', '300'])
+async def test_overlong_recovery_configuration_cannot_use_a_warm_cache(fleet, monkeypatch, max_age):
+    async with httpx.AsyncClient(transport=fleet.transport) as client:
+        assert await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert fleet.pressure.allows('synthetic.invalid', 2)
+        calls = len(fleet.calls)
+        monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS', max_age)
+        assert not await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert not fleet.pressure.allows('synthetic.invalid', 2)
+        assert len(fleet.calls) == calls
 
 
 @pytest.mark.asyncio

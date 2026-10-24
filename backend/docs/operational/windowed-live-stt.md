@@ -169,7 +169,7 @@ not. Small two-pod pools retain the conservative one-hot-pod stand-down.
 | `PARAKEET_BATCH_PRESSURE_MAX_LIVE_PENDING_PER_REPLICA` | `4` | Busy when live pending reaches this count |
 | `PARAKEET_BATCH_PRESSURE_MAX_LIVE_OLDEST_SECONDS` | `0.75` | Busy when oldest live queue wait reaches this many seconds |
 | `PARAKEET_BATCH_PRESSURE_BUSY_REPLICA_SHARE` | `0.5` | Stand down when busy plus unknown reaches this ready-pool share |
-| `PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS` | `60` | Maximum age of each last-good observation used at admission; set `15` to restore strict freshness/DNS behavior |
+| `PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS` | `60` | Maximum age of each last-good observation used at admission, configurable from `15` through `60` seconds; set `15` to restore strict freshness/DNS behavior |
 | `PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES` | `3` | Consecutive sweeps without a newly received quorum before closing/recreating the HTTP pool and rediscovering |
 
 Invalid configuration stands down. Invalid, negative, non-finite or old-revision

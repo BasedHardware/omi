@@ -186,7 +186,7 @@ class BatchPressure:
         self._publish_counts(now)
         reason = self._reason(min_replicas, now)
         if (
-            reason in ('missing', 'stale')
+            reason in ('missing', 'stale', 'pressure')
             and self._max_snapshot_age > self.STALE_SECONDS
             and self._last_good_at > 0
             and now - self._last_good_at <= self._max_snapshot_age
@@ -221,7 +221,11 @@ class BatchPressure:
         reset_after = int(os.getenv('PARAKEET_BATCH_PRESSURE_RESET_AFTER_FAILURES', str(self.RESET_AFTER_FAILURES)))
         if pending < 1 or not math.isfinite(oldest) or oldest <= 0 or not math.isfinite(share) or not 0 < share <= 1:
             raise ValueError('Invalid Parakeet batch pressure thresholds')
-        if not math.isfinite(max_age) or max_age < self.STALE_SECONDS or reset_after < 1:
+        if (
+            not math.isfinite(max_age)
+            or not self.STALE_SECONDS <= max_age <= self.MAX_SNAPSHOT_AGE_SECONDS
+            or reset_after < 1
+        ):
             raise ValueError('Invalid Parakeet batch pressure recovery configuration')
         self._max_pending, self._max_oldest, self._busy_share = pending, oldest, share
         self._max_snapshot_age, self._reset_after_failures = max_age, reset_after
