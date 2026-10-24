@@ -28,6 +28,10 @@ export interface GcpDailyCost {
   llmNetUsd: number; // Vertex/Gemini portion of netUsd
   /** Net USD by GCP service for this day (one-time incident detection). */
   services?: Record<string, number>;
+  /** The prepaid Vertex reserved-capacity SKU (Provisioned Throughput), net.
+   * Already inside netUsd/llmNetUsd; carried separately so the variable-margin
+   * tile can exclude it (David 2026-10-23) without a second billing read. */
+  vertexReservedUsd?: number;
 }
 
 export interface GcpServiceCost {
@@ -83,13 +87,18 @@ export async function fetchGcpBilling(
   const bq = getGcpBillingClient();
   if (!bq) return null;
 
-  // Inclusive end at D-2; start so the series still spans `days` days.
+  // Inclusive end at D-2; start so the series still spans `days` days. The
+  // reserved-capacity column matches the FinOps component classifier's SKU
+  // rule verbatim (backend/scripts/finops/gcp_component_classifier.sql), so
+  // the two never drift on what "prepaid Vertex reserved" means.
   const query = `
     SELECT
       FORMAT_DATE('%F', DATE(usage_start_time)) AS day,
       service.description AS service,
       ROUND(SUM(cost) + SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)), 2) AS net_usd,
-      ROUND(SUM(cost), 2) AS gross_usd
+      ROUND(SUM(cost), 2) AS gross_usd,
+      ROUND(SUM(IF(sku.description LIKE 'Vertex AI: Provisioned Throughput%',
+                  cost + IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0), 0)), 2) AS reserved_usd
     FROM \`${billingTable()}\`
     WHERE _PARTITIONTIME >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @scanDays DAY)
       AND usage_start_time >= TIMESTAMP_SUB(TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), DAY), INTERVAL @windowDays DAY)
@@ -110,18 +119,22 @@ export async function fetchGcpBilling(
       service: string;
       net_usd: number;
       gross_usd: number;
+      reserved_usd: number | null;
     }[]) {
       const entry = dailyMap.get(row.day) ?? {
         date: row.day,
         netUsd: 0,
         grossUsd: 0,
         llmNetUsd: 0,
+        vertexReservedUsd: 0,
       };
       entry.netUsd += row.net_usd;
       entry.services = entry.services ?? {};
       entry.services[row.service] =
         (entry.services[row.service] ?? 0) + row.net_usd;
       entry.grossUsd += row.gross_usd;
+      entry.vertexReservedUsd =
+        (entry.vertexReservedUsd ?? 0) + (row.reserved_usd ?? 0);
       const llm = isLlmService(row.service);
       if (llm) entry.llmNetUsd += row.net_usd;
       dailyMap.set(row.day, entry);
@@ -143,6 +156,7 @@ export async function fetchGcpBilling(
       d.netUsd = round(d.netUsd);
       d.grossUsd = round(d.grossUsd);
       d.llmNetUsd = round(d.llmNetUsd);
+      d.vertexReservedUsd = round(d.vertexReservedUsd ?? 0);
     }
     const services = Array.from(serviceMap.values())
       .map((s) => ({ ...s, netUsd: round(s.netUsd) }))

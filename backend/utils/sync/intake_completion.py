@@ -28,6 +28,20 @@ from utils.stt.outcomes import TranscriptionOutcome
 logger = logging.getLogger(__name__)
 
 
+def log_sync_lineage_created(observation: dict) -> None:
+    """One id-free gate-3 observation after a successful assignment commit."""
+    try:
+        logger.info(
+            'event=sync_lineage_resolve outcome=%s stage=assignment '
+            'checked_live_candidates_bucket=%s lookup_complete=%s',
+            observation['outcome'],
+            observation['checked_live_candidates_bucket'],
+            str(observation['lookup_complete']).lower(),
+        )
+    except Exception:
+        pass
+
+
 def acknowledge_processed_segment(
     deferred_outcome: Optional[dict],
     *,

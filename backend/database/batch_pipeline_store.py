@@ -20,6 +20,7 @@ from utils.sync.stage import collection_name
 # Every state an obligation can drain from. Assignment needs only ``pending``;
 # completion of persisted/ready rows has its own page. All share one index.
 PROJECTION_DISCOVERY_STATES = ('pending', 'persisted', 'ready')
+PROJECTION_OBLIGATION_STATES = (*PROJECTION_DISCOVERY_STATES, 'quarantine_held')
 PROJECTION_ASSIGNMENT_STATES = ('pending',)
 PROJECTION_FINISH_STATES = ('persisted', 'ready')
 
@@ -238,7 +239,7 @@ def projection_page(
     Cursor values are discovery hints, never authorization or ordering fences.
     ``states`` narrows the same ``in`` filter to a subset of the drain states.
     """
-    if not states or not set(states) <= set(PROJECTION_DISCOVERY_STATES):
+    if not states or not set(states) <= set(PROJECTION_OBLIGATION_STATES):
         raise ValueError('projection discovery states must be drain states')
     collection = client.collection(f'{namespace}_results')
     query = collection.where('projection_state', 'in', list(states)).order_by('committed_at').order_by('__name__')
