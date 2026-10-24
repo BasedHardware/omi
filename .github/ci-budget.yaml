@@ -1574,6 +1574,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "gcp_incluster_guards.yml/deploy": {
+      "budget_p50_minutes": 5,
+      "display_name": "deploy",
+      "expected_runs_class": "non-pr",
+      "expected_runs_per_day": 0,
+      "if": "inputs.environment != 'prod' || github.ref == 'refs/heads/main'",
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "Backend infrastructure",
+      "rationale": "Manual independent guard-only Helm release; no image build or serving rollout; zero PR runs.",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "gcp_llm_gateway.yml/deploy": {
       "budget_p50_minutes": 6,
       "display_name": "deploy",
@@ -4964,6 +4982,44 @@
               "default": "",
               "description": "Release version (optional)",
               "required": "false"
+            }
+          }
+        }
+      }
+    },
+    "gcp_incluster_guards.yml": {
+      "name": "Deploy In-cluster Safety Guards",
+      "owner": "Backend infrastructure",
+      "rationale": "Manual independent guard-only Helm release; no image build or serving rollout; zero PR runs.",
+      "triggers": {
+        "workflow_dispatch": {
+          "inputs": {
+            "dry_run": {
+              "default": "false",
+              "description": "Kill switch for HPA writes (development always dry runs)",
+              "required": "true",
+              "type": "boolean"
+            },
+            "enabled": {
+              "default": "true",
+              "description": "Enable guard resources (false removes this release's guards)",
+              "required": "true",
+              "type": "boolean"
+            },
+            "environment": {
+              "default": "development",
+              "description": "Environment for the independent guard release",
+              "options": [
+                "development",
+                "prod"
+              ],
+              "required": "true",
+              "type": "choice"
+            },
+            "source_sha": {
+              "description": "Full merged source SHA (must be an ancestor of main)",
+              "required": "true",
+              "type": "string"
             }
           }
         }

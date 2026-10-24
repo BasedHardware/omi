@@ -1,9 +1,65 @@
+from pathlib import Path
+
 from prometheus_client import CollectorRegistry
+from unittest.mock import Mock
 import pytest
+import yaml
 
 from utils.batch_pipeline.metrics import QueueMetrics
 from tests.unit.test_batch_pipeline_scheduler import MemoryStore, item
 from utils.batch_pipeline.scheduler import Scheduler
+
+BACKEND = Path(__file__).resolve().parents[2]
+ALERTS = BACKEND / 'charts/monitoring/batch-projection/alerts.yaml'
+
+
+def test_projection_obligation_age_includes_quarantine_and_does_not_refresh_on_error():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = Mock(namespace='synthetic')
+    store.projection_page.return_value = (['held'], None)
+    reference = store.client.collection.return_value.document.return_value
+    reference.get.return_value.to_dict.return_value = {'committed_at': 100.0}
+    metrics.refresh_projection(store, 1001.0)
+    assert registry.get_sample_value('omi_batch_projection_obligation_oldest_age_seconds') == 901
+    assert registry.get_sample_value('omi_batch_projection_obligation_observed_at_seconds') == 1001
+    assert 'quarantine_held' in store.projection_page.call_args.kwargs['states']
+    store.projection_page.side_effect = RuntimeError('unavailable')
+    with pytest.raises(RuntimeError):
+        metrics.refresh_projection(store, 1100)
+    assert registry.get_sample_value('omi_batch_projection_obligation_observed_at_seconds') == 1001
+    store.projection_page.side_effect = None
+    store.projection_page.return_value = ([], None)
+    metrics.refresh_projection(store, 1200)
+    assert registry.get_sample_value('omi_batch_projection_obligation_oldest_age_seconds') == 0
+
+
+def test_projection_obligation_failing_first_sample_stays_never_observed():
+    registry = CollectorRegistry()
+    metrics = QueueMetrics(registry)
+    store = Mock(namespace='synthetic')
+    store.projection_page.side_effect = RuntimeError('unavailable')
+    with pytest.raises(RuntimeError):
+        metrics.refresh_projection(store, 1000.0)
+    # Never observed must read as zero, never a fabricated timestamp: the stale
+    # rule's zero-inclusive expression is the only startup path that alarms.
+    assert not registry.get_sample_value('omi_batch_projection_obligation_observed_at_seconds')
+    store.projection_page.side_effect = None
+    store.projection_page.return_value = ([], None)
+    metrics.refresh_projection(store, 1001.0)
+    assert registry.get_sample_value('omi_batch_projection_obligation_observed_at_seconds') == 1001
+
+
+def test_stale_observation_alert_rule_includes_never_observed_zero_with_bounded_grace():
+    rules = yaml.safe_load(ALERTS.read_text(encoding='utf-8'))
+    alerts = {rule['alert']: rule for group in rules['spec']['groups'] for rule in group['rules']}
+    stale = alerts['OmiBatchProjectionObservationStale']
+    expr = ' '.join(stale['expr'].split())
+    assert 'omi_batch_projection_obligation_observed_at_seconds > 0' not in expr
+    assert 'time() - omi_batch_projection_obligation_observed_at_seconds >= 120' in expr
+    assert stale['for'] == '2m'
+    overdue = ' '.join(alerts['OmiBatchProjectionObligationOverdue']['expr'].split())
+    assert 'time() - omi_batch_projection_obligation_observed_at_seconds < 120' in overdue
 
 
 def test_queue_age_and_stale_refresh_retains_previous_sample(monkeypatch):

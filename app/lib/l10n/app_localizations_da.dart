@@ -4411,6 +4411,10 @@ class AppLocalizationsDa extends AppLocalizations {
   String get continueText => 'Fortsæt';
 
   @override
+  String get checkoutExistingSubscription =>
+      'Du har allerede et abonnement. Administrer dit nuværende abonnement i stedet for at starte et nyt.';
+
+  @override
   String get resubscribeFirstToChangePlans => 'Gentilmelding først for at skifte abonnement.';
 
   @override
