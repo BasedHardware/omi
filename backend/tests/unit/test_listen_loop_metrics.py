@@ -2,14 +2,20 @@
 
 import asyncio
 import contextvars
+import os
 import struct
+import subprocess
+import sys
+import textwrap
 import time
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 
+import routers.listen.runtime as runtime_module
 import utils.observability.listen_loop as listen_loop
 from routers.listen.receiver import ListenReceiver
 from utils.observability.listen_loop import (
@@ -267,3 +273,92 @@ async def test_lag_probe_does_not_inherit_session_byok_or_uid_context(monkeypatc
     assert all(value in (None, False) for value in leaked.values()), leaked
     assert 'secret-key' not in repr(list(captured[0].values()))
     assert 'user-1' not in repr(list(captured[0].values()))
+
+
+@pytest.mark.anyio
+async def test_listen_session_entry_starts_lag_probe_before_runtime(monkeypatch):
+    calls: list[str] = []
+
+    class _Boom(Exception):
+        pass
+
+    def _runtime(_request):
+        calls.append('runtime')
+        raise _Boom()
+
+    monkeypatch.setattr(runtime_module, 'ensure_loop_lag_probe', lambda: calls.append('probe'))
+    monkeypatch.setattr(runtime_module, 'ListenSessionRuntime', _runtime)
+    with pytest.raises(_Boom):
+        await runtime_module.run_listen_session(SimpleNamespace(source=None))
+    assert calls == ['probe', 'runtime']
+
+
+def test_listen_metrics_endpoint_renders_lag_histogram():
+    """Exercise the deployed listen app, not the handler in isolation.
+
+    The listen container serves ``main:app`` (backend/Dockerfile CMD), and that app
+    mounts ``routers.metrics`` alongside the listen websocket routes. Codex review on
+    this PR: a test that imports ``routers.listen.runtime`` itself and invokes the
+    ``metrics`` handler directly still passes if ``main`` stops registering the router,
+    and a same-process zero-count assertion is polluted by whichever earlier test in
+    the file started the probe. So run the whole assertion path in a fresh interpreter:
+    the only histogram samples it can see are the ones rendered at import time, and the
+    request itself goes through the real app's routing and auth stack.
+    """
+    child = textwrap.dedent('''\
+        import asyncio
+        from contextlib import ExitStack
+
+        import httpx
+
+        # Prove the exposition path is hermetic: no network is needed to import the app
+        # or serve /metrics, so this stays valid in the no-Redis CI unit lane. The guard
+        # must stay referenced for the whole block: a bare __enter__() lets CPython
+        # collect the context manager immediately and restore the sockets early.
+        with ExitStack() as stack:
+            from testing.hermetic_network import block_outbound_network
+
+            stack.enter_context(block_outbound_network())
+
+            import main  # the deployed listen entrypoint (`uvicorn main:app`)
+            from utils.observability import listen_loop
+
+            assert listen_loop._probe is None, 'probe must not be running before any session'
+
+            async def _fetch(headers):
+                transport = httpx.ASGITransport(app=main.app)
+                async with httpx.AsyncClient(transport=transport, base_url="http://listen") as client:
+                    return await client.get("/metrics", headers=headers)
+
+            denied = asyncio.run(_fetch({}))
+            assert denied.status_code == 401, denied.status_code
+            response = asyncio.run(_fetch({"Authorization": "Bearer scrape-token"}))
+            assert response.status_code == 200, response.status_code
+            body = response.text
+            count_lines = [line for line in body.splitlines() if line.startswith("omi_listen_event_loop_lag_seconds_count ")]
+            assert count_lines == ["omi_listen_event_loop_lag_seconds_count 0.0"], count_lines
+            assert 'omi_listen_event_loop_lag_seconds_bucket{le="0.05"}' in body
+            # Serving /metrics must not start the probe either: only run_listen_session does.
+            assert listen_loop._probe is None
+        ''')
+    env = {
+        **os.environ,
+        'METRICS_SECRET': 'scrape-token',
+        # test.sh exports both; setdefault-style guards keep bare pytest runs working.
+        'ENCRYPTION_SECRET': os.environ.get(
+            'ENCRYPTION_SECRET',
+            'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv',
+        ),
+        'OPENAI_API_KEY': os.environ.get('OPENAI_API_KEY', 'test-openai-key-not-real'),
+    }
+    backend_dir = Path(__file__).resolve().parents[2]  # backend/tests/unit/test_*.py -> backend/
+    env['PYTHONPATH'] = str(backend_dir) + os.pathsep + env.get('PYTHONPATH', '')
+    completed = subprocess.run(  # noqa: PLW1510 - the child's failure is asserted below
+        [sys.executable, '-c', child],
+        cwd=backend_dir,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=300,
+    )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
