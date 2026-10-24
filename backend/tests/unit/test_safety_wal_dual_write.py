@@ -625,10 +625,17 @@ async def test_empty_cut_cannot_acknowledge_a_fully_suppressed_job(coordinator, 
 
 
 def test_unknown_fuzzy_match_requires_compatible_duration():
+    from utils.sync.merge_dedupe import _duration_compatible
+
     text = 'Please bring the blue notebook to our planning meeting'
     live = [dict(segment(text, T, duration=18), person_id=None, is_user=False)]
     incoming = [dict(segment(text, T, duration=2), person_id=None, is_user=False)]
     assert dedupe_segments_for_merge(T, live, incoming, fuzzy_live_overlap=True, estimated_offset_seconds=0) == incoming
+    assert not _duration_compatible({'person_id': None, 'is_user': False}, {'person_id': None, 'is_user': False})
+    assert not _duration_compatible(
+        {'start': 0.0, 'end': 4.0, 'person_id': None, 'is_user': False},
+        {'duration': None, 'person_id': None, 'is_user': False},
+    )
 
 
 def test_unknown_repeated_occurrences_are_not_chosen_arbitrarily():

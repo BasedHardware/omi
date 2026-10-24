@@ -115,8 +115,11 @@ def _same_live_voice(left: dict, right: dict) -> bool:
 def _duration_compatible(left: dict, right: dict) -> bool:
     if not _both_unidentified_speaker(left, right):
         return True
-    duration = float(left['end']) - float(left['start'])
-    other = right['duration']
+    try:
+        duration = float(left.get('end')) - float(left.get('start'))
+        other = float(right.get('duration'))
+    except (TypeError, ValueError):
+        return False
     return duration > 0 and other > 0 and abs(duration - other) / max(duration, other) <= _MERGE_TEXT_DUP_DURATION_RATIO
 
 
