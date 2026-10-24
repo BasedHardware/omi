@@ -11193,13 +11193,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get captureStorageAlmostFull => 'Ο χώρος σχεδόν γέμισε';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Το Omi θα επανασυνδεθεί μόνο του';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name και άλλοι';
   }

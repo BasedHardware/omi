@@ -11140,13 +11140,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get captureStorageAlmostFull => 'Atmintis beveik pilna';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi pats vėl prisijungs';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ir kiti';
   }
