@@ -1331,6 +1331,15 @@ def test_custom_instructions_http_crud(monkeypatch):
         assert toggled.json()['about_me'] == 'Founder based in SF'
         assert toggled.json()['enabled'] is False
 
+        patched_omitting_enabled = client.patch(
+            '/v1/users/custom-instructions',
+            json={'about_me': 'Founder based in NYC'},
+        )
+        assert patched_omitting_enabled.status_code == 200
+        assert patched_omitting_enabled.json()['about_me'] == 'Founder based in NYC'
+        assert patched_omitting_enabled.json()['response_style'] == 'Use bullet points and skip intros'
+        assert patched_omitting_enabled.json()['enabled'] is False
+
         replaced = client.put('/v1/users/custom-instructions', json={'about_me': 'Replacement'})
         assert replaced.status_code == 200
         assert replaced.json()['about_me'] == 'Replacement'
