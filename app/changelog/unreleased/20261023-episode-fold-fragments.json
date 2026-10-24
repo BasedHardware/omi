@@ -1,0 +1,3 @@
+{
+  "change": "While an episode is live, its conversation fragments — including finished ones and offline-sync captures — fold under the one live row in Today instead of showing as separate rows; they return as ordinary rows once the episode closes"
+}

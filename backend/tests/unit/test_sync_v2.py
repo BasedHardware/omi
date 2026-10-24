@@ -1348,6 +1348,15 @@ def _install_sync_observability_stubs(saved_modules):
         },
     )
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=MagicMock())
+
+    # The pipeline schedules the episodes finalize hook at module scope; the
+    # fire-and-forget hook itself is no sync-coordinator concern, so the whole
+    # package stubs like observability above (MagicMock('utils') is not a package).
+    saved_modules.setdefault('utils.episodes', sys.modules.get('utils.episodes'))
+    episodes_pkg = types.ModuleType('utils.episodes')
+    episodes_pkg.__path__ = []  # type: ignore[attr-defined]
+    sys.modules['utils.episodes'] = episodes_pkg
+    install_package_submodule_stubs('utils.episodes', saved_modules)
     return fallback_mod
 
 

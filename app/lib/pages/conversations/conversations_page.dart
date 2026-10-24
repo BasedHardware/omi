@@ -16,7 +16,6 @@ import 'package:omi/pages/conversations/widgets/capture_continuity_dogfood_banne
 import 'package:omi/pages/review/widgets/review_entry_card.dart';
 import 'package:omi/pages/episodes/episode_presentation.dart';
 import 'live_episode_visibility.dart';
-import 'package:omi/services/experiments/client_refactor_flags.dart';
 import 'package:omi/pages/episodes/live_episode_row.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -571,10 +570,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
           _conversationPageSnapshot(conversationProvider, recordingsProvider),
       builder: (context, snapshot, child) {
         final convoProvider = context.read<ConversationProvider>();
-        final hiddenByLive = episodeLive
-            ? hiddenLiveConversations(episodes!.liveConversationIds, snapshot.conversations,
-                serving: ClientRefactorFlags.serving)
-            : const <String>{};
+        final hiddenByLive = episodeLive ? hiddenLiveConversations(episodes!.liveConversationIds) : const <String>{};
         // Unsynced local recordings (batch/offline mode) shown inline with conversations,
         // grouped into the same date buckets. Only in the default view (no search/folder/
         // starred/daily-summaries filter).
