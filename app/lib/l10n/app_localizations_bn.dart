@@ -11119,13 +11119,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get captureStorageAlmostFull => 'স্টোরেজ প্রায় পূর্ণ';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi নিজে থেকেই আবার সংযোগ করবে';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ও অন্যরা';
   }
