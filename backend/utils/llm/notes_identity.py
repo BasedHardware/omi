@@ -47,7 +47,7 @@ class NotesIdentity:
 def notes_identity(prefix: Any, inputs: Mapping[str, Any], packet: Mapping[str, Any] | None = None) -> NotesIdentity:
     """Take only server-supplied, conversation-tied fields; never parse model evidence lines."""
     packet = packet or {}
-    meeting = list(getattr(prefix, 'meeting_names', ()))
+    meeting: list[str] = list(getattr(prefix, 'meeting_names', ()))
     roster = inputs.get('roster')
     meeting.extend(
         entry.display_name for entry in getattr(roster, 'entries', ()) if entry.kind == 'human' and entry.display_name
@@ -62,7 +62,7 @@ def notes_identity(prefix: Any, inputs: Mapping[str, Any], packet: Mapping[str, 
         for row in packet.get('people_on_screen') or ()
         if row.get('call_seen_during_conversation') and row.get('name')
     )
-    contacts = list(packet.get('contact_name_spellings') or ())
+    contacts: list[str] = list(packet.get('contact_name_spellings') or ())
     contacts.extend(str(row.get('name') or '') for row in inputs.get('people') or ())
     return NotesIdentity(
         speaker_names=getattr(prefix, 'speaker_names', ()),
