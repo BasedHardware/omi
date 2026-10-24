@@ -14,6 +14,13 @@ import wave
 
 from scripts.diarization_eval.local_artifacts import file_digest
 from config.batch_pipeline_gpu_skip import diarize_speech_only_enabled, short_speech_single_enabled
+from config.batch_pipeline import (
+    empty_asr_disposition_enabled,
+    empty_asr_recovery_enabled,
+    long_speech_handoff_enabled,
+    worker_silence_disposition_enabled,
+    worker_validation_disposition_enabled,
+)
 
 # The primitive is backportable to the scorecard before production enrichment.
 COMMUNITY_MODEL_REVISION = '3533c8cf8e369892e6b79ff1bf80f7b0286a54ee'
@@ -27,6 +34,11 @@ def effective_worker_switches():
     return {
         'BATCH_PIPELINE_DIARIZE_SPEECH_ONLY_ENABLED': diarize_speech_only_enabled(),
         'BATCH_PIPELINE_SHORT_SPEECH_SINGLE_ENABLED': short_speech_single_enabled(),
+        'BATCH_PIPELINE_EMPTY_ASR_RECOVERY_ENABLED': empty_asr_recovery_enabled(),
+        'BATCH_PIPELINE_EMPTY_ASR_DISPOSITION_ENABLED': empty_asr_disposition_enabled(),
+        'BATCH_PIPELINE_WORKER_SILENCE_DISPOSITION_ENABLED': worker_silence_disposition_enabled(),
+        'BATCH_PIPELINE_WORKER_VALIDATION_DISPOSITION_ENABLED': worker_validation_disposition_enabled(),
+        'BATCH_PIPELINE_LONG_SPEECH_HANDOFF_ENABLED': long_speech_handoff_enabled(),
     }
 
 
