@@ -414,6 +414,11 @@ final class OmiBleManager: NSObject {
             readyRequests.insert(uuid)
             discoveryRetries[uuid] = 0
             let completedServices = completedBleServices(for: peripheral)
+            if savedReconnect.contains(uuid), let recovery = captureReconnects[uuid],
+               recovery.stage == .finished, recovery.disconnected {
+                // Capture's budget is spent; link recovery still belongs to the saved pairing.
+                captureReconnects.removeValue(forKey: uuid)
+            }
             switch OmiBleConnectionPolicy.readyRecoveryAction(
                 peripheralState: peripheral.state,
                 nativeReady: readyNotified.contains(uuid),
@@ -889,9 +894,15 @@ final class OmiBleManager: NSObject {
             guard let self, let recovery, self.captureReconnects[uuid] === recovery,
                   recovery.stage != .finished else { return }
             self.logBle(uuid: uuid, event: "capture_reconnect_failed", detail: "timeout")
-            // Retain the tombstone until the radio callback, preventing an
-            // automatic reconnect outside the durable budget.
+            // Keep the cancellation fence only until the physical down callback.
+            // A spent capture budget cannot revoke a saved link's pending connect.
             recovery.finish(false)
+            if self.savedReconnect.contains(uuid), recovery.disconnected {
+                if self.captureReconnects[uuid] === recovery { self.captureReconnects.removeValue(forKey: uuid) }
+                if let peripheral = self.peripherals[uuid], peripheral.state == .disconnected {
+                    self.scheduleSavedRetry(peripheral, uuid: uuid)
+                }
+            }
         }
     }
 
