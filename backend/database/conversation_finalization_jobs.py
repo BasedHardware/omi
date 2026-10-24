@@ -1867,8 +1867,9 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
 
     Persist the original ordered values, not a document snapshot re-read after
     mutation. A repaired/deleted last row must not rewind or skip the next page.
-    CAS fences competing scans. A crash after cursor reservation only delays
-    these rows until wrap; it never removes the durable obligation.
+    Freeze each sweep cutoff so recurring successors cannot keep the window
+    full forever. CAS fences competing scans. A crash after reservation delays
+    these rows until bounded wrap; it never removes the durable obligation.
     """
     client = _client(firestore_client)
     try:
@@ -1878,9 +1879,12 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
     state_ref = client.collection('conversation_recovery_state').document('finalization_replay')
     state = state_ref.get().to_dict() or {}
     cursor = state.get('cursor')
+    cutoff = cursor.get('cutoff') if isinstance(cursor, dict) else None
+    if not isinstance(cutoff, datetime):
+        cutoff = _now()
     query = (
         client.collection(FINALIZATION_JOBS_COLLECTION)
-        .where('reconcile_after_at', '<=', _now())
+        .where('reconcile_after_at', '<=', cutoff)
         .order_by('reconcile_after_at')
         .order_by('__name__')
     )
@@ -1901,7 +1905,11 @@ def get_finalization_replay_candidates(*, limit: int = 100, firestore_client: An
     next_cursor = None
     if len(snapshots) == safe_limit:
         last = snapshots[-1]
-        next_cursor = {'reconcile_after_at': (last.to_dict() or {})['reconcile_after_at'], 'job_id': last.id}
+        next_cursor = {
+            'reconcile_after_at': (last.to_dict() or {})['reconcile_after_at'],
+            'job_id': last.id,
+            'cutoff': cutoff,
+        }
     firestore.transactional(_advance_finalization_replay_cursor_txn)(
         client.transaction(), state_ref, int(state.get('generation', 0)), next_cursor
     )

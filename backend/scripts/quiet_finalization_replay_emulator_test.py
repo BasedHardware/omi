@@ -94,8 +94,31 @@ def main():
     assert result == {'status': 'done', 'reason': 'missing_conversation'}
     assert retired['status'] == 'quiet_done' and 'reconcile_after_at' not in retired
     assert retired['updated_at'] >= now
+    # A crash-reserved prefix must be revisited even if a full later page
+    # becomes due every minute. Freeze the sweep's cutoff across invocations.
+    for snapshot in col.stream():
+        snapshot.reference.delete()
+    state.delete()
+    for key in ('a', 'b', 'c', 'd'):
+        col.document(key).set({'reconcile_after_at': now - timedelta(hours=1)})
+    clock = [now]
+    with patch.object(jobs, '_now', side_effect=lambda: clock[0]):
+        assert [j['job_id'] for j in jobs.get_finalization_replay_candidates(limit=2, firestore_client=client)] == [
+            'a',
+            'b',
+        ]
+        page = jobs.get_finalization_replay_candidates(limit=2, firestore_client=client)
+        assert [j['job_id'] for j in page] == ['c', 'd']
+        for row in page:
+            col.document(row['job_id']).update({'reconcile_after_at': now + timedelta(seconds=60)})
+        clock[0] += timedelta(seconds=60)
+        assert jobs.get_finalization_replay_candidates(limit=2, firestore_client=client) == []
+        assert [j['job_id'] for j in jobs.get_finalization_replay_candidates(limit=2, firestore_client=client)] == [
+            'a',
+            'b',
+        ]
     print(
-        'PASS: 101-row starvation, deleted boundary, wrap, increased limit, oldest age, missing-conversation retirement'
+        'PASS: 101-row starvation, deleted boundary, wrap, increased limit, oldest age, missing-conversation retirement, crash-safe bounded sweep'
     )
 
 

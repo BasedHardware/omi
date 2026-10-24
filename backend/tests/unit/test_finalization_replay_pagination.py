@@ -116,3 +116,31 @@ def test_cursor_cas_rejects_delayed_writer():
     assert advance(store.transaction(), ref, 0, {'job_id': 'new'})
     assert not advance(store.transaction(), ref, 0, {'job_id': 'old'})
     assert ref.get().to_dict()['cursor'] == {'job_id': 'new'}
+
+
+def test_crash_reserved_page_is_revisited_despite_recurring_successors(monkeypatch):
+    store = seed()
+    for path in list(store.rows):
+        if path[-1] not in {'quiet-000', 'quiet-001', 'quiet-002', 'quiet-003'}:
+            del store.rows[path]
+    clock = [NOW]
+    monkeypatch.setattr(jobs, '_now', lambda: clock[0])
+    # Crash after reservation: A/B remain untouched behind the cursor.
+    assert [j['job_id'] for j in jobs.get_finalization_replay_candidates(limit=2, firestore_client=store)] == [
+        'quiet-000',
+        'quiet-001',
+    ]
+    page = jobs.get_finalization_replay_candidates(limit=2, firestore_client=store)
+    assert [j['job_id'] for j in page] == ['quiet-002', 'quiet-003']
+    for row in page:
+        store.rows[(jobs.FINALIZATION_JOBS_COLLECTION, row['job_id'])]['reconcile_after_at'] = NOW + timedelta(
+            seconds=60
+        )
+    clock[0] += timedelta(seconds=60)
+    # Even though C/D are due again, this sweep excludes their successors,
+    # reaches exhaustion, and wraps to the unprocessed A/B on the next pass.
+    assert jobs.get_finalization_replay_candidates(limit=2, firestore_client=store) == []
+    assert [j['job_id'] for j in jobs.get_finalization_replay_candidates(limit=2, firestore_client=store)] == [
+        'quiet-000',
+        'quiet-001',
+    ]
