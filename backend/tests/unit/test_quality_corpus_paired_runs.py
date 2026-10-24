@@ -5,6 +5,9 @@ import json
 import numpy as np
 import pytest
 
+from diarizer.batch_pipeline_startup import DIARIZER_REVISION
+from utils.stt.voice_centroids import COMMUNITY_MODEL_REVISION
+
 from scripts.parity import scorers  # noqa: F401  (loads scipy/jiwer at collection, not in a timed call)
 from testing.quality_corpus import corpus, paired_flight_batching as flight, paired_short_speech as short
 from testing.quality_corpus.audio import (
@@ -22,8 +25,7 @@ PROD = '3533c8cf8e369892e6b79ff1bf80f7b0286a54ee'
 
 
 def test_prod_revision_constants_match_the_worker_pin():
-    source = open('diarizer/batch_pipeline_startup.py').read()
-    assert f"DIARIZER_REVISION = '{PROD}'" in source
+    assert DIARIZER_REVISION == COMMUNITY_MODEL_REVISION == PROD
     assert short.PROD_DIARIZER_REVISION == flight.PROD_DIARIZER_REVISION == PROD
 
 

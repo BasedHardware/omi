@@ -25,9 +25,14 @@ from database import batch_pipeline_projection_session as projection_module
 from database.batch_pipeline_projection_session import ProjectionSession
 from database.conversations import encode_conversation_for_write
 from models.transcript_segment import TranscriptSegment
+from utils.conversations.final_pass_assignment import build_turns
+from utils.manual_speaker_assignments import apply_manual_assignments
+from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 from utils.batch_pipeline.projection import build_incoming
 from utils.speakers import processing
 from utils.batch_pipeline.contracts import Priority, WorkItem
+from utils.stt import embedding_inference
+
 from utils.stt.voice_centroids import (
     COMMUNITY_MODEL_REVISION,
     EMBEDDING_MODEL,
@@ -356,7 +361,6 @@ def test_naming_requires_immutable_compatible_provenance_and_manual_owner_wins()
 
 
 def test_faithful_turns_use_max_overlap_preserve_clocks_and_strict_two_second_boundary():
-    from utils.conversations.final_pass_assignment import build_turns
 
     words = [
         {'word': 'synthetic', 'timestamp': [3, 4]},
@@ -369,7 +373,8 @@ def test_faithful_turns_use_max_overlap_preserve_clocks_and_strict_two_second_bo
     actual = build_turns(words, turns, scope='final:batch:unit', id_namespace='batch:unit:')
     assert [s.text for s in actual] == ['synthetic joined', 'boundary', 'other', 'gap']
     assert [(s.start, s.end) for s in actual] == [(3, 6), (8, 9), (9, 10), (12, 13)]
-    assert [s.speaker for s in actual] == ['a', 'a', 'b', None]
+    assert [s.speaker for s in actual[:-1]] == ['a', 'a', 'b']
+    assert actual[-1].speaker.startswith('BATCH_UNASSIGNED_')
     assert actual[-1].speaker_match_source == 'batch_abstention'
     assert [s.id for s in actual] == [
         s.id for s in build_turns(words, turns, scope='final:batch:unit', id_namespace='batch:unit:')
@@ -490,3 +495,143 @@ def test_explicit_enrichment_obeys_live_kill_switch(monkeypatch):
         raise AssertionError('disabled extraction must not run')
 
     assert PipelineWorker.enrich_result(item(), original, np.zeros(RATE), centroid_extractor=forbidden) == original
+
+
+def test_gap_keys_survive_conversation_allocation_and_limit_manual_scope():
+
+    words = [{'word': 'synthetic', 'timestamp': [a, a + 0.5]} for a in (1, 3, 5)]
+    turns = [{'speaker': 'a', 'start': 2, 'end': 4}]
+    allocator = ConversationSpeakerIdAllocator()
+    parts = []
+    for part in ('first', 'second'):
+        segments = build_turns(words, turns, scope='final:batch:unit', id_namespace=f'batch:{part}:')
+        for segment in segments:
+            row = segment.model_dump()
+            allocator.assign(row)
+            parts.append(row)
+    gaps = [s for s in parts if s['speaker_match_source'] == 'batch_abstention']
+    assert len({s['speaker_id'] for s in gaps}) == 4
+    assert len({s['speaker_id'] for s in parts if s['speaker'] == 'a'}) == 1
+    labeled = apply_manual_assignments(parts, {'speakers': {str(gaps[0]['speaker_id']): {'is_user': True}}})
+    assert [s['id'] for s in labeled if s['is_user']] == [gaps[0]['id']]
+    assert [(s['start'], s['end']) for s in parts[:3]] == [(1, 1.5), (3, 3.5), (5, 5.5)]
+
+
+@pytest.mark.parametrize('manual', [False, True])
+def test_transaction_plan_reconciles_independent_owner_accepts_and_preserves_manual(monkeypatch, manual):
+    session = object.__new__(ProjectionSession)
+    session._naming_guard_snapshots = {'user': {}}
+    session.binding = ProjectionBinding('owner', 'job', 'content', ('unit',))
+    monkeypatch.setattr(session, 'guard', lambda *_: None)
+    planned = {
+        'id': 'conversation',
+        'transcript_segments': [
+            {
+                'id': f'word-{i}',
+                'speaker_id_scope': f'final:batch:unit-{i}',
+                'speaker_id': i,
+                'is_user': True,
+                'speaker_match_source': 'final_centroid:batch-v1',
+                'speaker_label_source': 'auto',
+            }
+            for i in range(2)
+        ],
+    }
+    if manual:
+        planned['transcript_segments'][0]['speaker_label_source'] = 'manual'
+        planned['manual_speaker_assignments'] = {'speakers': {'0': {'is_user': True}}}
+        session.incoming_segment_ids = {'word-1'}
+    session.validate_plan(None, planned)
+    segments = planned['transcript_segments']
+    assert [s['is_user'] for s in segments] == [manual, False]
+    assert segments[1]['speaker_identity_status'] == 'ambiguous'
+    if manual:
+        assert segments[0]['speaker_label_source'] == 'manual'
+
+
+def test_transaction_plan_keeps_repeated_accepts_for_the_same_unit_voice(monkeypatch):
+    session = object.__new__(ProjectionSession)
+    session._naming_guard_snapshots = {'user': {}}
+    session.binding = ProjectionBinding('owner', 'job', 'content', ('unit',))
+    monkeypatch.setattr(session, 'guard', lambda *_: None)
+    planned = {
+        'id': 'conversation',
+        'transcript_segments': [
+            {
+                'id': f'word-{i}',
+                'speaker_id_scope': 'final:batch:unit',
+                'speaker_id': 0,
+                'is_user': True,
+                'speaker_match_source': 'final_centroid:batch-v1',
+                'speaker_label_source': 'auto',
+            }
+            for i in range(2)
+        ],
+    }
+    session.validate_plan(None, planned)
+    assert all(s['is_user'] for s in planned['transcript_segments'])
+
+
+@pytest.mark.parametrize('receipt_kind', ['excerpt', 'nonowner', 'wholeowner', 'linked'])
+def test_transaction_callback_preserves_receipt_and_linked_voice_authority(monkeypatch, receipt_kind):
+    session = object.__new__(ProjectionSession)
+    session._naming_guard_snapshots = {'user': {}}
+    session.binding = ProjectionBinding('owner', 'job', 'content', ('unit',))
+    monkeypatch.setattr(session, 'guard', lambda *_: None)
+    segments = [
+        {
+            'id': f'word-{i}',
+            'speaker_id_scope': f'final:batch:unit-{i}',
+            'speaker_id': i,
+            'is_user': True,
+            'speaker_match_source': 'final_centroid:batch-v1',
+            'speaker_label_source': 'auto',
+        }
+        for i in range(2)
+    ]
+    receipt = {}
+    if receipt_kind == 'linked':
+        segments[1]['speaker_id'] = 0  # Post-allocator canonical ID shared across scopes by PR3.
+    elif receipt_kind == 'excerpt':
+        receipt = {'segments': {'word-0': {'is_user': True, 'segment_only': True, 'generation': 2}}}
+    elif receipt_kind == 'nonowner':
+        receipt = {'speakers': {'0': {'is_user': False, 'person_id': 'synthetic-person', 'generation': 2}}}
+    else:
+        receipt = {'speakers': {'0': {'is_user': True, 'generation': 2}}}
+    planned = {'id': 'conversation', 'transcript_segments': segments, 'manual_speaker_assignments': receipt}
+    session.validate_plan(None, planned)
+    expected = (
+        [False, True] if receipt_kind == 'nonowner' else [True, False] if receipt_kind == 'wholeowner' else [True, True]
+    )
+    assert [s['is_user'] for s in planned['transcript_segments']] == expected
+    if receipt_kind == 'nonowner':
+        assert planned['transcript_segments'][0]['person_id'] == 'synthetic-person'
+
+
+def test_anonymous_words_separated_by_two_seconds_have_distinct_correction_keys():
+    words = [{'word': 'synthetic', 'timestamp': [a, a + 0.5]} for a in (1, 1.8, 4.3)]
+    segments = build_turns(words, [], scope='final:batch:unit', id_namespace='batch:unit:')
+    assert segments[0].speaker == segments[1].speaker
+    assert segments[1].speaker != segments[2].speaker
+    assert all(not s.is_user and s.person_id is None and s.speaker_match_source == 'batch_abstention' for s in segments)
+
+
+def test_embedding_factory_is_shared_pinned_and_constructs_only_once(monkeypatch):
+    monkeypatch.delenv('HUGGINGFACE_TOKEN', raising=False)
+    calls = []
+    model = object()
+    inference = SimpleNamespace(to=lambda device: calls.append(('device', device)))
+    monkeypatch.setattr(embedding_inference, 'torch', SimpleNamespace(device=lambda value: value))
+    monkeypatch.setattr(
+        embedding_inference,
+        'Model',
+        SimpleNamespace(from_pretrained=lambda *args, **kwargs: (calls.append((args, kwargs)), model)[1]),
+    )
+    monkeypatch.setattr(embedding_inference, 'Inference', lambda value, **kwargs: inference)
+    embedding_inference.get_embedding_inference.cache_clear()
+    try:
+        assert embedding_inference.get_embedding_inference(2, 'cpu') is inference
+        assert embedding_inference.get_embedding_inference(2, 'cpu') is inference
+        assert calls == [((EMBEDDING_MODEL,), {'revision': EMBEDDING_REVISION, 'token': None}), ('device', 'cpu')]
+    finally:
+        embedding_inference.get_embedding_inference.cache_clear()

@@ -36,6 +36,8 @@ from diarizer.batch_pipeline_context import capture_stream
 from diarizer.batch_pipeline_flight import FlightPyannote, diarization_payload
 from utils.batch_pipeline.audio import read_context
 from utils.stt.voice_centroids import MAX_CLIP_SECONDS, MIN_CLIP_SECONDS
+from utils.stt.embedding_inference import get_embedding_inference
+from utils.stt import speaker_embedding
 
 
 def _validate_centroid_clip(samples):
@@ -52,8 +54,6 @@ class HostedCentroidEmbedding:
 
     def __call__(self, samples):
         _validate_centroid_clip(samples)
-        from utils.stt.speaker_embedding import extract_embedding_from_bytes
-
         pcm = np.clip(np.asarray(samples) * 32768, -32768, 32767).astype('<i2')
         body = io.BytesIO()
         with wave.open(body, 'wb') as handle:
@@ -61,7 +61,7 @@ class HostedCentroidEmbedding:
             handle.setsampwidth(2)
             handle.setframerate(16000)
             handle.writeframes(pcm.tobytes())
-        return extract_embedding_from_bytes(body.getvalue(), timeout=30.0)
+        return speaker_embedding.extract_embedding_from_bytes(body.getvalue(), timeout=30.0)
 
 
 class LocalCentroidEmbedding:
@@ -80,8 +80,6 @@ class LocalCentroidEmbedding:
         _validate_centroid_clip(samples)
         if torch is None:
             raise RuntimeError('local embedding requires torch')
-        from diarizer.embedding import get_embedding_inference
-
         with self._lock, torch.inference_mode():
             if self._inference is None:
                 self._inference = get_embedding_inference(2, self.device)

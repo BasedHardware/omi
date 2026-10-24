@@ -1,7 +1,7 @@
 """Real assignment/ledger/outbox crash boundaries; loopback emulator only."""
 
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import replace
+from dataclasses import asdict, replace
 from itertools import permutations
 from types import SimpleNamespace
 from uuid import uuid4
@@ -1564,3 +1564,58 @@ def test_head_wait_commit_order_converges_to_one_conversation(lane, monkeypatch,
             assert row.get('sync_merged_into') == rows[0]['id']
     for unit in units:
         assert unit.ledger.get().to_dict()['status'] == 'completed'
+
+
+@pytest.mark.parametrize('receipt_kind', ['none', 'excerpt', 'nonowner', 'wholeowner'])
+def test_independent_owner_claims_reconcile_in_assignment_transaction(lane, monkeypatch, receipt_kind):
+    from utils.stt.voice_centroids import COMMUNITY_MODEL_REVISION, EMBEDDING_MODEL, EMBEDDING_REVISION, EMBEDDING_SPACE
+
+    monkeypatch.setenv('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    lane.payload['diarization'].update(
+        centroids={'SPEAKER_00': {'embedding': [1, 0], 'evidence_seconds': 4}},
+        embedding_space=EMBEDDING_SPACE,
+        provenance={
+            'model_revision': COMMUNITY_MODEL_REVISION,
+            'embedding_model': EMBEDDING_MODEL,
+            'embedding_revision': EMBEDDING_REVISION,
+        },
+    )
+    first = lane.seed()
+    lane.user.set({'speaker_embedding': [1, 0]}, merge=True)
+    lane.finish(first)
+    lane.projector.project(first.ids[0])
+    row = active_rows(lane)[0]
+    original = row['transcript_segments'][0]
+    assert original['is_user'] is True
+    receipt = {}
+    if receipt_kind == 'excerpt':
+        receipt = {'segments': {original['id']: {'is_user': True, 'segment_only': True, 'generation': 2}}}
+    elif receipt_kind in ('nonowner', 'wholeowner'):
+        receipt = {
+            'speakers': {str(original['speaker_id']): {'is_user': receipt_kind == 'wholeowner', 'generation': 2}}
+        }
+    lane.user.collection('conversations').document(row['id']).update(
+        {
+            'manual_speaker_assignments': receipt,
+            'manual_speaker_assignments_compressed': False,
+        }
+    )
+    second = lane.seed(capture_at=1060)
+    lane.user.set({'speaker_embedding': [1, 0]}, merge=True)
+    binding = replace(second.binding, target_conversation_id=row['id'])
+    lane.projector.store.ref('jobs', second.ids[0]).update({'projection_binding': asdict(binding)})
+    lane.finish(second)
+    lane.projector.project(second.ids[0])
+    segments = active_rows(lane)[0]['transcript_segments']
+    assert len({s['speaker_id_scope'] for s in segments}) == 2
+    expected = (
+        [False, False]
+        if receipt_kind == 'none'
+        else (
+            [False, True]
+            if receipt_kind == 'nonowner'
+            else [True, False] if receipt_kind == 'wholeowner' else [True, True]
+        )
+    )
+    assert [s['is_user'] for s in segments] == expected

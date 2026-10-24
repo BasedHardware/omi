@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -20,6 +23,9 @@ from database.sync_ledger import sync_content_ledger_ref, batch_projection_ledge
 from utils.batch_pipeline.contracts import ProjectionBinding
 from utils.batch_pipeline.scheduler import owner_key
 from utils.sync.capture import chunk_identity
+from utils.stt.batch_naming import NamingSnapshot, competing_owner_claim_indices
+from utils.manual_speaker_assignments import apply_manual_assignments, manual_owner_reserved
+from database.conversations import decode_manual_speaker_assignments
 
 if TYPE_CHECKING:
     from database.batch_pipeline_projection import ProjectionStore
@@ -105,9 +111,6 @@ class ProjectionSession:
 
     @staticmethod
     def _snapshot_fingerprint(snapshot):
-        import hashlib
-        import json
-
         return hashlib.sha256(
             json.dumps(
                 {
@@ -121,17 +124,11 @@ class ProjectionSession:
         ).hexdigest()
 
     def loaded_naming_snapshot(self):
-        from utils.stt.batch_naming import NamingSnapshot
-
         snapshots = self._naming_guard_snapshots
         if 'user' not in snapshots:
             return None
         # These canonical conversations and user were already read by the
         # privacy guard. No enrollment/profile fetch or new read is introduced.
-        from utils.manual_speaker_assignments import manual_owner_reserved
-
-        from database.conversations import decode_manual_speaker_assignments
-
         try:
             receipts = [
                 decode_manual_speaker_assignments(
@@ -155,8 +152,6 @@ class ProjectionSession:
         )
 
     def freeze_naming_snapshot(self, snapshot):
-        from utils.stt.batch_naming import NamingSnapshot
-
         if (
             isinstance(snapshot, NamingSnapshot)
             and snapshot.owner_id == self.binding.owner_id
@@ -251,8 +246,6 @@ class ProjectionSession:
     def validate_plan(self, transaction, planned):
         # encode is still in assignment's read-only planning phase.
         self.guard(transaction, [planned['id'], *(planned.get('sync_merged_from') or [])])
-        from utils.manual_speaker_assignments import apply_manual_assignments, manual_owner_reserved
-
         current = self.loaded_naming_snapshot()
         if current is not None and manual_owner_reserved(current.manual_receipt):
             # A previously unbound canonical candidate may first be known here.
@@ -275,6 +268,21 @@ class ProjectionSession:
             planned['transcript_segments'] = apply_manual_assignments(
                 planned.get('transcript_segments') or [], planned.get('manual_speaker_assignments') or {}
             )
+
+        # The assignment plan includes all existing and incoming units. Scoped
+        # centroid accepts alone cannot prove that their owner voices agree.
+        segments = planned.get('transcript_segments') or []
+        receipt = planned.get('manual_speaker_assignments') or {}
+        competing = competing_owner_claim_indices(segments, receipt, canonical_ids=True)
+        for index in competing:
+            segments[index].update(
+                is_user=False,
+                person_id=None,
+                speaker_label_source=None,
+                speaker_match_source='batch_owner_competition',
+                speaker_identity_status='ambiguous',
+            )
+        planned['transcript_segments'] = apply_manual_assignments(segments, receipt)
 
     def persist(self, transaction, planned=None, *, superseded=False):
         assigned, created, survivors = planned if planned is not None else ({}, False, [])

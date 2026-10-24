@@ -4,7 +4,7 @@ No profile acquisition, owner audio repair, cloud clients or text naming.
 A caller must scope a snapshot from authorized data already in memory.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import isfinite
 from typing import Callable, Mapping
 
@@ -12,6 +12,7 @@ from models.diarization import OMI_EMBEDDING_SPACE
 from utils.conversations.final_pass_assignment import name_centroids
 from utils.stt.conversation_speakers import unit_voice_vector
 from utils.stt.voiceprints import usable_person_voiceprint
+from utils.manual_speaker_assignments import manual_owner_reserved, manual_assignment_decision
 
 from utils.stt.voice_centroids import (
     EMBEDDING_MODEL,
@@ -78,8 +79,6 @@ def naming_decisions(diarization, snapshot, *, owner_id, privacy_generation):
         return {}
     if snapshot.embedding_space != OMI_EMBEDDING_SPACE or not compatible_centroids(diarization):
         return {}
-    from utils.manual_speaker_assignments import manual_owner_reserved
-
     prints = snapshot_voiceprints(
         snapshot.owner_profile, snapshot.people, named_allowed=snapshot.named_allowed and snapshot.validate is not None
     )
@@ -94,11 +93,47 @@ def naming_decisions(diarization, snapshot, *, owner_id, privacy_generation):
     # Distinct diarized voices cannot publish the same person twice. Retain
     # every candidate in ambiguity comparison, then deduplicate accepted people.
     accepted = {}
-    from dataclasses import replace
-
     for voice, decision in sorted(decisions.items(), key=lambda pair: pair[1].best_distance):
         if decision.person_id and decision.person_id in accepted:
             decisions[voice] = replace(decision, person_id=None)
         elif decision.person_id:
             accepted[decision.person_id] = voice
     return decisions
+
+
+def competing_owner_claim_indices(segments, receipt=None, *, canonical_ids=False):
+    """Conservatively arbitrate independent accepts, honoring winning receipts.
+
+    Use canonical IDs only after the conversation allocator. A registry may
+    unify one voice across multiple scopes; that is one claim. Before allocation
+    a provider-local integer has meaning only within its scope. Excerpt labels
+    do not reserve a whole voice, and a newer non-owner receipt beats stale flags.
+    """
+    receipt = receipt or {}
+    owners, automatic = set(), set()
+    for index, segment in enumerate(segments):
+        scope = segment.get('speaker_id_scope') or ''
+        if not scope.startswith(('sync:', 'final:batch:')):
+            continue
+        decision = manual_assignment_decision(segment, receipt)
+        if decision is not None:
+            is_owner = decision.get('is_user') and not decision.get('segment_only')
+        else:
+            is_owner = segment.get('is_user')
+        if not is_owner:
+            continue
+        speaker_id = segment.get('speaker_id')
+        owners.add(speaker_id if canonical_ids else (scope, speaker_id))
+        if (
+            decision is None
+            and segment.get('speaker_label_source') not in ('manual', 'carried')
+            and (
+                (segment.get('speaker_match_source') == 'sync_embedding' and scope.startswith('sync:'))
+                or (
+                    segment.get('speaker_match_source') == 'final_centroid:batch-v1'
+                    and scope.startswith('final:batch:')
+                )
+            )
+        ):
+            automatic.add(index)
+    return automatic if len(owners) > 1 else set()

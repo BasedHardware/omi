@@ -19,6 +19,8 @@ from types import SimpleNamespace
 from config.policy import ProjectionPolicy
 from scripts.diarization_eval.prep_speaker_task import private_dir
 from utils.batch_pipeline.contracts import ProjectionBinding, WorkItem
+from utils.stt.batch_naming import NamingSnapshot
+from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
 
 
 def private_json(path, value):
@@ -97,8 +99,6 @@ class LocalProjectionStore:
 
 
 def filesystem_assignment(owner_id, incoming, *, before_assign, validate_plan, after_assign, allocator=None, **kwargs):
-    from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
-
     before_assign(None)
     allocator = allocator or ConversationSpeakerIdAllocator()
     for segment in incoming['transcript_segments']:
@@ -115,8 +115,6 @@ def frozen_naming_snapshot(gallery, *, owner_id='local-evaluation', privacy_gene
     from predeclared held-out spans. The sample marker represents that evidence,
     not an enrollment write or a claim about production entitlement.
     """
-    from utils.stt.batch_naming import NamingSnapshot
-
     return NamingSnapshot(
         owner_id=owner_id,
         privacy_generation=privacy_generation,
@@ -137,8 +135,6 @@ def frozen_naming_snapshot(gallery, *, owner_id='local-evaluation', privacy_gene
 
 
 def project(artifacts, item, binding, uri, *, policy=None, naming_snapshot=None):
-    from utils.stt.speaker_identity import ConversationSpeakerIdAllocator
-
     # Filesystem evaluation has no canonical cloud conversation lookup.
     binding = replace(binding, target_conversation_id=binding.target_conversation_id or 'local-conversation')
     root = artifacts.root / 'projection' / item.segment_id
@@ -215,8 +211,6 @@ def main():
     request['binding']['segment_ids'] = tuple(request['binding']['segment_ids'])
     snapshot = None
     if request.get('naming_snapshot') is not None:
-        from utils.stt.batch_naming import NamingSnapshot
-
         data = request['naming_snapshot']
         data['people'] = tuple(data['people'])
         snapshot = NamingSnapshot(**data, validate=lambda *_: True)

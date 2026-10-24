@@ -21,6 +21,12 @@ import time
 import traceback
 import wave
 
+import numpy as np
+
+from config.policy.kill_switches import kill_switch
+from diarizer.batch_pipeline import PipelineWorker
+from diarizer.batch_pipeline_models import LocalCentroidEmbedding
+
 from scripts.diarization_eval.local_artifacts import (
     Artifacts,
     cache_key,
@@ -210,6 +216,7 @@ def evaluate(
         *[p for p in sorted((ROOT / 'utils/batch_pipeline').glob('*.py')) if not p.name.startswith('projection')],
         ROOT / 'utils/stt/voice_centroids.py',
         ROOT / 'diarizer/embedding.py',
+        ROOT / 'utils/stt/embedding_inference.py',
         Path(__file__).resolve().with_name('inference_archive.py'),
         *sorted((ROOT / 'config').glob('batch_pipeline*.py')),
     ]
@@ -217,6 +224,8 @@ def evaluate(
         *sorted((ROOT / 'utils/batch_pipeline').glob('projection*.py')),
         ROOT / 'utils/stt/batch_naming.py',
         ROOT / 'utils/conversations/final_pass_assignment.py',
+        ROOT / 'utils/conversations/speaker_resolution.py',
+        ROOT / 'database/batch_pipeline_projection_session.py',
         ROOT / 'utils/stt/speaker_identity.py',
         ROOT / 'utils/sync/assignment.py',
         Path(__file__).resolve().with_name('local_artifacts.py'),
@@ -227,8 +236,6 @@ def evaluate(
     projection_fingerprint = fingerprint(
         {str(p.resolve().relative_to(ROOT)): file_digest(p.resolve()) for p in projection_sources}
     )
-    from config.policy.kill_switches import kill_switch
-
     settings['local_quality_enabled'] = kill_switch('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED')
     settings['inference_archive_sha256'] = file_digest(inference_archive) if inference_archive is not None else None
     scores, recordings, failures, rich_scores, rich_recordings = [], [], 0, [], []
@@ -264,10 +271,6 @@ def evaluate(
                 else None
             )
             if archived is not None:
-                import numpy as np
-                from diarizer.batch_pipeline import PipelineWorker
-                from diarizer.batch_pipeline_models import LocalCentroidEmbedding
-
                 original_payload, original_receipt = archived
                 # The archive validator proved the original pin; do not alter
                 # its immutable file, and retain the full original receipt.
@@ -408,8 +411,14 @@ def evaluate(
                             'clock': 'crop',
                             'turns': rich_persisted,
                             'diagnostic_only': True,
-                            'projection_fingerprint': projection_fingerprint,
-                            'gallery_fingerprint': fingerprint(rich['gallery']),
+                            'provenance': {
+                                'production_path': True,
+                                **settings,
+                                'projection_fingerprint': projection_fingerprint,
+                                'gallery_fingerprint': fingerprint(rich['gallery']),
+                            },
+                            'cache_key': key,
+                            'composed_provenance': payload.get('local_composed_provenance'),
                         }
                     )
                     diagnostic = score_recording(

@@ -6,6 +6,9 @@ No admission flag is consulted: already accepted work drains after rollback.
 
 from config.stt_cap_dispatch import execution_admission_enabled as cap_dispatch_enabled
 from config.policy import ProjectionPolicy
+from utils.conversations.final_pass_assignment import assign_words, build_turns
+from utils.stt.batch_naming import naming_decisions
+from config.policy.kill_switches import kill_switch
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
@@ -175,9 +178,6 @@ def build_incoming(
     from models.conversation import Conversation, CreateConversation
     from models.conversation_enums import ConversationSource
     from utils.conversations.deterministic_minimum import build_deterministic_minimum_structured
-    from utils.conversations.final_pass_assignment import assign_words, build_turns
-    from utils.stt.batch_naming import naming_decisions
-    from config.policy.kill_switches import kill_switch
     from utils.stt.pre_recorded import postprocess_words
     from utils.sync.capture import chunk_identity
 

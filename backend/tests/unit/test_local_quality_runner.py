@@ -117,7 +117,10 @@ def test_runner_all_fail_is_blocked_and_cli_prints_no_private_values(tmp_path, m
     assert str(tmp_path) not in captured.out + captured.err
 
 
-def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path, monkeypatch, capsys, no_network):
+@pytest.mark.parametrize('rich_diagnostic', [False, True])
+def test_runner_success_uses_persisted_projection_and_hides_model_logs(
+    tmp_path, monkeypatch, capsys, no_network, rich_diagnostic
+):
     import sys
     from types import SimpleNamespace
 
@@ -145,6 +148,7 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path,
                             {'start': 4, 'end': 5, 'truth': 'secret-name', 'text': 'private-continuation.'},
                         ],
                         'identity_table': {'secret-name': {'is_user': True}},
+                        'enrollment_spans': [[0, 1]] if rich_diagnostic else [],
                     }
                 ],
             }
@@ -171,6 +175,16 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path,
             print('secret-error-model-log', file=sys.stderr)
             return [SimpleNamespace(outcome='success', result_uri=self.artifacts.persist_result(items[0], payload()))]
 
+    monkeypatch.setattr(
+        run_local,
+        'build_gallery',
+        lambda *args, **kwargs: {
+            'gallery': {'user': [1, 0]},
+            'names': {},
+            'identity_table': {'secret-name': {'is_user': True}},
+            'excluded_spans': [],
+        },
+    )
     monkeypatch.setattr(run_local, 'crop_audio', crop)
     monkeypatch.setattr(batch_pipeline_startup, 'load_local_worker', lambda artifacts, **kwargs: Worker(artifacts))
     monkeypatch.setattr(sys, 'argv', ['run_local.py', '--manifest', str(manifest)])
@@ -187,6 +201,17 @@ def test_runner_success_uses_persisted_projection_and_hides_model_logs(tmp_path,
     runs = json.loads((tmp_path / 'pr1/runs.json').read_text())
     assert runs['recordings'][0]['turns'][0]['start'] == 2
     assert runs['recordings'][0]['turns'][0]['is_user'] is False
+    if rich_diagnostic:
+        rich_runs = json.loads((tmp_path / 'pr1/runs-enrollment-rich.json').read_text())
+        rich_row = rich_runs['recordings'][0]
+        assert rich_row['status'] == 'ok' and rich_row['diagnostic_only'] is True
+        assert rich_row['provenance']['production_path'] is True
+        assert (
+            rich_row['provenance']['projection_fingerprint']
+            == runs['recordings'][0]['provenance']['projection_fingerprint']
+        )
+        assert rich_row['cache_key'] == runs['recordings'][0]['cache_key']
+        assert rich_row['turns'] == runs['recordings'][0]['turns']
     # The identical corpus/settings reuse computation, then re-run projection.
     assert run_local.main() == 0
     capsys.readouterr()

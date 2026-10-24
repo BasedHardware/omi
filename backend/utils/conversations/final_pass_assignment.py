@@ -2,6 +2,10 @@
 
 from bisect import bisect_right
 from math import isfinite
+from uuid import NAMESPACE_URL, uuid5
+
+from models.transcript_segment import TranscriptSegment
+from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
 
 from utils.stt.conversation_speakers import VOICE_MATCH_THRESHOLD, unit_voice_vector, voice_cosine_distance
 from utils.stt.speaker_match import (
@@ -72,11 +76,6 @@ def build_turns(words, turns, *, decisions=None, scope, id_namespace, source='ba
     strictly below two seconds. Anonymous gap words remain explicit abstentions.
     id_namespace includes its trailing separator to preserve caller ID recipes.
     """
-    from uuid import NAMESPACE_URL, uuid5
-
-    from models.transcript_segment import TranscriptSegment
-    from utils.stt.speaker_identity import OMI_SPEAKER_ID_SENTINEL
-
     decisions = decisions or {}
     speaker_ids = (
         speaker_ids
@@ -84,11 +83,18 @@ def build_turns(words, turns, *, decisions=None, scope, id_namespace, source='ba
         else {voice: index for index, voice in enumerate(sorted({t['speaker'] for t in turns}, key=str))}
     )
     segments = []
+    gap_key = None
     for word in assign_words(words, turns):
         voice = word['speaker']
+        left, right = map(float, word['timestamp'])
+        if voice is None and (gap_key is None or (segments and left - segments[-1].end >= 2)):
+            # Include the part namespace: unrelated gaps across multipart
+            # projections must never share whole-speaker correction authority.
+            gap_key = 'BATCH_UNASSIGNED_' + uuid5(NAMESPACE_URL, f'{id_namespace}gap:{len(segments)}').hex
+        elif voice is not None:
+            gap_key = None
         decision = decisions.get(voice)
         identity = decision.person_id if decision is not None else None
-        left, right = map(float, word['timestamp'])
         text = word.get('text', word.get('word', ''))
         if segments and voice is not None and segments[-1].speaker == str(voice) and left - segments[-1].end < 2:
             segments[-1].text += ' ' + text
@@ -100,7 +106,7 @@ def build_turns(words, turns, *, decisions=None, scope, id_namespace, source='ba
                 text=text,
                 start=left,
                 end=right,
-                speaker=str(voice) if voice is not None else None,
+                speaker=str(voice) if voice is not None else gap_key,
                 speaker_id=speaker_ids.get(voice, OMI_SPEAKER_ID_SENTINEL),
                 speaker_id_scope=scope,
                 is_user=identity == 'user',

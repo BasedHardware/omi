@@ -484,9 +484,13 @@ def test_all_admitted_gate_drains_non_allowlisted_obligations_without_admission_
     assert stt.call_count == 1 and row(client)['recovery_state'] == 'recovered'
 
 
-def test_authoritative_projection_preserves_pyannote_groups_and_gap_abstention(monkeypatch, legacy_dependencies):
+@pytest.mark.parametrize('quality', [False, True])
+def test_authoritative_projection_preserves_pyannote_groups_and_gap_abstention(
+    monkeypatch, legacy_dependencies, quality
+):
     _, _, _, build_incoming, *_ = legacy_dependencies
     monkeypatch.setenv('BATCH_PIPELINE_AUTHORITATIVE_LABELS_ENABLED', 'true')
+    monkeypatch.setenv('BATCH_PIPELINE_LOCAL_QUALITY_ENABLED', str(quality).lower())
     binding = ProjectionBinding('synthetic-owner', 'job', 'content', ('unit',))
     item = WorkItem('part', binding.owner_id, 100, 'gs://synthetic/audio', 5, Priority.FRESH)
     payload = {
@@ -508,7 +512,21 @@ def test_authoritative_projection_preserves_pyannote_groups_and_gap_abstention(m
         item, binding, payload, batch_segment_id='unit', policy=resolve_stage_policy(binding.owner_id, 'projection')
     )
     segments = row['transcript_segments']
-    assert [s['speaker'] for s in segments] == ['SPEAKER_00', 'BATCH_UNASSIGNED_part_1', 'SPEAKER_01']
+    assert [s['speaker'] for s in (segments[0], segments[2])] == ['SPEAKER_00', 'SPEAKER_01']
+    if quality:
+        assert segments[1]['speaker'].startswith('BATCH_UNASSIGNED_')
+        assert (
+            segments
+            == build_incoming(
+                item,
+                binding,
+                payload,
+                batch_segment_id='unit',
+                policy=resolve_stage_policy(binding.owner_id, 'projection'),
+            )['transcript_segments']
+        )
+    else:
+        assert segments[1]['speaker'] == 'BATCH_UNASSIGNED_part_1'
     assert {s['speaker_id_scope'] for s in segments} == {'final:batch:unit'}
     assert all(not s['is_user'] and s['person_id'] is None for s in segments)
     assert segments[1]['speaker_match_source'] == 'batch_abstention'
