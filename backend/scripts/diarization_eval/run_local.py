@@ -38,7 +38,7 @@ from utils.conversations.final_pass_assignment import name_centroids
 from utils.stt.diarization_eval import aggregate_scorecards, model_reference_wer, score_recording
 from utils.stt.voiceprints import usable_person_voiceprint
 from config.batch_pipeline_providers import provider_config
-from scripts.diarization_eval.inference_archive import load_inference
+from scripts.diarization_eval.inference_archive import effective_worker_switches, load_inference
 
 ROOT = Path(__file__).resolve().parents[2]
 EMBEDDING_SPACE = 'pyannote/wespeaker-voxceleb-resnet34-LM:v2'
@@ -198,6 +198,7 @@ def evaluate(
         'packages': model_versions,
         'model_batch_size': 1,
         'provider_config': asdict(provider_config()),
+        'worker_switches': effective_worker_switches(),
     }
     settings['model_revisions'] = {
         'parakeet': '541d1f99c6b0c3cd0b11a95167540bb8edefd82b',
