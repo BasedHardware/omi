@@ -9,6 +9,7 @@ import 'package:omi/services/devices/transports/native_ble_transport.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
+import 'package:omi/services/devices/connectors/limitless_connection.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
@@ -429,6 +430,55 @@ class DeviceService {
 
   DateTime? getFirstConnectedAt() {
     return _firstConnectedAt;
+  }
+
+  /// Queries bounded compatibility metadata on the selected, already-connected,
+  /// initialized Limitless session without discovering, force-connecting,
+  /// re-initializing, or mutating paired-device preferences.
+  Future<LimitlessMetadataQueryResult> queryLimitlessCompatibilityMetadata({
+    String? deviceId,
+    Duration? timeout,
+    Future<void>? cancelTrigger,
+  }) async {
+    final selected = SharedPreferencesUtil().btDevice;
+    if (deviceId != null && deviceId.isNotEmpty) {
+      if (selected.id.isNotEmpty && selected.id != deviceId) {
+        return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.wrongDevice);
+      }
+    }
+
+    final targetId = (deviceId != null && deviceId.isNotEmpty) ? deviceId : selected.id;
+    if (targetId.isEmpty) {
+      if (_connections.values.any((c) => c.status == DeviceConnectionState.connected)) {
+        return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.wrongDevice);
+      }
+      return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.disconnected);
+    }
+
+    if (selected.id == targetId && selected.type != null && selected.type != DeviceType.limitless) {
+      return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.wrongDevice);
+    }
+
+    final connection = _connections[targetId];
+    if (connection == null) {
+      if (_connections.entries.any(
+        (e) => e.key != targetId && e.value.status == DeviceConnectionState.connected,
+      )) {
+        return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.wrongDevice);
+      }
+      return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.disconnected);
+    }
+
+    if (connection is! LimitlessDeviceConnection ||
+        connection.device.type != DeviceType.limitless ||
+        connection.device.id != targetId) {
+      return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.wrongDevice);
+    }
+
+    return connection.queryCompatibilityMetadata(
+      timeout: timeout,
+      cancelTrigger: cancelTrigger,
+    );
   }
 
   // Helper method to get stored device from SharedPreferences
