@@ -513,7 +513,13 @@ def get_available_plans_endpoint(
                 current_price_id = price_map.get(current_price_id, current_price_id)
                 scheduled_price_id = price_map.get(scheduled_price_id, scheduled_price_id)
 
-        current_plan = current_subscription.plan if current_subscription else PlanType.basic
+        # Catalog filtering keys off the same period-valid plan lookup as
+        # checkout (new_buyer_single_plan_violation): a lapsed Operator or
+        # Architect record keeps its stored plan after the paid period ends,
+        # and the mobile manage-only fast path would otherwise leave that user
+        # with only their expired desktop SKU instead of the Omi Pro offer.
+        valid_subscription = users_db.get_user_valid_subscription(uid)
+        current_plan = valid_subscription.plan if valid_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
         for definition in filter_plans_for_user(all_definitions, current_plan, platform=x_app_platform):
             monthly_price_id = definition["monthly_price_id"]

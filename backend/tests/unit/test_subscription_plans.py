@@ -186,18 +186,76 @@ def _set_catalog_prices(monkeypatch):
     monkeypatch.setenv("STRIPE_OPERATOR_MONTHLY_PRICE_ID", "price_operator_monthly")
 
 
-def test_new_buyer_single_plan_rejects_legacy_prices_off_desktop(monkeypatch, subscription_module):
+def test_new_buyer_single_plan_rejects_legacy_prices_on_explicit_platforms(monkeypatch, subscription_module):
     """2026-10-24 ruling: a buyer with no current paid subscription may only
-    start on Omi Pro (`unlimited_v2`). Mobile, web, and unknown/missing platform
-    values all reject a legacy price; a missing header must not reach the
-    legacy catalog."""
+    start on Omi Pro (`unlimited_v2`). The restriction follows the explicit
+    first-party platform values (mobile and web); a missing or unknown header
+    keeps the pre-ruling behaviour for desktop compatibility."""
     sub = subscription_module
     _mock_new_buyer(monkeypatch, sub)
     _set_catalog_prices(monkeypatch)
 
-    for platform in ("ios", "android", "web", "unknown", None):
+    for platform in ("ios", "android", "web"):
         error = sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", platform)
         assert error is not None and "Omi Pro" in error, platform
+    # Missing / unknown platform: old behaviour, no rejection.
+    for platform in ("unknown", None):
+        assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", platform) is None, platform
+
+
+def test_new_buyer_single_plan_unknown_platform_allowance_is_counted(monkeypatch, subscription_module):
+    """A legacy price allowed only because the platform is missing/unknown is
+    visible in the guard metric under reason `unknown_platform_allowed`."""
+    from prometheus_client import REGISTRY
+
+    sub = subscription_module
+    _mock_new_buyer(monkeypatch, sub)
+    _set_catalog_prices(monkeypatch)
+    labels = {"reason": "unknown_platform_allowed", "plan": "plus"}
+    before = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels) or 0.0
+
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", None) is None
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "not-a-platform") is None
+    # Desktop and explicit-platform rejections never touch this reason.
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "macos") is None
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "ios") is not None
+
+    after = REGISTRY.get_sample_value("omi_new_buyer_checkout_rejected_total", labels)
+    assert after == before + 2.0
+
+
+def test_granted_plan_without_personal_subscription_is_not_exempt(monkeypatch, subscription_module):
+    """Organization grants store a one-time PaymentIntent (`pi_…`) or no id at
+    all; only a current *recurring* personal subscription exempts a caller
+    from the single-plan rule. A grant recipient is a new buyer for checkout."""
+    sub = subscription_module
+    _set_catalog_prices(monkeypatch)
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    for granted_id in ("pi_org_grant", None):
+        sub.users_db.get_user_valid_subscription = lambda uid, _id=granted_id: SimpleNamespace(
+            plan=PlanType.operator,
+            status="active",
+            cancel_at_period_end=False,
+            current_period_end=2_000_000_000,
+            stripe_subscription_id=_id,
+            current_price_id=None,
+        )
+        assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "web") is not None, granted_id
+
+
+def test_current_recurring_subscriber_still_exempt_on_web(monkeypatch, subscription_module):
+    sub = subscription_module
+    _set_catalog_prices(monkeypatch)
+    monkeypatch.setattr(sub, "users_db", SimpleNamespace())
+    sub.users_db.get_user_valid_subscription = lambda uid: SimpleNamespace(
+        plan=PlanType.operator,
+        status="active",
+        cancel_at_period_end=False,
+        current_period_end=2_000_000_000,
+        stripe_subscription_id="sub_personal",
+        current_price_id="price_operator_monthly",
+    )
+    assert sub.new_buyer_single_plan_violation("u1", "price_plus_monthly", "web") is None
 
 
 def test_new_buyer_single_plan_accepts_unlimited_v2_off_desktop(monkeypatch, subscription_module):

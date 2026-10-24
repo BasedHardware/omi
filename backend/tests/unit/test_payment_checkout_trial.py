@@ -62,6 +62,38 @@ def test_first_time_subscriber_gets_the_trial():
     assert captured['trial_period_days'] == 7
 
 
+def test_first_time_buyer_omi_pro_trial_through_the_single_plan_guard(monkeypatch):
+    """The 7-day trial on a configured Omi Pro monthly price must pass the real
+    new-buyer single-plan guard (not a stub) and still reach Stripe with the
+    trial period — the guard exempts exactly this price for a web new buyer."""
+    pro_monthly = 'price_unlimited_v2_monthly_configured'
+    monkeypatch.setenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID', pro_monthly)
+    monkeypatch.delenv('NEW_BUYER_SINGLE_PLAN_ENABLED', raising=False)
+    captured = {}
+
+    def create_session(
+        uid, price_id, idempotency_key, customer_id=None, promotion_code_id=None, trial_period_days=None
+    ):
+        captured['trial_period_days'] = trial_period_days
+        captured['customer_id'] = customer_id
+        return SimpleNamespace(url='https://checkout.stripe.com/c/pay/cs_test', id='cs_test')
+
+    with (
+        patch.object(payment, 'is_purchasable_price_id', return_value=True),
+        patch.object(payment.subscription_utils, 'can_user_make_payment', return_value=(True, '')),
+        # The guard itself runs for real; only its Firestore read is isolated.
+        patch.object(payment.subscription_utils.users_db, 'get_user_valid_subscription', return_value=None),
+        patch.object(payment, '_try_reactivate_subscription', return_value=None),
+        patch.object(payment.users_db, 'get_stripe_customer_id', return_value=None),
+        patch.object(payment.stripe_utils, 'create_subscription_checkout_session', side_effect=create_session),
+    ):
+        result = payment.create_checkout_session_endpoint(
+            CreateCheckoutRequest(price_id=pro_monthly, trial_days=7), uid='uid_1', x_app_platform='web'
+        )
+    assert result['session_id'] == 'cs_test'
+    assert captured['trial_period_days'] == 7
+
+
 def test_former_subscriber_is_refused_a_trial_instead_of_being_charged():
     with pytest.raises(HTTPException) as excinfo:
         _checkout(trial_days=7, existing_customer_id='cus_existing')

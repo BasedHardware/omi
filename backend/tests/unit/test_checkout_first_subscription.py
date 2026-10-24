@@ -128,19 +128,37 @@ def test_new_buyer_without_a_stored_subscription_id_keeps_checkout(checkout):
     checkout.retrieve.assert_not_called()
 
 
-def test_new_buyer_cannot_checkout_a_legacy_plan_without_a_platform_header(checkout, monkeypatch):
-    """2026-10-24 ruling at the HTTP layer: a header-less buyer with no current
-    paid subscription gets 400 for a legacy (Plus) price. The kill switch
-    restores the old acceptance."""
+def test_new_buyer_legacy_price_platform_matrix_at_http_layer(checkout, monkeypatch):
+    """2026-10-24 ruling at the HTTP layer: a buyer with no current paid
+    subscription posting a legacy (Plus) price gets 400 on the explicit
+    non-desktop platforms (mobile/web). A missing platform header keeps the
+    pre-ruling acceptance — every desktop build ever shipped sends the header,
+    but desktop compatibility outranks closing the header-less direct-API gap."""
     checkout.stored = Subscription(plan=PlanType.basic, status=SubscriptionStatus.active)
-    response = request_checkout(checkout, OTHER_PRICE)
-    assert response.status_code == 400
-    assert 'Omi Pro' in response.json()['detail']
+
+    for platform in ('ios', 'android', 'web'):
+        response = checkout.client.post(
+            '/v1/payments/checkout-session',
+            json={'price_id': OTHER_PRICE},
+            headers={'X-App-Platform': platform},
+        )
+        assert response.status_code == 400, platform
+        assert 'Omi Pro' in response.json()['detail'], platform
     assert_no_new_billing(checkout)
 
-    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
+    # Missing header: pre-ruling behaviour — the legacy price is accepted.
     assert request_checkout(checkout, OTHER_PRICE).status_code == 200
     checkout.create.assert_called_once()
+
+    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
+    assert (
+        checkout.client.post(
+            '/v1/payments/checkout-session',
+            json={'price_id': OTHER_PRICE},
+            headers={'X-App-Platform': 'ios'},
+        ).status_code
+        == 200
+    )
 
 
 def test_new_buyer_desktop_platform_keeps_legacy_checkout(checkout):

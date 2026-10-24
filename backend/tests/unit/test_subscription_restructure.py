@@ -125,18 +125,13 @@ def test_operator_is_paid(load_subscription):
         assert not sub_mod.is_paid_plan(PlanType.basic)
 
 
-def test_filter_plans_for_basic_user(load_subscription, monkeypatch):
-    """A basic buyer with no platform header gets the single-plan catalog (Omi Pro).
+def test_filter_plans_for_basic_user(load_subscription):
+    """A basic buyer with no platform header keeps the pre-ruling catalog.
 
-    2026-10-24 ruling: a missing platform must not be a way back to the legacy
-    catalog. With the kill switch off, the old unfiltered shape returns.
+    Desktop compatibility outranks closing the header-less direct-API gap: a
+    missing or unknown platform is not restricted (the restriction follows the
+    explicit first-party values — see the mobile/web tests below).
     """
-    with load_subscription() as sub_mod:
-        definitions = sub_mod.get_paid_plan_definitions()
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic)
-        assert [d['plan_id'] for d in filtered] == ['unlimited_v2']
-
-    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
         filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic)
@@ -283,26 +278,19 @@ def test_filter_plans_shows_neo_on_web_for_current_neo_subscriber(load_subscript
     assert 'unlimited' in [d['plan_id'] for d in filtered]
 
 
-def test_filter_plans_keeps_neo_for_unknown_platform(load_subscription, monkeypatch):
-    """Unknown/missing platform: current-Neo escape intact; new buyers are single-plan.
+def test_filter_plans_keeps_neo_for_unknown_platform(load_subscription):
+    """Unknown/missing platform keeps the pre-ruling catalog entirely.
 
-    2026-10-24 ruling: a header-less caller with no current paid subscription
-    must not fall back to the unfiltered catalog — that was a way to buy legacy
-    plans by omitting the header. A current Neo subscriber still sees Neo so
-    they can manage/cancel, and the kill switch restores the old unfiltered
-    shape for basic callers.
+    The single-plan restriction follows the explicit first-party platform
+    values (ios/android/web); a header-less or unrecognized caller is not
+    restricted, so the current-Neo escape and the unfiltered new-buyer catalog
+    both keep working for desktop compatibility.
     """
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
         filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=None)
-        assert [d['plan_id'] for d in filtered] == ['unlimited_v2']
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited, platform=None)
         assert 'unlimited' in [d['plan_id'] for d in filtered]
-
-    monkeypatch.setenv('NEW_BUYER_SINGLE_PLAN_ENABLED', 'false')
-    with load_subscription() as sub_mod:
-        definitions = sub_mod.get_paid_plan_definitions()
-        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform=None)
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.unlimited, platform=None)
         assert 'unlimited' in [d['plan_id'] for d in filtered]
 
 

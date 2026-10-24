@@ -46,8 +46,10 @@ def ctx():
     # DB helpers the endpoint reaches at request time. Tests reconfigure
     # ``return_value`` per-case via these persistent MagicMock objects.
     get_user_subscription = MagicMock(return_value=None)
+    get_user_valid_subscription = MagicMock(return_value=None)
     get_stripe_customer_id = MagicMock(return_value=None)
     mp.setattr(users_db, "get_user_subscription", get_user_subscription)
+    mp.setattr(users_db, "get_user_valid_subscription", get_user_valid_subscription)
     mp.setattr(users_db, "get_stripe_customer_id", get_stripe_customer_id)
 
     mp.setattr(stripe, "api_key", "sk_test_fake")
@@ -60,6 +62,7 @@ def ctx():
     yield {
         "client": client,
         "get_user_subscription": get_user_subscription,
+        "get_user_valid_subscription": get_user_valid_subscription,
         "get_stripe_customer_id": get_stripe_customer_id,
     }
     mp.undo()
@@ -142,14 +145,7 @@ def test_all_valid_prices_returns_all_plans(ctx, monkeypatch):
     assert "Power-user AI" in descriptions[ARCH_MONTHLY]
 
 
-def test_new_buyer_headerless_gets_single_plan_catalog(ctx, monkeypatch):
-    """2026-10-24 ruling: a buyer with no current paid subscription and no
-    platform header is offered only Omi Pro (`unlimited_v2`) — both intervals,
-    and nothing else, even though Neo/Architect prices are configured and
-    retrievable. The kill switch restores the multi-plan catalog."""
-    ctx["get_user_subscription"].return_value = None
-    monkeypatch.delenv("NEW_BUYER_SINGLE_PLAN_ENABLED", raising=False)
-
+def _all_price_retrieve_mock():
     def _mock_retrieve(price_id):
         intervals = {
             UNLIM_MONTHLY: "month",
@@ -171,27 +167,73 @@ def test_new_buyer_headerless_gets_single_plan_catalog(ctx, monkeypatch):
             raise Exception(f"Unexpected price_id: {price_id}")
         return _make_stripe_price(price_id, amounts[price_id], intervals[price_id])
 
-    stripe.Price.retrieve = MagicMock(side_effect=_mock_retrieve)
+    return MagicMock(side_effect=_mock_retrieve)
 
-    response = ctx["client"].get("/v1/payments/available-plans")
+
+_ALL_SIX_PRICES = {
+    UNLIM_MONTHLY,
+    UNLIM_ANNUAL,
+    ARCH_MONTHLY,
+    ARCH_ANNUAL,
+    PRO_MONTHLY,
+    PRO_ANNUAL,
+}
+
+
+def test_new_buyer_explicit_platforms_get_single_plan_catalog(ctx, monkeypatch):
+    """2026-10-24 ruling: a buyer with no current paid subscription on an
+    explicit non-desktop platform (mobile or web) is offered only Omi Pro
+    (`unlimited_v2`) — both intervals, and nothing else, even though Neo and
+    Architect prices are configured and retrievable. A missing or unknown
+    platform header keeps the pre-ruling full catalog (desktop compatibility
+    outranks closing the header-less direct-API gap)."""
+    ctx["get_user_subscription"].return_value = None
+    ctx["get_user_valid_subscription"].return_value = None
+    monkeypatch.delenv("NEW_BUYER_SINGLE_PLAN_ENABLED", raising=False)
+    stripe.Price.retrieve = _all_price_retrieve_mock()
+
+    for platform in ("ios", "android", "web"):
+        response = ctx["client"].get("/v1/payments/available-plans", headers={"X-App-Platform": platform})
+        assert response.status_code == 200, platform
+        plans = response.json()["plans"]
+        assert {p["id"] for p in plans} == {PRO_MONTHLY, PRO_ANNUAL}, platform
+        assert {p["plan_id"] for p in plans} == {"unlimited_v2"}, platform
+
+    # Missing header and unrecognized values keep the pre-ruling catalog.
+    for headers in ({}, {"X-App-Platform": "not-a-platform"}):
+        response = ctx["client"].get("/v1/payments/available-plans", headers=headers)
+        assert response.status_code == 200, headers
+        assert {p["id"] for p in response.json()["plans"]} == _ALL_SIX_PRICES, headers
+
+
+def test_expired_desktop_tier_subscriber_on_mobile_is_offered_omi_pro(ctx, monkeypatch):
+    """Catalog filtering keys off the period-valid plan, like checkout: a
+    lapsed Operator record keeps its stored plan after the paid period ends,
+    and the mobile manage-only fast path must not reduce that user to their
+    expired desktop SKU — they are a basic buyer and get the Omi Pro offer."""
+    from models.users import Subscription, SubscriptionStatus, PlanType
+
+    ctx["get_user_subscription"].return_value = Subscription(
+        plan=PlanType.operator,
+        status=SubscriptionStatus.active,
+        stripe_subscription_id="sub_operator_expired",
+        cancel_at_period_end=False,
+        current_period_end=1_000,  # long past
+    )
+    # The same period-valid lookup checkout uses sees a lapsed paid plan as basic.
+    from utils.subscription import get_default_basic_subscription
+
+    ctx["get_user_valid_subscription"].return_value = get_default_basic_subscription()
+    monkeypatch.delenv("NEW_BUYER_SINGLE_PLAN_ENABLED", raising=False)
+    stripe.Price.retrieve = _all_price_retrieve_mock()
+    stripe.Subscription.retrieve = MagicMock()
+    stripe.SubscriptionSchedule.list = MagicMock(return_value=MagicMock(data=[]))
+
+    response = ctx["client"].get("/v1/payments/available-plans", headers={"X-App-Platform": "ios"})
     assert response.status_code == 200
     plans = response.json()["plans"]
     assert {p["id"] for p in plans} == {PRO_MONTHLY, PRO_ANNUAL}
     assert {p["plan_id"] for p in plans} == {"unlimited_v2"}
-
-    monkeypatch.setenv("NEW_BUYER_SINGLE_PLAN_ENABLED", "false")
-    response = ctx["client"].get("/v1/payments/available-plans")
-    assert response.status_code == 200
-    # Kill switch off: the header-less caller again sees every configured plan
-    # (this fixture configures Neo, Architect and Omi Pro prices).
-    assert {p["id"] for p in response.json()["plans"]} == {
-        UNLIM_MONTHLY,
-        UNLIM_ANNUAL,
-        ARCH_MONTHLY,
-        ARCH_ANNUAL,
-        PRO_MONTHLY,
-        PRO_ANNUAL,
-    }
 
 
 def test_legacy_unlimited_subscriber_sees_is_active(ctx):
