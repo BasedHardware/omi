@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "images": [
+    {
+      "file": "001-web-connected-mobile.png",
+      "platform": "web",
+      "description": "Actual callback at a simulated 412 by 915 mobile browser viewport; not physical Android evidence.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    },
+    {
+      "file": "002-web-connected-desktop.png",
+      "platform": "web",
+      "description": "Actual callback at a 1280 by 800 desktop browser viewport.",
+      "captured_by": "agent",
+      "source": "playwright-e2e"
+    }
+  ]
+}
