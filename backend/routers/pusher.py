@@ -249,6 +249,11 @@ async def _websocket_util_trigger(
     # under a window it can no longer see.
     v2_reconcile_exempt: Dict[str, int] = {}
     conversation_generation = 0
+    # Conversations with a chunk already enqueued this session. A skipped
+    # all-zero run is only audio-identical when objects exist on BOTH sides:
+    # readers zero-fill the gap between two objects, so a leading silent run
+    # (no earlier object) must be stored to anchor the recording's start.
+    conversations_with_chunks: set[str] = set()
     v2_replay_seen: set[str] = set()
     record_close_requests: set[str] = set()
     record_owners: dict[str, str] = {}
@@ -710,15 +715,17 @@ async def _websocket_util_trigger(
                 # An all-zero run carries no audio information: every reader
                 # zero-fills gaps between objects with these same bytes, so
                 # skipping the run is audio-identical to storing it, without
-                # one sub-1 KB object per silence boundary. Only a flush that
-                # a later object for this conversation is guaranteed to follow
-                # (a discontinuity: the post-gap audio itself must land, worst
-                # case at the next terminal flush) may drop it. A flush that
-                # can be the recording's last — shutdown, conversation switch,
-                # process handoff, or a size trigger with nothing after it —
-                # must store the zeros: with no later object there is no gap
-                # to zero-fill, and the recording would end early.
-                if skip_if_silent:
+                # one sub-1 KB object per silence boundary. Two conditions
+                # must hold, or the zero-fill gap has no boundary to fill
+                # against: the flush must be a discontinuity (audio for this
+                # conversation has arrived beyond the gap, so a later object
+                # is guaranteed — worst case at the next terminal flush), and
+                # the conversation must already have an earlier chunk (a
+                # leading silent run would otherwise shift the recording's
+                # start to the first stored object). Shutdown, conversation
+                # switch, process handoff and size triggers never skip: with
+                # no guaranteed later object the zeros must be stored.
+                if skip_if_silent and current_conversation_id in conversations_with_chunks:
                     PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL.inc()
                     audio_budget.release(len(private_cloud_sync_buffer))
                     _reset_private_cloud_buffer()
@@ -747,6 +754,9 @@ async def _websocket_util_trigger(
             # The continuity window this chunk was buffered under; the upload
             # path compares it against the conversation's clean-upload window.
             chunk_payload['timeline_generation'] = conversation_generation
+            # This chunk anchors every later gap for the conversation,
+            # including the zero-fill left by any skipped silent run.
+            conversations_with_chunks.add(current_conversation_id)
             append_bounded(
                 private_cloud_queue,
                 chunk_payload,

@@ -243,11 +243,11 @@ async def test_conversation_switch_flushes_and_rebinds(env):
 
 
 async def test_all_zero_run_is_skipped_and_real_runs_are_not(env):
-    """GCS-4: an all-zero run never lands as a standalone sub-1 KB object.
+    """GCS-4: an interior all-zero run never lands as a standalone sub-1 KB object.
 
-    Readers zero-fill gaps between objects with the same bytes, so skipping
-    the run is audio-identical to storing it; a run carrying any real sample
-    is still stored in full.
+    Readers zero-fill gaps between objects with the same bytes, so skipping a
+    run bounded by stored objects on both sides is audio-identical to storing
+    it; a run carrying any real sample is still stored in full.
     """
     from utils.metrics import PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL
 
@@ -257,6 +257,7 @@ async def test_all_zero_run_is_skipped_and_real_runs_are_not(env):
     ws = FakeWebSocket(
         [
             _conversation('c1'),
+            _audio(580.0, real),
             _audio(600.0, silent),
             # 20 s gap: the silent run closes on its own and must not upload.
             _audio(620.0, real),
@@ -265,9 +266,39 @@ async def test_all_zero_run_is_skipped_and_real_runs_are_not(env):
 
     await _run(ws)
 
-    assert [chunk['timestamp'] for _cid, chunk in env] == [620.0]
-    assert env[0][1]['data'] == real
+    assert [chunk['timestamp'] for _cid, chunk in env] == [580.0, 620.0]
+    assert env[1][1]['data'] == real
     assert PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get() == before + 1
+
+
+async def test_leading_silent_run_is_stored_before_real_audio(env):
+    """A leading all-zero run anchors the recording's start (review r2).
+
+    Zero-fill covers the gap between two stored objects; with no earlier
+    object there is no gap to fill, so skipping a leading silent run would
+    shift playback's start to the first real object and drop the leading
+    interval. The first run of a conversation is always stored, even when
+    all-zero.
+    """
+    from utils.metrics import PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL
+
+    before = PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get()
+    silent = bytes(RATE * 2 // 100)  # 20 ms of zeros, one keepalive frame
+    real = b'\x09\x01' * (RATE // 2)
+    ws = FakeWebSocket(
+        [
+            _conversation('c1'),
+            _audio(600.0, silent),
+            # 20 s gap: real audio only after a leading silent run.
+            _audio(620.0, real),
+        ]
+    )
+
+    await _run(ws)
+
+    assert [chunk['timestamp'] for _cid, chunk in env] == [600.0, 620.0]
+    assert env[0][1]['data'] == silent, 'the leading silent run must anchor the start'
+    assert PUSHER_SILENT_RUN_FLUSHES_SKIPPED_TOTAL._value.get() == before
 
 
 async def test_zero_bytes_inside_a_contiguous_run_are_kept(env):
