@@ -256,7 +256,7 @@ void main() {
 
     test('decodes Opus frames and safely runs Logger.debug skip paths in background isolate', () async {
       player.debugOpusFrameDecoder = _decodeTestOpusFrame;
-      final opusName = 'audio_2600.bin';
+      const opusName = 'audio_2600.bin';
       final opusBytes = BytesBuilder();
       for (final frame in <List<int>>[
         [176, 255, 254],
