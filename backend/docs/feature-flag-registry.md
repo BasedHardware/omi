@@ -248,6 +248,7 @@ and an explicit empty literal renders as `''`.
 | `MEETING_NOTES_EPISODE_TIER_MIN_SOURCE_KINDS` | C6 admitted source-kind threshold, default 2 | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_TIER_MIN_WORDS` | C6 admitted speech word threshold, default 1500 | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-05 | dazheng |
 | `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS` | Episode C7 writer budget, default 120s in durable jobs; synchronous requests retain 60s | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-05 | dazheng |
+| `MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED` | Default off; L1 memory extraction serves its system instructions without the owner name or per-account language embedded, moving both to the volatile tail so the prefix is shareable and prefix-cacheable | backend | env | closed | — | — | — | — | pending | undecided | 2026-11-07 | dazheng |
 | `MOBILE_STANDARD_BATCH_ENABLED` | Authorize hidden mobile Standard pendant capture to batch via existing WAL sync | backend, mobile | env | closed | — | — | true (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-11-14 | dazheng |
 | `MOBILE_STANDARD_BATCH_PERCENT` | Stable UID percentage for mobile Standard batch, default zero | backend | env | closed | — | — | 0 (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-11-14 | dazheng |
 | `MOBILE_STANDARD_BATCH_UIDS` | Comma-separated UID allowlist for mobile Standard batch, default empty | backend | env | closed | — | — | vi7SA9ckQCe4ccobWNxlbdcNdC23 (backend-listen (chart), gke/backend-listen) | — | pending | undecided | 2026-11-14 | dazheng |
@@ -408,6 +409,7 @@ and an explicit empty literal renders as `''`.
 | `CONVERSATION_SMART_MERGE_MODE` | Fold a finished pendant conversation into its predecessor when Jev says same occasion; default merge, set off to stop | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` | Incident stop for conversation-wide speaker resolution | backend | env | open | — | — | — | — | keep | keep | — | unowned |
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | keep | — | unowned |
+| `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` | Default on; the desktop provisional-topic endpoint answers transcripts under the notes short-clip word floor deterministically (first-sentence title, no emoji) instead of one conv_structure model call per request | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | keep | — | unowned |
 | `DEEPGRAM_SELF_HOSTED_ENABLED` | Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner | backend | env | closed | — | — | — | — | keep | keep | — | unowned |
 | `DESKTOP_LOOP_WATCHDOG_ENABLED` | Desktop event-loop stall warning and liveness signal; default on, false disables both | backend | env | open | — | — | — | — | keep | keep | — | dazheng |
@@ -658,6 +660,7 @@ and an explicit empty literal renders as `''`.
 | `MEDIA_NOISE_MODE_SERVE_PERCENT` | reviewed synthetic and digest pilot → 1% → 10% → 100% | omi_media_noise_shadow_total errors stay zero; reviewed false media/noise exclusions and false hallucination drops stay zero; no owner call or reminder loss | dazheng | 2026-10-26 |
 | `MEDIA_NOISE_MODE_SERVE_UID_SHA256S` | reviewed synthetic and digest pilot → 1% → 10% → 100% | omi_media_noise_shadow_total errors stay zero; reviewed false media/noise exclusions and false hallucination drops stay zero; no owner call or reminder loss | dazheng | 2026-10-26 |
 | `MEDIA_NOISE_MODE_SHADOW_PERCENT` | reviewed synthetic and digest pilot → 1% → 10% → 100% | omi_media_noise_shadow_total errors stay zero; reviewed false media/noise exclusions and false hallucination drops stay zero; no owner call or reminder loss | dazheng | 2026-10-26 |
+| `MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED` | off everywhere; fixture eval green → one processing host on for 24 h → all prod processing hosts on | memory-l1 cached input share rises toward the conv-structure lane's ~70% with no rise in L1 extraction errors, empty extractions, or lost owner attribution on the eval fixtures | dazheng (W12 cost lane) | 2026-11-07 |
 | `NOTES_PACKET_V2_MODE` | synthetic acceptance → 1% → 10% → 100% | omi_notes_refactor_shadow_total outcome=error stays zero; no unsupported named attribution or citation violations; notes p95 latency and vendor spend do not regress across a full 24h lookback per step | dazheng | 2026-10-26 |
 | `NOTES_PACKET_V2_MODE_SERVE_PERCENT` | synthetic acceptance → 1% → 10% → 100% | omi_notes_refactor_shadow_total outcome=error stays zero; no unsupported named attribution or citation violations; notes p95 latency and vendor spend do not regress across a full 24h lookback per step | dazheng | 2026-10-26 |
 | `NOTES_PACKET_V2_MODE_SERVE_UID_SHA256S` | synthetic acceptance → 1% → 10% → 100% | omi_notes_refactor_shadow_total outcome=error stays zero; no unsupported named attribution or citation violations; notes p95 latency and vendor spend do not regress across a full 24h lookback per step | dazheng | 2026-10-26 |
@@ -772,6 +775,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `CONVERSATION_SMART_MERGE_MODE` — Fold a finished pendant conversation into its predecessor when Jev says same occasion; default merge, set off to stop (fail: open)
 - `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
+- `CONVERSATION_TOPIC_DETERMINISTIC_SHORT_ENABLED` — Default on; the desktop provisional-topic endpoint answers transcripts under the notes short-clip word floor deterministically (first-sentence title, no emoji) instead of one conv_structure model call per request (fail: open)
 - `DEEPGRAM_SELF_HOSTED_ENABLED` — Retired 2026-08-27 with the rest of Deepgram; env removed from all charts and forbidden_env on every Cloud Run owner (fail: closed)
 - `DESKTOP_LOOP_WATCHDOG_ENABLED` — Desktop event-loop stall warning and liveness signal; default on, false disables both (fail: open)
 - `DIARIZATION_V2_ENABLED` — Enable the separate batch-only diarizer app; default false; startup loads models before readiness (fail: closed)
@@ -825,6 +829,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MEETING_NOTES_EPISODE_WRITER_TIMEOUT_SECONDS` — Episode C7 writer budget, default 120s in durable jobs; synchronous requests retain 60s (fail: closed)
 - `MEMORY_IMPORT_BODY_STORAGE_MODE` — Select memory import body storage mode (fail: closed)
 - `MEMORY_IMPORT_WRITE_BLOCK_MODE` — Block memory import writes during incident (fail: inverted)
+- `MEMORY_L1_OWNER_NEUTRAL_PREFIX_ENABLED` — Default off; L1 memory extraction serves its system instructions without the owner name or per-account language embedded, moving both to the volatile tail so the prefix is shareable and prefix-cacheable (fail: closed)
 - `MEMORY_OBSERVATION_INTAKE_ENABLED` — Default on; route ordinary captured observations inline and in maintenance independently of Dream (fail: open)
 - `MEMORY_RELEASED_PROJECTION` — Default on; reuse exact raw released-memory queries only under current atomic writer heads and proven fleet coverage (fail: open)
 - `MEMORY_RELEASED_WRITERS_COVERED` — Initially absent; v1:<unique-epoch> attests every released-memory writer participates in atomic invalidation (fail: closed)
