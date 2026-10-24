@@ -449,7 +449,7 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
-          # Held-audio recovery for the original-live cap cohort; merged with the 100% cap step (#22991 narrowing removed).
+          # Enforce funded STT cap dispatch admission (cohort- and lane-gated); the cap cohort is runtime-doc driven.
           STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
