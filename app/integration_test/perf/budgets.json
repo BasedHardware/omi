@@ -100,8 +100,8 @@
     },
     "device_page": {
       "counts": {
-        "rebuilds": 3804,
-        "layouts": 2265,
+        "rebuilds": 4266,
+        "layouts": 2656,
         "paints": 4700,
         "semantics_compiles": 0,
         "max_clip_layers": 5,

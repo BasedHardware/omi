@@ -61,7 +61,10 @@ and 10 events, clip-layer maxima +2, nonzero opacity-layer maxima +1, and
 painted image size at least 1,048,576 pixels. Semantics remains exactly zero.
 Three independent holdouts passed with identical counts (26.6–28.3 seconds
 each; 0/3 observed false failures). These initialize new count metrics, not
-relaxations of existing timing caps.
+relaxations of existing timing caps. After merging main, device_page was
+re-baselined on the same formula: #23494's never-set-clock catch-up rendering
+is what the fixture's `timerStart: 1` WALs legitimately exercise (3869
+rebuilds / 2405 layouts, deterministic), so its caps follow that baseline.
 
 Counts include route push/pop and interaction; seeding/warmup are outside the
 measurement. Missing phases, samples, scenarios, repeated scorecards, framework failure
