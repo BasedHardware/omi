@@ -513,7 +513,13 @@ def get_available_plans_endpoint(
                 current_price_id = price_map.get(current_price_id, current_price_id)
                 scheduled_price_id = price_map.get(scheduled_price_id, scheduled_price_id)
 
-        current_plan = current_subscription.plan if current_subscription else PlanType.basic
+        # Catalog filtering keys off the same period-valid plan lookup as
+        # checkout (new_buyer_single_plan_violation): a lapsed Operator or
+        # Architect record keeps its stored plan after the paid period ends,
+        # and the mobile manage-only fast path would otherwise leave that user
+        # with only their expired desktop SKU instead of the Omi Pro offer.
+        valid_subscription = users_db.get_user_valid_subscription(uid)
+        current_plan = valid_subscription.plan if valid_subscription else PlanType.basic
         pricing_options: List[PricingOption] = []
         for definition in filter_plans_for_user(all_definitions, current_plan, platform=x_app_platform):
             monthly_price_id = definition["monthly_price_id"]
@@ -648,7 +654,11 @@ def _validate_price_id(price_id: str) -> None:
     response_model_exclude_none=True,
 )
 @fresh_reader
-def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = Depends(auth.get_current_user_uid)):
+def create_checkout_session_endpoint(
+    request: CreateCheckoutRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+    x_app_platform: Optional[str] = Header(None, alias='X-App-Platform'),
+):
     _validate_price_id(request.price_id)
     # Check if user can make a new payment
     can_pay, reason = subscription_utils.can_user_make_payment(uid, request.price_id)
@@ -667,6 +677,15 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
     reactivation_result = _try_reactivate_subscription(uid, request.price_id)
     if reactivation_result:
         return reactivation_result
+
+    # New-buyer single-plan rule (2026-10-24), after every subscriber escape
+    # (a stale Firestore record can make a current subscriber look basic): a
+    # first-time buyer on a non-desktop platform — mobile, web, or a missing/
+    # unknown platform header — may only start on Omi Pro (`unlimited_v2`).
+    # Desktop checkout is unchanged.
+    single_plan_error = subscription_utils.new_buyer_single_plan_violation(uid, request.price_id, x_app_platform)
+    if single_plan_error:
+        raise HTTPException(status_code=400, detail=single_plan_error)
 
     # Normal checkout flow for new subscriptions (Scenario B or first-time subscribers)
     idempotency_key = str(uuid.uuid4())
@@ -806,15 +825,25 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
             modify_params = {
                 'items': [{'id': current_item_id, 'price': request.price_id}],
                 'proration_behavior': 'always_invoice',
+                'payment_behavior': 'error_if_incomplete',
                 'metadata': {'uid': uid, 'sub_type': target_plan.value},
             }
             if resolved_promo_id:
                 modify_params['discounts'] = [{'promotion_code': resolved_promo_id}]
 
             updated_sub = stripe.Subscription.modify(stripe_sub['id'], **modify_params)
+            updated_sub_dict = updated_sub.to_dict()
+            if updated_sub_dict.get('status') not in ('active', 'trialing') or updated_sub_dict.get('pending_update'):
+                logger.warning(
+                    f"Subscription upgrade payment incomplete for user {uid}: status={sanitize(str(updated_sub_dict.get('status')))}"
+                )
+                raise HTTPException(
+                    status_code=402,
+                    detail="Payment for the plan change could not be completed. Your current subscription remains active.",
+                )
 
             # Update our database immediately
-            new_subscription = _build_subscription_from_stripe_object(updated_sub.to_dict())
+            new_subscription = _build_subscription_from_stripe_object(updated_sub_dict)
             if new_subscription:
                 users_db.update_user_subscription(uid, new_subscription.model_dump())
                 set_credits_invalidation_signal(uid)
@@ -892,6 +921,14 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
 
     except HTTPException:
         raise
+    except stripe.error.CardError as e:
+        logger.warning(f"Stripe declined subscription change for user {uid}: {sanitize(str(e))}")
+        raise HTTPException(
+            status_code=402,
+            detail=_stripe_client_error_detail(
+                e, "Payment for the plan change was declined. Your current subscription remains active."
+            ),
+        )
     except stripe.error.InvalidRequestError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
         detail = str(e.user_message) if hasattr(e, 'user_message') and e.user_message else str(e)

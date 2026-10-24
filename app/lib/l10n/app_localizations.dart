@@ -20217,18 +20217,6 @@ abstract class AppLocalizations {
   /// **'Storage almost full'**
   String get captureStorageAlmostFull;
 
-  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
-  ///
-  /// In en, this message translates to:
-  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
-  String get capturePendantDisconnectedDetail;
-
-  /// Listening pill, after the status, when the pendant dropped and is not reconnecting yet: the one-line reassurance. The details sheet has the full explanation.
-  ///
-  /// In en, this message translates to:
-  /// **'Omi reconnects on its own'**
-  String get capturePendantDisconnectedShort;
-
   /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
   ///
   /// In en, this message translates to:

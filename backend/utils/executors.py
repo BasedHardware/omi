@@ -3,6 +3,7 @@
 Provides shared executors with strict separation (bulkhead pattern):
 - critical_executor: auth verification, rate limiting, hard restriction checks,
   small session/code cache reads. Must never starve — gates every request.
+- quiet_replay_executor: bounded quiet-check replay leaves, separate from the DB coordinator.
 - db_executor: Firestore CRUD and Redis data mutations. High volume, moderate latency.
 - context_executor: optional context reads and fresh mount fences, four workers,
   zero queue, isolated from setup's Firestore work even after caller cancellation.
@@ -62,6 +63,7 @@ _TASKS = frozenset(
         'trigger_realtime_integrations',
         'finish_absorb',
         'decide_and_apply',
+        '_reconcile_quiet_candidate',
     }
 )
 
@@ -208,7 +210,12 @@ speaker_tag_verify_executor = MonitoredThreadPoolExecutor(
 # database/mcp_client_metadata.py — database must not import this module.
 cimd_executor = MonitoredThreadPoolExecutor(name="cimd", max_workers=4, max_queue_size=8, thread_name_prefix="cimd")
 
+quiet_replay_executor = MonitoredThreadPoolExecutor(
+    name="quiet_replay", max_workers=16, max_queue_size=16, thread_name_prefix="quiet-replay"
+)
+
 _ALL_EXECUTORS = [
+    quiet_replay_executor,
     critical_executor,
     db_executor,
     llm_executor,
@@ -299,6 +306,28 @@ async def run_blocking(executor: ThreadPoolExecutor, fn: Callable[P, T], *args: 
     return await future
 
 
+def _byok_detail_code(error: BaseException) -> str | None:
+    """Read the byok failure class off an already-mapped HTTPException detail.
+
+    Structural mirror of ``utils.llm.gateway_error_contract.byok_failure_class_of``
+    without importing it: this module sits below utils.byok in the import graph
+    (gateway_error_contract reads the BYOK contextvars), so an import here would
+    be circular. Only the typed conversation-processing boundary produces these
+    details.
+    """
+    seen: set[int] = set()
+    current: BaseException | None = error
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        detail = getattr(current, 'detail', None)
+        if isinstance(detail, dict):
+            code = detail.get('code')
+            if isinstance(code, str) and code.startswith('byok_'):
+                return code
+        current = current.__cause__ or current.__context__
+    return None
+
+
 def _log_background_failure(name: str, future: "Future[Any]") -> None:
     if future.cancelled():
         return
@@ -310,6 +339,17 @@ def _log_background_failure(name: str, future: "Future[Any]") -> None:
     # what Cloud Error Reporting groups as a crash at legal_holds.py.
     if type(error).__name__ == 'DestructiveOperationInProgress':
         logger.info('background task %s deferred reason=destructive_operation', name)
+        return
+    # A BYOK provider failure is the user's own provider account state, not a
+    # server fault: one structured WARNING, never a traceback at ERROR.
+    byok_class = _byok_detail_code(error)
+    if byok_class is not None:
+        logger.warning(
+            'byok provider failure is user account state, not a server fault: byok=true failure_class=%s '
+            'route=background_task/%s',
+            byok_class,
+            name,
+        )
         return
     logger.error("background task %s failed: %s", name, error, exc_info=error)
 

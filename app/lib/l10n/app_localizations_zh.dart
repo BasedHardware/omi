@@ -10933,12 +10933,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get captureStorageAlmostFull => '存储空间即将用完';
 
   @override
-  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi 会自动重新连接';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name等人';
   }

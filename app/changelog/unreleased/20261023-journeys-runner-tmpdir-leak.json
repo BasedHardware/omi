@@ -1,4 +1,0 @@
-{
-  "kind": "none",
-  "reason": "Journey test runner no longer leaks an empty temp evidence dir on --list or selection drift; no app behavior change"
-}

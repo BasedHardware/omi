@@ -66,8 +66,10 @@ def run(job_id: str, generation: int, *, firestore_client: Any = None) -> str:
         # Remove the due index so disabled checks cannot starve normal outbox
         # replay. Session setup/disconnect or the fallback scan can rearm later.
         checks_db.stop_quiet_check(job_id, generation, firestore_client=firestore_client)
+        checks_db.ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
         return 'disabled'
     if not is_listen_finalization_dispatch_enabled() or not is_listen_finalization_dispatch_configured():
+        checks_db.ensure_quiet_check_progress(job_id, firestore_client=firestore_client)
         raise lifecycle.FinalizationDispatchUnavailable('quiet finalization dispatch is unavailable')
     check = checks_db.evaluate_quiet_check(job_id, generation, firestore_client=firestore_client)
     if check['status'] not in {'ready', 'empty_ready', 'deferred'}:

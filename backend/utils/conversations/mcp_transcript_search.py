@@ -25,6 +25,7 @@ from utils.executors import db_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.model_text import DisplayClock, truncation_note
 from utils.observability.fallback import record_fallback
+from utils.speaker_display import SpeakerLabeler, voice_key
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +240,7 @@ def build_transcript_match_snippets(
 
     snippets: List[Dict[str, Any]] = []
     used_centers: set[int] = set()
+    labeler = SpeakerLabeler()
     for center in match_idxs:
         if len(snippets) >= max_snippets:
             break
@@ -255,7 +257,7 @@ def build_transcript_match_snippets(
             if not text:
                 continue
             speaker = seg.get("speaker_id")
-            prefix = f"Speaker {speaker}: " if speaker is not None else ""
+            prefix = f"{labeler.label(voice_key(seg))}: " if speaker is not None else ""
             if seg.get("is_user"):
                 prefix = "User: "
             lines.append(f"{prefix}{text}")

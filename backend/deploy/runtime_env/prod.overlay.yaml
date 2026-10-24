@@ -74,7 +74,7 @@ overlay:
         STT_ROUTING_MODE:
           value: 'on'
         STT_ROUTING_ON_PERCENT:
-          value: '90'
+          value: '100'
         PARAKEET_WINDOW_ALLOCATION_PERCENT:
           value: '100'
         PARAKEET_WINDOW_MAX_SESSIONS:
@@ -199,10 +199,6 @@ overlay:
           config_map:
             name: prod-omi-backend-config
             key: MCP_OAUTH_CLAUDE_REDIRECT_URIS
-        SERVICE_ACCOUNT_JSON:
-          secret:
-            name: prod-omi-backend-secrets
-            key: SERVICE_ACCOUNT_JSON
         OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
           value: 'true'
           category: rollout
@@ -449,6 +445,8 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          # Enforce funded STT cap dispatch admission (cohort- and lane-gated); the cap cohort is runtime-doc driven.
+          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_ENABLED: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.
@@ -757,6 +755,7 @@ overlay:
             secret: DREAM_AGENT_FEEDBACK_SALT
             version: latest
         env:
+          STT_CAP_DISPATCH_ENFORCEMENT: {value: 'true', category: rollout}
           FIRST_SUMMARY_DEADLINE_PERCENT: {value: '100', category: rollout}
           SUMMARY_DEBT_REPAIR_ENABLED: {value: 'false', category: rollout}
           # Explicit shared-speech rollback; GKE hosts remain off.

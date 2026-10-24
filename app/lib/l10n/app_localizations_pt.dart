@@ -11136,13 +11136,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get captureStorageAlmostFull => 'Armazenamento quase cheio';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Seu pendente perdeu a conexão com este telefone. O Omi se reconecta sozinho quando o pendente estiver ligado e por perto. Tudo o que foi gravado antes está seguro.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'O Omi se reconecta sozinho';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name e outros';
   }

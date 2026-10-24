@@ -11124,13 +11124,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get captureStorageAlmostFull => 'Penyimpanan hampir penuh';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi akan menyambung kembali sendiri';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name dan lainnya';
   }

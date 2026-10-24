@@ -11155,13 +11155,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get captureStorageAlmostFull => 'Pamięć prawie pełna';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi połączy się ponownie samo';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name i inni';
   }

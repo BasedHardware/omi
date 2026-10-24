@@ -11130,13 +11130,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get captureStorageAlmostFull => 'Depolama neredeyse dolu';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi kendiliğinden yeniden bağlanır';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name ve diğerleri';
   }

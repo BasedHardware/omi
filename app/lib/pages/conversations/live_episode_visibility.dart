@@ -1,20 +1,11 @@
-import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/pending_work.dart';
-import 'package:omi/services/experiments/client_refactor_flags.dart';
 
-/// A live episode replaces unfinished conversations. Finished rows,
-/// including highlights, become available without waiting for the episode to close.
-Set<String> hiddenLiveConversations(Set<String> episodeIds, Iterable<ServerConversation> conversations,
-    {required bool serving}) {
-  final inProgress = conversations
-      .where((c) => c.status != ConversationStatus.completed && c.status != ConversationStatus.failed)
-      .map((c) => c.id)
-      .toSet();
-  final hidden = episodeIds.intersection(inProgress);
-  ClientRefactorFlags.compare('home_visibility', hidden.length == episodeIds.length);
-  // refactor: superseded by live_episode_visibility when clients_refactor=serve
-  return serving ? hidden : episodeIds;
-}
+/// A live episode replaces its member conversations on Home: live splits, short
+/// fragments, parallel and offline-sync captures, finished rows and highlights
+/// all fold under the one live row, reachable inside the live episode page
+/// (Moments, members). When the episode closes, the members return as ordinary
+/// rows beside it — nothing here hides them then.
+Set<String> hiddenLiveConversations(Set<String> episodeIds) => episodeIds;
 
 /// Conversations offline sync is still adding audio to, with how much: the server's pending sync
 /// jobs that name their target conversation.
