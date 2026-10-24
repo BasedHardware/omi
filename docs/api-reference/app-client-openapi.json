@@ -26513,7 +26513,7 @@
             "default": "other"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "💬",
             "title": "Emoji",
             "type": "string"
           },
@@ -30364,7 +30364,7 @@
             "default": "other"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "💬",
             "title": "Emoji",
             "type": "string"
           },
@@ -32570,7 +32570,7 @@
             "description": "A category for this conversation"
           },
           "emoji": {
-            "default": "🧠",
+            "default": "💬",
             "description": "An emoji to represent the conversation",
             "title": "Emoji",
             "type": "string"
