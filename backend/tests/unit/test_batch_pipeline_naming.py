@@ -414,7 +414,9 @@ def test_production_projection_publishes_named_owner_and_anonymous_voice_with_ca
     assert [(s['is_user'], s['person_id']) for s in segments] == [(True, None), (False, None)]
     assert {s['speaker_id_scope'] for s in segments} == {'final:batch:one'}
     assert segments[0]['speaker_label_source'] == 'auto'
-    assert 'centroids' not in incoming and '_batch_voice_evidence' not in incoming
+    assert 'centroids' not in incoming
+    biometric_fields = {'centroids', 'embedding', 'speaker_embedding', 'voiceprint'}
+    assert all(not biometric_fields.intersection(segment) for segment in segments)
 
 
 def test_hosted_embedding_encodes_bounded_pcm_for_existing_v2_endpoint(monkeypatch):
