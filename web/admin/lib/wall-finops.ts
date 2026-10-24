@@ -491,7 +491,9 @@ export interface VendorBalanceHistory {
 
 export async function fetchVendorBalanceHistory(
   today: string,
-  days = 40
+  /** Covers the 60-day margin sparkline plus its 7-day run-rate lookback,
+   * like the fee/infra reads (HEALTH_HISTORY_DAYS). */
+  days = HEALTH_HISTORY_DAYS
 ): Promise<VendorBalanceHistory> {
   const bq = getGcpBillingClient();
   if (!bq) throw new WallSourceError("FinOps BigQuery client unavailable");
@@ -553,7 +555,8 @@ export interface ModulateModelledDay {
 
 export async function fetchModulateModelled(
   today: string,
-  days = 40
+  /** Same window as the vendor-balance read: every margin sparkline day. */
+  days = HEALTH_HISTORY_DAYS
 ): Promise<{
   byDay: Record<string, ModulateModelledDay>;
   price: number | null;

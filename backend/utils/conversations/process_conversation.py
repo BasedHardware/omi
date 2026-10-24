@@ -3032,7 +3032,7 @@ def process_conversation(
             # "<App> couldn't finish" while the regenerated notes stay persisted.
             logger.error('Conversation processing failed: %s', type(failure).__name__)
             raise HTTPException(status_code=502, detail=APP_RESULT_FAILED_ERROR_DETAIL) from failure
-        raise conversation_processing_http_exception(failure) from failure
+        raise conversation_processing_http_exception(failure, route='conversation_processing/app_result') from failure
     logger.info(f'process_conversation completed conversation.id= {conversation.id}')
     return conversation
 
