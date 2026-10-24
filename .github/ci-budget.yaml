@@ -3136,6 +3136,24 @@
       },
       "runs_on": "ubuntu-latest"
     },
+    "sdk-dart.yml/dart": {
+      "budget_p50_minutes": 5,
+      "display_name": "dart",
+      "expected_runs_class": "unsampled-pr-sentinel",
+      "expected_runs_per_day": 1,
+      "if": null,
+      "matrix": {},
+      "matrix_size": 1,
+      "needs": [],
+      "owner": "CI maintainers",
+      "rationale": "2026-10-19 new path-scoped job: two PRs touched sdks/device/dart since 2026-07-30; 5 minutes covers cached Flutter 3.44.5 setup, pub get and the package tests",
+      "reusable": null,
+      "runner": "linux",
+      "runner_counts": {
+        "linux": 1
+      },
+      "runs_on": "ubuntu-latest"
+    },
     "sdk-rust.yml/rust": {
       "budget_p50_minutes": 5,
       "display_name": "rust",
@@ -6075,6 +6093,28 @@
               "type": "string"
             }
           }
+        }
+      }
+    },
+    "sdk-dart.yml": {
+      "name": "Dart Device SDK",
+      "owner": "CI maintainers",
+      "rationale": "2026-10-19: path-scoped like sdk-cpp.yml; no workflow or manifest lane ran the Dart device SDK tests, and the Hygiene runner has no Flutter toolchain",
+      "triggers": {
+        "pull_request": {
+          "paths": [
+            "sdks/device/dart/**",
+            ".github/workflows/sdk-dart.yml"
+          ]
+        },
+        "push": {
+          "branches": [
+            "main"
+          ],
+          "paths": [
+            "sdks/device/dart/**",
+            ".github/workflows/sdk-dart.yml"
+          ]
         }
       }
     },

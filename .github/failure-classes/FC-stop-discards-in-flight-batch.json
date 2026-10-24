@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-stop-discards-in-flight-batch",
+  "violated_contract": "A batching transcriber must deliver the result of every batch it accepted before stop, including a batch whose runner call is still in flight when stop is called. The Dart device SDK's WhisperTranscriber started each full batch without awaiting it and dropped any result that resolved after stop() had set its stopped flag, while stop() transcribed only the buffered tail. A session stopped during a 5 s batch lost that batch's transcript and kept only the tail. The TypeScript (#12964) and React Native (#13618) SDKs shipped the same stopped-flag check on the in-flight result.",
+  "canonical_prevention": "Run batches one at a time in input order, each starting after the previous one has settled even if it failed, and deliver every runner result regardless of the stopped flag, which only gates new input. stop() queues the buffered tail behind the batches already accepted, and where it returns a future it completes only after the queue has drained. A regression test holds the runner's result pending across stop() and asserts that the in-flight transcript is delivered before the tail and before stop() completes.",
+  "canonical_prevention_artifact": [
+    "sdks/device/dart/test/whisper_stop_test.dart"
+  ],
+  "evidence_prs": [13619, 20407],
+  "scope_hints": [
+    "sdks/device/dart/lib/stt/",
+    "sdks/device/typescript/src/stt/",
+    "sdks/react-native/src/stt/",
+    "sdks/python/omi/stt/"
+  ],
+  "status": "open"
+}
