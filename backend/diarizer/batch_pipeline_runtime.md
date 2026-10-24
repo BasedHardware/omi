@@ -38,9 +38,8 @@ legacy provider clients into the GPU image is unnecessary.
 `BATCH_PIPELINE_WORKER_PIPELINE_DEPTH` (Helm `worker.pipelineDepth`, default
 `2`, range 1-4) runs that many pump lanes in one process. Lease claim, compute
 admission, completion and ordered merge of one lane overlap another lane's GPU
-chain; the chain itself (fetch/decode, VAD, ASR, diarization, persist and CUDA
-quiescence) stays exclusive behind one asyncio lock, so device and host memory
-remain one flight. Each lane renews its own leases while it waits for the GPU.
+chain; VAD, ASR, diarization, persist and CUDA quiescence stay exclusive behind
+one asyncio lock. Each lane renews its own leases while it waits for the GPU.
 On SIGTERM or a fatal GPU error a lane still waiting refunds its leases without
 an attempt charge instead of starting another chain. Periodic recovery,
 result-ready drains and queue metrics run in their own task on the same 5s/15s
@@ -49,6 +48,27 @@ ordered merge remains the per-owner ordering authority across lanes, exactly as
 it already is across replicas and the serving reconciler. `1` restores the serial
 pump. A waiting lane may hold one already-claimed flight ahead of later fresh
 arrivals, so fresh work can wait up to one extra chain.
+
+`BATCH_PIPELINE_WORKER_DECODE_CONCURRENCY` (Helm `worker.decodeConcurrency`,
+default `1`, range 1–4) additionally prepares up to N−1 fetch/decode operations
+outside the GPU lock, using the worker's existing IO executor. Reservations
+cover queued, running and completed-but-unconsumed decodes across all lanes.
+The shared ahead budget is 1,800 admitted audio seconds (115.2 MB float32 at
+16 kHz), in addition to the existing two-hour active group. Longer units and
+full budgets use normal in-flight decode. Increasing pump depth does not
+multiply the read-ahead budget. N is CPU preparation concurrency, **not** model
+concurrency or a multiplier on leases/min. IO concurrency 1 disables read-ahead.
+No model replica, GPU activation batch, precision or window budget changes:
+incremental VRAM per ahead lease is zero. Temporary fetched/decrypted WAV bodies
+also use host RAM; qualify container peak as well as CUDA peak on the exact image.
+
+`1` is the rollback, including malformed/out-of-range env values. Keep it at 1
+until a paired public/synthetic corpus run on dev/staging L4 qualifies N=2,3,4.
+The admission and per-microbatch compute policy checks, lease-token completion,
+privacy fences and owner-ordered merge remain in their existing paths. Failed
+read-ahead surfaces as the ordinary per-item fetch/decode failure. A discarded
+flight drains/cancels its CPU futures before stopping heartbeats; read-ahead
+alone never produces a result or a commit.
 
 ## Encrypted staging and results
 

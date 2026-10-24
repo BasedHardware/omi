@@ -25,7 +25,7 @@ from utils.batch_pipeline.compute_client import from_env as compute_client_from_
 from utils.batch_pipeline.leader import LeaderLease
 from utils.batch_pipeline.metrics import QueueMetrics
 from utils.batch_pipeline.scheduler import Scheduler
-from utils.executors import db_executor, run_blocking, sync_executor
+from utils.executors import db_executor, run_blocking, sync_executor, storage_executor
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +88,9 @@ class Pump:
         self.publish_concurrency = publish_concurrency
         self._owner_locks: dict[str, list] = {}
         self._segment_owners: OrderedDict[str, str] = OrderedDict()
-        # ``flights`` pump lanes overlap claim/admission and result publication
-        # with another lane's GPU chain. The chain itself (decode through
-        # persist and CUDA quiescence) stays exclusive under ``_gpu``, so device
-        # and host memory remain those of one flight.
+        # ``flights`` overlap claim/admission, bounded CPU decode read-ahead and
+        # publication with another lane's exclusive GPU chain. Extra decoded
+        # audio is bounded by the worker across all lanes; CUDA stays one flight.
         self.flights = flights
         self._gpu = asyncio.Lock()
         self._maintenance = asyncio.Lock()
@@ -272,6 +271,7 @@ class Pump:
         done = asyncio.Event()
         lost: set[str] = set()
         renew = asyncio.create_task(self._renew(leases, done, lost))
+        prepared = None
         try:
             if self.shadow is not None:
                 try:
@@ -320,6 +320,12 @@ class Pump:
                     return set(receipt.get('allowed') or [])
 
                 dispatch_kwargs['authorize_dispatch'] = authorize_dispatch
+            prepare = getattr(self.worker, 'prepare_batch', None)
+            if callable(prepare):
+                # CPU-only bounded submission, outside the exclusive GPU chain.
+                prepared = prepare([v.item for v in leases])
+                if prepared is not None:
+                    dispatch_kwargs['prepared'] = prepared
             try:
                 async with self._gpu:
                     if stop_event is not None and stop_event.is_set() and self.flights > 1:
@@ -388,9 +394,15 @@ class Pump:
             await self._release(claimed)
             raise
         finally:
-            self._normal_flights -= 1
-            done.set()
-            await renew
+            try:
+                if prepared is not None:
+                    # A stopped or revoked flight can have unconsumed read-ahead.
+                    # Keep renewal alive until IO drains; never block the event loop.
+                    await run_blocking(storage_executor, prepared.close)
+            finally:
+                self._normal_flights -= 1
+                done.set()
+                await renew
 
     async def _release(self, leases: list[LeasedWork]) -> None:
         for lease in leases:

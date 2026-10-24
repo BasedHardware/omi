@@ -26,6 +26,7 @@ from config.batch_pipeline import (
     empty_asr_recovery_enabled,
     empty_asr_disposition_enabled,
     worker_io_concurrency,
+    worker_decode_concurrency,
     worker_silence_disposition_enabled,
     worker_validation_disposition_enabled,
 )
@@ -47,6 +48,7 @@ from utils.batch_pipeline.gpu_skip_metrics import record_compacted_unassigned, r
 from utils.batch_pipeline.errors import FatalGpuError
 from utils.batch_pipeline.language_metrics import record_route
 from utils.observability.fallback import record_fallback
+from diarizer.batch_pipeline_prefetch import DecodeAhead
 
 SAMPLE_RATE = 16000
 _GPU_CHAIN_LOCK = threading.Lock()
@@ -337,6 +339,7 @@ class PipelineWorker:
         recover_words: Callable | None = None,
         gpu_lock=None,
         io_concurrency: int | None = None,
+        decode_concurrency: int | None = None,
         flight_models=None,
         stream_of: Callable | None = None,
         language_of: Callable | None = None,
@@ -374,6 +377,16 @@ class PipelineWorker:
             if self.io_concurrency > 1
             else None
         )
+        self.decode_ahead = DecodeAhead(
+            self._io,
+            self.decode,
+            worker_decode_concurrency() if decode_concurrency is None else decode_concurrency,
+        )
+
+    def prepare_batch(self, items):
+        # Submission only; the pump keeps renewing leases during the CPU work.
+        # Default 1 avoids even allocating a prepared handle.
+        return self.decode_ahead.prepare(items) if self.decode_ahead.limit and self._io is not None else None
 
     def _fatal(self, exc):
         self._unavailable = True
@@ -506,7 +519,7 @@ class PipelineWorker:
         return [prefixed, *clips[1:]]
 
     def process_batch(
-        self, items: Sequence[WorkItem], *, authorize_dispatch=None
+        self, items: Sequence[WorkItem], *, authorize_dispatch=None, prepared=None
     ) -> Sequence[WorkResult | HeldWork | RecoveryWork | ValidationFailureWork]:
         if len(items) > 32 or len({i.segment_id for i in items}) != len(items):
             raise ValueError('pull must contain at most 32 distinct conversations')
@@ -523,14 +536,14 @@ class PipelineWorker:
             # Bound decoded host memory to two audio-hours (~460 MB float32).
             for item in items:
                 if group and seconds + item.duration_seconds > 7200:
-                    results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
+                    results.extend(self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared))
                     group, seconds = [], 0
                 group.append(item)
                 seconds += item.duration_seconds
-            results.extend(self._process(group, authorize_dispatch=authorize_dispatch))
+            results.extend(self._process(group, authorize_dispatch=authorize_dispatch, prepared=prepared))
             return results
 
-    def _process(self, items, *, authorize_dispatch=None):
+    def _process(self, items, *, authorize_dispatch=None, prepared=None):
         states, windows, failed, results = {}, [], set(), []
         failure_records = []
         held = set()
@@ -607,8 +620,9 @@ class PipelineWorker:
                     except Exception as callback_error:
                         logger.warning('batch_failure_callback_failed exception_type=%s', type(callback_error).__name__)
 
+        decode = prepared.decode if prepared is not None else self.decode
         prefetch = (
-            _DecodePrefetch(self._io, self.decode, items, self.io_concurrency, PREFETCH_AHEAD_SECONDS)
+            _DecodePrefetch(self._io, decode, items, self.io_concurrency, PREFETCH_AHEAD_SECONDS)
             if self._io is not None
             else None
         )
@@ -631,7 +645,7 @@ class PipelineWorker:
                 for index, item in enumerate(items):
                     self.counts['items'] += 1
                     try:
-                        samples = prefetch.take(index) if prefetch is not None else self.decode(item)
+                        samples = prefetch.take(index) if prefetch is not None else decode(item)
                         shapes[item.segment_id]['samples'] = len(samples)
                         duration = len(samples) / SAMPLE_RATE
                         if (
