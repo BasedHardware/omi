@@ -255,6 +255,11 @@ class BatchPressure:
             )
             ips = tuple(sorted({address[4][0] for address in addresses}))
             if not ips or len(ips) > self.MAX_REPLICAS:
+                # Known empty/out-of-bounds discovery is not a transient DNS
+                # failure. The former membership cannot establish headroom.
+                self._ready = ()
+                self._samples.clear()
+                self._last_good_at = 0.0
                 raise ValueError('Parakeet batch pool outside bounded discovery size')
         except Exception:
             self._unavailable()

@@ -600,6 +600,20 @@ async def test_grace_cannot_bootstrap_from_disjoint_cold_partial_sweeps(fleet, m
         assert fleet.pressure._last_good_at == 0
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize('replicas', [0, 65])
+async def test_known_empty_or_oversized_discovery_invalidates_warm_grace(fleet, monkeypatch, replicas):
+    monkeypatch.setenv('PARAKEET_BATCH_PRESSURE_MAX_SNAPSHOT_AGE_SECONDS', '60')
+    async with httpx.AsyncClient(transport=fleet.transport) as client:
+        await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert fleet.pressure.allows('synthetic.invalid', 2)
+        fleet.ips[:] = [f'10.1.0.{n}' for n in range(replicas)]
+        assert not await fleet.pressure._refresh('synthetic.invalid', 2, client)
+        assert not fleet.pressure.allows('synthetic.invalid', 2)
+        assert not fleet.pressure._samples
+        assert len(fleet.calls) == 6  # No unbounded fetch fanout after discovery.
+
+
 @pytest.mark.parametrize('ready', [1, 2, 3, 6, 11, 16, 64])
 @pytest.mark.parametrize('minimum', [2, 3, 7])
 def test_quorum_math_counts_busy_and_unknown_conservatively(ready, minimum):
