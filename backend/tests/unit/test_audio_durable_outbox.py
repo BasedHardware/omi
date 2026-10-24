@@ -321,6 +321,23 @@ async def test_cancelled_commit_keeps_frozen_pack_unacknowledged(remote, monkeyp
     assert not archive.uncommitted and archive.host.events
 
 
+@pytest.mark.asyncio
+async def test_spawn_refusal_keeps_pack_and_next_barrier_retries(remote):
+    h = host()
+    archive = LiveAudioArchive(h)
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1)
+
+    def refused(*args, **kwargs):
+        raise RuntimeError('supervisor closing')
+
+    h.spawn = refused
+    with pytest.raises(RuntimeError):
+        await archive.flush(0)
+    assert archive.uncommitted and not h.events and not archive.running
+    await archive.ensure_durable()
+    assert not archive.uncommitted and h.events
+
+
 class Socket:
     def __init__(self, frames):
         self.frames = deque(frames)

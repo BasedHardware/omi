@@ -142,7 +142,14 @@ class LiveAudioArchive:
 
     def _start(self, pack, channel):
         self.running.add(id(pack))
-        task = self.host.spawn(self._commit(pack, channel), name='raw_capture_commit')
+        commit = self._commit(pack, channel)
+        try:
+            task = self.host.spawn(commit, name='raw_capture_commit')
+        except BaseException:
+            commit.close()
+            self.running.discard(id(pack))
+            self._disable('enqueue_failed')
+            raise
         self.inflight.add(task)
 
         def finished(task):
@@ -260,6 +267,8 @@ class LiveAudioArchive:
                     self._disable('timeout')
                     for task in pending:
                         task.cancel()
+            if self.durable and self.uncommitted:
+                raise RuntimeError('audio custody still pending; producer remains unacknowledged')
 
     async def close(self):
         await self.ensure_durable()
