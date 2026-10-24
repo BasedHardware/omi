@@ -164,7 +164,8 @@ class LiveAudioArchive:
 
     async def _retry_pending(self):
         for key, (pack, channel) in list(self.uncommitted.items()):
-            if key not in self.running:
+            # Another pack can commit while an earlier retry awaits storage.
+            if key in self.uncommitted and key not in self.running:
                 # Retry one at a time, retaining the original bytes/identity.
                 await self._commit(pack, channel)
         if self.inflight:

@@ -347,6 +347,41 @@ async def test_spawn_refusal_keeps_pack_and_next_barrier_retries(remote):
     assert not archive.uncommitted and h.events
 
 
+@pytest.mark.asyncio
+async def test_retry_snapshot_skips_pack_committed_while_another_retry_awaited(remote, monkeypatch):
+    h = host()
+    archive = LiveAudioArchive(h)
+    await archive.append(b'\x01\x00', 'conversation', 1000, 1, 0)
+    await archive.append(b'\x02\x00', 'conversation', 1000, 1, 1)
+    release_second = asyncio.Event()
+    attempts = []
+    second_task = None
+    real_write = archive._write
+
+    async def interleaved_write(pack, channel):
+        attempts.append(channel)
+        if channel == 0 and attempts.count(0) == 1:
+            raise OSError('first pack needs retry')
+        if channel == 0:
+            release_second.set()
+            assert second_task is not None
+            await second_task
+        elif attempts.count(1) == 1:
+            await release_second.wait()
+        await real_write(pack, channel)
+
+    monkeypatch.setattr(archive, '_write', interleaved_write)
+    await archive.flush(0)
+    first_task = next(iter(archive.inflight))
+    await archive.flush(1)
+    second_task = next(task for task in archive.inflight if task is not first_task)
+    await asyncio.gather(first_task, return_exceptions=True)
+    await archive.ensure_durable()
+    assert attempts == [0, 1, 0]
+    assert len(h.events) == 2 and all(event.frames for event in h.events)
+    assert not archive.uncommitted
+
+
 class Socket:
     def __init__(self, frames):
         self.frames = deque(frames)
