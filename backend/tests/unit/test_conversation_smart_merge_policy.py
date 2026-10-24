@@ -286,3 +286,87 @@ def test_budget_waiting_conversations_never_merge_without_processing_consent():
     waiting['processing_deferred'] = False
     assert policy.new_conversation_skip(waiting, _segments(), capture_end=True) is None
     assert policy.predecessor_status_skip(waiting) is None
+
+
+def test_mixed_naive_aware_and_iso_timestamps_across_policy_and_state():
+    from utils.conversations.smart_merge_state import build_state
+
+    survivor, s_segments, new, n_segments = _pair(gap_minutes=5)
+    # Mix naive UTC datetime on survivor with aware/ISO timestamps on ledger and new row.
+    survivor['created_at'] = survivor['created_at'].replace(tzinfo=None)
+    survivor['started_at'] = survivor['started_at'].replace(tzinfo=None)
+    survivor['finished_at'] = survivor['finished_at'].replace(tzinfo=None)
+    new['created_at'] = new['created_at'].isoformat().replace('+00:00', 'Z')
+    new['started_at'] = new['started_at'].isoformat().replace('+00:00', 'Z')
+    new['finished_at'] = new['finished_at']  # aware datetime
+
+    ledger_entries = [
+        {
+            'id': 'f-naive',
+            'started_at': (T0 - timedelta(minutes=25)).replace(tzinfo=None),
+            'finished_at': (T0 - timedelta(minutes=20)).replace(tzinfo=None),
+            'title': 'Earlier naive',
+            'overview': 'Overview naive',
+        },
+        {
+            'id': 'f-iso',
+            'started_at': (T0 - timedelta(minutes=15)).isoformat().replace('+00:00', 'Z'),
+            'finished_at': (T0 - timedelta(minutes=10)).isoformat().replace('+00:00', 'Z'),
+            'title': 'Earlier ISO',
+            'overview': 'Overview ISO',
+        },
+        {
+            'id': 'p',
+            'started_at': T0.replace(tzinfo=None),
+            'finished_at': (T0 + timedelta(minutes=10)),
+            'title': 'title p',
+            'overview': 'overview p',
+        },
+    ]
+    survivor['smart_merge'] = {
+        'role': 'survivor',
+        'revision': 2,
+        'refreshed_revision': 2,
+        'fragments': ledger_entries,
+    }
+
+    fragments = policy.ledger_fragments(survivor)
+    assert [f.id for f in fragments] == ['f-naive', 'f-iso', 'p']
+    assert all(f.started_at.tzinfo is not None and f.finished_at.tzinfo is not None for f in fragments)
+
+    newest = policy.newest_wallclock_fragment(survivor)
+    assert newest is not None and newest.id == 'p'
+
+    check = policy.check_pair(survivor, s_segments, new, n_segments)
+    assert check.reason is None
+    assert check.gap_seconds == pytest.approx(300.0)
+
+    # Same-recording wallclock check with mixed naive/ISO/aware timestamps.
+    live_ext = {'recording_session_id': 'sess-1', 'recording_origin_id': 'orig-1'}
+    survivor_wc = dict(survivor, external_data=live_ext)
+    new_wc = dict(new, external_data=live_ext)
+    wc_check = policy.check_pair(survivor_wc, s_segments, new_wc, n_segments, wallclock_gap=True)
+    assert wc_check.reason is None
+
+    # Stretch and build_state with mixed naive and aware Fragment inputs.
+    frag_b = policy.fragment_of(new)
+    assert frag_b is not None
+    stretch = policy.stretch_before(newest, fragments[:-1])
+    assert [f.id for f in stretch] == ['f-naive', 'f-iso']
+    rendered = build_state(
+        source='omi',
+        a=newest,
+        a_segments=s_segments,
+        b=frag_b,
+        b_segments=n_segments,
+        stretch=stretch,
+        tz=timezone.utc,
+    )
+    assert 'Conversation A' in rendered and 'Conversation B' in rendered
+
+    survivor_update, _ = policy.absorb_payloads(
+        survivor, s_segments, new, n_segments, merged_at=T0 + timedelta(hours=1), decision={'decision': 'merged'}
+    )
+    assert survivor_update['finished_at'] == T0 + timedelta(minutes=25)
+    assert survivor_update['transcript_segments'][-1]['start'] == pytest.approx(n_segments[-1]['start'] + 900.0)
+
