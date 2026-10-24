@@ -261,8 +261,20 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
       test_index=$((test_index + 1))
       (
         echo "::group::$test_path"
+        # Per-file workers do not use loop-on-failure. Load the HTTP-server
+        # fixture plugin only where its fixture is referenced; importing it
+        # (and Werkzeug) in every isolated process adds suite-wide startup cost.
+        file_pytest_args=("${pytest_args[@]}" -p no:xdist.looponfail)
+        if [[ -f "$test_path" ]]; then
+          test_source="$(<"$test_path")"
+          httpserver_fixture_pattern='(^|[^[:alnum:]_])httpserver'
+          if [[ ! "$test_source" =~ $httpserver_fixture_pattern ]]; then
+            file_pytest_args+=(-p no:pytest_httpserver)
+          fi
+          unset test_source
+        fi
         set +e
-        "$PYTHON_BIN" -m pytest "${pytest_args[@]}" "$test_path"
+        "$PYTHON_BIN" -m pytest "${file_pytest_args[@]}" "$test_path"
         status=$?
         set -e
         if [[ "$status" -eq 5 && -n "$marker_expr" ]]; then
