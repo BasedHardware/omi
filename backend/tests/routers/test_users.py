@@ -431,6 +431,50 @@ def test_update_person_name_existing_returns_ok():
     update_person.assert_called_once_with('uid1', 'p1', 'Alice')
 
 
+def test_update_person_name_strips_padding():
+    update_person = MagicMock(return_value=True)
+    with patch.object(users_router, 'update_person', update_person):
+        result = users_router.update_person_name(person_id='p1', value='  Alice Smith  ', uid='uid1')
+
+    assert result == {'status': 'ok'}
+    update_person.assert_called_once_with('uid1', 'p1', 'Alice Smith')
+
+
+@pytest.mark.parametrize('invalid_value', ['', '   ', '\t\n '])
+def test_update_person_name_rejects_blank(invalid_value):
+    update_person = MagicMock()
+    with patch.object(users_router, 'update_person', update_person):
+        with pytest.raises(HTTPException) as exc:
+            users_router.update_person_name(person_id='p1', value=invalid_value, uid='uid1')
+
+    assert exc.value.status_code == 422
+    assert 'at least 2 characters' in exc.value.detail
+    update_person.assert_not_called()
+
+
+@pytest.mark.parametrize('too_short', ['A', '  A  '])
+def test_update_person_name_rejects_too_short(too_short):
+    update_person = MagicMock()
+    with patch.object(users_router, 'update_person', update_person):
+        with pytest.raises(HTTPException) as exc:
+            users_router.update_person_name(person_id='p1', value=too_short, uid='uid1')
+
+    assert exc.value.status_code == 422
+    assert 'at least 2 characters' in exc.value.detail
+    update_person.assert_not_called()
+
+
+def test_update_person_name_rejects_too_long():
+    update_person = MagicMock()
+    with patch.object(users_router, 'update_person', update_person):
+        with pytest.raises(HTTPException) as exc:
+            users_router.update_person_name(person_id='p1', value='A' * 41, uid='uid1')
+
+    assert exc.value.status_code == 422
+    assert 'cannot exceed 40 characters' in exc.value.detail
+    update_person.assert_not_called()
+
+
 def _managed_allowance():
     from utils.subscription import TranscriptionAllowance
 

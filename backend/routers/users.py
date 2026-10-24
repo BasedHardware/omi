@@ -683,10 +683,15 @@ def get_all_people(
 @router.patch('/v1/users/people/{person_id}/name', tags=['v1'], response_model=UserStatusResponse)
 def update_person_name(
     person_id: str,
-    value: str,  # = Field(min_length=2, max_length=40),
+    value: str,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    if not update_person(uid, person_id, value):
+    clean_name = value.strip()
+    if len(clean_name) < 2:
+        raise HTTPException(status_code=422, detail="Person name must be at least 2 characters")
+    if len(clean_name) > 40:
+        raise HTTPException(status_code=422, detail="Person name cannot exceed 40 characters")
+    if not update_person(uid, person_id, clean_name):
         raise HTTPException(status_code=404, detail="Person not found")
     return {'status': 'ok'}
 
