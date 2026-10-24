@@ -34,6 +34,21 @@ DEFAULT_COLUMNS = [
 ]
 
 INJECTION_CHARS = ("=", "+", "-", "@", "\t", "\r")
+DONE_WORDS = {"true", "yes", "1", "done", "completed"}
+
+
+def strip_surrogates(value: str) -> str:
+    """Drop unpaired surrogate code points that cannot be encoded as UTF-8."""
+    return value.encode("utf-8", "ignore").decode("utf-8")
+
+
+def is_completed(value: Any) -> bool:
+    """Normalize completion state handling booleans, numbers, and loose string representations."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    return isinstance(value, str) and value.strip().lower() in DONE_WORDS
 
 
 def parse_datetime(iso_str: Optional[str]) -> Optional[datetime]:
@@ -63,11 +78,12 @@ def sanitize_cell(value: Any, defend_formula_injection: bool = True) -> str:
     """Sanitize cell value and protect against spreadsheet formula injection."""
     if value is None:
         return ""
-    text = str(value)
+    text = strip_surrogates(str(value))
+    stripped = text.lstrip()
 
-    if defend_formula_injection and text.startswith(INJECTION_CHARS):
+    if defend_formula_injection and (text.startswith(INJECTION_CHARS) or stripped.startswith(INJECTION_CHARS)):
         # Allow bare negative or positive integers/floats without prefix escaping
-        if not re.match(r"^[-+]?\d+(\.\d+)?$", text):
+        if not re.match(r"^[-+]?\d+(\.\d+)?$", stripped):
             text = f"'{text}"
 
     return text
@@ -87,10 +103,10 @@ def load_items(source: str) -> List[Dict[str, Any]]:
     if isinstance(data, list):
         return [item for item in data if isinstance(item, dict)]
     elif isinstance(data, dict):
-        if "action_items" in data and isinstance(data["action_items"], list):
-            return [item for item in data["action_items"] if isinstance(item, dict)]
-        if "items" in data and isinstance(data["items"], list):
-            return [item for item in data["items"] if isinstance(item, dict)]
+        for key in ("action_items", "items", "data"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return [item for item in val if isinstance(item, dict)]
         # Single item payload
         if "description" in data or "id" in data:
             return [data]
@@ -107,9 +123,9 @@ def filter_and_sort_items(
     """Filter action items by completion status and sort by specified key."""
     status_lower = (status_filter or "all").lower().strip()
     if status_lower in ("open", "pending", "todo"):
-        filtered = [it for it in items if not it.get("completed")]
+        filtered = [it for it in items if not is_completed(it.get("completed"))]
     elif status_lower in ("completed", "done", "closed"):
-        filtered = [it for it in items if bool(it.get("completed"))]
+        filtered = [it for it in items if is_completed(it.get("completed"))]
     else:
         filtered = list(items)
 
@@ -130,9 +146,9 @@ def filter_and_sort_items(
             reverse=reverse,
         )
     elif sort_lower in ("status", "completed"):
-        filtered.sort(key=lambda x: bool(x.get("completed")), reverse=reverse)
+        filtered.sort(key=lambda x: is_completed(x.get("completed")), reverse=reverse)
     elif sort_lower in ("id",):
-        filtered.sort(key=lambda x: str(x.get("id") or ""), reverse=reverse)
+        filtered.sort(key=lambda x: "" if x.get("id") is None else str(x.get("id")), reverse=reverse)
     elif reverse:
         filtered.reverse()
 
@@ -146,13 +162,14 @@ def item_to_row(
     flatten_newlines: bool = True,
 ) -> List[str]:
     """Convert an action item dictionary into a sanitized CSV row list."""
-    item_id = str(item.get("id") or "").strip()
+    raw_id = item.get("id")
+    item_id = "" if raw_id is None else str(raw_id).strip()
 
     raw_desc = str(item.get("description") or "").strip()
     if flatten_newlines:
         raw_desc = " ".join(raw_desc.splitlines())
 
-    completed_val = bool(item.get("completed", False))
+    completed_val = is_completed(item.get("completed", False))
     bool_fmt = (bool_format or "true_false").lower().strip()
     if bool_fmt == "check":
         completed_str = "[x]" if completed_val else "[ ]"
@@ -166,7 +183,8 @@ def item_to_row(
     due_at_utc = format_datetime_utc(item.get("due_at"))
     created_at_utc = format_datetime_utc(item.get("created_at"))
     updated_at_utc = format_datetime_utc(item.get("updated_at"))
-    conv_id = str(item.get("conversation_id") or "").strip()
+    raw_conv_id = item.get("conversation_id")
+    conv_id = "" if raw_conv_id is None else str(raw_conv_id).strip()
 
     row = [
         sanitize_cell(item_id, defend_formula_injection),
@@ -210,7 +228,7 @@ def export_csv(
     output_stream = io.StringIO()
     writer = csv.writer(output_stream, delimiter=delimiter, lineterminator="\n")
     writer.writerows(rows)
-    content = output_stream.getvalue()
+    content = strip_surrogates(output_stream.getvalue())
 
     if output_path:
         out_file = Path(output_path)
