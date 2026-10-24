@@ -53,7 +53,9 @@ from utils.observability.journeys import (
 logger = logging.getLogger(__name__)
 
 REPLAY_OLDEST_OVERDUE_AGE = Gauge(
-    'listen_finalization_replay_oldest_overdue_age_seconds', 'Age of the oldest overdue finalization replay obligation'
+    'listen_finalization_replay_oldest_overdue_age_seconds',
+    'Age of the oldest overdue replay obligation; aggregate replicas with max(), not sum()',
+    ['queue'],
 )
 REPLAY_OUTCOMES = Counter('listen_finalization_replay_outcomes_total', 'Finalization replay outcomes', ['outcome'])
 
@@ -188,7 +190,7 @@ def reconcile_listen_finalization_jobs(
         oldest_overdue_age = jobs_db.get_finalization_replay_oldest_overdue_age_seconds(
             firestore_client=firestore_client
         )
-        REPLAY_OLDEST_OVERDUE_AGE.set(oldest_overdue_age)
+        REPLAY_OLDEST_OVERDUE_AGE.labels(queue='conversation_finalization_jobs').set(oldest_overdue_age)
     except Exception:
         logger.exception('listen finalization overdue-age query failed')
     if limit is None:
