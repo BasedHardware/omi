@@ -54,9 +54,9 @@ class _PreviousEpisodeLinkState extends State<PreviousEpisodeLink> {
     final episode = episodes?.previous;
     if (episode == null) return const SizedBox.shrink();
     return Padding(
-      key: const Key('previous_episode_link'),
       padding: const EdgeInsets.all(OmiSpacing.md),
       child: OmiButton.tertiary(
+        key: const Key('previous_episode_link'),
         label:
             '${context.l10n.episodePrevious}: ${episode.title.trim().isEmpty ? context.l10n.conversationTab : episode.title}',
         onPressed: () =>

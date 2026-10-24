@@ -4,6 +4,7 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/http/api_result.dart';
 import 'package:omi/backend/schema/episode.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/episode_provider.dart';
 
@@ -32,7 +33,7 @@ void main() {
     )..debugSetLive(closed);
     final history = ConversationProvider(
       isSignedIn: () => false,
-      conversationListFetcher: () async => (items: [], ok: true),
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: true),
     );
     addTearDown(episodes.dispose);
     addTearDown(history.dispose);
@@ -42,6 +43,7 @@ void main() {
     expect(history.conversations, isEmpty);
     expect(find.byKey(const Key('previous_episode_link')), findsOneWidget);
     await tester.tap(find.byKey(const Key('previous_episode_link')));
+    await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.byKey(const Key('previous_episode_page')), findsOneWidget);
     expect(find.text('Retained running note'), findsOneWidget);
