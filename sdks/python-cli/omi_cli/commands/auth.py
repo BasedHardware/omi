@@ -64,7 +64,7 @@ def login(
 
     # Explicit flags win over the picker.
     if browser:
-        return _do_browser_login(ctx, provider=provider)
+        return _do_browser_login(ctx, provider=oauth_auth.normalize_provider(provider))
 
     if api_key_arg is not None:
         return _do_api_key_login(ctx, api_key_arg)
@@ -91,7 +91,7 @@ def login(
     choice = typer.prompt("Choose 1 or 2", default="1").strip()
 
     if choice in {"1", "browser", "b"}:
-        return _do_browser_login(ctx, provider=provider)
+        return _do_browser_login(ctx, provider=oauth_auth.normalize_provider(provider))
     if choice in {"2", "api-key", "key", "k"}:
         api_key_input = typer.prompt(
             "Paste your Omi developer API key", hide_input=True
