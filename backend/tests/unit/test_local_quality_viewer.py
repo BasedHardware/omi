@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -122,9 +123,34 @@ def test_persisted_numeric_voice_zero_and_other_channels_remain_distinct():
     assert rows[0]['speaker'] != rows[1]['speaker']
 
 
-def test_populated_pairs_are_balanced_and_provenance_hidden(tmp_path):
+def test_populated_pairs_are_balanced_and_provenance_hidden(tmp_path, monkeypatch):
+    letters_tool = tmp_path / 'synthetic-letters.js'
+
+    def letters(command, **options):
+        assert command == [
+            'node',
+            str(letters_tool),
+            '--variants',
+            'production,reference',
+            '--ids',
+            'recording-1-section-1,recording-1-section-2',
+            '--seed',
+            'task',
+        ]
+        assert options == {'check': True, 'capture_output': True, 'text': True}
+        return SimpleNamespace(
+            stdout='\n'.join(
+                json.dumps(row)
+                for row in [
+                    {'item_id': 'recording-1-section-1', 'letters': {'A': 'production', 'B': 'reference'}},
+                    {'item_id': 'recording-1-section-2', 'letters': {'A': 'reference', 'B': 'production'}},
+                ]
+            )
+        )
+
+    monkeypatch.setattr(viewer.subprocess, 'run', letters)
     reference = fixture(tmp_path)
-    result = viewer.build(reference, runs(), tmp_path / 'task', section_seconds=4)
+    result = viewer.build(reference, runs(), tmp_path / 'task', section_seconds=4, letters_tool=letters_tool)
     assert result['items'] == 2
     cards = [json.loads(line) for line in (tmp_path / 'task' / 'items.jsonl').read_text().splitlines()]
     assert [c['hidden']['production_letter'] for c in cards] in [['A', 'B'], ['B', 'A']]
