@@ -23,6 +23,9 @@ the lease/intent retryable without a provider-failure attempt. Immutable
 admission-time `policy.provider_reason=byok` / provider-route BYOK snapshots remain
 exempt from keyless rechecks; a request key never exempts an Omi-funded alternative.
 Reviewers and valid paid-through accounts retain the existing resolver decision.
+Offline admission uses non-provisioning subscription and desktop-trial lookups:
+an allowance check must not create a default subscription or restore a missing
+user root. Existing usage-publication erasure fences remain authoritative.
 
 This audio-only predicate does **not** widen live listen, generic LLM/generated
 processing, held-backlog consent, or recovery rollout membership. Existing holds

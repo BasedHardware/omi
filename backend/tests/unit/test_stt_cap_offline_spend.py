@@ -1,5 +1,8 @@
 """Default-on finite-allowance refusal is independent of the live rollout."""
 
+from contextlib import nullcontext
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -63,7 +66,9 @@ def test_each_spend_boundary_uses_current_allowance_and_bounded_metrics(monkeypa
     metric = DISPATCH_DECISIONS.labels(path.value, 'allowed' if managed else 'held', metric_reason.value)
     before = metric._value.get()
     assert dispatch.sync_allowed('synthetic', 1, 'modulate', lane=lane, path=path) is managed
-    resolver.assert_called_once_with('synthetic', source=None, byok_active=False, omi_funded=True)
+    resolver.assert_called_once_with(
+        'synthetic', source=None, byok_active=False, omi_funded=True, provision_subscription=False
+    )
     assert metric._value.get() == before + 1
 
 
@@ -92,3 +97,61 @@ def test_metrics_reject_unbounded_labels():
         record_decision('unbounded', False, DispatchReason.ACCESS_DENIED)
     with pytest.raises(ValueError):
         record_decision(DispatchPath.BATCH_GPU, False, 'raw-provider-error')
+
+
+@pytest.mark.parametrize('lane', ['sync', 'batch'])
+@pytest.mark.parametrize('root_kind', ['missing', 'no_subscription', 'paid_through', 'reviewer'])
+def test_offline_allowance_reads_never_provision_or_restore_user_roots(monkeypatch, lane, root_kind):
+    from database import users as users_db
+    from models.users import PlanType, SubscriptionStatus
+
+    row: dict[str, object] | None = None if root_kind == 'missing' else {'display_name': 'Synthetic'}
+    if root_kind == 'paid_through':
+        assert row is not None
+        paid = subscription.get_default_basic_subscription().model_copy(
+            update={
+                'plan': PlanType.unlimited,
+                'status': SubscriptionStatus.inactive,
+                'current_period_end': int((datetime.now(timezone.utc) + timedelta(days=1)).timestamp()),
+            }
+        )
+        row['subscription'] = paid.model_dump(exclude={'features', 'limits'})
+    original = deepcopy(row)
+    snapshot = SimpleNamespace(
+        exists=row is not None,
+        to_dict=lambda: deepcopy(row),
+        reference=SimpleNamespace(path='users/synthetic'),
+    )
+    client, reference = Mock(), Mock()
+    client.collection.return_value.document.return_value = reference
+    reference.get.return_value = snapshot
+    monkeypatch.setattr(users_db, 'db', client)
+    monkeypatch.setattr(users_db, 'user_snapshot', lambda *args, **kwargs: snapshot)
+    monkeypatch.setattr(users_db, 'lever_enabled', lambda *args, **kwargs: False)
+    monkeypatch.setattr(users_db, 'writing', lambda *args, **kwargs: nullcontext())
+    monkeypatch.setattr(subscription, 'is_marketplace_reviewer', lambda uid: root_kind == 'reviewer')
+    trial = Mock(return_value=False)
+    monkeypatch.setattr(subscription, 'is_trial_paywalled', trial)
+    monkeypatch.delenv('SUBSCRIPTION_LAUNCH_DATE', raising=False)
+
+    allowance = dispatch.funded_allowance('synthetic', source='desktop', lane=lane)
+
+    assert allowance.managed
+    assert row == original
+    reference.set.assert_not_called()
+    if root_kind == 'reviewer':
+        assert allowance.reason == 'marketplace_reviewer'
+        reference.get.assert_not_called()
+        trial.assert_not_called()
+    else:
+        reference.get.assert_called_once_with(['subscription'])
+        trial.assert_called_once_with(
+            'synthetic',
+            'desktop',
+            required_byok_provider='deepgram',
+            strict=True,
+            byok_exempt=False,
+            provision=False,
+        )
+        if root_kind == 'paid_through':
+            assert allowance.reason == 'plan_unlimited'

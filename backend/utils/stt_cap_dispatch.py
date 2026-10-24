@@ -76,6 +76,8 @@ def funded_allowance(uid, source=None, *, usage_cache=None, subscription=_UNRESO
         except Exception:
             return TranscriptionAllowance('on_device', 0, 'allowance_unavailable')
     kwargs = {'usage_cache': usage_cache} if usage_cache is not None else {}
+    if offline_enforcement_enabled(lane):
+        kwargs['provision_subscription'] = False
     if subscription is not _UNRESOLVED:
         kwargs['subscription'] = subscription
     return resolve_transcription_allowance(uid, source=source, byok_active=False, omi_funded=True, **kwargs)
