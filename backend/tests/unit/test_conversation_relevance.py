@@ -80,7 +80,6 @@ def test_only_user_actions_skip_assessment():
         ProcessingTrigger.MERGE,
         ProcessingTrigger.SMART_MERGE,
         ProcessingTrigger.SERVER_RECOVERY,
-        ProcessingTrigger.BACKLOG_CHOICE,
     }
 
 
