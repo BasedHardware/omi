@@ -20371,7 +20371,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "((max by (namespace, pod) (omi_stt_window_batch_pressure_replicas{job=\"backend-listen-metrics\",state=\"fresh\"}) == 0) + 1) or on (namespace, pod) (time() - max by (namespace, pod) (omi_stt_window_batch_pressure_progress_timestamp_seconds{job=\"backend-listen-metrics\"}) > 15)",
+          "expr": "((max by (namespace, pod) (omi_stt_window_batch_pressure_replicas{job=\"backend-listen-metrics\",state=\"fresh\"}) == 0) + 1) or on (namespace, pod) (time() - max by (namespace, pod) (omi_stt_window_batch_pressure_progress_timestamp_seconds{job=\"backend-listen-metrics\"} > 0) > 15)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,

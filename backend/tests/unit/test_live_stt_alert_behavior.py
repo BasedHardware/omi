@@ -35,7 +35,7 @@ def test_pressure_sampler_alarm_is_per_pod_without_a_traffic_floor(export, durat
         '((max by (namespace, pod) (omi_stt_window_batch_pressure_replicas'
         '{job="backend-listen-metrics",state="fresh"}) == 0) + 1) or on (namespace, pod) '
         '(time() - max by (namespace, pod) (omi_stt_window_batch_pressure_progress_timestamp_seconds'
-        '{job="backend-listen-metrics"}) > 15)'
+        '{job="backend-listen-metrics"} > 0) > 15)'
     )
     assert 'admissions' not in expression
     bad = (('namespace', 'prod'), ('pod', 'broken'))
