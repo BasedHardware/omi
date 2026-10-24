@@ -11132,13 +11132,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get captureStorageAlmostFull => 'اسٹوریج تقریباً بھر گئی';
 
   @override
-  String get capturePendantDisconnectedDetail =>
-      'آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔';
-
-  @override
-  String get capturePendantDisconnectedShort => 'Omi خود دوبارہ جڑ جائے گا';
-
-  @override
   String participantsSummaryUncounted(String name) {
     return '$name اور دیگر';
   }

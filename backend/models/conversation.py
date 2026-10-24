@@ -194,7 +194,9 @@ class SharedStructured(BaseModel):
 
     title: str = ''
     overview: str = ''
-    emoji: str = '🧠'
+    # NEUTRAL_EMOJI (models.conversation_emoji): a shared row that never carried
+    # an emoji shows the neutral one, not the "unset" brain sentinel.
+    emoji: str = '💬'
     category: CategoryEnum = CategoryEnum.other
     sections: List[SharedSection] = Field(default_factory=list)
     action_items: List[SharedActionItem] = Field(default_factory=list)
