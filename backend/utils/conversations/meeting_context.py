@@ -627,14 +627,21 @@ def context_from_screen_activity(
 
     # Callers that know the capture-session window is not the call length (#4056) pass the
     # transcript-span duration; the window stays the fallback when only timestamps exist.
-    effective_seconds = duration_seconds if duration_seconds is not None else (finished_at - started_at).total_seconds()
+    start_utc = _as_utc(started_at)
+    end_utc = _as_utc(finished_at)
+    if duration_seconds is not None:
+        effective_seconds = duration_seconds
+    elif start_utc is not None and end_utc is not None:
+        effective_seconds = (end_utc - start_utc).total_seconds()
+    else:
+        effective_seconds = 60.0
 
     return CalendarMeetingContext(
         calendar_event_id='screen-activity',
         title=title,
         participants=participants,
         platform=app_name,
-        start_time=started_at,
+        start_time=start_utc or started_at,
         duration_minutes=max(1, int(effective_seconds / 60)),
         calendar_source='screen_activity',
     )
@@ -654,12 +661,19 @@ def context_from_calendar_link(link: CalendarEventLink) -> CalendarMeetingContex
     else:
         participants = [MeetingParticipant(name=name) for name in link.attendees]
         participants.extend(MeetingParticipant(email=email) for email in link.attendee_emails)
+    start_utc = _as_utc(link.start_time)
+    end_utc = _as_utc(link.end_time)
+    duration_seconds = (
+        (end_utc - start_utc).total_seconds()
+        if start_utc is not None and end_utc is not None
+        else 60.0
+    )
     return CalendarMeetingContext(
         calendar_event_id=link.event_id,
         title=link.title,
         participants=participants,
-        start_time=link.start_time,
-        duration_minutes=max(1, int((link.end_time - link.start_time).total_seconds() / 60)),
+        start_time=start_utc or link.start_time,
+        duration_minutes=max(1, int(duration_seconds / 60)),
         meeting_link=link.html_link,
         calendar_source='google',
     )
@@ -710,9 +724,21 @@ def merge_meeting_contexts(
 
 
 def _as_utc(value: Any) -> Optional[datetime]:
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if raw.endswith('Z'):
+            raw = f'{raw[:-1]}+00:00'
+        try:
+            value = datetime.fromisoformat(raw)
+        except ValueError:
+            return None
     if not isinstance(value, datetime):
         return None
-    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def stored_meeting_window(record: dict[str, Any]) -> Optional[tuple[datetime, datetime]]:
@@ -888,12 +914,14 @@ def meeting_context_from_time_overlap(
     Independent of the Redis mapping and of any OAuth grant: it reads the same
     `users/{uid}/meetings` collection that `POST /v1/calendar/meetings` writes.
     """
-    if started_at is None or finished_at is None:
+    start_utc = _as_utc(started_at)
+    end_utc = _as_utc(finished_at)
+    if start_utc is None or end_utc is None:
         return None
     try:
         tolerance = timedelta(minutes=MEETING_SEARCH_TOLERANCE_MINUTES)
-        records = calendar_db.get_meetings_in_time_range(uid, started_at - tolerance, finished_at + tolerance)
-        return select_overlapping_meeting(records, started_at=started_at, finished_at=finished_at)
+        records = calendar_db.get_meetings_in_time_range(uid, start_utc - tolerance, end_utc + tolerance)
+        return select_overlapping_meeting(records, started_at=start_utc, finished_at=end_utc)
     except Exception as exc:
         logger.error('Error reading stored meetings by time range for uid %s: %s', uid, exc)
         return None
