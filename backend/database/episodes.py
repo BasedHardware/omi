@@ -28,6 +28,7 @@ from database._client import get_firestore_client, run_transactional
 from utils.encryption import decrypt, encrypt
 
 CURRENT = 'current'
+LAST_CLOSED = 'last_closed'
 CONTENT_FIELDS = ('title', 'bullets', 'people', 'open_questions', 'provisional_items', 'moments')
 _LINK_BATCH_LIMIT = 50
 
@@ -98,10 +99,17 @@ def get_current_episode(uid: str, *, firestore_client: Any = None) -> Optional[d
     return get_episode(uid, episode_id, firestore_client=client) if episode_id else None
 
 
+def get_last_closed_episode(uid: str, *, firestore_client: Any = None) -> Optional[dict[str, Any]]:
+    """A discoverable recap even if its conversation's finalizer has not completed."""
+    client = _client(firestore_client)
+    episode_id = _link_target(client, uid, LAST_CLOSED)
+    return get_episode(uid, episode_id, firestore_client=client) if episode_id else None
+
+
 def get_episode_for_conversation(
     uid: str, conversation_id: str, *, firestore_client: Any = None
 ) -> Optional[dict[str, Any]]:
-    if not conversation_id or conversation_id == CURRENT:
+    if not conversation_id or conversation_id in {CURRENT, LAST_CLOSED}:
         return None
     client = _client(firestore_client)
     episode_id = _link_target(client, uid, conversation_id)
@@ -110,6 +118,38 @@ def get_episode_for_conversation(
 
 def _closed_fields(reason: str, closed_at: datetime) -> dict[str, Any]:
     return {'status': 'closed', 'close_reason': reason, 'closed_at': closed_at}
+
+
+def _merge_state(raw: Mapping[str, Any], updates: Mapping[str, Any]) -> dict[str, Any]:
+    """A notes CAS must not overwrite speech retained while its model call ran."""
+    merged = {**raw, **updates}
+    before, after = raw.get('last_activity_at'), updates.get('last_activity_at')
+    if isinstance(before, datetime) and isinstance(after, datetime):
+        merged['last_activity_at'] = max(before, after)
+    return merged
+
+
+@firestore.transactional
+def _record_activity(
+    transaction: Any, client: Any, uid: str, episode_id: str, conversation_id: str, at: datetime
+) -> Optional[datetime]:
+    ref = _episodes(client, uid).document(episode_id)
+    raw = ref.get(transaction=transaction).to_dict() or {}
+    if raw.get('status') != 'live' or conversation_id not in (raw.get('conversation_ids') or []):
+        return None
+    last = raw.get('last_activity_at')
+    activity = max(last, at) if isinstance(last, datetime) else at
+    if activity != last:
+        # This clock has its own transaction. It must not invalidate notes state_version.
+        transaction.update(ref, {'last_activity_at': activity})
+    return activity
+
+
+def record_activity(
+    uid: str, episode_id: str, conversation_id: str, at: datetime, *, firestore_client: Any = None
+) -> Optional[datetime]:
+    client = _client(firestore_client)
+    return run_transactional(client, _record_activity, client, uid, episode_id, conversation_id, at)
 
 
 @firestore.transactional
@@ -138,10 +178,13 @@ def _commit(
         if not current_raw or current_raw.get('state_version') != expected_version:
             raise EpisodeConflict('state_version_changed')
     now = datetime.now(timezone.utc)
-    links = [cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid != CURRENT][:_LINK_BATCH_LIMIT]
+    links = [cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}][
+        :_LINK_BATCH_LIMIT
+    ]
     if new_episode is not None:
         if current_ref is not None and current_raw and current_raw.get('status') == 'live':
             transaction.update(current_ref, _closed_fields(close_reason or 'gap', closed_at or now))
+            transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': current_id, 'updated_at': now})
         episode_id = str(new_episode['id'])
         stored = seal(uid, {**new_episode, 'state_version': 1})
         transaction.set(_episodes(client, uid).document(episode_id), stored)
@@ -150,7 +193,7 @@ def _commit(
     else:
         if current_ref is None or current_raw is None:
             raise EpisodeConflict('no_open_episode')
-        merged = {**(unseal(uid, current_raw) or {}), **updates}
+        merged = _merge_state(unseal(uid, current_raw) or {}, updates)
         merged['state_version'] = int(current_raw.get('state_version') or 0) + 1
         transaction.set(current_ref, seal(uid, merged))
         episode_id = current_id
@@ -198,6 +241,7 @@ def _close(
     reason: str,
     closed_at: datetime,
     extra: Mapping[str, Any],
+    expected_activity_at: Optional[datetime],
 ) -> Optional[dict[str, Any]]:
     ref = _episodes(client, uid).document(episode_id)
     snapshot = ref.get(transaction=transaction)
@@ -205,11 +249,14 @@ def _close(
     current_id = _link_target(client, uid, CURRENT, transaction)
     if not raw or raw.get('status') != 'live':
         return None
+    if reason == 'idle' and expected_activity_at is not None and raw.get('last_activity_at') != expected_activity_at:
+        return None  # Speech won the race with a lazy reader's stale idle decision.
     merged = {**(unseal(uid, raw) or {}), **extra, **_closed_fields(reason, closed_at)}
     merged['state_version'] = int(raw.get('state_version') or 0) + 1
     transaction.set(ref, seal(uid, merged))
     if current_id == episode_id:
         transaction.set(_links(client, uid).document(CURRENT), {'episode_id': None, 'updated_at': closed_at})
+        transaction.set(_links(client, uid).document(LAST_CLOSED), {'episode_id': episode_id, 'updated_at': closed_at})
     return merged
 
 
@@ -220,12 +267,21 @@ def close_episode(
     *,
     closed_at: Optional[datetime] = None,
     extra: Optional[Mapping[str, Any]] = None,
+    expected_activity_at: Optional[datetime] = None,
     firestore_client: Any = None,
 ) -> Optional[dict[str, Any]]:
     """Close a live episode once. Returns the closed state, or None when it was not live."""
     client = _client(firestore_client)
     return run_transactional(
-        client, _close, client, uid, episode_id, reason, closed_at or datetime.now(timezone.utc), dict(extra or {})
+        client,
+        _close,
+        client,
+        uid,
+        episode_id,
+        reason,
+        closed_at or datetime.now(timezone.utc),
+        dict(extra or {}),
+        expected_activity_at,
     )
 
 
@@ -244,11 +300,13 @@ def _update(
     raw = snapshot.to_dict() if snapshot.exists else None
     if not raw or raw.get('state_version') != expected_version:
         raise EpisodeConflict('state_version_changed')
-    merged = {**(unseal(uid, raw) or {}), **updates}
+    merged = _merge_state(unseal(uid, raw) or {}, updates)
     merged['state_version'] = expected_version + 1
     transaction.set(ref, seal(uid, merged))
     now = datetime.now(timezone.utc)
-    for conversation_id in [cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid != CURRENT]:
+    for conversation_id in [
+        cid for cid in dict.fromkeys(link_conversation_ids) if cid and cid not in {CURRENT, LAST_CLOSED}
+    ]:
         transaction.set(_links(client, uid).document(conversation_id), {'episode_id': episode_id, 'updated_at': now})
     return merged
 

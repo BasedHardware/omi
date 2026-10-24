@@ -935,6 +935,46 @@ def test_gcp_diarizer_checks_deployment_files_only_after_checkout():
     assert re.search(r"(?:\[\[?|\btest\b)[^\n]*-f[^\n]*\$values_file", target_script)
 
 
+def test_gcp_diarizer_batch_deploys_dedicated_release_like_the_runbook():
+    """W1: the diarizer-batch dispatch must reproduce the lead-only install.
+
+    backend/scripts/diarization_eval/batch_install.md installs the separate
+    prod-omi-diarizer-batch release from the same chart and image as diarizer,
+    stacking the batch values on the base values and pinning the published
+    digest with the tag emptied. The workflow option must not drift from that.
+    """
+    workflow_path = BACKEND_DIR.parent / ".github/workflows/gcp_diarizer.yml"
+    workflow = yaml.safe_load(workflow_path.read_text(encoding="utf-8"))
+
+    service_input = workflow[True]["workflow_dispatch"]["inputs"]["service"]
+    assert "diarizer-batch" in service_input["options"]
+
+    steps = workflow["jobs"]["deploy"]["steps"]
+    target_step = next(step for step in steps if step.get("name") == "Resolve deployment target")
+    target_script = target_step["run"]
+    assert 'diarizer-batch)' in target_script
+    assert 'values_overlay="backend/charts/diarizer/${DEPLOY_ENV}_omi_diarizer_batch_values.yaml"' in target_script
+    assert '[[ -n "$values_overlay" && ! -f "$values_overlay" ]]' in target_script
+    assert 'echo "values_overlay=$values_overlay"' in target_script
+    # release_name stays ${DEPLOY_ENV}-omi-${SERVICE}, so diarizer-batch targets
+    # prod-omi-diarizer-batch, never prod-omi-diarizer.
+    assert 'echo "release_name=${DEPLOY_ENV}-omi-${SERVICE}"' in target_script
+
+    build_step = next(step for step in steps if step.get("name") == "Build and Push Docker image")
+    assert '"$SERVICE" == "batch-pipeline-worker" || "$SERVICE" == "diarizer-batch"' in build_step["run"]
+
+    helm_step = next(step for step in steps if "Helm" in step.get("name", ""))
+    helm_script = helm_step["run"]
+    assert helm_step["env"]["TARGET_VALUES_OVERLAY"] == "${{ steps.target.outputs.values_overlay }}"
+    assert '-f "./$TARGET_VALUES" -f "./$TARGET_VALUES_OVERLAY"' in helm_script
+    assert "--set-string image.tag= --set-string" in helm_script
+    assert '--atomic --wait --timeout 15m' in helm_script
+
+    verify_step = next(step for step in steps if step.get("name") == "Verify rollout")
+    assert '"$SERVICE" == "diarizer-batch"' in verify_step["run"]
+    assert "rollout_timeout=900s" in verify_step["run"]
+
+
 def test_firestore_readiness_gate_covers_every_backend_image_shipment():
     """Every backend-source image push/deploy needs the shared immutable gate."""
     policy = _workflow_policy()

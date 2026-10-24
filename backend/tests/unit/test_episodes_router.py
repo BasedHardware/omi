@@ -36,6 +36,7 @@ def client(monkeypatch):
     monkeypatch.delenv(config.EPISODES_PERCENT_ENV, raising=False)
     # The capability marker is Redis; test_episodes_client_gate covers it.
     monkeypatch.setattr(router_module.client_gate, 'note_client_seen', lambda uid: False)
+    monkeypatch.setattr(router_module.service, 'last_closed_episode', lambda uid: None)
     app = FastAPI()
     app.include_router(router_module.router)
     app.dependency_overrides[auth.get_current_user_uid] = lambda: 'uid-1'
@@ -90,3 +91,23 @@ def test_lookup_wrap_up_and_dismiss(client, monkeypatch):
     assert calls == [('wrap', 'e1', 'c1'), ('wrap', 'e1', None), ('dismiss', 'e1', 'p1')]
     monkeypatch.setattr(router_module.service, 'wrap_up', lambda uid, eid, conversation_id: None)
     assert http.post('/v1/episodes/missing/wrap-up').status_code == 404
+
+
+def test_idle_closed_recap_is_discoverable_and_directly_reachable(client, monkeypatch):
+    _, http = client
+    closed = {**EPISODE, 'status': 'closed', 'close_reason': 'idle', 'closed_at': T0}
+    monkeypatch.setattr(router_module.service, 'live_episode', lambda uid: None)
+    monkeypatch.setattr(router_module.service, 'last_closed_episode', lambda uid: closed)
+    monkeypatch.setattr(router_module.service, 'episode_by_id', lambda uid, eid: closed if eid == 'e1' else None)
+    response = http.get('/v1/episodes/live').json()
+    assert response['episode'] is None
+    assert response['last_closed_episode']['status'] == 'closed'
+    assert response['last_closed_episode']['title'] == EPISODE['title']
+    assert http.get('/v1/episodes/e1').json()['bullets'] == EPISODE['bullets']
+    assert http.get('/v1/episodes/missing').status_code == 404
+    monkeypatch.setattr(router_module.service, 'live_episode', lambda uid: {**EPISODE, 'id': 'new-live'})
+    response = http.get('/v1/episodes/live').json()
+    assert response['episode']['id'] == 'new-live'
+    assert response['last_closed_episode']['id'] == 'e1'
+    monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
+    assert http.get('/v1/episodes/e1').status_code == 404

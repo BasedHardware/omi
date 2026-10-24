@@ -176,7 +176,7 @@ def _install_stub_modules() -> None:
 
 
 @pytest.fixture(scope="module")
-def router():
+def payment_router():
     """Import routers.payment once per file with external IO modules mocked
     while keeping real models.users. The real import graph (stripe SDK, FastAPI,
     models.users) costs ~2s CPU; re-importing it inside every test's call phase
@@ -234,7 +234,7 @@ def router():
 
 
 @pytest.fixture(autouse=True)
-def _uncalled_shared_mocks(router):
+def _uncalled_shared_mocks(payment_router):
     """Start every test against uncalled shared mocks.
 
     ``return_value=False, side_effect=False`` keeps the stub configuration
@@ -265,7 +265,8 @@ def test_upgrade_sets_error_if_incomplete_payment_behavior_in_source():
     assert card_pos < generic_pos
 
 
-def test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify(router):
+def test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify(payment_router):
+    router = payment_router
     current_sub = router.Subscription(
         plan=router.PlanType.plus,
         status=router.SubscriptionStatus.active,
@@ -321,7 +322,8 @@ def test_cross_plan_upgrade_passes_error_if_incomplete_to_stripe_modify(router):
     assert written_sub["plan"] == router.PlanType.unlimited
 
 
-def test_declined_proration_card_error_returns_402_and_preserves_paid_plan(router):
+def test_declined_proration_card_error_returns_402_and_preserves_paid_plan(payment_router):
+    router = payment_router
     current_sub = router.Subscription(
         plan=router.PlanType.plus,
         status=router.SubscriptionStatus.active,
@@ -372,10 +374,11 @@ def test_declined_proration_card_error_returns_402_and_preserves_paid_plan(route
     router.clear_fair_use_on_upgrade.assert_not_called()
 
 
-def test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic(router):
+def test_declined_proration_past_due_snapshot_returns_402_and_never_projects_basic(payment_router):
     """If Stripe ever returns a past_due or pending_update subscription from modify,
     the endpoint must reject with 402 rather than projecting past_due -> Basic (Free)
     and overwriting the subscriber's paid plan in Firestore."""
+    router = payment_router
     current_sub = router.Subscription(
         plan=router.PlanType.plus,
         status=router.SubscriptionStatus.active,

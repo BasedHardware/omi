@@ -270,6 +270,10 @@ def test_listen_pusher_wire_contract_reconnect_replays_one_durable_finalization(
                 assert replay.payload == first.payload
                 jobs, checks = _split_finalization_jobs(fake_firestore, test_uid)
                 assert any(check['conversation_id'] == session['conversation_id'] for check in checks)
+                owner_checks = [check for check in checks if check['conversation_id'] == session['conversation_id']]
+                assert all(
+                    check['status'] == 'quiet_done' and 'reconcile_after_at' not in check for check in owner_checks
+                )
                 assert len(jobs) == 1
                 assert jobs[0]['job_id'] == first.payload['finalization_job_id']
                 assert jobs[0]['dispatch_generation'] == first.payload['dispatch_generation']
@@ -331,6 +335,12 @@ def test_listen_pusher_wire_contract_terminal_or_fenced_response_is_not_replayed
 
                 pusher.wait_for_frames(PUSHER_PROCESS_CONVERSATION, 1)
                 pusher.wait_for_finalization_actions(1)
+                _jobs, checks = _split_finalization_jobs(fake_firestore, test_uid)
+                owner_checks = [check for check in checks if check['conversation_id'] == session['conversation_id']]
+                assert owner_checks
+                assert all(
+                    check['status'] == 'quiet_done' and 'reconcile_after_at' not in check for check in owner_checks
+                )
 
                 # The closed peer forces the real pusher receiver through its
                 # production reconnect path.  A terminal 201 must have removed

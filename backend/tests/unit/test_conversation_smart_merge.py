@@ -13,6 +13,8 @@ from types import SimpleNamespace
 import pytest
 
 from config import conversation_smart_merge as config
+from database import conversation_quiet_checks as quiet_checks
+from google.cloud import firestore
 from database import conversation_finalization_jobs as jobs_db
 from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
@@ -377,8 +379,19 @@ def test_merge_at_threshold_absorbs_redirects_and_refreshes_once(world):
     world.add('p', 0, 10)
     world.add('n', 15, 10, private_cloud_sync_enabled=True)
     world.jev_answers = [0.35]
+    quiet_paths = [('conversation_finalization_jobs', quiet_checks.quiet_check_id(UID, cid)) for cid in ('p', 'n')]
+    for path in quiet_paths:
+        world.store.rows[path] = {
+            'kind': 'listen_quiet_check',
+            'status': 'waiting_quiet',
+            'dispatch_generation': 1,
+            'reconcile_after_at': T0,
+        }
 
     assert world.finish('n') is True
+    for path in quiet_paths:
+        assert world.store.rows[path]['status'] == 'quiet_done'
+        assert world.store.rows[path]['reconcile_after_at'] is firestore.DELETE_FIELD
 
     donor = world.raw('n')
     assert donor['deleted'] is True and donor['discarded'] is True and donor['sync_merged_into'] == 'p'
