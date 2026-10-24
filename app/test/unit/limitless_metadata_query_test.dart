@@ -14,15 +14,12 @@ import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _FakeLimitlessTransport extends DeviceTransport {
-  _FakeLimitlessTransport({this.deviceId = 'limitless-1'});
-
   @override
-  final String deviceId;
+  final String deviceId = 'limitless-1';
 
   final Map<String, StreamController<List<int>>> _rxControllers = {};
   final Map<String, int> streamListenCounts = {};
-  final StreamController<DeviceTransportState> _stateController =
-      StreamController<DeviceTransportState>.broadcast();
+  final _stateController = StreamController<DeviceTransportState>.broadcast();
   final List<List<int>> writes = [];
   bool physicallyConnected = true;
   bool throwOnNextWrite = false;
@@ -34,8 +31,7 @@ class _FakeLimitlessTransport extends DeviceTransport {
       characteristicUuid,
       () => StreamController<List<int>>.broadcast(
         onListen: () {
-          streamListenCounts[characteristicUuid] =
-              (streamListenCounts[characteristicUuid] ?? 0) + 1;
+          streamListenCounts[characteristicUuid] = (streamListenCounts[characteristicUuid] ?? 0) + 1;
         },
       ),
     );
@@ -77,11 +73,7 @@ class _FakeLimitlessTransport extends DeviceTransport {
   Future<List<int>> readCharacteristic(String serviceUuid, String characteristicUuid) async => [];
 
   @override
-  Future<void> writeCharacteristic(
-    String serviceUuid,
-    String characteristicUuid,
-    List<int> data,
-  ) async {
+  Future<void> writeCharacteristic(String serviceUuid, String characteristicUuid, List<int> data) async {
     if (throwOnNextWrite) {
       throwOnNextWrite = false;
       throw StateError('Simulated BLE write error');
@@ -121,29 +113,30 @@ List<dynamic> _decodeVarint(List<int> data, int pos) {
   return [result, p];
 }
 
-List<int> _protoField(int fieldNum, int wireType, List<int> value) => [
-      ..._varint((fieldNum << 3) | wireType),
-      ...value,
-    ];
+List<int> _protoField(int fieldNum, int wireType, List<int> value) {
+  return [..._varint((fieldNum << 3) | wireType), ...value];
+}
 
 List<int> _intField(int fieldNum, int value) => _protoField(fieldNum, 0, _varint(value));
 
-List<int> _bytesField(int fieldNum, List<int> data) =>
-    _protoField(fieldNum, 2, [..._varint(data.length), ...data]);
+List<int> _bytesField(int fieldNum, List<int> data) {
+  return _protoField(fieldNum, 2, [..._varint(data.length), ...data]);
+}
 
 List<int> _stringField(int fieldNum, String value) => _bytesField(fieldNum, utf8.encode(value));
 
-List<int> _bleWrapper(int index, int seq, int numFrags, List<int> payload) => [
-      ..._intField(1, index),
-      ..._intField(2, seq),
-      ..._intField(3, numFrags),
-      ..._bytesField(4, payload),
-    ];
+List<int> _bleWrapper(int index, int seq, int numFrags, List<int> payload) {
+  return [
+    ..._intField(1, index),
+    ..._intField(2, seq),
+    ..._intField(3, numFrags),
+    ..._bytesField(4, payload),
+  ];
+}
 
-List<int> _requestDataField(int requestId, {int status = 0}) => _bytesField(30, [
-      ..._intField(1, requestId),
-      ..._intField(2, status),
-    ]);
+List<int> _requestDataField(int requestId, {int status = 0}) {
+  return _bytesField(30, [..._intField(1, requestId), ..._intField(2, status)]);
+}
 
 List<int> _deviceInfoPayload({
   required int? requestId,
@@ -151,7 +144,6 @@ List<int> _deviceInfoPayload({
   String? hardware,
   String? model,
   String? manufacturer,
-  int? protocolVersion,
   String? secretSerial,
   String? secretKey,
   int requestStatus = 0,
@@ -161,7 +153,6 @@ List<int> _deviceInfoPayload({
     if (hardware != null) ..._stringField(2, hardware),
     if (model != null) ..._stringField(3, model),
     if (manufacturer != null) ..._stringField(4, manufacturer),
-    if (protocolVersion != null) ..._intField(5, protocolVersion),
     if (secretSerial != null) ..._stringField(5, secretSerial),
     if (secretKey != null) ..._stringField(6, secretKey),
   ];
@@ -242,14 +233,15 @@ List<int> _opusFrame(int toc, int seed, int length) {
   return frame;
 }
 
-BtDevice _limitlessDevice({String id = 'limitless-1', String name = 'Limitless Pendant'}) =>
-    BtDevice(
-      id: id,
-      name: name,
-      type: DeviceType.limitless,
-      rssi: -45,
-      locator: DeviceLocator.bluetooth(deviceId: id),
-    );
+BtDevice _limitlessDevice() {
+  return BtDevice(
+    id: 'limitless-1',
+    name: 'Limitless Pendant',
+    type: DeviceType.limitless,
+    rssi: -45,
+    locator: DeviceLocator.bluetooth(deviceId: 'limitless-1'),
+  );
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -276,14 +268,12 @@ void main() {
 
   tearDown(() {
     for (final channel in mockedChannels) {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMessageHandler(channel, null);
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMessageHandler(channel, null);
     }
     mockedChannels.clear();
   });
 
-  test('rejects disconnected, uninitialized, wrong-device, busy, and overlapping states without BLE writes',
-      () async {
+  test('rejects disconnected, uninitialized, wrong-device, busy, and overlapping states', () async {
     final transport = _FakeLimitlessTransport();
     final device = _limitlessDevice();
     final connection = LimitlessDeviceConnection(
@@ -333,12 +323,8 @@ void main() {
     expect(transport.writes.length, 4);
 
     // 5. Overlapping query while one is in flight -> second rejected with no extra BLE write.
-    final firstQuery = connection.queryCompatibilityMetadata(
-      timeout: const Duration(milliseconds: 60),
-    );
-    final overlappingQuery = await connection.queryCompatibilityMetadata(
-      timeout: const Duration(milliseconds: 60),
-    );
+    final firstQuery = connection.queryCompatibilityMetadata(timeout: const Duration(milliseconds: 60));
+    final overlappingQuery = await connection.queryCompatibilityMetadata(timeout: const Duration(milliseconds: 60));
     expect(overlappingQuery.status, LimitlessMetadataQueryStatus.overlappingQuery);
     expect(overlappingQuery.didWriteToDevice, isFalse);
     expect(transport.writes.length, 5, reason: 'only the first query may write to the pendant');
@@ -349,8 +335,7 @@ void main() {
     await connection.disconnect();
   });
 
-  test('DeviceService routes only to the selected, already-connected Limitless session without connecting',
-      () async {
+  test('DeviceService routes only to the selected connected Limitless session', () async {
     final transport = _FakeLimitlessTransport();
     final limitless = _limitlessDevice();
     await SharedPreferencesUtil().btDeviceSet(limitless);
@@ -447,8 +432,7 @@ void main() {
     await service.stop();
   });
 
-  test('distinguishes placeholders/unsupported fields and retires malformed, unmatched, error, and cancelled queries',
-      () async {
+  test('distinguishes placeholders and retires malformed, unmatched, error, and cancelled queries', () async {
     final transport = _FakeLimitlessTransport();
     final connection = LimitlessDeviceConnection(
       _limitlessDevice(),
@@ -463,20 +447,14 @@ void main() {
     final placeholderQuery = connection.queryCompatibilityMetadata();
     await Future<void>.delayed(const Duration(milliseconds: 5));
     final req1 = _decodeWrapperCommand(transport.writes.last)['requestId'] as int;
-    transport.emitRx(
-      _bleWrapper(
-        1,
-        0,
-        1,
-        _deviceInfoPayload(
-          requestId: req1,
-          firmware: '1.0.0',
-          hardware: 'Unknown',
-          model: 'Limitless Pendant',
-          manufacturer: 'Limitless',
-        ),
-      ),
+    final placeholderPayload = _deviceInfoPayload(
+      requestId: req1,
+      firmware: '1.0.0',
+      hardware: 'Unknown',
+      model: 'Limitless Pendant',
+      manufacturer: 'Limitless',
     );
+    transport.emitRx(_bleWrapper(1, 0, 1, placeholderPayload));
     final placeholderResult = await placeholderQuery;
     expect(placeholderResult.status, LimitlessMetadataQueryStatus.malformedResponse);
     expect(placeholderResult.metadata, isNull);
@@ -485,36 +463,18 @@ void main() {
     final partialQuery = connection.queryCompatibilityMetadata();
     await Future<void>.delayed(const Duration(milliseconds: 5));
     final req2 = _decodeWrapperCommand(transport.writes.last)['requestId'] as int;
-    transport.emitRx(
-      _bleWrapper(
-        2,
-        0,
-        1,
-        _deviceInfoPayload(
-          requestId: req2,
-          firmware: '1.8.4',
-          hardware: 'Unknown',
-        ),
-      ),
-    );
+    final partialPayload = _deviceInfoPayload(requestId: req2, firmware: '1.8.4', hardware: 'Unknown');
+    transport.emitRx(_bleWrapper(2, 0, 1, partialPayload));
     final partialResult = await partialQuery;
     expect(partialResult.status, LimitlessMetadataQueryStatus.ok);
     expect(partialResult.metadata?.firmwareRevision, '1.8.4');
     expect(partialResult.metadata?.hardwareRevision, isNull);
 
     // 3. Unmatched requestId response -> retires with unmatchedResponse.
-    final unmatchedQuery = connection.queryCompatibilityMetadata(
-      timeout: const Duration(milliseconds: 35),
-    );
+    final unmatchedQuery = connection.queryCompatibilityMetadata(timeout: const Duration(milliseconds: 35));
     await Future<void>.delayed(const Duration(milliseconds: 5));
-    transport.emitRx(
-      _bleWrapper(
-        3,
-        0,
-        1,
-        _deviceInfoPayload(requestId: 999, firmware: '2.0.0', hardware: 'rev-a'),
-      ),
-    );
+    final unmatchedPayload = _deviceInfoPayload(requestId: 999, firmware: '2.0.0', hardware: 'rev-a');
+    transport.emitRx(_bleWrapper(3, 0, 1, unmatchedPayload));
     final unmatchedResult = await unmatchedQuery;
     expect(unmatchedResult.status, LimitlessMetadataQueryStatus.unmatchedResponse);
 
@@ -522,14 +482,8 @@ void main() {
     final errorQuery = connection.queryCompatibilityMetadata();
     await Future<void>.delayed(const Duration(milliseconds: 5));
     final req4 = _decodeWrapperCommand(transport.writes.last)['requestId'] as int;
-    transport.emitRx(
-      _bleWrapper(
-        4,
-        0,
-        1,
-        _deviceInfoPayload(requestId: req4, firmware: '2.0.0', requestStatus: 1),
-      ),
-    );
+    final errorPayload = _deviceInfoPayload(requestId: req4, firmware: '2.0.0', requestStatus: 1);
+    transport.emitRx(_bleWrapper(4, 0, 1, errorPayload));
     final errorResult = await errorQuery;
     expect(errorResult.status, LimitlessMetadataQueryStatus.deviceError);
 
@@ -548,8 +502,7 @@ void main() {
     await connection.disconnect();
   });
 
-  test('preserves ongoing audio capture, button/status consumers, and ignores late notifications',
-      () async {
+  test('preserves audio capture and button consumers and ignores late notifications', () async {
     final transport = _FakeLimitlessTransport();
     final connection = LimitlessDeviceConnection(
       _limitlessDevice(),
@@ -561,17 +514,11 @@ void main() {
 
     final receivedAudio = <List<int>>[];
     final receivedButtons = <List<int>>[];
-    final audioSub = await connection.getBleAudioBytesListener(
-      onAudioBytesReceived: receivedAudio.add,
-    );
-    final buttonSub = await connection.getBleButtonListener(
-      onButtonReceived: receivedButtons.add,
-    );
+    final audioSub = await connection.getBleAudioBytesListener(onAudioBytesReceived: receivedAudio.add);
+    final buttonSub = await connection.getBleButtonListener(onButtonReceived: receivedButtons.add);
 
     // Start a metadata query that times out, then emit a late response for that timed-out request.
-    final timedOutFuture = connection.queryCompatibilityMetadata(
-      timeout: const Duration(milliseconds: 25),
-    );
+    final timedOutFuture = connection.queryCompatibilityMetadata(timeout: const Duration(milliseconds: 25));
     await Future<void>.delayed(const Duration(milliseconds: 5));
     final timedOutReqId = _decodeWrapperCommand(transport.writes.last)['requestId'] as int;
 
@@ -586,58 +533,37 @@ void main() {
     final timedOutResult = await timedOutFuture;
     expect(timedOutResult.status, LimitlessMetadataQueryStatus.timeout);
     expect(receivedAudio, [expectedFrame]);
-    expect(receivedButtons, [
-      [2, 0, 0, 0],
-    ]);
+    expect(receivedButtons, [[2, 0, 0, 0]]);
 
     // Late notification for the retired query arrives after timeout; must not emit audio or break next query.
     // Note: manufacturer starts with 'p' (0x70) and is 16 chars long to verify DeviceInfo is never
     // misclassified as a 0x22-prefixed Opus frame in real-time mode.
-    transport.emitRx(
-      _bleWrapper(
-        22,
-        0,
-        1,
-        _deviceInfoPayload(
-          requestId: timedOutReqId,
-          firmware: '2.5.0',
-          hardware: 'rev-d',
-          manufacturer: 'pendant-hardware',
-        ),
-      ),
+    final latePayload = _deviceInfoPayload(
+      requestId: timedOutReqId,
+      firmware: '2.5.0',
+      hardware: 'rev-d',
+      manufacturer: 'pendant-hardware',
     );
+    transport.emitRx(_bleWrapper(22, 0, 1, latePayload));
     await Future<void>.delayed(const Duration(milliseconds: 10));
     expect(receivedAudio.length, 1, reason: 'late DeviceInfo packet must never leak into audio stream');
 
     // Start a fresh query; inject an older unmatched notification before the matched one.
-    final nextQueryFuture = connection.queryCompatibilityMetadata(
-      timeout: const Duration(milliseconds: 80),
-    );
+    final nextQueryFuture = connection.queryCompatibilityMetadata(timeout: const Duration(milliseconds: 80));
     await Future<void>.delayed(const Duration(milliseconds: 5));
     final nextReqId = _decodeWrapperCommand(transport.writes.last)['requestId'] as int;
     expect(nextReqId, timedOutReqId + 1);
 
-    transport.emitRx(
-      _bleWrapper(
-        23,
-        0,
-        1,
-        _deviceInfoPayload(requestId: timedOutReqId, firmware: '0.9.0', hardware: 'old'),
-      ),
+    final stalePayload = _deviceInfoPayload(requestId: timedOutReqId, firmware: '0.9.0', hardware: 'old');
+    transport.emitRx(_bleWrapper(23, 0, 1, stalePayload));
+
+    final matchedPayload = _deviceInfoPayload(
+      requestId: nextReqId,
+      firmware: '2.6.0',
+      hardware: 'rev-e',
+      manufacturer: 'pendant-hardware',
     );
-    transport.emitRx(
-      _bleWrapper(
-        24,
-        0,
-        1,
-        _deviceInfoPayload(
-          requestId: nextReqId,
-          firmware: '2.6.0',
-          hardware: 'rev-e',
-          manufacturer: 'pendant-hardware',
-        ),
-      ),
-    );
+    transport.emitRx(_bleWrapper(24, 0, 1, matchedPayload));
 
     final nextResult = await nextQueryFuture;
     expect(nextResult.status, LimitlessMetadataQueryStatus.ok);

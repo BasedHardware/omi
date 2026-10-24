@@ -455,7 +455,7 @@ class DeviceService {
       return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.disconnected);
     }
 
-    if (selected.id == targetId && selected.type != null && selected.type != DeviceType.limitless) {
+    if (selected.id == targetId && selected.type != DeviceType.limitless) {
       return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.wrongDevice);
     }
 

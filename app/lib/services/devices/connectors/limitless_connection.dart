@@ -65,13 +65,16 @@ class LimitlessCompatibilityMetadata {
   bool get hasFirmwareRevision => firmwareRevision != null && !isPlaceholder;
   bool get hasHardwareRevision => hardwareRevision != null && !isPlaceholder;
 
-  bool get hasReportedMetadata =>
-      !isPlaceholder &&
-      (firmwareRevision != null ||
-          hardwareRevision != null ||
-          protocolVersion != null ||
-          (modelNumber != null && modelNumber != placeholderModelNumber) ||
-          (manufacturerName != null && manufacturerName != placeholderManufacturerName));
+  bool get hasReportedMetadata {
+    if (isPlaceholder) return false;
+    if (firmwareRevision != null || hardwareRevision != null || protocolVersion != null) {
+      return true;
+    }
+    if (modelNumber != null && modelNumber != placeholderModelNumber) {
+      return true;
+    }
+    return manufacturerName != null && manufacturerName != placeholderManufacturerName;
+  }
 
   Map<String, String> toAllowlistedMap() {
     return Map.unmodifiable({
@@ -95,19 +98,37 @@ class LimitlessMetadataQueryResult {
     this.requestId,
   });
 
-  bool get isSuccess =>
-      status == LimitlessMetadataQueryStatus.ok && metadata != null && !metadata!.isPlaceholder;
+  bool get isSuccess => status == LimitlessMetadataQueryStatus.ok && metadata != null && !metadata!.isPlaceholder;
 
   bool get didWriteToDevice => requestId != null;
 }
 
 class _PendingLimitlessMetadataQuery {
-  final Completer<LimitlessMetadataQueryResult> completer =
-      Completer<LimitlessMetadataQueryResult>();
+  final completer = Completer<LimitlessMetadataQueryResult>();
   int? requestId;
   Timer? timer;
   bool sawUnmatchedResponse = false;
   bool sawMalformedResponse = false;
+}
+
+class _ParsedDeviceInfo {
+  final LimitlessCompatibilityMetadata? metadata;
+  final int? requestId;
+  final bool hasError;
+  final bool malformed;
+
+  const _ParsedDeviceInfo({
+    required this.metadata,
+    required this.requestId,
+    required this.hasError,
+    required this.malformed,
+  });
+
+  const _ParsedDeviceInfo.malformed({
+    this.requestId,
+    this.hasError = false,
+  })  : metadata = null,
+        malformed = true;
 }
 
 class LimitlessDeviceConnection extends DeviceConnection {
@@ -117,6 +138,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
   static const int _deviceInfoMessageNumber = 14;
   static const int _requestDataMessageNumber = 30;
   static const int _maxMetadataFieldBytes = 64;
+  static const Set<String> _placeholderTokens = {'unknown', 'n/a', 'none', 'null', 'placeholder'};
 
   int _messageIndex = 0;
   int _requestId = 0;
@@ -2320,19 +2342,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (device.type != DeviceType.limitless) {
       return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.wrongDevice);
     }
-    if (_closed ||
-        status != DeviceConnectionState.connected ||
-        !_isInitialized ||
-        _activeConnect != null) {
+    if (_closed || status != DeviceConnectionState.connected || !_isInitialized || _activeConnect != null) {
       return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.disconnected);
     }
     if (_isBatchMode || _isReinitializing || _pendingReinit) {
       return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.busy);
     }
     if (_pendingMetadataQuery != null) {
-      return const LimitlessMetadataQueryResult(
-        status: LimitlessMetadataQueryStatus.overlappingQuery,
-      );
+      return const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.overlappingQuery);
     }
 
     final epoch = connectionEpoch;
@@ -2340,24 +2357,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
     _pendingMetadataQuery = query;
 
     if (cancelTrigger != null) {
-      unawaited(
-        cancelTrigger.then(
-          (_) => _retireMetadataQuery(
-            query,
-            LimitlessMetadataQueryResult(
-              status: LimitlessMetadataQueryStatus.cancelled,
-              requestId: query.requestId,
-            ),
-          ),
-          onError: (_, __) => _retireMetadataQuery(
-            query,
-            LimitlessMetadataQueryResult(
-              status: LimitlessMetadataQueryStatus.cancelled,
-              requestId: query.requestId,
-            ),
-          ),
-        ),
+      final cancelFuture = cancelTrigger.then(
+        (_) => _cancelMetadataQuery(query),
+        onError: (_, __) => _cancelMetadataQuery(query),
       );
+      unawaited(cancelFuture);
     }
 
     try {
@@ -2366,17 +2370,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
         return query.completer.future;
       }
       if (!connected || !_isCurrentSession(epoch) || !_isInitialized) {
-        _retireMetadataQuery(
-          query,
-          const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.disconnected),
-        );
+        _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.disconnected);
         return query.completer.future;
       }
       if (_isBatchMode || _isReinitializing || _pendingReinit) {
-        _retireMetadataQuery(
-          query,
-          const LimitlessMetadataQueryResult(status: LimitlessMetadataQueryStatus.busy),
-        );
+        _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.busy);
         return query.completer.future;
       }
 
@@ -2386,15 +2384,13 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
       final effectiveTimeout = timeout ?? _metadataQueryTimeout;
       query.timer = Timer(effectiveTimeout, () {
-        final status = query.sawMalformedResponse
-            ? LimitlessMetadataQueryStatus.malformedResponse
-            : query.sawUnmatchedResponse
-                ? LimitlessMetadataQueryStatus.unmatchedResponse
-                : LimitlessMetadataQueryStatus.timeout;
-        _retireMetadataQuery(
-          query,
-          LimitlessMetadataQueryResult(status: status, requestId: query.requestId),
-        );
+        var status = LimitlessMetadataQueryStatus.timeout;
+        if (query.sawMalformedResponse) {
+          status = LimitlessMetadataQueryStatus.malformedResponse;
+        } else if (query.sawUnmatchedResponse) {
+          status = LimitlessMetadataQueryStatus.unmatchedResponse;
+        }
+        _retireMetadataQueryWithStatus(query, status);
       });
 
       await transport.writeCharacteristic(limitlessServiceUuid, limitlessTxCharUuid, cmd);
@@ -2402,41 +2398,40 @@ class LimitlessDeviceConnection extends DeviceConnection {
         return query.completer.future;
       }
       if (!_isCurrentSession(epoch)) {
-        _retireMetadataQuery(
-          query,
-          LimitlessMetadataQueryResult(
-            status: LimitlessMetadataQueryStatus.disconnected,
-            requestId: requestId,
-          ),
-        );
+        _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.disconnected);
       }
     } catch (e) {
       Logger.debug('Limitless: Error sending device info query: $e');
-      _retireMetadataQuery(
-        query,
-        LimitlessMetadataQueryResult(
-          status: LimitlessMetadataQueryStatus.deviceError,
-          requestId: query.requestId,
-        ),
-      );
+      _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.deviceError);
     }
 
     return query.completer.future;
   }
 
+  void _cancelMetadataQuery(_PendingLimitlessMetadataQuery query) {
+    _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.cancelled);
+  }
+
   void _retireActiveMetadataQuery(LimitlessMetadataQueryStatus status) {
     final query = _pendingMetadataQuery;
     if (query == null) return;
-    _retireMetadataQuery(
-      query,
-      LimitlessMetadataQueryResult(status: status, requestId: query.requestId),
-    );
+    _retireMetadataQueryWithStatus(query, status);
   }
 
-  void _retireMetadataQuery(
+  void _retireMetadataQueryWithStatus(
     _PendingLimitlessMetadataQuery query,
-    LimitlessMetadataQueryResult result,
-  ) {
+    LimitlessMetadataQueryStatus status, {
+    LimitlessCompatibilityMetadata? metadata,
+  }) {
+    final result = LimitlessMetadataQueryResult(
+      status: status,
+      metadata: metadata,
+      requestId: query.requestId,
+    );
+    _retireMetadataQuery(query, result);
+  }
+
+  void _retireMetadataQuery(_PendingLimitlessMetadataQuery query, LimitlessMetadataQueryResult result) {
     query.timer?.cancel();
     query.timer = null;
     if (identical(_pendingMetadataQuery, query)) {
@@ -2551,13 +2546,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
     if (!sawDeviceInfoField) {
       if (query != null && !sawOtherContentField && requestId != null) {
         if (matchesActiveRequest && hasRequestError) {
-          _retireMetadataQuery(
-            query,
-            LimitlessMetadataQueryResult(
-              status: LimitlessMetadataQueryStatus.deviceError,
-              requestId: expectedRequestId,
-            ),
-          );
+          _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.deviceError);
           return true;
         }
         if (!matchesActiveRequest) {
@@ -2575,13 +2564,7 @@ class LimitlessDeviceConnection extends DeviceConnection {
 
     if (malformed || deviceInfoBytes == null) {
       if (matchesActiveRequest) {
-        _retireMetadataQuery(
-          query,
-          LimitlessMetadataQueryResult(
-            status: LimitlessMetadataQueryStatus.malformedResponse,
-            requestId: expectedRequestId,
-          ),
-        );
+        _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.malformedResponse);
       } else {
         query.sawMalformedResponse = true;
       }
@@ -2598,35 +2581,16 @@ class LimitlessDeviceConnection extends DeviceConnection {
     }
 
     if (resolvedError) {
-      _retireMetadataQuery(
-        query,
-        LimitlessMetadataQueryResult(
-          status: LimitlessMetadataQueryStatus.deviceError,
-          requestId: expectedRequestId,
-        ),
-      );
+      _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.deviceError);
       return !sawOtherContentField;
     }
 
     if (parsed.malformed || parsed.metadata == null || !parsed.metadata!.hasReportedMetadata) {
-      _retireMetadataQuery(
-        query,
-        LimitlessMetadataQueryResult(
-          status: LimitlessMetadataQueryStatus.malformedResponse,
-          requestId: expectedRequestId,
-        ),
-      );
+      _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.malformedResponse);
       return !sawOtherContentField;
     }
 
-    _retireMetadataQuery(
-      query,
-      LimitlessMetadataQueryResult(
-        status: LimitlessMetadataQueryStatus.ok,
-        metadata: parsed.metadata,
-        requestId: expectedRequestId,
-      ),
-    );
+    _retireMetadataQueryWithStatus(query, LimitlessMetadataQueryStatus.ok, metadata: parsed.metadata);
     return !sawOtherContentField;
   }
 
@@ -2676,14 +2640,9 @@ class LimitlessDeviceConnection extends DeviceConnection {
     return (requestId, hasError);
   }
 
-  ({
-    LimitlessCompatibilityMetadata? metadata,
-    int? requestId,
-    bool hasError,
-    bool malformed,
-  }) _parseDeviceInfoSubmessage(List<int> bytes) {
+  _ParsedDeviceInfo _parseDeviceInfoSubmessage(List<int> bytes) {
     if (bytes.isEmpty) {
-      return (metadata: null, requestId: null, hasError: false, malformed: true);
+      return const _ParsedDeviceInfo.malformed();
     }
 
     var pos = 0;
@@ -2698,20 +2657,20 @@ class LimitlessDeviceConnection extends DeviceConnection {
     while (pos < bytes.length) {
       final tagDecoded = _decodeSafeVarint(bytes, pos);
       if (tagDecoded == null) {
-        return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+        return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
       }
       final tag = tagDecoded.$1;
       pos = tagDecoded.$2;
       final fieldNum = tag >> 3;
       final wireType = tag & 0x07;
       if (fieldNum <= 0) {
-        return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+        return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
       }
 
       if (wireType == 0) {
         final valDecoded = _decodeSafeVarint(bytes, pos);
         if (valDecoded == null) {
-          return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
         }
         final value = valDecoded.$1;
         pos = valDecoded.$2;
@@ -2725,12 +2684,12 @@ class LimitlessDeviceConnection extends DeviceConnection {
       } else if (wireType == 2) {
         final lenDecoded = _decodeSafeVarint(bytes, pos);
         if (lenDecoded == null) {
-          return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
         }
         final length = lenDecoded.$1;
         pos = lenDecoded.$2;
         if (length < 0 || pos + length > bytes.length) {
-          return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
         }
         final fieldBytes = bytes.sublist(pos, pos + length);
         pos += length;
@@ -2738,14 +2697,14 @@ class LimitlessDeviceConnection extends DeviceConnection {
         if (fieldNum == _requestDataMessageNumber) {
           final req = _parseRequestDataSubmessage(fieldBytes);
           if (req == null) {
-            return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+            return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
           }
           nestedRequestId = req.$1 ?? nestedRequestId;
           if (req.$2) hasError = true;
         } else if (fieldNum >= 1 && fieldNum <= 4) {
           final sanitized = _sanitizeAllowlistedString(fieldBytes, fieldNum: fieldNum);
           if (sanitized.$2) {
-            return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+            return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
           }
           final value = sanitized.$1;
           if (fieldNum == 1) firmwareRevision = value;
@@ -2757,30 +2716,30 @@ class LimitlessDeviceConnection extends DeviceConnection {
         // are intentionally dropped without exporting or logging their contents.
       } else if (wireType == 1) {
         if (pos + 8 > bytes.length) {
-          return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
         }
         pos += 8;
       } else if (wireType == 5) {
         if (pos + 4 > bytes.length) {
-          return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+          return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
         }
         pos += 4;
       } else {
-        return (metadata: null, requestId: nestedRequestId, hasError: hasError, malformed: true);
+        return _ParsedDeviceInfo.malformed(requestId: nestedRequestId, hasError: hasError);
       }
     }
 
+    final resolvedManufacturer = manufacturerName ?? LimitlessCompatibilityMetadata.placeholderManufacturerName;
     final metadata = LimitlessCompatibilityMetadata(
       modelNumber: modelNumber ?? LimitlessCompatibilityMetadata.placeholderModelNumber,
       firmwareRevision: firmwareRevision,
       hardwareRevision: hardwareRevision,
-      manufacturerName:
-          manufacturerName ?? LimitlessCompatibilityMetadata.placeholderManufacturerName,
+      manufacturerName: resolvedManufacturer,
       protocolVersion: protocolVersion,
       isPlaceholder: false,
     );
 
-    return (
+    return _ParsedDeviceInfo(
       metadata: metadata,
       requestId: nestedRequestId,
       hasError: hasError,
@@ -2806,17 +2765,11 @@ class LimitlessDeviceConnection extends DeviceConnection {
     final trimmed = decoded.trim();
     if (trimmed.isEmpty) return (null, false);
 
-    final lower = trimmed.toLowerCase();
-    if (lower == 'unknown' ||
-        lower == 'n/a' ||
-        lower == 'none' ||
-        lower == 'null' ||
-        lower == 'placeholder') {
+    if (_placeholderTokens.contains(trimmed.toLowerCase())) {
       return (null, false);
     }
-    if (fieldNum == 1 &&
-        (trimmed == LimitlessCompatibilityMetadata.placeholderFirmwareRevision ||
-            trimmed == '0.0.0')) {
+    const placeholderFw = LimitlessCompatibilityMetadata.placeholderFirmwareRevision;
+    if (fieldNum == 1 && (trimmed == placeholderFw || trimmed == '0.0.0')) {
       return (null, false);
     }
     return (trimmed, false);
