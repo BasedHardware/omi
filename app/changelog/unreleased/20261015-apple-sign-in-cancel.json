@@ -1,0 +1,4 @@
+{
+  "change": "Closing the Sign in with Apple sheet no longer shows an error or ends your current session",
+  "platforms": ["ios"]
+}

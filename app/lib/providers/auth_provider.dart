@@ -3,6 +3,7 @@ import 'package:omi/services/proactivity/proactivity_runtime.dart';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -216,18 +217,22 @@ class AuthenticationProvider extends BaseProvider {
     }
   }
 
+  /// This platform's Apple sign-in: the native sheet on iOS, otherwise the
+  /// browser flow.
+  @visibleForTesting
+  Future<UserCredential?> signInWithApple() {
+    if (PlatformService.isMobile && !Env.useWebAuth && !Platform.isAndroid) {
+      return AuthService.instance.signInWithAppleMobile();
+    }
+    return AuthService.instance.authenticateWithProvider('apple');
+  }
+
   Future<void> onAppleSignIn(Function() onSignIn) async {
-    final useWebAuth = Env.useWebAuth;
     if (!loading) {
       setLoadingState(true);
       PlatformManager.instance.analytics.signInStarted('apple');
       try {
-        UserCredential? credential;
-        if (PlatformService.isMobile && !useWebAuth && !Platform.isAndroid) {
-          credential = await AuthService.instance.signInWithAppleMobile();
-        } else {
-          credential = await AuthService.instance.authenticateWithProvider('apple');
-        }
+        final credential = await signInWithApple();
         if (credential != null && _hasFirebaseUser) {
           await _signIn(onSignIn, credential: credential, authProvider: 'apple');
         } else {
@@ -240,9 +245,12 @@ class AuthenticationProvider extends BaseProvider {
       } catch (e) {
         Logger.debug('OAuth Apple sign in error: $e');
         PlatformManager.instance.analytics.signInFailed('apple', error: e);
-        AppSnackbar.showSnackbarError(
-          globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
-        );
+        // Closing the Apple sheet is the user's choice: no failure copy.
+        if (!isAppleSignInCancellation(e)) {
+          AppSnackbar.showSnackbarError(
+            globalNavigatorKey.currentContext?.l10n.authenticationFailed ?? 'Authentication failed. Please try again.',
+          );
+        }
       }
       setLoadingState(false);
     }
