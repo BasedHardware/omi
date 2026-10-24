@@ -592,6 +592,201 @@ def frozen_manifest(lane, batch, **extra):
     return with_context(stream.getvalue(), context)
 
 
+def ambiguous_manifest(lane, batch, monkeypatch, *, ambiguous_index=None):
+    from utils.sync import recording_lineage
+
+    lane.projector.store.ref('jobs', batch.ids[0]).update({'requires_compute_admission': True})
+    lane.payload.setdefault('speech_spans', [{'start': 0, 'end': 4}])
+    manifest = frozen_manifest(
+        lane,
+        batch,
+        recording_session_id='synthetic-recording',
+        audio_start_seconds=batch.items[0].capture_at,
+        audio_end_seconds=batch.items[0].capture_at + batch.items[0].duration_seconds,
+    )
+    lane.projector.fetch_audio = lambda _: manifest
+    monkeypatch.setattr(recording_lineage, 'lineage_resolution_requested', lambda *a, **kw: True)
+    monkeypatch.setattr(recording_lineage, 'ambiguous_binding_pending', lambda _, reason: reason == 'ambiguous_pending')
+
+    def plan(ids, timestamp_of, duration_of, uid, origin, stamped, source, device, locked, job, reasons):
+        index = round((timestamp_of(ids[0]) - batch.items[0].capture_at) / 150)
+        reasons[ids[0]] = 'ambiguous_pending' if ambiguous_index is None or index == ambiguous_index else None
+        return {ids[0]: None}
+
+    monkeypatch.setattr(recording_lineage, 'plan_segment_targets', plan)
+
+
+def test_ambiguous_head_retains_custody_and_successor_drains_idempotently(lane, monkeypatch):
+    from utils.batch_pipeline.scheduler import owner_key
+    from utils.batch_pipeline.retention import expire_completed_segment
+    from utils.batch_pipeline.projection_repair import plan_owner, apply_owner
+    from utils.batch_pipeline.projection import Projector
+
+    head = lane.seed()
+    lane.finish(head)
+    ambiguous_manifest(lane, head, monkeypatch)
+    tail = lane.seed(capture_at=2000)
+    lane.finish(tail)
+    from utils.batch_pipeline import context as context_module
+    from utils.sync import recording_lineage
+
+    manifests = {
+        head.ids[0]: lane.projector.fetch_audio(head.items[0]),
+        tail.ids[0]: frozen_manifest(
+            lane, tail, recording_session_id='synthetic-tail', audio_start_seconds=2000, audio_end_seconds=2030
+        ),
+    }
+    lane.projector.store.ref('jobs', tail.ids[0]).update({'requires_compute_admission': True})
+    lane.projector.fetch_audio = lambda item: manifests[item.segment_id]
+    lane.projector.require_lineage_fence = True
+    monkeypatch.setattr(context_module, 'sync_live_dedupe_active_for', lambda _: True)
+    from utils.batch_pipeline.projection import build_incoming
+
+    live = build_incoming(tail.items[0], tail.binding, lane.payload)
+    live['id'] = 'synthetic-tail-target'
+    lane.conversations.assign_sync_conversation(lane.uid, live, firestore_client=lane.client)
+
+    def strict_plan(ids, timestamp_of, duration_of, uid, origin, stamped, source, device, locked, job, reasons):
+        ambiguous = origin == 'synthetic-recording'
+        reasons[ids[0]] = 'ambiguous_pending' if ambiguous else 'bound'
+        return {ids[0]: None if ambiguous else 'synthetic-tail-target'}
+
+    monkeypatch.setattr(recording_lineage, 'plan_segment_targets', strict_plan)
+    # The serving role pins its own stage policy before an operator may reuse it.
+    for sid in (head.ids[0], tail.ids[0]):
+        lane.projector.store.read(sid)
+    plan = plan_owner(lane.store, lane.uid)
+    assert plan['units'] == [head.ids[0], tail.ids[0]]
+    assert apply_owner(lane.projector, plan) == {'quarantine_held': 1, 'completed': 1}
+    receipt = lane.projector.store.ref('results', head.ids[0]).get().to_dict()
+    assert receipt['projection_state'] == 'quarantine_held' and receipt['protocol_version'] == 2
+    part = receipt['projection_parts']['0']
+    assert part['state'] == 'quarantined' and part['disposition'] == 'ambiguous_generation'
+    assert part['held_speech_seconds'] == 4 and part['speech_seconds'] == 0
+    assert 'expires_at' not in receipt
+    assert head.ledger.get().to_dict()['status'] == 'processing'
+    assert not expire_completed_segment(lane.store, lane.uid, head.ids[0], 10000)
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == tail.ids[0]
+    assert len(active_rows(lane)) == 1 and len(lane.published) == 1
+    assert sum(len(segment['text'].split()) for segment in active_rows(lane)[0]['transcript_segments']) == 4
+    restarted = Projector(lane.store, lane.projector.load_result, publish=lane.projector.publish, clock=lane.clock)
+    assert restarted.project(head.ids[0]) is None  # must not reload the manifest or assign held text
+    assert apply_owner(restarted, plan_owner(lane.store, lane.uid)) == {}
+    assert len(active_rows(lane)) == 1 and len(lane.published) == 1
+
+
+@pytest.mark.parametrize('ambiguous_index', [0, 1, 2])
+def test_multipart_ambiguity_replays_proven_parts_without_completing_held_upload(lane, monkeypatch, ambiguous_index):
+    batch = multipart(lane, 3)
+    ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=ambiguous_index)
+    assert lane.projector.project(batch.ids[0]) is None
+    assert lane.projector.project(batch.ids[0]) is None
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['projection_state'] == 'quarantine_held'
+    assert row['projection_parts'][str(ambiguous_index)]['state'] == 'quarantined'
+    assert len(active_rows(lane)) == 2 and len(lane.tasks) == 2
+    assert all(c['sync_content_revision'] == 1 for c in active_rows(lane))
+    assert batch.ledger.get().to_dict()['status'] == 'processing' and not lane.published
+    assert not list(lane.user.collection('hourly_usage').stream())
+
+
+def test_quarantine_transaction_rechecks_privacy_before_releasing_head(lane, monkeypatch):
+    from database.batch_pipeline_privacy import BatchPrivacyBlocked
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from utils.batch_pipeline.scheduler import owner_key
+
+    batch = lane.seed()
+    lane.finish(batch)
+    ambiguous_manifest(lane, batch, monkeypatch)
+    original = ProjectionSession.persist_empty
+
+    def erase_before_commit(session, **kwargs):
+        if kwargs.get('quarantined'):
+            lane.user.update({'data_protection_level': 'e2ee'})
+        return original(session, **kwargs)
+
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', erase_before_commit)
+    with pytest.raises(BatchPrivacyBlocked):
+        lane.projector.project(batch.ids[0])
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert not row.get('projection_parts') and row['protocol_version'] == 1
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) is None
+    assert not active_rows(lane)
+
+
+def test_mixed_quarantine_keeps_proven_followups_discoverable_after_restart(lane, monkeypatch):
+    from utils.batch_pipeline.projection import Projector
+    from utils.batch_pipeline.metrics import QueueMetrics
+    from prometheus_client import CollectorRegistry
+
+    batch = multipart(lane, 3)
+    ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=0)
+    lane.projector.persist(batch.ids[0])  # async assignment, no follow-ups
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['projection']['state'] == 'quarantined' and row['projection_state'] == 'persisted'
+    assert batch.ids[0] in lane.store.projection_pending()
+    assert not lane.tasks
+    restarted = Projector(lane.store, lane.projector.load_result, publish=lane.projector.publish, clock=lane.clock)
+    assert restarted.project(batch.ids[0]) is None
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['projection_state'] == 'quarantine_held' and len(lane.tasks) == 2
+    assert batch.ids[0] not in lane.store.projection_pending()
+    metrics = QueueMetrics(CollectorRegistry())
+    metrics.refresh_projection(lane.store, 10000)
+    assert metrics.projection_age._value.get() == 9998
+    assert not lane.published and batch.ledger.get().to_dict()['status'] == 'processing'
+
+
+def test_partial_quarantine_crash_retains_watermark_fence_and_resumes(lane, monkeypatch):
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from utils.batch_pipeline.scheduler import owner_key
+
+    batch = multipart(lane, 3)
+    ambiguous_manifest(lane, batch, monkeypatch, ambiguous_index=0)
+    original = ProjectionSession.persist_empty
+
+    def lose_first_reply(session, **kwargs):
+        receipt = original(session, **kwargs)
+        if kwargs.get('quarantined'):
+            raise RuntimeError('synthetic partial quarantine crash')
+        return receipt
+
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', lose_first_reply)
+    with pytest.raises(RuntimeError, match='partial quarantine crash'):
+        lane.projector.project(batch.ids[0])
+    row = lane.projector.store.ref('results', batch.ids[0]).get().to_dict()
+    assert row['protocol_version'] == 2 and row['projection_state'] == 'pending'
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) is None
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', original)
+    assert lane.projector.project(batch.ids[0]) is None
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == batch.ids[0]
+    assert len(active_rows(lane)) == 2 and not lane.published
+
+
+def test_lost_quarantine_commit_reply_restarts_without_duplicate_or_custody_ttl(lane, monkeypatch):
+    from database.batch_pipeline_projection_session import ProjectionSession
+    from utils.batch_pipeline.scheduler import owner_key
+
+    batch = lane.seed()
+    lane.finish(batch)
+    ambiguous_manifest(lane, batch, monkeypatch)
+    original = ProjectionSession.persist_empty
+
+    def lost(session, **kwargs):
+        receipt = original(session, **kwargs)
+        if kwargs.get('quarantined'):
+            raise RuntimeError('synthetic lost quarantine reply')
+        return receipt
+
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', lost)
+    with pytest.raises(RuntimeError, match='lost quarantine reply'):
+        lane.projector.project(batch.ids[0])
+    monkeypatch.setattr(ProjectionSession, 'persist_empty', original)
+    assert lane.projector.project(batch.ids[0]) is None
+    assert lane.projector.store.projection_watermark(owner_key(lane.uid)) == batch.ids[0]
+    assert not active_rows(lane) and not lane.published
+
+
 def test_authenticated_manifest_preserves_location_and_uses_legacy_lineage_policy(lane, monkeypatch):
     from utils.batch_pipeline.projection import build_incoming
     from utils.sync import recording_lineage
