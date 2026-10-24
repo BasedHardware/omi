@@ -2066,3 +2066,67 @@ class TestProductHuntBadge:
         # Renders today; the gate is exercised directly above. Guard the markup contract
         # so a future edit cannot leave a dangling empty anchor behind.
         assert html.count('class="ph-badge"') <= 1
+
+
+class TestDesktopPublishedAtSorting:
+    """Verify published_at sorting handles None, missing, and datetime objects safely."""
+
+    def test_release_published_at_sort_key_types(self):
+        from datetime import datetime, timezone
+        from routers.updates import _release_published_at_sort_key
+
+        assert _release_published_at_sort_key(None) == ""
+        assert _release_published_at_sort_key("not-a-dict") == ""
+        assert _release_published_at_sort_key({}) == ""
+        assert _release_published_at_sort_key({"published_at": None}) == ""
+        assert _release_published_at_sort_key({"published_at": "2026-03-01T00:00:00Z"}) == "2026-03-01T00:00:00Z"
+        dt = datetime(2026, 3, 1, 12, 0, tzinfo=timezone.utc)
+        assert _release_published_at_sort_key({"published_at": dt}) == dt.isoformat()
+
+    def test_newest_release_by_channel_handles_none_and_mixed_timestamps(self):
+        from datetime import datetime, timezone
+        from routers.updates import _newest_release_by_channel
+
+        entries = [
+            {
+                "channel": "stable",
+                "release": {"tag_name": "v1.0.0", "published_at": None},
+            },
+            {
+                "channel": "stable",
+                "release": {"tag_name": "v1.1.0", "published_at": "2026-03-01T00:00:00Z"},
+            },
+            {
+                "channel": "beta",
+                "release": {"tag_name": "v2.0.0-beta", "published_at": "2026-02-01T00:00:00Z"},
+            },
+            {
+                "channel": "beta",
+                "release": {
+                    "tag_name": "v2.1.0-beta",
+                    "published_at": datetime(2026, 3, 15, 0, 0, tzinfo=timezone.utc),
+                },
+            },
+            {
+                "channel": "beta",
+                "release": {"tag_name": "v2.2.0-beta", "published_at": None},
+            },
+        ]
+        # Without coercion, comparing entry["release"].get("published_at", "") > current[...]
+        # raised TypeError: '>' not supported between instances of 'str' and 'NoneType' or
+        # '<' not supported between instances of 'datetime.datetime' and 'str'.
+        result = _newest_release_by_channel(entries)
+        assert result["stable"]["release"]["tag_name"] == "v1.1.0"
+        assert result["beta"]["release"]["tag_name"] == "v2.1.0-beta"
+
+    def test_desktop_releases_sort_handles_none_published_at(self):
+        from routers.updates import _release_published_at_sort_key
+
+        releases = [
+            {"release": {"tag_name": "v1", "published_at": None}},
+            {"release": {"tag_name": "v2", "published_at": "2026-05-01T00:00:00Z"}},
+            {"release": {"tag_name": "v0", "published_at": None}},
+        ]
+        # Total sort must not raise TypeError and must order populated timestamps first
+        releases.sort(key=lambda x: _release_published_at_sort_key(x.get("release")), reverse=True)
+        assert releases[0]["release"]["tag_name"] == "v2"

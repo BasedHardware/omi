@@ -464,6 +464,18 @@ def _get_installer_download_url(release: Dict, platform: str) -> Optional[str]:
     return _get_dmg_download_url(release)
 
 
+def _release_published_at_sort_key(release: Any) -> str:
+    """Deterministic, total sort key for release payloads, tolerant of None/missing/datetime published_at."""
+    if not isinstance(release, dict):
+        return ""
+    val = release.get("published_at")
+    if isinstance(val, str):
+        return val
+    if isinstance(val, datetime):
+        return val.isoformat()
+    return ""
+
+
 async def _get_legacy_live_desktop_releases(platform: str) -> List[Dict]:
     """
     Fetch and filter live desktop releases for a given platform.
@@ -525,7 +537,7 @@ async def _get_legacy_live_desktop_releases(platform: str) -> List[Dict]:
             }
         )
 
-    desktop_releases.sort(key=lambda x: x["release"].get("published_at", ""), reverse=True)
+    desktop_releases.sort(key=lambda x: _release_published_at_sort_key(x.get("release")), reverse=True)
     return desktop_releases
 
 
@@ -570,7 +582,9 @@ def _newest_release_by_channel(entries: List[Dict]) -> Dict[str, Dict]:
     for entry in entries:
         channel = entry["channel"]
         current = newest.get(channel)
-        if current is None or entry["release"].get("published_at", "") > current["release"].get("published_at", ""):
+        if current is None or _release_published_at_sort_key(entry.get("release")) > _release_published_at_sort_key(
+            current.get("release")
+        ):
             newest[channel] = entry
     return newest
 
@@ -664,7 +678,7 @@ async def _get_live_desktop_releases(platform: str) -> List[Dict]:
         ).inc()
         DESKTOP_UPDATE_FEED_VALID.labels(platform=platform, channel=channel).set(1)
 
-    resolved.sort(key=lambda entry: entry["release"].get("published_at", ""), reverse=True)
+    resolved.sort(key=lambda entry: _release_published_at_sort_key(entry.get("release")), reverse=True)
     return resolved
 
 

@@ -1,5 +1,6 @@
+from datetime import datetime
 import re
-from typing import Optional, Tuple, List, Dict
+from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import APIRouter, HTTPException
 from enum import Enum
@@ -162,6 +163,18 @@ def _find_candidate_releases(
     return candidates
 
 
+def _release_published_at_sort_key(release: Any) -> str:
+    """Deterministic, total sort key for GitHub releases, tolerant of missing/None/datetime published_at."""
+    if not isinstance(release, dict):
+        return ""
+    val = release.get("published_at")
+    if isinstance(val, str):
+        return val
+    if isinstance(val, datetime):
+        return val.isoformat()
+    return ""
+
+
 def _find_release_by_version(
     releases: List[Dict], release_prefix: str, target_firmware_tuple: Tuple[int, ...]
 ) -> Optional[Dict]:
@@ -173,7 +186,7 @@ def _find_release_by_version(
     unparseable stored version simply won't equal the (already-validated) target, so it is skipped.
     """
     candidates = _find_candidate_releases(releases, release_prefix)
-    candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
+    candidates.sort(key=_release_published_at_sort_key, reverse=True)
     for release in candidates:
         kv = extract_key_value_pairs(release.get("body"))
         if _parse_firmware_version(kv.get("release_firmware_version")) == target_firmware_tuple:
@@ -251,7 +264,7 @@ async def get_latest_version(device_model: str, firmware_revision: str, hardware
     if not candidates:
         raise HTTPException(status_code=404, detail="No suitable firmware update found for your device version.")
 
-    candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
+    candidates.sort(key=_release_published_at_sort_key, reverse=True)
     return _extract_firmware_response(device, candidates[0])
 
 
@@ -275,7 +288,7 @@ async def get_stable_version(device_model: str):
     if not candidates:
         raise HTTPException(status_code=404, detail="No stable firmware found for your device.")
 
-    candidates.sort(key=lambda r: r.get("published_at", ""), reverse=True)
+    candidates.sort(key=_release_published_at_sort_key, reverse=True)
     return _extract_firmware_response(device, candidates[0])
 
 
