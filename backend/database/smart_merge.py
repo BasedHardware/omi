@@ -26,6 +26,7 @@ from google.cloud.firestore_v1 import FieldFilter
 
 from database import conversations as conversations_db
 from database import smart_merge_audit as audit_db
+from database.quiet_check_retirement import stop_quiet_check_for_conversation
 from database._client import get_firestore_client, run_transactional
 from database.firestore_index_registry import CONVERSATIONS_SMART_MERGE_PRECEDING_QUERY
 from database.people_stats_cache import invalidate_people_stats_cache
@@ -397,6 +398,8 @@ def absorb_conversation(
         logger.warning('event=smart_merge_audit_restart reason=io_failed uid=%s', uid)
         result = run_transactional(client, absorb, audit_unavailable=True)
     if result.outcome == 'absorbed':
+        for retired_id in (donor_id, survivor_id):
+            stop_quiet_check_for_conversation(uid, retired_id, firestore_client=client)
         invalidate_people_stats_cache(uid)
         # The same fail-open search-index hooks the conversation adapter runs after its writes.
         conversations_db._sync_conversation_search_index(uid, survivor_id)  # pyright: ignore[reportPrivateUsage]

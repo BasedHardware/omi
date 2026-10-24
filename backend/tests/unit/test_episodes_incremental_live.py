@@ -156,14 +156,19 @@ def test_on_realtime_segments_schedules_a_background_update(monkeypatch):
     monkeypatch.setattr(live.executors, 'start_background_task', fake_start)
     tracker.observe('u', _segs(30), 'c1', 'omi', now=0)
     monkeypatch.setattr(live.time, 'time', lambda: 1000.0)
+    monkeypatch.setattr(live.time, 'monotonic', lambda: 1000.0)
     asyncio.run(live.on_realtime_segments('u', _segs(3), 'c2', 'omi'))
     # The new conversation attaches at its first words; the old one's moment ends.
     assert scheduled == ['episode_attach', 'episode_moment']
     asyncio.run(live.on_realtime_segments('u', _segs(3), 'c2', 'omi'))
+    # Activity is independent of the word budget, coalesced to one write a minute.
     assert scheduled == ['episode_attach', 'episode_moment']
+    monkeypatch.setattr(live.time, 'monotonic', lambda: 1060.0)
+    asyncio.run(live.on_realtime_segments('u', _segs(3), 'c2', 'omi'))
+    assert scheduled == ['episode_attach', 'episode_moment', 'episode_attach']
     monkeypatch.setenv(config.EPISODES_ENABLED_ENV, 'off')
     asyncio.run(live.on_realtime_segments('u', _segs(3), 'c3', 'omi'))
-    assert scheduled == ['episode_attach', 'episode_moment']
+    assert scheduled == ['episode_attach', 'episode_moment', 'episode_attach']
 
 
 def test_the_first_moment_comes_early_then_the_interval_holds():
