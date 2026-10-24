@@ -2385,9 +2385,7 @@ def merge_conversations(
 
     conversations = []
     for conv_id in request.conversation_ids:
-        conv = conversations_db.get_conversation(uid, conv_id)
-        if conv is None:
-            raise HTTPException(status_code=404, detail=f"Conversation {conv_id} not found")
+        conv = _get_valid_conversation_by_id(uid, conv_id)
         conversations.append(conv)
 
     is_valid, error_message, warning_message = validate_merge_compatibility(conversations)
