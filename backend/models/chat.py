@@ -783,6 +783,7 @@ class SendMessageRequest(BaseModel):
     file_ids: Optional[List[str]] = []
     context: Optional[PageContext] = None
     time_zone: Optional[str] = None
+    custom_instructions_enabled: Optional[bool] = None
 
     # Tools this client can execute on the device itself. Declared per request
     # because it depends on the device in hand: an iPad with no messaging
@@ -856,6 +857,7 @@ class ChatSession(BaseModel):
     app_id: Optional[str] = None
     plugin_id: Optional[str] = None
     created_at: datetime
+    custom_instructions_enabled: Optional[bool] = None
     # Legacy Assistants IDs remain readable on old session docs; nothing writes them.
     openai_thread_id: Optional[str] = None
     openai_assistant_id: Optional[str] = None

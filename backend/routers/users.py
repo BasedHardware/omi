@@ -95,6 +95,8 @@ from models.users import (
     TrialMetadata,
     LocationContextConsentResponse,
     LocationContextConsentUpdate,
+    CustomInstructionsResponse,
+    UpdateCustomInstructionsRequest,
 )
 from utils.phone_calls import get_quota_snapshot as get_phone_call_quota_snapshot
 from utils.apps import get_available_app_by_id
@@ -2722,3 +2724,48 @@ async def report_surface_state(
 
     await run_blocking(db_executor, observe_surface, uid, body.session_id, body.model_dump())
     return {'status': 'ok'}
+
+
+# ============================================================================
+# Account-Wide Custom Instructions (#20214)
+# ============================================================================
+
+
+@router.get('/v1/users/custom-instructions', tags=['users'], response_model=CustomInstructionsResponse)
+def get_custom_instructions_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Get the user's account-wide custom instructions applied across chat clients."""
+    return users_db.get_custom_instructions(uid)
+
+
+@router.put('/v1/users/custom-instructions', tags=['users'], response_model=CustomInstructionsResponse)
+def put_custom_instructions_endpoint(
+    request: UpdateCustomInstructionsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Replace the user's account-wide custom instructions, defaulting omitted fields."""
+    return users_db.update_custom_instructions(
+        uid,
+        enabled=request.enabled if request.enabled is not None else True,
+        about_me=request.about_me if request.about_me is not None else '',
+        response_style=request.response_style if request.response_style is not None else '',
+    )
+
+
+@router.patch('/v1/users/custom-instructions', tags=['users'], response_model=CustomInstructionsResponse)
+def patch_custom_instructions_endpoint(
+    request: UpdateCustomInstructionsRequest,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    """Partially update the user's account-wide custom instructions."""
+    return users_db.update_custom_instructions(
+        uid,
+        enabled=request.enabled,
+        about_me=request.about_me,
+        response_style=request.response_style,
+    )
+
+
+@router.delete('/v1/users/custom-instructions', tags=['users'], response_model=CustomInstructionsResponse)
+def delete_custom_instructions_endpoint(uid: str = Depends(auth.get_current_user_uid)):
+    """Clear and reset the user's account-wide custom instructions."""
+    return users_db.delete_custom_instructions(uid)

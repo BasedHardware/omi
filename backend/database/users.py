@@ -89,6 +89,7 @@ class DeletionWipeIntent(TypedDict):
 _USER_LANGUAGE_CACHE = CachePolicy(namespace='user_language', version=1, ttl_seconds=300)
 _USER_TRANSCRIPTION_PREFS_CACHE = CachePolicy(namespace='user_transcription_prefs', version=1, ttl_seconds=120)
 _USER_AI_PROFILE_CACHE = CachePolicy(namespace='user_ai_profile', version=1, ttl_seconds=300)
+_USER_CUSTOM_INSTRUCTIONS_CACHE = CachePolicy(namespace='user_custom_instructions', version=1, ttl_seconds=300)
 
 
 # Industry-standard two-field pattern (Mixpanel / Amplitude / PostHog):
@@ -2505,3 +2506,80 @@ def update_ai_user_profile(
     user_ref.update({'ai_user_profile': existing})
     invalidate(_USER_AI_PROFILE_CACHE, uid)
     return existing
+
+
+def _default_custom_instructions() -> dict:
+    return {
+        'enabled': True,
+        'about_me': '',
+        'response_style': '',
+        'updated_at': None,
+    }
+
+
+def _normalize_custom_instructions_dict(raw: Any) -> dict:
+    from models.users import CUSTOM_INSTRUCTIONS_MAX_LENGTH, sanitize_custom_instruction_text
+
+    if not isinstance(raw, dict):
+        return _default_custom_instructions()
+    enabled = raw.get('enabled')
+    about_raw = raw.get('about_me') if isinstance(raw.get('about_me'), str) else raw.get('about_user')
+    about_me = sanitize_custom_instruction_text(about_raw if isinstance(about_raw, str) else '')[
+        :CUSTOM_INSTRUCTIONS_MAX_LENGTH
+    ]
+    response_style = sanitize_custom_instruction_text(
+        raw.get('response_style') if isinstance(raw.get('response_style'), str) else ''
+    )[:CUSTOM_INSTRUCTIONS_MAX_LENGTH]
+    return {
+        'enabled': bool(enabled) if isinstance(enabled, bool) else True,
+        'about_me': about_me,
+        'response_style': response_style,
+        'updated_at': raw.get('updated_at'),
+    }
+
+
+def _get_custom_instructions_from_firestore(uid: str) -> dict:
+    user_ref = db.collection('users').document(uid)
+    doc = user_ref.get(['custom_instructions'])
+    if not doc.exists:
+        return _default_custom_instructions()
+    data = doc.to_dict() or {}
+    return _normalize_custom_instructions_dict(data.get('custom_instructions'))
+
+
+def get_custom_instructions(uid: str) -> dict:
+    """Return the user's account-wide custom instructions projection."""
+    return get_or_fetch(_USER_CUSTOM_INSTRUCTIONS_CACHE, uid, lambda: _get_custom_instructions_from_firestore(uid))
+
+
+def update_custom_instructions(
+    uid: str,
+    *,
+    enabled: Optional[bool] = None,
+    about_me: Optional[str] = None,
+    response_style: Optional[str] = None,
+) -> dict:
+    """Create or partially update account-wide custom instructions on users/{uid}."""
+    from models.users import CUSTOM_INSTRUCTIONS_MAX_LENGTH, sanitize_custom_instruction_text
+
+    existing = _get_custom_instructions_from_firestore(uid)
+    if enabled is not None:
+        existing['enabled'] = bool(enabled)
+    if about_me is not None:
+        existing['about_me'] = sanitize_custom_instruction_text(about_me)[:CUSTOM_INSTRUCTIONS_MAX_LENGTH]
+    if response_style is not None:
+        existing['response_style'] = sanitize_custom_instruction_text(response_style)[:CUSTOM_INSTRUCTIONS_MAX_LENGTH]
+    existing['updated_at'] = datetime.now(timezone.utc)
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'custom_instructions': existing}, merge=True)
+    invalidate(_USER_CUSTOM_INSTRUCTIONS_CACHE, uid)
+    return existing
+
+
+def delete_custom_instructions(uid: str) -> dict:
+    """Clear account-wide custom instructions for a user and reset to default empty state."""
+    reset_state = _default_custom_instructions()
+    user_ref = db.collection('users').document(uid)
+    user_ref.set({'custom_instructions': reset_state}, merge=True)
+    invalidate(_USER_CUSTOM_INSTRUCTIONS_CACHE, uid)
+    return reset_state
