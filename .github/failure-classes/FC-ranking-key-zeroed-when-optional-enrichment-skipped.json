@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-ranking-key-zeroed-when-optional-enrichment-skipped",
+  "violated_contract": "A ranking key that multiplies an always-hydrated signal by an optional enrichment signal collapses to zero for every record whenever the caller skips that optional enrichment (or when a record lacks it), silently falling back to storage iteration order instead of the hydrated popularity signal.",
+  "canonical_prevention": "Include the always-hydrated popularity signal (installs, floored at zero) as the tie-breaker in the sort key after the composite score, and exercise the default route path with the optional enrichment disabled to verify descending popularity order.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_apps_catalog_ranking_without_reviews.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/apps.py",
+    "backend/routers/apps.py"
+  ],
+  "status": "open"
+}
