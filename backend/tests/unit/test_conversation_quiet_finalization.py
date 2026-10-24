@@ -490,50 +490,120 @@ def test_quiet_deadline_and_recovery_admission_share_speech_clock_in_serve(store
     assert jobs.recovery_admission_refusal('synthetic', row, NOW - timedelta(seconds=120)) is None
 
 
-def _oversized_write_rejection():
-    from google.api_core.exceptions import InvalidArgument
+from google.api_core.exceptions import InvalidArgument as FirestoreInvalidArgument
 
-    return InvalidArgument(
-        "400 Document 'projects/p/databases/(default)/documents/users/synthetic/conversations/old' cannot be "
-        "written because its size (1,048,631 bytes) exceeds the maximum allowed size of 1,048,576 bytes."
+
+def _size_limit_error(conversation_id: str) -> Exception:
+    return FirestoreInvalidArgument(
+        "400 Document 'projects/based-hardware/databases/(default)/documents/users/synthetic/"
+        f"conversations/{conversation_id}' cannot be written because its size (1,048,679 bytes) "
+        'exceeds the maximum allowed size of 1,048,576 bytes.'
     )
 
 
-def test_oversized_conversation_retires_the_quiet_check_instead_of_retrying_forever(store, monkeypatch):
-    """#23341: the 1 MiB refusal is permanent, so the check must stop re-waking and the worker must not 5xx."""
+def test_oversized_row_is_closed_and_the_check_stops_instead_of_redelivering_forever(store, monkeypatch):
     quiet.arm('synthetic', 'old', 120, firestore_client=store)
     _advance(monkeypatch, 361)
 
-    def refuse(*args, **kwargs):
-        raise _oversized_write_rejection()
+    def refuse(error_uid, error_conversation_id, **kwargs):
+        raise _size_limit_error(error_conversation_id)
 
-    monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
+    monkeypatch.setattr(lifecycle, 'request_finalization', refuse)
+    closed = {}
+
+    def record_close(
+        uid, conversation_id, *, quiet_for=None, firestore_client=None, recovery_fences=None, recovery_cutoff=None
+    ):
+        closed['args'] = (uid, conversation_id, quiet_for)
+        closed['client'] = firestore_client
+        closed['recovery_fences'] = recovery_fences
+        closed['recovery_cutoff'] = recovery_cutoff
+        return 'closed'
+
+    monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', record_close)
     job_id = checks.quiet_check_id('synthetic', 'old')
-    assert quiet.run(job_id, 1, firestore_client=store) == 'document_size_limit'
+    assert quiet.run(job_id, 1, firestore_client=store) == 'oversized_closed'
+    uid, conversation_id, quiet_for = closed['args']
+    assert (uid, conversation_id) == ('synthetic', 'old')
+    # The terminal close must use the same client the check and admission used,
+    # and re-assert the recovery fences the failed admission passed.
+    assert closed['client'] is store
+    assert closed['recovery_fences'] is True
+    assert quiet_for is None
+    # The terminal fence is the check's own recovery cutoff passed through as
+    # an absolute instant: reconstructing it as a duration at close time would
+    # shift the fence forward by the failed admission's latency.
+    from models.conversation_continuity import continuation_timeout
+
+    evaluated_at = NOW + timedelta(seconds=361)
+    expected_cutoff = evaluated_at - timedelta(seconds=continuation_timeout(store.rows[ROW], 120))
+    assert closed['recovery_cutoff'] == expected_cutoff
+    job = _job(store)
+    assert job['status'] == 'quiet_done'
+    assert job['last_failure_code'] == 'document_size_limit'
+    assert 'finalization_job_id' not in store.rows[ROW]
+    # The successor wake this run dispatched before admission is now inert.
+    assert quiet.run(job_id, job['dispatch_generation'], firestore_client=store) == 'stale'
+
+
+def test_oversized_close_refusal_leaves_the_check_armed_for_the_next_replay(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+
+    def refuse(error_uid, error_conversation_id, **kwargs):
+        raise _size_limit_error(error_conversation_id)
+
+    monkeypatch.setattr(lifecycle, 'request_finalization', refuse)
+    monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', lambda *a, **k: 'recent_write')
+    fallback = MagicMock()
+    monkeypatch.setattr(quiet, 'record_fallback', fallback)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'oversized_recent_write'
+    # A refused close is ordinary fencing, not a degraded terminal: the fallback
+    # metric must not count it.
+    fallback.assert_not_called()
+    assert _job(store)['status'] == 'waiting_quiet'
+    assert _job(store)['dispatch_generation'] == 2
+
+
+def test_size_rejection_naming_another_document_holds_the_check_without_touching_the_row(store, monkeypatch):
+    """#23341 containment: any permanent size rejection must stop the 5xx storm.
+
+    A 400 naming another document cannot be fixed by closing this conversation,
+    so the check retires as held and the row keeps its in_progress status.
+    """
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+    monkeypatch.setattr(
+        lifecycle,
+        'request_finalization',
+        lambda *a, **k: (_ for _ in ()).throw(_size_limit_error('other-conversation')),
+    )
+    close = MagicMock(side_effect=AssertionError("another document's rejection must not close this row"))
+    monkeypatch.setattr(lifecycle, 'close_oversized_in_progress_conversation', close)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'document_size_limit'
+    close.assert_not_called()
     job = _job(store)
     assert job['status'] == 'quiet_done'
     assert job['last_failure_code'] == 'document_size_limit'
     assert (
         job['reconcile_after_at'] is firestore.DELETE_FIELD
     )  # the fixture keeps the sentinel; Firestore drops the field
-    # The successor wake this run dispatched before admission is now inert.
-    assert quiet.run(job_id, job['dispatch_generation'], firestore_client=store) == 'stale'
-    # User data stays: the conversation row is neither touched nor terminalized here.
     assert store.rows[ROW]['status'] == 'in_progress'
     assert store.rows[ROW]['transcript_segments'] == [{'text': 'synthetic fixture'}]
 
 
-def test_other_invalid_argument_rejections_still_surface(store, monkeypatch):
-    from google.api_core.exceptions import InvalidArgument
-
+@pytest.mark.parametrize(
+    'error',
+    [
+        FirestoreInvalidArgument('400 some other 400'),
+        ValueError('unrelated'),
+    ],
+)
+def test_non_size_rejections_still_raise(store, monkeypatch, error):
     quiet.arm('synthetic', 'old', 120, firestore_client=store)
     _advance(monkeypatch, 361)
-
-    def refuse(*args, **kwargs):
-        raise InvalidArgument('400 synthetic unrelated rejection')
-
-    monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
-    with pytest.raises(InvalidArgument):
+    monkeypatch.setattr(lifecycle, 'request_finalization', lambda *a, **k: (_ for _ in ()).throw(error))
+    with pytest.raises(type(error)):
         quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
     assert _job(store)['status'] == checks.QUIET_CHECK_STATUS
 
@@ -543,9 +613,10 @@ def test_worker_endpoint_acks_an_oversized_conversation_with_200(store, monkeypa
     _advance(monkeypatch, 361)
 
     def refuse(*args, **kwargs):
-        raise _oversized_write_rejection()
+        raise _size_limit_error('old')
 
     monkeypatch.setattr(quiet.lifecycle, 'request_finalization', refuse)
+    monkeypatch.setattr(quiet.lifecycle, 'close_oversized_in_progress_conversation', lambda *a, **k: 'closed')
     actual = quiet.run
     monkeypatch.setattr(quiet, 'run', lambda jid, gen: actual(jid, gen, firestore_client=store))
     app = FastAPI()
@@ -560,6 +631,6 @@ def test_worker_endpoint_acks_an_oversized_conversation_with_200(store, monkeypa
             '/v1/conversation-finalization-jobs/run',
             json={'job_id': payload['job_id'], 'dispatch_generation': _job(store)['dispatch_generation']},
         )
-    assert (first.status_code, first.json()['status']) == (200, 'document_size_limit')
+    assert (first.status_code, first.json()['status']) == (200, 'oversized_closed')
     assert (second.status_code, second.json()['status']) == (200, 'stale')
     assert (successor.status_code, successor.json()['status']) == (200, 'stale')
