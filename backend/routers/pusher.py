@@ -308,6 +308,7 @@ async def _websocket_util_trigger(
                     cached_protection_level,
                     sample_rate=sample_rate,
                 )
+                OMI_AUDIO_TIMELINE_CHUNKS_WRITTEN_TOTAL.labels(reason='with_spans').inc()
                 audio_files = await run_blocking(
                     storage_executor, conversations_db.create_audio_files_from_chunks, uid, conv_id
                 )

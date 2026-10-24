@@ -422,10 +422,36 @@ async def test_reconnect_recovers_receipts_after_pusher_process_state_is_lost(re
     await pusher._websocket_util_trigger(first, 'owner', 16000, audio_custody=1)
     receipt = json.loads(first.sent[0][4:])['receipt']
     del first
-    second = Socket(frames)
+    # A replacement producer may send DIFFERENT bytes for the same projected
+    # clock. Custody preserves both generations rather than trusting the clock
+    # or overwriting the earlier capture.
+    second = Socket([frames[0], struct.pack('<Id', 101, 1000) + b'\x02\x00' * 160])
     await pusher._websocket_util_trigger(second, 'owner', 16000, audio_custody=1)
     assert read_pcm('owner', AudioReceipt(**receipt)) == b'\x01\x00' * 160
-    assert read_pcm('owner', AudioReceipt(**json.loads(second.sent[0][4:])['receipt'])) == b'\x01\x00' * 160
+    assert read_pcm('owner', AudioReceipt(**json.loads(second.sent[0][4:])['receipt'])) == b'\x02\x00' * 160
+
+
+@pytest.mark.asyncio
+async def test_pusher_projects_verified_receipts_in_capture_order(remote, monkeypatch):
+    monkeypatch.setattr(pusher, 'get_audio_bytes_webhook_seconds', lambda uid: None)
+    monkeypatch.setattr(pusher, 'is_audio_bytes_app_enabled', lambda uid: False)
+    monkeypatch.setattr(pusher.users_db, 'get_user_private_cloud_sync_enabled', lambda uid: True)
+    uploaded = []
+
+    def project(chunks, *args, **kwargs):
+        uploaded.extend(chunks)
+        return ['projected']
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', project)
+    monkeypatch.setattr(pusher.conversations_db, 'create_audio_files_from_chunks', lambda *a: [])
+    payloads = [b'\x01\x00' * 160, b'\x02\x00' * 160]
+    frames = [struct.pack('<I', 103) + b'conversation']
+    frames.extend(struct.pack('<Id', 101, 1000 + i * 0.01) + pcm for i, pcm in enumerate(payloads))
+    sock = Socket(frames)
+    await pusher._websocket_util_trigger(sock, 'owner', 16000, audio_custody=1)
+    assert [chunk['data'] for chunk in uploaded] == payloads
+    assert [chunk['span']['samples'] for chunk in uploaded] == [160, 160]
+    assert len(sock.sent) == 2
 
 
 @pytest.mark.asyncio
