@@ -320,15 +320,16 @@ def test_message_buffer_creates_session():
     assert data['messages_at_last_analysis'] == 0
 
 
-def test_message_buffer_silence_detection():
+def test_message_buffer_silence_detection(monkeypatch):
     """MessageBuffer should detect silence after threshold."""
+    now = 1000.0
+    monkeypatch.setattr(mentor_mod, 'time', SimpleNamespace(time=lambda: now))
     buf = MessageBuffer()
-    buf.silence_threshold = 0.1  # Very short for testing
 
     data = buf.get_buffer("session_2")
-    data['last_activity'] = time.time() - 1  # 1 second ago
+    data['last_activity'] = now
 
-    time.sleep(0.15)
+    now += buf.silence_threshold + 1
     data = buf.get_buffer("session_2")
     assert data['silence_detected'] is True
     assert data['messages'] == []

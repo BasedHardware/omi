@@ -20,7 +20,7 @@ def _write_executable(path: Path, content: str) -> None:
 
 
 @pytest.mark.parametrize("file_isolation", ["0", "1"])
-def test_runner_blocks_unused_langsmith_plugin_but_keeps_asyncio(tmp_path, file_isolation):
+def test_runner_blocks_unused_plugins_but_keeps_asyncio(tmp_path, file_isolation):
     probe = tmp_path / "test_plugin_probe.py"
     probe.write_text(
         "import sys\n"
@@ -29,6 +29,9 @@ def test_runner_blocks_unused_langsmith_plugin_but_keeps_asyncio(tmp_path, file_
         "async def test_plugins(pytestconfig):\n"
         "    assert pytestconfig.pluginmanager.is_blocked('langsmith_plugin')\n"
         "    assert 'langsmith.pytest_plugin' not in sys.modules\n"
+        "    assert pytestconfig.pluginmanager.is_blocked('pytest_httpserver')\n"
+        "    assert 'pytest_httpserver.pytest_plugin' not in sys.modules\n"
+        "    assert 'werkzeug' not in sys.modules\n"
         "    assert pytestconfig.pluginmanager.hasplugin('asyncio')\n",
         encoding="utf-8",
     )
@@ -53,6 +56,8 @@ def test_runner_blocks_unused_langsmith_plugin_but_keeps_asyncio(tmp_path, file_
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert "1 passed" in result.stdout
+    if file_isolation == "1":
+        assert "BACKEND-UNIT-FILE-WALL " in result.stdout
 
 
 def test_file_isolation_failure_prints_exact_rerun_guidance(tmp_path):

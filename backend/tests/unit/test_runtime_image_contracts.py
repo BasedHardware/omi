@@ -178,6 +178,76 @@ def test_relative_import_resolution_keeps_the_current_package(contracts_module):
     )
 
 
+def test_import_scans_observe_source_changes_between_invocations(contracts_module, tmp_path):
+    (tmp_path / 'main.py').write_text('import package\nimport added\n', encoding='utf-8')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / '__init__.py').write_text('import json\n', encoding='utf-8')
+    dockerfile = tmp_path / 'Dockerfile'
+    dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\nCOPY package/ ./package/\n', encoding='utf-8')
+    contract = replace(
+        _contract(contracts_module, 'pusher'),
+        dockerfile=dockerfile,
+        target=None,
+        build_context=tmp_path,
+        source_root=tmp_path,
+        entrypoint_source_root=tmp_path,
+        entrypoints=('main',),
+    )
+
+    def assert_external():
+        assert contracts_module.source_closure_errors(contract) == []
+        assert 'added' not in contracts_module.first_party_import_closure(contract, contract.entrypoints)
+        assert 'added' in contracts_module.third_party_dependency_modules(contract)
+
+    assert_external()
+    added = tmp_path / 'added.py'
+    added.write_text('import external_dependency\n', encoding='utf-8')
+    assert any("'added'" in error for error in contracts_module.source_closure_errors(contract))
+    assert 'added' in contracts_module.first_party_import_closure(contract, contract.entrypoints)
+    dependencies = contracts_module.third_party_dependency_modules(contract)
+    assert 'external_dependency' in dependencies
+    assert 'added' not in dependencies
+    added.unlink()
+    assert_external()
+
+
+def test_shared_import_parse_keeps_lazy_imports_and_each_image_copy_surface(contracts_module, tmp_path):
+    (tmp_path / 'main.py').write_text(
+        'def lazy():\n    import added\nclass Nested:\n    from package import child\n', encoding='utf-8'
+    )
+    (tmp_path / 'added.py').write_text('import json\n', encoding='utf-8')
+    package = tmp_path / 'package'
+    package.mkdir()
+    (package / '__init__.py').write_text('', encoding='utf-8')
+    (package / 'child.py').write_text('import json\n', encoding='utf-8')
+    contracts = []
+    for name, copies in (
+        ('complete', 'COPY added.py ./\nCOPY package/ ./package/\n'),
+        ('missing-lazy', 'COPY package/ ./package/\n'),
+        ('missing-child', 'COPY added.py ./\nCOPY package/__init__.py ./package/__init__.py\n'),
+    ):
+        dockerfile = tmp_path / name
+        dockerfile.write_text('FROM python\nWORKDIR /app\nCOPY main.py ./\n' + copies, encoding='utf-8')
+        contracts.append(
+            replace(
+                _contract(contracts_module, 'pusher'),
+                name=name,
+                dockerfile=dockerfile,
+                target=None,
+                build_context=tmp_path,
+                source_root=tmp_path,
+                entrypoint_source_root=tmp_path,
+                entrypoints=('main',),
+            )
+        )
+
+    errors = contracts_module.check_source_closures(contracts)
+    assert not any(error.startswith('complete:') for error in errors)
+    assert any(error.startswith('missing-lazy:') and "'added'" in error for error in errors)
+    assert any(error.startswith('missing-child:') and "'package.child'" in error for error in errors)
+
+
 def test_pusher_dependency_probe_includes_jsonschema(contracts_module):
     pusher = _contract(contracts_module, 'pusher')
     dependencies = contracts_module.third_party_dependency_modules(pusher)
