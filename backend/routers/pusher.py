@@ -508,7 +508,17 @@ async def _websocket_util_trigger(
                 owned_close = conv_id in record_close_requests and (
                     live_record_admission_enabled() or conv_id in record_owners
                 )
-                if is_shutdown or is_size_ready or is_age_ready or owned_close:
+                # Leave one uploader tick for the boundary frame/close message
+                # to join a size-ready batch. Otherwise a scheduler tick between
+                # the full run and its final frame creates a second tiny object.
+                # Real discontinuities still close into ready_batches, and age,
+                # recording close and disconnect always flush immediately.
+                if is_size_ready and 'size_ready_at' not in batch:
+                    batch['size_ready_at'] = now
+                size_grace_elapsed = (
+                    is_size_ready and now - batch['size_ready_at'] >= PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL
+                )
+                if is_shutdown or size_grace_elapsed or is_age_ready or owned_close:
                     conv_ids_to_flush.append(conv_id)
 
             for conv_id in conv_ids_to_flush:

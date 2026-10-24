@@ -44,6 +44,7 @@ class SyncReconciler {
   /// because a previous pass is in flight.
   Future<void> poke() async {
     final phone = _phone;
+    final onConversations = _onConversations;
     if (phone == null) return;
     if (_running) {
       throw StateError('SyncReconciler invoked outside RecordingTransferCoordinator');
@@ -55,7 +56,7 @@ class SyncReconciler {
       if (madeProgress) {
         _idleStreak = 0;
         try {
-          await _onConversations?.call(resp);
+          await onConversations?.call(resp);
         } catch (e) {
           Logger.debug('SyncReconciler: surface callback failed: $e');
         }

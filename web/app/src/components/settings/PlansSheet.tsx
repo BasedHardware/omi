@@ -24,7 +24,7 @@ import { TranscriptionUsageMeter } from './TranscriptionUsageMeter';
 import { DEFAULT_PLAN_FEATURES } from '@/lib/planFeatures';
 import {
   RESUBSCRIBE_FIRST,
-  isPendingCancelConflict,
+  purchaseErrorMessage,
   renewalDateSeconds,
   yourPlanEndsOn,
   yourPlanWillRenewOn,
@@ -158,6 +158,7 @@ export function PlansSheet({
     setIsLoading(true);
     setError(null);
 
+    let purchaseRoute: 'upgrade' | 'checkout' = 'checkout';
     try {
       const selectedOption = pricingOptions.find((p) => p.id === selectedPriceId);
       const isCurrentPlan = selectedOption?.is_active;
@@ -178,6 +179,7 @@ export function PlansSheet({
 
       // If already subscribed and selecting a different plan, use upgrade endpoint
       if (isPaid && !isCanceling_ && !isCurrentPlan) {
+        purchaseRoute = 'upgrade';
         const result = await upgradeSubscription(priceId);
         if (result?.status === 'success' || result?.scheduled_start) {
           trackUpgradeSucceeded(tier, interval);
@@ -188,6 +190,7 @@ export function PlansSheet({
         }
       } else {
         // New subscription or reactivation
+        purchaseRoute = 'checkout';
         const result = await createCheckoutSession(priceId);
         if (result?.url) {
           // Stripe Checkout opens in a new tab. The parent page never sees the
@@ -219,11 +222,7 @@ export function PlansSheet({
         }
       }
     } catch (err) {
-      setError(
-        isPendingCancelConflict(err)
-          ? RESUBSCRIBE_FIRST
-          : 'An error occurred. Please try again.',
-      );
+      setError(purchaseErrorMessage(err, purchaseRoute));
     } finally {
       setIsLoading(false);
     }
