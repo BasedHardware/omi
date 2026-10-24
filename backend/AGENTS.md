@@ -314,7 +314,7 @@ WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per 
 8. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 9. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work
 10. **New fallbacks** — call `utils.observability.fallback.record_fallback` (see `.github/agent-docs/fallback-telemetry.md`); do not invent a new `*_fallback_total` Counter
-11. **Audio custody** — queue caps never authorize dropping uncommitted audio. The default durable outbox queues at most 20 immutable receipts and backpressures the producer; raw packs stay retained until commit. `AUDIO_DURABLE_OUTBOX_ENABLED=false` is emergency rollback only. See `docs/runbooks/audio-durable-outbox.md`.
+11. **Audio custody** — never drop uncommitted audio. Queue durable receipts and backpressure producers; see the [runbook](docs/runbooks/audio-durable-outbox.md).
 12. **`langdetect` unreliable on short text** — don't use on <20 chars or gate paid API calls on interim streaming text
 
 Speaker assignments: [owner and teaching](docs/listen_pusher_pipeline.mdx).
