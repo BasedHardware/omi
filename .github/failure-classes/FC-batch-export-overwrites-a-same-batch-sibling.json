@@ -11,5 +11,5 @@
     "sdks/python-cli/examples/conversations_to_markdown.py",
     "sdks/python-cli/tests/test_conversations_to_markdown_filename_collisions.py"
   ],
-  "status": "open"
+  "status": "new"
 }
