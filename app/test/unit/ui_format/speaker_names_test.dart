@@ -15,7 +15,6 @@ import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/ui/format/speaker_names.dart';
 import 'package:omi/ui/format/diarization_label.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
-import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/utils/constants.dart';
 
 TranscriptSegment seg(int speakerId, {bool isUser = false, String? personId, String text = 'hi'}) => TranscriptSegment(
