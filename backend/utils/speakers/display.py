@@ -266,6 +266,7 @@ def display_participants(
             elif (
                 defer_short_voices
                 and not name
+                and token not in order
                 and (cluster.speech_seconds if cluster else display_seconds.get(key, 0.0)) < MIN_EVIDENCE_SECONDS
             ):
                 labels[key] = 'Unknown speaker'

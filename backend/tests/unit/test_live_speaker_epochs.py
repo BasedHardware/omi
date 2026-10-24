@@ -153,6 +153,33 @@ def test_unnamed_display_never_joins_distinct_voice_turns(monkeypatch):
     assert incremental.render_moment(rows).text == 'Unknown speaker: turn1\nUnknown speaker: turn2'
 
 
+@pytest.mark.parametrize(
+    'start,end,conversation_id,expected',
+    [(6, 7, 'c', 'Speaker A'), (-1, -1, 'c', 'Speaker A'), (6, 7, 'other', 'Unknown speaker')],
+)
+def test_moment_ledger_retains_qualification_across_short_deltas(monkeypatch, start, end, conversation_id, expected):
+    monkeypatch.setattr(incremental, 'shadow_or_serve', lambda *_: False)
+    voice = dict(speaker_id=1, speaker_id_scope='listen:0')
+    first = incremental.render_moment(
+        [dict(voice, id='anchor', text='first turn', start=0, end=6)], conversation_id='c', voice_order=[]
+    )
+    assert first.text == 'Speaker A: first turn'
+    assert len(first.voice_order) == 1
+    # The episode caller supplies only its new delta plus the saved ledger.
+    # A new epoch must qualify independently; a different conversation cannot
+    # borrow qualification even when the raw provider identity happens to agree.
+    next_moment = incremental.render_moment(
+        [
+            dict(voice, id='reply', text='short reply', start=start, end=end),
+            dict(id='new-epoch', speaker_id=2, speaker_id_scope='listen:1', text='new voice', start=8, end=9),
+        ],
+        conversation_id=conversation_id,
+        voice_order=first.voice_order,
+    )
+    assert next_moment.text == f'{expected}: short reply\nUnknown speaker: new voice'
+    assert next_moment.voice_order == first.voice_order
+
+
 @pytest.mark.parametrize('delta,linked', [(0.0, False), (-0.001, True)])
 def test_epoch_distance_boundary_is_strict(delta, linked):
     groups = group_epoch_voices(
