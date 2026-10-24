@@ -8,6 +8,12 @@ from services.conversation_finalization import reconcile_listen_finalization_job
 def mock_dependencies(monkeypatch):
     monkeypatch.setattr(
         conversation_finalization.jobs_db,
+        'get_finalization_replay_oldest_overdue_age_seconds',
+        mock.Mock(return_value=0),
+    )
+    monkeypatch.setattr(conversation_finalization.jobs_db, 'defer_finalization_replay', mock.Mock(return_value=False))
+    monkeypatch.setattr(
+        conversation_finalization.jobs_db,
         'recover_stranded_byok_jobs',
         mock.Mock(return_value={'blocked': 0, 'errors': 0}),
     )
@@ -46,7 +52,15 @@ def test_reconcile_listen_finalization_jobs_disabled(mock_dependencies):
 
     result = reconcile_listen_finalization_jobs()
 
-    assert result == {'requeued': 0, 'skipped': 0, 'enqueue_failed': 0}
+    assert result == {
+        'requeued': 0,
+        'skipped': 0,
+        'enqueue_failed': 0,
+        'stale': 0,
+        'no_progress': 0,
+        'retired': 0,
+        'advanced': 0,
+    }
     mock_dependencies["publish_metrics"].assert_called_once()
     mock_dependencies["get_candidates"].assert_not_called()
 
@@ -56,7 +70,16 @@ def test_reconcile_listen_finalization_jobs_query_fails(mock_dependencies):
 
     result = reconcile_listen_finalization_jobs()
 
-    assert result == {'requeued': 0, 'skipped': 0, 'enqueue_failed': 0, 'error': 1}
+    assert result == {
+        'requeued': 0,
+        'skipped': 0,
+        'enqueue_failed': 0,
+        'stale': 0,
+        'no_progress': 0,
+        'retired': 0,
+        'advanced': 0,
+        'error': 1,
+    }
     mock_dependencies["publish_metrics"].assert_called_once()
 
 
@@ -65,7 +88,15 @@ def test_reconcile_listen_finalization_jobs_skips_invalid_job_id(mock_dependenci
 
     result = reconcile_listen_finalization_jobs()
 
-    assert result == {'requeued': 0, 'skipped': 3, 'enqueue_failed': 0}
+    assert result == {
+        'requeued': 0,
+        'skipped': 3,
+        'enqueue_failed': 0,
+        'stale': 0,
+        'no_progress': 0,
+        'retired': 0,
+        'advanced': 0,
+    }
     mock_dependencies["claim_replay"].assert_not_called()
     mock_dependencies["publish_metrics"].assert_called_once()
 
@@ -76,7 +107,15 @@ def test_reconcile_listen_finalization_jobs_claim_fails(mock_dependencies):
 
     result = reconcile_listen_finalization_jobs()
 
-    assert result == {'requeued': 0, 'skipped': 1, 'enqueue_failed': 0}
+    assert result == {
+        'requeued': 0,
+        'skipped': 1,
+        'enqueue_failed': 0,
+        'stale': 0,
+        'no_progress': 0,
+        'retired': 0,
+        'advanced': 0,
+    }
     mock_dependencies["publish_metrics"].assert_called_once()
 
 
@@ -89,7 +128,15 @@ def test_reconcile_listen_finalization_jobs_claim_not_queued(mock_dependencies):
 
     result = reconcile_listen_finalization_jobs()
 
-    assert result == {'requeued': 0, 'skipped': 2, 'enqueue_failed': 0}
+    assert result == {
+        'requeued': 0,
+        'skipped': 2,
+        'enqueue_failed': 0,
+        'stale': 0,
+        'no_progress': 0,
+        'retired': 0,
+        'advanced': 0,
+    }
     assert mock_dependencies["claim_replay"].call_count == 2
     mock_dependencies["enqueue_job"].assert_not_called()
     mock_dependencies["publish_metrics"].assert_called_once()
@@ -102,7 +149,15 @@ def test_reconcile_listen_finalization_jobs_enqueue_fails(mock_dependencies):
 
     result = reconcile_listen_finalization_jobs()
 
-    assert result == {'requeued': 0, 'skipped': 0, 'enqueue_failed': 1}
+    assert result == {
+        'requeued': 0,
+        'skipped': 0,
+        'enqueue_failed': 1,
+        'stale': 0,
+        'no_progress': 0,
+        'retired': 0,
+        'advanced': 0,
+    }
     mock_dependencies["record_reconciliation"].assert_called_once_with('enqueue_failed')
     mock_dependencies["record_fallback"].assert_called_once()
     mock_dependencies["publish_metrics"].assert_called_once()
@@ -114,7 +169,15 @@ def test_reconcile_listen_finalization_jobs_success(mock_dependencies):
 
     result = reconcile_listen_finalization_jobs()
 
-    assert result == {'requeued': 1, 'skipped': 0, 'enqueue_failed': 0}
+    assert result == {
+        'requeued': 1,
+        'skipped': 0,
+        'enqueue_failed': 0,
+        'stale': 0,
+        'no_progress': 0,
+        'retired': 0,
+        'advanced': 0,
+    }
     mock_dependencies["claim_replay"].assert_called_once_with("job1", stale_after="stale_after", firestore_client=None)
     mock_dependencies["enqueue_job"].assert_called_once_with("job1", 1)
     mock_dependencies["record_reconciliation"].assert_called_once_with('requeued')
@@ -132,5 +195,41 @@ def test_reconcile_skips_generation_already_dispatched_by_another_tick(mock_depe
 
     result = reconcile_listen_finalization_jobs()
 
-    assert result == {'requeued': 0, 'skipped': 1, 'enqueue_failed': 0}
+    assert result == {
+        'requeued': 0,
+        'skipped': 1,
+        'enqueue_failed': 0,
+        'stale': 0,
+        'no_progress': 0,
+        'retired': 0,
+        'advanced': 0,
+    }
     mock_dependencies['enqueue_job'].assert_not_called()
+
+
+@pytest.mark.parametrize(
+    'outcome,current,key',
+    [
+        ('done', {'status': 'quiet_done'}, 'retired'),
+        ('stale', {'status': 'waiting_quiet', 'dispatch_generation': 2}, 'stale'),
+        ('deferred', {'status': 'waiting_quiet', 'dispatch_generation': 2}, 'advanced'),
+        ('deferred', {'status': 'waiting_quiet', 'dispatch_generation': 1}, 'no_progress'),
+        ('queued', {'status': 'waiting_quiet', 'dispatch_generation': 2}, 'requeued'),
+    ],
+)
+def test_quiet_replay_counts_actual_outcome(mock_dependencies, monkeypatch, outcome, current, key):
+    mock_dependencies['get_candidates'].return_value = [
+        {'job_id': 'quiet-one', 'kind': 'listen_quiet_check', 'dispatch_generation': 1}
+    ]
+    monkeypatch.setattr(conversation_finalization.quiet_finalization, 'run', mock.Mock(return_value=outcome))
+    monkeypatch.setattr(conversation_finalization.jobs_db, 'get_finalization_job', mock.Mock(return_value=current))
+    result = reconcile_listen_finalization_jobs()
+    assert result[key] == 1
+    assert sum(result.values()) == 1
+    conversation_finalization.jobs_db.defer_finalization_replay.assert_called_once()
+
+
+def test_replay_limit_environment_is_bounded(mock_dependencies, monkeypatch):
+    monkeypatch.setenv('LISTEN_FINALIZATION_RECONCILE_LIMIT', '1000')
+    reconcile_listen_finalization_jobs()
+    mock_dependencies['get_candidates'].assert_called_once_with(limit=1000, firestore_client=None)

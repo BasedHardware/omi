@@ -563,3 +563,67 @@ def test_worker_endpoint_acks_an_oversized_conversation_with_200(store, monkeypa
     assert (first.status_code, first.json()['status']) == (200, 'document_size_limit')
     assert (second.status_code, second.json()['status']) == (200, 'stale')
     assert (successor.status_code, successor.json()['status']) == (200, 'stale')
+
+
+@pytest.mark.parametrize('generation', ['1', 1.0, 2])
+def test_stale_overdue_check_reserves_successor(store, monkeypatch, generation):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _job(store)['dispatch_generation'] = generation
+    _advance(monkeypatch, 361)
+    outcome = checks.evaluate_quiet_check(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert outcome['status'] in {'stale', 'ready'}
+    assert _job(store)['dispatch_generation'] == int(generation) + 1
+    assert _job(store)['reconcile_after_at'] > checks._now()
+
+
+def test_missing_conversation_retires_and_updates_timestamp(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    del store.rows[ROW]
+    _advance(monkeypatch, 361)
+    assert quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store) == 'done'
+    assert _job(store)['status'] == 'quiet_done'
+    assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD
+    assert _job(store)['updated_at'] == checks._now()
+
+
+def test_dispatch_unavailable_moves_due_index_forward(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _advance(monkeypatch, 361)
+    monkeypatch.setattr(quiet, 'is_listen_finalization_dispatch_configured', lambda: False)
+    with pytest.raises(lifecycle.FinalizationDispatchUnavailable):
+        quiet.run(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert _job(store)['dispatch_generation'] == 2
+    assert _job(store)['reconcile_after_at'] > checks._now()
+
+
+def test_stale_delivery_preserves_fresh_successor(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _job(store)['dispatch_generation'] = 3
+    expected = dict(_job(store))
+    assert (
+        checks.evaluate_quiet_check(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)['status']
+        == 'stale'
+    )
+    assert _job(store) == expected
+
+
+@pytest.mark.parametrize('generation', [None, 'bad', True, 1.5])
+def test_malformed_quiet_generation_retires(store, monkeypatch, generation):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _job(store)['dispatch_generation'] = generation
+    _advance(monkeypatch, 361)
+    assert checks.ensure_quiet_check_progress(checks.quiet_check_id('synthetic', 'old'), firestore_client=store)
+    assert _job(store)['status'] == 'quiet_done'
+    assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD
+
+
+def test_replay_backoff_cannot_overwrite_newer_generation(store, monkeypatch):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    candidate = dict(_job(store), job_id=checks.quiet_check_id('synthetic', 'old'))
+    _advance(monkeypatch, 361)
+    _job(store)['dispatch_generation'] = 2
+    assert not jobs.defer_finalization_replay(candidate, firestore_client=store)
+    assert _job(store)['reconcile_after_at'] == candidate['reconcile_after_at']
+    _job(store)['dispatch_generation'] = 1
+    assert jobs.defer_finalization_replay(candidate, firestore_client=store)
+    assert _job(store)['reconcile_after_at'] > checks._now()
