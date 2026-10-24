@@ -645,3 +645,23 @@ def test_repeated_arm_reuses_one_conversation_obligation(store):
     assert first['job_id'] == second['job_id']
     assert _job(store)['dispatch_generation'] == 1
     assert 'arm_outcome' not in _job(store)
+
+
+@pytest.mark.parametrize('checkpoint', [None, 'invalid'])
+def test_waiting_check_without_valid_checkpoint_reserves_wake(store, monkeypatch, checkpoint):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    if checkpoint is None:
+        del _job(store)['reconcile_after_at']
+    else:
+        _job(store)['reconcile_after_at'] = checkpoint
+    assert checks.ensure_quiet_check_progress(checks.quiet_check_id('synthetic', 'old'), firestore_client=store)
+    assert _job(store)['dispatch_generation'] == 2
+    assert _job(store)['reconcile_after_at'] > checks._now()
+
+
+def test_stale_terminal_check_removes_even_future_checkpoint(store):
+    quiet.arm('synthetic', 'old', 120, firestore_client=store)
+    _job(store)['status'] = 'quiet_done'
+    result = checks.evaluate_quiet_check(checks.quiet_check_id('synthetic', 'old'), 1, firestore_client=store)
+    assert result['status'] == 'stale'
+    assert _job(store)['reconcile_after_at'] == firestore.DELETE_FIELD

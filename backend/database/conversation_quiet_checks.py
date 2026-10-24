@@ -243,8 +243,10 @@ def ensure_quiet_check_progress(job_id: str, *, firestore_client: Any = None) ->
             return False
         now = _now()
         reconcile_at = job.get('reconcile_after_at')
-        if not isinstance(reconcile_at, datetime) or reconcile_at > now:
-            return False
+        if job.get('status') != QUIET_CHECK_STATUS and 'reconcile_after_at' not in job:
+            return False  # Already retired.
+        if job.get('status') == QUIET_CHECK_STATUS and isinstance(reconcile_at, datetime) and reconcile_at > now:
+            return False  # A fresh successor is already reserved.
         updates: dict[str, Any] = {'updated_at': now}
         generation = job.get('dispatch_generation')
         parsed_generation = 0
