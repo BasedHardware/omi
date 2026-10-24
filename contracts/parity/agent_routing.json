@@ -1,0 +1,149 @@
+{
+  "$comment": "Which coding agent a spoken task asks for. Omi lets a user name an agent out loud ('use codex to fix this'), and each desktop platform extracts that name with its own copy of one literal alias table: macOS `desktop/macos/agent/src/runtime/agent-mention.ts`, Windows `desktop/windows/src/main/codingAgent/agentMention.ts`. Two copies of a string-matching rule is exactly the divergence this directory exists to prevent — a negator scoping fix or a new alias applied on one platform and not the other silently changes which agent runs a user's task. Matching is word-boundary and case-insensitive, so 'hermeneutics' is not Hermes. Negation is scoped to the clause containing the mention (boundaries: , ; : . ! ? em/en dash, newline, and the word 'but'), looking back at most 4 words, so 'don't use codex, use hermes' rules out only codex. 'instead' negates rather than ending a clause, because 'use hermes instead of codex' rules codex out. An agent both ruled out and asked for counts as asked for. `expected_agent` is the first non-negated mention, or null when nobody was named; `expected_ruled_out` is the set of agents excluded, order-insensitive.",
+  "cases": [
+    {
+      "name": "plain_request",
+      "utterance": "use hermes to run the test suite",
+      "expected_agent": "hermes",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "no_agent_named",
+      "utterance": "fix the failing test",
+      "expected_agent": null,
+      "expected_ruled_out": []
+    },
+    {
+      "name": "empty_utterance",
+      "utterance": "",
+      "expected_agent": null,
+      "expected_ruled_out": []
+    },
+    {
+      "name": "uppercase_and_trailing_period",
+      "utterance": "Use CODEX.",
+      "expected_agent": "codex",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "at_prefix",
+      "utterance": "@hermes please run the suite",
+      "expected_agent": "hermes",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "parenthesised",
+      "utterance": "(openclaw) take this one",
+      "expected_agent": "openclaw",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "word_boundary_hermeneutics_is_not_hermes",
+      "utterance": "explain hermeneutics to me",
+      "expected_agent": null,
+      "expected_ruled_out": []
+    },
+    {
+      "name": "word_boundary_codexes_is_not_codex",
+      "utterance": "read the codexes in the archive",
+      "expected_agent": null,
+      "expected_ruled_out": []
+    },
+    {
+      "name": "word_boundary_claudette_is_not_claude",
+      "utterance": "claudette wrote this",
+      "expected_agent": null,
+      "expected_ruled_out": []
+    },
+    {
+      "name": "longer_alias_beats_its_own_prefix",
+      "utterance": "send it to claude code",
+      "expected_agent": "acp",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "spaced_alias",
+      "utterance": "open claw should do it",
+      "expected_agent": "openclaw",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "hyphenated_alias",
+      "utterance": "route to open-claw",
+      "expected_agent": "openclaw",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "pi_mono_spaced",
+      "utterance": "use pi mono",
+      "expected_agent": "pi-mono",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "negated_do_not_use",
+      "utterance": "do not use codex for this",
+      "expected_agent": null,
+      "expected_ruled_out": ["codex"]
+    },
+    {
+      "name": "negated_without",
+      "utterance": "fix it without hermes",
+      "expected_agent": null,
+      "expected_ruled_out": ["hermes"]
+    },
+    {
+      "name": "negated_except",
+      "utterance": "anything except openclaw",
+      "expected_agent": null,
+      "expected_ruled_out": ["openclaw"]
+    },
+    {
+      "name": "negated_contraction_keeps_word_whole",
+      "utterance": "don't use codex",
+      "expected_agent": null,
+      "expected_ruled_out": ["codex"]
+    },
+    {
+      "name": "negation_does_not_cross_comma",
+      "utterance": "don't use codex, use hermes",
+      "expected_agent": "hermes",
+      "expected_ruled_out": ["codex"]
+    },
+    {
+      "name": "negation_does_not_cross_dash",
+      "utterance": "not claude code — openclaw",
+      "expected_agent": "openclaw",
+      "expected_ruled_out": ["acp"]
+    },
+    {
+      "name": "negation_does_not_cross_sentence",
+      "utterance": "that is not what I meant. run the suite with hermes",
+      "expected_agent": "hermes",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "instead_of_negates_the_later_agent",
+      "utterance": "use hermes instead of codex",
+      "expected_agent": "hermes",
+      "expected_ruled_out": ["codex"]
+    },
+    {
+      "name": "first_of_several_requested_wins",
+      "utterance": "try codex or hermes",
+      "expected_agent": "codex",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "later_request_overrides_earlier_exclusion",
+      "utterance": "don't use hermes, actually use hermes",
+      "expected_agent": "hermes",
+      "expected_ruled_out": []
+    },
+    {
+      "name": "but_ends_the_clause",
+      "utterance": "fix this, but don't use hermes",
+      "expected_agent": null,
+      "expected_ruled_out": ["hermes"]
+    }
+  ]
+}
