@@ -608,10 +608,10 @@ def test_equal_digests_imply_identical_rendered_attribution() -> None:
         'Bob: approved transfer',
         'You: approved transfer',
         'Speaker A: approved transfer',
-        'Speaker A: approved transfer',
-        'Speaker A:',
+        'Speaker B: approved transfer',
+        'Speaker B:',
     ]
-    assert len(set(rendered)) == 5  # isolated unnamed voices share a display label; wire identities stay distinct
+    assert len(set(rendered)) == 6
     assert len(set(digests)) == 6
 
     # Reviewer's reproduction: ['approved transfer'] versus that plus an
