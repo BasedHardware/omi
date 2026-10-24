@@ -250,6 +250,9 @@ class Stack:
                 'LISTEN_FINALIZATION_DISPATCH_MODE': self.finalization_mode,
                 'RECORDING_SESSION_MODE': self.recording_session_mode,
                 'OMI_STACK_STATE_DIR': str(self.state_dir),
+                'OMI_HARNESS_STATE_ROOT': str(self.state_dir),
+                'OMI_LOCAL_STORAGE_ROOT': str(self.state_dir / 'audio-storage'),
+                'BUCKET_PRIVATE_CLOUD_SYNC': 'stack-private-audio',
                 'PYTHONPATH': str(BACKEND),
                 # Child logs are evidence when a process fails to bind; avoid
                 # losing a short Python traceback in the file buffer.
