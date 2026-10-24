@@ -156,8 +156,10 @@ public enum TranscriptFilter {
 /// 16-bit PCM helpers, pure and unit-testable.
 public enum PCM {
     public static func rms(int16LE data: Data) -> Float
+    public static func peak(int16LE data: Data) -> UInt16
     public static func downmixToMono(interleaved samples: [Float], channels: Int) -> [Float]
     public static func int16LE(from samples: [Float]) -> Data
+    public static func int16LE(from samples: UnsafeBufferPointer<Float>) -> Data
     public static func floatSamples(int16LE data: Data) -> [Float]
 }
 ```
