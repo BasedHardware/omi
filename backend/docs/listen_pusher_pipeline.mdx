@@ -224,6 +224,12 @@ by that duration, rounded up to a second. Deepgram BYOK cannot exempt this
 Omi-managed Parakeet call. This proxy does not measure VAD speech or change the
 live-listen, offline-sync, or locked-conversation policies.
 
+Hourly usage writers also maintain [monthly totals](monthly-usage-totals.md) in
+the same commit, under the existing sync receipt when present. The reader lever
+`usage_month_total` stays off until every writer has that contract; warm monthly
+allowance refreshes then read one durable total. Resets invalidate it atomically.
+This changes read work, preserving the existing allowance and reservation policy.
+
 Admission and usage recording are not a distributed monthly reservation. The
 proxy probes the seekable upload spool and initially checks allowance before
 acquiring a provider slot, then rechecks allowance after queueing. It holds its

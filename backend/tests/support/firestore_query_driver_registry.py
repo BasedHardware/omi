@@ -140,6 +140,7 @@ _DEV_KEY = 'omi_dev_' + 'a' * 32
 _MCP_KEY = 'omi_mcp_' + 'a' * 32
 
 BODY_DIGEST = {
+    'database.monthly_usage_totals._rebuild': '2c9be83589399a6824fbb2ef7376cd7baf8492e8a780671e31b67a8294b40db0',
     'database.batch_pipeline_shadow.ShadowStore._busy': '3be03e458c8e65c535fed1475cbfae9c97421970c89dc751e2f4eaa4a46a4467',
     'database.batch_pipeline_shadow.ShadowStore.reap': 'e5ea33125389c09c8ad556fab4a6319142f223e4dfa655095dcd89c64e976a8d',
     'database.batch_ramp.ramp_admission_policy': 'af9830f4381f5f9d880199ed21df739af633db7a327d7e723ac4d409585c9a01',
@@ -2656,6 +2657,48 @@ _add(
         'database.user_usage._read_all_time_usage',
         covered_by=('database.user_usage.get_all_time_usage_stats',),
         reason='all-time scan reached by the all-time stats driver',
+    )
+)
+
+
+def _monthly_total_transaction_boundary(client):
+    module = importlib.import_module('database.monthly_usage_totals')
+    # Recorder transactions capture shapes; real commit/retry semantics are
+    # proved separately against the loopback emulator.
+    return unittest.mock.patch.object(module, '_rebuild', module._rebuild.to_wrap)
+
+
+def _monthly_total_user(client, combo, trial):
+    client.documents[f'users/{UID}'] = {'synthetic': True}
+
+
+_add(
+    DriverEntry(
+        'database.monthly_usage_totals.read_monthly_totals',
+        base={'uid': UID, 'date': T0},
+        domains={'start_date': [None, T0]},
+        setup=_monthly_total_user,
+        patchers=(
+            _stub('database.monthly_usage_totals.lever_enabled', True),
+            _stub('database.monthly_usage_totals._epoch', 'v1'),
+            _monthly_total_transaction_boundary,
+        ),
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.monthly_usage_totals._month_rows',
+        covered_by=('database.monthly_usage_totals.read_monthly_totals',),
+        reason='enabled cold reader observes the unchanged year/month query',
+    )
+)
+_add(
+    CoveredByEntry(
+        'database.monthly_usage_totals._rebuild',
+        covered_by=('database.monthly_usage_totals.read_monthly_totals',),
+        reason='transaction orchestrator; its only query is recorded under _month_rows in the cold reader driver',
+        expect_observed=False,
+        body_digest=BODY_DIGEST['database.monthly_usage_totals._rebuild'],
     )
 )
 _add(DriverEntry('database.user_usage.get_all_time_usage_stats', base={'uid': UID}))
