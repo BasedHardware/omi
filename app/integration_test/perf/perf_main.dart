@@ -71,9 +71,16 @@ void main() {
               'PERF $name frames=${collector.sampledFrames} work=${collector.workCounts} violations=$violations');
           expect(violations, isEmpty, reason: '$name: ${violations.join('; ')}');
         } finally {
-          await tester.pumpWidget(const SizedBox.shrink());
-          ErrorWidget.builder = previousErrorBuilder;
-          debugDefaultTargetPlatformOverride = previousPlatform;
+          try {
+            await tester.pumpWidget(const SizedBox.shrink());
+            await drainFixtureIo(tester);
+            // Close pooled HTTP idle-connection timers outside the measured
+            // window; any still-hung request remains a real test failure.
+            await tester.pump(const Duration(seconds: 31));
+          } finally {
+            ErrorWidget.builder = previousErrorBuilder;
+            debugDefaultTargetPlatformOverride = previousPlatform;
+          }
         }
       }, semanticsEnabled: false);
     }

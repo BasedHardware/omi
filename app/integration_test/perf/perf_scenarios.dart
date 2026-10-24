@@ -396,6 +396,15 @@ class PerfWorld {
   }
 }
 
+/// Advance real fixture transport and then the fake-zone continuations. A single
+/// real delay cannot finish multi-step headers/body/SSE work in a fake clock.
+Future<void> drainFixtureIo(WidgetTester tester, {int cycles = 5}) async {
+  for (var i = 0; i < cycles; i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.pump();
+  }
+}
+
 Future<void> pumpFrames(WidgetTester tester, int count) async {
   for (var i = 0; i < count; i++) {
     await tester.pump(const Duration(milliseconds: 16));
@@ -420,6 +429,7 @@ Future<void> scrollRoundTrip(WidgetTester tester, Type page) async {
     for (var n = 0; n < 100; n++) {
       await tester.fling(scrollable, Offset(0, direction * 500), 3000);
       await pumpFrames(tester, 24);
+      await drainFixtureIo(tester);
       final pos = state.position;
       if (direction < 0 ? pos.pixels >= pos.maxScrollExtent - 1 : pos.pixels <= pos.minScrollExtent + 1) break;
       if (n == 99) fail('$page did not reach scroll endpoint');
@@ -530,6 +540,7 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
           reason: 'Home must show the live episode row');
       await liveScrollRoundTrip(tester, world, ConversationsPage);
       globalNavigatorKey.currentState!.pop();
+      await drainFixtureIo(tester);
       await pumpFrames(tester, 120);
       expect(find.byType(ConversationsPage), findsNothing);
     case 'episode_page':
@@ -546,6 +557,7 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
       await pumpFrames(tester, 30);
       await liveScrollRoundTripOnKey(tester, world, const ValueKey('live-transcript-$liveConversationId'));
       globalNavigatorKey.currentState!.pop();
+      await drainFixtureIo(tester);
       await pumpFrames(tester, 120);
       expect(find.byType(LiveEpisodePage), findsNothing);
     case 'device_page':
@@ -565,6 +577,7 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
       await pumpFrames(tester, 10);
       await scrollRoundTrip(tester, DeviceSettings);
       globalNavigatorKey.currentState!.pop();
+      await drainFixtureIo(tester);
       await pumpFrames(tester, 120);
       expect(find.byType(DeviceSettings), findsNothing);
     case 'tab_switch':
@@ -581,6 +594,7 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
         deliverLiveSegments(world);
       }
       globalNavigatorKey.currentState!.pop();
+      await drainFixtureIo(tester);
       await pumpFrames(tester, 120);
     default:
       throw ArgumentError(name);
@@ -611,6 +625,7 @@ Future<void> _flingBothEnds(WidgetTester tester, PerfWorld world, Finder scrolla
     for (var n = 0; n < 100; n++) {
       await tester.fling(scrollable, Offset(0, direction * 500), 3000);
       await pumpFrames(tester, 24);
+      await drainFixtureIo(tester);
       tickLiveClock(world);
       deliverLiveSegments(world);
       final pos = state.position;
@@ -708,16 +723,15 @@ Future<void> runScenario(WidgetTester tester, PerfWorld world, String name) asyn
     await Future<void>.delayed(const Duration(milliseconds: 100));
   });
   await pumpFrames(tester, 10);
+  await drainFixtureIo(tester);
   if (name == 'chat_tap') {
     const prompt = 'Summarize the deterministic performance fixture.';
     await tester.enterText(find.byKey(const ValueKey('omi.chat.input')), prompt);
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('omi.chat.send')));
-    await tester.runAsync(() async {
-      for (var i = 0; i < 100 && !world.messages.messages.any((m) => m.id.startsWith('srv-reply-')); i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
-    });
+    for (var i = 0; i < 100 && !world.messages.messages.any((m) => m.id.startsWith('srv-reply-')); i++) {
+      await drainFixtureIo(tester, cycles: 1);
+    }
     await pumpFrames(tester, 60);
     expect(world.backend.countOf('POST', '/v2/messages'), 1);
     expect(find.textContaining(world.backend.assistantReplyText), findsWidgets);
@@ -725,6 +739,7 @@ Future<void> runScenario(WidgetTester tester, PerfWorld world, String name) asyn
     await scrollRoundTrip(tester, page.runtimeType);
   }
   globalNavigatorKey.currentState!.pop();
+  await drainFixtureIo(tester);
   await pumpFrames(tester, 120);
   expect(find.byType(page.runtimeType), findsNothing);
 }
