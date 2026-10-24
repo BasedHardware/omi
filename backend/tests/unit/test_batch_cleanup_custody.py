@@ -29,6 +29,7 @@ def cleanup(monkeypatch):
     monkeypatch.delenv('AUDIO_CLEANUP_HOLD_ENABLED', raising=False)
     monkeypatch.delenv('AUDIO_CLEANUP_HOLD_WINDOWS', raising=False)
     store = SimpleNamespace(client=Mock(), namespace='batch_pipeline_prod')
+    store.client.collection.return_value.document.return_value.get.return_value.to_dict.return_value = {}
     mirror = Mock()
     monkeypatch.setattr(retention, 'mirror_refresh', mirror)
     now = datetime(2026, 10, 25, tzinfo=timezone.utc)
