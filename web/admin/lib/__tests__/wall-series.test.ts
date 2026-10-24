@@ -26,7 +26,13 @@ import {
   SeriesStore,
 } from "../wall-series-store";
 import { isoDay, shiftDay, utcDay } from "../qualified-activity";
-import { INFRA_AS_OF, INFRA_MONTHLY_USD } from "../wall-cost";
+import {
+  INFRA_AS_OF,
+  INFRA_MONTHLY_USD,
+  STRIPE_FEES_MONTHLY_USD,
+  STT_MONTHLY_USD,
+  VARIABLE_MARGIN_TARGET,
+} from "../wall-cost";
 import { HEALTH_COST_DAYS } from "../wall-finops";
 
 const now = new Date("2026-10-15T12:00Z");
@@ -1482,5 +1488,38 @@ describe("the snapshot is shared and never served cold as settled", () => {
       expect(value(before, id).value).not.toBeNull();
     }
     expect(value(after, "growth.wau").stale).toBe(false);
+  });
+});
+
+describe("variable margin frames (David 2026-10-23)", () => {
+  it("trails the settled 7-day run rate against that day's book, disclosed", async () => {
+    const s = sources();
+    const f = await all(null, s);
+    const rows = f.health.variableMargin;
+    // 60 rendered days, ending at the D−2 cutoff like every cost frame.
+    expect(rows).toHaveLength(60);
+    const cutoff = isoDay(shiftDay(end, -2));
+    const last = rows.at(-1)!;
+    expect(last.date).toBe(`${cutoff}T00:00:00Z`);
+    // The fixture book at the cutoff day: unlimited 500+38 plus plus 400.
+    const mrr = 500 + 38 + 400;
+    expect(last.mrr).toBe(mrr);
+    // Cost scope/day: GCP (60 + vertexLlm avg 106) + OpenAI 10, Soniox on the
+    // console constant, Modulate dark (named), fees on the dated baseline.
+    const perMonth = (usd: number) => usd * (365.25 / 12);
+    const cost = perMonth(60 + 106 + 10) + STT_MONTHLY_USD + STRIPE_FEES_MONTHLY_USD;
+    expect(last.costPerMonth).toBe(Math.round(cost));
+    expect(last.marginPct).toBe(
+      Math.round(((100 * (mrr - cost)) / mrr) * 10) / 10
+    );
+    expect(last.goalCost).toBe(Math.round(mrr * (1 - VARIABLE_MARGIN_TARGET)));
+    expect(last.missing).toBe("Modulate");
+    // The disclosure names every line's source, including the dark ones.
+    const text = f.health.variableMarginStatus[0].text as string;
+    expect(text).toContain(`through ${cutoff}`);
+    expect(text).toContain("Modulate: n/a");
+    expect(text).toContain("Soniox: console est.");
+    expect(text).toContain("Stripe fees: est.");
+    expect(text).toContain("OpenAI: invoice");
   });
 });

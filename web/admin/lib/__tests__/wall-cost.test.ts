@@ -26,7 +26,13 @@ import {
   sonioxBalanceInputs,
   sonioxSeriesBroken,
   sttLineFor,
+  STRIPE_FEES_AS_OF,
+  STRIPE_FEES_MONTHLY_USD,
   STT_MONTHLY_USD,
+  VARIABLE_MARGIN_TARGET,
+  variableCostDay,
+  variableMarginLineStatus,
+  variableMarginSeries,
 } from "../wall-cost";
 
 const query = vi.hoisted(() => vi.fn());
@@ -1054,5 +1060,228 @@ describe("vendor balance and Modulate modelled readers", () => {
     );
     expect(FINOPS_MODULATE_MODELLED_QUERY).toContain("price_as_of");
     expect(FINOPS_PLAN_COST_QUERY).not.toContain("stt_modulate_modelled_daily");
+  });
+});
+
+describe("variable margin (David 2026-10-23: MRR vs the real monthly cost)", () => {
+  const d = (i: number) => `2026-10-${String(i).padStart(2, "0")}`;
+  /** 21 flat settled days: GCP $1,600/day net of which $95 is the prepaid
+   * Vertex reserved SKU, OpenAI $250, Anthropic $10 (out of margin scope). */
+  const marginDays = Array.from({ length: 21 }, (_, k) => ({
+    date: d(k + 1),
+    total: 0,
+    components: {
+      gcpInfra: 1_500,
+      vertexLlm: 100,
+      vertexReserved: 95,
+      openai: 250,
+      anthropic: 10,
+      gcpServices: { Compute: 1_500, "Vertex AI": 100 },
+    },
+  }));
+  const cash = Object.fromEntries(
+    marginDays.map((x) => [x.date, { modulate: 20 }])
+  );
+  const monthly = (perDay: number) => perDay * (365.25 / 12);
+  /** The margin scope per day: GCP ex reserved + OpenAI + Soniox console est.
+   * + Modulate cash + Stripe-fee baseline est. */
+  const dayUsd =
+    1_500 + 100 - 95 + 250 + STT_MONTHLY_USD / (365.25 / 12) + 20 +
+    STRIPE_FEES_MONTHLY_USD / (365.25 / 12);
+  const run = (vendor = {}, coverage = {}, feesCash?: Record<string, number>) =>
+    variableMarginSeries(
+      allInCost(marginDays, coverage, vendor).daily,
+      () => 60_000,
+      { feesCash }
+    );
+
+  it("excludes only the prepaid Vertex reserved capacity from the GCP line", () => {
+    const points = run({ sttCash: cash });
+    expect(points).toHaveLength(15); // window ends d(7)..d(21)
+    const last = points.at(-1)!;
+    expect(last.date).toBe(d(21));
+    // GCP keeps every net dollar except the prepaid reserved SKU…
+    expect(last.gcpPerMonth).toBeCloseTo(monthly(1_505), 1);
+    expect(last.vertexReservedPerMonth).toBeCloseTo(monthly(95), 1);
+    // …and the scope is exactly the five definition lines — Anthropic, SaaS,
+    // infra and Deepgram stay out (the all-in stack counts those).
+    expect(last.costPerMonth).toBeCloseTo(
+      last.gcpPerMonth +
+        monthly(250) +
+        STT_MONTHLY_USD +
+        monthly(20) +
+        STRIPE_FEES_MONTHLY_USD,
+      0
+    );
+    expect(
+      variableCostDay(allInCost(marginDays, {}, { sttCash: cash }).daily[0]).usd
+    ).toBeCloseTo(dayUsd);
+  });
+
+  it("computes (MRR − run rate) ÷ MRR with the 50% target line", () => {
+    const last = run({ sttCash: cash }).at(-1)!;
+    expect(last.mrr).toBe(60_000);
+    expect(last.costPerMonth).toBeCloseTo(monthly(dayUsd), 0);
+    expect(last.marginPct).toBeCloseTo((100 * (60_000 - monthly(dayUsd))) / 60_000, 4);
+    expect(last.goalCost).toBeCloseTo(60_000 * (1 - VARIABLE_MARGIN_TARGET), 6);
+  });
+
+  it("never borrows a neighbour's book: a day without MRR keeps its cost point", () => {
+    const points = variableMarginSeries(
+      allInCost(marginDays, {}, { sttCash: cash }).daily,
+      (day) => (day === d(21) ? null : 60_000)
+    );
+    const last = points.at(-1)!;
+    expect(last.mrr).toBeNull();
+    expect(last.marginPct).toBeNull();
+    expect(last.costPerMonth).toBeCloseTo(monthly(dayUsd), 0);
+    expect(points.at(-2)!.marginPct).not.toBeNull();
+  });
+
+  it("a gap in the settled days kills the run rate until the window clears it", () => {
+    const withGap = marginDays.filter((x) => x.date !== d(10));
+    const points = variableMarginSeries(
+      allInCost(withGap, {}, { sttCash: cash }).daily,
+      () => 60_000
+    );
+    // d(7)..d(9) predate the gap; every window ending d(10)..d(16) contains
+    // it; d(17) is the first window (d(11)..d(17)) clear of the hole.
+    expect(points.map((p) => p.date)).toEqual([
+      d(7),
+      d(8),
+      d(9),
+      d(17),
+      d(18),
+      d(19),
+      d(20),
+      d(21),
+    ]);
+  });
+
+  it("excludes one-time incident excess, as every wall run rate does", () => {
+    const spiked = marginDays.map((x) =>
+      x.date === d(12)
+        ? {
+            ...x,
+            components: {
+              ...x.components,
+              gcpInfra: 1_500 + 13_800,
+              gcpServices: { Compute: 1_500, "Cloud Storage": 13_800 },
+            },
+          }
+        : x
+    );
+    const clean = run({ sttCash: cash }).at(-1)!;
+    const dirty = variableMarginSeries(
+      allInCost(spiked, {}, { sttCash: cash }).daily,
+      () => 60_000
+    ).at(-1)!;
+    // Only the excess is excluded, so a one-time incident never moves the
+    // run rate — checked on the window that contains it (d(8)..d(14)) and on
+    // one that does not.
+    const dirty14 = variableMarginSeries(
+      allInCost(spiked, {}, { sttCash: cash }).daily,
+      () => 60_000
+    ).find((p) => p.date === d(14))!;
+    const clean14 = run({ sttCash: cash }).find((p) => p.date === d(14))!;
+    expect(dirty.costPerMonth).toBeCloseTo(clean.costPerMonth, 5);
+    expect(dirty14.costPerMonth).toBeCloseTo(clean14.costPerMonth, 5);
+  });
+
+  it("names a missing vendor line instead of silently undercounting it", () => {
+    // OpenAI leg off, no Modulate cash anywhere: both lines are named, counted
+    // as $0, and the disclosure says n/a — never a quiet zero.
+    const last = run({}, { openai: false }).at(-1)!;
+    expect(last.missing).toEqual(["OpenAI", "Modulate"]);
+    expect(last.openaiPerMonth).toBe(0);
+    const lines = variableMarginLineStatus(last, {
+      now: new Date("2026-10-23T00:00Z"),
+    }).join(" · ");
+    expect(lines).toContain("OpenAI: n/a (invoice leg off)");
+    expect(lines).toContain("Modulate: n/a (no modelled or Mercury-cash line)");
+    expect(lines).toContain("Soniox: console est.");
+    expect(lines).toContain(
+      `Stripe fees: est. $${STRIPE_FEES_MONTHLY_USD.toLocaleString("en-US")}/mo`
+    );
+    expect(lines).toContain(STRIPE_FEES_AS_OF);
+    expect(lines).toContain(`through ${d(21)}`);
+  });
+
+  it("says since when a live Soniox series stopped covering the window", () => {
+    const bal = {
+      ready: true,
+      firstDay: d(1),
+      lastDay: d(8),
+      asOf: d(8),
+      spend: Object.fromEntries(
+        marginDays.slice(0, 8).map((x) => [x.date, 175])
+      ),
+      flags: {} as Record<string, string>,
+    };
+    const broken = run({ sonioxBalance: bal, sttCash: cash }).at(-1)!;
+    expect(broken.sonioxMeasured).toBe(false);
+    expect(
+      variableMarginLineStatus(broken, {
+        now: new Date("2026-10-23T00:00Z"),
+        soniox: bal,
+      }).join(" · ")
+    ).toContain(`Soniox: n/a since ${d(8)} — console est.`);
+    // While the series covers every window day the line is measured.
+    const covered = {
+      ...bal,
+      lastDay: d(21),
+      asOf: d(21),
+      spend: Object.fromEntries(marginDays.map((x) => [x.date, 175])),
+    };
+    const measured = run({ sonioxBalance: covered, sttCash: cash }).at(-1)!;
+    expect(measured.sonioxMeasured).toBe(true);
+    expect(
+      variableMarginLineStatus(measured, {
+        now: new Date("2026-10-23T00:00Z"),
+        soniox: covered,
+      }).join(" · ")
+    ).toContain("Soniox: measured $5,327/mo"); // 175/day × 30.4375
+  });
+
+  it("uses measured fees, then Mercury fee cash, before the dated baseline", () => {
+    const vendor = { sttCash: cash };
+    const measured = run({
+      ...vendor,
+      stripeFees: Object.fromEntries(marginDays.map((x) => [x.date, 90])),
+    }).at(-1)!;
+    expect(measured.feeSource).toBe("measured");
+    expect(measured.feesPerMonth).toBeCloseTo(monthly(90), 1);
+
+    const cashFees = run(
+      vendor,
+      {},
+      Object.fromEntries(marginDays.map((x) => [x.date, 80]))
+    ).at(-1)!;
+    expect(cashFees.feeSource).toBe("cash");
+    expect(cashFees.feesPerMonth).toBeCloseTo(monthly(80), 1);
+
+    const estimate = run(vendor).at(-1)!;
+    expect(estimate.feeSource).toBe("estimate");
+    expect(estimate.feesPerMonth).toBeCloseTo(STRIPE_FEES_MONTHLY_USD, 6);
+    // The baseline goes stale by its own threshold, named on the disclosure.
+    const fresh = variableMarginLineStatus(estimate, {
+      now: new Date("2026-10-23T00:00Z"),
+    }).join(" · ");
+    expect(fresh).not.toContain("STALE");
+    const stale = variableMarginLineStatus(estimate, {
+      now: new Date("2026-12-01T00:00Z"),
+      feesUnavailable: "fee table dark",
+    }).join(" · ");
+    expect(stale).toContain("Stripe fees: est.");
+    expect(stale).toContain("STALE");
+    expect(stale).toContain("; measured line unavailable");
+  });
+
+  it("with no settled window there is no number, only a disclosure", () => {
+    expect(
+      variableMarginLineStatus(undefined, {
+        now: new Date("2026-10-23T00:00Z"),
+      })
+    ).toEqual(["Variable margin: no complete settled 7-day cost window yet"]);
   });
 });
