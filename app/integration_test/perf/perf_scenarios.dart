@@ -48,6 +48,8 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import '../journeys/support/fixture_backend.dart';
 import '../journeys/support/hermetic_boot.dart';
+import 'perf_mutations.dart';
+import 'production_shell.dart';
 
 const scenarioNames = [
   'home_scroll',
@@ -190,6 +192,7 @@ class PerfWorld {
   late DeviceProvider device;
 
   Future<void> seed() async {
+    _liveSegmentCounter = 0;
     mockCommonPlatformChannels();
     nativeDirectory = await Directory.systemTemp.createTemp('omi-perf-native-');
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
@@ -357,21 +360,24 @@ class PerfWorld {
   final _liveElapsed = ValueNotifier<Duration>(Duration.zero);
 
   Future<void> boot(WidgetTester tester, {List<SingleChildWidget> extraProviders = const []}) async {
-    await JourneyHermeticBoot.pumpPage(tester, page: const Scaffold(), providers: [
-      ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
-      ChangeNotifierProvider<MemoriesProvider>.value(value: memories),
-      ChangeNotifierProvider<MessageProvider>.value(value: messages),
-      ChangeNotifierProvider(create: (_) => LocalRecordingsProvider()),
-      ChangeNotifierProvider(create: (_) => PhoneCallProvider.forTesting()),
-      ChangeNotifierProvider<DeviceProvider>.value(value: device),
-      ChangeNotifierProvider(create: (_) => SpeakerTagPromptsProvider(now: () => seedDate)),
-      ChangeNotifierProvider(create: (_) => CaptureProvider(now: () => seedDate)),
-      ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
-        create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(seedDate),
-        update: (_, app, conversations, previous) => previous!..setProviders(app, conversations),
-      ),
-      ...extraProviders,
-    ]);
+    await JourneyHermeticBoot.pumpPage(tester,
+        page: const Scaffold(),
+        appBuilder: (page) => injectPerfMutation(PerfProductionShell(page: page)),
+        providers: [
+          ChangeNotifierProvider<ConversationProvider>.value(value: conversations),
+          ChangeNotifierProvider<MemoriesProvider>.value(value: memories),
+          ChangeNotifierProvider<MessageProvider>.value(value: messages),
+          ChangeNotifierProvider(create: (_) => LocalRecordingsProvider()),
+          ChangeNotifierProvider(create: (_) => PhoneCallProvider.forTesting()),
+          ChangeNotifierProvider<DeviceProvider>.value(value: device),
+          ChangeNotifierProvider(create: (_) => SpeakerTagPromptsProvider(now: () => seedDate)),
+          ChangeNotifierProvider(create: (_) => CaptureProvider(now: () => seedDate)),
+          ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
+            create: (_) => ConversationDetailProvider()..selectedDate = conversationLocalDayKey(seedDate),
+            update: (_, app, conversations, previous) => previous!..setProviders(app, conversations),
+          ),
+          ...extraProviders,
+        ]);
   }
 
   Future<void> close() async {
@@ -387,6 +393,15 @@ class PerfWorld {
     await backend.stop();
     JourneyHermeticBoot.stop();
     await nativeDirectory.delete(recursive: true);
+  }
+}
+
+/// Advance real fixture transport and then the fake-zone continuations. A single
+/// real delay cannot finish multi-step headers/body/SSE work in a fake clock.
+Future<void> drainFixtureIo(WidgetTester tester, {int cycles = 5}) async {
+  for (var i = 0; i < cycles; i++) {
+    await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 20)));
+    await tester.pump();
   }
 }
 
@@ -414,10 +429,15 @@ Future<void> scrollRoundTrip(WidgetTester tester, Type page) async {
     for (var n = 0; n < 100; n++) {
       await tester.fling(scrollable, Offset(0, direction * 500), 3000);
       await pumpFrames(tester, 24);
+      await drainFixtureIo(tester);
       final pos = state.position;
       if (direction < 0 ? pos.pixels >= pos.maxScrollExtent - 1 : pos.pixels <= pos.minScrollExtent + 1) break;
       if (n == 99) fail('$page did not reach scroll endpoint');
     }
+    // iOS bouncing physics may cross the endpoint before returning to rest.
+    // Fixed virtual frames keep this deterministic; the collector itself schedules
+    // frames, so pumpAndSettle would never finish during the measured window.
+    await pumpFrames(tester, 120);
   }
   expect(state.position.pixels, closeTo(state.position.minScrollExtent, 1));
 }
@@ -520,7 +540,8 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
           reason: 'Home must show the live episode row');
       await liveScrollRoundTrip(tester, world, ConversationsPage);
       globalNavigatorKey.currentState!.pop();
-      await pumpFrames(tester, 30);
+      await drainFixtureIo(tester);
+      await pumpFrames(tester, 120);
       expect(find.byType(ConversationsPage), findsNothing);
     case 'episode_page':
       globalNavigatorKey.currentState!
@@ -533,10 +554,11 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
       // Then the live transcript itself, with lines still arriving.
       final tab = find.descendant(of: find.byType(TabBar), matching: find.byType(Tab)).at(1);
       await tester.tap(tab);
-      await pumpFrames(tester, 10);
+      await pumpFrames(tester, 30);
       await liveScrollRoundTripOnKey(tester, world, const ValueKey('live-transcript-$liveConversationId'));
       globalNavigatorKey.currentState!.pop();
-      await pumpFrames(tester, 30);
+      await drainFixtureIo(tester);
+      await pumpFrames(tester, 120);
       expect(find.byType(LiveEpisodePage), findsNothing);
     case 'device_page':
       // The pendant David's report is about: connected, syncing its storage.
@@ -548,14 +570,15 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
       );
       world.device.isConnected = true;
       globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(builder: (_) => const DeviceSettings()));
-      await pumpFrames(tester, 30);
+      await pumpFrames(tester, 120);
       await tester.runAsync(() async {
         await Future<void>.delayed(const Duration(milliseconds: 150));
       });
       await pumpFrames(tester, 10);
       await scrollRoundTrip(tester, DeviceSettings);
       globalNavigatorKey.currentState!.pop();
-      await pumpFrames(tester, 30);
+      await drainFixtureIo(tester);
+      await pumpFrames(tester, 120);
       expect(find.byType(DeviceSettings), findsNothing);
     case 'tab_switch':
       globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(builder: (_) => _TabShellPage(world: world)));
@@ -571,7 +594,8 @@ Future<void> runLiveScenario(WidgetTester tester, PerfWorld world, String name) 
         deliverLiveSegments(world);
       }
       globalNavigatorKey.currentState!.pop();
-      await pumpFrames(tester, 30);
+      await drainFixtureIo(tester);
+      await pumpFrames(tester, 120);
     default:
       throw ArgumentError(name);
   }
@@ -601,12 +625,14 @@ Future<void> _flingBothEnds(WidgetTester tester, PerfWorld world, Finder scrolla
     for (var n = 0; n < 100; n++) {
       await tester.fling(scrollable, Offset(0, direction * 500), 3000);
       await pumpFrames(tester, 24);
+      await drainFixtureIo(tester);
       tickLiveClock(world);
       deliverLiveSegments(world);
       final pos = state.position;
       if (direction < 0 ? pos.pixels >= pos.maxScrollExtent - 1 : pos.pixels <= pos.minScrollExtent + 1) break;
       if (n == 99) fail('$label did not reach scroll endpoint');
     }
+    await pumpFrames(tester, 120);
   }
   expect(state.position.pixels, closeTo(state.position.minScrollExtent, 1));
 }
@@ -690,22 +716,22 @@ Future<void> runScenario(WidgetTester tester, PerfWorld world, String name) asyn
     _ => throw ArgumentError(name),
   };
   globalNavigatorKey.currentState!.push(MaterialPageRoute<void>(builder: (_) => page));
-  await pumpFrames(tester, 30);
+  // Virtual time must cover the production iOS route transition.
+  await pumpFrames(tester, 120);
   // Complete real loopback I/O outside the virtual clock, then fixed UI pumps.
   await tester.runAsync(() async {
     await Future<void>.delayed(const Duration(milliseconds: 100));
   });
   await pumpFrames(tester, 10);
+  await drainFixtureIo(tester);
   if (name == 'chat_tap') {
     const prompt = 'Summarize the deterministic performance fixture.';
     await tester.enterText(find.byKey(const ValueKey('omi.chat.input')), prompt);
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('omi.chat.send')));
-    await tester.runAsync(() async {
-      for (var i = 0; i < 100 && !world.messages.messages.any((m) => m.id.startsWith('srv-reply-')); i++) {
-        await Future<void>.delayed(const Duration(milliseconds: 10));
-      }
-    });
+    for (var i = 0; i < 100 && !world.messages.messages.any((m) => m.id.startsWith('srv-reply-')); i++) {
+      await drainFixtureIo(tester, cycles: 1);
+    }
     await pumpFrames(tester, 60);
     expect(world.backend.countOf('POST', '/v2/messages'), 1);
     expect(find.textContaining(world.backend.assistantReplyText), findsWidgets);
@@ -713,6 +739,7 @@ Future<void> runScenario(WidgetTester tester, PerfWorld world, String name) asyn
     await scrollRoundTrip(tester, page.runtimeType);
   }
   globalNavigatorKey.currentState!.pop();
-  await pumpFrames(tester, 30);
+  await drainFixtureIo(tester);
+  await pumpFrames(tester, 120);
   expect(find.byType(page.runtimeType), findsNothing);
 }
