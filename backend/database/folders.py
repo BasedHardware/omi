@@ -385,10 +385,17 @@ def bulk_move_conversations_to_folder(
     if not conversation_ids:
         return 0
 
+    # Defensive deduplication preserving order
+    unique_ids: List[str] = list(
+        dict.fromkeys([cid.strip() for cid in conversation_ids if isinstance(cid, str) and cid.strip()])
+    )
+    if not unique_ids:
+        return 0
+
     user_ref = db.collection('users').document(uid)
     conversations_ref = user_ref.collection('conversations')
 
-    conv_refs = [conversations_ref.document(conv_id) for conv_id in conversation_ids]
+    conv_refs = [conversations_ref.document(conv_id) for conv_id in unique_ids]
     conv_docs = db.get_all(conv_refs)
 
     affected_folders: Set[str] = set()
