@@ -133,7 +133,7 @@ class ConversationSpeakerIdAllocator:
         speaker = canonical_speaker_label(str(speaker or 'SPEAKER_00'))
         key = (str(scope), speaker)
         # A persisted scope/acoustic binding is authority; a later label hint
-        # must never renumber it or disagree with lookup(). Batch voices require
+        # must never renumber it or disagree with that binding. Batch voices require
         # their acoustic registry decision, including its explicit abstentions.
         speaker_id = self._speaker_ids.get(key)
         if speaker_id is None:

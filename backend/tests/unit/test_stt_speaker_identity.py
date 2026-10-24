@@ -283,7 +283,9 @@ def test_persisted_scope_binding_wins_over_a_later_owner_hint():
     replay = {'speaker': 'SPEAKER_01', 'speaker_id_scope': 'sync:old', 'is_user': True}
     allocator.assign(replay)
     assert replay['speaker_id'] == 8
-    assert allocator.lookup('sync:old', 'SPEAKER_01') == replay['speaker_id']
+    retry = {'speaker': 'SPEAKER_01', 'speaker_id_scope': 'sync:old'}
+    allocator.assign(retry)
+    assert retry['speaker_id'] == replay['speaker_id']
 
 
 def test_batch_owner_hint_cannot_bypass_an_abstained_acoustic_link():
