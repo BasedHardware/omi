@@ -8,7 +8,7 @@ from typing import Any, Mapping
 
 from config.refactor_modes import default_on
 
-IDENTITY_REPAIR_ENV = 'NOTES_IDENTITY_REPAIR_ENABLED'
+IDENTITY_REPAIR_ENV = 'SPEAKER_IDENTITY_REPAIR_ENABLED'
 
 
 def _pattern(name: str) -> re.Pattern[str]:

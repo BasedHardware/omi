@@ -742,7 +742,7 @@ def test_v2_retains_one_shot_fallback_when_no_usable_submission_exists():
 @pytest.mark.parametrize('contract_v2', [False, True])
 @pytest.mark.parametrize('enabled', [False, True])
 def test_people_only_speaker_binding_is_rejected_then_sanitized_at_budget_exhaustion(contract_v2, enabled, monkeypatch):
-    monkeypatch.setenv('NOTES_IDENTITY_REPAIR_ENABLED', 'on' if enabled else 'off')
+    monkeypatch.setenv('SPEAKER_IDENTITY_REPAIR_ENABLED', 'on' if enabled else 'off')
     repairs = []
     monkeypatch.setattr(agent, 'record_identity_repair', lambda: repairs.append(True))
     bad = submission(

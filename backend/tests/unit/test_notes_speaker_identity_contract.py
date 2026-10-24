@@ -227,7 +227,7 @@ def test_identity_repair_preserves_absent_optional_wire_fields(monkeypatch):
 @pytest.mark.parametrize('transcript_name', ['sara chen', 'Sarah Chen'])
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
 def test_sarah_chen_contact_mentions_keep_people_spelling_on_every_notes_path(monkeypatch, transcript_name, mode):
-    monkeypatch.delenv('NOTES_IDENTITY_REPAIR_ENABLED', raising=False)
+    monkeypatch.delenv('SPEAKER_IDENTITY_REPAIR_ENABLED', raising=False)
     monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
     prefix = SimpleNamespace(
         transcript_segment_ids={'s1'},
@@ -292,7 +292,7 @@ def test_blocked_david_contact_does_not_scrub_owner_first_name_or_full_name():
 @pytest.mark.parametrize('off', ['off', 'false', '0', 'no'])
 @pytest.mark.parametrize('mode', ['off', 'shadow', 'serve'])
 def test_identity_kill_switch_restores_unrepaired_notes_on_all_paths(monkeypatch, off, mode):
-    monkeypatch.setenv('NOTES_IDENTITY_REPAIR_ENABLED', off)
+    monkeypatch.setenv('SPEAKER_IDENTITY_REPAIR_ENABLED', off)
     monkeypatch.setenv('NOTES_PACKET_V2_MODE', mode)
     payload = submission()
     payload['participants'][0]['source'] = 'roster'
