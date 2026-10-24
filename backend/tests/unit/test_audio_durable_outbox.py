@@ -771,3 +771,59 @@ def test_submillisecond_raw_fragments_cannot_replace_rounded_legacy_audio(remote
     # Previously persisted AudioFiles can still request the millisecond key.
     same_pcm(storage.download_audio_chunks_and_merge('owner', 'conversation', [1000]), accepted_middle)
     assert read_pcm('owner', receipt) == prefix + original_middle + suffix
+
+
+@pytest.mark.parametrize('is_batch', [False, True])
+@pytest.mark.parametrize('raw_start', [1000, 999.99975])
+def test_persisted_fingerprinted_audio_file_survives_precise_source_aliases(remote, monkeypatch, is_batch, raw_start):
+    from copy import deepcopy
+    from utils.other.playback_identity import source_fingerprint, validate_sources, retain_aliases
+    from utils.other.raw_audio_read import invalidate_pack_index
+    from utils.sync import playback
+
+    accepted = b'\x09\x00' * 16000
+    _legacy_chunk(remote, 1000.00025, accepted, is_batch=is_batch)
+    invalidate_pack_index(remote, 'owner', 'conversation')
+    old_file = pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')[0].model_dump()
+    assert old_file['chunk_timestamps'] == [1000] and old_file['source_fingerprint']
+    count = round((1000.00025 - raw_start) * 16000)
+    prefix = b'\x01\x00' * count
+    commit_pcm('owner', prefix + b'\x02\x00' * 16000 + b'\x03\x00' * 4, 'conversation', raw_start, 16000, 'root', 0)
+    chunks = storage.list_audio_chunks('owner', 'conversation', source_identity=True)
+    validate_sources([old_file], chunks)
+
+    class PcmExport:
+        def __init__(self, data, **kwargs):
+            self.data = data
+
+        def export(self, stream, **kwargs):
+            stream.write(self.data)
+
+    # Exercise the actual artifact builder and both source guards; only the
+    # final MP3 encoder is replaced with a PCM canary for exact-byte assertions.
+    monkeypatch.setattr(playback, 'AudioSegment', PcmExport)
+    monkeypatch.setattr(playback, 'list_audio_chunks', storage.list_audio_chunks)
+    monkeypatch.setattr(playback, 'download_audio_chunks_and_merge', storage.download_audio_chunks_and_merge)
+    built = playback.build_playback_artifact(
+        'owner', 'conversation', old_file['chunk_timestamps'], source_fingerprint=old_file['source_fingerprint']
+    )
+    assert len(built) == len(accepted) and hashlib.sha256(built).digest() == hashlib.sha256(accepted).digest()
+    built, _ = playback.build_conversation_playback_artifact(
+        'owner', 'conversation', [old_file], 1000, strict_sources=True
+    )
+    assert len(built) == len(accepted) and hashlib.sha256(built).digest() == hashlib.sha256(accepted).digest()
+    raw_prefix = next(chunk for chunk in chunks if chunk['timestamp'] == raw_start)
+    built = playback.build_playback_artifact(
+        'owner', 'conversation', [raw_start], source_fingerprint=source_fingerprint([raw_prefix])
+    )
+    assert built == prefix
+    current = [
+        item.model_dump() for item in pusher.conversations_db.create_audio_files_from_chunks('owner', 'conversation')
+    ]
+    assert old_file['id'] in retain_aliases(current, [old_file])[0]['legacy_ids']
+    replaced = deepcopy(chunks)
+    next(chunk for chunk in replaced if chunk['path'].startswith('chunks/'))['generation'] = 18
+    with pytest.raises(RuntimeError, match='source manifest changed'):
+        validate_sources([old_file], replaced)
+    with pytest.raises(RuntimeError, match='source manifest changed'):
+        validate_sources([old_file], [chunk for chunk in chunks if not chunk['path'].startswith('chunks/')])
