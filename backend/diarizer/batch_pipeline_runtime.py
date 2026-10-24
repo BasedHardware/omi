@@ -15,7 +15,7 @@ from typing import Any, Callable
 
 from prometheus_client import CollectorRegistry, CONTENT_TYPE_LATEST, generate_latest
 
-from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled
+from config.stt_cap_dispatch import execution_admission_configured as cap_dispatch_enabled, offline_enforcement_enabled
 from utils.observability.stt_cap_dispatch import AUDIO_SECONDS
 from config.batch_pipeline import worker_pipeline_depth
 from config.batch_pipeline_providers import provider_config
@@ -100,7 +100,7 @@ def health_server(state: RuntimeState, registry: CollectorRegistry, port: int) -
     registry.register(LANGUAGE_ROUTES)
     for collector in SHADOW_COLLECTORS:
         registry.register(collector)
-    if cap_dispatch_enabled():
+    if cap_dispatch_enabled() or offline_enforcement_enabled('batch'):
         registry.register(AUDIO_SECONDS)
     registry.register(TRANSITIONS)
     registry.register(DURATION)
