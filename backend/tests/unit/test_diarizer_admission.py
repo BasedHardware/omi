@@ -120,13 +120,16 @@ def load_service(monkeypatch, entrypoint, *, startup_failure=None, inference=Non
     for name, value in [('torch', torch), ('torchaudio', ModuleType('torchaudio')), ('pyannote.audio', pyannote)]:
         monkeypatch.setitem(sys.modules, name, value)
 
-    def load(name):
-        spec = importlib.util.spec_from_file_location(name, root / (name + '.py'))
+    def load(name, source=None):
+        spec = importlib.util.spec_from_file_location(name, source or root / (name + '.py'))
         module = importlib.util.module_from_spec(spec)
         monkeypatch.setitem(sys.modules, name, module)
         spec.loader.exec_module(module)
         return module
 
+    # Each synthetic service owns fresh factories/cache bound to this test's
+    # model stubs; monkeypatch restores the previously loaded module afterward.
+    load('utils.stt.embedding_inference', root.parent / 'utils/stt/embedding_inference.py')
     embedding = load('embedding')
     embedding.embedding_endpoint = lambda _file: [1.0]
     embedding.embedding_endpoint_v2 = lambda _file: [1.0]
