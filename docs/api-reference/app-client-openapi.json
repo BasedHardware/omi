@@ -26513,7 +26513,7 @@
             "default": "other"
           },
           "emoji": {
-            "default": "💬",
+            "default": "",
             "title": "Emoji",
             "type": "string"
           },
