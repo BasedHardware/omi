@@ -86,13 +86,14 @@ invoker SA and its endpoint-specific OIDC audience. Configure
 named task before the cohort ramp. Do not enable a worker without runtime-image,
 identity, index-readiness and route qualification.
 
-First deploy this SHA at the prod default memory (4Gi since the 2026-10-24
-right-sizing; development keeps 8Gi) through GitHub Actions. For the
-separate memory trial, the lead creates a tagged **no-traffic** 6Gi revision
-from that already-built same-SHA image, routes at most 5% to it and waits ≥12h.
-Only after qualification/full promotion set GitHub environment variable
-`BACKEND_SYNC_MEMORY=6Gi` for future deployments; the backend-stack action validates
-`4Gi|6Gi|8Gi`. Since the 2026-10-24 right-sizing, the manual workflow's fallback is `4Gi`
+First deploy this SHA at the prod default memory (6Gi since the 2026-10-24
+costcut promotion; development keeps 8Gi) through GitHub Actions. For a
+separate memory trial, the lead creates a tagged **no-traffic** revision at
+the trial size from that already-built same-SHA image, routes at most 5% to it
+and waits ≥12h. Only after qualification/full promotion change the prod
+fallback here (or set GitHub environment variable `BACKEND_SYNC_MEMORY`)
+for future deployments; the backend-stack action validates
+`4Gi|6Gi|8Gi`. Since the 2026-10-24 costcut, the manual workflow's fallback is `6Gi`
 for prod and `8Gi` for development, and the dev-only deploys (auto-dev) keep the action's
 `8Gi` default. The deployment remains through the existing release admission and
 GitHub Actions workflow. Rollback: redeploy the admitted image at the prior size.
